@@ -2,15 +2,17 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { Code, explorerColorClass, formatBytes, iconForEntry, placeAnchored, type Placement } from "@intentic/ui";
-import { type Component, computed, type CSSProperties, nextTick, onBeforeUnmount, ref, type Ref, shallowRef, watch } from "vue";
+import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, type Ref, shallowRef, watch } from "vue";
+import { useLatest } from "@intentic/ui/async";
 import { useLayout } from "../../../shell/window/useLayout";
-import { renderViewerForExtension } from "../../../core-views/viewerRegistry";
+import { renderViewerForExtension, useViewerComponent } from "../../../core-views/viewerRegistry";
 import { sandboxBlob } from "../../sandbox/client/sandboxClient";
-import { type ExplorerFilters, explorerShows } from "../explorer/explorerFilter";
+import { explorerShows } from "../explorer/explorerFilter";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { readFileWindow } from "../files/fileWindow";
 import { scopeQuery } from "../health/workspaceScope";
-import { homeGroups, homeOrder, extOf } from "./homeOrder";
+import { extensionOf } from "@intentic/ui/file-format";
+import { homeGroups, homeOrder } from "./homeOrder";
 import { kindLabel, PEEK_BYTES, type PeekKind, peekLines, peekPlan } from "./peekContent";
 import { thumbnailUrl } from "./thumbnails";
 import { useT } from "@intentic/ui/i18n";
@@ -21,14 +23,14 @@ const t = useT();
 
 const { entry, anchor } = defineProps<{ entry: WorkspaceTreeEntry | undefined; anchor: HTMLElement | undefined }>();
 
-const { tree, entriesByPath, lazyChildren, loadChildren } = useWorkspaceTree();
+const { listingOf, keepListed } = useWorkspaceTree();
 const layout = useLayout();
 
 const plan = computed(() => (entry === undefined ? undefined : peekPlan(entry)));
 // The extension viewer that draws this format from bytes. Reactive: switching the viewers extension off drops the
 // card back to a name and a size, the same as opening the file would.
 const documentViewer = computed(() =>
-    entry === undefined || plan.value?.kind !== `document` ? undefined : renderViewerForExtension(extOf(entry.name)),
+    entry === undefined || plan.value?.kind !== `document` ? undefined : renderViewerForExtension(extensionOf(entry.name)),
 );
 // What the card actually draws: a document nothing here can paint is a document with no look, whatever the plan says.
 const kind = computed<PeekKind>(() => {
@@ -39,30 +41,15 @@ const icon = computed(() => (entry === undefined ? `file` : iconForEntry(entry.n
 const color = computed(() => (entry === undefined ? `` : explorerColorClass(`colorful`, entry.name, entry.type, entry.ignored)));
 
 // --- Folder: what the home would show on entering it, so its count agrees with the tiles. ------------------------
-const filters = computed<ExplorerFilters>(() => ({
-    showIgnored: layout.showIgnored.value,
-    hideTests: layout.hideTests.value,
-    hideTechnical: layout.hideTechnical.value,
-}));
-const folderChildren = computed<readonly WorkspaceTreeEntry[] | undefined>(() => {
-    if (entry === undefined || entry.type !== `dir`) {
-        return undefined;
-    }
-    const listed = entry.path === `` ? tree.value : (entriesByPath.value.get(entry.path)?.children ?? lazyChildren.value.get(entry.path));
-    return listed?.filter((child) => explorerShows(child, filters.value));
+const folder = (): string | undefined => (entry?.type === `dir` ? entry.path : undefined);
+const folderChildren = computed(() => {
+    const dir = folder();
+    return dir === undefined ? undefined : listingOf(dir)?.filter((child) => explorerShows(child, layout.explorerFilters.value));
 });
+keepListed(folder);
 // Enough names to recognise the folder by; the count says the rest.
 const FOLDER_NAMES = 6;
 const folderNames = computed(() => (folderChildren.value === undefined ? [] : homeOrder(homeGroups(folderChildren.value)).slice(0, FOLDER_NAMES)));
-watch(
-    () => [entry?.path, entry?.type, folderChildren.value === undefined] as const,
-    ([path, type, unlisted]) => {
-        if (path !== undefined && type === `dir` && unlisted) {
-            void loadChildren(path);
-        }
-    },
-    { immediate: true },
-);
 
 // --- File: text, a picture, a video or a document; text is read once per hover and kept for a sweep back over the same
 // tiles, pictures and videos come from the cache the tiles already filled, and a document is fetched per hover, since
@@ -73,26 +60,8 @@ const media = ref<string>();
 const documentBytes = shallowRef<Blob>();
 const loading = ref(false);
 
-// The viewer's component, imported on the first hover over a format and held for the rest of the session. The
-// computed above keeps its identity per format, so moving between two documents of the same kind imports nothing.
-const documentComponent = shallowRef<Component>();
-let componentSeq = 0;
-watch(
-    documentViewer,
-    (next) => {
-        const token = ++componentSeq;
-        documentComponent.value = undefined;
-        if (next === undefined) {
-            return;
-        }
-        void next.component().then((component) => {
-            if (token === componentSeq) {
-                documentComponent.value = component;
-            }
-        });
-    },
-    { immediate: true },
-);
+// `documentViewer` keeps its identity per format, so moving between two documents of the same kind imports nothing.
+const documentComponent = useViewerComponent(documentViewer);
 
 const TEXT_CACHE_SIZE = 32;
 const textCache = new Map<string, string>();
@@ -115,56 +84,56 @@ const fetchText = async (target: WorkspaceTreeEntry, signal: AbortSignal): Promi
     return peekLines(window.content, window.bytes, window.size);
 };
 
-let seq = 0;
+const latest = useLatest();
 let controller: AbortController | undefined;
 // Lands a value only if this is still the hover that asked for it.
-const settle = <T,>(id: number, show: Ref<T | undefined>, value: T | undefined): void => {
-    if (id === seq) {
+const settle = <T,>(isLatest: () => boolean, show: Ref<T | undefined>, value: T | undefined): void => {
+    if (isLatest()) {
         show.value = value;
         loading.value = false;
     }
 };
-const readText = async (target: WorkspaceTreeEntry, id: number, signal: AbortSignal): Promise<void> => {
+const readText = async (target: WorkspaceTreeEntry, isLatest: () => boolean, signal: AbortSignal): Promise<void> => {
     const key = cacheKey(target);
     const cached = textCache.get(key);
     if (cached !== undefined) {
-        settle(id, text, cached);
+        settle(isLatest, text, cached);
         return;
     }
     loading.value = true;
     try {
         const value = await fetchText(target, signal);
         rememberText(key, value);
-        settle(id, text, value);
+        settle(isLatest, text, value);
     } catch {
-        settle(id, text, undefined); // aborted or refused: the header already says the name and kind
+        settle(isLatest, text, undefined); // aborted or refused: the header already says the name and kind
     }
 };
-const readMedia = async (target: WorkspaceTreeEntry, medium: "picture" | "video", id: number): Promise<void> => {
+const readMedia = async (target: WorkspaceTreeEntry, medium: "picture" | "video", isLatest: () => boolean): Promise<void> => {
     loading.value = true;
     try {
-        settle(id, media, await thumbnailUrl(target, medium));
+        settle(isLatest, media, await thumbnailUrl(target, medium));
     } catch {
-        settle(id, media, undefined);
+        settle(isLatest, media, undefined);
     }
 };
 // The whole file, since a document is a zip a viewer reads end to end; the peek's size cap is what keeps that bounded.
-const readDocument = async (target: WorkspaceTreeEntry, id: number, signal: AbortSignal): Promise<void> => {
+const readDocument = async (target: WorkspaceTreeEntry, isLatest: () => boolean, signal: AbortSignal): Promise<void> => {
     loading.value = true;
     try {
         settle(
-            id,
+            isLatest,
             documentBytes,
             await sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path: target.path })).toString()}`, { signal }),
         );
     } catch {
-        settle(id, documentBytes, undefined);
+        settle(isLatest, documentBytes, undefined);
     }
 };
 const load = (target: WorkspaceTreeEntry | undefined): void => {
     controller?.abort();
     controller = undefined;
-    const id = ++seq;
+    const isLatest = latest();
     text.value = undefined;
     media.value = undefined;
     documentBytes.value = undefined;
@@ -175,12 +144,12 @@ const load = (target: WorkspaceTreeEntry | undefined): void => {
     }
     if (planned === `text`) {
         controller = new AbortController();
-        void readText(target, id, controller.signal);
+        void readText(target, isLatest, controller.signal);
     } else if (planned === `picture` || planned === `video`) {
-        void readMedia(target, planned, id);
+        void readMedia(target, planned, isLatest);
     } else if (planned === `document`) {
         controller = new AbortController();
-        void readDocument(target, id, controller.signal);
+        void readDocument(target, isLatest, controller.signal);
     }
 };
 watch(() => entry, load, { immediate: true });

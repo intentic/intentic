@@ -103,7 +103,7 @@ const GRANT_GROUPS = computed(() => [
         key: `devices` as const,
         kind: `device` as const,
         icon: `desktop` as const,
-        label: t(`sandbox.personaPowersFields.devices`),
+        label: t(`shared.devices`),
         empty: t(`sandbox.personaPowersFields.noDevicesConnectedYet`),
     },
     {
@@ -148,7 +148,7 @@ const shellCaveat = computed(
 
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <Icon name="file-tree" :class="RAIL" />
-                        <span class="min-w-0 flex-1 text-sm text-content">{{ t(`sandbox.personaPowersFields.files`) }}</span>
+                        <span class="min-w-0 flex-1 text-sm text-content">{{ t(`shared.files`) }}</span>
                         <SegmentedControl v-model="draft.files" :options="FILE_ACCESS" />
                     </div>
 

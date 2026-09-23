@@ -20,8 +20,7 @@ const exec = promisify(execFile);
 
 // `wslpath -w /` answers `\\wsl.localhost\archlinux\` (`\\wsl$\archlinux\` on older builds): the second component is
 // the registration name. Anything else — interop off, no wslpath, a drive path — names nothing.
-const registeredFrom = (wslRoot: string | undefined): string =>
-    /^\\\\wsl(?:\.localhost|\$)\\([^\\]+)/.exec((wslRoot ?? "").trim())?.[1] ?? "";
+const registeredFrom = (wslRoot: string | undefined): string => /^\\\\wsl(?:\.localhost|\$)\\([^\\]+)/.exec((wslRoot ?? "").trim())?.[1] ?? "";
 
 // The registration name alone, from the two sources that carry it; what `wsl.exe -d` needs, so never a pretty one.
 export const registeredNameFrom = (distroEnv: string | undefined, wslRoot: string | undefined): string | undefined =>
@@ -74,14 +73,13 @@ export const registeredDistro = async (): Promise<string | undefined> => {
     return registeredNameFrom(process.env["WSL_DISTRO_NAME"], await wslRoot());
 };
 
-// The distros `wsl -l -q` lists, one per line. Older wsl.exe builds print UTF-16 whatever the console is set to, which
-// arrives through a UTF-8 decode as every other byte NUL; stripping them is what turns that back into names.
+// The user's distros `wsl -l -q` lists, one per line; older wsl.exe prints UTF-16 regardless, which decodes with every other byte NUL.
 export const distrosFrom = (stdout: string): string[] =>
     stdout
         .replaceAll("\0", "")
         .split(/\r?\n/)
         .map((line) => line.trim())
-        .filter((line) => line !== "");
+        .filter((line) => line !== "" && !WSL_SYSTEM_DISTROS.has(line));
 
 // The user's own distros as this side of the PC sees them (Windows, or a distro through interop); undefined when WSL
 // cannot be asked, so a failed listing is never read as "there are none".
@@ -91,5 +89,15 @@ export const listDistros = async ({ running = false }: { readonly running?: bool
         windowsHide: true,
         env: { ...process.env, WSL_UTF8: "1" },
     }).catch(() => undefined);
-    return answer === undefined ? undefined : distrosFrom(answer.stdout).filter((distro) => !WSL_SYSTEM_DISTROS.has(distro));
+    return answer === undefined ? undefined : distrosFrom(answer.stdout);
 };
+
+// Which environment of a PC this agent is: its Windows side, one of its WSL distros, or a computer with no other side.
+export type Side = "windows" | "wsl" | "native";
+
+// Only the Windows side of a PC holds distros, and knowing it needs no read.
+export const WINDOWS_SIDE = process.platform === "win32";
+
+let side: Promise<Side> | undefined;
+export const thisSide = (): Promise<Side> =>
+    (side ??= WINDOWS_SIDE ? Promise.resolve("windows") : wslEnvironment().then((wsl) => (wsl === undefined ? "native" : "wsl")));

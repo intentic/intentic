@@ -16,7 +16,7 @@ import {
     windowsLaunchStub,
 } from "@intentic/local-agent";
 import { binDir } from "../config.js";
-import { archToken, download, exe, osToken, setAside } from "../release.js";
+import { archToken, download, exe, osToken, renameIfPresent } from "../release.js";
 import { mutagenDaemonLogPath, type Pairing } from "./config.js";
 import { runProcess } from "./exec.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
@@ -98,8 +98,7 @@ export const parseForwardPorts = (listed: string, sandboxId: string): number[] =
         return Number.isInteger(port) ? [port] : [];
     });
 
-export const forwardedPorts = (mutagen: string, sandboxId: string): number[] =>
-    parseForwardPorts(listSessionNames(mutagen, "forward"), sandboxId);
+export const forwardedPorts = (mutagen: string, sandboxId: string): number[] => parseForwardPorts(listSessionNames(mutagen, "forward"), sandboxId);
 
 // Forward sessions no pairing in `keptSandboxIds` claims.
 const orphanForwardSessions = (mutagen: string, keptSandboxIds: readonly string[]): string[] =>
@@ -329,7 +328,9 @@ export const flushSession = async (mutagen: string, name: string): Promise<void>
     await runProcess(mutagen, ["sync", "flush", "--skip-wait", name]);
 };
 
-export const conflictsFrom = (session: Pick<LiveSession, "conflicts" | "excludedConflicts">): { count: number; paths: DeviceConflict[] } | undefined => {
+export const conflictsFrom = (
+    session: Pick<LiveSession, "conflicts" | "excludedConflicts">,
+): { count: number; paths: DeviceConflict[] } | undefined => {
     const listed = session.conflicts ?? [];
     const excluded = Number(session.excludedConflicts ?? 0);
     const count = listed.length + (Number.isFinite(excluded) ? excluded : 0);
@@ -584,15 +585,6 @@ const installedVersion = (binary: string, versionArgs: string[]): string | undef
     return /\d+\.\d+\.\d+/.exec(result.stdout)?.[0];
 };
 
-// Mutagen is replaced by extraction into place, so the running copy is set aside first and dropped once the new one lands.
-const replaceBinary = async (binary: string, write: () => Promise<void> | void): Promise<void> => {
-    const displaced = `${binary}.old`;
-    await setAside(binary, displaced);
-    await write();
-    await chmod(binary, 0o755);
-    await rm(displaced, { force: true }).catch(() => {});
-};
-
 // Extract a gzipped tarball into this agent's own bin using the system `tar` (bsdtar on macOS/Windows 10+).
 const extractTarball = (tarball: string): void => {
     const extract = spawnSync("tar", ["-xzf", tarball, "-C", binDir], { stdio: "inherit", windowsHide: true });
@@ -632,7 +624,12 @@ export const ensureMutagen = async (): Promise<string> => {
         `https://github.com/mutagen-io/mutagen/releases/download/v${MUTAGEN_VERSION}/mutagen_${osToken()}_${archToken()}_v${MUTAGEN_VERSION}.tar.gz`,
         tarball,
     );
-    await replaceBinary(dest, () => extractTarball(tarball));
+    // Extraction writes in place, so the running copy is set aside first and dropped once the new one lands.
+    const displaced = `${dest}.old`;
+    await renameIfPresent(dest, displaced);
+    extractTarball(tarball);
+    await chmod(dest, 0o755);
+    await rm(displaced, { force: true }).catch(() => undefined);
     await rm(tarball, { force: true }).catch(() => undefined);
     return dest;
 };

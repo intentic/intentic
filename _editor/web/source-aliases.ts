@@ -131,9 +131,8 @@ export const sourceAliases = (): Record<string, string> => ({
     // Guard against a stylesheet being replaced by a no-op write; installed on Vite's own dev-style nodes before the
     // app mounts, so it must stay import-light.
     "@intentic/ui/style-stability": fromRoot("_editor/ui/src/lib/styleStability.ts"),
-    // A file's kind from its name (category, glyph, colour class), read by the home's pure ordering and its unit tests
-    // without booting the component graph.
-    "@intentic/ui/file-icon": fromRoot("_editor/ui/src/icons/fileIcon.ts"),
+    // A file's format from its name, read by pure modules (the home's ordering, chat's peeks) without the component graph.
+    "@intentic/ui/file-format": fromRoot("_editor/ui/src/lib/fileFormat.ts"),
     "@intentic/ui": fromRoot("_editor/ui/src/index.ts"),
     // This one must resolve to source, not as a convenience: `@intentic/extension-ui`'s published dist/index.js is the
     // host bridge that hands back `globalThis.__intenticHost.modules[...]`, the object this app fills by importing the

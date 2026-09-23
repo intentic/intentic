@@ -94,7 +94,7 @@ const judge = (): RailGroup => ({
     items: [signal(`approvals`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
 });
 // Authored once, then left alone. Automations never badges: a held wake is counted by Approvals instead.
-const setup = (): RailGroup => ({ id: `setup`, label: t(`views.registry.setUp`), items: [signal(`workflows`), signal(`automations`)] });
+const setup = (): RailGroup => ({ id: `setup`, label: t(`shared.setUp`), items: [signal(`workflows`), signal(`automations`)] });
 // Consulted deliberately, not summoned; Documentation badges rarely and meaningfully, the others don't at all.
 const know = (): RailGroup => ({
     id: `know`,
@@ -135,7 +135,9 @@ export const railGroupsFor = (audience: Audience): readonly RailGroup[] => railG
 
 // A guest's rail: the chat it drives and the board of its own conversations, whichever audience it answered. Every
 // other tile opens on a read the daemon refuses a guest, and a tile that only ever shows a refusal is not a tile.
-export const makerRailGroups = (): readonly RailGroup[] => [{ id: `work`, label: t(`views.registry.work`), items: [always(`chat`), always(`agents`)] }];
+export const makerRailGroups = (): readonly RailGroup[] => [
+    { id: `work`, label: t(`views.registry.work`), items: [always(`chat`), always(`agents`)] },
+];
 
 // Whether this reader can open a tile at all, asked of every list of sections the shell draws: the rail's tiles, its
 // More menu, the phone's menu and tab bar. A guest is fenced to a handful of paths (shell/guestPaths.ts) and a tile

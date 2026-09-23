@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import type { Capability } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { stubEnv } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";

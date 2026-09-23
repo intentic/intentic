@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { stabilizeStyleWrites } from "@intentic/ui/style-stability";
-import { it, expect, afterEach } from "bun:test";
 
 /* Hot CSS updates replace the style node's text in place. */
 const updateStyle = (id: string, content: string): void => {

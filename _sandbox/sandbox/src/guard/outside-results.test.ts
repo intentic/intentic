@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, test, expect } from "bun:test";
 import { CONTROL_MCP_SERVERS, DAEMON_MCP_SERVERS, RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract";
 import { mcpServerOf, outsideSourceOf, sealResult } from "./outside-results.js";
 
@@ -207,7 +206,10 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
             ).toBe(true);
         }
         for (const server of RESERVED_MCP_SERVER_NAMES) {
-            expect(discovered.has(server), `reserved server "${server}" is mounted nowhere the scan can see — a stale row in DAEMON_MCP_SERVERS`).toBe(true);
+            expect(
+                discovered.has(server),
+                `reserved server "${server}" is mounted nowhere the scan can see — a stale row in DAEMON_MCP_SERVERS`,
+            ).toBe(true);
         }
     });
 

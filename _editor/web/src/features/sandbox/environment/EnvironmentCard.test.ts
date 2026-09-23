@@ -2,7 +2,6 @@
 // can't gate on it): show the recipe and hide the tab, not the inventory itself (contents.integration.test.ts).
 import "@intentic/testing/dom";
 import type { Environment } from "@intentic/sandbox-contract";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -22,7 +21,7 @@ const applied = ref<Environment[`approved`] | undefined>(environment.approved);
 const recurring = ref<NonNullable<Environment[`recurring`]>>([]);
 // Set only on a sandbox whose base was compiled from a checkout; undefined is every published sandbox.
 const localImage = ref<Environment[`localImage`]>(undefined);
-mock.module(`./useEnvironment`, () => ({
+jest.mock(`./useEnvironment`, () => ({
     ENVIRONMENT_KEY: [`environment`],
     useEnvironment: () => ({
         state: ref(environment),
@@ -41,7 +40,7 @@ mock.module(`./useEnvironment`, () => ({
 
 // Whether this sandbox's daemon knows the contents route; the one flag each test sets.
 const unsupported = ref(false);
-mock.module(`./useEnvironmentContents`, () => ({
+jest.mock(`./useEnvironmentContents`, () => ({
     useEnvironmentContents: () => ({
         groups: ref([]),
         awaiting: ref(0),
@@ -53,25 +52,25 @@ mock.module(`./useEnvironmentContents`, () => ({
 }));
 // The active sandbox as the platform describes it; `hosted` selects the rebuild executor.
 const active = ref<{ id: string; role: string; hosted?: { region: string; warm: boolean } | null }>({ id: `sb1`, role: `owner` });
-mock.module(`../client/useSandbox`, () => ({
+jest.mock(`../client/useSandbox`, () => ({
     useSandbox: () => ({ active, daemonUrl: ref(undefined), reachable: ref(true) }),
     sandboxKey: (name: string) => [name],
 }));
-mock.module(`@tanstack/vue-query`, () => ({ useQueryClient: () => ({ setQueryData: () => {} }) }));
+jest.mock(`@tanstack/vue-query`, () => ({ useQueryClient: () => ({ setQueryData: () => {} }) }));
 // Mocked as a module: agentActions reaches the shared query client and chat broadcast singletons, which
 // are out of this suite's subject and fail at import if left real.
-mock.module(`../../agents/fleet/agentActions`, () => ({ startAgent: () => `` }));
+jest.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: () => `` }));
 // Each reaches the daemon on its own; mocked here only so mounting the card doesn't.
-mock.module(`../../workspace/viewers/DiffView.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-mock.module(`../../workspace/viewers/DiffToolbar.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`../../workspace/viewers/DiffView.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`../../workspace/viewers/DiffToolbar.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // Marks each executor with data-executor, so a test can tell which one rendered without mounting it.
-mock.module(`../../capabilities/connect/HostRecreate.vue`, () => ({
+jest.mock(`../../capabilities/connect/HostRecreate.vue`, () => ({
     default: defineComponent({ render: () => h(`div`, { "data-executor": `host` }) }),
 }));
-mock.module(`./HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
+jest.mock(`./HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
 // Carries `recipePending` out with it: whether the checkout's rebuild knows a recipe is waiting is what makes it
 // describe itself as applying that recipe rather than as a second, unrelated rebuild.
-mock.module(`./DevRebuild.vue`, () => ({
+jest.mock(`./DevRebuild.vue`, () => ({
     default: defineComponent({
         props: { recipePending: { type: Boolean, default: false } },
         render(): ReturnType<typeof h> {

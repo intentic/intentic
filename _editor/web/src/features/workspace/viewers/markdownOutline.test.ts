@@ -1,6 +1,5 @@
 // Arithmetic behind the markdown preview's outline rail: which section is active, which headings exist.
 import "@intentic/testing/dom";
-import { describe, it, expect } from "bun:test";
 import { activeAt, matchHeadings, progressAt, readHeadings, type OutlineHeading } from "./markdownOutline";
 
 const container = (html: string): HTMLElement => {

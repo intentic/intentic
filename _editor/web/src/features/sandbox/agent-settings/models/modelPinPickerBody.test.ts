@@ -2,12 +2,11 @@
 // writes an explicit value: an entry never carries an absence for the harness to interpret, because the panel
 // has no way to show one.
 import "@intentic/testing/dom";
-import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Stubbed: the model list has its own suite; this stub renders the footer slot and can answer with a pick.
-mock.module(`../../../chat/models/ModelPicker.vue`, () => ({
+jest.mock(`../../../chat/models/ModelPicker.vue`, () => ({
     __esModule: true,
     default: defineComponent({
         props: { provider: String, model: String, unpickable: Function },
@@ -31,10 +30,10 @@ mock.module(`../../../chat/models/ModelPicker.vue`, () => ({
 let unpickable: ((entry: { provider: string; value: string }) => boolean) | undefined;
 
 // Only used as the floor when adding, where there's no entry to read a provider off.
-mock.module(`../../../chat/run/useChat`, () => ({ useChat: () => ({ provider: ref(`claude`), model: ref(`claude-haiku-4-5`) }) }));
+jest.mock(`../../../chat/run/useChat`, () => ({ useChat: () => ({ provider: ref(`claude`), model: ref(`claude-haiku-4-5`) }) }));
 // Empty: puts every model on the static effort scale with no `fast` badge; the badge case sets its own catalog below.
 const catalog = ref<Record<string, readonly { value: string; label: string; badges?: readonly string[]; efforts?: readonly string[] }[]>>({});
-mock.module(`../../../chat/accounts/providerCatalog`, () => ({
+jest.mock(`../../../chat/accounts/providerCatalog`, () => ({
     providerModels: catalog,
     providerDisplayLabel: (provider: string) => provider.toUpperCase(),
     // <ProviderLogo> names it; bun links an ESM import against exactly what this factory returns.

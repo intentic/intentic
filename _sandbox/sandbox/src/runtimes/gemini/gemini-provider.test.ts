@@ -1,5 +1,4 @@
 import { unstubbed } from "@intentic/testing";
-import { test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
 import { context, servicesWith, turn } from "../../agent/run/turn/turn-plan.testing.js";
 import { testConfig } from "../../testing.js";
@@ -16,7 +15,10 @@ const OFFERED: readonly GeminiModel[] = [
 ];
 
 // `live` undefined is a translator that has never listed a Google model, while `models` still falls back to the seed.
-const geminiServices = (models: readonly GeminiModel[] = OFFERED, served: { live: readonly GeminiModel[] | undefined } = { live: models }): Services =>
+const geminiServices = (
+    models: readonly GeminiModel[] = OFFERED,
+    served: { live: readonly GeminiModel[] | undefined } = { live: models },
+): Services =>
     servicesWith({
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {

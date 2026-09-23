@@ -1,7 +1,6 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { MAX_TEXT_BYTES, readWorkspaceFileWindow } from "./workspace-files.js";
 
 // A temp file holding `content`, and the dir to clean up after.

@@ -1,5 +1,4 @@
 import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
 
 // The brief is the only thing standing between a graph of separate sessions and agents doing unrelated jobs; pure text

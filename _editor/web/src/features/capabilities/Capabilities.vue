@@ -17,15 +17,13 @@ import {
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import NetdiskMounts from "../../components/NetdiskMounts.vue";
-import VpnConnections from "../../components/VpnConnections.vue";
+import LiveLinkRows from "../../components/LiveLinkRows.vue";
 import { startAgent } from "../agents/fleet/agentActions";
 import { useExtensions } from "../extensions/useExtensions";
 import { useRegistry } from "../extensions/useRegistry";
 import { useDevices } from "../sandbox/devices/useDevices";
-import { useNetdisk } from "../sandbox/devices/useNetdisk";
 import { HOST_DOOR, usePeerConnect, WEBEXT_DOOR } from "../sandbox/devices/usePeerConnect";
-import { useVpn } from "../sandbox/devices/useVpn";
+import { useLiveLinks } from "../sandbox/devices/useLiveLinks";
 import { useBackgroundProcesses, viewProcessLogs } from "../terminal/useBackgroundProcesses";
 import { useCapabilityCatalog } from "./capabilityCatalog";
 import { swallowFileDrag, useCapabilityForm } from "./capabilityForm";
@@ -70,9 +68,9 @@ const router = useRouter();
 const { recommendationFor, capabilities, error: listError, add, remove, rename, refetch, dismissRecommendation } = useCapabilities();
 const { contributionOf, enabled: enabledExtensions, settled: extensionsSettled } = useExtensions();
 // A tunnel's live address for the Connected slice; the VPN tile reads the same query, so the two can't disagree.
-const { links: vpnLinks } = useVpn();
+const { links: vpnLinks } = useLiveLinks(`vpn`);
 // Same for a disk's mount point and whether it takes writes; the disk tile reads the same query.
-const { links: netdiskLinks } = useNetdisk();
+const { links: netdiskLinks } = useLiveLinks(`netdisk`);
 // Background gateway liveness for relay connectors (Discord, IMAP), scoped to this tile.
 const { rows: processRows, busy: processBusy, start: startProcess, stop: stopProcess } = useBackgroundProcesses();
 // Desktop sync, the other door a machine arrives through, holds no tile; read off the Devices tab's list, never polled here.
@@ -188,7 +186,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <SplitView :title="t(`capabilities.capabilities.capabilities`)" :description="description">
+    <SplitView :title="t(`shared.capabilities`)" :description="description">
         <template #strips>
             <Notice v-if="topError" :of="topError" />
         </template>
@@ -214,14 +212,7 @@ onBeforeUnmount(() => {
                             <Icon name="sparkles" class="text-info" />
                             <span class="text-xs text-content">{{ t(`capabilities.capabilities.recommendedSetup`) }}</span>
                             <span class="text-2xs text-muted">{{ t(`capabilities.capabilities.left`, { count: walkQueue.length }) }}</span>
-                            <Button
-                                class="ml-auto"
-                                :label="t(`capabilities.capabilities.skip`)"
-                                size="small"
-                                severity="secondary"
-                                text
-                                @click="skip"
-                            />
+                            <Button class="ml-auto" :label="t(`shared.skip`)" size="small" severity="secondary" text @click="skip" />
                         </div>
 
                         <!-- Tile heading plus, for a singleton tile, its state (which describes the whole screen, not one row) and its removal control. -->
@@ -259,22 +250,14 @@ onBeforeUnmount(() => {
                             class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-warning hover:underline"
                         >
                             <Icon name="exclamation-triangle" />
-                            {{ soleInstance.status.detail ?? t(`capabilities.capabilities.needsSandboxRebuild`)
-                            }}{{ t(`capabilities.capabilities.finishSetup`) }}
+                            {{ soleInstance.status.detail ?? t(`shared.needsSandboxRebuild`) }}{{ t(`capabilities.capabilities.finishSetup`) }}
                         </RouterLink>
 
                         <form class="flex flex-col gap-3" @submit.prevent="submit">
                             <!-- What you already have of this tile, suppressed on a singleton tile. -->
-                            <VpnConnections
-                                v-if="selected.kind === 'vpn' && selectedInstances.length > 0"
-                                :instances="selectedInstances"
-                                :editing-id="editing?.id"
-                                @edit="openEdit"
-                                @rename="askRename"
-                                @remove="confirmRemoveId = $event"
-                            />
-                            <NetdiskMounts
-                                v-else-if="selected.kind === 'netdisk' && selectedInstances.length > 0"
+                            <LiveLinkRows
+                                v-if="(selected.kind === 'vpn' || selected.kind === 'netdisk') && selectedInstances.length > 0"
+                                :kind="selected.kind"
                                 :instances="selectedInstances"
                                 :editing-id="editing?.id"
                                 @edit="openEdit"
@@ -283,7 +266,7 @@ onBeforeUnmount(() => {
                             />
                             <RowGroup
                                 v-else-if="(selectedInstances.length > 0 || selectedDevices.length > 0) && !selected.singleton"
-                                :label="t(`capabilities.capabilities.connections`)"
+                                :label="t(`shared.connections`)"
                             >
                                 <CapabilityInstanceRow
                                     v-for="instance in selectedInstances"
@@ -344,7 +327,7 @@ onBeforeUnmount(() => {
                                             <template #icon><Icon name="align-left" /></template>
                                         </Button>
                                         <Button
-                                            :label="row.running ? t(`capabilities.capabilities.restart`) : t(`ui.action.start`)"
+                                            :label="row.running ? t(`shared.restart`) : t(`ui.action.start`)"
                                             size="small"
                                             :text="true"
                                             :disabled="processBusy === row.id"
@@ -410,7 +393,7 @@ onBeforeUnmount(() => {
                             >
                                 <div :class="ui.sectionLabel()">
                                     <!-- A singleton tile always says "Settings": it never adds a second anything, and has no name to show. -->
-                                    <template v-if="selected.singleton">{{ t(`capabilities.capabilities.settings`) }}</template>
+                                    <template v-if="selected.singleton">{{ t(`shared.settings`) }}</template>
                                     <template v-else-if="editing">
                                         {{ t(`capabilities.capabilities.editing`) }} <span class="font-mono normal-case">{{ editing.id }}</span>
                                     </template>
@@ -424,7 +407,7 @@ onBeforeUnmount(() => {
 
                             <!-- No name box while editing or on a singleton tile: renaming moves state a form can't (askRename), so a second box here would be a lossy shortcut for it. -->
                             <label v-if="!selected.singleton && !editing" class="ui-field">
-                                <span class="ui-field-label">{{ t(`capabilities.capabilities.name`) }}</span>
+                                <span class="ui-field-label">{{ t(`shared.name`) }}</span>
                                 <input
                                     v-model="name"
                                     placeholder="my-tool"
@@ -455,7 +438,7 @@ onBeforeUnmount(() => {
                             <!-- A device's access as a posture: the preset sets all switches at once; the sentence states what they currently spell. -->
                             <label v-if="selected.kind === 'device'" class="flex items-start justify-between gap-4">
                                 <span class="min-w-0">
-                                    <span class="ui-field-label">{{ t(`capabilities.capabilities.access`) }}</span>
+                                    <span class="ui-field-label">{{ t(`shared.access`) }}</span>
                                     <span class="mt-0.5 block text-2xs text-muted">{{ hostGrantSummary(values) }}</span>
                                 </span>
                                 <SegmentedControl
@@ -732,9 +715,7 @@ onBeforeUnmount(() => {
             <!-- Names what stops as precisely as the Devices board does: this is the same revoke, pressed from the tile. -->
             <ConfirmDialog
                 :open="disconnecting !== undefined"
-                :header="
-                    t(`capabilities.capabilities.disconnectHeader`, { machine: disconnecting?.title ?? t(`capabilities.capabilities.thisMachine`) })
-                "
+                :header="t(`capabilities.capabilities.disconnectHeader`, { machine: disconnecting?.title ?? t(`shared.thisMachine`) })"
                 :confirm-label="t(`ui.action.disconnect`)"
                 confirm-icon="times"
                 :destructive="true"

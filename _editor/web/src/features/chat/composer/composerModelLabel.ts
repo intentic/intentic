@@ -30,5 +30,5 @@ export const composerModelReading = (chat: ComposerModelChoice): ComposerModelRe
     }
     // On Auto the control says Auto, not the model underneath: that model is only the fallback if the reading never
     // lands, and naming it would read as though pressing the Auto row had done nothing.
-    return { label: chat.auto ? t(`chat.composerModelPill.auto`) : modelLabelFor(chat.provider, chat.model), unset: false };
+    return { label: chat.auto ? t(`shared.autoLabel`) : modelLabelFor(chat.provider, chat.model), unset: false };
 };

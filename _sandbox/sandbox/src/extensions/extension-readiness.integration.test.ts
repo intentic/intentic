@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { repoRoot } from "@intentic/constants/node";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
-import { test, expect } from "bun:test";
 import { extensionRuntimeAbsent } from "./extension-readiness.js";
 import type { InstalledExtension } from "./installed-extensions.js";
 

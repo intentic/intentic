@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { stubGlobal } from "@intentic/testing/bun";
 import { textOfBlock } from "./document-model";
 import { openOdf } from "./pkg";

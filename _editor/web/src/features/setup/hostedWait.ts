@@ -94,8 +94,7 @@ export interface HostedWaitInput {
 const MINUTE_MS = 60_000;
 // Long enough that a cold first boot isn't accused of being broken; applies only when nothing better is known.
 const SILENT_MS = 3 * MINUTE_MS;
-// Matches the daemon's give-up window (reach-report.ts REACH_GIVE_UP_MS); past this, nothing is still trying.
-// Only a fallback for a daemon too old to send `retrying`: a daemon that says it stopped outranks this clock.
+// The daemon's give-up window (reach-report.ts REACH_GIVE_UP_MS), for a probe still `checking` or silent about retrying.
 const UNREACHABLE_MS = 5 * MINUTE_MS;
 // When a probe that keeps failing starts being quoted under the steps: long enough that a boot's ordinary first
 // misses are never narrated, short enough that nobody watches a bare spinner for the whole give-up window.

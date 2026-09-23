@@ -2,7 +2,6 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createSpeech, type ExecFn, SpeechModelNotReadyError, SpeechUnprovisionedError, whisperLanguage } from "./transcribe.js";
 

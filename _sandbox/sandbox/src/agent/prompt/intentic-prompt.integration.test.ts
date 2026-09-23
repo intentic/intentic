@@ -2,7 +2,6 @@ import { CLAUDE_SEED_MODELS } from "@intentic/sandbox-contract";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { intenticPromptOf, missedCuts } from "./intentic-prompt.js";
 import { presetSystemPrompt } from "./preset-prompt.js";
 

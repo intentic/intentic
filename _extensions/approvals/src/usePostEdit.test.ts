@@ -1,5 +1,4 @@
 import type { PostApprovalSummary } from "@intentic/sandbox-contract";
-import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
 import { runAllTimersAsync } from "@intentic/testing/bun";
 import { usePostEdit } from "./usePostEdit";
 
@@ -18,7 +17,7 @@ const post = (overrides: Partial<PostApprovalSummary> = {}): PostApprovalSummary
 });
 
 let written: { post: PostApprovalSummary; changes: unknown }[];
-const write = mock(async (target: PostApprovalSummary, changes: unknown) => void written.push({ post: target, changes }));
+const write = jest.fn(async (target: PostApprovalSummary, changes: unknown) => void written.push({ post: target, changes }));
 
 beforeEach(() => {
     jest.useFakeTimers();

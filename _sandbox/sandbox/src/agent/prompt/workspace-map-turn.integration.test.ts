@@ -4,7 +4,6 @@ import { createCredentialGrants } from "../../secrets/credential-grants.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentTurn, type Persona, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { test, expect, mock } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { conversationAfter, testConfig, memoryFleet } from "../../testing.js";
@@ -26,7 +25,7 @@ const cards = parkedCards(memoryFleet().conversations);
 // sent once per conversation, honoured on every runtime, and built against the run's actual tree, not the shared
 // checkout.
 
-mock.module("../providers/harness-credentials.js", () => ({
+jest.mock("../providers/harness-credentials.js", () => ({
     resolveHarnessCredentials: async () => ({ ok: true, credentials: { oauthToken: "***", account: "acc-1" } }),
 }));
 

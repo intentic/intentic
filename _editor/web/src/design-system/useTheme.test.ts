@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach } from "bun:test";
 import { freshImport, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 
 // The scheme is the one preference with THREE states and two of them spell the same attribute: `system` is the

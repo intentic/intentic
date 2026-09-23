@@ -1,7 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import type { Embedder } from "../embed/embedder.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import { openIndex } from "../store/db.js";

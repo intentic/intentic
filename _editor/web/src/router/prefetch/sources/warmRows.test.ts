@@ -1,5 +1,4 @@
 import type { GitChange, RepoChanges } from "@intentic/api-contract";
-import { describe, it, expect } from "bun:test";
 import { warmRows, WARM_LIMIT } from "./warmRows";
 
 /* Read-ahead follows the workspace review's stable source order. */

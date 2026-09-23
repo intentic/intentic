@@ -8,7 +8,6 @@ import { promisify } from "node:util";
 import { serve, type ServerType } from "@hono/node-server";
 import { runnerIncomingRef } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import type { AgentWorktrees } from "../agents/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { createRunnerGitRefsRoute, createRunnerGitRpcRoute } from "./runner-git.routes.js";

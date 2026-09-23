@@ -4,21 +4,20 @@ import "@intentic/testing/dom";
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
-import { test, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-const patch = mock((fields: Partial<SandboxSettings>) => {
+const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-mock.module(`../../overview/useSandboxSettings`, () => ({
+jest.mock(`../../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
 // Two repos, since the per-repo half is what's worth proving: one row must not write the other's name.
-mock.module(`../../../workspace/explorer/useRepos`, () => ({
+jest.mock(`../../../workspace/explorer/useRepos`, () => ({
     useRepos: () => ({
         options: computed(() => [`root`, `vendor/widget`]),
         nested: computed(() => [`vendor/widget`]),

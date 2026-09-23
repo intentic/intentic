@@ -1,5 +1,4 @@
 import { nextTick, ref } from "vue";
-import { describe, it, expect, beforeEach, mock } from "bun:test";
 
 /* Switching sandboxes as a change of SCREEN, not just of daemon: what each sandbox was last showing is what it comes back to. */
 
@@ -30,11 +29,11 @@ type AfterEach = (to: Landing, from: Landing, failure?: unknown) => void;
 
 const activeSandboxId = ref<string | undefined>(`sb1`);
 const currentRoute = ref<Landing>(shellRoute(`/workspace`));
-const replace = mock();
+const replace = jest.fn();
 const hooks: AfterEach[] = [];
 
-mock.module("./useSandbox", () => ({ useSandbox: () => ({ activeSandboxId }) }));
-mock.module("../../../router", () => ({
+jest.mock("./useSandbox", () => ({ useSandbox: () => ({ activeSandboxId }) }));
+jest.mock("../../../router", () => ({
     router: { afterEach: (hook: AfterEach) => void hooks.push(hook), currentRoute, replace },
 }));
 

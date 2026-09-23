@@ -1,7 +1,6 @@
 // needs jsdom: pins rendered geometry (percentages, stack order, rounded data-end) that a NaN width or inverted
 // stack would get wrong silently, with no thrown error or type failure.
 import "@intentic/testing/dom";
-import { describe, it, expect, afterEach } from "bun:test";
 import { type App, createApp, h } from "vue";
 import { BarChart } from "@intentic/ui";
 import UsageColumnChart from "./UsageColumnChart.vue";

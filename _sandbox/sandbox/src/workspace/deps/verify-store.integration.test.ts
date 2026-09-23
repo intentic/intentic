@@ -1,7 +1,6 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "bun:test";
 import { fileVerifyStore, freshFailures } from "./verify-store.js";
 
 // What a red names as new decides whether a land is sent back for it, so a standing failure must never read as fresh.

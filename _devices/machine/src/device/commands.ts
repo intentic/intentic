@@ -1,59 +1,26 @@
 import { rm } from "node:fs/promises";
-import { sleep } from "@intentic/base/async";
+import { pollUntil } from "@intentic/base/async";
 import { plural } from "@intentic/base/format";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { buildCommand, type CommandContext } from "@stricli/core";
-import { resolveDaemonBase } from "../daemon-base.js";
+import { postWhileWarming } from "../daemon-base.js";
 import { completeSetup, prepareSetup } from "../install.js";
 import { ensureResident } from "../resident.js";
-import {
-    auditPath,
-    configPath,
-    type HostLink,
-    readLinks,
-    readLinkStates,
-    removeLinks,
-    unreachableIn,
-    upsertLink,
-} from "./config.js";
+import { auditPath, configPath, type HostLink, readLinks, readLinkStates, removeLinks, unreachableIn, upsertLink } from "./config.js";
 
 // device: setup (redeem a pairing and stay connected) and uninstall (disconnect, keep the audit log); no OAuth, only the pairing token.
 
-// Retries through a tunnel that may still be warming, but never through a 401: an expired pairing is definitive, and
-// retrying only delays the reconnect the user needs.
-const enroll = async (
-    sandboxUrl: string,
-    pairToken: string,
-    { attempts = 10, delayMs = 3000 }: { attempts?: number; delayMs?: number } = {},
-): Promise<{ id: string; token: string }> => {
-    for (let attempt = 1; ; attempt++) {
-        // Resolved per attempt (daemon-base.ts), since loopback may only appear partway through the retries.
-        const { base } = await resolveDaemonBase(sandboxUrl);
-        const url = `${base}/system/hosts/enroll`;
-        let response: Response;
-        try {
-            response = await fetch(url, { method: "POST", headers: { "x-intentic-pair": pairToken } });
-        } catch (error) {
-            if (attempt >= attempts) {
-                throw error;
-            }
-            process.stderr.write(`connecting: the sandbox isn't reachable yet, retrying (${attempt}/${attempts})…\n`);
-            await sleep(delayMs);
-            continue;
-        }
-        if (response.status === 401) {
-            throw new Error("that pairing has expired: click Connect again on the device's card in your sandbox for a fresh command.");
-        }
-        if (response.status >= 500 && attempt < attempts) {
-            process.stderr.write(`connecting: the sandbox is warming up (HTTP ${response.status}), retrying (${attempt}/${attempts})…\n`);
-            await sleep(delayMs);
-            continue;
-        }
-        if (!response.ok) {
-            throw new Error(`connecting this device failed (${response.status}): ${await response.text()}`);
-        }
-        return (await response.json()) as { id: string; token: string };
+const enroll = async (sandboxUrl: string, pairToken: string): Promise<{ id: string; token: string }> => {
+    const response = await postWhileWarming(
+        sandboxUrl,
+        "/system/hosts/enroll",
+        { headers: { "x-intentic-pair": pairToken } },
+        { doing: "connecting", expired: "that pairing has expired: click Connect again on the device's card in your sandbox for a fresh command." },
+    );
+    if (!response.ok) {
+        throw new Error(`connecting this device failed (${response.status}): ${await response.text()}`);
     }
+    return (await response.json()) as { id: string; token: string };
 };
 
 interface SetupFlags {
@@ -127,18 +94,11 @@ const LINK_OPEN_TIMEOUT_MS = 20_000;
 const LINK_OPEN_POLL_MS = 500;
 
 // Setup says "connected" only once the agent's own stamp shows this link's socket open.
-const linkOpens = async (url: string): Promise<boolean> => {
-    const deadline = Date.now() + LINK_OPEN_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded poll of one stamp, serial by definition
-        if ((await readLinkStates())?.[url]?.state === "open") {
-            return true;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-        await sleep(LINK_OPEN_POLL_MS);
-    }
-    return false;
-};
+const linkOpens = async (url: string): Promise<boolean> =>
+    await pollUntil(async () => (await readLinkStates())?.[url]?.state === "open", {
+        intervalMs: LINK_OPEN_POLL_MS,
+        timeoutMs: LINK_OPEN_TIMEOUT_MS,
+    });
 
 interface UninstallFlags {
     readonly sandbox?: string;
@@ -204,7 +164,9 @@ const forgetUnreachable = buildCommand({
 export const dropUnreachableLinks = async (out: Log): Promise<void> => {
     const stamped = await readLinkStates();
     if (stamped === undefined) {
-        out("This machine's agent isn't running, so nothing here knows which links are answering. Start it with `intentic-machine run` and try again.");
+        out(
+            "This machine's agent isn't running, so nothing here knows which links are answering. Start it with `intentic-machine run` and try again.",
+        );
         return;
     }
     const gone = unreachableIn(stamped);

@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { disabledOf, FEATURES, parseFeatures } from "./features.js";
 
 test("default: everything on", () => {

@@ -1,6 +1,5 @@
 import { homedir } from "node:os";
 import { HOST_STATE_ROOT } from "@intentic/constants";
-import { describe, it, expect } from "bun:test";
 import {
     linuxDesktopEntry,
     macLaunchAgentXml,

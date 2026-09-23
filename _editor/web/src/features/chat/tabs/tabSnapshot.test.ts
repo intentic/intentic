@@ -1,5 +1,4 @@
 import { STATE_DIR } from "@intentic/constants";
-import { describe, it, expect, beforeEach } from "bun:test";
 
 // Pins the reader's contract: every tab named once, a focus naming one of them, nothing readable dropped. A
 // duplicate conversationId would collide on Vue's v-for key, scrambling names and closes.
@@ -199,83 +198,41 @@ describe(`reading a tab snapshot`, () => {
         expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ model: `claude-sonnet-4-5-20250929`, effort: `medium`, thinking: false });
     });
 
-    // The debt a thin catalog left (ComposerSelection.displacedModel): losing it on reload settles the app's substitution as
-    // though the user had picked it, and the pinned model never comes back.
-    it(`restores the model a catalog moved the tab off, and drops one that names nothing`, () => {
-        const stored = (displacedModel: unknown): string =>
-            JSON.stringify({
-                active: `a`,
-                tabs: [
-                    { conversationId: `a`, draft: ``, provider: `gemini`, model: `gemini-3.1-pro-low`, displacedModel, attachments: [] },
-                ],
-            });
-
-        session.set(KEY, stored(`claude-opus-4-6-thinking`));
-        expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ model: `gemini-3.1-pro-low`, displacedModel: `claude-opus-4-6-thinking` });
-
-        session.set(KEY, stored(``));
-        expect(readTabSnapshot(`sb1`)?.tabs[0]).not.toHaveProperty(`displacedModel`);
-    });
-
-    it(`restores the persona the tab acts as, and drops one that names nothing`, () => {
-        const stored = (actsAs: unknown): unknown =>
-            JSON.stringify({ active: `a`, tabs: [{ conversationId: `a`, draft: ``, actsAs, attachments: [] }] });
-
-        session.set(KEY, stored(`work`) as string);
-        expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ actsAs: `work` });
-
-        session.set(KEY, stored(``) as string);
-        expect(readTabSnapshot(`sb1`)?.tabs[0]).not.toHaveProperty(`actsAs`);
-    });
-
-    it(`drops turn settings that aren't usable values, leaving the restore to fall back`, () => {
+    // The debt a thin catalog left (ComposerSelection.displacedModel) and the persona the tab acts as survive a reload.
+    it(`restores the model a catalog moved the tab off and the persona it acts as`, () => {
         session.set(
             KEY,
-            JSON.stringify({
-                active: `a`,
-                tabs: [{ conversationId: `a`, draft: ``, model: ``, effort: 3, thinking: `yes`, attachments: [] }],
-            }),
+            blob(`a`, [{ ...tab(`a`), provider: `gemini`, model: `gemini-3.1-pro-low`, displacedModel: `claude-opus-4-6-thinking`, actsAs: `work` }]),
         );
+
+        expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({
+            model: `gemini-3.1-pro-low`,
+            displacedModel: `claude-opus-4-6-thinking`,
+            actsAs: `work`,
+        });
+    });
+
+    // Each field that reads back unusable is left out on its own, so the restore falls back for it and keeps the tab.
+    it.each([
+        [`displacedModel`, ``],
+        [`actsAs`, ``],
+        [`model`, ``],
+        [`effort`, 3],
+        [`thinking`, `yes`],
+        [`draftAt`, `this morning`],
+        [`account`, ``],
+    ])(`drops a %s that isn't a usable value`, (field, value) => {
+        session.set(KEY, blob(`a`, [{ ...tab(`a`), [field]: value }]));
 
         const restored = readTabSnapshot(`sb1`)?.tabs[0];
-        expect(restored).not.toHaveProperty(`model`);
-        expect(restored).not.toHaveProperty(`effort`);
-        expect(restored).not.toHaveProperty(`thinking`);
+        expect(restored?.conversationId).toBe(`a`);
+        expect(restored?.[field as keyof typeof restored]).toBeUndefined();
     });
 
-    it(`drops a draft stamp that isn't a finite instant`, () => {
-        session.set(
-            KEY,
-            JSON.stringify({
-                active: `a`,
-                tabs: [{ conversationId: `a`, draft: `half a sentence`, draftAt: `this morning`, attachments: [] }],
-            }),
-        );
+    it(`keeps a session whose account isn't a usable id, without the account`, () => {
+        session.set(KEY, blob(`a`, [{ ...tab(`a`), session: { id: `sess-1`, provider: `claude`, harness: `native`, account: 42 } }]));
 
-        expect(readTabSnapshot(`sb1`)?.tabs[0]).not.toHaveProperty(`draftAt`);
-    });
-
-    it(`drops an account that isn't a usable id, leaving the restore to fall back`, () => {
-        session.set(
-            KEY,
-            JSON.stringify({
-                active: `a`,
-                tabs: [
-                    {
-                        conversationId: `a`,
-                        draft: ``,
-                        provider: `claude`,
-                        account: ``,
-                        session: { id: `sess-1`, provider: `claude`, harness: `native`, account: 42 },
-                        attachments: [],
-                    },
-                ],
-            }),
-        );
-
-        const restored = readTabSnapshot(`sb1`)?.tabs[0];
-        expect(restored).not.toHaveProperty(`account`);
-        expect(restored?.session).toEqual({ id: `sess-1`, provider: `claude`, harness: `native`, account: undefined });
+        expect(readTabSnapshot(`sb1`)?.tabs[0]?.session).toEqual({ id: `sess-1`, provider: `claude`, harness: `native`, account: undefined });
     });
 
     it(`drops a session that reads back without what minted it, rather than completing it from the tab`, () => {

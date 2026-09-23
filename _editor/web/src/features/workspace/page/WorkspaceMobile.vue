@@ -40,9 +40,12 @@ import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
-import { isArchiveContent, opensAsFolder } from "../files/archiveEntries";
-import { type Provisional, provisionalAt, withProvisionalEntries } from "../files/provisionalEntries";
-import { type ExplorerFilters, explorerShows, technicalHidden } from "../explorer/explorerFilter";
+import { opensAsFolder } from "../files/archiveEntries";
+import { withProvisionalEntries } from "../files/provisionalEntries";
+import { explorerShows, technicalHidden } from "../explorer/explorerFilter";
+import { deadLink } from "../explorer/tree/treeRows";
+import { useInlineEdit } from "../explorer/tree/useTreeEdits";
+import { useTreeRules } from "../explorer/tree/useTreeRules";
 import FileViewer from "../viewers/FileViewer.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
@@ -53,7 +56,7 @@ import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
 import { withinScope } from "../../../app/projectScope";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
-import { parentDir } from "@intentic/ui/path";
+import { basename, parentDir } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
 
 // Drill-down file browser (one directory per screen) plus Changes/Restore Points panels and a full-screen
@@ -71,11 +74,13 @@ const back = usePageBack();
 const words = useVocabulary();
 const { maker } = useAudience();
 const changes = useChanges();
+const store = useWorkspaceTree();
 const {
-    tree,
-    rootHidden,
     entriesByPath,
     entry,
+    listingOf,
+    hiddenIn,
+    keepListed,
     error,
     isLoading,
     refetch,
@@ -86,11 +91,8 @@ const {
     busy,
     actionError,
     canEditFiles,
-    loadChildren,
-    lazyChildren,
-    lazyHidden,
     lazyLoading,
-} = useWorkspaceTree();
+} = store;
 // The tree query reports a raw message; this view knows the user was trying to see their files.
 const treeNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: t(`workspace.workspaceMobile.couldntLoadFiles`), detail: error.value },
@@ -182,7 +184,7 @@ const changesMark = computed(() => {
 });
 const segmentOptions = computed(() => [
     // Touch has no hover; `markTitle` reaches the reader via the pill's accessible name (nameOf), not a tooltip.
-    { label: t(`workspace.workspaceMobile.files`), value: `files` as const },
+    { label: t(`shared.files`), value: `files` as const },
     { label: words.value.changes, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
 ]);
 
@@ -202,58 +204,26 @@ const {
     note: searchNote,
 } = results;
 
-// Fetches an unlisted dir's children on demand (ignored, past budget, or a lazy subtree); repaints on arrival.
-watch(
-    dir,
-    (path) => {
-        if (path === ``) {
-            return;
-        }
-        const node = entriesByPath.value.get(path);
-        if (node === undefined || node.children === undefined) {
-            void loadChildren(path);
-        }
-    },
-    { immediate: true },
-);
-// Filter switches are shared with desktop, so a drilled-into folder shows the same entries the tree would.
-const filters = computed<ExplorerFilters>(() => ({
-    showIgnored: layout.showIgnored.value,
-    hideTests: layout.hideTests.value,
-    hideTechnical: layout.hideTechnical.value,
-}));
-// A walked dir carries children inline; an unlisted one's arrive via loadChildren, keyed by path.
-const children = computed<readonly WorkspaceTreeEntry[]>(() =>
-    dir.value === `` ? tree.value : (entriesByPath.value.get(dir.value)?.children ?? lazyChildren.value.get(dir.value) ?? []),
-);
+// A folder the walk skipped (ignored, past budget, a lazy subtree) is listed on demand, and repaints on arrival.
+keepListed(() => dir.value);
+const children = computed(() => listingOf(dir.value) ?? []);
 const listing = computed<readonly WorkspaceTreeEntry[]>(() => {
-    // Entries on their way into this folder are listed and ones on their way out are not, so every file gesture shows
-    // in the list at the gesture rather than a round trip later.
-    const shown = withProvisionalEntries(dir.value, children.value).filter((node) => explorerShows(node, filters.value));
+    // What this browser just wrote joins the list at the gesture, not a round trip later; the switches are the desktop's.
+    const shown = withProvisionalEntries(dir.value, children.value).filter((node) => explorerShows(node, layout.explorerFilters.value));
     const query = filter.value.trim().toLowerCase();
     return query === `` ? shown : shown.filter((node) => node.name.toLowerCase().includes(query));
 });
 // Tooling entries the technical switch took out of this level, said on a chip so the list never reads as the folder.
-const technicalCount = computed(() => technicalHidden(children.value, filters.value));
+const technicalCount = computed(() => technicalHidden(children.value, layout.explorerFilters.value));
 const dirLoading = computed(() => dir.value !== `` && lazyLoading.value.has(dir.value));
 // Entries the daemon's cap cut from the open dir's listing; 0, the common case, shows nothing.
-const dirHidden = computed(() => (dir.value === `` ? rootHidden.value : (lazyHidden.value.get(dir.value) ?? 0)));
+const dirHidden = computed(() => hiddenIn(dir.value));
 
 // The funnel's sheet (the desktop menu's rows), thumb-sized; stays open, since both repaint the list behind it.
 const filterSheet = ref(false);
 
-// A symlink that goes nowhere or leaves the workspace: dimmed, with no drill-in, since the sandbox has nothing
-// to list behind it.
-const deadLink = (node: WorkspaceTreeEntry): boolean => node.link?.state !== undefined;
-
-// A row for a file still arriving: drawn so an upload is visible where it lands, but there is nothing at that path to
-// open or act on until the workspace listing has it. A folder still arriving drills in — its own rows are placeholders.
-// Only for a path the listing doesn't have: a folder an upload is landing in usually exists already.
-const pendingRow = (path: string): Provisional | undefined => (entriesByPath.value.has(path) ? undefined : provisionalAt(path));
-const pending = (path: string): boolean => pendingRow(path) !== undefined;
-// An archive's contents are read-only: what a row there names is a copy the daemon keeps out of sight, and nothing
-// repacks a zip. The archive FILE itself is ordinary workspace content.
-const archivedEntry = (node: WorkspaceTreeEntry): boolean => isArchiveContent(node.path, (path) => entriesByPath.value.get(path));
+// A file still arriving is drawn but takes nothing, a folder still arriving drills in; an archive's contents are read-only.
+const { pendingRow, pending, archived } = useTreeRules({ byPath: entriesByPath, store });
 const openEntry = (node: WorkspaceTreeEntry): void => {
     if (node.type === `dir` && !isLockedWorkspacePath(node.path) && !deadLink(node)) {
         openDir(node.path);
@@ -274,16 +244,15 @@ const openEntry = (node: WorkspaceTreeEntry): void => {
 // visible window, not the opener's.
 const rootEl = ref<HTMLElement>();
 const sheetEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
-const renameTarget = ref<WorkspaceTreeEntry | undefined>(undefined);
-const renameValue = ref(``);
+// The tree's own naming field, in a box: what a commit writes, and that an empty or unchanged name writes nothing.
+const { edit: renaming, draft: renameValue, apply: renameStep } = useInlineEdit(() => false);
 const deleteTarget = ref<WorkspaceTreeEntry | undefined>(undefined);
 
 const renameField = ref<HTMLInputElement>();
 let selectWholeName = false;
 const startRename = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
-    renameValue.value = target.name;
-    renameTarget.value = target;
+    renameStep({ kind: `rename`, path: target.path });
     selectWholeName = true;
 };
 // Selected whole only as the box opens, so the first keystroke replaces the name; a later tap in the field places a
@@ -296,18 +265,14 @@ const onRenameFocus = (): void => {
     renameField.value?.select();
 };
 const confirmRename = (): void => {
-    const target = renameTarget.value;
-    renameTarget.value = undefined;
-    const name = renameValue.value.trim();
-    if (target === undefined || name === `` || name === target.name) {
+    const write = renameStep({ kind: `commit`, draft: renameValue.value, refused: false });
+    if (write?.kind !== `rename`) {
         return;
     }
-    const parent = parentDir(target.path);
-    // Said only once the move lands, and named: on a phone the list is the only feedback there is, and a row changing
-    // its own name is easy to miss with a thumb over it.
+    // Said only once the move lands, and named: on a phone a row changing its own name is easy to miss under a thumb.
     void run(async () => {
-        await moveEntry(target.path, parent === `` ? name : `${parent}/${name}`);
-        say(`Renamed to ${name}`);
+        await moveEntry(write.from, write.to);
+        say(`Renamed to ${basename(write.to)}`);
     }, `Couldn't rename that.`);
 };
 const confirmDelete = (): void => {
@@ -451,7 +416,7 @@ const onPick = (event: Event): void => {
                     :class="
                         ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`, layout.showIgnored.value || layout.hideTests.value ? `text-link` : ``)
                     "
-                    :aria-label="t(`workspace.workspaceMobile.filterWhatExplorerLists`)"
+                    :aria-label="t(`shared.filterWhatExplorerLists`)"
                     @click="filterSheet = true"
                 >
                     <Icon name="filter" class="text-base" />
@@ -496,7 +461,7 @@ const onPick = (event: Event): void => {
                         <input
                             v-model="filter"
                             type="search"
-                            :placeholder="contentMode ? t(`workspace.workspaceMobile.searchInFiles`) : t(`workspace.workspaceMobile.filter`)"
+                            :placeholder="contentMode ? t(`shared.searchInFiles`) : t(`shared.filter`)"
                             class="ui-field-box w-full min-w-0 pl-8 pr-3"
                             @keydown.esc="clearFilter"
                         />
@@ -522,8 +487,8 @@ const onPick = (event: Event): void => {
                         <input
                             v-model="search.include.value"
                             type="search"
-                            :placeholder="t(`workspace.workspaceMobile.filesToIncludeE`)"
-                            :aria-label="t(`workspace.workspaceMobile.filesToInclude`)"
+                            :placeholder="t(`shared.filesToIncludeE`)"
+                            :aria-label="t(`shared.filesToInclude`)"
                             class="ui-field-box w-full min-w-0 pl-8 pr-3"
                         />
                     </div>
@@ -618,8 +583,7 @@ const onPick = (event: Event): void => {
                             <span
                                 class="min-w-0 flex-1 truncate text-sm"
                                 :class="{
-                                    'text-subtle':
-                                        node.ignored || isLockedWorkspacePath(node.path) || node.link?.state !== undefined || pending(node.path),
+                                    'text-subtle': node.ignored || isLockedWorkspacePath(node.path) || deadLink(node) || pending(node.path),
                                 }"
                                 >{{ node.name }}</span
                             >
@@ -658,7 +622,7 @@ const onPick = (event: Event): void => {
                             />
                         </button>
                         <p v-if="dirLoading && listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">
-                            {{ t(`workspace.workspaceMobile.loading`) }}
+                            {{ t(`shared.loading`) }}
                         </p>
                         <p v-else-if="listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">
                             {{ filter ? t(`workspace.workspaceMobile.noMatchingEntries`) : t(`workspace.workspaceMobile.directoryEmpty`) }}
@@ -694,7 +658,7 @@ const onPick = (event: Event): void => {
         </template>
 
         <!-- A checked row draws its mark; the gutter holds the space either way, so the label can't shift on flip. -->
-        <BottomSheet v-model="filterSheet" :header="t(`workspace.workspaceMobile.filter2`)">
+        <BottomSheet v-model="filterSheet" :header="t(`shared.filter2`)">
             <div class="flex flex-col gap-0.5">
                 <button
                     type="button"
@@ -755,7 +719,7 @@ const onPick = (event: Event): void => {
                 </p>
                 <!-- Everything below Copy path is refused by the sandbox on a locked entry, so it gets the explanation instead. -->
                 <p v-if="isLockedWorkspacePath(sheetEntry.path)" class="flex h-12 items-center gap-3 px-3 text-sm text-muted">
-                    <Icon name="lock" class="text-base text-subtle" /> {{ t(`workspace.workspaceMobile.keptPrivateBySandbox`) }}
+                    <Icon name="lock" class="text-base text-subtle" /> {{ t(`shared.keptPrivateBySandbox`) }}
                 </p>
                 <template v-else>
                     <button
@@ -767,7 +731,7 @@ const onPick = (event: Event): void => {
                         <Icon name="download" class="text-base text-muted" /> {{ t(`ui.action.download`) }}
                     </button>
                     <!-- Rename and Delete stay gated; Download and Copy path remain available. -->
-                    <template v-if="canEditFiles && !archivedEntry(sheetEntry)">
+                    <template v-if="canEditFiles && !archived(sheetEntry.path)">
                         <button
                             type="button"
                             class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
@@ -783,17 +747,17 @@ const onPick = (event: Event): void => {
                             <Icon name="trash" class="text-base" /> {{ t(`ui.action.delete`) }}
                         </button>
                     </template>
-                    <p v-else-if="archivedEntry(sheetEntry)" class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
-                        <Icon name="box" class="text-base text-subtle" /> {{ t(`workspace.workspaceMobile.insideArchiveExtractTo`) }}
+                    <p v-else-if="archived(sheetEntry.path)" class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
+                        <Icon name="box" class="text-base text-subtle" /> {{ t(`shared.insideArchiveExtractTo`) }}
                     </p>
                     <p v-else class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
-                        <Icon name="lock" class="text-base text-subtle" /> {{ t(`workspace.workspaceMobile.readOnlyChangingFiles`) }}
+                        <Icon name="lock" class="text-base text-subtle" /> {{ t(`shared.readOnlyChangingFiles`) }}
                     </p>
                 </template>
             </div>
         </BottomSheet>
 
-        <Modal :open="renameTarget !== undefined" size="sm" :header="t(`ui.action.rename`)" @update:open="renameTarget = undefined">
+        <Modal :open="renaming.kind === 'renaming'" size="sm" :header="t(`ui.action.rename`)" @update:open="renameStep({ kind: 'cancel' })">
             <input
                 ref="renameField"
                 v-model="renameValue"
@@ -804,7 +768,7 @@ const onPick = (event: Event): void => {
                 @keydown.enter="confirmRename"
             />
             <template #footer>
-                <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="renameTarget = undefined" />
+                <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="renameStep({ kind: 'cancel' })" />
                 <Button :label="t(`ui.action.rename`)" @click="confirmRename" />
             </template>
         </Modal>

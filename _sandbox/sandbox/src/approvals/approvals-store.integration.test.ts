@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { PostApprovalSummary } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { fileApprovalsStore } from "./approvals-store.js";
 
 // A store over a fresh temp path (the directory doesn't exist yet: the store must create it on write).

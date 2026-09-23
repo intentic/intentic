@@ -60,7 +60,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
     return role.kind === `helper`
         ? { label: t(`sandbox.modelRoleRow.off`), hint: t(`sandbox.modelRoleRow.notSetJobDoes`) }
         : {
-              label: t(`sandbox.modelRoleRow.chatDefault`),
+              label: t(`shared.chatDefault`),
               hint: t(`sandbox.modelRoleRow.nothingPinnedRunsOn`),
           };
 });

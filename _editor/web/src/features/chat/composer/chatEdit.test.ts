@@ -1,8 +1,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import type { Conversation } from "../session/conversation";
 import { providerAccounts } from "../accounts/providerAccounts";
@@ -18,16 +16,16 @@ import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 // Asserted through the real composer and DOM, since editing is a mode with no value unless a surface
 // offers it. Arming commits nothing (doomed turns stay struck through until retyped); Send is the
 // only thing that spends. The conversation-level rewind is pinned in conversation.test.ts.
-hoisted(() => {
+(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
         unobserve(): void {}
         disconnect(): void {}
     } as unknown as typeof globalThis.IntersectionObserver;
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-});
+})();
 
-mock.module(`../../agents/fleet/useAgents`, () => {
+jest.mock(`../../agents/fleet/useAgents`, () => {
     return {
         useAgents: () => ({
             fleet: computed(() => []),
@@ -39,12 +37,12 @@ mock.module(`../../agents/fleet/useAgents`, () => {
         }),
     };
 });
-mock.module(`../../agents/fleet/useWorkflowRuns`, () => ({
+jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
     ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
 // Import-time globals a mounted chat surface needs.
-mock.module(`../../sandbox/client/useSandbox`, () => {
+jest.mock(`../../sandbox/client/useSandbox`, () => {
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
     const sandboxes = ref([{ id: `sandbox-1`, name: `test` }]);
     return {
@@ -126,7 +124,7 @@ afterEach(() => {
 // network. A message with no anchor (the assistant rows) offers no edit.
 it(`loads the old prompt into the box and destroys nothing`, async () => {
     const conversation = editableChat();
-    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     await mountPanel();
 
     conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
@@ -193,8 +191,8 @@ it(`abandons the edit on Escape`, async () => {
 // Escape leaves free, since arming costs nothing: no turn to stop, no transcript to put back.
 it(`sends the replacement through the edit path, not as a new message`, async () => {
     const conversation = editableChat();
-    const submitEdit = spyOn(conversation.transcript, `submitEdit`).mockResolvedValue(true);
-    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const submitEdit = jest.spyOn(conversation.transcript, `submitEdit`).mockResolvedValue(true);
+    const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     await mountPanel();
 
     conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
@@ -214,7 +212,7 @@ it(`sends the replacement through the edit path, not as a new message`, async ()
 // turns it's meant to replace.
 it(`refuses to spend an edit on an empty box`, async () => {
     const conversation = editableChat();
-    const submitEdit = spyOn(conversation.transcript, `submitEdit`).mockResolvedValue(true);
+    const submitEdit = jest.spyOn(conversation.transcript, `submitEdit`).mockResolvedValue(true);
     await mountPanel();
 
     conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);

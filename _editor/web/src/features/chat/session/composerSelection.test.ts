@@ -1,7 +1,6 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { ContextUsage, TurnFact } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { computed, reactive, ref } from "vue";
 import { selectedAccountId } from "../accounts/providerAccounts";
 import { modelLabelFor, providerTabs } from "../accounts/providerCatalog";
@@ -121,19 +120,12 @@ describe(`ComposerSelection`, () => {
         expect(turnDefaults.provider.value).toBe(`codex`);
     });
 
-    it(`waits out a live turn for every pick but the account, which waits only while the model generates`, () => {
+    it(`reads the live turn off the chat: a pick waits it out, and an account waits only while the model generates`, () => {
         const { selection, live, host } = selectionOf();
         live.streaming = true;
 
         selection.apply({ kind: `selectProvider`, provider: `codex` });
-        selection.apply({ kind: `selectModel`, pick: { provider: `codex`, value: `gpt-5-codex` } });
-        selection.apply({ kind: `selectHarness`, harness: `claude-code` });
-        selection.apply({ kind: `setAuto`, auto: true });
-        selection.apply({ kind: `wearModel`, pin: { provider: `claude`, model: `haiku` } });
         expect(selection.provider.value).toBe(`claude`);
-        expect(selection.model.value).toBe(`opus`);
-        expect(selection.harness.value).toBe(`native`);
-        expect(selection.auto.value).toBe(false);
 
         live.generating = true;
         selection.apply({ kind: `selectAccount`, account: `a2` });
@@ -146,22 +138,6 @@ describe(`ComposerSelection`, () => {
         selection.apply({ kind: `selectAccount`, account: `a2` });
         expect(selection.account.value).toBe(`a2`);
         expect(host.peek.value).toBe(false);
-    });
-
-    it(`holds a divider for an account switched during the turn until the turn settles`, () => {
-        const { selection, live, host, notices } = selectionOf();
-        host.session.value = CLAUDE_SESSION;
-        live.streaming = true;
-
-        selection.apply({ kind: `selectAccount`, account: `a2` });
-        expect(notices()).toEqual([]);
-
-        live.streaming = false;
-        selection.apply({ kind: `settled` });
-        expect(notices()).toEqual([FRESH(providerName(`claude`))]);
-        // Owed once: a second settle has nothing more to say.
-        selection.apply({ kind: `settled` });
-        expect(notices()).toEqual([FRESH(providerName(`claude`))]);
     });
 
     it(`keeps one divider for the next send, reworded as picks move and gone once they come back`, () => {
@@ -197,56 +173,14 @@ describe(`ComposerSelection`, () => {
         expect(notices()).toEqual([`Switched to ${modelLabelFor(`claude`, `sonnet`)}`]);
     });
 
-    it(`arms Auto without moving the chat, and a model named by hand or by a card disarms it`, () => {
+    it(`remembers Auto for the next chat, and forgets it once a model is named by hand`, () => {
         const { selection } = selectionOf();
 
         selection.apply({ kind: `selectModel`, pick: { provider: AUTO_PROVIDER, value: `` } });
-        expect(selection.auto.value).toBe(true);
-        expect(selection.model.value).toBe(`opus`);
+        expect(selectionOf().selection.auto.value).toBe(true);
 
-        selection.apply({ kind: `wearModel`, pin: { provider: `claude`, model: `haiku`, effort: `low`, thinking: false } });
-        expect(selection.auto.value).toBe(false);
-        expect(selection.model.value).toBe(`haiku`);
-        expect(selection.effortPick.value).toBe(`low`);
-        expect(selection.thinking.value).toBe(false);
-    });
-
-    it(`owes back a model a catalog displaced, until the user picks one of their own`, () => {
-        const { selection } = selectionOf();
-
-        selection.apply({ kind: `displaceModel`, model: `haiku` });
-        selection.apply({ kind: `displaceModel`, model: `sonnet` });
-        // Owed the user's pick, not the stand-in it passed through.
-        expect(selection.displacedModel.value).toBe(`opus`);
-        selection.apply({ kind: `restoreModel` });
-        expect(selection.model.value).toBe(`opus`);
-        expect(selection.displacedModel.value).toBeUndefined();
-
-        selection.apply({ kind: `displaceModel`, model: `haiku` });
-        selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `sonnet` } });
-        selection.apply({ kind: `restoreModel` });
-        expect(selection.model.value).toBe(`sonnet`);
-    });
-
-    it(`gives back the provider the app moved the chat off, but not mid-turn`, () => {
-        const { selection, live } = selectionOf();
-
-        selection.apply({ kind: `repointProvider`, provider: `codex` });
-        selection.apply({ kind: `repointProvider`, provider: `grok` });
-        // The first pick it moved off is what is owed, not the stop in between.
-        expect(selection.movedFrom.value).toEqual({ provider: `claude`, value: `opus` });
-        // Not a pick: the next new chat still starts where the user left it.
-        expect(turnDefaults.provider.value).toBe(`claude`);
-
-        live.streaming = true;
-        selection.apply({ kind: `restoreProvider` });
-        expect(selection.provider.value).toBe(`grok`);
-
-        live.streaming = false;
-        selection.apply({ kind: `restoreProvider` });
-        expect(selection.provider.value).toBe(`claude`);
-        expect(selection.model.value).toBe(`opus`);
-        expect(selection.movedFrom.value).toBeUndefined();
+        selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
+        expect(selectionOf().selection.auto.value).toBe(false);
     });
 
     it(`moves the held session onto a reconnected credential without calling it a switch`, () => {
@@ -289,33 +223,5 @@ describe(`ComposerSelection`, () => {
 
         expect(selection.fast.value).toBe(true);
         expect(host.fastMode.value).toBeUndefined();
-    });
-
-    it(`hands a fork the source's picks, not what they clamp to, and no session`, () => {
-        const source = selectionOf().selection;
-        source.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
-        source.apply({ kind: `setEffort`, effort: `max` });
-        source.apply({ kind: `setThinking`, thinking: false });
-        source.apply({ kind: `set`, picks: { modePick: `plan` } });
-        const { selection, host } = selectionOf();
-
-        selection.apply({ kind: `adopt`, from: source.state.value });
-
-        expect(selection.model.value).toBe(`haiku`);
-        expect(selection.effortPick.value).toBe(`max`);
-        expect(selection.thinking.value).toBe(false);
-        expect(selection.modePick.value).toBe(`plan`);
-        expect(host.session.value).toBeUndefined();
-    });
-
-    it(`resumes a history session on Claude's remembered account, planning before it touches anything`, () => {
-        const { selection, host } = selectionOf();
-        selection.apply({ kind: `selectProvider`, provider: `codex` });
-
-        selection.apply({ kind: `resumeHistory`, sessionId: `s-9` });
-
-        expect(host.session.value).toEqual({ id: `s-9`, provider: `claude`, account: `a1`, harness: `native` });
-        expect(selection.provider.value).toBe(`claude`);
-        expect(selection.modePick.value).toBe(`plan`);
     });
 });

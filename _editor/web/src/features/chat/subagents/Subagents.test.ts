@@ -2,7 +2,6 @@
 // Needs jsdom: mounts a real Vue app to the DOM.
 import "@intentic/testing/dom";
 import { humanizeModelId, type SubagentSession } from "@intentic/sandbox-contract";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
@@ -26,18 +25,18 @@ const sessions = ref<SubagentSession[]>([]);
 const opened: string[] = [];
 
 // Stubs the roster/fleet caches so the test drives the list, not the network; `subagentLive` stays real.
-mock.module("./subagentsQuery", () => ({
+jest.mock("./subagentsQuery", () => ({
     ...subagentsQueryOriginal,
     useSubagentsQuery: () => ({ sessions: computed(() => sessions.value), running: computed(() => sessions.value), refetch: async () => undefined }),
 }));
-mock.module("../../agents/fleet/useAgents", () => ({
+jest.mock("../../agents/fleet/useAgents", () => ({
     useAgents: () => ({
         agentById: (id: string) => (id === `c1` ? { id, title: `analyse the gap`, model: `x-test-model` } : undefined),
         open: (agent: { id: string }) => void opened.push(agent.id),
     }),
 }));
 // Stubs useQuery (the transcript read); irrelevant to which rows the rail draws.
-mock.module("@tanstack/vue-query", () => ({
+jest.mock("@tanstack/vue-query", () => ({
     ...vueQueryOriginal,
     useQuery: () => ({ data: ref([]) }),
 }));

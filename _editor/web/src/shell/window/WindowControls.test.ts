@@ -5,7 +5,6 @@
 // and the assertions that matter are the ones made without pumping one.
 import "@intentic/testing/dom";
 import { IconStub } from "@intentic/ui/testing";
-import { describe, it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
 import { stubGlobal, unstubAllGlobals, mocked } from "@intentic/testing/bun";
 import { type App, createApp } from "vue";
 import { workDesktopWindow } from "../../app/environments/desktop";
@@ -14,15 +13,15 @@ import * as desktopOriginal from "../../app/environments/desktop";
 
 // Partial, over the real module: the component reaches for whatever the desktop lane grows next, and a mock listing
 // its exports by hand fails the mount the day one is added.
-mock.module("../../app/environments/desktop", () => ({
+jest.mock("../../app/environments/desktop", () => ({
     ...desktopOriginal,
     desktopFrameless: () => true,
     // Both fire on mount; the real ones navigate to an `intentic://` link jsdom cannot follow.
-    workDesktopWindow: mock(),
-    announceDesktopMode: mock(),
+    workDesktopWindow: jest.fn(),
+    announceDesktopMode: jest.fn(),
 }));
 
-mock.module("vue-router", () => ({ useRoute: () => ({ fullPath: `/workspace` }) }));
+jest.mock("vue-router", () => ({ useRoute: () => ({ fullPath: `/workspace` }) }));
 
 const RESERVE = `padding-inline-end`;
 
@@ -47,7 +46,7 @@ const mountControls = (): void => {
 // top-right corner of a 1280-wide window, and every bar running the window's full width along the top edge — into
 // the corner, which is exactly the case under test.
 const layOut = (): void => {
-    spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockImplementation(function (this: HTMLElement) {
+    jest.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockImplementation(function (this: HTMLElement) {
         return this.classList.contains(`window-controls`) ? new DOMRect(1160, 0, 120, 36) : new DOMRect(0, 0, 1280, 36);
     });
 };

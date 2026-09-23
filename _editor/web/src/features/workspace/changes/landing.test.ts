@@ -1,7 +1,6 @@
 // jsdom because the roster store's import chain reaches the app's environment read at module eval.
 import "@intentic/testing/dom";
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { it, expect, afterEach } from "bun:test";
 import { registry } from "../../agents/fleet/useAgents-registry";
 import { landingLine, landingNow } from "./landing";
 

@@ -1,7 +1,6 @@
 // jsdom because the subject is which rows offer which way out: a checkout of its own can only ever leave.
 import "@intentic/testing/dom";
 import type { ScratchPath } from "@intentic/sandbox-contract";
-import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

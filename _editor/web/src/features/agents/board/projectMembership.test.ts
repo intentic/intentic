@@ -1,5 +1,4 @@
 import type { Persona } from "@intentic/sandbox-contract";
-import { describe, it, expect } from "bun:test";
 import { agentInProject, heldWakeInProject, personaInProject, runInProject } from "./projectMembership";
 
 // Only the fields membership reads; the rest of a card is the persona editor's business.

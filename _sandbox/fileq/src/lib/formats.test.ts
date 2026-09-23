@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { isCandidatePath } from "./formats.js";
 import { isDeriveIgnored } from "./derive.js";
 

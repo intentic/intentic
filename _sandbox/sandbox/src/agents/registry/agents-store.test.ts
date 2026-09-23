@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import { openConversationsDb } from "../../store/conversations-db.js";
 import { IN_MEMORY } from "../../store/sqlite.js";
 import { conversationEntry, isolatedAgent } from "../../testing.js";
@@ -90,7 +89,15 @@ describe("sqliteAgentsStore", () => {
 
     it("a save replaces the checkout's repo rows with the entry's, never merging them", () => {
         const { store } = fresh();
-        store.save([isolatedAgent([{ repo: "root", base: "a" }, { repo: "gone", base: "b" }], { id: "w" })]);
+        store.save([
+            isolatedAgent(
+                [
+                    { repo: "root", base: "a" },
+                    { repo: "gone", base: "b" },
+                ],
+                { id: "w" },
+            ),
+        ]);
         const narrowed = isolatedAgent([{ repo: "root", base: "c", landedTip: "d" }], { id: "w" });
         store.save([narrowed]);
         expect(store.load()).toEqual([narrowed]);

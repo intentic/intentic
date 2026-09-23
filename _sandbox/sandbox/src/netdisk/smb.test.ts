@@ -1,5 +1,4 @@
 import type { SmbNetdiskConfig } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { explainMountFailure, smbCredentialsFile, smbMountOptions, smbTarget } from "./smb.js";
 
 // The mount line is the whole access decision: what mount.cifs is told decides what the kernel enforces.

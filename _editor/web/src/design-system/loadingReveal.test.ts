@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { effectScope, nextTick, ref, type Ref } from "vue";
 import { useLoadingReveal } from "@intentic/ui/loading-reveal";
 

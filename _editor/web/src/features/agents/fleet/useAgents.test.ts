@@ -1,29 +1,27 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { describe, it, expect, beforeEach, mock, spyOn } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // canArchive is pure, but the fleet store it lives beside pulls useChat and the app shell at import time. These
 // mocks cut the edges that reach `window.env` (router, analytics, sandbox client) without touching what's tested.
-mock.module("../../../router", () => ({ router: { push: mock() } }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
-mock.module("../../sandbox/client/useSandbox", () => {
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../sandbox/client/useSandbox", () => {
     return { useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }) };
 });
 // Pins the scoping rule to a fixed id so assertions below can spell out the whole key.
-mock.module("../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock(), sandboxRequest: mock() }));
+jest.mock("../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
+jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
 // The fleet's daemon calls, one mock per procedure a case can reach. resetDaemon handles them as the one seam they used
 // to be: reset together, each answering `answer` until a case queues its own.
 const daemon = {
-    list: mock(),
-    archived: mock(),
-    seen: mock(),
-    rename: mock(),
-    archive: mock(),
-    unarchive: mock(),
-    approve: mock(),
-    reject: mock(),
+    list: jest.fn(),
+    archived: jest.fn(),
+    seen: jest.fn(),
+    archive: jest.fn(),
+    unarchive: jest.fn(),
+    approve: jest.fn(),
+    reject: jest.fn(),
 };
 const resetDaemon = (answer?: unknown): void => {
     for (const procedure of Object.values(daemon)) {
@@ -35,13 +33,12 @@ const resetDaemon = (answer?: unknown): void => {
 };
 // Which of them anything reached, by name.
 const reached = (): string[] => Object.entries(daemon).flatMap(([name, procedure]) => (procedure.mock.calls.length > 0 ? [name] : []));
-mock.module("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../sandbox/client/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         agents: {
             list: daemon.list,
             archived: daemon.archived,
             seen: daemon.seen,
-            rename: daemon.rename,
             archive: daemon.archive,
             unarchive: daemon.unarchive,
         },
@@ -49,7 +46,7 @@ mock.module("../../sandbox/client/sandboxRpc", () => ({
     }),
 }));
 // And the fourth: auditRoster reports through sandboxTarget, which reads window.env on import.
-mock.module("../../../app/clientDiagnostics", () => ({ reportClient: mock() }));
+jest.mock("../../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));
 
 import { AgentsListSchema, type AgentSummary, type AutomationApproval } from "@intentic/sandbox-contract";
 import { nextTick, ref } from "vue";
@@ -325,27 +322,6 @@ describe("roster frames the board can skip", () => {
         expect(useAgents().fleet.value).toBe(before);
         expect(cardsById().get(`a1`)).toBe(wasA1);
     });
-
-    // What a moving frame may re-mint is covered by the diff-invalidation cases; this pins the stronger guarantee
-    // underlying the comparison itself.
-
-    // The cached fingerprint isn't stored: optimistic writes mutate the held entry in place, so a stored string would
-    // describe the pre-write entry and mask a value the daemon later refused.
-    it("lets a later frame overrule an optimistic write still in flight", async () => {
-        setAgents([summary(`a1`, { title: `Old name` })], 1);
-        await nextTick();
-
-        // The request never settles, so the board holds only the in-place optimistic write.
-        daemon.rename.mockImplementation(() => new Promise(() => undefined));
-        void useAgents().rename(`a1`, `New name`);
-        await nextTick();
-        expect(cardsById().get(`a1`)?.title).toBe(`New name`);
-
-        // A frame that still disagrees puts the roster back on the daemon's own account.
-        setAgents([summary(`a1`, { title: `Old name` })], 2);
-        await nextTick();
-        expect(cardsById().get(`a1`)?.title).toBe(`Old name`);
-    });
 });
 
 // The beat's audit: a roster frame that never applied leaves the board silently frozen until reload. The
@@ -445,7 +421,7 @@ describe("diff invalidation", () => {
 
     it("invalidates an agent's diff on a status transition: the auto-land flip this browser never performed", () => {
         setAgents([summary(`a1`, `running`)], 1);
-        const invalidate = spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
+        const invalidate = jest.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
 
         setAgents([summary(`a1`, `landed`)], 2);
 
@@ -458,7 +434,7 @@ describe("diff invalidation", () => {
 
     it("stays quiet across frames that only tick activity: a running turn must not hammer the diff", () => {
         setAgents([summary(`a1`, `running`)], 1);
-        const invalidate = spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
+        const invalidate = jest.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
 
         setAgents([{ ...summary(`a1`, `running`), updatedAt: 2_000 }], 2);
 
@@ -478,7 +454,7 @@ describe("diff invalidation", () => {
     });
 
     it("treats an unseen id as a transition: a reconnect's first snapshot may carry a land that happened offline", () => {
-        const invalidate = spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
+        const invalidate = jest.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
 
         setAgents([summary(`a1`, `landed`)], 0);
 

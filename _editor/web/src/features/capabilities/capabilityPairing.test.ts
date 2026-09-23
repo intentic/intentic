@@ -6,7 +6,6 @@ import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { CapabilityContribution } from "@intentic/extension-manifest";
 import type { CapabilityKind, HostSummary, WebExtSummary } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { effectScope, type EffectScope, ref } from "vue";
 import * as actualSandboxRpc from "../sandbox/client/sandboxRpc";
 import type { ProcedureInput } from "../sandbox/client/sandboxRpc";
@@ -14,10 +13,10 @@ import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 
 // The one daemon call here: an ACP agent's sign-in, which answers with the job session to watch.
-const login = mock<(input: ProcedureInput<`capabilities.login`>) => Promise<{ session: string }>>();
+const login = jest.fn<(input: ProcedureInput<`capabilities.login`>) => Promise<{ session: string }>>();
 // Snapshotted before the mock replaces the module: a namespace is a live binding.
 const realSandboxRpc = { ...actualSandboxRpc };
-mock.module(`../sandbox/client/sandboxRpc`, () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ capabilities: { login } }) }));
+jest.mock(`../sandbox/client/sandboxRpc`, () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ capabilities: { login } }) }));
 
 const { handOffOf, useCapabilityPairing } = await import("./capabilityPairing");
 
@@ -118,16 +117,16 @@ const pairing = (rosters: { hosts?: readonly HostSummary[]; browsers?: readonly 
     const state = {
         hosts: {
             peerFor: (id: string) => rosters.hosts?.find((found) => found.id === id),
-            revoke: mock<(id: string) => Promise<void>>(async () => {}),
-            refresh: mock(async () => {}),
+            revoke: jest.fn<(id: string) => Promise<void>>(async () => {}),
+            refresh: jest.fn(async () => {}),
         },
         browsers: {
             peerFor: (id: string) => rosters.browsers?.find((found) => found.id === id),
-            revoke: mock<(id: string) => Promise<void>>(async () => {}),
-            refresh: mock(async () => {}),
+            revoke: jest.fn<(id: string) => Promise<void>>(async () => {}),
+            refresh: jest.fn(async () => {}),
         },
         contributionOf: (kind: CapabilityKind, id: string) => (kind === CHROME_CARD.kind && id === CHROME_CARD.id ? CHROME_CARD : undefined),
-        refetch: mock(),
+        refetch: jest.fn(),
         error: ref<NoticeModel | null>(null),
     };
     const scope = effectScope();

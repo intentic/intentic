@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { pino } from "pino";
 import type { Logger } from "pino";
 import { createLogsRoutes } from "./logs.routes.js";

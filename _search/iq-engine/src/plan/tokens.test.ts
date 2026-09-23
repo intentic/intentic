@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { pathTokens, queryTokens } from "./tokens.js";
 
 test("query tokens drop stopwords and anything shorter than three characters", () => {

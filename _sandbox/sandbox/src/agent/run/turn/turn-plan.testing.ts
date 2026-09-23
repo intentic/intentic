@@ -12,7 +12,7 @@ import type { TurnContext } from "../../providers/adapter.js";
 import { parkedCards } from "../../../agents/actor/parked-cards.js";
 
 // Shared fixture both turn-plan suites build on, as a `*.testing.ts` module (not copied) so the integration-budget
-// checker can follow the import and judge each suite by what it uses. Mocks nothing here: `mock.module` is global to
+// checker can follow the import and judge each suite by what it uses. Mocks nothing here: `jest.mock` is global to
 // the run, so each suite declares its own.
 
 // Doesn't exist on disk, so the dependency probe finds nothing and no assertion depends on the host's checkout.

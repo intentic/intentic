@@ -48,16 +48,8 @@ export const daemonStopFindings = async (deps: Pick<Services, "logger">, turn: D
     }
 };
 
-// What the turn's exit leaves for the resume pass, told to the conversation it belongs to: a credential to re-mint, an
-// outage to wait out, a held turn, or proof the run got somewhere.
-const recordResumes = (deps: Pick<Services, "conversations">, plan: SettlementPlan): void => {
-    const { authFailure, outageFailure, hold } = plan;
-    if (authFailure !== undefined) {
-        deps.conversations.send(authFailure.input.conversationId, { kind: "auth-refused", failure: authFailure });
-    }
-    if (outageFailure !== undefined) {
-        deps.conversations.send(outageFailure.input.conversationId, { kind: "outage-stranded", failure: outageFailure });
-    }
+// Tells the conversation what the turn's exit leaves the resume pass: a held turn, or proof the run got somewhere.
+const recordResumes = (deps: Pick<Services, "conversations">, { hold }: SettlementPlan): void => {
     if (hold?.kind === "held") {
         deps.conversations.send(hold.held.input.conversationId, { kind: "turn-held", held: hold.held });
     } else if (hold?.kind === "got-somewhere") {

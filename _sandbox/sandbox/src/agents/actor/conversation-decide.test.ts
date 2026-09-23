@@ -1,5 +1,4 @@
 import type { AgentEvent, AgentJob, AgentWatch } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "bun:test";
 import { isolatedAgent } from "../../testing.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { PersistedAgent } from "../registry/agents-store.js";

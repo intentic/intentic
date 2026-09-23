@@ -3,18 +3,17 @@
 // states an intent rather than flipping whatever the daemon happens to hold.
 import "@intentic/testing/dom";
 import type { AgentReaction } from "@intentic/sandbox-contract";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { PICKER_EMOJI, QUICK_EMOJI } from "./reactions";
 
-const reacted = mock(async () => ({}) as never);
-const refresh = mock(async () => {});
+const reacted = jest.fn(async () => ({}) as never);
+const refresh = jest.fn(async () => {});
 const me = ref<string | undefined>(`ada@example.com`);
 
-// The factory is synchronous: a mock.module factory runs in place, and awaiting inside one that replaces a module
+// The factory is synchronous: a jest.mock factory runs in place, and awaiting inside one that replaces a module
 // already in this file's graph never returns.
-mock.module("@intentic/ui", () => {
+jest.mock("@intentic/ui", () => {
     return {
         ui: { iconButton: () => `` },
         // Draws its slot when open, since whether the picker is open — and what it then offers — is half of what this
@@ -30,10 +29,10 @@ mock.module("@intentic/ui", () => {
         useDevice: () => ({ mobile: ref(false) }),
     };
 });
-mock.module("../../fleet/agentActions", () => ({ reactToAgent: reacted }));
-mock.module("../../fleet/useAgents", () => ({ useAgents: () => ({ refresh, notice: ref(undefined) }) }));
-mock.module("../../../sandbox/live/fleetAcross", () => ({ refreshAcross: mock() }));
-mock.module("../../../sandbox/session/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: me }) }));
+jest.mock("../../fleet/agentActions", () => ({ reactToAgent: reacted }));
+jest.mock("../../fleet/useAgents", () => ({ useAgents: () => ({ refresh, notice: ref(undefined) }) }));
+jest.mock("../../../sandbox/live/fleetAcross", () => ({ refreshAcross: jest.fn() }));
+jest.mock("../../../sandbox/session/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: me }) }));
 
 const { default: AgentReactions } = await import("./AgentReactions.vue");
 

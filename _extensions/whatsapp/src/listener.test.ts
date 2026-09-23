@@ -1,5 +1,4 @@
 import { WORKSPACE_ROOT } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import type { WhatsAppConnection } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";

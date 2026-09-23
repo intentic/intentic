@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { type Persona, type SandboxSettings, PersonaPowersSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { test, expect, beforeEach, mock } from "bun:test";
 import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { conversationAfter, testConfig } from "../../../testing.js";
@@ -22,19 +21,19 @@ import * as harnessCredentialsOriginal from "../../providers/harness-credentials
 // (app.integration.test.ts). A refusal is a value (`ok: false` + code), assertable without a stream.
 
 // Takes the arguments through, since which account an arm asks for is itself under test below.
-const credentials = mock<(...args: unknown[]) => Promise<Record<string, unknown>>>();
+const credentials = jest.fn<(...args: unknown[]) => Promise<Record<string, unknown>>>();
 // Only the resolution is faked. The rest of the module stands, because the pre-dispatch context check reads its
 // model-resolution rule (routedModel) and a mock that replaced the whole module left that undefined.
-mock.module("../../providers/harness-credentials.js", async () => ({
+jest.mock("../../providers/harness-credentials.js", async () => ({
     ...harnessCredentialsOriginal,
     resolveHarnessCredentials: (...args: unknown[]) => credentials(...args),
 }));
-const browserServers = mock();
-mock.module("../../../browser/tools/browser-tools.js", () => ({
+const browserServers = jest.fn();
+jest.mock("../../../browser/tools/browser-tools.js", () => ({
     ROUTED_BROWSER_SERVER: "browser",
     ANONYMOUS_BROWSER_SERVER: "web",
     browserServersOf: (...args: unknown[]) => browserServers(...args),
-    prepareBrowserOwner: mock(),
+    prepareBrowserOwner: jest.fn(),
 }));
 
 /* NOTHING HERE TOUCHES THE DISK, which is what keeps this suite under the unit budget: the shared fixture's ROOT is a path that does not exist. */
@@ -193,7 +192,7 @@ test("a window under a full turn trims the guidance and says what it left out", 
     // The composed request carries the decision on, so the adapter sheds the same guidance the planner did.
     expect(trimmed.request.spec.contextTrim).toEqual({ guidance: true, base: false });
     // 40k holds the loop's own base, so it keeps it; what goes is everything this product would have added.
-    expect(trimmed.contextTrim?.trim.tier).toBe("lean");
+    expect(trimmed.contextTrim?.trim).toEqual({ window: 40_000, base: false });
     expect(trimmed.request.spec.systemPrompt).toBeUndefined();
 });
 

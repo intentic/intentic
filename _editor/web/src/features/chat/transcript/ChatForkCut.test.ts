@@ -1,7 +1,5 @@
 import "@intentic/testing/dom";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, defineComponent as define, h, h as hyper, nextTick, ref as vueRef, shallowRef, watchEffect } from "vue";
 import type { MenuItem } from "primevue/menuitem";
 import type { ChatMessage } from "./transcript";
@@ -11,26 +9,26 @@ import { IconStub } from "@intentic/ui/testing";
 // Pins the cut's menu: which rows a cut offers, which an uncheckpointed cut may still show, and that the destructive rewind
 // needs two presses.
 
-const forkAt = hoisted(() => mock());
-const rewindTo = hoisted(() => mock(async () => true));
-const beginEdit = hoisted(() => mock());
-const state = hoisted(() => ({
+const forkAt = jest.fn();
+const rewindTo = jest.fn(async () => true);
+const beginEdit = jest.fn();
+const state = {
     messages: [] as ChatMessage[],
     streaming: false,
     isolated: true,
     // Message an edit is already armed on, if any; its own cut's row drops out when set.
     editing: undefined as ChatMessage | undefined,
     fleet: [] as { id: string; title?: string; forkedFrom?: { conversationId: string; index: number } }[],
-}));
-const opened = hoisted(() => ({ ids: [] as string[] }));
+};
+const opened = { ids: [] as string[] };
 // What the ContextMenu component was last handed, since PrimeVue itself isn't mounted here.
-const shown = hoisted(() => ({ model: [] as MenuItem[], opened: 0 }));
+const shown = { model: [] as MenuItem[], opened: 0 };
 
-hoisted(() => {
+(() => {
     // The fleet read below reaches the environment chain every component test must stand up.
-});
+})();
 
-mock.module("@intentic/ui", () => {
+jest.mock("@intentic/ui", () => {
     return {
         useDevice: () => ({ mobile: vueRef(false) }),
         // Stub that records the model instead of rendering a popup; jsdom has no layout for PrimeVue's overlay.
@@ -49,9 +47,9 @@ mock.module("@intentic/ui", () => {
         }),
     };
 });
-mock.module("../../workspace/changes/history/useHistory", () => ({ invalidateWorkspace: mock() }));
+jest.mock("../../workspace/changes/history/useHistory", () => ({ invalidateWorkspace: jest.fn() }));
 // Built fresh per mount: a computed over the plain `state` object would otherwise cache its first reading.
-mock.module("../panel/useChat-view", () => {
+jest.mock("../panel/useChat-view", () => {
     return {
         usePaneView: () => ({
             // Whether the chat works in a copy of its own decides how many forks the menu offers.
@@ -63,12 +61,12 @@ mock.module("../panel/useChat-view", () => {
         }),
     };
 });
-mock.module("../run/useChat", () => {
+jest.mock("../run/useChat", () => {
     return { useChat: () => ({ conversations: computed(() => []), setActive: (id: string) => opened.ids.push(id) }) };
 });
-mock.module("../panel/useChat-reveal", () => ({ openAgentConversation: (agent: { id: string }) => opened.ids.push(agent.id) }));
+jest.mock("../panel/useChat-reveal", () => ({ openAgentConversation: (agent: { id: string }) => opened.ids.push(agent.id) }));
 // Forks are read off the fleet, not open tabs, so a closed tab or a colleague's fork still counts.
-mock.module("../../agents/fleet/useAgents", () => {
+jest.mock("../../agents/fleet/useAgents", () => {
     return { useAgents: () => ({ fleet: computed(() => state.fleet), agentById: (id: string) => state.fleet.find((agent) => agent.id === id) }) };
 });
 

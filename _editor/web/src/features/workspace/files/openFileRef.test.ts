@@ -1,22 +1,21 @@
 // The full gesture: a rendered markdown link, a real click on it, and the editor tab that opens.
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { waitFor, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { effectScope } from "vue";
 import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
-const openFile = mock();
-const openAtLine = mock();
-const push = mock();
+const openFile = jest.fn();
+const openAtLine = jest.fn();
+const push = jest.fn();
 // Daemon's reference resolver; unmatched by default so a click opens the path as written.
 const unmatched = async (_input: ProcedureInput<`workspace.resolve`>): Promise<{ path?: string }> => ({});
-const resolve = mock(unmatched);
+const resolve = jest.fn(unmatched);
 
-mock.module("../../../lib/queryPersistence", () => ({ queryClient: { getQueriesData: () => [] } }));
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { resolve } }) }));
-mock.module("../tabs/useWorkspaceTabs", () => ({ useWorkspaceTabs: () => ({ openFile, openAtLine }) }));
-mock.module("../../../router", () => ({ router: { push } }));
+jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { getQueriesData: () => [] } }));
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { resolve } }) }));
+jest.mock("../tabs/useWorkspaceTabs", () => ({ useWorkspaceTabs: () => ({ openFile, openAtLine }) }));
+jest.mock("../../../router", () => ({ router: { push } }));
 
 const { fileLinkDecorator, renderMarkdown } = await import("../../../lib/markdown/renderMarkdown");
 const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
@@ -124,10 +123,10 @@ describe(`clicking a file an isolated conversation mentioned`, () => {
 // A popped-out panel has no app window to open a file in, so the click goes to the app's own window instead.
 describe(`clicking a file in a popped-out panel`, () => {
     it(`sends it to the app's own window rather than routing this one`, () => {
-        const open = mock(() => null);
+        const open = jest.fn(() => null);
         stubGlobal(`open`, open);
         const scope = effectScope();
-        scope.run(() => claimFloating(`chat`, mock()));
+        scope.run(() => claimFloating(`chat`, jest.fn()));
 
         clickFileLink(surface(`Fixed in src/foo.ts:42.`));
 

@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect, afterEach, spyOn, jest } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import Icon from "@intentic/ui/icon";
@@ -61,7 +60,7 @@ it(`leaves an ordinary icon still`, async () => {
 
 it(`slows the spinner for reduced motion and removes its preference listener on unmount`, async () => {
     const query = window.matchMedia(`(prefers-reduced-motion: reduce)`);
-    const remove = spyOn(query, `removeEventListener`);
+    const remove = jest.spyOn(query, `removeEventListener`);
     Object.defineProperty(query, `matches`, { value: true });
     // Stubbed rather than spied on: the DOM shim carries `matchMedia` as an accessor, and a spy cannot stand in for one.
     stubGlobal(`matchMedia`, () => query);

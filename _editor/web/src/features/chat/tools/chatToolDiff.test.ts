@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { diffRows, diffStat } from "./chatToolDiff";
 
 describe(`diffRows`, () => {

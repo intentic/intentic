@@ -1,5 +1,4 @@
 import { resetSandboxScope, sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
-import { describe, it, expect, beforeEach } from "bun:test";
 
 /* The extensions' state scope (extension-api/src/scope.ts), tested from here because the SDK ships no test harness of its own. */
 

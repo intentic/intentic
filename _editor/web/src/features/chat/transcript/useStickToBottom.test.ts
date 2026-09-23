@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect, spyOn } from "bun:test";
 import { createApp, h, nextTick, ref } from "vue";
 import { useStickToBottom } from "./useStickToBottom";
 
@@ -133,7 +132,7 @@ it(`stops observing when the panel unmounts`, async () => {
     document.body.append(host);
     app.mount(host);
     const element = scroller.value as HTMLElement;
-    const remove = spyOn(element, `removeEventListener`);
+    const remove = jest.spyOn(element, `removeEventListener`);
     await nextTick();
 
     app.unmount();

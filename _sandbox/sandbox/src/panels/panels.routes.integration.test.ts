@@ -3,7 +3,6 @@ import http from "node:http";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { panelsContract } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { errorCode, routesClient } from "../harness/route-client.testing.js";
 import { fakeProcesses, tempWorkspace } from "../harness/route-fakes.testing.js";
 import { testConfig } from "../testing.js";

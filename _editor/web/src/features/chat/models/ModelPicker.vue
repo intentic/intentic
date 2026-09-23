@@ -149,25 +149,25 @@ const sections = computed<
                   },
               ]),
         ...pickerSections(pickerEntries.value, provider, rail.value, providerReady).map((section) => {
-        const isExpanded = expanded.value.has(section.key);
-        const single = section.providers.length === 1 ? section.providers[0] : undefined;
-        // The selected model survives collapse only for the current provider's lane; only that checkmark is real.
-        const blocks = pickerBlocks(section.groups, section.providers.includes(provider) ? model : undefined, isExpanded);
-        const rowCount = blocks.reduce((count, block) => count + block.entries.length, 0);
-        return {
-            key: section.key,
-            label: section.label,
-            provider: single,
-            providers: section.providers,
-            blocks: blocks.map((block) => ({ key: block.key, label: block.label, rows: withRows(block.entries) })),
-            rowCount,
-            hidden: section.total - rowCount,
-            expanded: isExpanded,
-            // Offered only when it would actually change the list, so a short group never grows a dead control.
-            collapsible: isExpanded || section.total > rowCount,
-            badge: single === undefined ? undefined : accessBadge(single),
-            trial: single === undefined ? undefined : trialBadge(single),
-        };
+            const isExpanded = expanded.value.has(section.key);
+            const single = section.providers.length === 1 ? section.providers[0] : undefined;
+            // The selected model survives collapse only for the current provider's lane; only that checkmark is real.
+            const blocks = pickerBlocks(section.groups, section.providers.includes(provider) ? model : undefined, isExpanded);
+            const rowCount = blocks.reduce((count, block) => count + block.entries.length, 0);
+            return {
+                key: section.key,
+                label: section.label,
+                provider: single,
+                providers: section.providers,
+                blocks: blocks.map((block) => ({ key: block.key, label: block.label, rows: withRows(block.entries) })),
+                rowCount,
+                hidden: section.total - rowCount,
+                expanded: isExpanded,
+                // Offered only when it would actually change the list, so a short group never grows a dead control.
+                collapsible: isExpanded || section.total > rowCount,
+                badge: single === undefined ? undefined : accessBadge(single),
+                trial: single === undefined ? undefined : trialBadge(single),
+            };
         }),
     ];
 });
@@ -243,7 +243,9 @@ onMounted(() => {
 // it. Distinct from `isLocked`, which is a provider with no credential at all.
 const isCooling = (entry: PickerEntry): boolean => entry.availableAt !== undefined && entry.availableAt * 1000 > now.value;
 const coolingBadge = (entry: PickerEntry): string | undefined =>
-    entry.availableAt === undefined || !isCooling(entry) ? undefined : t(`chat.modelPicker.backAt`, { at: formatReset(entry.availableAt, now.value) });
+    entry.availableAt === undefined || !isCooling(entry)
+        ? undefined
+        : t(`chat.modelPicker.backAt`, { at: formatReset(entry.availableAt, now.value) });
 
 const rowAriaLabel = (entry: PickerEntry): string => {
     const cooling = coolingBadge(entry);
@@ -341,8 +343,8 @@ onMounted(() => {
                     :aria-checked="rail === undefined"
                     class="ui-row-select ui-row-select-horizontal flex h-8 w-8 shrink-0 items-center justify-center rounded-lg max-md:h-11 max-md:w-11"
                     :class="{ 'ui-row-select-on': rail === undefined }"
-                    v-tooltip.bottom="t(`chat.modelPicker.allProviders`)"
-                    :aria-label="t(`chat.modelPicker.allProviders`)"
+                    v-tooltip.bottom="t(`shared.allProviders`)"
+                    :aria-label="t(`shared.allProviders`)"
                     @click="railTo(undefined)"
                 >
                     <Icon name="th-large" class="text-sm" :class="rail === undefined ? 'text-primary-500' : 'text-subtle'" />
@@ -386,7 +388,7 @@ onMounted(() => {
                 id="model-picker-list"
                 class="min-h-0 min-w-0 flex-1 overflow-y-auto py-1 max-md:overflow-visible"
                 role="listbox"
-                :aria-label="t(`chat.modelPicker.models`)"
+                :aria-label="t(`shared.models`)"
             >
                 <template v-for="section in sections" :key="section.key">
                     <!-- Group header doubles as the access line (cost + way out); absent once connected, since a usable provider needs no annotation. -->
@@ -401,7 +403,7 @@ onMounted(() => {
                                 v-if="providerNeedsReauth(section.provider)"
                                 name="exclamation-triangle"
                                 class="text-2xs text-warning"
-                                v-tooltip.top="t(`chat.modelPicker.accountNeedsToReconnected`)"
+                                v-tooltip.top="t(`shared.accountNeedsToReconnected`)"
                             />
                             <template v-if="section.badge !== undefined">
                                 <span
@@ -499,9 +501,7 @@ onMounted(() => {
                         @click="toggleExpanded(section.key)"
                     >
                         <Icon :name="section.expanded ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
-                        <span>{{
-                            section.expanded ? t(`chat.modelPicker.showFewer`) : t(`chat.modelPicker.showOlder`, { hidden: section.hidden })
-                        }}</span>
+                        <span>{{ section.expanded ? t(`shared.showFewer`) : t(`chat.modelPicker.showOlder`, { hidden: section.hidden }) }}</span>
                     </button>
                     <!-- Catalog state row (loading / error+retry): searching hides it. -->
                     <template v-if="!searching && section.label !== undefined && section.rowCount === 0">

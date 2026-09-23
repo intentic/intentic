@@ -296,8 +296,10 @@ const confirmRemoval = (): void => {
 
             <!-- The rest of this PC, as rows in the same list: a distro that is here but holds no door yet. A
                  connected one is already a row above, and saying so twice is what made this a second list. -->
-            <Row v-for="distro in distros" :key="distro.name" icon="desktop" :description="t(`sandbox.devicePage.notConnected`)">
-                <template #title><span class="font-mono">{{ distro.name }}</span></template>
+            <Row v-for="distro in distros" :key="distro.name" icon="desktop" :description="t(`shared.notConnected`)">
+                <template #title
+                    ><span class="font-mono">{{ distro.name }}</span></template
+                >
                 <template #control>
                     <Button
                         :as="RouterLink"
@@ -327,7 +329,7 @@ const confirmRemoval = (): void => {
                         size="small"
                         severity="secondary"
                         :text="true"
-                        :label="t(`sandbox.devicePage.selectAll`)"
+                        :label="t(`shared.selectAll`)"
                         :disabled="ops.working.value || chosen.length === pickable.length"
                         @click="picked = new Set(pickable.map((group) => group.sandboxId))"
                     />
@@ -437,7 +439,7 @@ const confirmRemoval = (): void => {
                     </template>
                     <!-- The one row on this page that can close the page, said beside the name rather than only in the confirmation. -->
                     <template #badges="{ group }">
-                        <StatusBadge v-if="ops.selfGroup(group)" variant="info" size="xs" :label="t(`sandbox.devicePage.oneYoureUsing`)" />
+                        <StatusBadge v-if="ops.selfGroup(group)" variant="info" size="xs" :label="t(`shared.oneYoureUsing`)" />
                     </template>
                     <!-- The verbs are the kit's, so this page and the desktop app's manager window offer the same row. -->
                     <template #actions="{ group }">
@@ -524,7 +526,7 @@ const confirmRemoval = (): void => {
                                 size="small"
                                 severity="danger"
                                 :text="true"
-                                :label="t(`sandbox.devicePage.unpair`)"
+                                :label="t(`shared.unpair`)"
                                 :loading="ops.syncRunning(ops.rowKey(group), `sync-unpair`)"
                                 :disabled="ops.working.value"
                                 v-tooltip.top="t(`sandbox.devicePage.stopDeviceSyncingSandbox`)"
@@ -599,7 +601,7 @@ const confirmRemoval = (): void => {
                             :lines="ops.lines(group)"
                             :running="ops.verbRunning(group)"
                             :empty="t(`sandbox.devicePage.startingOnDevice`)"
-                            :note="t(`sandbox.devicePage.runningOnDeviceKeeps`)"
+                            :note="t(`shared.runningOnDeviceKeeps`)"
                         />
                         <DeviceOpFailure
                             v-if="ops.failure.value?.key === ops.rowKey(group)"
@@ -644,7 +646,7 @@ const confirmRemoval = (): void => {
                         <Button
                             size="small"
                             severity="danger"
-                            :label="t(`sandbox.devicePage.revokeAccess`)"
+                            :label="t(`shared.revokeAccess`)"
                             :disabled="ops.working.value"
                             @click="ops.confirmingRevoke.value = environment"
                         >
@@ -714,7 +716,9 @@ const confirmRemoval = (): void => {
             @cancel="ops.confirmingRemoval.value = undefined"
             @confirm="confirmRemoval()"
         >
-            <template #item="{ item }"><span class="min-w-0 truncate font-mono text-xs text-content">{{ item }}</span></template>
+            <template #item="{ item }"
+                ><span class="min-w-0 truncate font-mono text-xs text-content">{{ item }}</span></template
+            >
             <p v-for="effect in ops.removalPrompt.value?.effects ?? []" :key="effect" class="mt-3 first:mt-0">{{ effect }}</p>
             <p v-if="ops.removalPrompt.value?.severing === true" class="mt-3 text-xs text-warning">
                 {{ t(`sandbox.devicePage.sandboxUsingRightNow`) }}
@@ -727,7 +731,7 @@ const confirmRemoval = (): void => {
             :header="
                 t(`sandbox.devicePage.unpairHeader`, { sandbox: ops.confirmingUnpair.value?.group.title ?? t(`sandbox.devicePage.thisSandbox`) })
             "
-            :confirm-label="t(`sandbox.devicePage.unpair`)"
+            :confirm-label="t(`shared.unpair`)"
             :destructive="true"
             @cancel="ops.confirmingUnpair.value = undefined"
             @confirm="ops.confirmUnpair()"
@@ -746,7 +750,7 @@ const confirmRemoval = (): void => {
         <ConfirmDialog
             :open="ops.confirmingRevoke.value !== undefined"
             :header="t(`sandbox.devicePage.revokeSAccess2`, { label: ops.confirmingRevoke.value?.device.label ?? machine.label })"
-            :confirm-label="t(`sandbox.devicePage.revokeAccess`)"
+            :confirm-label="t(`shared.revokeAccess`)"
             confirm-icon="times"
             :destructive="true"
             :loading="ops.revoking.value"

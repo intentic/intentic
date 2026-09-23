@@ -1,8 +1,7 @@
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "bun:test";
-import { agentAssetUrl, archToken, exe, isLeftover, launcherAssetUrl, osToken, probeVersion } from "./release.js";
+import { agentAssetUrl, archToken, exe, isLeftover, launcherAssetUrl, osToken, versionOf } from "./release.js";
 
 describe("release asset URLs", () => {
     // Two environments of one PC downloading "latest" a minute apart can land on two releases; a tag cannot.
@@ -50,7 +49,7 @@ describe("isLeftover", () => {
     });
 });
 
-describe.skipIf(process.platform === "win32")("probeVersion", () => {
+describe.skipIf(process.platform === "win32")("versionOf", () => {
     const script = (body: string): string => {
         const path = join(mkdtempSync(join(tmpdir(), "probe-")), "agent");
         writeFileSync(path, `#!/bin/sh\n${body}\n`);
@@ -59,19 +58,16 @@ describe.skipIf(process.platform === "win32")("probeVersion", () => {
     };
 
     it("reads the bare version a working agent prints", () => {
-        expect(probeVersion(script(`echo 1.305.0`))).toEqual({ kind: "version", version: "1.305.0" });
+        expect(versionOf(script(`echo 1.305.0`))).toBe("1.305.0");
     });
 
     // A captive-portal page or a truncated body downloads fine and must never become the agent.
-    it("calls a file that will not run unusable", () => {
+    it("reads no version from a file that will not run, fails, or answers anything else", () => {
         const path = join(mkdtempSync(join(tmpdir(), "probe-")), "agent");
         writeFileSync(path, "<html>sign in to the wifi</html>");
         chmodSync(path, 0o755);
-        expect(probeVersion(path).kind).not.toBe("version");
-    });
-
-    it("tells an agent too old for `version` from one that answered nonsense", () => {
-        expect(probeVersion(script(`echo "No command registered for version" >&2; exit 1`))).toEqual({ kind: "no-version-command" });
-        expect(probeVersion(script(`echo hello`))).toEqual({ kind: "unusable" });
+        expect(versionOf(path)).toBeUndefined();
+        expect(versionOf(script(`echo 1.305.0; exit 1`))).toBeUndefined();
+        expect(versionOf(script(`echo hello`))).toBeUndefined();
     });
 });

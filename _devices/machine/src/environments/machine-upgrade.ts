@@ -1,16 +1,16 @@
 import { execFile, spawn } from "node:child_process";
-import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
-import { claimPidFile, type Log, releasePidFile } from "@intentic/local-agent";
+import { pollUntil } from "@intentic/base/async";
+import { claimPidFile, type Log, releasePidFile, spawnDetached } from "@intentic/local-agent";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
-import { binDir, upgradeLockPath } from "../config.js";
+import { agentLogPath, binDir, upgradeLockPath } from "../config.js";
 import { installedBuild } from "../installed.js";
 import { publishedVersion } from "../release.js";
-import { readResident, restartResident } from "../supervision.js";
+import { machineLauncher, readResident, restartResident } from "../supervision.js";
 import { realUpgradeExec, runUpgrade, type UpgradeOutcome, upgradeLanded, upgradeMessage } from "../upgrade.js";
 import { MACHINE_VERSION } from "../version.js";
 import { agentInDistro, crossEnv, NO_AGENT_EXIT } from "./crossing.js";
-import { childrenOf, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot } from "./machine.js";
+import { heldDistros, runOnWindows, updateMachineConfig, windowsRoot } from "./machine.js";
 
 // A PC upgrades as one: whichever side is asked, every environment ends on the same exact release or says why it did not.
 
@@ -30,23 +30,17 @@ const LOCK_WAIT_MS = 15 * 60_000;
 const LOCK_POLL_MS = 2_000;
 
 const withUpgradeLock = async (log: Log, run: () => Promise<UpgradeOutcome>): Promise<UpgradeOutcome> => {
-    const deadline = Date.now() + LOCK_WAIT_MS;
-    let said = false;
-    for (;;) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded wait on one lock, serial by definition
+    let holder = 0;
+    const claimed = async (): Promise<boolean> => {
         const claim = await claimPidFile(upgradeLockPath, binDir, { pid: process.pid });
-        if (claim.claimed) {
-            break;
-        }
-        if (Date.now() > deadline) {
-            return { kind: "failed", reason: `another upgrade (pid ${claim.holder.pid}) is still running here.` };
-        }
-        if (!said) {
-            said = true;
+        if (!claim.claimed && holder === 0) {
             log(`Waiting for the upgrade already running here (pid ${claim.holder.pid})…`);
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-        await sleep(LOCK_POLL_MS);
+        holder = claim.claimed ? holder : claim.holder.pid;
+        return claim.claimed;
+    };
+    if (!(await pollUntil(claimed, { intervalMs: LOCK_POLL_MS, timeoutMs: LOCK_WAIT_MS }))) {
+        return { kind: "failed", reason: `another upgrade (pid ${holder}) is still running here.` };
     }
     try {
         return await run();
@@ -186,7 +180,7 @@ export const realMachineIo = (ask: MachineUpgradeAsk, log: Log): MachineIo => ({
     leg: process.env[UPGRADE_ENV],
     windowsRoot,
     delegate: (agent, args) => runOnWindows(agent, args, { inherit: true }).status,
-    children: async () => (process.platform === "win32" ? childrenOf(await readMachineConfig()) : []),
+    children: heldDistros,
     published: publishedVersion,
     installedHere: installedBuild,
     installedIn,
@@ -196,11 +190,23 @@ export const realMachineIo = (ask: MachineUpgradeAsk, log: Log): MachineIo => ({
 });
 
 // The versions of every other side this one can reach: a distro sees its Windows side, the Windows side its distros.
-export const siblingVersions = async (): Promise<readonly (string | undefined)[]> => {
+const siblingVersions = async (): Promise<readonly (string | undefined)[]> => {
     const root = await windowsRoot();
     if (root !== undefined) {
         const answer = runOnWindows(root, ["version"]);
         return [answer.status === 0 ? /^\d+\.\d+\.\d+$/.exec(answer.output)?.[0] : undefined];
     }
-    return process.platform === "win32" ? await Promise.all(childrenOf(await readMachineConfig()).map(installedIn)) : [];
+    return await Promise.all((await heldDistros()).map(installedIn));
+};
+
+// This side alone, to the newest release the channel or any side of this PC has: what setup runs before it enrolls.
+export const upgradeHereToMachine = async (log: Log): Promise<UpgradeOutcome> => {
+    const [published, siblings] = await Promise.all([publishedVersion(), siblingVersions()]);
+    const target = machineTarget(published, [MACHINE_VERSION, ...siblings]);
+    return target === undefined ? { kind: "failed", reason: "couldn't reach the release channel" } : await upgradeHere(target, false, log);
+};
+
+// The machine-wide upgrade, detached: it restarts this environment's agent, which may be the very process asking.
+export const launchUpgrade = async (level: boolean): Promise<void> => {
+    await spawnDetached(agentLogPath, machineLauncher(), ["upgrade", ...(level ? ["--level"] : [])], { finishes: true });
 };

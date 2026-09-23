@@ -1,5 +1,4 @@
 import type { ExtensionManifest } from "@intentic/extension-manifest";
-import { describe, it, expect } from "bun:test";
 import { type ExtensionSection, sectionsOf } from "./extensionCategories";
 import type { ExtensionEntry } from "./useExtensionList";
 

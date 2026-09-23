@@ -3,18 +3,17 @@
 import "@intentic/testing/dom";
 import { STATE_DIR } from "@intentic/constants";
 import type { ManifestProblemReport, ManifestRepair } from "@intentic/sandbox-contract";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const reports = ref<ManifestProblemReport[]>([]);
-const repair = mock<(request: ManifestRepair) => Promise<void>>(async () => undefined);
-mock.module(`../../extensions/useManifestProblems`, () => ({
+const repair = jest.fn<(request: ManifestRepair) => Promise<void>>(async () => undefined);
+jest.mock(`../../extensions/useManifestProblems`, () => ({
     useManifestProblems: () => ({ reports, hasProblems: computed(() => reports.value.length > 0), repair }),
 }));
 
-const opened = mock();
-mock.module(`../../../workspace/files/openFileRef`, () => ({ openWorkspaceRef: (path: string) => opened(path) }));
+const opened = jest.fn();
+jest.mock(`../../../workspace/files/openFileRef`, () => ({ openWorkspaceRef: (path: string) => opened(path) }));
 
 const { default: SandboxManifestCard } = await import("./SandboxManifestCard.vue");
 

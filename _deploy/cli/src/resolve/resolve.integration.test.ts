@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IntentSet } from "@intentic/need-resolver";
 import { resolveState } from "@intentic/state-resolver";
-import { describe, it, expect } from "bun:test";
 import { collectSecrets } from "../secrets/secrets.js";
 import { discoverZone, loadIntent } from "./resolve.js";
 

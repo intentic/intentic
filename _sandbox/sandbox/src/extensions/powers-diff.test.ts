@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { ExtensionManifestSchema, diffPowers } from "@intentic/extension-manifest";
 
 const manifest = (overrides: object = {}) =>

@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { unstubbed } from "@intentic/testing";
 import type { CloudflareApi, IngressRule } from "./cloudflare-api.js";

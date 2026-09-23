@@ -1,5 +1,4 @@
 import { LOCAL_MODEL_WINDOW_DEFAULT, type TurnNote } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { applyTrim, trimFrame, trimState, type TurnTrim, turnTrim } from "./context-trim.js";
 import { SKILL_CATALOG_NOTE_TITLE } from "../../../store/loaded-skills.js";
 import { PERSONA_NOTE_TITLE } from "../../../personas/personas.js";
@@ -29,25 +28,17 @@ test("an unknown window trims nothing", () => {
 });
 
 test("one rung under a full turn sheds what is optional and keeps the base", () => {
-    const trim = turnTrim(FULL - 1, "replace");
-
-    expect(trim?.tier).toBe("lean");
-    expect(trim?.guidance).toBe(true);
-    expect(trim?.fieldNotes).toBe(true);
-    expect(trim?.base).toBe(false);
+    expect(turnTrim(FULL - 1, "replace")).toEqual({ window: FULL - 1, base: false });
 });
 
 test("two rungs under, the base goes too", () => {
-    expect(turnTrim(16_384, "replace")?.tier).toBe("minimal");
-    expect(turnTrim(16_384, "replace")?.base).toBe(true);
+    expect(turnTrim(16_384, "replace")).toEqual({ window: 16_384, base: true });
 });
 
 // A runtime that can only add to its own instructions has no base to swap, and the notice must not claim one was.
 test("a runtime that cannot replace its base keeps it whatever the window says", () => {
-    expect(turnTrim(16_384, "append")?.base).toBe(false);
-    expect(turnTrim(16_384, "none")?.base).toBe(false);
-    // Still the smallest tier: the window is what it is, only the one thing it cannot do is not done.
-    expect(turnTrim(16_384, "append")?.tier).toBe("minimal");
+    expect(turnTrim(16_384, "append")).toEqual({ window: 16_384, base: false });
+    expect(turnTrim(16_384, "none")).toEqual({ window: 16_384, base: false });
 });
 
 // The state a turn starts from, with nothing taken from the system prompt unless a case says so.

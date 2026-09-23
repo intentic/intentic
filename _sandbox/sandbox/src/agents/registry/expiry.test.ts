@@ -1,4 +1,3 @@
-import { expect, test } from "bun:test";
 import { createPathLists } from "./expiry.js";
 
 // Pins that the kept weight equals a fresh walk after any mix of writes, replacements and deletes.

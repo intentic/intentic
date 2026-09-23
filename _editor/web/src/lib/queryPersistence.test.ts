@@ -1,11 +1,10 @@
 // A cache write the browser refuses (a full or disabled IndexedDB) is dropped, never an unhandled rejection.
-import { it, expect, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 
-const set = mock(async (): Promise<void> => {
+const set = jest.fn(async (): Promise<void> => {
     throw new DOMException(`The quota has been exceeded.`, `QuotaExceededError`);
 });
-mock.module(`idb-keyval`, () => ({ get: async () => undefined, set, del: async () => undefined }));
+jest.mock(`idb-keyval`, () => ({ get: async () => undefined, set, del: async () => undefined }));
 
 const { queryClient, restorePersistedQueries } = await import(`./queryPersistence`);
 

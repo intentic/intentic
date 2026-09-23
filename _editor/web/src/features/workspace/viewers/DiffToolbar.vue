@@ -7,8 +7,8 @@ import type { ChangeStatus } from "@intentic/extension-api";
 import { basename, parentDir } from "@intentic/ui/path";
 import ReviewStat from "../../../components/ReviewStat.vue";
 import type { LineStat } from "@intentic/code-read";
-import { nameExt } from "@intentic/code-read";
-import { isDelimitedPath, isDocumentPath, isProsePath, rendersAsBytes } from "../explorer/fileType";
+import { extensionOf, formatOf } from "@intentic/ui/file-format";
+import { rendersAsBytes } from "../explorer/fileType";
 import { compareViewerForExtension } from "../../../core-views/viewerRegistry";
 import { useT } from "@intentic/ui/i18n";
 
@@ -48,11 +48,12 @@ const { showComments, toggleShowComments, diffLayout, setDiffLayout, diffProse, 
 
 // A document offers a second reading, tracked changes over the text; code has only the code. In the prose reading the
 // layout and comment controls have nothing to act on, so they step aside.
-const prose = computed(() => isProsePath(path));
+const format = computed(() => formatOf(path).reads);
+const prose = computed(() => format.value === `markdown` || format.value === `plain`);
 const proseOn = computed(() => prose.value && diffProse.value);
 const READING_OPTIONS = computed(() => [
     { label: t(`workspace.diffToolbar.prose`), value: `prose`, title: t(`workspace.diffToolbar.textWhatAddedUnderlined`) },
-    { label: t(`workspace.diffToolbar.code`), value: `code`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+    { label: t(`shared.code`), value: `code`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
 ]);
 
 // A binary document (a .docx, a .pdf, a deck) reads either as tracked changes over the text rendered from it or as its
@@ -60,21 +61,21 @@ const READING_OPTIONS = computed(() => [
 // share one preference, since each pair is "the structure" against "the raw file". Comments never apply to either.
 // A format whose viewer can draw the two versions as one marked document (a .docx) has three: that redline, the text,
 // and the two versions; elsewhere a stored `text` reads as the Changes it is.
-const document = computed(() => isDocumentPath(path) || isDelimitedPath(path));
+const document = computed(() => format.value === `document` || format.value === `table`);
 const documentChanges = computed(() => document.value && diffDocument.value !== `sides`);
-const redline = computed(() => isDocumentPath(path) && compareViewerForExtension(nameExt(path).ext) !== undefined);
+const redline = computed(() => format.value === `document` && compareViewerForExtension(extensionOf(path)) !== undefined);
 const documentReading = computed(() => (diffDocument.value === `text` && !redline.value ? `changes` : diffDocument.value));
 const DOCUMENT_OPTIONS = computed(() => {
-    if (isDelimitedPath(path)) {
+    if (format.value === `table`) {
         return [
             { label: t(`workspace.diffToolbar.table`), value: `changes`, title: t(`workspace.diffToolbar.rowsAndCellsChangedMarked`) },
-            { label: t(`workspace.diffToolbar.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+            { label: t(`shared.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
         ];
     }
     if (redline.value) {
         return [
             { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.documentDrawnWordsMarked`) },
-            { label: t(`workspace.diffToolbar.text`), value: `text`, title: t(`workspace.diffToolbar.textOfBothVersionsAgentReads`) },
+            { label: t(`shared.text`), value: `text`, title: t(`workspace.diffToolbar.textOfBothVersionsAgentReads`) },
             { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.bothVersionsDrawnWhole`) },
         ];
     }
@@ -82,7 +83,7 @@ const DOCUMENT_OPTIONS = computed(() => {
         { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.documentTextWhatAdded`) },
         rendersAsBytes(path, undefined)
             ? { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.bothVersionsDrawnWhole`) }
-            : { label: t(`workspace.diffToolbar.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+            : { label: t(`shared.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
     ];
 });
 
@@ -196,7 +197,7 @@ const LABEL = `text-2xs text-content max-md:text-sm`;
                 <SegmentedControl :model-value="diffLayout" :options="LAYOUT_OPTIONS" size="xs" @update:model-value="setDiffLayout" />
             </div>
             <div :class="ROW" v-if="commentsRow">
-                <span :class="LABEL">{{ t(`workspace.diffToolbar.comments`) }}</span>
+                <span :class="LABEL">{{ t(`shared.comments`) }}</span>
                 <SegmentedControl
                     :model-value="showComments ? `shown` : `hidden`"
                     :options="COMMENT_OPTIONS"

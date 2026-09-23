@@ -1,4 +1,3 @@
-import { expect, test } from "bun:test";
 import { sqliteAgentsStore } from "../../agents/registry/agents-store.js";
 import { openConversationsDb } from "../../store/conversations-db.js";
 import { IN_MEMORY } from "../../store/sqlite.js";

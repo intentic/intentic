@@ -171,8 +171,8 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
     const stockImage = await resolveHostedImage(config, logger);
     const live = new Map<string, (typeof rows)[number][]>();
     for (const row of rows) {
-        // A drifted image or a row with no identity is worth nothing claimable, for the same reason a wrong rootfs is.
-        if (row.image !== stockImage || row.token === ``) {
+        // A drifted image is worth nothing claimable, for the same reason a wrong rootfs is.
+        if (row.image !== stockImage) {
             // oxlint-disable-next-line eslint/no-await-in-loop
             await destroyPoolMachine(prisma, config, row).catch((error: unknown) =>
                 logger.error({ err: error, app: row.appName }, `hosted pool: replacing a drifted machine failed`),

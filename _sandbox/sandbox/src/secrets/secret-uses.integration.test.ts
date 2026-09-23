@@ -1,7 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { fileSecretUses, lastUseByName } from "./secret-uses.js";
 
 /* The use ledger: append-only rows on disk, capped, newest-last, what the inventory joins as "last used". */

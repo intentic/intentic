@@ -1,6 +1,5 @@
 // Pins which terminals the sweep gesture calls inactive; now and the quiet threshold are injected so cases avoid real
 // waits.
-import { test, expect } from "bun:test";
 import type { TerminalTab } from "./useTerminal";
 import { inactiveTerminals, QUIET_MS } from "./terminalSweep";
 

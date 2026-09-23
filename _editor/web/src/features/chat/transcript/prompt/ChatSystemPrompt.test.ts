@@ -5,7 +5,6 @@ import "@intentic/testing/dom";
 import type { ConversationPrompt } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
-import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, ref, toValue } from "vue";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 import ChatSystemPrompt from "./ChatSystemPrompt.vue";
@@ -33,16 +32,16 @@ const PROMPT: ConversationPrompt = {
 let asked: { enabled?: unknown } | undefined;
 const data = ref<ConversationPrompt | undefined>(undefined);
 
-mock.module(`../../../sandbox/client/useSandboxQuery`, () => ({
+jest.mock(`../../../sandbox/client/useSandboxQuery`, () => ({
     useSandboxQuery: (options: { enabled?: unknown }) => {
         asked = options;
         return {
-            query: { data, isFetching: ref(false), isSuccess: ref(data.value !== undefined), refetch: mock() },
+            query: { data, isFetching: ref(false), isSuccess: ref(data.value !== undefined), refetch: jest.fn() },
             error: ref(undefined),
         };
     },
 }));
-mock.module(`../../../sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock(`../../../sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
 
 let app: App | undefined;
 

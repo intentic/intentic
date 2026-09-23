@@ -2,7 +2,6 @@
 // jsdom: the composable writes directly to the document. A skin used to fetch a webfont as it was applied and these
 // also pinned that; every face is served from the app's own origin now, so there is no link left to assert on.
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach } from "bun:test";
 import { freshImport, stubGlobal } from "@intentic/testing/bun";
 
 // Both modules are module-scope singletons. The theme is evaluated once, over a `prefers-color-scheme` this file can

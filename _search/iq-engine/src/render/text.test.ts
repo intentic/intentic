@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { RankedGroup } from "../types.js";
 import { estimateTokens } from "./budget.js";
 import { renderText } from "./text.js";

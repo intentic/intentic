@@ -1,15 +1,14 @@
 import type { LandedMessageDraft } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect, beforeEach, mock } from "bun:test";
 import type { Services } from "../../composition.js";
 import { describeLanding } from "./landed-subject.js";
 import { isolatedAgent } from "../../testing.js";
 
-const ask = mock<() => Promise<{ value: { subject: string; note: string; breaking: string } }>>();
+const ask = jest.fn<() => Promise<{ value: { subject: string; note: string; breaking: string } }>>();
 // Whether a model is set for commit messages; checked before the report opens, not caught by the walk.
-const modelSet = mock<() => boolean>(() => true);
-mock.module("../../agent/models/role-model.js", () => ({ askRoleModel: () => ask(), roleModelIsSet: async () => modelSet() }));
-mock.module("../../git/changes/contract-shrink.js", () => ({ claimedContractShrink: async () => [] }));
+const modelSet = jest.fn<() => boolean>(() => true);
+jest.mock("../../agent/models/role-model.js", () => ({ askRoleModel: () => ask(), roleModelIsSet: async () => modelSet() }));
+jest.mock("../../git/changes/contract-shrink.js", () => ({ claimedContractShrink: async () => [] }));
 
 // Order the user is told in while a landing's sentence writes: the report may only end once there's something to show;
 // ending it first would show 'ready' over an empty box.
@@ -37,7 +36,8 @@ const servicesWith = (said?: string): Services =>
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () => isolatedAgent([{ repo: "root", base: "a".repeat(40) }]),
             setLandedMessageDraft: (_id, draft) => noteDraft(draft),
-            setLandedSubject: async (_id, draft) => void steps.push(`wrote ${draft.subject}${draft.testNote === undefined ? `` : ` | ${draft.testNote}`}`),
+            setLandedSubject: async (_id, draft) =>
+                void steps.push(`wrote ${draft.subject}${draft.testNote === undefined ? `` : ` | ${draft.testNote}`}`),
         }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {
             read: async () => (said === undefined ? [] : [{ role: "assistant", text: said }]) as never,

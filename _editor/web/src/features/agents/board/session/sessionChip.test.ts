@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { bareBranch, shortBranch } from "./sessionChip";
 
 describe(`bareBranch`, () => {

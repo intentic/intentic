@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/extension-ui";
+import { Icon, useLatest } from "@intentic/extension-ui";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { openOdf, type OdfPackage } from "./odf/pkg";
 import { renderBlocks } from "./odf/render";
@@ -14,7 +14,7 @@ const container = ref<HTMLElement>();
 const loading = ref(true);
 const error = ref<string>();
 const count = ref(0);
-let seq = 0;
+const latest = useLatest();
 let open: OdfPackage | undefined;
 // One observer for the whole strip: every slide is the same width, so the scale is a single number.
 let observer: ResizeObserver | undefined;
@@ -94,13 +94,13 @@ const render = async (source: Blob): Promise<void> => {
     if (host === undefined) {
         return;
     }
-    const id = ++seq;
+    const isLatest = latest();
     loading.value = true;
     error.value = undefined;
     host.replaceChildren();
     try {
         const bytes = new Uint8Array(await source.arrayBuffer());
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         release();
@@ -121,12 +121,12 @@ const render = async (source: Blob): Promise<void> => {
         observer = new ResizeObserver(fit);
         observer.observe(host);
     } catch (caught) {
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         error.value = caught instanceof Error ? caught.message : `Could not render this presentation.`;
     } finally {
-        if (id === seq) {
+        if (isLatest()) {
             loading.value = false;
         }
     }
@@ -137,10 +137,7 @@ watch(
     () => blob,
     (next) => void render(next),
 );
-onBeforeUnmount(() => {
-    seq += 1;
-    release();
-});
+onBeforeUnmount(release);
 </script>
 
 <template>

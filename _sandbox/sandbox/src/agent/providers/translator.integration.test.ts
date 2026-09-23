@@ -2,7 +2,6 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AccountUsage } from "@intentic/sandbox-contract";
-import { test, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createCliProxyClient } from "./translator.js";
 
@@ -24,7 +23,7 @@ const memoryStore = () => {
 
 // Every client here is pointed at a port nothing is listening on, with fetch rejecting: the situation itself.
 const clientOver = (authDir: string) => {
-    stubGlobal("fetch", mock().mockRejectedValue(new Error("fetch failed")));
+    stubGlobal("fetch", jest.fn().mockRejectedValue(new Error("fetch failed")));
     return createCliProxyClient({
         managementUrl: "http://127.0.0.1:8789/v0/management",
         token: "local",
@@ -99,7 +98,7 @@ test("judges the credential a sign-in just wrote, before the proxy's listing cat
     const patched: unknown[] = [];
     stubGlobal(
         "fetch",
-        mock(async (input: string | URL, init?: RequestInit) => {
+        jest.fn(async (input: string | URL, init?: RequestInit) => {
             const url = String(input);
             if (url.endsWith("/auth-files/status")) {
                 patched.push(JSON.parse(String(init?.body)));

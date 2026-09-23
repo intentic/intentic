@@ -3,149 +3,7 @@
 // colorful/vivid explorer setups.
 import type { ExplorerStyle } from "./explorerStyle.js";
 import type { IconName } from "./iconSets.js";
-
-export type FileCategory =
-    | "code"
-    | "style"
-    | "config"
-    | "data"
-    | "image"
-    | "audio"
-    | "doc"
-    | "shell"
-    | "archive"
-    | "lock"
-    | "binary"
-    | "generic";
-
-const EXT_CATEGORY: Record<string, FileCategory> = {
-    // images
-    png: "image",
-    jpg: "image",
-    jpeg: "image",
-    gif: "image",
-    webp: "image",
-    avif: "image",
-    bmp: "image",
-    ico: "image",
-    svg: "image",
-    // sound; the set the daemon types as audio/* on /workspace/raw, which is what a player is handed
-    mp3: "audio",
-    wav: "audio",
-    ogg: "audio",
-    oga: "audio",
-    opus: "audio",
-    weba: "audio",
-    flac: "audio",
-    m4a: "audio",
-    aac: "audio",
-    // documents
-    pdf: "doc",
-    md: "doc",
-    markdown: "doc",
-    mdx: "doc",
-    txt: "doc",
-    docx: "doc",
-    odt: "doc",
-    ott: "doc",
-    rtf: "doc",
-    epub: "doc",
-    pptx: "doc",
-    odp: "doc",
-    otp: "doc",
-    odg: "doc",
-    ipynb: "doc",
-    // code
-    ts: "code",
-    tsx: "code",
-    mts: "code",
-    cts: "code",
-    js: "code",
-    jsx: "code",
-    mjs: "code",
-    cjs: "code",
-    go: "code",
-    rs: "code",
-    java: "code",
-    c: "code",
-    h: "code",
-    cpp: "code",
-    cs: "code",
-    py: "code",
-    rb: "code",
-    php: "code",
-    kt: "code",
-    swift: "code",
-    vue: "code",
-    svelte: "code",
-    astro: "code",
-    html: "code",
-    htm: "code",
-    // styles
-    css: "style",
-    scss: "style",
-    sass: "style",
-    less: "style",
-    // data / config
-    json: "config",
-    jsonc: "config",
-    yaml: "config",
-    yml: "config",
-    toml: "config",
-    ini: "config",
-    cfg: "config",
-    conf: "config",
-    xml: "config",
-    // database / schema / spreadsheets
-    sql: "data",
-    prisma: "data",
-    graphql: "data",
-    gql: "data",
-    csv: "data",
-    tsv: "data",
-    xlsx: "data",
-    ods: "data",
-    ots: "data",
-    // shell
-    sh: "shell",
-    bash: "shell",
-    zsh: "shell",
-    ps1: "shell",
-    // archives
-    zip: "archive",
-    gz: "archive",
-    tgz: "archive",
-    tar: "archive",
-    rar: "archive",
-    "7z": "archive",
-    bz2: "archive",
-    xz: "archive",
-    zst: "archive",
-    jar: "archive",
-    war: "archive",
-    whl: "archive",
-    // fonts / binaries
-    woff: "binary",
-    woff2: "binary",
-    ttf: "binary",
-    otf: "binary",
-    // locks
-    lock: "lock",
-    lockb: "lock",
-};
-
-// Exact filenames (extensionless or dotfiles) that fall through the extension map.
-const BY_NAME_CATEGORY: Record<string, FileCategory> = {
-    dockerfile: "config",
-    makefile: "config",
-    ".gitignore": "config",
-    ".gitattributes": "config",
-    ".dockerignore": "config",
-    ".editorconfig": "config",
-    ".npmrc": "config",
-    ".env": "config",
-    ".prettierignore": "config",
-};
+import { extensionOf, type FileCategory, formatOf } from "../lib/fileFormat.js";
 
 // The default glyph per category.
 const CATEGORY_ICON: Record<FileCategory, IconName> = {
@@ -155,6 +13,7 @@ const CATEGORY_ICON: Record<FileCategory, IconName> = {
     data: "database",
     image: "image",
     audio: "waveform",
+    video: "file",
     doc: "file-edit",
     shell: "server",
     archive: "box",
@@ -171,6 +30,7 @@ const CATEGORY_COLOR: Record<FileCategory, string> = {
     data: "text-file-data",
     image: "text-file-image",
     audio: "text-file-audio",
+    video: "text-muted",
     doc: "text-file-doc",
     shell: "text-file-shell",
     archive: "text-file-archive",
@@ -188,17 +48,6 @@ const ICON_BY_NAME: Partial<Record<string, IconName>> = {
     ".gitattributes": "github",
 };
 
-const extOf = (lower: string): string => {
-    const dot = lower.lastIndexOf(`.`);
-    return dot > 0 ? lower.slice(dot + 1) : ``;
-};
-
-// The category of a file entry, drives its colour, and its default glyph.
-export const categoryForEntry = (name: string): FileCategory => {
-    const lower = name.toLowerCase();
-    return EXT_CATEGORY[extOf(lower)] ?? BY_NAME_CATEGORY[lower] ?? `generic`;
-};
-
 // The icon for a tree entry. Directories get an open/closed folder; files map by exact name, then by a
 // glyph override, then by their category's default glyph.
 export const iconForEntry = (name: string, type: "file" | "dir", expanded = false): IconName => {
@@ -206,7 +55,7 @@ export const iconForEntry = (name: string, type: "file" | "dir", expanded = fals
         return expanded ? `folder-open` : `folder`;
     }
     const lower = name.toLowerCase();
-    return ICON_BY_NAME[lower] ?? ICON_BY_EXT[extOf(lower)] ?? CATEGORY_ICON[categoryForEntry(name)];
+    return ICON_BY_NAME[lower] ?? ICON_BY_EXT[extensionOf(lower)] ?? CATEGORY_ICON[formatOf(name).category];
 };
 
 export interface ExplorerTreatment {
@@ -238,7 +87,7 @@ export const explorerColorClass = (style: ExplorerStyle, name: string, type: "fi
     if (style === `minimal`) {
         return type === `dir` ? `text-content/70` : `text-muted`;
     }
-    return type === `dir` ? `text-file-folder` : CATEGORY_COLOR[categoryForEntry(name)];
+    return type === `dir` ? `text-file-folder` : CATEGORY_COLOR[formatOf(name).category];
 };
 
 // How to draw one tree row's icon under the active explorer setup.

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { foldUnchangedRows, MAX_ROWS, type RowDiff, type Sheet, sheetOfDelimited, sheetsOfMarkdown, tableDiff } from "./tableDiff";
 
 const sheet = (name: string, ...rows: string[][]): Sheet => ({ name, rows });

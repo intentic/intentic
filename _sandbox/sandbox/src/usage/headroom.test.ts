@@ -1,6 +1,5 @@
 import type { AccountUsage } from "@intentic/sandbox-contract";
 import { pino } from "pino";
-import { test, expect, jest } from "bun:test";
 import type { AccountUsageStore } from "./account-usage.js";
 import { createHeadroomService, FRESH_MS, type HeadroomReading, type HeadroomSource, type HeadroomTarget } from "./headroom.js";
 import { memoryUsageParkStore, type UsageParkStore } from "./usage-parks.js";

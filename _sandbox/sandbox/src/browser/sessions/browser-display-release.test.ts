@@ -1,13 +1,12 @@
-import { test, expect, mock } from "bun:test";
 import * as displayOriginal from "../cast/display.js";
 
 // The X display is shared by every conversation browsing the same account, so the release has to be refcounted by
 // server. Spying on display.js is the only way to observe it: releaseDisplay's own effect is killing a process.
 const released: string[] = [];
-mock.module("../cast/display.js", () => ({
+jest.mock("../cast/display.js", () => ({
     ...displayOriginal,
-    ensureDisplay: mock(),
-    displayOf: mock(),
+    ensureDisplay: jest.fn(),
+    displayOf: jest.fn(),
     releaseDisplay: (key: string) => {
         released.push(key);
     },

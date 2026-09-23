@@ -3,7 +3,9 @@ import { CONTROL_SCOPE_REACH, type ControlScope } from "@intentic/sandbox-contra
 import { Button, Code, CopyButton, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
-import { type ControlToken, useControlTokens } from "./useControlTokens";
+import { useMintedTokens } from "../../../lib/useMintedTokens";
+import { jsonBody } from "../client/jsonBody";
+import { sandboxJson } from "../client/sandboxClient";
 import { useSandbox } from "../client/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 
@@ -20,8 +22,43 @@ const SCOPES: readonly ControlScope[] = [`read`, `drive`, `land`, `editor`];
 const SNIPPETS: readonly (`curl` | `github` | `acp`)[] = [`curl`, `github`, `acp`];
 const DEFAULT_EXPIRY: Expiry = `90`;
 
+interface ControlToken {
+    readonly id: string;
+    readonly label: string;
+    readonly scope: ControlScope;
+    readonly createdAt: number;
+    readonly createdBy?: string;
+    readonly expiresAt?: number;
+    readonly lastUsedAt?: number;
+}
+
+interface MintRequest {
+    readonly label: string;
+    readonly scope: ControlScope;
+    // Epoch ms; undefined mints a token that lives until revoked.
+    readonly expiresAt: number | undefined;
+}
+
+const TOKENS = `/system/control/tokens`;
+
 const { daemonUrl, active } = useSandbox();
-const { tokens, minted, minting, notice, mint, revoke } = useControlTokens();
+// Unfiltered by scope: hiding tokens minted elsewhere would let a leaked one stay live unnoticed.
+const { tokens, minted, minting, notice, mint, revoke } = useMintedTokens({
+    list: async () => (await sandboxJson<{ tokens?: ControlToken[] }>(TOKENS)).tokens ?? [],
+    mint: async ({ label, scope, expiresAt }: MintRequest) => {
+        const named = label.trim();
+        const { token } = await sandboxJson<{ token: string }>(
+            TOKENS,
+            jsonBody(`POST`, { scope, ...(named === `` ? {} : { label: named }), ...(expiresAt === undefined ? {} : { expiresAt }) }),
+        );
+        return { token, label: named === `` ? scope : named, scope };
+    },
+    revoke: async (id) => {
+        await sandboxJson(`${TOKENS}/${encodeURIComponent(id)}`, { method: `DELETE` });
+        return undefined;
+    },
+    owner: () => active.value?.id,
+});
 
 const isOwner = computed(() => active.value?.role === `owner`);
 
@@ -46,12 +83,12 @@ const scopeOptions = computed<readonly PickerOption<ControlScope>[]>(() =>
 );
 
 const EXPIRY_OPTIONS = computed((): readonly PickerOption<Expiry>[] => [
-    { value: `30`, label: t(`sandbox.controlTokensSection.n30Days`) },
-    { value: `90`, label: t(`sandbox.controlTokensSection.n90Days`) },
+    { value: `30`, label: t(`shared.n30Days`) },
+    { value: `90`, label: t(`shared.n90Days`) },
     { value: `365`, label: t(`sandbox.controlTokensSection.n1Year`) },
     {
         value: `never`,
-        label: t(`sandbox.controlTokensSection.never`),
+        label: t(`shared.never`),
         hint: t(`sandbox.controlTokensSection.livesUntilRevokedRight`),
     },
 ]);
@@ -67,8 +104,7 @@ const submit = async (): Promise<void> => {
     if (scope.value === undefined || minting.value) {
         return;
     }
-    const expiresAt = expiresAtOf(expiry.value);
-    await mint({ label: label.value, scope: scope.value, ...(expiresAt === undefined ? {} : { expiresAt }) });
+    await mint({ label: label.value, scope: scope.value, expiresAt: expiresAtOf(expiry.value) });
     label.value = ``;
 };
 
@@ -151,14 +187,14 @@ const describe = (token: ControlToken): string =>
 </script>
 
 <template>
-    <RowGroup v-if="isOwner" :label="t(`sandbox.controlTokensSection.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
+    <RowGroup v-if="isOwner" :label="t(`shared.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
         <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
             <!-- Same pill the member roster uses for the same word, so "expired" doesn't get two spellings. -->
             <template v-if="expired(token)" #meta>
                 <StatusBadge variant="danger" :label="t(`sandbox.controlTokensSection.expired`)" size="xs" />
             </template>
             <template #control>
-                <Button :label="t(`sandbox.controlTokensSection.revoke`)" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
+                <Button :label="t(`shared.revoke`)" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
             </template>
         </Row>
 

@@ -1,4 +1,3 @@
-import { afterEach, beforeEach, expect, jest, test } from "bun:test";
 import { advanceTimersByTimeAsync, waitFor } from "@intentic/testing/bun";
 import { type Caller, createIndicator, IDLE_MS, PAUSE_HOTKEY } from "./indicator.js";
 import { ScopeError } from "./policy.js";

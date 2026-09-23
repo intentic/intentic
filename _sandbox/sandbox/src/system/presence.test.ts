@@ -1,5 +1,4 @@
 import type { PresenceUser } from "@intentic/sandbox-contract";
-import { describe, test, expect } from "bun:test";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
 
 // The registry is module-level state shared across tests; each test registers under unique clientIds and

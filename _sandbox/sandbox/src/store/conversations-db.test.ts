@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import { sqliteAgentsStore } from "../agents/registry/agents-store.js";
 import { conversationEntry, isolatedAgent } from "../testing.js";
 import { openConversationsDb } from "./conversations-db.js";
@@ -63,7 +62,9 @@ describe("the conversations database", () => {
     it("finds every row naming a conversation by reading the schema, JSON columns read back as values", () => {
         const db = openConversationsDb(IN_MEMORY);
         sqliteAgentsStore(db).save([isolatedAgent([{ repo: "root", base: "a" }], { id: "c1" }), conversationEntry({ id: "c2" })]);
-        db.db.prepare("INSERT INTO checkpoint(conversation_id, message, anchor) VALUES ('c1', 3, ?)").run(JSON.stringify({ kind: "tree", snapshot: "s" }));
+        db.db
+            .prepare("INSERT INTO checkpoint(conversation_id, message, anchor) VALUES ('c1', 3, ?)")
+            .run(JSON.stringify({ kind: "tree", snapshot: "s" }));
         const rows = db.rowsOf("c1");
         expect(Object.keys(rows).toSorted()).toEqual(["checkpoint", "conversation", "conversation_repo"]);
         expect(rows["checkpoint"]).toEqual([{ conversation_id: "c1", message: 3, anchor: { kind: "tree", snapshot: "s" } }]);

@@ -2,7 +2,6 @@ import { mkdtemp, readdir, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
-import { test, expect } from "bun:test";
 import { stateRelPath } from "../../state-paths.js";
 import { isRendition, thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
 
@@ -84,7 +83,9 @@ test("thumbnailable names the formats it will decode, and leaves svg out", () =>
 
 // A page taller than it is wide, red over its first screenful and blue below: what a full-page capture looks like.
 const writePage = async (path: string): Promise<void> => {
-    const top = await sharp({ create: { width: 1440, height: 900, channels: 3, background: { r: 220, g: 30, b: 30 } } }).png().toBuffer();
+    const top = await sharp({ create: { width: 1440, height: 900, channels: 3, background: { r: 220, g: 30, b: 30 } } })
+        .png()
+        .toBuffer();
     const page = await sharp({ create: { width: 1440, height: 4000, channels: 3, background: { r: 30, g: 30, b: 220 } } })
         .composite([{ input: top, left: 0, top: 0 }])
         .png()
@@ -125,7 +126,13 @@ test("a view keeps the picture's own size, as AVIF for a reader that decodes it 
     const avifDrawn = await sharp(avif!.bytes).metadata();
     const webpDrawn = await sharp(webp!.bytes).metadata();
     // sharp names AVIF by its container, HEIF, with AV1 inside.
-    expect([avif!.type, avifDrawn.format, avifDrawn.compression, avifDrawn.width, avifDrawn.height]).toEqual(["image/avif", "heif", "av1", 1600, 1200]);
+    expect([avif!.type, avifDrawn.format, avifDrawn.compression, avifDrawn.width, avifDrawn.height]).toEqual([
+        "image/avif",
+        "heif",
+        "av1",
+        1600,
+        1200,
+    ]);
     expect([webp!.type, webpDrawn.format, webpDrawn.width, webpDrawn.height]).toEqual(["image/webp", "webp", 1600, 1200]);
     expect(avif!.bytes.byteLength).toBeLessThan(sourceBytes);
     // One version, two answers: each format is its own tag, so a cache keyed on Accept never serves the other.

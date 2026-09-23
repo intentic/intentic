@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { test, expect, beforeEach, mock } from "bun:test";
 import { RunnableProvidersSchema, TrialStatusSchema } from "@intentic/sandbox-contract";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
@@ -10,11 +9,11 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // The catalog reads are the whole subject: the providers this box adds, each provider's and endpoint's catalog, and the
 // trial allowance that rides the same load. Any other daemon call throws naming its procedure.
-const providersList = mock();
-const providerModels = mock();
-const endpointModels = mock();
-const trial = mock();
-mock.module("../../sandbox/client/sandboxRpc", () => ({
+const providersList = jest.fn();
+const providerModels = jest.fn();
+const endpointModels = jest.fn();
+const trial = jest.fn();
+jest.mock("../../sandbox/client/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({ providers: { list: providersList, models: providerModels }, endpoints: { models: endpointModels, trial } }),
 }));
 

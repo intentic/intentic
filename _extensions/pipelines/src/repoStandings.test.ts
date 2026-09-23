@@ -1,5 +1,4 @@
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { repoStandings, standingNote } from "./repoStandings";
 
 /* The board's running order. */

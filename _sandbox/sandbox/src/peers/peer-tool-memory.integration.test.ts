@@ -1,7 +1,6 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, afterEach } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { filePeerTools, peerToolsFile } from "./peer-tool-memory.js";
 

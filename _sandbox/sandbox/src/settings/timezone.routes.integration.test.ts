@@ -1,7 +1,6 @@
 import { type SandboxSettings, SandboxSettingsSchema, ZoneSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
-import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { createSettingsRoutes } from "./settings.routes.js";

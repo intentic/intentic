@@ -6,7 +6,7 @@ import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract";
 import { auditPath, readLinks, readLinkStates } from "./device/config.js";
 import { PAUSE_HOTKEY, readPausedAt } from "./device/indicator.js";
 import { runLogPath } from "./config.js";
-import { childrenOf, readMachineConfig } from "./environments/machine.js";
+import { heldDistros } from "./environments/machine.js";
 import { readResidentPid } from "./resident.js";
 import { readResident } from "./supervision.js";
 import { registeredDistro } from "./wsl.js";
@@ -372,8 +372,8 @@ export const status = buildCommand<StatusFlags>({
         // The agent's liveness is the whole of sync's liveness, not just mirroring's: it holds the SSH transport every
         // session rides (sync/tunnel.ts). Said once, here, where the version it is running is also stated.
         out(agentLine(report.sync.agent, Date.now()));
-        const [distro, held, machine] = await Promise.all([registeredDistro(), readResident(), readMachineConfig().catch(() => ({}))]);
-        const where = machineLine(distro, held?.supervisor, childrenOf(machine));
+        const [distro, held, children] = await Promise.all([registeredDistro(), readResident(), heldDistros().catch(() => [])]);
+        const where = machineLine(distro, held?.supervisor, children);
         if (where !== undefined) {
             out(where);
         }

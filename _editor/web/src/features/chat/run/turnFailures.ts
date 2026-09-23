@@ -1,9 +1,10 @@
-import type { AgentProvider, TurnFact } from "@intentic/sandbox-contract";
-import { ref, type Ref } from "vue";
+import type { TurnFact } from "@intentic/sandbox-contract";
+import { ref } from "vue";
 import type { PickUp } from "./pickUp";
 import { markAccountReauth } from "../accounts/providerAccounts";
-import type { SessionRef } from "./turnRequest";
 import { bindingWindow, usageStatusFor } from "../session/usageStatus";
+import type { ComposerSelection } from "../session/composerSelection";
+import type { Conversation } from "../session/conversation";
 import type { TranscriptView } from "../session/transcriptView";
 import type { TurnClient } from "../session/turnClient";
 import { importOrReload } from "../../../router/staleChunk";
@@ -21,6 +22,9 @@ export interface OutageResume {
     readonly scheduled: boolean;
 }
 
+// The daemon refused the pinned model (not served, or not on this plan); the reloaded catalog repoints the picker.
+const MODEL_REFUSED: ReadonlySet<TurnError["code"]> = new Set([`grok-model-invalid`, `codex-model-invalid`, `model-unavailable`]);
+
 // Renewal probe (1s+25x3s) must outlast the daemon's AUTH_RESUME_DEADLINE_MS (1 minute) re-mint window.
 const RENEWAL_PROBE = { delayMs: 1_000, intervalMs: 3_000, tries: 25 } as const;
 const OUTAGE_PROBE = { delayMs: 10_000, intervalMs: 15_000, tries: 20 } as const;
@@ -28,23 +32,11 @@ const OUTAGE_PROBE = { delayMs: 10_000, intervalMs: 15_000, tries: 20 } as const
 const FRESH_SESSION_PROBE = { delayMs: 2_000, intervalMs: 3_000, tries: 10 } as const;
 
 // The subset of a conversation a failure can touch or act on.
-export interface FailureHost {
-    // Where a failure's notice line goes, mirrored once written: it is part of the conversation.
+export type FailureHost = Pick<Conversation, "session" | "error" | "pickUp"> & {
     readonly transcript: Pick<TranscriptView, "messages" | "notice" | "persist">;
-    readonly provider: Readonly<Ref<AgentProvider>>;
-    readonly account: Readonly<Ref<string | undefined>>;
-    // The model this chat is on; a refusal's fallback reset reads off the pool this model spends.
-    readonly model: Readonly<Ref<string>>;
-    // Dropped when the daemon no longer has the session behind this chat.
-    readonly session: Ref<SessionRef | undefined>;
-    // The red line: this needs the user.
-    readonly error: Ref<string | null>;
-    // This turn died mid-work with nothing left to fix; one press continues it (pickUp.ts).
-    readonly pickUp: Ref<PickUp | undefined>;
-    // The runs: a probe stands down while one is live (the run it was hunting is already here); a restarted run is
-    // attached to.
+    readonly selection: Pick<ComposerSelection, "provider" | "account" | "model">;
     readonly turn: Pick<TurnClient, "streaming" | "reattach">;
-}
+};
 
 export class TurnFailures {
     // The outage this conversation is waiting out; cleared when the next turn starts (resume or user send).
@@ -106,20 +98,10 @@ export class TurnFailures {
                     async (chat) => {
                         await chat.loadTrialStatus();
                         if (code === `trial-model-unavailable`) {
-                            await chat.loadProviderModels(this.host.provider.value);
+                            await chat.loadProviderModels(this.host.selection.provider.value);
                         }
                     },
                 );
-                return;
-            case `grok-model-invalid`:
-            case `codex-model-invalid`:
-                // Daemon rejected the pinned model (after Grok's own mid-turn self-heal fails, or always for Codex);
-                // reload the provider's catalog so the picker repoints to what's actually served.
-                importOrReload(
-                    () => import(`../models/useChat-catalog`),
-                    (chat) => chat.loadProviderModels(this.host.provider.value),
-                );
-                this.host.error.value = message;
                 return;
             default:
                 this.applyUnhandledError(error);
@@ -128,19 +110,16 @@ export class TurnFailures {
     }
 
     // Failures this window cannot fix itself: the red line; where nothing was processed yet the daemon holds the message.
-    // `context-overflow`, `model-unavailable` and `engine-version-floor` get their own handling; the rest fall through.
     private applyUnhandledError(error: TurnError): void {
         const { message, code } = error;
         if (code === `context-overflow`) {
             this.applyOverflowError(error);
             return;
         }
-        if (code === `model-unavailable`) {
-            // Model exists but isn't available on this plan; the daemon already dropped it from the catalog. Held in the
-            // queue for retry (nothing was spent) while the catalog reloads and the picker repoints.
+        if (MODEL_REFUSED.has(code)) {
             importOrReload(
                 () => import(`../models/useChat-catalog`),
-                (chat) => chat.loadProviderModels(this.host.provider.value),
+                (chat) => chat.loadProviderModels(this.host.selection.provider.value),
             );
             this.host.error.value = message;
             return;
@@ -156,9 +135,7 @@ export class TurnFailures {
             return;
         }
         this.host.error.value = message;
-        // Continue is offered only when the code is unknown: for the three named cases above, nothing here would fix
-        // the block and pressing it would just re-fail. `held` rides through, so the press re-runs the turn the daemon
-        // kept rather than appending a word after it.
+        // Continue only for an unknown code, since a named one re-fails; `held` makes the press re-run the kept turn.
         if (code === undefined) {
             this.host.pickUp.value = {
                 reason: `stopped`,
@@ -172,14 +149,14 @@ export class TurnFailures {
     // Lights the reauth badge on the account this turn ran under; both reauth codes mark the same account the
     // same way.
     private markReauth(detail: string): void {
-        markAccountReauth(this.host.provider.value, this.host.account.value, detail);
+        markAccountReauth(this.host.selection.provider.value, this.host.selection.account.value, detail);
     }
 
     // A spent allowance is a wait, not a crash: muted, not red, and nothing is resent unless this conversation's
     // answer for the ending says so. `held` means continuing resends the same turn, not a new message.
     private applyLimitError(error: TurnError): void {
-        const model = this.host.model.value === `` ? undefined : { id: this.host.model.value };
-        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.provider.value, this.host.account.value, model), model)?.resetsAt;
+        const model = this.host.selection.model.value === `` ? undefined : { id: this.host.selection.model.value };
+        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.selection.provider.value, this.host.selection.account.value, model), model)?.resetsAt;
         this.host.pickUp.value = {
             reason: `limit`,
             // `resetsAt` always comes from the frame, never the store's fallback; `nextAt` is the daemon's own booking.

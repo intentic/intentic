@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { type GmailMessage, addressOf, attachmentsOf, bodyText, nameOf, parseMessage, replySubject, stripHtml } from "./gmail-message.js";
 
 const b64 = (text: string): string => Buffer.from(text, "utf8").toString("base64url");

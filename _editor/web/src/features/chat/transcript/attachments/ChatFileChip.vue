@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Button, explorerColorClass, iconForEntry, type Side } from "@intentic/ui";
+import { AnchoredOverlay, Button, iconForEntry, type Side } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui/format";
-import { computed, onBeforeUnmount, ref } from "vue";
+import { type ComponentPublicInstance, computed, onBeforeUnmount, ref, useTemplateRef } from "vue";
 import { type FilePeek, peekLead, peekLines, peekOmitted } from "../../drafts/filePeek";
+import ChatChip from "./ChatChip.vue";
+import ChatChipName from "./ChatChipName.vue";
 import ChatImageThumb from "./ChatImageThumb.vue";
-import { useClippedName } from "../clippedName";
-import { useChatSurface } from "../../tools/chatToolSurface";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -22,7 +22,6 @@ const {
     error,
     framed = false,
     removable = false,
-    inert = false,
 } = defineProps<{
     name: string;
     // Workspace-relative path: what a click opens, and what `peek` was read from.
@@ -36,25 +35,13 @@ const {
     // Upload in flight: 0..1. Undefined once the bytes are on disk.
     progress?: number;
     error?: string;
-    // Composer only: a bordered token, since chips in a row over the input have to read as discrete removable things.
     framed?: boolean;
     removable?: boolean;
-    // Drawn, never operated: a copy inside another hover card, which the pointer passes straight through.
-    inert?: boolean;
 }>();
 
 const emit = defineEmits<{ remove: [] }>();
 
-const surface = useChatSurface();
-// Nothing to open while the bytes are still going up, and nothing at all on a page with no workspace behind it.
-const openable = computed(() => !inert && surface.openFile !== undefined && progress === undefined);
-
 const icon = computed(() => iconForEntry(name, `file`));
-// Fixed `colorful`: the explorer's setting is about the file tree's own density, and a chip in a conversation is not
-// that tree. The vocabulary it defines — which hue means a config, a log, an archive — is worth sharing regardless.
-const iconColor = computed(() => explorerColorClass(`colorful`, name, `file`, false));
-
-const { nameBox, nameHead, nameTail, clipped } = useClippedName(() => name);
 
 // Scale, and length where length is knowable: the facts a filename withholds. Never the kind, which is the name's own
 // ending — the one part of it the middle-ellipsis above never gives up.
@@ -76,12 +63,6 @@ const leadLines = computed(() => (lead === 0 || peek === undefined ? [] : peekLe
 // fits ends on a hard edge instead, so the fade never says "there is more" of a file there is no more of.
 const truncated = computed(() => peek !== undefined && (peek.headBytes < peek.size || peekLead(peek, lead + 1).length > lead));
 
-// The composer's token wears its own border; everywhere else only the file's text is boxed, and the tile is bare. One
-// width for both: a name is what the reader matches against, and it is the first thing a narrower box eats.
-const frame = computed(() =>
-    framed ? `max-w-72 overflow-hidden rounded-lg border bg-card ${error === undefined ? `border-line` : `border-danger`}` : `max-w-72`,
-);
-
 // What the card says when there is no text for it to say anything with.
 const nothingToShow = computed(() => {
     if (peek === undefined) {
@@ -99,7 +80,8 @@ const nothingToShow = computed(() => {
 
 const omitted = computed(() => (peek === undefined ? 0 : peekOmitted(peek)));
 
-const root = ref<HTMLElement>();
+const chip = useTemplateRef<ComponentPublicInstance>(`chip`);
+const root = computed<HTMLElement | undefined>(() => chip.value?.$el);
 const hovering = ref(false);
 // Opens only once there is something to draw, and opens by itself if the windows land while the pointer is still on
 // the chip. Writable, so the overlay's own dismissals (Escape, a press outside) can shut it.
@@ -162,17 +144,30 @@ const onBlur = (): void => {
     hovering.value = false;
 };
 
-const open = (): void => {
+// The card goes with the press, since what it previewed is opening.
+const opening = (open: () => void): void => {
     clearTimeout(timer);
     hovering.value = false;
-    surface.openFile?.(path);
+    open();
 };
 
 onBeforeUnmount(() => clearTimeout(timer));
 </script>
 
 <template>
-    <div ref="root" class="group relative flex" :class="frame" @pointerenter="onEnter" @pointerleave="onLeave">
+    <ChatChip
+        ref="chip"
+        v-slot="{ openable, open, iconColor }"
+        :name="name"
+        :path="path"
+        :progress="progress"
+        :error="error"
+        :framed="framed"
+        :removable="removable"
+        @remove="emit(`remove`)"
+        @pointerenter="onEnter"
+        @pointerleave="onLeave"
+    >
         <!-- The target, drawn only on approach. -->
         <div
             v-if="!framed && openable"
@@ -183,8 +178,8 @@ onBeforeUnmount(() => clearTimeout(timer));
             :type="openable ? `button` : undefined"
             class="relative flex min-w-0 flex-1 flex-col gap-1 text-left"
             :class="[framed ? `px-2 py-1.5` : ``, openable ? `cursor-pointer` : ``]"
-            :aria-label="openable ? t(`chat.chatFileChip.openInWorkspace`, { name }) : undefined"
-            @click="openable && open()"
+            :aria-label="openable ? t(`shared.openInWorkspace`, { name }) : undefined"
+            @click="openable && opening(open)"
             @focus="onFocus"
             @blur="onBlur"
         >
@@ -193,17 +188,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                 <!-- A picture stands in for its own glyph; everything else gets its category's. -->
                 <ChatImageThumb v-if="previewUrl" :src="previewUrl" :alt="name" size="h-8 w-8" />
                 <Icon v-else :name="icon" class="shrink-0 text-xs" :class="iconColor" />
-                <!-- Preserve the capture identifier at narrow widths. -->
-                <span class="flex min-w-0 items-center text-xs text-content">
-                    <!-- Softened at the cut, so a half-drawn glyph reads as the name running into its mark. -->
-                    <span
-                        ref="nameBox"
-                        class="overflow-hidden whitespace-nowrap"
-                        :class="clipped ? `[mask-image:linear-gradient(to_right,#000_calc(100%_-_0.6em),transparent)]` : ``"
-                        >{{ nameHead }}</span
-                    >
-                    <span v-if="nameTail" class="shrink-0">{{ clipped ? `…` : `` }}{{ nameTail }}</span>
-                </span>
+                <span class="flex min-w-0 items-center text-xs text-content"><ChatChipName :name="name" /></span>
                 <span v-if="meta" class="shrink-0 text-2xs whitespace-nowrap text-subtle">· {{ meta }}</span>
                 <Icon v-if="progress !== undefined" name="spinner" spin class="shrink-0 text-2xs text-link" />
                 <Icon v-else-if="error !== undefined" name="exclamation-circle" class="shrink-0 text-2xs text-danger" v-tooltip.top="error" />
@@ -218,22 +203,6 @@ onBeforeUnmount(() => clearTimeout(timer));
                 </span>
             </span>
         </component>
-        <!-- `self-center`: a chip carrying a thumbnail is taller than its text, and only a removable chip — the composer's, which draws no lead lines — is ever asked to sit beside one. -->
-        <button
-            v-if="removable"
-            type="button"
-            class="composer-ghost relative m-1 h-5 w-5 shrink-0 self-center"
-            :aria-label="t(`chat.chatFileChip.removeAttachment`)"
-            @click="emit(`remove`)"
-        >
-            <Icon name="times" class="text-2xs" />
-        </button>
-        <!-- Upload progress: the one thing drawn here that is about the transfer rather than the file. -->
-        <div
-            v-if="progress !== undefined"
-            class="absolute inset-x-0 bottom-0 h-0.5 bg-primary-500"
-            :style="{ width: `${Math.round(progress * 100)}%` }"
-        ></div>
 
         <!-- The peek, teleported out of this chip by the overlay. -->
         <AnchoredOverlay v-model="peeking" :anchor="root" :side="side" cross="start" :gap="GAP">
@@ -260,12 +229,12 @@ onBeforeUnmount(() => clearTimeout(timer));
                     </template>
                 </div>
                 <div v-if="openable" class="shrink-0 border-t border-line px-3 py-1">
-                    <Button type="button" size="small" :text="true" class="w-full" @click="open">
+                    <Button type="button" size="small" :text="true" class="w-full" @click="opening(open)">
                         <Icon name="external-link" />
                         {{ t(`chat.chatFileChip.openInWorkspace2`) }}
                     </Button>
                 </div>
             </div>
         </AnchoredOverlay>
-    </div>
+    </ChatChip>
 </template>

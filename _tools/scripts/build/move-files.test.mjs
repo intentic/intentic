@@ -93,7 +93,7 @@ test("an import of a moved file is re-aimed, and an untouched one is left byte-i
     const source = [
         `import { plan } from "./turn-plan.js";`,
         `import { services } from "../composition.js";`,
-        `mock.module("./turn-plan.js", () => ({}));`,
+        `jest.mock("./turn-plan.js", () => ({}));`,
         `const late = await import("./turn-plan.js");`,
         `const label = "./turn-plan.js is not an import";`,
     ].join("\n");
@@ -101,7 +101,7 @@ test("an import of a moved file is re-aimed, and an untouched one is left byte-i
     const { text, changes } = rewriteSpecifiers(source, "_sandbox/sandbox/src/agent/agent.ts", finalOf, tracked);
     assert.equal(changes.length, 3, "the three import contexts, and not the string that merely looks like one");
     assert.match(text, /from "\.\/run\/turn-plan\.js"/);
-    assert.match(text, /mock\.module\("\.\/run\/turn-plan\.js"/);
+    assert.match(text, /jest\.mock\("\.\/run\/turn-plan\.js"/);
     assert.match(text, /await import\("\.\/run\/turn-plan\.js"\)/);
     assert.match(text, /from "\.\.\/composition\.js"/, "a specifier whose target did not move is untouched");
     assert.match(text, /const label = "\.\/turn-plan\.js is not an import"/, "a string in no import context is not a specifier");

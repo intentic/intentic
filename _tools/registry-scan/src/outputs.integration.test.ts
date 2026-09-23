@@ -3,7 +3,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REGISTRY_FACTS_FILE, type RegistryFile } from "@intentic/registry";
-import { describe, it, expect } from "bun:test";
 import type { ListingProposal, ScanResult } from "./scan.js";
 import { writeScanOutputs } from "./outputs.js";
 

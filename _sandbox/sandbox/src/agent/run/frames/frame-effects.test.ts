@@ -1,12 +1,19 @@
 import type { AgentEvent, UsageWindow } from "@intentic/sandbox-contract";
-import { afterEach, describe, expect, test } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../../harness/route-services.testing.js";
 import { beginTurn } from "../../../testing.js";
 import { providerOutage, recordProviderFailure, recordProviderSuccess } from "../../providers/provider-health.js";
 import type { FailureWrite } from "./classify-failure.js";
-import { activityOf, fileAccountUsage, performFailureWrites, providerAnswered, recordFrame, type TurnActivity, turnActivity } from "./frame-effects.js";
+import {
+    activityOf,
+    fileAccountUsage,
+    performFailureWrites,
+    providerAnswered,
+    recordFrame,
+    type TurnActivity,
+    turnActivity,
+} from "./frame-effects.js";
 
 afterEach(() => recordProviderSuccess("effects-provider"));
 
@@ -17,7 +24,8 @@ const recorded = (extra: Parameters<typeof services>[0] = {}) => {
     return { deps: services({ ...stores.overrides, logger, ...extra }), writes: stores.writes, lines };
 };
 
-const warnings = (lines: readonly Record<string, unknown>[]): unknown[] => lines.filter((line) => line["level"] === "warn").map((line) => line["message"]);
+const warnings = (lines: readonly Record<string, unknown>[]): unknown[] =>
+    lines.filter((line) => line["level"] === "warn").map((line) => line["message"]);
 
 const rejecting = async (): Promise<never> => {
     throw new Error("disk full");
@@ -62,7 +70,11 @@ describe("a frame's writes", () => {
 describe("the turn's rows", () => {
     test("carry the turn's identity, the title as it stands at each row, and the session once there is one", async () => {
         const { deps, writes } = recorded();
-        await beginTurn(deps.conversations, { conversationId: "effects-rows", isolated: false, prompt: "ship it", profile: { agent: "claude", harness: "native" } }, 1);
+        await beginTurn(
+            deps.conversations,
+            { conversationId: "effects-rows", isolated: false, prompt: "ship it", profile: { agent: "claude", harness: "native" } },
+            1,
+        );
         // The sessions the stream has named so far; the row reads the latest.
         const sessions: string[] = [];
         const record = turnActivity(deps, {
@@ -78,7 +90,14 @@ describe("the turn's rows", () => {
         await deps.agents.setTitle("effects-rows", "Renamed", "user");
         record({ type: "turn.completed" });
 
-        const identity = { provider: "claude", direction: "system" as const, turnId: "t-1", account: "acct", actor: "ada@example.com", conversationId: "effects-rows" };
+        const identity = {
+            provider: "claude",
+            direction: "system" as const,
+            turnId: "t-1",
+            account: "acct",
+            actor: "ada@example.com",
+            conversationId: "effects-rows",
+        };
         expect(writes.activity).toStrictEqual([
             { ...identity, title: "Ship it", origin, type: "turn.started", content: "ship it" },
             { ...identity, sessionId: "s-1", title: "Renamed", origin, type: "turn.completed" },
@@ -87,7 +106,9 @@ describe("the turn's rows", () => {
 
     test("of a turn with no conversation name none, and a refused append is logged, not thrown", async () => {
         const { deps, lines } = recorded({ activity: { append: rejecting, list: async () => [] } });
-        turnActivity(deps, { input: { prompt: "p" }, provider: "codex", turnId: "t-2", attribution: {}, sessionId: () => undefined })({ type: "turn.started" });
+        turnActivity(deps, { input: { prompt: "p" }, provider: "codex", turnId: "t-2", attribution: {}, sessionId: () => undefined })({
+            type: "turn.started",
+        });
         await waitFor(() => expect(warnings(lines)).toStrictEqual(["activity: turn event append failed"]), SETTLES);
     });
 });
@@ -116,7 +137,10 @@ describe("the first answer", () => {
             claudeSeats: { ...base.claudeSeats, clear: rejecting },
         });
         providerAnswered(deps, "claude", "acct");
-        await waitFor(() => expect(warnings(lines)).toStrictEqual(["provider refusal: settle failed", "claude account: could not clear the entitlement mark"]), SETTLES);
+        await waitFor(
+            () => expect(warnings(lines)).toStrictEqual(["provider refusal: settle failed", "claude account: could not clear the entitlement mark"]),
+            SETTLES,
+        );
     });
 });
 
@@ -138,7 +162,9 @@ describe("an account reading", () => {
     test("on a routed provider goes under the subscription's shared key", async () => {
         const { deps, writes } = recorded({ cliProxy: { sharedUsageKey: async () => "codex-shared" } });
         await fileAccountUsage(deps, "codex", "ignored", windows);
-        expect(writes.headroomRecords).toStrictEqual([{ provider: "codex", account: "codex-shared", usage: { windows, measuredAt: expect.any(Number) } }]);
+        expect(writes.headroomRecords).toStrictEqual([
+            { provider: "codex", account: "codex-shared", usage: { windows, measuredAt: expect.any(Number) } },
+        ]);
     });
 
     test("on a routed provider with no shared key re-reads every file instead", async () => {
@@ -169,7 +195,9 @@ describe("a classification's writes", () => {
         const { deps, writes } = recorded();
         performFailureWrites(deps, all);
         await waitFor(() => expect(writes.headroomRefreshes).toHaveLength(2), SETTLES);
-        expect(writes.providerRefusals).toStrictEqual([{ provider: "cursor", refusal: { at: 1, kind: "limit", message: "spent", account: "acct", model: "m" } }]);
+        expect(writes.providerRefusals).toStrictEqual([
+            { provider: "cursor", refusal: { at: 1, kind: "limit", message: "spent", account: "acct", model: "m" } },
+        ]);
         expect(writes.headroomRefreshes).toStrictEqual([
             { scope: { providers: ["cursor"], account: "acct" }, maxAgeMs: 0 },
             { scope: { providers: ["cursor"], account: "acct" }, maxAgeMs: 0 },

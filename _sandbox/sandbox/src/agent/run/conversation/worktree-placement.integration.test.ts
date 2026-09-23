@@ -1,7 +1,6 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent, WorkspaceEvent } from "@intentic/sandbox-contract";
-import { afterEach, expect, test } from "bun:test";
 import type { ConversationWorktree } from "../../../agents/worktrees/worktrees.js";
 import { gitOut, realCheckout, recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../../harness/route-services.testing.js";
@@ -27,11 +26,21 @@ const begun = async (id: string, change: { readonly runner?: string } = {}, extr
     const recorded = recordingTurnStores();
     const { lines, logger } = recordingLogger();
     const deps = services({ ...recorded.overrides, logger, agentWorktrees: made.worktrees, ...extra });
-    await beginTurn(deps.conversations, { conversationId: id, isolated: true, prompt: "ship it", profile: { agent: "claude", harness: "native" }, ...change }, 1);
+    await beginTurn(
+        deps.conversations,
+        { conversationId: id, isolated: true, prompt: "ship it", profile: { agent: "claude", harness: "native" }, ...change },
+        1,
+    );
     const base = await gitOut(made.work, "rev-parse", "HEAD");
     // What composing the worktree records, which is what a land reads its repos from.
     await deps.agents.recordWorktree(id, [{ repo: "root", base }]);
-    const composed: ConversationWorktree = { cwd: made.worktree, branch: `agent/${id}`, repos: [{ repo: "root", base }], fenced: false, elsewhere: [] };
+    const composed: ConversationWorktree = {
+        cwd: made.worktree,
+        branch: `agent/${id}`,
+        repos: [{ repo: "root", base }],
+        fenced: false,
+        elsewhere: [],
+    };
     return { ...made, deps, writes: recorded.writes, lines, base, composed };
 };
 
@@ -90,9 +99,13 @@ test("a runner's mirror is announced under its runner, anchored for a rewind, an
     ]);
     expect(dispatched).toStrictEqual([composed]);
     const anchor = await gitOut(worktree, "rev-parse", "HEAD");
-    expect(writes.checkpoints).toStrictEqual([{ conversationId: "mirror", index: 2, checkpoint: { kind: "worktree", repos: [{ repo: "root", base: anchor }] } }]);
+    expect(writes.checkpoints).toStrictEqual([
+        { conversationId: "mirror", index: 2, checkpoint: { kind: "worktree", repos: [{ repo: "root", base: anchor }] } },
+    ]);
     expect(await gitOut(worktree, "log", "-1", "--format=%s")).toBe("Agent: before this turn");
-    expect(writes.spans.filter(({ name }) => name === "agent.land")).toStrictEqual([{ name: "agent.land", attrs: { id: "mirror", mode: "measure", span: "outstanding" } }]);
+    expect(writes.spans.filter(({ name }) => name === "agent.land")).toStrictEqual([
+        { name: "agent.land", attrs: { id: "mirror", mode: "measure", span: "outstanding" } },
+    ]);
     expect(await gitOut(work, "status", "--porcelain")).toBe("");
 });
 
@@ -109,7 +122,12 @@ test("a pinned workflow step runs on its run's snapshot, and is never rebased on
     const snapshot = [{ repo: "root", base }];
     const placement = worktreePlacement(
         deps,
-        { input: { prompt: "step", conversationId: "pinned", worktreeBase: snapshot, autoLand: false }, conversationId: "pinned", snapshot: { conversationId: "pinned", index: 0 }, signal: undefined },
+        {
+            input: { prompt: "step", conversationId: "pinned", worktreeBase: snapshot, autoLand: false },
+            conversationId: "pinned",
+            snapshot: { conversationId: "pinned", index: 0 },
+            signal: undefined,
+        },
         stepsOf(composed, runs, bases),
     );
 
@@ -117,11 +135,20 @@ test("a pinned workflow step runs on its run's snapshot, and is never rebased on
 
     expect(bases).toStrictEqual([snapshot]);
     expect(frames[0]).toStrictEqual({ kind: "worktree", branch: "agent/pinned", base: base.slice(0, 7), unenforced: true });
-    expect(runs.map(({ id, cwd, fenced, synced }) => ({ id, cwd, fenced, synced }))).toStrictEqual([{ id: "pinned", cwd: composed.cwd, fenced: false, synced: [] }]);
+    expect(runs.map(({ id, cwd, fenced, synced }) => ({ id, cwd, fenced, synced }))).toStrictEqual([
+        { id: "pinned", cwd: composed.cwd, fenced: false, synced: [] },
+    ]);
     expect(await runs[0]?.resync()).toBeUndefined();
     expect(writes.spans.filter(({ name }) => name === "agent.sync")).toStrictEqual([]);
     expect(emitted).toStrictEqual([
-        { event: "turn.settled", agentId: "pinned", title: "Ship it", branch: "agent/pinned", outcome: "idle", repos: [{ repo: "root", from: base, dir: composed.cwd }] },
+        {
+            event: "turn.settled",
+            agentId: "pinned",
+            title: "Ship it",
+            branch: "agent/pinned",
+            outcome: "idle",
+            repos: [{ repo: "root", from: base, dir: composed.cwd }],
+        },
     ]);
 });
 
@@ -161,7 +188,12 @@ test("a worktree that never came up settles nothing and says nothing, and the fa
     deps.events.subscribe("workspace", (event) => void emitted.push(event));
     const placement = worktreePlacement(
         deps,
-        { input: { prompt: "p", conversationId: "never" }, conversationId: "never", snapshot: { conversationId: "never", index: 0 }, signal: undefined },
+        {
+            input: { prompt: "p", conversationId: "never" },
+            conversationId: "never",
+            snapshot: { conversationId: "never", index: 0 },
+            signal: undefined,
+        },
         {
             ...stepsOf(composed, []),
             compose: async () => {
@@ -194,8 +226,10 @@ test("a land whose last rebase fails still lands, on the old base, and says why"
 
     expect(frames).toStrictEqual([{ kind: "landed", landed: false, held: true }]);
     expect(books).toMatchObject({ reconciled: true, outcome: "ready" });
-    expect(lines.filter(({ message }) => message === "agents: pre-land sync failed, landing on the old base").map(({ level, id }) => ({ level, id }))).toStrictEqual([
-        { level: "warn", id: "stale" },
+    expect(
+        lines.filter(({ message }) => message === "agents: pre-land sync failed, landing on the old base").map(({ level, id }) => ({ level, id })),
+    ).toStrictEqual([{ level: "warn", id: "stale" }]);
+    expect(writes.spans.filter(({ name }) => name === "agent.land")).toStrictEqual([
+        { name: "agent.land", attrs: { id: "stale", mode: "measure", span: "outstanding" } },
     ]);
-    expect(writes.spans.filter(({ name }) => name === "agent.land")).toStrictEqual([{ name: "agent.land", attrs: { id: "stale", mode: "measure", span: "outstanding" } }]);
 });

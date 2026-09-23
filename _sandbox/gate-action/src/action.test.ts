@@ -1,6 +1,5 @@
 import { GateVerdictSchema } from "@intentic/sandbox-contract";
 import { WAIT_DEFAULT_S } from "@intentic/gate";
-import { test, expect } from "bun:test";
 import {
     annotationOf,
     defaultRequest,

@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { totpCode } from "./totp.js";
 
 // RFC 6238 Appendix B vectors: ASCII seed "12345678901234567890" (base32 below), 8 digits, 30s, SHA-1, plus

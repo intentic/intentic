@@ -5,7 +5,6 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { CapabilityStatus, CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, type CapabilityCategory } from "@intentic/capability-catalog";
 import type { Device, HostSummary, NetdiskLink, VpnLink, WebExtSummary } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "bun:test";
 import {
     type ConnectionRow,
     type ConnectionSources,

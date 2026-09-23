@@ -85,7 +85,7 @@ const spawnNoteFor = (spawn: boolean, runtime: TurnRuntime): string | undefined 
 const fieldNotesOf = (facts: AdmittedTurnFacts, arm: boolean | undefined, trim: TurnTrim | undefined): TurnFieldNotes => ({
     arm,
     brief: facts.fieldNotes,
-    note: (arm ?? true) && trim?.fieldNotes !== true ? facts.fieldNotes?.text : undefined,
+    note: (arm ?? true) && trim === undefined ? facts.fieldNotes?.text : undefined,
 });
 
 // What the SYSTEM prompt would have carried had the window paid for it. A custom prompt already dropped the guidance and
@@ -120,8 +120,6 @@ const sharedContext = (
     premise: TurnPremise,
     runtime: TurnRuntime,
     trim: TurnTrim | undefined,
-    notes: TurnFieldNotes,
-    spawnText: string | undefined,
 ): TurnContext => ({
     ...context,
     // The merged rule list travels with the settings, so no reader asks a second question to learn what stands.
@@ -129,13 +127,7 @@ const sharedContext = (
     conversationTurns: runtime.conversationTurns,
     iqSearchEnabled: premise.iqSearchEnabled,
     ...opt("contextTrim", trim),
-    ...opt("iqSearchNote", premise.send.iqTeaching ? facts.iqTeaching?.note : undefined),
-    ...opt("fieldNotesNote", notes.note),
-    ...opt("skillCatalogNote", facts.skillCatalogNote),
-    ...opt("contextNote", facts.contextNote),
     ...opt("iqSearchCohort", facts.iqTeaching?.cohort),
-    ...opt("spawnNote", spawnText),
-    ...opt("turnContextNote", facts.turnContext !== undefined && "note" in facts.turnContext ? facts.turnContext.note : undefined),
 });
 
 // The turn index only for a turn in a conversation; the map's size off the notes as they will be sent, trimmed. The
@@ -183,10 +175,11 @@ export const decideTurn = (facts: TurnFacts, input: AgentTurn, context: TurnCont
     const spawn = context.children !== undefined && input.conversationId !== undefined && mayDelegate(persona);
     const notes = fieldNotesOf(facts, premise.arms.notes, trim);
     const prompt = personaPrompt(persona.persona, facts.personaPrompt, facts.settings);
-    const shared = sharedContext(context, facts, settings, premise, runtime, trim, notes, spawnNoteFor(spawn, runtime));
+    const shared = sharedContext(context, facts, settings, premise, runtime, trim);
     // The card's briefing, then the window's filter: what a small window left out is named by building what it would send.
     const system = systemPieces(capabilities, prompt.mode, notes);
-    const composed = trimmed(trim, honoured(facts, shared, settings, capabilities, premise, prompt, mounts.withheld), system);
+    const written = { spawn: spawnNoteFor(spawn, runtime), fieldNotes: notes.note };
+    const composed = trimmed(trim, honoured(facts, shared, settings, capabilities, premise, prompt, mounts.withheld, written), system);
     const planned: TurnContext = { ...shared, base: composed.request, persona };
     // The last gate, and the only one that reads the prompt as it will be sent: notes and all, trimmed where trimmed.
     const shortfall = contextShortfall({
@@ -210,7 +203,7 @@ export const decideTurn = (facts: TurnFacts, input: AgentTurn, context: TurnCont
         spawn,
         briefing: premise.briefing,
         ...opt("contextTrim", composed.contextTrim),
-        experiments: experimentsOf(facts, input, runtime, premise, notes, planned.base.spec.notes, system.guidance && trim?.guidance !== true),
+        experiments: experimentsOf(facts, input, runtime, premise, notes, planned.base.spec.notes, system.guidance && trim === undefined),
         warnings,
     };
 };

@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { applyEdit, fileAnchor, renderForEdit, renderForRead } from "./hashline.js";
 
 // Pull the anchor and the `<tag> <n>│<text>` rows out of a view (a read, or an edit's answer), the way the model would
@@ -68,7 +67,9 @@ test("an empty file reads as such", () => {
 
 test("replace swaps a single tagged line and preserves the rest + trailing newline", () => {
     const { anchor, tags } = parseView(renderForRead(FILE));
-    expect(applyEdit(FILE, anchor, [{ op: "replace", from: tags[1] as string, lines: ["LINE TWO"] }]).content).toBe("line one\nLINE TWO\nline three\n");
+    expect(applyEdit(FILE, anchor, [{ op: "replace", from: tags[1] as string, lines: ["LINE TWO"] }]).content).toBe(
+        "line one\nLINE TWO\nline three\n",
+    );
 });
 
 test("replace across a tag range collapses the range to the new lines", () => {
@@ -146,7 +147,9 @@ test("in a mixed file, kept lines keep their own ending and written lines take t
 
 test("a written string holding a line break becomes separate lines in the file's ending", () => {
     const { anchor, tags } = parseView(renderForRead(CRLF));
-    expect(applyEdit(CRLF, anchor, [{ op: "replace", from: tags[0] as string, lines: ["a\nb"] }]).content).toBe("a\r\nb\r\nline two\r\nline three\r\n");
+    expect(applyEdit(CRLF, anchor, [{ op: "replace", from: tags[0] as string, lines: ["a\nb"] }]).content).toBe(
+        "a\r\nb\r\nline two\r\nline three\r\n",
+    );
 });
 
 test("an edit answers with the new anchor and two lines around each change, not the whole file", () => {

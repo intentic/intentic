@@ -1,5 +1,4 @@
 import { STATE_DIR } from "@intentic/constants";
-import { it, expect, afterEach, mock, spyOn } from "bun:test";
 import { emitFilesChanged, onFilesChanged } from "./fileEvents";
 
 // Scoping rules for api.workspace.onDidChangeFiles: a subscriber must get exactly its own declared paths, no more, no
@@ -17,8 +16,8 @@ afterEach(() => {
 });
 
 it(`wakes a subscriber only for writes under its own declared paths`, () => {
-    const approvals = mock();
-    const chores = mock();
+    const approvals = jest.fn();
+    const chores = jest.fn();
     listen([`${STATE_DIR}/config/approvals/`], approvals);
     listen([`${STATE_DIR}/records/chores/`], chores);
 
@@ -30,7 +29,7 @@ it(`wakes a subscriber only for writes under its own declared paths`, () => {
 
 // A trailing slash marks a directory entry; it must not match a sibling file.
 it(`does not let a directory entry match a sibling file`, () => {
-    const listener = mock();
+    const listener = jest.fn();
     listen([`${STATE_DIR}/config/approvals/`], listener);
 
     emitFilesChanged([`${STATE_DIR}/config/approvals-backup.json`]);
@@ -39,7 +38,7 @@ it(`does not let a directory entry match a sibling file`, () => {
 });
 
 it(`hands over only the matching paths, not the whole batch`, () => {
-    const listener = mock();
+    const listener = jest.fn();
     listen([`${STATE_DIR}/config/approvals/`], listener);
 
     emitFilesChanged([`README.md`, `${STATE_DIR}/config/approvals/one.json`, `${STATE_DIR}/records/chores/report.json`]);
@@ -51,8 +50,8 @@ it(`hands over only the matching paths, not the whole batch`, () => {
 // It must wake every subscriber, since prefix matching against no paths would otherwise announce nothing for the
 // largest changes.
 it(`wakes every subscriber for its own paths when the batch says only "something, and we cannot say what"`, () => {
-    const approvals = mock();
-    const chores = mock();
+    const approvals = jest.fn();
+    const chores = jest.fn();
     listen([`${STATE_DIR}/config/approvals/`], approvals);
     listen([`${STATE_DIR}/records/chores/`], chores);
 
@@ -64,7 +63,7 @@ it(`wakes every subscriber for its own paths when the batch says only "something
 
 // An extension that declared no files hears nothing, including from the empty batch.
 it(`never wakes a subscriber that declared no files`, () => {
-    const listener = mock();
+    const listener = jest.fn();
     listen([], listener);
 
     emitFilesChanged([`${STATE_DIR}/config/approvals/one.json`]);
@@ -74,7 +73,7 @@ it(`never wakes a subscriber that declared no files`, () => {
 });
 
 it(`stops delivering once disposed`, () => {
-    const listener = mock();
+    const listener = jest.fn();
     const subscription = onFilesChanged([`${STATE_DIR}/config/approvals/`], listener);
 
     subscription.dispose();
@@ -85,8 +84,8 @@ it(`stops delivering once disposed`, () => {
 
 // One extension's broken listener must not cost every other extension its notification.
 it(`keeps going when a listener throws`, () => {
-    const after = mock();
-    const thrower = spyOn(console, `error`).mockImplementation(() => {});
+    const after = jest.fn();
+    const thrower = jest.spyOn(console, `error`).mockImplementation(() => {});
     listen([`${STATE_DIR}/config/approvals/`], () => {
         throw new Error(`badge derivation failed`);
     });

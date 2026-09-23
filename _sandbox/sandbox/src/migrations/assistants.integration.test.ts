@@ -2,7 +2,6 @@ import { Readable } from "node:stream";
 import { createGzip } from "node:zlib";
 import type { Capability, SkillDraft } from "@intentic/sandbox-contract";
 import { pack } from "tar-stream";
-import { test, expect } from "bun:test";
 import type { MigratedAutomation } from "./adapter-shared.js";
 import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archive.js";
 import { applyMigration, type MigrationDeps } from "./apply.js";

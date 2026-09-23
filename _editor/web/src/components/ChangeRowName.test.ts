@@ -4,7 +4,6 @@
 // themselves and had already drifted: one drew a middle-truncated full path where the other drew a name and a
 // dimmed directory, which is a file called two things on two screens.
 import "@intentic/testing/dom";
-import { it, expect, afterEach } from "bun:test";
 import { createApp, h, type App } from "vue";
 import ChangeRowName from "./ChangeRowName.vue";
 

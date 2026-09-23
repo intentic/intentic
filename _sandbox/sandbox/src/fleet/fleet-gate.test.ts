@@ -1,5 +1,4 @@
 import type { AgentEvent, DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract";
-import { it, expect, mock } from "bun:test";
 import { type CreateAsk, createSandboxThroughFleet, type FleetGateDeps, slugOf } from "./fleet-gate.js";
 import { parkedCards } from "../agents/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
@@ -23,7 +22,7 @@ const ok = (payload: unknown) => ({ status: 200, body: JSON.stringify(payload), 
 interface Fake {
     readonly deps: FleetGateDeps;
     readonly frames: AgentEvent[];
-    readonly provision: ReturnType<typeof mock>;
+    readonly provision: ReturnType<typeof jest.fn>;
     readonly flows: DeviceSandboxFlow[];
 }
 
@@ -33,7 +32,7 @@ const fake = (
 ): Fake => {
     const frames: AgentEvent[] = [];
     const flows: DeviceSandboxFlow[] = [];
-    const provision = mock(async () => ok(PROVISIONED));
+    const provision = jest.fn(async () => ok(PROVISIONED));
     const deps: FleetGateDeps = {
         cards,
         token: async () => "itk_test",

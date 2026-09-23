@@ -1,5 +1,4 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
 import { type ComputedRef, shallowRef } from "vue";
 import type { SandboxRpc } from "../../sandbox/client/sandboxRpc";
@@ -25,15 +24,15 @@ const reading: SandboxMetrics = {
     sessions: {},
     roles: {},
 };
-const measure = mock<SandboxRpc[`system`][`metrics`]>(async () => reading);
+const measure = jest.fn<SandboxRpc[`system`][`metrics`]>(async () => reading);
 
-mock.module("../../sandbox/client/useSandboxQuery", () => ({
+jest.mock("../../sandbox/client/useSandboxQuery", () => ({
     useSandboxQuery: (options: CapturedOptions) => {
         captured.options = options;
         return { query: { data }, error: { value: undefined } };
     },
 }));
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { metrics: measure } }) }));
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { metrics: measure } }) }));
 
 const { heaviestRoles, LIVE_METRICS_POLL_MS, showLiveMetrics, useLiveMetrics } = await import("./liveMetrics");
 const { setDaemonRoutes } = await import("../../sandbox/overview/useDaemonRoutes");

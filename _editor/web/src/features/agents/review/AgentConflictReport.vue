@@ -106,9 +106,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
         <template v-else>
             <!-- Both conflict rows need the agent's conversation to resolve them. -->
             <div v-if="box !== undefined && (mine.length > 0 || theirs.length > 0)" :class="ROW">
-                <Button size="small" :class="INLINE" @click="emit('cross')">
-                    <Icon name="arrow-right" />{{ t(`agents.agentConflictReport.openIn`) }} {{ box }}
-                </Button>
+                <Button size="small" :class="INLINE" @click="emit('cross')"> <Icon name="arrow-right" />{{ t(`shared.openIn`) }} {{ box }} </Button>
                 <!-- Gated on `mergeable`, since git refuses a three-way apply while any path is held by uncommitted work. -->
                 <span class="text-2xs text-subtle">
                     <template v-if="mine.length > 0">{{ t(`agents.agentConflictReport.askingAgentToRebase`) }}</template
@@ -127,7 +125,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     :class="INLINE"
                     :disabled="busy || streaming"
                     @click="emit('resolve')"
-                    v-tooltip.bottom="streaming ? t(`agents.agentConflictReport.waitAgentTurnTo`) : undefined"
+                    v-tooltip.bottom="streaming ? t(`shared.waitAgentTurnTo`) : undefined"
                 >
                     <Icon name="sparkles" />{{ words.resolveConflict }}
                 </Button>
@@ -142,7 +140,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             <!-- The user's own half, which nothing else here can do for them; primary only when it's the sole thing left blocking. -->
             <div v-if="box === undefined && theirs.length > 0" :class="ROW">
                 <Button size="small" :severity="mine.length === 0 ? undefined : `secondary`" :class="INLINE" @click="emit('commit')">
-                    <Icon name="file-edit" />{{ t(`agents.agentConflictReport.commitStashYours`) }}
+                    <Icon name="file-edit" />{{ t(`shared.commitStashYours`) }}
                 </Button>
                 <!-- Says what the button does inline instead of behind a pointer-only tooltip. -->
                 <span class="text-2xs text-subtle">{{ t(`agents.agentConflictReport.opensChangesPanelLand`) }}</span>

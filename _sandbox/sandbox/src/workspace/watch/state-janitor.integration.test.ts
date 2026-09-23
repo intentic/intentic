@@ -2,7 +2,6 @@ import { mkdtemp, mkdir, readdir, stat, utimes, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
-import { test, expect } from "bun:test";
 import { sweepAgedState, sweepStateAtBoot } from "./state-janitor.js";
 
 const log = pino({ enabled: false });

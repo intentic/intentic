@@ -3,7 +3,8 @@ import type { ApiToken } from "@intentic/api-contract";
 import { Button, Code, CopyButton, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { ref } from "vue";
-import { useApiTokens } from "./useApiTokens";
+import { apiClient } from "../../lib/useApi";
+import { useMintedTokens } from "../../lib/useMintedTokens";
 import { useT } from "@intentic/ui/i18n";
 
 // ACCOUNT tokens: what acts for this person outside a browser. One scope exists — `provision`, which a sandbox holds
@@ -12,7 +13,15 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { tokens, minted, minting, notice, mint, revoke } = useApiTokens();
+const { tokens, minted, minting, notice, mint, revoke } = useMintedTokens({
+    list: async () => (await apiClient.token.list()).tokens,
+    mint: async (label: string) => {
+        const named = label.trim();
+        const created = await apiClient.token.create({ label: named === `` ? `provision` : named, scope: `provision` });
+        return { token: created.token, label: created.label };
+    },
+    revoke: async (tokenId) => (await apiClient.token.revoke({ tokenId })).tokens,
+});
 
 const label = ref(``);
 
@@ -20,7 +29,7 @@ const submit = async (): Promise<void> => {
     if (minting.value) {
         return;
     }
-    await mint(label.value, `provision`);
+    await mint(label.value);
     label.value = ``;
 };
 
@@ -41,10 +50,10 @@ const pasteSnippet = `Capabilities → Sandbox fleet → Provisioning token`;
 
 <template>
     <div class="flex flex-col gap-6">
-        <RowGroup :label="t(`settings.settingsTokens.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
+        <RowGroup :label="t(`shared.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
             <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
                 <template #control>
-                    <Button :label="t(`settings.settingsTokens.revoke`)" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
+                    <Button :label="t(`shared.revoke`)" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
                 </template>
             </Row>
 

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import type { Config } from "./config.js";
 import { decryptSecret, encryptSecret } from "./crypto.js";
 

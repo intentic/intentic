@@ -6,7 +6,6 @@ import {
     TRIAL_ENDPOINT_ID,
     TRIAL_LABEL,
 } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { ProvidersRoutesDeps } from "./providers.routes.js";
 import { routesClient } from "../../harness/route-client.testing.js";
 import { memoryCapabilitiesStore } from "../../harness/route-stores.testing.js";

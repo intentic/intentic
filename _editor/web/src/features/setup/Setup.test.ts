@@ -2,7 +2,6 @@
 // Defaults to a platform that hosts nothing, the world that leaves the command lane on screen.
 import "@intentic/testing/dom";
 import type { SandboxSummary } from "@intentic/api-contract";
-import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { waitFor, advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -15,12 +14,12 @@ import * as actualDesktopDownloads from "../../app/environments/desktopDownloads
 
 // Both useDevice (matchMedia) and environment.ts (window.env) read globals at module scope on import.
 
-const push = mock();
-const replace = mock();
+const push = jest.fn();
+const replace = jest.fn();
 // Query string the page was opened with; unset means a cold, linkless visit.
 const query = ref<Record<string, string>>({});
 // The factory is synchronous: awaiting inside one that replaces a module this file has already imported never returns.
-mock.module(`vue-router`, () => ({
+jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRoute: () =>
         ({
@@ -38,7 +37,7 @@ const mobileDevice = ref(false);
 // Snapshotted before the mock below replaces the module: a namespace is a live binding, so calling through it
 // afterwards would re-enter the stand-in rather than reach the real one.
 const realUi = { ...actualUi };
-mock.module(`@intentic/ui`, () => {
+jest.mock(`@intentic/ui`, () => {
     return {
         ...realUi,
         useDevice: (() => ({ ...realUi.useDevice(), mobile: mobileDevice })) as typeof actualUi.useDevice,
@@ -49,18 +48,18 @@ mock.module(`@intentic/ui`, () => {
 
 // sandboxes feeds the auto-name count, list is the mount-time read, create is this page's one write.
 const sandboxes = ref<SandboxSummary[]>([]);
-const list = mock<() => Promise<SandboxSummary[]>>();
-const create = mock<(name: string) => Promise<SandboxSummary>>();
-const hostedProvision = mock<(sandboxId: string, token: string) => Promise<SandboxSummary>>();
-const hostedRelease = mock<(sandboxId: string) => Promise<SandboxSummary>>();
+const list = jest.fn<() => Promise<SandboxSummary[]>>();
+const create = jest.fn<(name: string) => Promise<SandboxSummary>>();
+const hostedProvision = jest.fn<(sandboxId: string, token: string) => Promise<SandboxSummary>>();
+const hostedRelease = jest.fn<(sandboxId: string) => Promise<SandboxSummary>>();
 // The 3s poll's read; the wait card is driven entirely by what it returns.
-const refresh = mock<() => Promise<SandboxSummary[]>>();
+const refresh = jest.fn<() => Promise<SandboxSummary[]>>();
 // The discard rule's one observable act: leaving without committing deletes the draft this page minted.
-const remove = mock<(id: string) => Promise<void>>();
+const remove = jest.fn<(id: string) => Promise<void>>();
 // The attach lane's one write; named so a test can assert the probe was never even attempted.
-const attach = mock<(id: string, url: string) => Promise<void>>();
+const attach = jest.fn<(id: string, url: string) => Promise<void>>();
 // activeSandboxId/reachable belong to the chat store, read at module scope; omitting them crashes the import.
-mock.module(`../sandbox/client/useSandbox`, () => ({
+jest.mock(`../sandbox/client/useSandbox`, () => ({
     useSandbox: () => ({
         sandboxes,
         list,
@@ -69,7 +68,7 @@ mock.module(`../sandbox/client/useSandbox`, () => ({
         hostedRelease,
         refresh,
         remove,
-        select: mock(),
+        select: jest.fn(),
         attach,
         activeSandboxId: ref<string | undefined>(undefined),
         reachable: ref(false),
@@ -78,27 +77,27 @@ mock.module(`../sandbox/client/useSandbox`, () => ({
 
 // Mint never settles, keeping step 3 locked; hostedOffer defaults to false so classic lanes stay hosted-free.
 type Minted = { code: string; hostname: string; expiresAt: string };
-const setupCode = mock<() => Promise<Minted>>(() => new Promise<Minted>(() => {}));
-const hostedOffer = mock().mockResolvedValue({ enabled: false, remaining: 0 });
+const setupCode = jest.fn<() => Promise<Minted>>(() => new Promise<Minted>(() => {}));
+const hostedOffer = jest.fn().mockResolvedValue({ enabled: false, remaining: 0 });
 // Address minting is on by default; the world every lane below assumes unless a test says otherwise.
-const addressOffer = mock().mockResolvedValue({ enabled: true });
+const addressOffer = jest.fn().mockResolvedValue({ enabled: true });
 // Power poll and restart default harmlessly; a wait that can't ask falls back to its plain step list.
-const hostedStatus = mock().mockResolvedValue({ machine: `unknown` });
-const hostedRestart = mock().mockResolvedValue({ ok: true });
+const hostedStatus = jest.fn().mockResolvedValue({ machine: `unknown` });
+const hostedRestart = jest.fn().mockResolvedValue({ ok: true });
 // The wait's own recovery: the platform is asked to start a machine the provider reports down.
-const wake = mock().mockResolvedValue({ ok: true });
-mock.module(`../../lib/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart, wake } } }));
-mock.module(`../sandbox/session/sandboxIdFromToken`, () => ({ sandboxIdFromToken: mock().mockResolvedValue(`0f310c3c4db4`) }));
-mock.module(`../../app/analytics`, () => ({ track: mock() }));
-mock.module(`../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
-mock.module(`../auth/useGoogleIdentity`, () => ({
-    useGoogleIdentity: () => ({ getIdToken: mock().mockResolvedValue(`id-token`), warmIdToken: mock() }),
+const wake = jest.fn().mockResolvedValue({ ok: true });
+jest.mock(`../../lib/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart, wake } } }));
+jest.mock(`../sandbox/session/sandboxIdFromToken`, () => ({ sandboxIdFromToken: jest.fn().mockResolvedValue(`0f310c3c4db4`) }));
+jest.mock(`../../app/analytics`, () => ({ track: jest.fn() }));
+jest.mock(`../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+jest.mock(`../auth/useGoogleIdentity`, () => ({
+    useGoogleIdentity: () => ({ getIdToken: jest.fn().mockResolvedValue(`id-token`), warmIdToken: jest.fn() }),
 }));
 // The page's wall clock as a knob: every verdict the wait card reaches by elapsed time reads this, so a test
 // about one has to be able to move it. Frozen at 0 unless a test says otherwise, which is how it behaved before.
 const nowAt = ref(0);
-mock.module(`../../../../ui/src/composables/useNow`, () => ({ useNow: () => nowAt }));
-mock.module(`../extensions/useCloudflareZones`, () => ({
+jest.mock(`../../../../ui/src/composables/useNow`, () => ({ useNow: () => nowAt }));
+jest.mock(`../extensions/useCloudflareZones`, () => ({
     useCloudflareZones: () => ({
         cfToken: ref(``),
         cfTokenValid: ref(false),
@@ -112,29 +111,29 @@ mock.module(`../extensions/useCloudflareZones`, () => ({
 // with the command, so it is a knob every test below can turn. Undefined by default: the Mac-shaped world,
 // where the command is still the path, which is what most of these tests were written against.
 // Typed off the real export rather than restated, so the knob cannot drift from the function it stands in for.
-const desktopInstaller = mock<typeof import("../../app/environments/desktopDownloads").desktopInstaller>(() => undefined);
+const desktopInstaller = jest.fn<typeof import("../../app/environments/desktopDownloads").desktopInstaller>(() => undefined);
 // Only the four reads that ask something of the machine are stubbed; the rest of the module comes through as
 // itself. A listed-exports-only mock made every new export the page reaches for an import-time crash in a file
 // that tests none of it (DESKTOP_SETUP_EVENT, which useDesktopSetup subscribes to, arrived exactly that way).
 // A browser unless a test sets a version: only the presence of one says "running inside the app", which is the
 // arrival that installs on this computer.
 const desktopApp = ref<string | undefined>(undefined);
-mock.module(`../../app/environments/desktop`, () => ({
+jest.mock(`../../app/environments/desktop`, () => ({
     ...actualDesktop,
     desktopSetupLink: () => ``,
     desktopVersion: () => desktopApp.value,
-    openDesktopLink: mock(),
+    openDesktopLink: jest.fn(),
 }));
-mock.module(`../../app/environments/desktopDownloads`, () => ({
+jest.mock(`../../app/environments/desktopDownloads`, () => ({
     ...actualDesktopDownloads,
     desktopInstaller: () => desktopInstaller(),
 }));
 // Steps 2-3's own components, stubbed out: none of their concerns belong to step 1's tests.
-mock.module(`./SetupCompose.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-mock.module(`./SetupHandoff.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-mock.module(`./SetupRunDetails.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-mock.module(`./SetupSyncOption.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-mock.module(`../capabilities/connect/CloudflareTokenField.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./SetupCompose.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./SetupHandoff.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./SetupRunDetails.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./SetupSyncOption.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`../capabilities/connect/CloudflareTokenField.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Setup } = await import("./Setup.vue");
 

@@ -1,6 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { GitRunner } from "@intentic/scaffold";
-import { describe, test, expect } from "bun:test";
 import { parseRemoteRefs, readRemoteRefs, RemoteRefsError } from "./remote-refs.js";
 
 // What `git ls-remote --symref <url> HEAD refs/heads/* refs/tags/*` actually prints: the symref line, HEAD's own sha,

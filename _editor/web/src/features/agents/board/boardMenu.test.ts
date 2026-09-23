@@ -6,8 +6,6 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
-import { afterEach, beforeEach, expect, it } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { useChat } from "../../chat/run/useChat";
 import { reviewAction } from "../fleet/agentStatus";
@@ -18,9 +16,9 @@ import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals boardSelection.test.ts installs: jsdom has no scrollIntoView.
-hoisted(() => {
+(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-});
+})();
 
 let app: App | undefined;
 const settle = async (): Promise<void> => {

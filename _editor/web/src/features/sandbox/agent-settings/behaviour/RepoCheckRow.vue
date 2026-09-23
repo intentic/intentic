@@ -65,7 +65,7 @@ const idle = computed(() => !entry.adopted && !entry.changed);
                     </span>
                     <!-- Repo-relative, as the file spells them; the daemon is the one that prefixes the repository. -->
                     <span v-if="(check.paths?.length ?? 0) > 0" class="inline-flex min-w-0 flex-wrap items-center gap-1.5 text-muted">
-                        <span class="shrink-0 text-subtle">{{ t(`sandbox.repoCheckRow.onlyTouching`) }}</span>
+                        <span class="shrink-0 text-subtle">{{ t(`shared.onlyTouching`) }}</span>
                         <span
                             v-for="glob in check.paths"
                             :key="glob"

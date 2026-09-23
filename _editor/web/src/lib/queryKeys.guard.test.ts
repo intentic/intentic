@@ -1,7 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
-import { describe, it, expect } from "bun:test";
 
 // queryKeys.ts is the only spelling of a vue-query key, enforced by scanning the repo for two violations:
 // 1. A cache key spelled as an inline array of string literals.

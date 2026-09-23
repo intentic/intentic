@@ -1,28 +1,14 @@
-import { readFile } from "node:fs/promises";
+import { totalmem } from "node:os";
 import { sleep } from "@intentic/base/async";
-import { parsePressure } from "./loop-watchdog.js";
+import { type CgroupReading, readCgroup } from "./cgroup.js";
 
 // Decides what a turn meets on a sandbox short of memory: reads live cgroup files instead of the periodic sampler
 // snapshot, and returns a hold as a value rather than throwing. A person is warned, never stopped; background work waits.
 
-// cgroup v2's own files; /proc/meminfo and /proc/pressure/memory read the host, not this container.
-const MEMORY_CURRENT = "/sys/fs/cgroup/memory.current";
-const MEMORY_MAX = "/sys/fs/cgroup/memory.max";
-const MEMORY_PRESSURE = "/sys/fs/cgroup/memory.pressure";
-// Anon this cgroup has pushed to swap. Charged HERE and not to memory.current, which is the whole reason this file
-// reads it: see the `usedBytes` note below.
-const MEMORY_SWAP_CURRENT = "/sys/fs/cgroup/memory.swap.current";
-// The engine's own total, read only as the most a cap can mean: an owner may set memory.max past it.
-const MEMINFO = "/proc/meminfo";
-
 export interface MemoryHeadroom {
     // Undefined when uncapped or cgroup v2 is unavailable; the gate treats both as no opinion.
     readonly limitBytes: number | undefined;
-    // Resident + swapped, not memory.current alone, so paging cannot read as relief. A sandbox runs with
-    // `--memory-swap -1` (sandbox-run/src/index.ts), so a page pushed to swap leaves memory.current and lands in
-    // memory.swap.current: measuring only the first makes freeBytes RISE as the box begins to thrash, which is the
-    // one moment this gate exists to catch. Measured on a 16 GiB cap: 12.4 resident + 6.8 swapped reported 3.6 GiB
-    // free and admitted every turn while the machine had 350 MB and was paging at 230 MB/s.
+    // Working set plus swapped: with `--memory-swap -1` a paged-out page leaves memory.current, so paging must not read as relief.
     readonly usedBytes: number | undefined;
     // The swapped half of `usedBytes`, kept apart only so a hold can name it; 0 when swap is off or unaccounted.
     readonly swapBytes: number;
@@ -31,61 +17,30 @@ export interface MemoryHeadroom {
     readonly stalledPercent: number;
 }
 
-// `max` means no limit; an unreadable file becomes undefined too, so unknown never reads as a small number.
-const numericFile = async (path: string): Promise<number | undefined> => {
-    const text = await readFile(path, "utf8").catch(() => undefined);
-    if (text === undefined || text.trim() === "max") {
-        return undefined;
-    }
-    const parsed = Number(text.trim());
-    return Number.isFinite(parsed) ? parsed : undefined;
-};
-
-const engineTotalBytes = async (): Promise<number | undefined> => {
-    const kib = /^MemTotal:\s+(\d+) kB$/mu.exec(await readFile(MEMINFO, "utf8").catch(() => ""))?.[1];
-    return kib === undefined || Number(kib) <= 0 ? undefined : Number(kib) * 1024;
-};
-
-export interface MemoryReading {
-    // memory.current: the cgroup's RESIDENT charge, which excludes everything it has paged out.
-    readonly residentBytes: number | undefined;
-    // memory.max, undefined when uncapped.
-    readonly limitBytes: number | undefined;
-    // MemTotal of the engine the container runs on; undefined when unreadable.
-    readonly engineBytes: number | undefined;
-    // memory.swap.current; `undefined` is an unaccounted swap, read as none.
-    readonly swapBytes: number | undefined;
-    readonly pressureText: string;
-}
-
-// Pure function of a reading, for the same reason `admitTurn` below is one: the arithmetic swap broke is the part
-// worth testing, and a cgroup is not something a unit test can stage.
-export const headroomFrom = ({ residentBytes, limitBytes, engineBytes, swapBytes, pressureText }: MemoryReading): MemoryHeadroom => {
-    // An unreadable swap file is 0, never `undefined`: swap being unaccounted (cgroup v1, swapaccount off) must not
-    // turn a box with a measurable ceiling into one with no opinion — that would widen the hole instead of closing it.
+// Pure, so the arithmetic swap broke is testable without a cgroup; a cap past the machine's memory never binds.
+export const headroomFrom = (
+    {
+        workingSetBytes,
+        memoryLimitBytes,
+        swapBytes,
+        pressure,
+    }: Pick<CgroupReading, "workingSetBytes" | "memoryLimitBytes" | "swapBytes" | "pressure">,
+    machineBytes: number,
+): MemoryHeadroom => {
+    // Unaccounted swap (cgroup v1, swapaccount off) is none, never unknown: it must not blank a measurable ceiling.
     const swapped = swapBytes ?? 0;
-    const usedBytes = residentBytes === undefined ? undefined : residentBytes + swapped;
-    // A cap past the engine's total never binds, so the smaller is the ceiling; the engine alone never makes one.
-    const ceiling = limitBytes === undefined || engineBytes === undefined ? limitBytes : Math.min(limitBytes, engineBytes);
+    const usedBytes = workingSetBytes === undefined ? undefined : workingSetBytes + swapped;
+    const ceiling = memoryLimitBytes === undefined ? undefined : Math.min(memoryLimitBytes, machineBytes);
     return {
         limitBytes: ceiling,
         usedBytes,
         swapBytes: swapped,
         freeBytes: ceiling === undefined || usedBytes === undefined ? undefined : Math.max(0, ceiling - usedBytes),
-        stalledPercent: parsePressure(pressureText)?.full ?? 0,
+        stalledPercent: pressure.memory?.full ?? 0,
     };
 };
 
-export const readMemoryHeadroom = async (): Promise<MemoryHeadroom> => {
-    const [residentBytes, limitBytes, engineBytes, swapBytes, pressureText] = await Promise.all([
-        numericFile(MEMORY_CURRENT),
-        numericFile(MEMORY_MAX),
-        engineTotalBytes(),
-        numericFile(MEMORY_SWAP_CURRENT),
-        readFile(MEMORY_PRESSURE, "utf8").catch(() => ""),
-    ]);
-    return headroomFrom({ residentBytes, limitBytes, engineBytes, swapBytes, pressureText });
-};
+export const readMemoryHeadroom = async (): Promise<MemoryHeadroom> => headroomFrom(await readCgroup(), totalmem());
 
 const GIB = 1024 ** 3;
 

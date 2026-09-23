@@ -5,56 +5,52 @@ import "@intentic/testing/dom";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
 import { type RemoteRefs, VAULTED } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
-import { it, expect, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import * as actualVueRouter from "vue-router";
 
 let query: Record<string, string> = {};
-mock.module(`vue-router`, () => ({
+jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRoute: () => ({ params: { entry: `extension` }, query }) as never,
-    useRouter: () => ({ push: mock(), replace: mock(), resolve: (to: string) => ({ href: to }) }) as never,
+    useRouter: () => ({ push: jest.fn(), replace: jest.fn(), resolve: (to: string) => ({ href: to }) }) as never,
 }));
 
-const add = mock<(input: AddCapabilityInput) => Promise<void>>(async () => {});
-const readRemoteRefs = mock<(url: string, token?: string, keeping?: string) => Promise<RemoteRefs>>();
+const add = jest.fn<(input: AddCapabilityInput) => Promise<void>>(async () => {});
+const readRemoteRefs = jest.fn<(url: string, token?: string, keeping?: string) => Promise<RemoteRefs>>();
 const capabilities = ref<{ id: string; kind: string; status: { state: string }; config: Record<string, string>; secrets: string[] }[]>([]);
-mock.module(`./connect/useCapabilities`, () => ({
+jest.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities,
         error: ref(undefined),
         add: (input: AddCapabilityInput) => add(input),
-        remove: { mutateAsync: mock(), isPending: ref(false) },
-        rename: { mutateAsync: mock(), isPending: ref(false) },
-        refetch: mock(),
-        dismissRecommendation: { mutateAsync: mock(), isPending: ref(false) },
+        remove: { mutateAsync: jest.fn(), isPending: ref(false) },
+        rename: { mutateAsync: jest.fn(), isPending: ref(false) },
+        refetch: jest.fn(),
+        dismissRecommendation: { mutateAsync: jest.fn(), isPending: ref(false) },
     }),
-    browseMarketplace: mock(),
-    probeCapability: mock(),
+    browseMarketplace: jest.fn(),
+    probeCapability: jest.fn(),
     readRemoteRefs: (url: string, token?: string, keeping?: string) => readRemoteRefs(url, token, keeping),
 }));
-mock.module(`../extensions/useExtensions`, () => ({
+jest.mock(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
 }));
-mock.module(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-mock.module(`../terminal/useBackgroundProcesses`, () => ({
-    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: mock(), stop: mock() }),
-    viewProcessLogs: mock(),
+jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
+jest.mock(`../terminal/useBackgroundProcesses`, () => ({
+    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
+    viewProcessLogs: jest.fn(),
 }));
-mock.module(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: mock(), refresh: mock(), start: mock(), stop: mock() }),
+jest.mock(`../composables/sandbox/useHostConnect`, () => ({
+    useHostConnect: () => ({ hostFor: () => undefined, revoke: jest.fn(), refresh: jest.fn(), start: jest.fn(), stop: jest.fn() }),
 }));
-mock.module(`../sandbox/devices/useVpn`, () => ({
-    importForticlient: mock(),
-    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: mock(), disconnect: mock() }),
+jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
+    importForticlient: jest.fn(),
+    useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));
-mock.module(`../sandbox/devices/useNetdisk`, () => ({
-    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: mock(), unmount: mock() }),
-}));
-mock.module(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-mock.module(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");
 

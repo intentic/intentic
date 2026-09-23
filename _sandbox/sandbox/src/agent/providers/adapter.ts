@@ -1,4 +1,4 @@
-import type { AgentCapabilities, AgentEvent, AgentProvider, AgentTurn, Capability, SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
+import type { AgentCapabilities, AgentEvent, AgentProvider, AgentTurn, Capability, SandboxSettings } from "@intentic/sandbox-contract";
 import type { TurnPersona } from "../../personas/personas.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { TurnTrim } from "../prompt/window/context-trim.js";
@@ -84,25 +84,9 @@ export interface TurnContext {
     readonly settings?: SandboxSettings;
     readonly conversationTurns?: number;
     readonly iqSearchEnabled?: boolean;
-    readonly iqSearchNote?: string;
     // What the model's declared window will not pay for (context-trim.ts), resolved once above everything that reads
     // it. Absent means the window is unknown or large enough, which is every model outside a local one's card.
     readonly contextTrim?: TurnTrim;
-    // The sandbox's own field notes, already narrowed to the owner's budget. Composed in planning rather than at
-    // placement so the SAME reading answers both questions the turn has about it — what to send, and which revision to
-    // stamp — and a control turn can name the revision it was withheld from without composing anything.
-    readonly fieldNotesNote?: string;
-    // Generated skill catalogue for a runtime with no native skill loader; opening turn only, carried after by the
-    // provider session.
-    readonly skillCatalogNote?: string;
-    // Which repos this conversation's tree holds or lacks, for a conversation on a context shelf; opening turn and the
-    // turn after a compaction.
-    readonly contextNote?: TurnNote;
-    // The `agents` CLI teaching for shell-only runtimes, on a conversation's opening turn where the spawn door is open.
-    readonly spawnNote?: string;
-    // This message's own anchors, looked up before the turn (turn-context.ts). Every turn, not once per conversation:
-    // it answers the message rather than describing the workspace.
-    readonly turnContextNote?: string;
     readonly iqSearchCohort?: string;
     // Who the turn is and what it may do, resolved once by planTurn; absent on the context the route builds before a
     // card is read.

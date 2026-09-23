@@ -1,4 +1,3 @@
-import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { ref } from "vue";
 import { fakeSandboxRpc } from "../testing/sandboxRpcFake";
@@ -8,13 +7,13 @@ import { usePushNotifications } from "./usePushNotifications";
 // never be reached again, or blaming the sandbox for a decision the browser made.
 
 const reachable = ref(true);
-mock.module(`../features/sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable }) }));
+jest.mock(`../features/sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable }) }));
 
 // The daemon's push routes: what a device needs to subscribe, and the registration writes.
-const config = mock();
-const subscribe = mock();
-const unsubscribe = mock();
-mock.module(`../features/sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ push: { config, subscribe, unsubscribe } }) }));
+const config = jest.fn();
+const subscribe = jest.fn();
+const unsubscribe = jest.fn();
+jest.mock(`../features/sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ push: { config, subscribe, unsubscribe } }) }));
 
 // Two valid uncompressed P-256 points (0x04 || X || Y), base64url: only their bytes matter here.
 const KEY_A = `B${`A`.repeat(85)}Q`;
@@ -34,18 +33,18 @@ const rawKey = (base64Url: string): ArrayBuffer => {
 const subscription = (endpoint: string, key: string) => ({
     endpoint,
     options: { applicationServerKey: rawKey(key) },
-    unsubscribe: mock(async () => true),
+    unsubscribe: jest.fn(async () => true),
     toJSON: () => ({ endpoint, keys: { p256dh: `p256dh`, auth: `auth` } }),
 });
 
-const manager = { getSubscription: mock(), subscribe: mock() };
+const manager = { getSubscription: jest.fn(), subscribe: jest.fn() };
 
 // Tests run in the node environment, so the browser surface the composable feature-detects has to be stood up by hand,
 // including `window`, which `supported()` probes for PushManager and Notification.
 const stubBrowser = (permission: NotificationPermission, brave: boolean): void => {
     const notification = { permission, requestPermission: async () => permission };
     stubGlobal(`navigator`, {
-        serviceWorker: { register: mock(async () => ({ pushManager: manager })) },
+        serviceWorker: { register: jest.fn(async () => ({ pushManager: manager })) },
         ...(brave ? { brave: { isBrave: async () => true } } : {}),
     });
     stubGlobal(`Notification`, notification);

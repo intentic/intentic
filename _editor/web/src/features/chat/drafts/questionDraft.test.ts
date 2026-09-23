@@ -1,7 +1,6 @@
 // The picks a question card keeps across a reload: found by the same requestId and no other, gone once the
 // card is settled or swept, and limited to what the live card would still accept.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
 import { clearQuestionDraft, type DraftQuestionShape, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "./questionDraft";
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useLatest } from "@intentic/extension-ui";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DocumentPaper from "./DocumentPaper.vue";
 import { renderBlocks } from "./odf/render";
@@ -12,7 +13,7 @@ const paper = ref<InstanceType<typeof DocumentPaper>>();
 const loading = ref(true);
 const error = ref<string>();
 const empty = ref(false);
-let seq = 0;
+const latest = useLatest();
 // Pictures decoded out of the file; they leak until revoked.
 let urls: string[] = [];
 
@@ -28,14 +29,14 @@ const render = async (source: Blob): Promise<void> => {
     if (host === undefined) {
         return;
     }
-    const id = ++seq;
+    const isLatest = latest();
     loading.value = true;
     error.value = undefined;
     empty.value = false;
     host.replaceChildren();
     try {
         const bytes = new Uint8Array(await source.arrayBuffer());
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         release();
@@ -54,12 +55,12 @@ const render = async (source: Blob): Promise<void> => {
         renderBlocks(doc.blocks, page, host.ownerDocument);
         host.append(page);
     } catch (caught) {
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         error.value = caught instanceof Error ? caught.message : `Could not render this document.`;
     } finally {
-        if (id === seq) {
+        if (isLatest()) {
             loading.value = false;
         }
     }
@@ -71,10 +72,7 @@ watch(
     () => blob,
     (next) => void render(next),
 );
-onBeforeUnmount(() => {
-    seq += 1;
-    release();
-});
+onBeforeUnmount(release);
 </script>
 
 <template>

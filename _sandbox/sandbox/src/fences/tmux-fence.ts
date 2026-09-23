@@ -2,18 +2,17 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { suiteKindOf } from "@intentic/constants/test-suites";
 import { afterAll, beforeAll } from "bun:test";
 
 // Preload, not a helper: fences tmux suites off the real server (the daemon's own, shared with live shells).
 // Seam is a `tmux` shim on PATH pointing at a private socket; TMUX_TMPDIR doesn't work (tmux 3.3a silently ignores it).
 
-// Only a suite that reaches for the machine can reach tmux; a unit file pays neither the shim nor the kill-server.
-const REACHES_TMUX = /\.(integration|e2e)\.test\.[cm]?[jt]sx?$/;
-
 let dir: string | undefined;
 
 beforeAll(() => {
-    if (!REACHES_TMUX.test(Bun.main)) {
+    // Only a suite that reaches for the machine can reach tmux.
+    if (suiteKindOf(Bun.main) === "unit") {
         return;
     }
     let binary: string;

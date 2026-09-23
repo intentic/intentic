@@ -64,7 +64,7 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <Modal v-model:open="open" size="md" :header="t(`sandbox.newExtensionDialog.newExtension`)">
+    <Modal v-model:open="open" size="md" :header="t(`shared.newExtension`)">
         <div class="flex flex-col gap-4">
             <p class="text-2xs text-subtle">
                 {{ t(`sandbox.newExtensionDialog.writesWorkingExtensionInto`) }}
@@ -77,14 +77,14 @@ const submit = async (): Promise<void> => {
                 </label>
                 <span class="pb-2 text-subtle">.</span>
                 <label class="flex flex-1 flex-col gap-1">
-                    <span :class="ui.sectionLabel()">{{ t(`sandbox.newExtensionDialog.name`) }}</span>
+                    <span :class="ui.sectionLabel()">{{ t(`shared.name`) }}</span>
                     <input v-model="name" :class="ui.input()" placeholder="release-notes" spellcheck="false" autofocus @keyup.enter="submit()" />
                 </label>
             </div>
             <!-- The rule at rest; once a box holds something that breaks it, the same line names which box and turns
                  to a warning, rather than leaving Create greyed out with nothing pointing at the cause. -->
             <span v-if="publisherProblem || nameProblem" class="text-2xs text-warning">
-                {{ publisherProblem ? t(`sandbox.newExtensionDialog.publisher`) : t(`sandbox.newExtensionDialog.name`) }}:
+                {{ publisherProblem ? t(`sandbox.newExtensionDialog.publisher`) : t(`shared.name`) }}:
                 {{ publisherProblem ?? nameProblem }}
             </span>
             <span v-else class="text-2xs text-subtle">

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { documentTypeOf, extensionOf, OFFICE_FORMATS } from "./formats.js";
 import { manifest } from "./manifest.js";
 

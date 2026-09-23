@@ -2,7 +2,6 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { pairings } from "../peers/enrollment.js";
 import {
     enrolledFleet,

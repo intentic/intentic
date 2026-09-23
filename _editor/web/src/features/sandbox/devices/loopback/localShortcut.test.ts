@@ -1,7 +1,6 @@
 // jsdom because the subject is what survives a reload: under `node` the storage boundary degrades to
 // in-memory and every persistence assertion would pass for the wrong reason.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, mock } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
 import type { LoopbackPermission } from "./loopbackPermission";
 import { activeSandboxId } from "../../overview/activeSandbox";
@@ -19,7 +18,7 @@ const browser = { verdict: `prompt` as LoopbackPermission };
 const browserSays = (verdict: LoopbackPermission): void => {
     browser.verdict = verdict;
 };
-mock.module("./loopbackPermission", () => ({ loopbackPermission: async () => browser.verdict }));
+jest.mock("./loopbackPermission", () => ({ loopbackPermission: async () => browser.verdict }));
 
 // A fresh module over the same localStorage is what a reload is.
 const load = async () => {

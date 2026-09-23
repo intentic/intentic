@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { queryClient } from "../../lib/queryPersistence";
 import { heldInCache, warmQuery } from "./warmQuery";
 
@@ -22,7 +21,7 @@ describe(`a warm wish`, () => {
     });
 
     it(`joins a read already in flight instead of opening a second one beside it`, async () => {
-        const queryFn = mock(() => Promise.resolve(`body`));
+        const queryFn = jest.fn(() => Promise.resolve(`body`));
         const wish = warmQuery(`w`, `rail`, { queryKey: KEY, queryFn });
 
         // The loader's read and a click landing on the same key mid-flight.
@@ -43,7 +42,7 @@ describe(`a warm wish`, () => {
     });
 
     it(`asks once and gives up, rather than multiplying its own requests against a daemon having a moment`, async () => {
-        const queryFn = mock(() => Promise.reject(new Error(`daemon said no`)));
+        const queryFn = jest.fn(() => Promise.reject(new Error(`daemon said no`)));
         const wish = warmQuery(`w`, `rail`, { queryKey: KEY, queryFn });
 
         await expect(wish.read()).rejects.toThrow(`daemon said no`);
@@ -54,7 +53,7 @@ describe(`a warm wish`, () => {
     });
 
     it(`carries its surface's own caching terms rather than a second opinion`, async () => {
-        const queryFn = mock(() => Promise.resolve(`body`));
+        const queryFn = jest.fn(() => Promise.resolve(`body`));
         const wish = warmQuery(`w`, `now`, { queryKey: KEY, queryFn, staleTime: Infinity });
 
         await wish.read();

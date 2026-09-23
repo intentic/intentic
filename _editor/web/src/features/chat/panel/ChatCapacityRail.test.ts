@@ -7,7 +7,6 @@
 //    no Usage tab in this window to check
 import "@intentic/testing/dom";
 import type { OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
-import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

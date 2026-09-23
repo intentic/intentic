@@ -2,7 +2,6 @@ import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IntenticLine } from "@intentic/sandbox-contract";
-import { test, expect, beforeEach, afterEach } from "bun:test";
 import { applyEventsPath, applyRunLive, isTerminalExit, resetEventsFile, tailIntenticEvents } from "./apply-events.js";
 
 const line = (value: Record<string, unknown>): string => `${JSON.stringify(value)}\n`;

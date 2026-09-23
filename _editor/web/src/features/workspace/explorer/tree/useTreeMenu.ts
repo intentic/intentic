@@ -1,17 +1,15 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { t } from "@intentic/ui/i18n";
 import { parentDir } from "@intentic/ui/path";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
-import { type EntryVerbs, entryMenuItems } from "../entryMenu";
+import { type EntryMenuInput, type EntryVerbs, entryMenuItems } from "../entryMenu";
 import type { RowAction } from "../rowActions";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
 import type { useTreeRules } from "./useTreeRules";
 import type { useTreeSelection } from "./useTreeSelection";
 
-// The right-click menu (entryMenu.ts), acting on the whole selection when the right-clicked row is part of it, and a
-// directory's own actions, which its row offers as hover icons and the menu as text.
+// The right-click menu (entryMenu.ts) of a file surface: on a selected entry it acts on the whole selection.
 
 export interface TreeMenuHost {
     // Where a right-click on empty space acts: the tree's own root, the open project when one is.
@@ -21,7 +19,9 @@ export interface TreeMenuHost {
     readonly isBarren: (path: string) => boolean;
     readonly rules: Pick<ReturnType<typeof useTreeRules>, "archiveDir" | "unlockedOnly">;
     readonly selecting: Pick<ReturnType<typeof useTreeSelection>, "selection" | "selectSingle">;
-    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "canEditFiles" | "clipboard" | "expanded" | "collapseAll">;
+    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "canEditFiles" | "clipboard">;
+    // The surface's own rows around the verbs: the home's Open first, the tree's Collapse Folders last.
+    readonly frame: (target: WorkspaceTreeEntry | undefined, multi: boolean) => Pick<EntryMenuInput, "head" | "tail">;
     readonly beginCreate: (dir: string, type: "file" | "dir") => void;
     readonly beginRename: (path: string) => void;
     readonly extract: (path: string) => Promise<void>;
@@ -98,15 +98,13 @@ export const useTreeMenu = (host: TreeMenuHost) => {
             barren: target?.type === `dir` && host.isBarren(target.path),
             clipboardFull: host.store.clipboard.value !== undefined,
             lead: dirActionItems(target, multi),
-            tail:
-                host.store.expanded.value.size > 0
-                    ? [{ label: t(`workspace.workspaceTree.collapseFolders`), icon: `collapse-all`, command: host.store.collapseAll }]
-                    : [],
+            ...host.frame(target, multi),
             verbs: verbsFor(target, dir),
         });
     });
     // Right-clicking outside the current selection collapses it to that one row; inside a multi-selection keeps it.
     const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): void => {
+        event.preventDefault();
         menuEntry.value = entry;
         if (entry !== undefined && !selection.value.has(entry.path)) {
             selectSingle(entry.path);

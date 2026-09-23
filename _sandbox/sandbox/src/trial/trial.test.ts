@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import type { Config } from "../env.config.js";
 import { createTrialService, type TrialStatus } from "./trial.js";
 

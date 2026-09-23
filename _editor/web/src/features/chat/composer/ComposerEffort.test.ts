@@ -3,7 +3,6 @@
 // ChatModelPicker keeps for the rest of the run settings under Auto; this is the control that lives outside it.
 import "@intentic/testing/dom";
 import { type AgentProvider, capabilitiesOf } from "@intentic/sandbox-contract";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import type { Conversation } from "../session/conversation";
@@ -25,7 +24,7 @@ const conversationOf = (auto: boolean): Conversation =>
             effort: computed(() => HELD),
             auto: ref(auto),
             capabilities: computed(() => capabilitiesOf(PROVIDER, `claude-code`)),
-            apply: mock(),
+            apply: jest.fn(),
         },
     }) as unknown as Conversation;
 

@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { isIqDenied } from "./floor.js";
 
 test("the floor denies the agent plane by default, at any depth", () => {

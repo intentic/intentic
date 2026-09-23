@@ -45,7 +45,7 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
                     </p>
                     <p v-else-if="mode === `watch`" class="text-2xs text-muted">
                         {{ t(`sandbox.agentSafetyJudge.everyFlaggedCommandJudged`) }}
-                        <span class="text-content">{{ t(`sandbox.agentSafetyJudge.recentDecisions`) }}</span>
+                        <span class="text-content">{{ t(`shared.recentDecisions`) }}</span>
                         {{ t(`sandbox.agentSafetyJudge.toSeeWhatPolicy`) }}
                     </p>
                     <p v-else class="text-2xs text-muted">{{ t(`sandbox.agentSafetyJudge.verdictDecidesAllowedSilently`) }}</p>
@@ -76,7 +76,7 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
 
                     <!-- The only automatic judge that reads a command whose text may itself be arguing for its own approval. -->
                     <p v-if="mode !== `off`" class="text-2xs text-subtle">
-                        {{ t(`sandbox.agentSafetyJudge.worthBetterModelThan`) }}
+                        {{ t(`shared.worthBetterModelThan`) }}
                     </p>
                 </div>
             </template>

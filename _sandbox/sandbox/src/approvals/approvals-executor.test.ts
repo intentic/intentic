@@ -1,16 +1,15 @@
 import type { ActionApprovalSummary, ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract";
-import { test, expect, beforeEach, mock } from "bun:test";
 import type { Services } from "../composition.js";
 import * as actualDiscordPost from "./discord-post.js";
 
 // Tests when the executor wakes and which door each item goes through, both decided from the queue on disk.
 // The fake store below behaves like the real one (read, write, read back); only the two doors themselves are stubbed.
 
-const startTurn = mock(async () => undefined);
-const sendDiscord = mock(async () => ({ url: "https://discord.com/channels/1/2/3" }));
+const startTurn = jest.fn(async () => undefined);
+const sendDiscord = jest.fn(async () => ({ url: "https://discord.com/channels/1/2/3" }));
 
-mock.module("../seams/runtime-feed.js", () => ({ publishRuntimeChange: mock() }));
-mock.module("./discord-post.js", () => ({
+jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: jest.fn() }));
+jest.mock("./discord-post.js", () => ({
     // Whether a post can go the fast way is itself under test; only the network call is replaced.
     ...actualDiscordPost,
     postToDiscord: (...args: unknown[]) => sendDiscord(...(args as [])),
@@ -62,7 +61,7 @@ const servicesWith = (...seed: ApprovalSummary[]) => {
                 { id: "travel", capabilities: [] },
             ],
         },
-        logger: { error: mock(), warn: mock(), info: mock() },
+        logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn() },
         // The detached start is the one door a turn goes through.
         turns: { start: (...args: unknown[]) => startTurn(...(args as [])) },
         rows,

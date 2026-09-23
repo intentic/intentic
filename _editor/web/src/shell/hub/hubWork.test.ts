@@ -1,6 +1,5 @@
 // THE LEDGER BEHIND A HUB ROW'S TURNING MARK. What is pinned here is the part a component cannot hold: a run
 // survives the section that started it, the row it belongs to, and how a row with several runs describes itself.
-import { it, expect, afterEach } from "bun:test";
 import { activeSandboxId } from "../../features/sandbox/overview/activeSandbox";
 import { beginHubWork, forgetHubWork, hubWorkKey, hubWorkRunning, trackHubWork } from "./hubWork";
 

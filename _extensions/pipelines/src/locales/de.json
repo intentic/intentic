@@ -1,7 +1,4 @@
 {
-    "extension": {
-        "pipelines": "Pipelines"
-    },
     "pipelineDagGraph": {
         "expand": "Aufklappen",
         "failingRunsInRow": "Fällt bei {name} seit mehreren Läufen in Folge durch",
@@ -48,8 +45,6 @@
         "noWorkspaceRepoMaps": "Kein Workspace-Repo passt zu einem verbundenen GitHub-/GitLab-Konto: klonen Sie ein Repo von Ihrem verbundenen Host, oder verbinden Sie die passende Fähigkeit auf der +-Seite.",
         "openPipelines": "{project}-Pipelines öffnen",
         "openProjectOn": "{project} auf {host} öffnen",
-        "pipelines": "Pipelines",
-        "repository": "Repository",
         "runs": "{runs} Läufe",
         "thisRepo": "dieses Repo"
     }

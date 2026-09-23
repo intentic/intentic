@@ -1,6 +1,5 @@
 import { type Capability, type CredentialGate, type Persona, PersonaPowersSchema, type Rule, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "bun:test";
 import { createMemoryWarnings, type MemoryHeadroom, type TurnAdmission } from "../../../platform/resources/memory-admission.js";
 import { TURN_ENDING_NOTE_TITLE } from "../../../rules/turn-ending-note.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
@@ -303,7 +302,7 @@ test.each([
     const decision = decided({ ...FACTS, settings, entry, iqTeaching: TEACHING }, turn({ agent, conversationId }));
 
     expect(titles(decision).includes(IQ_SEARCH_INSTRUCTION_TITLE)).toBe(sent);
-    expect(decision.context.iqSearchNote).toBe(sent ? TEACHING.note : undefined);
+    expect(decision.context.base.spec.notes?.find((note) => note.title === IQ_SEARCH_INSTRUCTION_TITLE)?.text).toBe(sent ? TEACHING.note : undefined);
     expect(decision.experiments).toEqual(experiments);
 });
 
@@ -347,7 +346,7 @@ test.each([
     const decision = decided({ ...FACTS, declared }, turn({ agent: "endpoint/tiny", model: "llama" }));
 
     expect(decision.context.base.spec.contextTrim).toEqual(trim);
-    expect(decision.contextTrim?.trim.tier).toBe(trim === undefined ? undefined : "lean");
+    expect(decision.contextTrim?.trim).toEqual(trim === undefined ? undefined : { window: 40_000, base: false });
 });
 
 // the experiments' arms: one per salt, the same on every turn of a conversation
@@ -395,13 +394,18 @@ test("a turn with no conversation is in no experiment, and still stamps what its
     expect(decided(MEASURED_FACTS).experiments).toEqual({ mapChars: MAP.length, notesChars: BRIEF.chars, notesCohort: BRIEF.revision });
 });
 
-test("a window too small for the field notes withholds them, so the ledger records no cost", () => {
-    const decision = decided(
-        { ...FACTS, settings: SandboxSettingsSchema.parse({ fieldNotes: true }), fieldNotes: BRIEF, declared: { window: 40_000, onACard: true } },
-        turn({ agent: "endpoint/tiny" }),
-    );
+// Whether the brief reached anything the turn sends: the system prompt, its append, or a note.
+const briefSent = (decision: TurnDecision): boolean => {
+    const { systemPrompt, systemAppend, notes } = decision.context.base.spec;
+    return [systemPrompt, systemAppend, ...(notes ?? []).map((note) => note.text)].some((text) => text?.includes(BRIEF.text) === true);
+};
 
-    expect(decision.context.fieldNotesNote).toBeUndefined();
+test("a window too small for the field notes withholds them, so the ledger records no cost", () => {
+    const facts = { ...FACTS, settings: SandboxSettingsSchema.parse({ fieldNotes: true }), fieldNotes: BRIEF };
+    const decision = decided({ ...facts, declared: { window: 40_000, onACard: true } }, turn({ agent: "endpoint/tiny" }));
+
+    expect(briefSent(decided(facts, turn({ agent: "endpoint/tiny" })))).toBe(true);
+    expect(briefSent(decision)).toBe(false);
     expect(decision.experiments).toEqual({ notesCohort: BRIEF.revision });
 });
 

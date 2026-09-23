@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { GIT_GLOBAL_ARGS, literalPathspecs } from "./exec.js";
 
 // Pins that literalPathspecs marks every arg after `--` literal, since git wildmatches raw paths (`report[1].txt`

@@ -1,8 +1,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { Persona } from "@intentic/sandbox-contract";
-import { hoisted } from "@intentic/testing/bun";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { createApp, h, nextTick, ref } from "vue";
 import * as roleModelOriginal from "../../accounts/roleModel";
 import * as usePersonasOriginal from "../../../sandbox/personas/usePersonas";
@@ -11,7 +9,7 @@ import * as usePersonasOriginal from "../../../sandbox/personas/usePersonas";
 // the notice speaks only for a card that would fail the turn; a guest's chat wears its first card from the start.
 
 // The workspace's cards and which capabilities are signed in; `backend` brings its own model, the others none.
-const { personas, signedIn } = await hoisted(async () => {
+const { personas, signedIn } = await (async () => {
     const { ref: vueRef } = await import(`vue`);
     return {
         personas: vueRef<Persona[]>([
@@ -21,13 +19,13 @@ const { personas, signedIn } = await hoisted(async () => {
         ]),
         signedIn: vueRef<readonly string[]>([]),
     };
-});
-mock.module("../../../sandbox/personas/usePersonas", () => ({
+})();
+jest.mock("../../../sandbox/personas/usePersonas", () => ({
     ...usePersonasOriginal,
     usePersonas: () => ({ personas, isConnected: (capability: string) => signedIn.value.includes(capability) }),
 }));
 // Claude connected, so a card's Claude model is one this sandbox can run.
-mock.module("../../accounts/roleModel", () => ({ ...roleModelOriginal, roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
+jest.mock("../../accounts/roleModel", () => ({ ...roleModelOriginal, roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
 
 const { usePanePersona } = await import("./panePersona");
 const { Conversation } = await import("../../session/conversation");
@@ -35,8 +33,8 @@ const { Conversation } = await import("../../session/conversation");
 let unmount: (() => void) | undefined;
 const personaOf = (guest = false) => {
     const chat = new Conversation(`c1`);
-    const route = { byHand: mock() };
-    const picked = mock();
+    const route = { byHand: jest.fn() };
+    const picked = jest.fn();
     const isGuest = ref(guest);
     let persona: ReturnType<typeof usePanePersona> | undefined;
     const app = createApp({

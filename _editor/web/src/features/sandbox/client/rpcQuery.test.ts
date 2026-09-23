@@ -1,4 +1,3 @@
-import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { QueryClient } from "@tanstack/vue-query";
 import { ref } from "vue";
@@ -11,9 +10,12 @@ import { mirrors, UNPERSISTED } from "../../../lib/queryPersistence";
 // under another.
 
 // Answers with the repo it was asked about, so an entry says which fetch filled it.
-const readFile = mock(async (input: { readonly repo: string; readonly path: string }, _options?: unknown) => ({ path: input.path, content: input.repo }));
-const settings = mock(async () => SandboxSettingsSchema.parse({}));
-mock.module(`./sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ git: { readFile }, settings: { get: settings } }) }));
+const readFile = jest.fn(async (input: { readonly repo: string; readonly path: string }, _options?: unknown) => ({
+    path: input.path,
+    content: input.repo,
+}));
+const settings = jest.fn(async () => SandboxSettingsSchema.parse({}));
+jest.mock(`./sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ git: { readFile }, settings: { get: settings } }) }));
 
 const { rpcQuery } = await import(`./rpcQuery`);
 
@@ -64,7 +66,10 @@ describe(`rpcQuery`, () => {
         const query = rpcQuery(`git.readFile`, () => ({ repo: repo.value, path: `README.md` }));
         repo.value = `site`;
         await client.fetchQuery(query);
-        expect(client.getQueryData<unknown>([`git.readFile`, { repo: `site`, path: `README.md` }, `sbx-here`])).toEqual({ path: `README.md`, content: `site` });
+        expect(client.getQueryData<unknown>([`git.readFile`, { repo: `site`, path: `README.md` }, `sbx-here`])).toEqual({
+            path: `README.md`,
+            content: `site`,
+        });
         expect(readFile.mock.calls).toEqual([[{ repo: `site`, path: `README.md` }, { context: {} }]]);
     });
 });

@@ -1,6 +1,5 @@
 import type { HostedPlanState } from "@intentic/api-contract";
 import { FREE_TIER } from "@intentic/constants";
-import { describe, it, expect } from "bun:test";
 import { formatDayShort, formatMinutes, hoursLeftLine, hoursMeter, lowOnHours, machineStandingLine, planBadge } from "./hostedHours";
 
 // Pins the hosted-plan sentences as words: the failure this suite guards against is two surfaces phrasing the same fact

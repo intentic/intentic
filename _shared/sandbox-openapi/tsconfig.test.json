@@ -2,7 +2,7 @@
 {
     "extends": "./tsconfig.json",
     "compilerOptions": {
-        "types": ["node", "bun"],
+        "types": ["node", "bun", "@intentic/testing/globals"],
         "noEmit": true,
         "composite": false,
         "declaration": false,

@@ -5,6 +5,7 @@ import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, noth
 import { refreshAcross } from "../../sandbox/live/fleetAcross";
 import { otherFleet } from "../fleet/fleetScope";
 import { unregistered } from "../fleet/agentStatus";
+import { hold, pendingOn } from "../fleet/useAgents-provisional";
 import { dropActionFor, type DropAction, type DropTarget, type PendingAction } from "./laneDrop";
 import { useAgents } from "../fleet/useAgents";
 import { useNotifications } from "../../../shell/notifications/notifications";
@@ -28,12 +29,6 @@ const draggedBox = ref<string | undefined>(undefined);
 const dragging = ref(false);
 const pointer = ref({ x: 0, y: 0 });
 const over = ref<DropTarget | undefined>(undefined);
-// Keyed by (sandboxId, id) as JSON, never by id alone, since the same id can sit on two cards from two boxes and a
-// literal-delimiter key risks colliding with a sandbox name. A press claims only its own card and releases only what it
-// claimed; sandbox-scoped, since a switch re-points every unqualified key at another daemon's cards.
-const cardKey = (id: string, at?: string): string => JSON.stringify([at ?? null, id]);
-const inFlight = sandboxRef<ReadonlyMap<string, PendingAction>>(() => new Map());
-const pendingOn = (id: string, at?: string): PendingAction | undefined => inFlight.value.get(cardKey(id, at));
 const ghostWidth = ref(0);
 
 // Resolved live against the roster, not snapshotted at grab time, so a turn ending mid-drag retracts its Stop action.
@@ -142,17 +137,15 @@ const runAction = async (id: string, chosen: PendingAction, at?: string): Promis
 };
 
 // The card doesn't move lane here; the action's claim does, on the press, and the roster frame the action provokes
-// confirms it. The in-flight mark only withholds a second press on the same card until this one has answered.
+// confirms it. The action's own layer only withholds a second press on the same card until this one has answered.
 const perform = async (id: string, chosen: PendingAction, at?: string): Promise<void> => {
-    const key = cardKey(id, at);
-    // Re-entry on the same card is a no-op, like useAsyncAction's: a card mid-action is pointer-inert. A press on
-    // another card is not re-entry, which is the whole reason this is a map.
-    if (inFlight.value.has(key)) {
+    // Re-entry on the same card is a no-op, like useAsyncAction's: a card mid-action is pointer-inert.
+    if (pendingOn(id, at) !== undefined) {
         return;
     }
-    inFlight.value = new Map(inFlight.value).set(key, chosen);
+    const lift = hold(id, at, { action: chosen });
     notice.value = undefined;
-    // After a switch the mark and the strip are the next sandbox's, which this press never touched.
+    // After a switch the strip is the next sandbox's, which this press never touched.
     const current = sandboxScopeGuard();
     try {
         await runAction(id, chosen, at);
@@ -164,11 +157,7 @@ const perform = async (id: string, chosen: PendingAction, at?: string): Promise<
             notice.value = errorMessage(caught, `That didn't work.`);
         }
     } finally {
-        if (current()) {
-            const next = new Map(inFlight.value);
-            next.delete(key);
-            inFlight.value = next;
-        }
+        lift();
     }
 };
 
@@ -281,7 +270,6 @@ export function useAgentDrag() {
         over,
         action,
         accepts,
-        pendingOn,
         ghostStyle,
         begin,
         consumeSuppressedOpen,

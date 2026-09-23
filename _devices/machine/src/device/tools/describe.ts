@@ -5,7 +5,7 @@ import type { DeviceFacts, DeviceScopes } from "@intentic/sandbox-contract";
 import { type LinkReading, readLinkStates, unreachableIn } from "../config.js";
 import { rootsOf } from "../policy.js";
 import { shellFor } from "./shell.js";
-import { wslEnvironment } from "../../wsl.js";
+import { listDistros, WINDOWS_SIDE, wslEnvironment } from "../../wsl.js";
 
 // What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
@@ -42,26 +42,10 @@ const engineFacts = async (): Promise<DeviceFacts["engine"]> => {
     return memoryBytes !== undefined && cpus !== undefined && memoryBytes > 0 && cpus > 0 ? { memoryBytes, cpus } : undefined;
 };
 
-// The distros `wsl -l -q` lists, one per line. Older wsl.exe builds print UTF-16 whatever the console is set to, which
-// arrives through a UTF-8 decode as every other byte NUL; stripping them is what turns that back into names.
-export const distrosFrom = (stdout: string): string[] =>
-    stdout
-        .replaceAll("\0", "")
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line !== "");
-
-// Windows only: which distros `run_command`'s `in: "wsl:<name>"` can reach. Absent, never guessed, where WSL is not
-// installed or the listing fails; `WSL_UTF8` asks wsl.exe for UTF-8 where it knows how.
+// Windows only: the distros `run_command`'s `in: "wsl:<name>"` can reach; absent, never guessed, where the listing fails.
 const wslDistros = async (): Promise<string[] | undefined> => {
-    if (platform() !== "win32") {
-        return undefined;
-    }
-    const { stdout } = await exec("wsl.exe", ["-l", "-q"], { timeout: 5_000, windowsHide: true, env: { ...process.env, WSL_UTF8: "1" } }).catch(
-        () => ({ stdout: "" }),
-    );
-    const distros = distrosFrom(stdout);
-    return distros.length === 0 ? undefined : distros;
+    const distros = WINDOWS_SIDE ? await listDistros() : undefined;
+    return distros === undefined || distros.length === 0 ? undefined : distros;
 };
 
 // This machine's links as a count, from the stamp the resident agent keeps (device/config.ts) rather than from the

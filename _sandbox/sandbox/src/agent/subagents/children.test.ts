@@ -1,5 +1,4 @@
 import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
-import { describe, it, expect, beforeEach } from "bun:test";
 import { listSubagentSessions, resetSubagents, waitForSubagent } from "./subagents.js";
 import type { Services } from "../../composition.js";
 import { spawnServices } from "../../harness/spawn-services.testing.js";

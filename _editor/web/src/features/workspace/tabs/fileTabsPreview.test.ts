@@ -1,17 +1,15 @@
 // Pins the peeked tab's only visual signal, italic, and the double-click that promotes it, asserted on the real
 // rendered strip.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import FileTabs from "./FileTabs.vue";
 import type { WorkspaceTab } from "./workspaceTabs";
 import { IconStub } from "@intentic/ui/testing";
 
 // scrollIntoView: FileTabs reads it at import; jsdom doesn't implement it.
-hoisted(() => {
+(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-});
+})();
 
 const TABS: WorkspaceTab[] = [
     { kind: `file`, id: `src/kept.ts`, path: `src/kept.ts` },

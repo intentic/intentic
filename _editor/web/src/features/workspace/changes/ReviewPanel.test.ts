@@ -7,7 +7,6 @@ import type { GitChangesResponse } from "@intentic/api-contract";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
@@ -21,11 +20,11 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // time, so a read can be held open while the assertions run; every other procedure throws naming itself, since no
 // other read decides anything here.
 const held: ((response: GitChangesResponse) => void)[] = [];
-const changes = mock(() => new Promise<GitChangesResponse>((resolve) => held.push(resolve)));
+const changes = jest.fn(() => new Promise<GitChangesResponse>((resolve) => held.push(resolve)));
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in.
 const realSandboxRpc = { ...actualSandboxRpc };
-mock.module("../../sandbox/client/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes } }) }));
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes } }) }));
 
 const { default: ReviewPanel } = await import("./ReviewPanel.vue");
 

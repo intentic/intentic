@@ -2,7 +2,6 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import { STATE_DIR } from "@intentic/constants";
 import { type AttachFrame, sandboxRouteName, TRIAL_PROVIDER, TrialStatusSchema } from "@intentic/sandbox-contract";
 import { nextTick, ref, toRaw, watch } from "vue";
-import { describe, it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
 import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import type { SandboxCallContext } from "../../sandbox/client/sandboxRpc";
@@ -20,14 +19,14 @@ interface CallOptions {
 // The daemon as this suite models it: one handler over each procedure's route name, handed exactly the arguments the
 // call was made with. Its default is the connection reads below; a test driving a turn or a transcript answers those
 // procedures itself (daemonAnswers).
-const daemon = mock<(procedure: string, input?: unknown, options?: CallOptions) => Promise<unknown>>();
+const daemon = jest.fn<(procedure: string, input?: unknown, options?: CallOptions) => Promise<unknown>>();
 // Each procedure the chat calls, served by the model above; the answer is the model's to shape, so the client's own
 // answer type is waived here and nowhere else.
 const procedureOf =
     (name: string) =>
     (...call: [input?: unknown, options?: CallOptions]): never =>
         daemon(name, ...call) as never;
-mock.module("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../sandbox/client/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         accounts: {
             accounts: procedureOf(`accounts.accounts`),
@@ -65,11 +64,11 @@ const daemonRefusal = (status: number, message = `Request failed (${status}).`):
 // The field of a call's input a test answers by: which provider, which conversation.
 const field = (input: unknown, name: string): unknown => (input as Record<string, unknown> | undefined)?.[name];
 // Avoids the window.env chain; send() only needs track() mocked.
-mock.module("../../../app/analytics", () => ({ track: mock() }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 // Avoids the window.env chain; tab persistence only reads activeSandboxId + reachable. The id is the app's own one ref,
 // as in the app, since the run view restores from it too.
 activeSandboxId.value = `sb1`;
-mock.module("../../sandbox/client/useSandbox", () => {
+jest.mock("../../sandbox/client/useSandbox", () => {
     const reachable = ref(false);
     // sandboxKey included: hydrate's transcript cache read is keyed by sandbox, and needs it defined.
     return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
@@ -724,7 +723,7 @@ describe(`per-tab drafts`, () => {
     });
 
     it(`stamps a composer the first time it holds something unsent, and clears it when that goes`, async () => {
-        const clock = spyOn(Date, `now`).mockReturnValue(1_000);
+        const clock = jest.spyOn(Date, `now`).mockReturnValue(1_000);
         try {
             const chat = useChat();
             expect(chat.active.value.draftAt.value).toBeUndefined();
@@ -748,7 +747,7 @@ describe(`per-tab drafts`, () => {
     });
 
     it(`restores the age of a draft rather than re-stamping it as freshly written`, async () => {
-        const clock = spyOn(Date, `now`).mockReturnValue(1_000);
+        const clock = jest.spyOn(Date, `now`).mockReturnValue(1_000);
         try {
             useChat().draft.value = `half a sentence`;
             await nextTick(); // flush the stamp and the persistence watch
@@ -1564,7 +1563,9 @@ describe(`opening a fleet agent`, () => {
         const chat = useChat();
         chat.selectModel({ provider: `claude`, value: `claude-fable-5` });
 
-        expect(openAgentConversation({ id: `a5`, provider: `claude`, harness: `native`, registered: false }).selection.model.value).toBe(`claude-fable-5`);
+        expect(openAgentConversation({ id: `a5`, provider: `claude`, harness: `native`, registered: false }).selection.model.value).toBe(
+            `claude-fable-5`,
+        );
     });
 
     it(`replays a NATIVE Codex agent: the daemon holds what it streamed, whatever ran the turn`, async () => {
@@ -1609,7 +1610,9 @@ describe(`opening a fleet agent`, () => {
 
         // Away from it again: that genuinely costs a fresh session, so it says so.
         conversation.selection.apply({ kind: `selectAccount`, account: `acct-personal` });
-        expect(conversation.transcript.messages.value.some((message) => message.role === `notice` && message.text.startsWith(`Switched to Claude`))).toBe(true);
+        expect(
+            conversation.transcript.messages.value.some((message) => message.role === `notice` && message.text.startsWith(`Switched to Claude`)),
+        ).toBe(true);
     });
 });
 

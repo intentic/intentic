@@ -1,4 +1,3 @@
-import { expect, test } from "bun:test";
 import { noticeScript } from "./notice-windows.js";
 
 /* What the helper asks Windows for. Whether Windows honours it is for a person at a Windows screen to see; that the

@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { describe, it, expect, afterEach } from "bun:test";
 import { onScreen } from "./onScreen";
 
 /* "Is anyone looking at THIS window", and that is the whole question now. */

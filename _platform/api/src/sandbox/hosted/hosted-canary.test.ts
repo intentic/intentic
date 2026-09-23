@@ -1,4 +1,3 @@
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
@@ -6,12 +5,12 @@ import { runHostedCanary } from "./hosted-canary.js";
 import { forgetProviderCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 import { fakeHostedAppLock, testIngressConfig } from "../../testing.js";
 
-mock.module(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
+jest.mock(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
 
 // Catches a lane that's intact but broken: the health sweep only notices a machine going missing, not one that never
 // checks in at all.
 
-const logger = { info: mock(), warn: mock(), error: mock() } as never;
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never;
 const nap = () => Promise.resolve();
 
 const config = (over: Record<string, unknown> = {}): Config =>
@@ -34,6 +33,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
             memoryMb: 4096,
             volumeGb: 10,
             idleStopMinutes: 20,
+            perUser: 1,
             poolSize: 0,
             canaryMinutes: 60,
             canaryEmail: `canary@intentic.test`,
@@ -42,44 +42,44 @@ const config = (over: Record<string, unknown> = {}): Config =>
     }) as unknown as Config;
 
 // lastSeenAt is written by the daemon's check-in; setting it in a fixture means a machine that came up.
-const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string, ReturnType<typeof mock>>> = {}) => {
+const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string, ReturnType<typeof jest.fn>>> = {}) => {
     const sandbox = { id: `canary-sbx`, name: `hosted canary`, token: `tok`, tunnelId: `abcdef012345`, ownerId: `canary-user` };
     const prisma = {
-        user: { findUnique: mock().mockResolvedValue({ id: `canary-user` }), create: mock().mockResolvedValue({ id: `canary-user` }) },
+        user: { findUnique: jest.fn().mockResolvedValue({ id: `canary-user` }), create: jest.fn().mockResolvedValue({ id: `canary-user` }) },
         sandbox: {
-            findMany: mock().mockResolvedValue([]),
-            create: mock(async ({ data }: { data: Record<string, unknown> }) => Object.assign(sandbox, data)),
-            findUnique: mock(async () => ({ ...sandbox, lastSeenAt })),
-            findUniqueOrThrow: mock().mockResolvedValue(sandbox),
-            update: mock().mockResolvedValue(sandbox),
-            delete: mock().mockResolvedValue(sandbox),
+            findMany: jest.fn().mockResolvedValue([]),
+            create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => Object.assign(sandbox, data)),
+            findUnique: jest.fn(async () => ({ ...sandbox, lastSeenAt })),
+            findUniqueOrThrow: jest.fn().mockResolvedValue(sandbox),
+            update: jest.fn().mockResolvedValue(sandbox),
+            delete: jest.fn().mockResolvedValue(sandbox),
         },
         // The row write runs under the owner's slot lock (hosted.ts withHostedSlot): the callback runs against
         // this same fake, the lock is a no-op, and `hostedMachine.count` below is the canary owner's use, none.
-        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
-        $executeRaw: mock().mockResolvedValue(0),
-        $queryRaw: mock().mockResolvedValue([]),
+        $transaction: jest.fn((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
+        $executeRaw: jest.fn().mockResolvedValue(0),
+        $queryRaw: jest.fn().mockResolvedValue([]),
         hostedCleanup: {
-            create: mock().mockResolvedValue({}),
-            findUnique: mock().mockResolvedValue({}),
-            deleteMany: mock().mockResolvedValue({ count: 1 }),
+            create: jest.fn().mockResolvedValue({}),
+            findUnique: jest.fn().mockResolvedValue({}),
+            deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
         // The slot count reads the owner's plan (hosted-plan.ts hostedSlotsOf): the canary's account has none.
-        hostedPlan: { findUnique: mock().mockResolvedValue(null) },
+        hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
         // The counts are how the run asks whether the lane has any machines left before it spends one
         // (hosted-capacity.ts). An empty fleet with no stock: this platform's whole capacity is whatever the
         // case's own config and refusals say it is.
         hostedMachine: {
-            create: mock().mockResolvedValue({}),
-            findUnique: mock(async ({ where }: { where: { appName?: string } }) => (where.appName ? null : { appName: `intentic-sbx-canary` })),
-            count: mock().mockResolvedValue(0),
+            create: jest.fn().mockResolvedValue({}),
+            findUnique: jest.fn(async ({ where }: { where: { appName?: string } }) => (where.appName ? null : { appName: `intentic-sbx-canary` })),
+            count: jest.fn().mockResolvedValue(0),
         },
         hostedPoolMachine: {
-            findMany: mock().mockResolvedValue([]),
-            count: mock().mockResolvedValue(0),
-            deleteMany: mock().mockResolvedValue({ count: 0 }),
+            findMany: jest.fn().mockResolvedValue([]),
+            count: jest.fn().mockResolvedValue(0),
+            deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
         },
-        hostedBuild: { count: mock().mockResolvedValue(0) },
+        hostedBuild: { count: jest.fn().mockResolvedValue(0) },
         ...over,
     };
     return prisma as unknown as PrismaClient;
@@ -146,7 +146,7 @@ describe(`the provisioning canary`, () => {
     it(`probes the address the row ends up with, not the one it was minted with`, async () => {
         const adopted = `99887766aabb`;
         const prisma = prismaWith(new Date());
-        (prisma.sandbox as unknown as { findUniqueOrThrow: ReturnType<typeof mock> }).findUniqueOrThrow.mockResolvedValue({
+        (prisma.sandbox as unknown as { findUniqueOrThrow: ReturnType<typeof jest.fn> }).findUniqueOrThrow.mockResolvedValue({
             id: `canary-sbx`,
             ownerId: `canary-user`,
             tunnelId: adopted,
@@ -196,7 +196,7 @@ describe(`the provisioning canary`, () => {
     });
 
     it(`stands down entirely while the lane is full`, async () => {
-        const fetchSpy = mock();
+        const fetchSpy = jest.fn();
         stubGlobal(`fetch`, fetchSpy);
         noteProviderAtCapacity(`iad`, `insufficient capacity`);
         const result = await runHostedCanary(prismaWith(new Date()), config(), logger, nap);
@@ -205,7 +205,7 @@ describe(`the provisioning canary`, () => {
     });
 
     it(`does nothing at all when it is switched off, or the lane is`, async () => {
-        const fetchSpy = mock();
+        const fetchSpy = jest.fn();
         stubGlobal(`fetch`, fetchSpy);
         expect((await runHostedCanary(prismaWith(null), config({ canaryEmail: `` }), logger, nap)).detail).toBe(`canary off`);
         expect((await runHostedCanary(prismaWith(null), config({ flyApiToken: `` }), logger, nap)).detail).toBe(`canary off`);

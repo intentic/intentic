@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { CursorHookService } from "./cursor-hooks.js";
 import { checks } from "./invariant.js";
 

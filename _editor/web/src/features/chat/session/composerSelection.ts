@@ -1,18 +1,11 @@
-import {
-    capabilitiesOf,
-    clampMode,
-    type ContextUsage,
-    fastAllowed,
-    type PermissionMode,
-    providerLabel,
-    type TurnFact,
-} from "@intentic/sandbox-contract";
-import { computed, type Ref, shallowRef } from "vue";
+import { capabilitiesOf, clampMode, fastAllowed, type PermissionMode, providerLabel } from "@intentic/sandbox-contract";
+import { computed, shallowRef } from "vue";
 import { rememberedAccountFor, selectedAccountId } from "../accounts/providerAccounts";
 import { modelLabelFor, providerModels, providerTabs } from "../accounts/providerCatalog";
 import { clampEffort } from "../models/run-settings/effortScale";
 import { rememberedModelFor, rememberedProviderFor, rememberPick, turnDefaults } from "../run/turnDefaults";
-import { resumes, type SessionRef, type TurnSettings } from "../run/turnRequest";
+import { resumes, type TurnSettings } from "../run/turnRequest";
+import type { Conversation } from "./conversation";
 import { type PickAction, type PickEffects, type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
 import type { TranscriptView } from "./transcriptView";
 import type { TurnClient } from "./turnClient";
@@ -59,23 +52,10 @@ export const midTurnSwitchText = (point: SwitchPoint, switchedMidTurn: boolean):
     (switchedMidTurn ? segmentSwitchText(point) : undefined) ?? modelSwitchText(point);
 
 // What a selection reads and writes of the conversation around it.
-export interface SelectionHost {
-    // The session the next turn would resume, which decides whether a switch retires it.
-    readonly session: Ref<SessionRef | undefined>;
-    // What the running segment reported, which a switch to another one makes stale.
-    readonly activeModel: Ref<string | null>;
-    readonly contextUsage: Ref<ContextUsage | undefined>;
-    // The speed the last turn was served at, which a change of the fast pick makes history.
-    readonly fastMode: Ref<Extract<TurnFact, { kind: `fast_mode` }> | undefined>;
-    // Where the divider is written, and whether anything is on screen yet.
+type SelectionHost = Pick<Conversation, "session" | "activeModel" | "contextUsage" | "fastMode" | "box" | "peek"> & {
     readonly transcript: Pick<TranscriptView, "messages" | "notice" | "rewordNotice" | "write">;
-    // The box this chat runs in; undefined is this browser's own, the only one whose session can pin an account.
-    readonly box: Readonly<Ref<string | undefined>>;
-    // Most picks wait out a live turn; an account waits only while the model is generating.
     readonly turn: Pick<TurnClient, "streaming" | "generating">;
-    // A pick is the reader acting on this chat, which takes it out of the peek slot.
-    readonly peek: Ref<boolean>;
-}
+};
 
 export class ComposerSelection {
     // The selection, whole; `apply` is the one thing that replaces it.

@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { SshExecutor, SshResult, SshSession, SshTarget } from "../core/ssh.js";
 import { createHostProvider } from "./host.js";
 

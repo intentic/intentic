@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { parseVpngateCsv } from "./vpngate.js";
 
 // VPN Gate's public CSV IS this provider's catalog: no account, no server names to type, a country picked and

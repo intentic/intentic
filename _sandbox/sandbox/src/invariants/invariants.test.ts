@@ -1,5 +1,4 @@
 import pino from "pino";
-import { test, expect, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
 import { createInvariantRegistry, type InvariantCheck } from "./invariants.js";
 
@@ -63,8 +62,8 @@ test("a passing check reports nothing", async () => {
 
 test("only the checks armed for the moment run", async () => {
     const registry = createInvariantRegistry(silent());
-    const atBoot = mock();
-    const atSweep = mock();
+    const atBoot = jest.fn();
+    const atSweep = jest.fn();
     registry.register("platform", [check("boot-only", atBoot, ["boot"]), check("sweep-only", atSweep, ["sweep"])]);
 
     await registry.run("boot");

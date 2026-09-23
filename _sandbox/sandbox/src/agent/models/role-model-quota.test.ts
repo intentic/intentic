@@ -1,6 +1,5 @@
 import { unstubbed } from "@intentic/testing";
 import type { UsageWindow } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
 import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
 import type { TurnLimit } from "../../usage/fleet-limit.js";

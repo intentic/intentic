@@ -1,6 +1,5 @@
 import type { CapabilityContribution } from "@intentic/extension-manifest";
 import { LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODEL_WINDOWS, LOCAL_MODELS, localModelChoice } from "@intentic/sandbox-contract";
-import { describe, it, expect } from "bun:test";
 import { CAPABILITY_CATALOG, contributionEntry } from "./index.js";
 
 // Real shapes from _extensions/connectors/intentic-extension.json, abridged to the card-relevant fields.

@@ -1,7 +1,6 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import type { Model } from "@intentic/sandbox-contract";
 import type { Config } from "../../env.config.js";
 import { createCodexCatalog } from "./codex-catalog.js";

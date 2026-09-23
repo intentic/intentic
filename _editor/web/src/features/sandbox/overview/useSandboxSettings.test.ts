@@ -3,7 +3,6 @@
 import "@intentic/testing/dom";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
@@ -11,10 +10,10 @@ import { SandboxHttpError } from "../client/sandboxHttpError";
 import type { SandboxRpc } from "../client/sandboxRpc";
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-const get = mock<SandboxRpc[`settings`][`get`]>();
-const set = mock<SandboxRpc[`settings`][`set`]>();
-mock.module("../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ settings: { get, set } }) }));
-mock.module("../client/useSandbox", () => ({
+const get = jest.fn<SandboxRpc[`settings`][`get`]>();
+const set = jest.fn<SandboxRpc[`settings`][`set`]>();
+jest.mock("../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ settings: { get, set } }) }));
+jest.mock("../client/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ reachable: ref(true) }),
 }));

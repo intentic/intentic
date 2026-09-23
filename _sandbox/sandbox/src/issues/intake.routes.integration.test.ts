@@ -12,7 +12,6 @@ import {
 } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
-import { test, expect } from "bun:test";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import { automationConfig } from "../harness/route-stores.testing.js";

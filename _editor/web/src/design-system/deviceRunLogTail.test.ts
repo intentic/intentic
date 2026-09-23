@@ -5,7 +5,6 @@
 import "@intentic/testing/dom";
 import { DeviceRunLog } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
-import { it, expect, beforeEach, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
 const mounted: { app: App; host: HTMLElement }[] = [];

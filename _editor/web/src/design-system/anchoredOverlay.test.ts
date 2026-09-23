@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect, afterEach, spyOn, jest } from "bun:test";
 import { AnchoredOverlay } from "@intentic/ui";
 import { createApp, defineComponent, h, ref } from "vue";
 
@@ -30,7 +29,7 @@ const anchor = ref<HTMLElement>();
 let app: ReturnType<typeof createApp> | undefined;
 
 const mountPicker = (): void => {
-    spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue(rect(PANEL));
+    jest.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue(rect(PANEL));
     app = createApp(
         defineComponent({
             setup: () => () =>

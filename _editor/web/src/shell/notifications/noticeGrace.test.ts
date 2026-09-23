@@ -1,6 +1,5 @@
 import type { NoticeModel } from "@intentic/ui/notice";
 import { effectScope, nextTick, ref } from "vue";
-import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { NOTICE_GRACE_MS, useNoticeGrace } from "./noticeGrace";
 
 const lost: NoticeModel = { tone: `danger`, title: `Lost contact with your sandbox.` };

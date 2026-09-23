@@ -1,6 +1,5 @@
 import type { IntenticLine } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/client";
-import { describe, it, expect } from "bun:test";
 import { readPlanSteps, statusLabel, statusVariant } from "./reconcileStatus";
 
 // The frames an `intentic deploy plan` stream yields through the typed client, one per line the CLI printed, ended by
@@ -62,6 +61,8 @@ describe(`readPlanSteps`, () => {
     // The daemon's own failure after the stream opened arrives as the stream's error; it ends the plan in its words.
     it(`throws the daemon's own words when it fails the stream midway`, async () => {
         const failure = new ORPCError(`INTERNAL_SERVER_ERROR`, { message: `The deploy engine stopped answering.` });
-        await expect(readPlanSteps(planStream([{ kind: `log`, message: `reading` }], failure))).rejects.toThrow(`The deploy engine stopped answering.`);
+        await expect(readPlanSteps(planStream([{ kind: `log`, message: `reading` }], failure))).rejects.toThrow(
+            `The deploy engine stopped answering.`,
+        );
     });
 });

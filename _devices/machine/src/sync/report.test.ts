@@ -1,5 +1,4 @@
 import type { PortSummary } from "@intentic/sandbox-contract";
-import { describe, it, expect } from "bun:test";
 import type { Pairing, SyncState } from "./config.js";
 import { skippedPortsOf } from "./mirror.js";
 import { buildReport, scopedReport } from "./report.js";

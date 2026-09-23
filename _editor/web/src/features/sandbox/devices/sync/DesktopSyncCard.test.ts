@@ -3,7 +3,6 @@
 import "@intentic/testing/dom";
 import type { Device } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -11,8 +10,8 @@ const canOperate = ref(true);
 const pairToken = ref<string | undefined>(undefined);
 const pairMode = ref<`sync` | `mirror` | undefined>(undefined);
 const takeover = ref(false);
-const enable = mock(async () => {});
-mock.module(`./useDesktopSync`, () => ({
+const enable = jest.fn(async () => {});
+jest.mock(`./useDesktopSync`, () => ({
     useDesktopSync: () => ({
         canOperate,
         available: ref(true),
@@ -37,14 +36,14 @@ const devices = ref<Device[]>([]);
 // Enrolling a machine we can already reach: recorded rather than performed, since the subject is what the card
 // sends — a device, a half, and a folder on THAT machine. The pairing and the command line are the daemon's.
 const installCalls: { hostId: string; command: string; ask?: { mode?: string; localDir?: string } }[] = [];
-mock.module(`../useDevices`, () => ({
+jest.mock(`../useDevices`, () => ({
     useDevices: () => ({ devices, error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
     runDeviceCommand: (hostId: string, command: string, ask?: { mode?: string; localDir?: string }) => {
         installCalls.push({ hostId, command, ask });
         return Promise.resolve({ ok: true, message: `That device is enrolled.` });
     },
 }));
-mock.module(`../../../capabilities/connect/ScriptSourceSwitch.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`../../../capabilities/connect/ScriptSourceSwitch.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: DesktopSyncCard } = await import("./DesktopSyncCard.vue");
 

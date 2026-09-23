@@ -98,7 +98,7 @@ onMounted(() => {
         </div>
 
         <!-- The model picker shares the composer's overlay and has no local height cap. -->
-        <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" :header="t(`agents.suggestedSessionBox.model`)" panel-class="w-[26rem]">
+        <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" :header="t(`shared.model`)" panel-class="w-[26rem]">
             <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
         </ResponsiveOverlay>
     </div>

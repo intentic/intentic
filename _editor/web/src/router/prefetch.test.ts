@@ -1,7 +1,6 @@
 // Background half of 'navigation never waits': walks every view registered through asyncView and pulls its chunk via
 // the same loader, once per window no matter how often the shell remounts. A failing chunk does not stop the rest.
 import "@intentic/testing/dom";
-import { it, expect, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { h } from "vue";
 import { asyncView } from "../components/asyncView";
@@ -9,9 +8,9 @@ import { prefetchViewsAtIdle } from "./prefetch";
 
 it(`pulls every registered view once, at idle, and survives a loader that fails`, async () => {
     jest.useFakeTimers();
-    const first = mock(() => Promise.resolve({ default: { render: () => h(`div`) } }));
-    const failing = mock(() => Promise.reject(new Error(`offline`)));
-    const last = mock(() => Promise.resolve({ default: { render: () => h(`div`) } }));
+    const first = jest.fn(() => Promise.resolve({ default: { render: () => h(`div`) } }));
+    const failing = jest.fn(() => Promise.reject(new Error(`offline`)));
+    const last = jest.fn(() => Promise.resolve({ default: { render: () => h(`div`) } }));
     asyncView(first);
     asyncView(failing);
     asyncView(last);

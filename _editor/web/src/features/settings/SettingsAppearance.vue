@@ -53,7 +53,7 @@ const { audience, setAudience } = useAudience();
 const audienceOptions = computed(
     () =>
         [
-            { label: t(`settings.appearance.work.developer`), value: `developer`, title: t(`settings.appearance.work.developerHint`) },
+            { label: t(`shared.iWriteCode`), value: `developer`, title: t(`settings.appearance.work.developerHint`) },
             { label: t(`settings.appearance.work.maker`), value: `maker`, title: t(`settings.appearance.work.makerHint`) },
         ] satisfies readonly { label: string; value: Audience; title: string }[],
 );
@@ -100,14 +100,14 @@ const setThemeChoice = (value: ThemeRow): void => {
 };
 const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: t(`settings.appearance.explorer.${value}`), value })));
 const iconRailOptions = computed(() => [
-    { label: t(`settings.appearance.look.iconRailCompact`), value: `compact` as const },
-    { label: t(`settings.appearance.look.iconRailComfortable`), value: `comfortable` as const },
+    { label: t(`shared.iconRailCompact`), value: `compact` as const },
+    { label: t(`shared.iconRailComfortable`), value: `comfortable` as const },
 ]);
 // Labeled by effect, not percentage, so nobody sets this and the browser's 110% zoom together.
 const textSizeOptions = computed(() => [
-    { label: t(`settings.appearance.look.textSizeCompact`), value: `compact` as const },
+    { label: t(`shared.iconRailCompact`), value: `compact` as const },
     {
-        label: t(`settings.appearance.look.textSizeComfortable`),
+        label: t(`shared.iconRailComfortable`),
         value: `default` as const,
         title: t(`settings.appearance.look.textSizeComfortableHint`),
     },
@@ -139,8 +139,8 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 <template>
     <div class="flex flex-col gap-6">
         <!-- Who the words are for; first, since it decides what the rest of the app is called. -->
-        <RowGroup :label="t(`settings.appearance.work.group`)">
-            <Row icon="user" :title="t(`settings.appearance.work.title`)" :description="t(`settings.appearance.work.hint`)">
+        <RowGroup :label="t(`shared.group`)">
+            <Row icon="user" :title="t(`shared.group`)" :description="t(`settings.appearance.work.hint`)">
                 <template #control
                     ><SegmentedControl :model-value="audience" :options="audienceOptions" @update:model-value="setAudience"
                 /></template>
@@ -255,7 +255,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         </RowGroup>
 
         <!-- How a review reads: its file list and where each diff opens; grouping mirrors the panel's own toggle. -->
-        <RowGroup :label="t(`settings.appearance.changes.group`)">
+        <RowGroup :label="t(`shared.changes`)">
             <Row
                 as="label"
                 icon="box"
@@ -282,13 +282,8 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         </RowGroup>
 
         <!-- How much of an agent's working-out shows in transcripts; also flipped from the chat's own readout row. -->
-        <RowGroup :label="t(`settings.appearance.chat.group`)">
-            <Row
-                as="label"
-                icon="eye"
-                :title="t(`settings.appearance.chat.showToolCalls`)"
-                :description="t(`settings.appearance.chat.showToolCallsHint`)"
-            >
+        <RowGroup :label="t(`shared.chat`)">
+            <Row as="label" icon="eye" :title="t(`shared.showToolCalls`)" :description="t(`settings.appearance.chat.showToolCallsHint`)">
                 <template #control><ToggleSwitch v-model="showToolCalls" /></template>
             </Row>
         </RowGroup>
@@ -306,8 +301,8 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         </RowGroup>
 
         <!-- Work terminals are hidden by default (evidence, not kept tabs); this toggle is the way back. -->
-        <RowGroup :label="t(`settings.appearance.terminal.group`)">
-            <Row as="label" icon="sparkles" :title="t(`settings.appearance.terminal.workTerminals`)">
+        <RowGroup :label="t(`shared.terminal`)">
+            <Row as="label" icon="sparkles" :title="t(`shared.workTerminals`)">
                 <template #control><ToggleSwitch v-model="showWorkTerminals" /></template>
             </Row>
         </RowGroup>

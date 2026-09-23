@@ -28,8 +28,7 @@ export const agentTranscriptKey = (conversationId: string, at?: string): unknown
 export const invalidateAgentTranscript = (conversationId: string, at?: string): void =>
     void queryClient.invalidateQueries({ queryKey: agentTranscriptKey(conversationId, at) });
 
-// A session must carry the runtime that can resume it; a bare id from an older daemon falls back to the tab's own
-// recorded ref. `account` may be legitimately absent, e.g. no stored account served this conversation.
+// A session resumes only on the runtime that minted it, so an id without its provider and harness is none; `account` may be absent.
 const boundSession = (body: { sessionId?: string; provider?: AgentProvider; harness?: AgentHarness; account?: string }): SessionRef | undefined =>
     body.sessionId !== undefined && body.provider !== undefined && body.harness !== undefined
         ? { id: body.sessionId, provider: body.provider, harness: body.harness, account: body.account }
@@ -45,7 +44,6 @@ const read = async (conversationId: string, at: string | undefined, before?: num
         throw new Error(`Could not open that conversation.`);
     }
     const bound = boundSession(page);
-    // Absent here reads as "nothing to pick up", the correct default for a daemon that predates this field.
     return {
         ...(bound !== undefined ? { session: bound } : {}),
         ...(page.ending !== undefined ? { ending: pickUpOf(page.ending) } : {}),

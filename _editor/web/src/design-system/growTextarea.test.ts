@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect } from "bun:test";
 import { growTextarea } from "@intentic/ui";
 
 // The arithmetic four composers used to each carry, pinned here since @intentic/ui has no test runner. jsdom lays

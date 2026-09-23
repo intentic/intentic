@@ -1,12 +1,11 @@
 import type { CommandRun } from "@intentic/sandbox-contract";
-import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createRunWatcher, type RunSource } from "./runWatcher";
 
 /* THE WATCHER'S OWN PROMISES, the ones a push rides on: the reveal happens once, at the first state that names a terminal. */
 
-const openFocused = mock();
-mock.module(`../../terminal/useTerminalPanel`, () => ({ useTerminalPanel: () => ({ openFocused }) }));
+const openFocused = jest.fn();
+jest.mock(`../../terminal/useTerminalPanel`, () => ({ useTerminalPanel: () => ({ openFocused }) }));
 
 const IDLE: CommandRun = { status: `idle`, command: ``, output: `` };
 const running = (session?: string): CommandRun => ({

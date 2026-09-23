@@ -1,6 +1,5 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Rule } from "@intentic/sandbox-contract";
-import { describe, test, expect, mock } from "bun:test";
 import { EDIT_COMMAND_CEILING_MS, type EditCommandRun, fileEditedReviewer } from "./file-edited.js";
 
 const rule = (over: Partial<Rule> = {}): Rule => ({
@@ -13,7 +12,8 @@ const rule = (over: Partial<Rule> = {}): Rule => ({
 });
 
 // The third argument is the rule's own repository, undefined for a rule that names none: it runs where the turn is.
-const runner = (answer: EditCommandRun) => mock<(command: string, timeoutMs: number, repo?: string) => Promise<EditCommandRun>>(async () => answer);
+const runner = (answer: EditCommandRun) =>
+    jest.fn<(command: string, timeoutMs: number, repo?: string) => Promise<EditCommandRun>>(async () => answer);
 
 describe("the file.edited moment", () => {
     test("no rule standing there is no reviewer at all, so a workspace without one pays nothing", () => {

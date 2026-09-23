@@ -1,7 +1,6 @@
 import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "bun:test";
 import { writeFileAtomic, writeSecretFile } from "./home.js";
 
 const dir = (): string => mkdtempSync(join(tmpdir(), "home-"));

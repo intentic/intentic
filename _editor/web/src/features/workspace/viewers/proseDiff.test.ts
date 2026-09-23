@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { blocksOf, foldUnchanged, proseDiff } from "./proseDiff";
 
 const text = (segments: readonly { kind: string; text: string }[], kind: string): string =>

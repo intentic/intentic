@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { extractImports } from "./imports.js";
 
 test("TypeScript: every import form, including type-only, re-export, require and dynamic", () => {

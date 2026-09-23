@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { coneFor, fencedComposition } from "./worktree-cone.js";
 
 // What a fenced conversation's checkout holds, as arithmetic. The worktree builder turns these answers into

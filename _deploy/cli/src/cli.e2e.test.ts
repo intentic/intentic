@@ -10,7 +10,6 @@ import { deploymentId, deploymentPort } from "@intentic/state-resolver";
 import { e2eTier } from "@intentic/testing/e2e";
 import { utils } from "ssh2";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
 
 // Manual, real-infra E2E: gates on `secrets`, not the token, so a missing credential skips only this tier.

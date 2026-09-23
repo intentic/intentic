@@ -3,7 +3,7 @@ import { AnchoredOverlay, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { relativeTime } from "../chat/models/catalog";
-import { KIND_ICONS } from "./terminalMeta";
+import { KINDS } from "./terminalMeta";
 import { openWorkTerminal, useWorkTerminals, type WorkTerminalRow } from "./useWorkTerminals";
 import { useT } from "@intentic/ui/i18n";
 
@@ -41,8 +41,8 @@ const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finishe
         :class="ui.iconButton()"
         :aria-expanded="panelOpen"
         @click="panelOpen = !panelOpen"
-        v-tooltip.top="t(`terminal.workTerminals.workTerminals`)"
-        :aria-label="t(`terminal.workTerminals.workTerminals`)"
+        v-tooltip.top="t(`shared.workTerminals`)"
+        :aria-label="t(`shared.workTerminals`)"
     >
         <Icon name="wave-pulse" class="text-xs" :class="live ? 'text-link' : 'text-muted'" />
     </button>
@@ -50,7 +50,7 @@ const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finishe
     <AnchoredOverlay v-model="panelOpen" :anchor="trigger ?? undefined" side="bottom" cross="end">
         <div class="flex w-80 flex-col p-1">
             <div v-if="live" class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
-                {{ t(`terminal.workTerminals.running`) }}
+                {{ t(`shared.running`) }}
             </div>
             <button
                 v-for="row in rows"
@@ -61,7 +61,7 @@ const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finishe
             >
                 <!-- Live dot, then the kind glyph (sparkles for an agent shell, bolt for a job), from the same table the pills use. -->
                 <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-link"></span>
-                <Icon :name="KIND_ICONS[row.kind]" class="shrink-0 text-2xs text-muted" />
+                <Icon :name="KINDS[row.kind].icon" class="shrink-0 text-2xs text-muted" />
                 <div class="min-w-0 flex-1">
                     <div class="truncate text-xs text-content">{{ row.name }}</div>
                     <div class="truncate text-2xs text-muted">{{ lastOutput(row) }}</div>
@@ -88,7 +88,7 @@ const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finishe
             >
                 <!-- Hollow dot against the live one above: same row, spent. -->
                 <span class="h-1.5 w-1.5 shrink-0 rounded-full border border-subtle"></span>
-                <Icon :name="KIND_ICONS[row.kind]" class="shrink-0 text-2xs text-subtle" />
+                <Icon :name="KINDS[row.kind].icon" class="shrink-0 text-2xs text-subtle" />
                 <div class="min-w-0 flex-1">
                     <div class="truncate text-xs text-muted">{{ row.name }}</div>
                     <div class="truncate text-2xs text-subtle">{{ endedAt(row) }}</div>

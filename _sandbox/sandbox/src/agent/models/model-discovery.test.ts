@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { listModels, suggestedModels } from "./model-discovery.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });

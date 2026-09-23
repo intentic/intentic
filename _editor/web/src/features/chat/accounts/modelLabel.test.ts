@@ -1,9 +1,8 @@
 /* THE ONE WAY THE APP NAMES A MODEL. */
-import { afterEach, beforeEach, expect, it, jest, mock } from "bun:test";
 import { modelLabelFor, perProvider, providerDisplayLabel, providerModels, providerModelsState, readCatalogsWith } from "./providerCatalog";
 
 // The loader as a label reaches it; recorded, never run, so each read is one the resolver itself asked for.
-const reads = mock<(provider: string) => void>();
+const reads = jest.fn<(provider: string) => void>();
 
 beforeEach(() => {
     providerModels.value = perProvider(() => []);

@@ -2,7 +2,6 @@
 // tiles a slice and a filter leave on the grid, and the sentence the page describes each slice with.
 import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATEGORIES, type CapabilityCatalogEntry, type CapabilityCategory } from "@intentic/capability-catalog";
-import { describe, expect, it } from "bun:test";
 import { entryHaystack } from "./tiles";
 import {
     ALL,

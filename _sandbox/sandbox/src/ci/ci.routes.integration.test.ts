@@ -7,7 +7,6 @@ import { defaultGit } from "@intentic/scaffold";
 import { type AgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
-import { test, expect } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";

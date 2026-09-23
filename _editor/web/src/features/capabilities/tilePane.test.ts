@@ -5,7 +5,6 @@ import type { CapabilityRecommendation, CapabilityStatus, CapabilitySummary } fr
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { RegistryEntry } from "@intentic/registry";
 import type { ExtensionSummary, HostSummary } from "@intentic/sandbox-contract";
-import { afterEach, describe, expect, it } from "bun:test";
 import { effectScope, type EffectScope, ref } from "vue";
 import type { BackgroundProcessRow } from "../terminal/useBackgroundProcesses";
 import type { ConnectionSources } from "./model/connectionRows";

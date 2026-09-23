@@ -1,5 +1,4 @@
 import type { PeerLink } from "@intentic/sandbox-contract/peer-dial";
-import { describe, expect, it } from "bun:test";
 import type { HostLink } from "./device/config.js";
 import { reconcileLinks } from "./resident.js";
 

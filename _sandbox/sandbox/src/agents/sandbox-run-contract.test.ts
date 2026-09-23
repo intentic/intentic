@@ -2,7 +2,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
-import { test, expect } from "bun:test";
 
 // Walks the repo for anything that hand-rolls the sandbox container's run shape (a container started with the workspace
 // volume at /work) instead of composing from @intentic/sandbox-run or using the image's own CLI verb.

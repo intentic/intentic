@@ -2,7 +2,6 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { type CredentialGate, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "bun:test";
 import type { Services } from "../../../composition.js";
 import { createMemoryWarnings, type MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
@@ -24,8 +23,7 @@ const admitted = (facts: TurnFacts): AdmittedTurnFacts => {
 const settingsOf = (settings: SandboxSettings): Services["sandboxSettings"] =>
     unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings });
 
-const conversationAt = (turns: number): Services["agents"] =>
-    unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(turns) });
+const conversationAt = (turns: number): Services["agents"] => unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(turns) });
 
 const GIB = 1024 ** 3;
 

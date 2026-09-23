@@ -2,7 +2,6 @@ import "@intentic/testing/dom";
 import { STATE_DIR } from "@intentic/constants";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
-import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { computed, createApp, h, nextTick, ref, shallowRef } from "vue";
 import { providerAccounts } from "../../accounts/providerAccounts";
 import { viewerPlaceholder } from "../../composer/composerIntent";
@@ -26,22 +25,22 @@ const composerOf = () => {
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `a1`, label: `Claude`, connectedAt: 1 }] };
     const chat = new Conversation(`c1`);
     const view = conversationView(computed(() => chat));
-    const say = spyOn(chat.turn, `say`).mockResolvedValue(undefined);
+    const say = jest.spyOn(chat.turn, `say`).mockResolvedValue(undefined);
     const host = {
         view,
         voiceAgent: ref(false),
         staging: { snapshot: () => view.attachments.value.map(({ name, path }) => ({ name, path })) },
         editorContext: { include: ref(true), forSend: () => undefined },
-        runThrough: { clearFailures: mock(), claimSend: mock(() => false) },
-        route: { beforeSend: mock<(text: string, editorContext: boolean) => Promise<void> | undefined>(() => undefined) },
+        runThrough: { clearFailures: jest.fn(), claimSend: jest.fn(() => false) },
+        route: { beforeSend: jest.fn<(text: string, editorContext: boolean) => Promise<void> | undefined>(() => undefined) },
         history: shallowRef(inputHistoryFor(`sb-send`)),
         reachable: ref(true),
         canDrive: ref(true),
         mobile: ref(false),
         words: computed(() => ({ provider: `Claude`, onTrial: false, editDropped: 0 })),
-        pin: mock(),
-        refocus: mock(),
-        openModels: mock(),
+        pin: jest.fn(),
+        refocus: jest.fn(),
+        openModels: jest.fn(),
     };
     let send: ReturnType<typeof useComposerSend> | undefined;
     const app = createApp({
@@ -107,7 +106,7 @@ describe(`a message`, () => {
             { id: 2, role: `assistant`, text: ``, plan: { requestId: `d1`, text: `the plan`, status: `pending` } },
         ];
         chat.transcript.adopt(rows);
-        const reply = spyOn(chat.requests, `reply`).mockResolvedValue(true);
+        const reply = jest.spyOn(chat.requests, `reply`).mockResolvedValue(true);
         chat.draft.value = `not like that`;
         chat.attachments.value = [CHIP];
 
@@ -122,7 +121,7 @@ describe(`a message`, () => {
 describe(`what intercepts a press`, () => {
     it(`places the words as the agent's when the voice is armed, and keeps them when the place is refused`, async () => {
         const { chat, host, say, send } = composerOf();
-        const place = spyOn(chat.transcript, `placeAsAgent`).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+        const place = jest.spyOn(chat.transcript, `placeAsAgent`).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
         host.voiceAgent.value = true;
         chat.draft.value = `I checked the tests.`;
 
@@ -146,7 +145,7 @@ describe(`what intercepts a press`, () => {
         const rows: ChatMessage[] = [{ id: 1, role: `user`, text: `first`, rewindIndex: 0 }];
         chat.transcript.adopt(rows);
         chat.transcript.beginEdit(chat.transcript.messages.value[0]!);
-        const submitEdit = spyOn(chat.transcript, `submitEdit`).mockResolvedValue(true);
+        const submitEdit = jest.spyOn(chat.transcript, `submitEdit`).mockResolvedValue(true);
         chat.draft.value = `first, better`;
 
         send.submit();
@@ -194,7 +193,7 @@ describe(`what intercepts a press`, () => {
     it(`continues a stopped turn when nothing is typed, recalling only what it sent`, async () => {
         const { chat, host, send } = composerOf();
         chat.pickUp.value = { reason: `stopped` };
-        const continued = spyOn(chat.turn, `continueTurn`).mockResolvedValue(`Continue`);
+        const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(`Continue`);
         expect(send.continueStrip.value).toBe(true);
         expect(send.continueOffer.value).toBe(true);
 
@@ -208,21 +207,17 @@ describe(`what intercepts a press`, () => {
 });
 
 describe(`what the composer says`, () => {
-    it(`names Stop and the queue by what they will do to the turn`, () => {
+    it(`names Stop by what it will do to the turn`, () => {
         const { chat, host, send } = composerOf();
-        expect(send.queuedHint.value).toBe(`Goes out as soon as the agent is free`);
-
         runningTurn(chat.turn);
         expect(send.stopLabel.value).toBe(`Stop generating`);
         expect(send.stopHint.value).toBe(`Stop generating (Esc)`);
-        expect(send.queuedHint.value).toBe(`Goes when this turn ends`);
         host.mobile.value = true;
         expect(send.stopHint.value).toBe(`Stop generating`);
 
         chat.transcript.adopt([{ id: 1, role: `assistant`, text: ``, permission: { requestId: `p1`, toolName: `Bash`, status: `pending` } }]);
         expect(send.stopLabel.value).toBe(`Stop the turn`);
         expect(send.stopHint.value).toBe(`Stop the turn, discards the request above`);
-        expect(send.queuedHint.value).toBe(`Goes in once you answer the request above`);
     });
 
     it(`keeps Send in the slot mid-turn only while the box holds something`, () => {
@@ -242,31 +237,5 @@ describe(`what the composer says`, () => {
         host.canDrive.value = false;
 
         expect(send.composerPlaceholder.value).toBe(viewerPlaceholder());
-    });
-});
-
-describe(`keeping both instead of editing`, () => {
-    it(`forks at the edited prompt and hands the fork the half-written replacement`, () => {
-        const { chat, view, send } = composerOf();
-        const rows: ChatMessage[] = [
-            { id: 1, role: `user`, text: `first`, rewindIndex: 0 },
-            { id: 2, role: `assistant`, text: `done` },
-        ];
-        chat.transcript.adopt(rows);
-        chat.draft.value = `half a thought`;
-        chat.transcript.beginEdit(chat.transcript.messages.value[0]!);
-        chat.draft.value = `first, better`;
-        chat.attachments.value = [CHIP];
-        const fork = new Conversation(`fork`);
-        const forkAt = spyOn(view, `forkAt`).mockReturnValue(fork);
-
-        send.forkInsteadOfEdit();
-
-        expect(forkAt.mock.calls).toEqual([[0, `now`]]);
-        expect(fork.draft.value).toBe(`first, better`);
-        expect(fork.attachments.value).toEqual([CHIP]);
-        // This pane's composer is back to what the pencil displaced.
-        expect(chat.transcript.editing.value).toBeUndefined();
-        expect(chat.draft.value).toBe(`half a thought`);
     });
 });

@@ -1,7 +1,6 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import { readLines } from "./line-reader.js";
 
 let dir: string;

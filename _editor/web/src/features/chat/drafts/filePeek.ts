@@ -1,19 +1,10 @@
-// What a peek at an attached file IS, and what can be derived from one. No fetching and no imports: the chip that
-// draws a peek also renders on the published share page, which has no daemon to read bytes from and must not carry
-// the client that would. attachmentPeeks.ts is the half that fetches.
+import { formatOf } from "@intentic/ui/file-format";
 
-// Extensions the <img> thumb can actually display; matches what the composer previews (image/* uploads). Everything
-// that is neither this nor sound below is a file chip with a text peek.
-const IMAGE_EXTS = new Set([`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `avif`]);
+// What a peek at an attached file IS; no fetching and no client (the share page draws it), attachmentPeeks.ts fetches.
 
-// Extensions an <audio> element decodes, which is the set the daemon types as audio/* on /workspace/raw
-// (workspace-files-download.ts). Copied rather than imported, under this module's no-imports rule above.
-const AUDIO_EXTS = new Set([`mp3`, `wav`, `ogg`, `oga`, `opus`, `weba`, `flac`, `m4a`, `aac`]);
-
-const extOf = (path: string): string => path.split(`.`).at(-1)?.toLowerCase() ?? ``;
-
-export const isImagePath = (path: string): boolean => IMAGE_EXTS.has(extOf(path));
-export const isAudioPath = (path: string): boolean => AUDIO_EXTS.has(extOf(path));
+// Anything that is neither a picture nor sound is a file chip with a text peek.
+export const isImagePath = (path: string): boolean => formatOf(path).category === `image`;
+export const isAudioPath = (path: string): boolean => formatOf(path).category === `audio`;
 
 export interface FilePeek {
     // False when the daemon answered that nothing is at the path: an attachment whose bytes were cleaned up.

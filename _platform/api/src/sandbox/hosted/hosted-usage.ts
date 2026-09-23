@@ -1,9 +1,9 @@
-import { hostedTier } from "@intentic/constants";
+import { FREE_TIER } from "@intentic/constants";
 import type { Prisma, PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { DAY_MS } from "../../durations.js";
-import { tierOfRow } from "./hosted-shape.js";
+import { hostedTierIn } from "./hosted-shape.js";
 import { getMachineDetail, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 
 // The hour meter: what a machine costs its month, and whether any of it is left to wake it with. A stretch opens at
@@ -33,13 +33,6 @@ export interface HostedBudget {
 }
 
 const unmetered: HostedBudget = { metered: false, allowanceMinutes: 0, usedMinutes: 0, remainingMinutes: 0 };
-
-/* THE MONTH'S CEILING FOR ONE MACHINE: the free rung's is the operator's (config.hosted.monthlyHours, 0 for none),
- * every other rung's is the ladder's. */
-const rungAllowance = (config: Config, tier: string): number => {
-    const rung = hostedTier(tierOfRow(tier));
-    return rung.priceUsd === 0 ? config.hosted.monthlyHours * 60 : rung.monthlyHours * 60;
-};
 
 /* THE NEWCOMER RAMP: an account younger than `hosted.newAccountDays` has `hosted.newAccountHours` as its
  * month's ceiling instead of the full one. A farm of fresh accounts is the cheapest way to multiply the free
@@ -101,7 +94,7 @@ export const hostedOwnerMinutes = async (prisma: PrismaClient, userId: string, n
  * free rung's, since that is the rung an arrival lands on, and the spend is the ACCOUNT's for the reason above.
  */
 export const hostedArrivalBudget = async (prisma: PrismaClient, config: Config, userId: string, now: Date = new Date()): Promise<HostedBudget> => {
-    const full = config.hosted.monthlyHours * 60;
+    const full = hostedTierIn(config, FREE_TIER.id).monthlyHours * 60;
     if (full === 0) {
         return unmetered;
     }
@@ -129,7 +122,7 @@ export const hostedBudgetOf = async (
     machine: { sandboxId: string; tier: string; ownerId: string },
     now: Date = new Date(),
 ): Promise<HostedBudget> => {
-    const full = rungAllowance(config, machine.tier);
+    const full = hostedTierIn(config, machine.tier).monthlyHours * 60;
     if (full === 0) {
         return unmetered;
     }

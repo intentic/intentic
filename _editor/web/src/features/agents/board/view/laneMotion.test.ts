@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { afterEach, beforeEach, describe, expect, it, jest, spyOn } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref, shallowRef } from "vue";
 import type { FleetLane } from "../../fleet/agentStatus";
 import { NO_ATTENTION } from "../../fleet/agentStatus";
@@ -63,7 +62,7 @@ describe(`cards moving across a render`, () => {
                 return { onfinish: null } as unknown as Animation;
             },
         });
-        spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
+        jest.spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
             const section = this.closest<HTMLElement>(`section[data-lane]`);
             const left = LANES.indexOf(section?.dataset[`lane`] as FleetLane) * 300;
             const top = section === null ? 0 : [...section.children].indexOf(this) * 100;
@@ -158,7 +157,7 @@ describe(`cards moving across a render`, () => {
 
     it(`scrolls a card into view once it is drawn, leaving a visible one where it is`, async () => {
         const scrolled: { card: string | null; options: boolean | ScrollIntoViewOptions | undefined }[] = [];
-        spyOn(Element.prototype, `scrollIntoView`).mockImplementation(function (this: Element, options?: boolean | ScrollIntoViewOptions) {
+        jest.spyOn(Element.prototype, `scrollIntoView`).mockImplementation(function (this: Element, options?: boolean | ScrollIntoViewOptions) {
             scrolled.push({ card: this.getAttribute(`aria-label`), options });
         });
         const { host, motion } = drawn(lanesOf([`a1`], []));

@@ -1,5 +1,4 @@
 import { pino } from "pino";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { startIdleStop, type IdleStopProbes } from "./idle-stop.js";
 
@@ -31,7 +30,7 @@ describe("startIdleStop", () => {
     });
 
     it("stops after the quiet window when nothing is connected or running", async () => {
-        const stop = mock();
+        const stop = jest.fn();
         const dispose = startIdleStop({ minutes: 5, logger }, probesOf({}), stop);
         await minutes(4);
         expect(stop).not.toHaveBeenCalled();
@@ -41,7 +40,7 @@ describe("startIdleStop", () => {
     });
 
     it("a connected tab resets the streak: even an idle one counts as a person", async () => {
-        const stop = mock();
+        const stop = jest.fn();
         let connected = 1;
         const dispose = startIdleStop({ minutes: 3, logger }, probesOf({ connected: () => connected }), stop);
         await minutes(10);
@@ -55,7 +54,7 @@ describe("startIdleStop", () => {
     });
 
     it("an in-flight turn or live delegate keeps the machine up with nobody connected", async () => {
-        const stop = mock();
+        const stop = jest.fn();
         let turns = 1;
         const dispose = startIdleStop({ minutes: 2, logger }, probesOf({ turns: () => turns }), stop);
         await minutes(6);
@@ -67,7 +66,7 @@ describe("startIdleStop", () => {
     });
 
     it("an armed condition watch keeps the machine up: stopping it is how a watch never fires", async () => {
-        const stop = mock();
+        const stop = jest.fn();
         let watchers = 1;
         const dispose = startIdleStop({ minutes: 2, logger }, probesOf({ watchers: () => watchers }), stop);
         await minutes(6);
@@ -79,7 +78,7 @@ describe("startIdleStop", () => {
     });
 
     it("a wake due inside the window keeps the machine up, since only a visit would restart it", async () => {
-        const stop = mock();
+        const stop = jest.fn();
         // Due in three minutes, inside a five-minute window: stopping now is how that wake arrives late.
         const dueAt = Date.now() + 3 * 60 * 1000;
         const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextOneTimeWakeAt: () => Promise.resolve(dueAt) }), stop);
@@ -89,7 +88,7 @@ describe("startIdleStop", () => {
     });
 
     it("a wake further out than the window is slept through: an always-awake machine costs more than the lateness", async () => {
-        const stop = mock();
+        const stop = jest.fn();
         const dispose = startIdleStop(
             { minutes: 5, logger },
             probesOf({ nextOneTimeWakeAt: () => Promise.resolve(Date.now() + 6 * 3_600_000) }),
@@ -101,7 +100,7 @@ describe("startIdleStop", () => {
     });
 
     it("nothing on any clock reads as 0, not as a wake due at the epoch", async () => {
-        const stop = mock();
+        const stop = jest.fn();
         const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextOneTimeWakeAt: () => Promise.resolve(0) }), stop);
         await minutes(5);
         expect(stop).toHaveBeenCalledTimes(1);
@@ -126,7 +125,7 @@ describe("startIdleStop", () => {
     };
 
     it("a tab that connects while the terminal probe is in flight is not stopped under", async () => {
-        const stop = mock();
+        const stop = jest.fn();
         let connected = 0;
         const tmux = held();
         const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ connected: () => connected, terminalActivityAt: tmux.probe }), stop);
@@ -140,7 +139,7 @@ describe("startIdleStop", () => {
     });
 
     it("a watch armed while the terminal probe is in flight is not stopped under", async () => {
-        const stop = mock();
+        const stop = jest.fn();
         let watchers = 0;
         const tmux = held();
         const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ watchers: () => watchers, terminalActivityAt: tmux.probe }), stop);
@@ -153,7 +152,7 @@ describe("startIdleStop", () => {
     });
 
     it("terminal output advances the streak's start, one window after the last line, not two", async () => {
-        const stop = mock();
+        const stop = jest.fn();
         let lastOutput = 0;
         const startedAt = Date.now();
         const dispose = startIdleStop({ minutes: 3, logger }, probesOf({ terminalActivityAt: () => Promise.resolve(lastOutput) }), stop);

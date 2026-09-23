@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, afterEach } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import { proven, rejectAuth, rejectForbidden } from "../harness/route-client.testing.js";

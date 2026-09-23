@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Capability } from "@intentic/sandbox-contract";
 import { gitHead } from "@intentic/scaffold";
-import { test, expect } from "bun:test";
 import { createTerminalRunner } from "../../terminal/terminal-run.js";
 import {
     makeWorkspaceDir,

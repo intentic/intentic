@@ -1,5 +1,4 @@
 import type { InputSavings, TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract";
-import { describe, it, expect } from "bun:test";
 import { compositionOf, meanUnit, savedByCleaner, stageLabel, verdictsOf } from "./savingsChart";
 
 // Composition segments must sum exactly to the raw output; everything else on the card is read against that

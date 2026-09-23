@@ -1,5 +1,4 @@
 import { generateKeyPairSync } from "node:crypto";
-import { describe, it, expect } from "bun:test";
 import { hostOwnerId, mintReachabilityGrant, verifyReachabilityGrant } from "./ingress-contract.js";
 
 const pemPair = (): { privateKey: string; publicKey: string } => {

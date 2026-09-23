@@ -1,5 +1,4 @@
 import { captureCli, type CliOutcome } from "@intentic/agent-cli/testing";
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import { makeFixtureWorkspace } from "@intentic/iq-engine/testing";
 import { app } from "./app.js";
 import { normalizeArgv } from "./lib/argv.js";

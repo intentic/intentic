@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { describe, it, expect, beforeEach } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
 import { activeSandboxId } from "../features/sandbox/overview/activeSandbox";
 

@@ -88,12 +88,10 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
 
     // The owner's standing choice: bring the server up with the sandbox rather than on the first document. Read once at
     // boot; a later flip is acted on by the viewer, which starts the server as it saves the setting.
-    const settings = await api.daemon.rpc.extensions
-        .settings({ id: context.extensionId })
-        .catch((error: unknown) => {
-            api.log(`settings unreadable, treating auto-start as off: ${error instanceof Error ? error.message : String(error)}`);
-            return undefined;
-        });
+    const settings = await api.daemon.rpc.extensions.settings({ id: context.extensionId }).catch((error: unknown) => {
+        api.log(`settings unreadable, treating auto-start as off: ${error instanceof Error ? error.message : String(error)}`);
+        return undefined;
+    });
     if (autoStartOf(settings?.settings)) {
         api.log(`starting the document server with the sandbox (auto-start is on)`);
         void docs.start();
@@ -102,12 +100,9 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
     // Where the browser reaches the listener: the daemon's forwarded-port hostname, asked for again on every open
     // since the forward table is in-memory and a busy sandbox can evict a slot.
     let listenerPort = 0;
-    // The last origin the daemon handed out; the listener names it to the document server on every proxied request.
-    let publicOrigin: string | undefined;
     const exposure = async (): Promise<string | undefined> => {
         const { previewUrl } = await api.daemon.rpc.ports.forward({ port: listenerPort });
-        publicOrigin = previewUrl?.replace(/\/$/, "");
-        return publicOrigin;
+        return previewUrl?.replace(/\/$/, "");
     };
 
     const readDocument = async (document: Document): Promise<Readable | undefined> => {
@@ -167,7 +162,6 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
         secret,
         sessions,
         documentServerPort: () => docs.running()?.port,
-        publicOrigin: () => publicOrigin,
         pageFor,
         readDocument,
         saveDocument,
@@ -203,7 +197,13 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
                 return json(404, { error: `no such file: ${request.path}` });
             }
         }
-        const session = sessions.open({ path: request.path, agent: request.agent, mode: request.agent === undefined ? request.mode : "view", theme: request.theme, stat: fileStat });
+        const session = sessions.open({
+            path: request.path,
+            agent: request.agent,
+            mode: request.agent === undefined ? request.mode : "view",
+            theme: request.theme,
+            stat: fileStat,
+        });
         return json(200, { url: `${origin}/editor?s=${encodeURIComponent(session.token)}` } satisfies OpenResult);
     };
 

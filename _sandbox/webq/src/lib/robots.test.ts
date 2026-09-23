@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { isAllowed, parseRobots } from "./robots.js";
 
 describe("parseRobots", () => {

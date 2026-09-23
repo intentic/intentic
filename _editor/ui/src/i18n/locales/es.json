@@ -47,7 +47,6 @@
         "emerald": "Esmeralda",
         "fern": "Helecho",
         "graphite": "Grafito",
-        "iris": "Iris",
         "lagoon": "Laguna",
         "moss": "Musgo",
         "orchid": "Orquídea",
@@ -80,7 +79,6 @@
         "deviceIsntSyncingFolder": "Este dispositivo no sincroniza ninguna carpeta ni retiene puertos para este sandbox.",
         "folder": "Carpeta",
         "image": "Imagen",
-        "localhost": "localhost:",
         "more": "… y {more} más",
         "noFolderDeviceOnly": "sin carpeta: este dispositivo solo replica puertos",
         "noFolderSynced": "sin carpeta sincronizada",
@@ -166,8 +164,6 @@
         "default": "predeterminado",
         "defaultIs": "predeterminado: {value}",
         "fullAccessToComputers": "Acceso total a los dispositivos y al núcleo de este ordenador, tal como lo necesita un motor de Docker anidado. Solo para una herramienta que no puede funcionar sin él.",
-        "gib": "GiB",
-        "gpu": "GPU",
         "memory": "Memoria",
         "memoryCapInGib": "Límite de memoria en GiB",
         "memoryWhole": "GiB enteros, al menos {min}. Vacío es lo predeterminado: todo lo que tenga este ordenador más allá de lo que se reserva.",
@@ -189,7 +185,6 @@
         "moreActions": "Más acciones"
     },
     "searchBar": {
-        "aa": "Aa",
         "clearEsc": "Vaciar (Esc)",
         "clearFilter": "Vaciar el filtro",
         "filter": "Filtrar…",
@@ -200,9 +195,5 @@
     },
     "timeWindow": {
         "all": "Todo"
-    },
-    "useOsPreference": {
-        "linuxMacos": "Linux / macOS",
-        "windowsPowershell": "Windows (PowerShell)"
     }
 }

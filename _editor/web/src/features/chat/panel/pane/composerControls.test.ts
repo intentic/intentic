@@ -1,8 +1,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { type PermissionMode, type RunnerSummary, RunnerSummarySchema, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { hoisted } from "@intentic/testing/bun";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { computed, createApp, h, nextTick, ref } from "vue";
 import * as useAgentsOriginal from "../../../agents/fleet/useAgents";
 import * as useRunnersOriginal from "../../../sandbox/devices/runners/useRunners";
@@ -14,17 +12,17 @@ import type { ChatMessage } from "../../transcript/transcript";
 // whatever else would rewrite what Send means.
 
 // The runners this sandbox has paired and the roster's entries, as the row reads them.
-const { runners, rostered } = await hoisted(async () => {
+const { runners, rostered } = await (async () => {
     const { ref: vueRef } = await import(`vue`);
     return { runners: vueRef<RunnerSummary[]>([]), rostered: vueRef<readonly string[]>([]) };
-});
+})();
 // Held before the mocks replace the modules' bindings, which would otherwise answer with the mocks themselves.
 const { useAgents } = useAgentsOriginal;
-mock.module("../../../agents/fleet/useAgents", () => ({
+jest.mock("../../../agents/fleet/useAgents", () => ({
     ...useAgentsOriginal,
     useAgents: () => ({ ...useAgents(), agentById: (id: string) => (rostered.value.includes(id) ? { id, status: `idle` } : undefined) }),
 }));
-mock.module("../../../sandbox/devices/runners/useRunners", () => ({ ...useRunnersOriginal, useRunners: () => ({ runners }) }));
+jest.mock("../../../sandbox/devices/runners/useRunners", () => ({ ...useRunnersOriginal, useRunners: () => ({ runners }) }));
 
 const { useComposerControls } = await import("./composerControls");
 const { Conversation } = await import("../../session/conversation");
@@ -35,7 +33,7 @@ const rowOf = () => {
     // An isolated chat's own untouched posture.
     const mode = ref<PermissionMode>(`bypassPermissions`);
     const runState = ref<RunThroughState>(`idle`);
-    const runThrough = { open: ref(false), state: computed(() => runState.value), clear: mock() };
+    const runThrough = { open: ref(false), state: computed(() => runState.value), clear: jest.fn() };
     const steered = ref(false);
     const editing = ref<ChatMessage | undefined>();
     const pills = {

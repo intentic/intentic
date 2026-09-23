@@ -1,43 +1,26 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { isLockedWorkspacePath, type Persona } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { noticeOf } from "@intentic/ui/async";
-import { computed, type Ref } from "vue";
-import { lensPersonaId, reachOf } from "../../directory-ui/personaReach";
+import type { Ref } from "vue";
 import { archiveAbove, isArchiveContent } from "../../files/archiveEntries";
 import { isLeaving, type Provisional, provisionalAt } from "../../files/provisionalEntries";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
 import { deadLink, dropDirOf, type Row } from "./treeRows";
 
-// What may be done to a row. A sandbox-private path (isLockedWorkspacePath, so children inherit it) takes no rename,
-// delete, cut, copy, drag or drop; an archive's contents take no write; a provisional row takes nothing; a lens only
-// dims.
+// What any file surface may do to an entry: nothing to a private (children inherit it) or provisional path, no archive write.
 
 export interface TreeRulesHost {
     readonly byPath: Readonly<Ref<ReadonlyMap<string, WorkspaceTreeEntry>>>;
-    readonly expandable: (row: Row) => boolean;
     readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "actionError" | "refuseWrite">;
-    // The sandbox's personas, one of which the explorer may be reading the tree as (lensPersonaId).
-    readonly personas: Readonly<Ref<readonly Persona[]>>;
 }
 
 export const useTreeRules = (host: TreeRulesHost) => {
     const entryAt = (path: string): WorkspaceTreeEntry | undefined => host.byPath.value.get(path);
 
-    const lensReach = computed(() => {
-        const persona = host.personas.value.find((candidate) => candidate.id === lensPersonaId.value);
-        return persona === undefined ? undefined : reachOf(persona);
-    });
-    // Whether the read-as persona's lens would refuse this path; only dims the row, since a lens must not restrict the
-    // actual user. A folder on the way to a reachable child is never dimmed.
-    const refused = (path: string): boolean => lensReach.value?.refuses(path) === true;
-
     // What this browser has just done here that the listing hasn't caught up with, which nothing may act on. Only for a
     // path the listing DOESN'T have, or a folder on the way to an upload would read as arriving itself.
     const pendingRow = (path: string): Provisional | undefined => (host.byPath.value.has(path) ? undefined : provisionalAt(path));
     const pending = (path: string): boolean => pendingRow(path) !== undefined;
-    // An arriving row holding nothing a press can reach: activation refuses a pending file, while a pending directory
-    // still expands. Said on the row as aria-, since the row still selects, reveals and takes a context menu.
-    const notYetOpenable = (row: Row): boolean => pending(row.entry.path) && !host.expandable(row);
     // Selection filtered to paths the ops may actually touch, so bulk delete doesn't hit paths the daemon will refuse, nor
     // placeholder rows for files that aren't on disk under that name yet.
     const unlockedOnly = (paths: readonly string[]): string[] =>
@@ -60,5 +43,5 @@ export const useTreeRules = (host: TreeRulesHost) => {
         return host.store.refuseWrite();
     };
 
-    return { refused, pendingRow, pending, notYetOpenable, unlockedOnly, archiveDir, archived, noDrops, dropTargetOf, refuseIn };
+    return { pendingRow, pending, unlockedOnly, archiveDir, archived, noDrops, dropTargetOf, refuseIn };
 };

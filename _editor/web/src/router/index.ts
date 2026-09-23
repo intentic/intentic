@@ -173,7 +173,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `chat`,
                 name: `chat`,
-                meta: { title: () => t(`router.index.chat`) },
+                meta: { title: () => t(`shared.chat`) },
                 beforeEnter: [chatEntry],
                 component: asyncView(() => import(`../features/chat/panel/ChatSection.vue`)),
             },
@@ -182,14 +182,14 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `preview`,
                 name: `preview`,
-                meta: { title: () => t(`router.index.preview`) },
+                meta: { title: () => t(`shared.preview`) },
                 beforeEnter: [desktopOnly],
                 component: asyncView(() => import(`../features/preview/PreviewArea.vue`)),
             },
             {
                 path: `agents`,
                 name: `agents`,
-                meta: { title: () => t(`router.index.agents`) },
+                meta: { title: () => t(`shared.agents`) },
                 component: asyncView(() => import(`../features/agents/fleet/Agents.vue`)),
             },
             // Drill-in for one agent: full-screen chat plus isolated diff review; an agent's conversation is its chat
@@ -197,20 +197,20 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `agents/:id`,
                 name: `agent`,
-                meta: { title: () => t(`router.index.agent`) },
+                meta: { title: () => t(`shared.agent`) },
                 component: asyncView(() => import(`../features/agents/review/AgentDetail.vue`)),
             },
             {
                 path: `menu`,
                 name: `menu`,
-                meta: { title: () => t(`router.index.menu`) },
+                meta: { title: () => t(`shared.menu`) },
                 beforeEnter: [mobileOnly],
                 component: asyncView(() => import(`../shell/MobileMenu.vue`)),
             },
             {
                 path: `terminal`,
                 name: `terminal`,
-                meta: { title: () => t(`router.index.terminal`) },
+                meta: { title: () => t(`shared.terminal`) },
                 beforeEnter: [mobileOnly],
                 component: asyncView(() => import(`../features/terminal/MobileTerminal.vue`)),
             },
@@ -220,13 +220,13 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `connect`,
                 name: `connect`,
-                meta: { title: () => t(`router.index.connect`) },
+                meta: { title: () => t(`shared.connectAModel`) },
                 component: asyncView(() => import(`../features/connect/Connect.vue`)),
             },
             {
                 path: `capabilities/:entry?`,
                 name: `capabilities`,
-                meta: { title: () => t(`router.index.capabilities`) },
+                meta: { title: () => t(`shared.capabilities`) },
                 // Title and description mirror the page's own copy, so the outline wears the real heading immediately.
                 component: asyncView(
                     () => import(`../features/capabilities/Capabilities.vue`),
@@ -240,7 +240,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `sandbox/:tab?`,
                 name: `sandbox`,
-                meta: { title: () => t(`router.index.sandbox`) },
+                meta: { title: () => t(`shared.sandbox2`) },
                 // The hub retitles itself with the active sandbox's name once mounted; the outline just says what the
                 // page is.
                 component: asyncView(() => import(`../features/sandbox/SandboxHub.vue`), hubOutline(`Sandbox`, ``, 7)),
@@ -250,7 +250,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `workspace/:path(.*)*`,
                 name: `workspace`,
-                meta: { title: () => t(`router.index.workspace`) },
+                meta: { title: () => t(`shared.workspace`) },
                 component: asyncView(() => import(`../features/workspace/page/Workspace.vue`)),
             },
             // The session is in the URL so a reload reopens the same browser; optional, since the rail tile links to
@@ -258,7 +258,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `browsers/:session?`,
                 name: `browsers`,
-                meta: { title: () => t(`router.index.browsers`) },
+                meta: { title: () => t(`shared.browsers`) },
                 component: asyncView(() => import(`../features/browsers/Browsers.vue`)),
             },
             // The id is in the URL so a reload or a chat card's link reopens the same agent; the bare path shows
@@ -266,14 +266,14 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `subagents/:id?`,
                 name: `subagents`,
-                meta: { title: () => t(`router.index.subagents`) },
+                meta: { title: () => t(`shared.subagents`) },
                 component: asyncView(() => import(`../features/chat/subagents/Subagents.vue`)),
             },
             { path: `ext/:ext/:key?`, name: `extension`, component: asyncView(() => import(`../features/extensions/ExtensionHost.vue`)) },
             {
                 path: `settings/:tab?`,
                 name: `settings`,
-                meta: { title: () => t(`router.index.settings`) },
+                meta: { title: () => t(`shared.settings`) },
                 // Mirrors the page's own heading (pages/SettingsHub.vue).
                 component: asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(`Settings`, ``, 5)),
             },

@@ -70,17 +70,13 @@
         "stopsStartsDevicesAgent": "Zatrzymuje i uruchamia pętlę agenta na tym urządzeniu. Nic nie jest pobierane — podnosi się build, który już tam jest zainstalowany."
     },
     "deviceAgentGroup": {
-        "agent": "Agent",
-        "agent2": "Agent {version}",
         "agentOnThisDevice": "Agent na tym urządzeniu"
     },
     "deviceDetail": {
         "backup": "kopia zapasowa: {folder}",
         "copyPath": "Kopiuj ścieżkę",
         "deviceIsntSyncingFolder": "To urządzenie nie synchronizuje żadnego folderu ani nie trzyma portów dla tego sandboxa.",
-        "folder": "Folder",
         "image": "Obraz",
-        "localhost": "localhost:",
         "more": "… i {more} więcej",
         "noFolderDeviceOnly": "brak folderu: to urządzenie odbija tylko porty",
         "noFolderSynced": "brak synchronizowanego folderu",
@@ -166,8 +162,6 @@
         "default": "domyślnie",
         "defaultIs": "domyślnie: {value}",
         "fullAccessToComputers": "Pełny dostęp do urządzeń i jądra tego komputera, tak jak potrzebuje go zagnieżdżony silnik Dockera. Tylko dla narzędzia, które bez tego nie zadziała.",
-        "gib": "GiB",
-        "gpu": "GPU",
         "memory": "Pamięć",
         "memoryCapInGib": "Limit pamięci w GiB",
         "memoryWhole": "Całe GiB, co najmniej {min}. Puste to wartość domyślna: wszystko, co ten komputer ma ponad to, co zostawia sobie.",
@@ -189,7 +183,6 @@
         "moreActions": "Więcej akcji"
     },
     "searchBar": {
-        "aa": "Aa",
         "clearEsc": "Wyczyść (Esc)",
         "clearFilter": "Wyczyść filtr",
         "filter": "Filtruj…",
@@ -200,9 +193,5 @@
     },
     "timeWindow": {
         "all": "Wszystko"
-    },
-    "useOsPreference": {
-        "linuxMacos": "Linux / macOS",
-        "windowsPowershell": "Windows (PowerShell)"
     }
 }

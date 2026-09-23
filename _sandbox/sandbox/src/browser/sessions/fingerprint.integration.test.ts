@@ -1,7 +1,6 @@
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { browserFingerprint } from "./fingerprint.js";
 import { stealthInit } from "./stealth.js";
 

@@ -33,9 +33,7 @@ const { messages } = conversation.transcript;
 // nothing sent yet. A chat already under way has a model, and it is running — an Auto row there would disarm itself at
 // the next send, which is a control that lies.
 const autoOffered = computed(() => messages.value.length === 0 && box.value === undefined);
-const leadRows = computed(() =>
-    autoOffered.value ? [autoEntry(t(`chat.chatModelPicker.autoLabel`), t(`chat.chatModelPicker.autoDescription`))] : [],
-);
+const leadRows = computed(() => (autoOffered.value ? [autoEntry(t(`shared.autoLabel`), t(`chat.chatModelPicker.autoDescription`))] : []));
 const leadSelected = computed(() => (auto.value ? AUTO_KEY : undefined));
 
 // Whether the shared block has content for this provider; needed before the footer renders its own padding.
@@ -170,10 +168,10 @@ const footerVisible = computed(() => (auto.value ? true : accountsShown.value ||
 
                 <!-- One row (label-left/control-right), the list itself behind a hover card. -->
                 <div v-if="limitations.length > 0 && !auto" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.chatModelPicker.notAvailableHere`) }}</span>
-                    <InfoHint :label="t(`chat.chatModelPicker.whatIsntAvailableHere`)" :text="`${limitations.length}`" class="shrink-0">
+                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`shared.notAvailableHere`) }}</span>
+                    <InfoHint :label="t(`shared.whatIsntAvailableHere`)" :text="`${limitations.length}`" class="shrink-0">
                         <!-- States its own heading, since the card teleports to the tooltip tier and may land clear of the row that raised it. -->
-                        <span class="block text-xs font-medium text-content">{{ t(`chat.chatModelPicker.notAvailableHere`) }}</span>
+                        <span class="block text-xs font-medium text-content">{{ t(`shared.notAvailableHere`) }}</span>
                         <ul class="mt-1 flex flex-col gap-1 text-xs">
                             <li v-for="limit in limitations" :key="limit" class="flex items-start gap-1.5">
                                 <span class="mt-[0.4rem] h-1 w-1 shrink-0 rounded-full bg-line-strong" aria-hidden="true"></span>

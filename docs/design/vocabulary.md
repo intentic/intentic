@@ -264,7 +264,7 @@ regex over 94 packages does not. Three lessons from the first four words, each o
 
 For i18n, move the key in all five catalogs at once, preserving key order, and let
 [i18n-keys.mjs](../../_tools/checks/i18n-keys.mjs) find the call sites that did not follow.
-`node _tools/checks/i18n-catalogs.mjs --fix` re-sorts afterwards.
+`node _tools/checks/i18n-catalogs.mjs` refuses a translation left behind under the old key.
 
 ## What the translated catalogs carry
 

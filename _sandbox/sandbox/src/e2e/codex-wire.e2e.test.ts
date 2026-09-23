@@ -6,7 +6,6 @@ import { startFakeModel, type ScriptedStep } from "@intentic/fake-model";
 import { hasTool, type ResponsesRequest, systemInstructions, toolOutputs, userMessages } from "@intentic/fake-model/responses";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
-import { describe, test, expect, beforeAll } from "bun:test";
 import type { AgentRequest, CodexCredential, TurnPolicy, TurnSpec, TurnTools } from "../agent/providers/agent-request.js";
 import { createCodexAgent } from "../runtimes/codex/codex-agent.js";
 import { writeCodexConfig } from "../runtimes/codex/codex-config.js";

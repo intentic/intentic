@@ -2,14 +2,12 @@
 // since jsdom lays nothing out.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { it, expect, beforeEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { AgentsListSchema } from "@intentic/sandbox-contract";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Stubs the daemon at the seam the list reaches it through, so the archive probe is asserted as a call.
-const archived = mock(async () => AgentsListSchema.parse({ agents: [], rev: 0 }));
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { archived } }) }));
+const archived = jest.fn(async () => AgentsListSchema.parse({ agents: [], rev: 0 }));
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { archived } }) }));
 
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
@@ -21,9 +19,9 @@ import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Same globals a mounted chat needs as chatTabsReveal.test.ts: matchMedia, window.env, scrollIntoView.
-hoisted(() => {
+(() => {
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-});
+})();
 
 let app: App | undefined;
 let host: HTMLElement | undefined;

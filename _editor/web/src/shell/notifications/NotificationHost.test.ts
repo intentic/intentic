@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect, afterEach, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, nextTick, ref } from "vue";
 import { hold, useNotifications } from "./notifications";

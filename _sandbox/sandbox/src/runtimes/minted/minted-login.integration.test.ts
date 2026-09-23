@@ -1,4 +1,3 @@
-import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createLogger } from "../../logger.js";
 import { memoryMintedStore } from "../../harness/route-stores.testing.js";
@@ -93,7 +92,7 @@ const metaVendor = (options: { tokenAnswers: ((call: Call) => unknown)[]; mint?:
 
 const startMeta = async (vendor: ReturnType<typeof fakeVendor>) => {
     const store = memoryMintedStore("Meta");
-    const forgotten = mock();
+    const forgotten = jest.fn();
     const started = await startMintedLogin({
         provider: "meta",
         driver: metaLoginDriver(META_HOSTS),

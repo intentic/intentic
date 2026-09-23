@@ -1,6 +1,5 @@
 // jsdom: the subject is what a reader sees, the board's line and a card's, in the English the catalog holds.
 import "@intentic/testing/dom";
-import { afterEach, describe, expect, it } from "bun:test";
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
 import { formatPercent, setFormatLocale } from "@intentic/ui/format";
 import { IconStub } from "@intentic/ui/testing";

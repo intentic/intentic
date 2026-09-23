@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import type { ListeningPort } from "../ports/port-scan.js";
 import { createPanelUpstreamResolver, panelDirOf, resolvePanelUpstream } from "./panel-upstream.js";
 

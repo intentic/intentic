@@ -86,7 +86,7 @@ watch(
             <p v-if="bodyError !== undefined" class="text-2xs text-danger">{{ bodyError }}</p>
             <p v-else-if="body === undefined" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="spinner" spin class="text-xs" />
-                {{ t(`sandbox.skillRow.reading`) }}
+                {{ t(`shared.reading`) }}
             </p>
             <template v-else>
                 <!-- The reader's own skill: the form is how they read it too. -->

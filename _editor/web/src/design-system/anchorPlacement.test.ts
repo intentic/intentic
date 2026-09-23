@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { describe, it, expect } from "bun:test";
 import { placeAnchored } from "@intentic/ui";
 
 // @intentic/ui reaches window.matchMedia at import; jsdom plus bun.setup.ts's stub cover it.

@@ -1,12 +1,9 @@
-import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
-
-const highlighter = hoisted(() => ({ ensureLang: mock() }));
-const diagnostics = hoisted(() => ({ reportClient: mock(), describeError: mock(() => ({ message: `boom`, fields: {} })) }));
-const appUpdate = hoisted(() => ({ reportIncompleteBundle: mock() }));
+const highlighter = { ensureLang: jest.fn() };
+const diagnostics = { reportClient: jest.fn(), describeError: jest.fn(() => ({ message: `boom`, fields: {} })) };
+const appUpdate = { reportIncompleteBundle: jest.fn() };
 
 // Listed by hand rather than spread over the barrel: pulling it in here would cost mermaid, shiki and vue-flow.
-mock.module("@intentic/ui", () => ({
+jest.mock("@intentic/ui", () => ({
     useHighlighter: () => highlighter,
     useTheme: () => ({ scheme: { value: `light` } }),
 }));
@@ -15,19 +12,19 @@ mock.module("@intentic/ui", () => ({
 // a document, and these cases are about grammar registration, so they run without one. Stubbed on the SUBPATHS,
 // which is how the modules under test reach them: a plain state module takes the kit's own entry point rather
 // than the barrel, so that holding a preference does not drag mermaid, shiki and vue-flow in with it.
-mock.module("@intentic/ui/text-size", () => ({ useTextSize: () => ({ scale: { value: 1 } }) }));
-mock.module("@intentic/ui/theme", () => ({ useTheme: mock() }));
+jest.mock("@intentic/ui/text-size", () => ({ useTextSize: () => ({ scale: { value: 1 } }) }));
+jest.mock("@intentic/ui/theme", () => ({ useTheme: jest.fn() }));
 // The two app-wide channels a failure reaches, stubbed because the real ones talk to the daemon and to the
 // notification host: what matters here is that a grammar that never arrived reaches both.
-mock.module("../../../app/clientDiagnostics", () => diagnostics);
-mock.module("../../../app/appUpdate", () => appUpdate);
+jest.mock("../../../app/clientDiagnostics", () => diagnostics);
+jest.mock("../../../app/appUpdate", () => appUpdate);
 
 const { useMonaco } = await import("./useMonaco");
 
 const monaco = {
     languages: {
-        getLanguages: mock(() => []),
-        register: mock(),
+        getLanguages: jest.fn(() => []),
+        register: jest.fn(),
     },
 };
 

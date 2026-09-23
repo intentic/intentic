@@ -1,6 +1,5 @@
 import { ATTACHMENTS_DIR, CONTROL_SCOPES, type ContractRoute, RAW_ROUTE_LIST, SANDBOX_ROUTES, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "bun:test";
 import type { ControlTokens } from "./control-tokens.js";
 import { controlScoped } from "./control-tokens.js";
 import { grantsOf } from "./grants.js";

@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
-import { test, expect } from "bun:test";
 import { currentLock } from "./contract-lock.js";
 
 // contract.lock.json must match the exported schemas; the git-aware half of this check lives in contract-shrink.mjs.

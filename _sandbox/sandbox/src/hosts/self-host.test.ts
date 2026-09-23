@@ -7,7 +7,6 @@ import {
     type HostSummary,
     pathReach,
 } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { machineReach } from "./self-host.js";
 
 // The predicate behind every "run it out there instead of asking" path, tested beside the daemon's reader of it

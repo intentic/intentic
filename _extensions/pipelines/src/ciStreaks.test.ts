@@ -1,5 +1,4 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { arrivesOpen, failureStreaks, openFailures, inFlightOnHead, streakTooltip, supersededBy } from "./ciStreaks";
 import { type JobFailureRun, recurringFailures } from "./failureHistory";
 

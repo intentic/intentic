@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon } from "@intentic/extension-ui";
+import { Button, Icon, useLatest } from "@intentic/extension-ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { openEpub, type EpubBook } from "./epub/book";
 import { renderChapter } from "./epub/page";
@@ -16,7 +16,7 @@ const source = ref(``);
 const loading = ref(true);
 const error = ref<string>();
 const showContents = ref(false);
-let seq = 0;
+const latest = useLatest();
 
 const chapters = computed(() => book.value?.chapters ?? []);
 const current = computed(() => chapters.value[index.value]);
@@ -33,26 +33,26 @@ const show = (next: number): void => {
 };
 
 const load = async (file: Blob): Promise<void> => {
-    const id = ++seq;
+    const isLatest = latest();
     loading.value = true;
     error.value = undefined;
     source.value = ``;
     book.value = undefined;
     try {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         book.value = openEpub(bytes);
         index.value = 0;
         show(0);
     } catch (caught) {
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         error.value = caught instanceof Error ? caught.message : `Could not open this book.`;
     } finally {
-        if (id === seq) {
+        if (isLatest()) {
             loading.value = false;
         }
     }

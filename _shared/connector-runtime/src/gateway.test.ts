@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { deliveryErrorResponse, GatewayRefusal } from "./gateway.js";
 
 test("delivery responses expose only deliberate refusals", () => {

@@ -7,7 +7,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { writeSecretFile } from "@intentic/local-agent";
 import { wslPathOf } from "@intentic/sandbox-contract";
 import { baseDir, machineConfigPath } from "../config.js";
-import { registeredDistro } from "../wsl.js";
+import { registeredDistro, WINDOWS_SIDE } from "../wsl.js";
 import { crossEnv } from "./crossing.js";
 
 // A PC is one version and one supervisor tree: its Windows side is the root, and every distro with an agent is its child.
@@ -45,6 +45,9 @@ export const updateMachineConfig = async (mutate: (config: MachineConfig) => Mac
 };
 
 export const childrenOf = (config: MachineConfig): readonly string[] => config.children ?? [];
+
+// The distros this environment keeps running; anywhere but the Windows side that is none, and the config is not read.
+export const heldDistros = async (): Promise<readonly string[]> => (WINDOWS_SIDE ? childrenOf(await readMachineConfig()) : []);
 
 export const withChild = (config: MachineConfig, distro: string): MachineConfig =>
     childrenOf(config).includes(distro) ? config : { ...config, children: [...childrenOf(config), distro].toSorted() };

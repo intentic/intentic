@@ -4,7 +4,6 @@ import { repoRoot } from "@intentic/constants/node";
 import * as sdkModule from "@intentic/extension-api";
 import { extensionApiVersion } from "@intentic/extension-api";
 import { CONTRIBUTION_POINTS, ExtensionManifestSchema, ListenerContributionSchema } from "@intentic/extension-manifest";
-import { test, expect } from "bun:test";
 
 // extensionApiVersion is an author's only signal for host compatibility; the snapshot in surface.json fails when the
 // live surface changes without a new versioned entry.

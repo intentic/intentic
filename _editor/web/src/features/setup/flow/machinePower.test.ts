@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import { MAX_WAKES, type MachinePower, type PowerEvent, stepPower, UNREAD, WAKE_THROTTLE_MS, wakeDue, wakeRefusalOf } from "./machinePower";
 
 // Pins the down clock and the wake reflex's budget as values: a down reading starts the clock and later ones keep it,

@@ -1,6 +1,5 @@
 // jsdom for a `window`/`navigator` to hang a Permissions API off; there is no storage in this module.
 import "@intentic/testing/dom";
-import { it, expect, afterEach } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
 
 // Chrome 142 shipped `local-network-access`; 145 split it into `local-network` (LAN) and `loopback-network`

@@ -9,6 +9,7 @@ import type {
     QueueEdit,
     QueueResume,
     QueueResumed,
+    ResumeReason,
     ResumeRouting,
     SessionOwner,
     StopResult,
@@ -30,6 +31,8 @@ export type TurnInput = AgentTurn & {
     // Runs the door turned away before this turn sent the same words again: recorded, never seen by the model, so no
     // history for a session seeded from the record.
     readonly unseenRuns?: readonly string[];
+    // Which re-run this turn is, set where the re-run is made; its prompt opens with the matching note for the model.
+    readonly resume?: ResumeReason | undefined;
 };
 
 // Who is speaking into a live turn; only a person proves somebody is at the composer.

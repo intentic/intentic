@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { type AgentEvent, type AgentTurn, LOOP_DIR, type Workflow, type WorkflowStep, workflowFaults } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "../loops/loops-store.js";

@@ -1,5 +1,4 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import { droppedRules, pyrightErrors, ruffFindings } from "./python-diagnostics.js";
 
 // Two parsers between this daemon and a tool it does not own: a payload neither can understand must read as unchecked,

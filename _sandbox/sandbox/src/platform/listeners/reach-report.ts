@@ -4,7 +4,7 @@ import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../../env.config.js";
 import type { BootTracker } from "../boot/boot.js";
 import type { ReachPosture } from "./ingress-tunnel.js";
-import { readCpuThrottle } from "../resources/cpu-throttle.js";
+import { type CgroupReading, readCgroup } from "../resources/cgroup.js";
 import { postToPlatform } from "../platform-post.js";
 
 // Whether anybody can actually reach this sandbox, which announce next door does not answer: a daemon can boot and
@@ -39,7 +39,7 @@ export interface ReachState {
 }
 
 export interface ReachReporter {
-/* WHETHER THERE IS ANYTHING TO WAIT FOR is the posture's to say (ingress-tunnel.ts), so it is asked for here rather than guessed at from config. */
+    /* WHETHER THERE IS ANYTHING TO WAIT FOR is the posture's to say (ingress-tunnel.ts), so it is asked for here rather than guessed at from config. */
     readonly start: (posture: ReachPosture) => void;
     readonly stop: () => void;
     readonly status: () => ReachState;
@@ -90,7 +90,12 @@ export const probeSelf = async (
 
 // `bootOf` is fetched at call time since the reporter and tracker are composed in the same literal (composition.ts); it
 // rides boot progress and CPU throttling onto the report, both optional and absent from an older daemon.
-export const createReachReporter = (config: Config, logger: Logger, bootOf: () => BootTracker | undefined = () => undefined): ReachReporter => {
+export const createReachReporter = (
+    config: Config,
+    logger: Logger,
+    bootOf: () => BootTracker | undefined = () => undefined,
+    cgroup: () => Promise<CgroupReading> = () => readCgroup(),
+): ReachReporter => {
     let timer: NodeJS.Timeout | undefined;
     let deadline = 0;
     let backoff = 3_000;
@@ -123,7 +128,7 @@ export const createReachReporter = (config: Config, logger: Logger, bootOf: () =
             return;
         }
         const boot = bootSnapshot();
-        const cpu = readCpuThrottle();
+        const cpu = (await cgroup()).cpuThrottle;
         // Sent on every report: this is the only channel that still works when the tunnel itself is broken.
         // Computed per post, not cached: a pure read of process.env, so nothing can go stale.
         const drift = containerDrift(process.env);

@@ -1,4 +1,4 @@
-import { AgentOriginSchema, AgentTurnSchema, ParkedRequestSchema } from "@intentic/sandbox-contract";
+import { AgentOriginSchema, AgentTurnSchema, ParkedRequestSchema, RESUME_NOTES, type ResumeReason } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { Services } from "../../../composition.js";
 import type { ConversationsDb } from "../../../store/conversations-db.js";
@@ -14,8 +14,11 @@ const RESUME_MAX_AGE_MS = 6 * 60 * 60_000;
 const MAX_RESUME_ATTEMPTS = 1;
 
 // Re-resolved at resume time (fresh credentials, worktree state); intersected, not extended, so a turn invalid at the
-// route can't be journalled either.
-const JournalledInputSchema = z.intersection(AgentTurnSchema, z.object({ conversationId: z.string() }));
+// route can't be journalled either. `resume` is kept so a restart keeps the kind its prompt's note already names.
+const JournalledInputSchema = z.intersection(
+    AgentTurnSchema,
+    z.object({ conversationId: z.string(), resume: z.enum(Object.keys(RESUME_NOTES) as [ResumeReason, ...ResumeReason[]]).optional() }),
+);
 
 // startedAt backs the staleness check on resume; attempts caps re-running a turn whose own output loops the daemon into
 // OOM forever.

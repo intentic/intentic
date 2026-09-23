@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, mock } from "bun:test";
 import { waitFor, stubGlobal, unstubAllGlobals, SETTLES } from "@intentic/testing/bun";
 import { LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig } from "@intentic/sandbox-contract";
 import type { CapabilityCtx } from "../capability.js";
@@ -14,7 +13,7 @@ import * as childProcessOriginal from "node:child_process";
 
 // Must define `promisify.custom`, like the real execFile does; without it promisify falls back to the bare-callback
 // convention and every `.stdout` read comes back undefined instead of throwing.
-mock.module("node:child_process", async () => {
+jest.mock("node:child_process", async () => {
     const actual = childProcessOriginal;
     const execFile = (_file: string, _args: readonly string[], done: (error: Error | null, stdout: string, stderr: string) => void): void => {
         done(null, "", "");
@@ -46,24 +45,24 @@ const landed = async (root: string): Promise<{ bytes: number; same: boolean }> =
 const whole = { bytes: WEIGHTS.byteLength, same: true };
 
 interface Panels {
-    readonly start: ReturnType<typeof mock>;
-    readonly stop: ReturnType<typeof mock>;
+    readonly start: ReturnType<typeof jest.fn>;
+    readonly stop: ReturnType<typeof jest.fn>;
 }
 
 interface Context {
     readonly ctx: CapabilityCtx;
     readonly panels: Panels;
-    readonly syncEndpoints: ReturnType<typeof mock>;
+    readonly syncEndpoints: ReturnType<typeof jest.fn>;
 }
 
 // `panelRunning` is what the serving watcher polls alongside /health; a test wanting it to keep looking must say the
 // panel is up. Defaults to dead, so unrelated tests don't leave one running.
 const context = (root: string, panelRunning = false): Context => {
-    const panels: Panels = { start: mock(async () => undefined), stop: mock(async () => undefined) };
-    const syncEndpoints = mock(async () => undefined);
+    const panels: Panels = { start: jest.fn(async () => undefined), stop: jest.fn(async () => undefined) };
+    const syncEndpoints = jest.fn(async () => undefined);
     const ctx = {
         workspace: { root },
-        logger: { warn: mock(), info: mock(), error: mock() },
+        logger: { warn: jest.fn(), info: jest.fn(), error: jest.fn() },
         panels: { ...panels, running: () => panelRunning },
         capabilities: { list: async () => [] },
         endpointModels: { forget: async () => undefined },

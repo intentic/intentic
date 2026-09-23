@@ -1,6 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { test, expect } from "bun:test";
 
 // Refuses module-level reactive state in the editor unless it is declared through the sandbox scope (sandboxRef,
 // sandboxShallowRef, sandboxValue from @intentic/extension-api, reset on every switch) or named below as app-wide.
@@ -11,8 +10,7 @@ const SRC = import.meta.dirname;
 
 // A component's plain <script> blocks: code that runs once, at module level, beside its per-instance <script setup>.
 const PLAIN_SCRIPT = /<script(?![^>]*\bsetup\b)[^>]*>([\s\S]*?)<\/script>/g;
-const isModule = (name: string): boolean =>
-    name.endsWith(`.vue`) || (name.endsWith(`.ts`) && !name.endsWith(`.test.ts`) && !name.endsWith(`.d.ts`));
+const isModule = (name: string): boolean => name.endsWith(`.vue`) || (name.endsWith(`.ts`) && !name.endsWith(`.test.ts`) && !name.endsWith(`.d.ts`));
 const moduleCodeOf = (name: string, text: string): string =>
     name.endsWith(`.vue`) ? [...text.matchAll(PLAIN_SCRIPT)].map((match) => match[1] ?? ``).join(`\n`) : text;
 
@@ -81,7 +79,10 @@ const APP_WIDE = new Map<string, string>([
     [`features/auth/useAuth.ts: user = ref(…)`, `the signed-in account, above every sandbox`],
     [`features/auth/useGoogleIdentity.ts: needsSignIn = ref(…)`, GOOGLE],
     [`features/auth/useGoogleIdentity.ts: signedInEmail = ref(…)`, GOOGLE],
-    [`features/chat/drafts/audioWave.ts: waves = shallowRef(…)`, `a decode cache keyed by uuid-scoped attachment paths, which no two sandboxes share`],
+    [
+        `features/chat/drafts/audioWave.ts: waves = shallowRef(…)`,
+        `a decode cache keyed by uuid-scoped attachment paths, which no two sandboxes share`,
+    ],
     [`features/chat/panel/chatPanelLayout.ts: chatBarPeek = ref(…)`, `a pointer asking to read the strip's turns, layout`],
     [
         `features/chat/session/limitReset.ts: answers = ref(…)`,
@@ -90,15 +91,30 @@ const APP_WIDE = new Map<string, string>([
     [`features/chat/tabs/useChat-tabs.ts: composerFocus = ref(…)`, EVENT],
     [`features/chat/tabs/useChat-tabs.ts: tabReveal = ref(…)`, EVENT],
     [`features/sandbox/client/useSandbox.ts: sandboxes = ref(…)`, `the account's sandbox list, which a switch chooses from`],
-    [`features/sandbox/client/useSandbox.ts: connection = ref(…)`, `the connection machine, which crosses a switch through its own \`switched\` signal`],
+    [
+        `features/sandbox/client/useSandbox.ts: connection = ref(…)`,
+        `the connection machine, which crosses a switch through its own \`switched\` signal`,
+    ],
     [`features/sandbox/client/useSandbox.ts: wakeRefused = ref(…)`, `a refused wake, stamped with the sandbox it names`],
-    [`features/sandbox/devices/loopback/localShortcut.ts: allowed = ref(…)`, `this browser's yes to local-network access, kept per browser like the permission`],
+    [
+        `features/sandbox/devices/loopback/localShortcut.ts: allowed = ref(…)`,
+        `this browser's yes to local-network access, kept per browser like the permission`,
+    ],
     [`features/sandbox/devices/loopback/localShortcut.ts: declined = ref(…)`, `the sandboxes that said no, keyed by sandbox id`],
     [`features/sandbox/devices/loopback/localShortcut.ts: asking = ref(…)`, `the one open local-network question, naming its sandbox`],
-    [`features/sandbox/live/sandboxRestart.ts: carried = shallowRef(…)`, `the restart ledger, each record naming its sandbox; it outlives the page on purpose`],
-    [`features/sandbox/live/sandboxRestart.ts: claims = shallowRef(…)`, `the restart ledger, each record naming its sandbox; it outlives the page on purpose`],
+    [
+        `features/sandbox/live/sandboxRestart.ts: carried = shallowRef(…)`,
+        `the restart ledger, each record naming its sandbox; it outlives the page on purpose`,
+    ],
+    [
+        `features/sandbox/live/sandboxRestart.ts: claims = shallowRef(…)`,
+        `the restart ledger, each record naming its sandbox; it outlives the page on purpose`,
+    ],
     [`features/sandbox/overview/activeSandbox.ts: activeSandboxId = ref(…)`, `the scope's own key: what a switch changes`],
-    [`features/sandbox/overview/contractFreshness.ts: uncompiled = ref(…)`, `the dev server's compiled contract against source, a fact about this build`],
+    [
+        `features/sandbox/overview/contractFreshness.ts: uncompiled = ref(…)`,
+        `the dev server's compiled contract against source, a fact about this build`,
+    ],
     [`features/sandbox/secrets/useEndpoint.ts: endpoints = ref(…)`, `the resolved endpoint per sandbox id, one entry per sandbox`],
     [`features/sandbox/session/sandboxSession.ts: sessions = ref(…)`, `daemon sessions keyed by sandbox id`],
     [`features/sandbox/session/signInPrompt.ts: prompt = shallowRef(…)`, `the one sign-in question, naming the daemon it is for`],
@@ -115,7 +131,10 @@ const APP_WIDE = new Map<string, string>([
     [`shell/commands/useCommands.ts: commands = shallowRef(…)`, REGISTRATION],
     [`shell/commands/useQuickOpen.ts: isOpen = ref(…)`, `whether the palette is open`],
     [`shell/commands/useQuickOpen.ts: mode = ref(…)`, `which chord opened the palette`],
-    [`shell/hub/hubWork.ts: runs = shallowRef(…)`, `work in flight behind a hub row, each run stamped with the sandbox it began on and retired by its own end`],
+    [
+        `shell/hub/hubWork.ts: runs = shallowRef(…)`,
+        `work in flight behind a hub row, each run stamped with the sandbox it began on and retired by its own end`,
+    ],
     [`shell/notifications/notifications.ts: sources = shallowReactive(…)`, `the app's one notification lane`],
     [`shell/notifications/notifications.ts: receipt = ref(…)`, `the app's one notification lane`],
     [`shell/rail/railPins.ts: writes = shallowRef(…)`, `a counter invalidating reads of the stored pins`],

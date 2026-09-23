@@ -1,5 +1,3 @@
-import { test, expect } from "bun:test";
-
 import { IMAGES } from "./images.js";
 
 // Every THIRD-PARTY pin must be fully immutable: a registry/repo, an explicit tag (never `latest`), AND a sha256

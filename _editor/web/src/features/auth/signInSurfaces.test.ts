@@ -2,7 +2,6 @@
 // desktop webview), where Google's button renders and accepts clicks but does nothing. The rule lives in
 // useGoogleIdentity; add a new surface to `SURFACES` below to hold it to the same rule.
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
@@ -10,20 +9,20 @@ import * as actualDesktop from "../../app/environments/desktop";
 
 // Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
-mock.module(`vue-router`, () => ({
+jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRoute: () => ({ query: { state: `nonce`, challenge: `chal` }, params: {} }) as never,
-    useRouter: () => ({ push: mock(), replace: mock() }) as never,
+    useRouter: () => ({ push: jest.fn(), replace: jest.fn() }) as never,
 }));
 
 // renderButton mimics the real mechanism (false in the desktop window, true elsewhere), since what's under test is
 // each surface's response to that. The mechanism's own half is asserted in useGoogleIdentity.desktop.test.ts.
-const desktopVersion = mock<() => string | undefined>();
+const desktopVersion = jest.fn<() => string | undefined>();
 // Takes the options the real one does: a surface asking for Google's chooser says so here (environments/desktop.ts).
-const signInThroughBrowser = mock<(options?: { pickAccount?: boolean }) => void>();
+const signInThroughBrowser = jest.fn<(options?: { pickAccount?: boolean }) => void>();
 // Partial, over the real module: a surface reaches for whatever the desktop lane grows next, and a mock listing its
 // exports by hand fails the link the day one is added.
-mock.module(`../../app/environments/desktop`, () => ({
+jest.mock(`../../app/environments/desktop`, () => ({
     ...actualDesktop,
     DESKTOP_SIGN_IN_LINK: `intentic://signin`,
     DESKTOP_DOWNLOADS: {},
@@ -31,26 +30,26 @@ mock.module(`../../app/environments/desktop`, () => ({
     // Which build this machine could install; irrelevant here, so it always answers none.
     desktopInstaller: () => undefined,
     desktopSetupLink: () => ``,
-    openDesktopLink: mock(),
+    openDesktopLink: jest.fn(),
     signInThroughBrowser: (options?: { pickAccount?: boolean }) => signInThroughBrowser(options),
 }));
 
-const renderButton = mock<() => Promise<boolean>>();
+const renderButton = jest.fn<() => Promise<boolean>>();
 const needsSignIn = ref(true);
-mock.module(`./useGoogleIdentity`, () => ({
+jest.mock(`./useGoogleIdentity`, () => ({
     useGoogleIdentity: () => ({
         needsSignIn,
         renderButton,
-        cancelSignIn: mock(),
-        getIdToken: mock(() => new Promise<never>(() => {})),
-        adoptIdToken: mock(),
+        cancelSignIn: jest.fn(),
+        getIdToken: jest.fn(() => new Promise<never>(() => {})),
+        adoptIdToken: jest.fn(),
     }),
 }));
-mock.module(`./useAuth`, () => ({
-    useAuth: () => ({ user: ref({ email: `owner@example.com` }), signInWithGoogle: mock(), signInWithGoogleCredential: mock() }),
+jest.mock(`./useAuth`, () => ({
+    useAuth: () => ({ user: ref({ email: `owner@example.com` }), signInWithGoogle: jest.fn(), signInWithGoogleCredential: jest.fn() }),
 }));
-mock.module(`../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: ref(undefined) }) }));
-mock.module(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff: mock() } } }));
+jest.mock(`../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: ref(undefined) }) }));
+jest.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff: jest.fn() } } }));
 
 const { default: Login } = await import("./Login.vue");
 const { default: DesktopAuth } = await import("./DesktopAuth.vue");

@@ -42,16 +42,12 @@
         "accentColour": "Couleur d'accent",
         "azure": "Azur",
         "brass": "Laiton",
-        "cobalt": "Cobalt",
         "ember": "Braise",
         "emerald": "Émeraude",
         "fern": "Fougère",
-        "graphite": "Graphite",
-        "iris": "Iris",
         "lagoon": "Lagune",
         "moss": "Mousse",
         "orchid": "Orchidée",
-        "rose": "Rose",
         "vermilion": "Vermillon"
     },
     "confirmDialog": {
@@ -64,14 +60,11 @@
         "agentAliveStoppedMaking": "Son agent est en vie mais ne fait plus de tours, donc l'image que ce sandbox a de ses dossiers et de ses ports date du dernier tour.",
         "commands": "Commandes",
         "folders": "Dossiers",
-        "ports": "Ports",
         "processKeepsBuildStarted": "Une boucle garde la version avec laquelle elle a démarré jusqu'à son redémarrage : remplacer le fichier sur le disque ne change donc rien à soi seul.",
         "restartAgent": "Redémarrer l'agent",
         "stopsStartsDevicesAgent": "Arrête et relance la boucle de l'agent de cet appareil. Rien n'est téléchargé : c'est la version déjà installée là-bas qui remonte."
     },
     "deviceAgentGroup": {
-        "agent": "Agent",
-        "agent2": "Agent {version}",
         "agentOnThisDevice": "Agent sur cet appareil"
     },
     "deviceDetail": {
@@ -79,14 +72,12 @@
         "copyPath": "Copier le chemin",
         "deviceIsntSyncingFolder": "Cet appareil ne synchronise aucun dossier et ne retient aucun port pour ce sandbox.",
         "folder": "Dossier",
-        "image": "Image",
         "localhost": "localhost :",
         "more": "… et {more} de plus",
         "noFolderDeviceOnly": "aucun dossier : cet appareil ne reflète que les ports",
         "noFolderSynced": "aucun dossier synchronisé",
         "notRunningHere": "ne tourne pas ici",
         "offDeviceIsntPutting": "Désactivé : cet appareil ne place pas les ports de ce sandbox sur son propre localhost. La synchronisation des fichiers n'est pas affectée.",
-        "ports": "Ports",
         "share": "Part",
         "show": "l'afficher",
         "stopped": "arrêté",
@@ -117,12 +108,6 @@
     "layoutRepoRail": {
         "allRepositories": "Tous les dépôts"
     },
-    "markdownDocument": {
-        "document": "Document"
-    },
-    "markdownDocumentSurface": {
-        "document": "Document"
-    },
     "navRail": {
         "filter": "Filtrer…"
     },
@@ -133,7 +118,6 @@
         "keep": "La garder",
         "loading": "Chargement…",
         "note": "{verb} cette note",
-        "note2": "Note",
         "unsaved": "non enregistrée",
         "writeNote": "Écrivez la note."
     },
@@ -141,8 +125,7 @@
         "select": "Sélectionner…"
     },
     "pickerPanel": {
-        "noMatches": "Aucune correspondance.",
-        "options": "{count} options"
+        "noMatches": "Aucune correspondance."
     },
     "projectChip": {
         "hidden": "· {hidden} masqués"
@@ -167,7 +150,6 @@
         "defaultIs": "par défaut : {value}",
         "fullAccessToComputers": "Accès complet aux périphériques et au noyau de cet ordinateur, comme l'exige un moteur Docker imbriqué. Réservé à un outil qui ne peut pas s'en passer.",
         "gib": "Gio",
-        "gpu": "GPU",
         "memory": "Mémoire",
         "memoryCapInGib": "Plafond mémoire en Gio",
         "memoryWhole": "Gio entiers, au moins {min}. Vide est la valeur par défaut : tout ce que cet ordinateur a au-delà de ce qu'il garde pour lui.",
@@ -189,7 +171,6 @@
         "moreActions": "Autres actions"
     },
     "searchBar": {
-        "aa": "Aa",
         "clearEsc": "Vider (Échap)",
         "clearFilter": "Vider le filtre",
         "filter": "Filtrer…",
@@ -200,9 +181,5 @@
     },
     "timeWindow": {
         "all": "Tout"
-    },
-    "useOsPreference": {
-        "linuxMacos": "Linux / macOS",
-        "windowsPowershell": "Windows (PowerShell)"
     }
 }

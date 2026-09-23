@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RelayChannel, WebPushChannel } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { test, expect, afterEach, spyOn, jest } from "bun:test";
 import { mocked } from "@intentic/testing/bun";
 import webpush, { WebPushError } from "web-push";
 import { createPushSender } from "./push.js";
@@ -116,8 +115,8 @@ const silentLogger = { debug: () => undefined, warn: () => undefined } as unknow
 
 // Stubs every send, refusing the endpoints named in `refusals` with the given status.
 const stubSends = (refusals: Record<string, number>): void => {
-    spyOn(webpush, "setVapidDetails").mockImplementation(() => undefined);
-    spyOn(webpush, "sendNotification").mockImplementation(async (target) => {
+    jest.spyOn(webpush, "setVapidDetails").mockImplementation(() => undefined);
+    jest.spyOn(webpush, "sendNotification").mockImplementation(async (target) => {
         const status = refusals[target.endpoint];
         if (status !== undefined) {
             throw new WebPushError("refused", status, {}, "", target.endpoint);
@@ -172,8 +171,8 @@ test("one dead endpoint does not stop the others being notified", async () => {
 });
 
 // Stubs the relay's answer for every deviceId; the daemon only ever sees an HTTP status.
-const stubRelay = (statuses: Record<string, number>): ReturnType<typeof spyOn> =>
-    spyOn(globalThis, "fetch").mockImplementation((async (_url: URL | RequestInfo, init?: RequestInit) => {
+const stubRelay = (statuses: Record<string, number>): ReturnType<typeof jest.spyOn> =>
+    jest.spyOn(globalThis, "fetch").mockImplementation((async (_url: URL | RequestInfo, init?: RequestInit) => {
         const { deviceId } = JSON.parse(String(init?.body)) as { deviceId: string };
         return new Response("{}", { status: statuses[deviceId] ?? 200 });
     }) as unknown as typeof fetch);
@@ -219,7 +218,7 @@ test("a relay that cannot be reached at all is a transient, not a prune", async 
     const path = await storePath();
     const store = filePushStore(path);
     await store.add(relayChannel("unreachable"));
-    spyOn(globalThis, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED"));
+    jest.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED"));
 
     // Unlike a 410, an unreachable relay says nothing about the device, so the row survives.
     await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 0, failed: 1 });

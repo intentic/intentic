@@ -13,16 +13,12 @@
     },
     "episodeRow": {
         "failed": "échoué",
-        "openTranscript": "Ouvrir la transcription",
-        "session": "session {sessionId}",
-        "source": "source {sourceKey}"
+        "openTranscript": "Ouvrir la transcription"
     },
     "filter": "Filtrer par texte, canal, session…",
-    "source": "Source",
     "sourceFilter": {
         "allSources": "Toutes les sources",
-        "connections": "Connexions",
-        "direct": "Direct"
+        "connections": "Connexions"
     },
     "sourceLabel": "Source de l'activité",
     "title": "Activité"

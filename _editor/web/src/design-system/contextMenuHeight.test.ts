@@ -2,7 +2,6 @@ import "@intentic/testing/dom";
 import { ContextMenu } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import PrimeVue from "primevue/config";
-import { it, expect, afterEach } from "bun:test";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

@@ -1,4 +1,3 @@
-import { test, expect, mock, jest } from "bun:test";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createPeerHub, type PeerClient } from "./peer-hub.js";
 
@@ -11,10 +10,10 @@ interface Scopes {
     readonly shell: "on" | "off";
 }
 interface Client extends PeerClient<Facts, Scopes> {
-    describe: ReturnType<typeof mock<(input?: undefined, options?: { signal?: AbortSignal }) => Promise<Facts>>>;
-    setScopes: ReturnType<typeof mock<(scopes: Scopes) => Promise<{ ok: true }>>>;
-    ping: ReturnType<typeof mock<() => Promise<{ ok: true }>>>;
-    mcp: ReturnType<typeof mock<(payload: unknown) => Promise<unknown>>>;
+    describe: ReturnType<typeof jest.fn<(input?: undefined, options?: { signal?: AbortSignal }) => Promise<Facts>>>;
+    setScopes: ReturnType<typeof jest.fn<(scopes: Scopes) => Promise<{ ok: true }>>>;
+    ping: ReturnType<typeof jest.fn<() => Promise<{ ok: true }>>>;
+    mcp: ReturnType<typeof jest.fn<(payload: unknown) => Promise<unknown>>>;
 }
 
 const facts: Facts = { os: "Ubuntu 24.04" };
@@ -25,10 +24,10 @@ const hub = () => createPeerHub<Client, { version: string }, Facts, Scopes>(spec
 const fakePeer = () => {
     const closed: string[] = [];
     const client: Client = {
-        describe: mock(async () => facts),
-        setScopes: mock(async () => ({ ok: true }) as const),
-        ping: mock(async () => ({ ok: true }) as const),
-        mcp: mock(async (payload: unknown) => ({ echoed: payload })),
+        describe: jest.fn(async () => facts),
+        setScopes: jest.fn(async () => ({ ok: true }) as const),
+        ping: jest.fn(async () => ({ ok: true }) as const),
+        mcp: jest.fn(async (payload: unknown) => ({ echoed: payload })),
     };
     return {
         client,

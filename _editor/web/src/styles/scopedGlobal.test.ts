@@ -1,6 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, it, expect } from "bun:test";
 
 // `:global(…)` in a scoped block does NOT mean "this part is global". Vue's scoped compiler replaces the WHOLE
 // selector with whatever `:global()` wraps and drops the rest, so `:global([data-frameless]) .door { … }` ships as

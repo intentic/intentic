@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sleep } from "@intentic/base/async";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { afterAll, expect, test } from "bun:test";
 import { runCommand } from "./shell.js";
 
 // Real processes through the login shell, on POSIX, where a command's process group is what a timeout stops. Every

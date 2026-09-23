@@ -1,6 +1,5 @@
 import { call, ORPCError } from "@orpc/server";
 import { createHash } from "node:crypto";
-import { describe, it, expect, mock } from "bun:test";
 import type { OrpcContext } from "../context.js";
 import { desktopRoutes } from "./desktop.routes.js";
 
@@ -9,15 +8,15 @@ import { desktopRoutes } from "./desktop.routes.js";
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
 
-const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof mock>>>) => overrides as unknown as OrpcContext[`prisma`];
+const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof jest.fn>>>) => overrides as unknown as OrpcContext[`prisma`];
 
 const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
     ({
         prisma: fakePrisma({}),
         config: { secrets: { key: `` } },
         user,
-        logger: { info: mock(), warn: mock(), error: mock() },
-        auth: { api: { generateOneTimeToken: mock().mockResolvedValue({ token: `ott-1` }) } },
+        logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+        auth: { api: { generateOneTimeToken: jest.fn().mockResolvedValue({ token: `ott-1` }) } },
         headers: new Headers(),
         ...overrides,
     }) as OrpcContext;
@@ -28,8 +27,8 @@ const row = (expiresAt: Date) => ({ id: `h1`, ott: `ott-1`, idToken: `google-jwt
 
 describe(`desktop handoff`, () => {
     it(`mints a one-time token for the caller's own session`, async () => {
-        const create = mock().mockResolvedValue({ id: `h1` });
-        const generateOneTimeToken = mock().mockResolvedValue({ token: `ott-1` });
+        const create = jest.fn().mockResolvedValue({ id: `h1` });
+        const generateOneTimeToken = jest.fn().mockResolvedValue({ token: `ott-1` });
         const headers = new Headers({ cookie: `session=abc` });
         const ctx = context({
             prisma: fakePrisma({ desktopHandoff: { create } }),
@@ -50,10 +49,10 @@ describe(`desktop handoff`, () => {
     });
 
     it(`returns both credentials and deletes the row in the same call`, async () => {
-        const remove = mock().mockResolvedValue({ count: 1 });
+        const remove = jest.fn().mockResolvedValue({ count: 1 });
         const ctx = context({
             prisma: fakePrisma({
-                desktopHandoff: { findUnique: mock().mockResolvedValue(row(new Date(Date.now() + 60_000))), deleteMany: remove },
+                desktopHandoff: { findUnique: jest.fn().mockResolvedValue(row(new Date(Date.now() + 60_000))), deleteMany: remove },
             }),
             user: null, // sessionless on purpose; the webview has no session yet, which is what this route is for
         });
@@ -66,14 +65,14 @@ describe(`desktop handoff`, () => {
     });
 
     it(`gives an expired row the same answer as an unknown one without exposing credentials`, async () => {
-        const remove = mock().mockResolvedValue({ count: 1 });
+        const remove = jest.fn().mockResolvedValue({ count: 1 });
         const expired = context({
             prisma: fakePrisma({
-                desktopHandoff: { findUnique: mock().mockResolvedValue(row(new Date(Date.now() - 1))), deleteMany: remove },
+                desktopHandoff: { findUnique: jest.fn().mockResolvedValue(row(new Date(Date.now() - 1))), deleteMany: remove },
             }),
         });
         const unknown = context({
-            prisma: fakePrisma({ desktopHandoff: { findUnique: mock().mockResolvedValue(null), deleteMany: mock() } }),
+            prisma: fakePrisma({ desktopHandoff: { findUnique: jest.fn().mockResolvedValue(null), deleteMany: jest.fn() } }),
         });
 
         await expect(call(desktopRoutes.redeem, { handoff: `h1`, verifier }, { context: expired })).rejects.toBeInstanceOf(ORPCError);
@@ -82,7 +81,7 @@ describe(`desktop handoff`, () => {
     });
 
     it(`hands back the Google token already on file for this session`, async () => {
-        const getAccessToken = mock().mockResolvedValue({ accessToken: `at`, idToken: `google-jwt`, scopes: [] });
+        const getAccessToken = jest.fn().mockResolvedValue({ accessToken: `at`, idToken: `google-jwt`, scopes: [] });
         const headers = new Headers({ cookie: `session=abc` });
         const ctx = context({ auth: { api: { getAccessToken } } as unknown as OrpcContext[`auth`], headers });
 
@@ -92,7 +91,7 @@ describe(`desktop handoff`, () => {
 
     it(`says it holds nothing rather than failing when Google returns no id token`, async () => {
         const ctx = context({
-            auth: { api: { getAccessToken: mock().mockResolvedValue({ accessToken: `at`, scopes: [] }) } } as unknown as OrpcContext[`auth`],
+            auth: { api: { getAccessToken: jest.fn().mockResolvedValue({ accessToken: `at`, scopes: [] }) } } as unknown as OrpcContext[`auth`],
         });
 
         await expect(call(desktopRoutes.googleIdToken, {}, { context: ctx })).resolves.toEqual({ idToken: undefined });
@@ -101,7 +100,7 @@ describe(`desktop handoff`, () => {
     it(`says it holds nothing rather than failing when the refresh is refused`, async () => {
         const ctx = context({
             auth: {
-                api: { getAccessToken: mock().mockRejectedValue(new Error(`no refresh token`)) },
+                api: { getAccessToken: jest.fn().mockRejectedValue(new Error(`no refresh token`)) },
             } as unknown as OrpcContext[`auth`],
         });
 
@@ -113,10 +112,10 @@ describe(`desktop handoff`, () => {
     });
 
     it(`a wrong verifier neither returns credentials nor consumes the app's attempt`, async () => {
-        const remove = mock().mockResolvedValue({ count: 1 });
+        const remove = jest.fn().mockResolvedValue({ count: 1 });
         const ctx = context({
             prisma: fakePrisma({
-                desktopHandoff: { findUnique: mock().mockResolvedValue(row(new Date(Date.now() + 60_000))), deleteMany: remove },
+                desktopHandoff: { findUnique: jest.fn().mockResolvedValue(row(new Date(Date.now() + 60_000))), deleteMany: remove },
             }),
             user: null,
         });

@@ -1,7 +1,6 @@
 import "@intentic/testing/dom";
 import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
-import { advanceTimersByTimeAsync, hoisted } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { SandboxHttpError } from "../client/sandboxHttpError";
 
 // A rebuild runs on another machine, detached, and ends by replacing the container this page is talking to. What is
@@ -9,8 +8,8 @@ import { SandboxHttpError } from "../client/sandboxHttpError";
 // and a reload afterwards — because none of those are the build stopping. A refusal is the real SandboxHttpError: an
 // answer FROM the daemon, carrying the status the composable branches on.
 
-const runDeviceCommand = hoisted(() => mock());
-mock.module(`../devices/useDevices`, () => ({ runDeviceCommand }));
+const runDeviceCommand = jest.fn();
+jest.mock(`../devices/useDevices`, () => ({ runDeviceCommand }));
 
 const { rebuildRunning, useDevRebuild } = await import("./useDevRebuild");
 

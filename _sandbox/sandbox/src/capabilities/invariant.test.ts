@@ -1,5 +1,4 @@
 import { type Capability, VAULTED } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 import { checks } from "./invariant.js";
 

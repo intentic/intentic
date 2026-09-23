@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { childPids, daemonCgroupOf, strays } from "./workload-priority.js";
 
 test("childPids accepts procfs whitespace and rejects anything that is not a positive integer pid", () => {

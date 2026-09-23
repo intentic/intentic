@@ -1,5 +1,4 @@
 import { installFakeFly } from "@intentic/testing/fly-fake";
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../config.js";
 import { RECOVERY_WINDOW_MS } from "../durations.js";
@@ -40,42 +39,47 @@ const trashRow = {
     flyImage: `registry/overlay:1`,
     baseImage: `registry/base:1`,
     environmentHash: `abc123`,
+    tier: `free`,
+    cpuKind: `shared`,
+    cpus: 2,
+    memoryMb: 4096,
+    volumeGb: 10,
     deletedAt: new Date(),
     purgeAfter: new Date(Date.now() + RECOVERY_WINDOW_MS),
 };
 
-const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof mock>>>) => {
+const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof jest.fn>>>) => {
     // The slot write asserts the row still carries the token it was handed, so the fake answers with the digest the
     // mint just wrote rather than a transcribed one.
     let mintedDigest = ``;
-    const created = overrides[`sandbox`]?.[`create`] ?? mock().mockResolvedValue({ id: `s2`, name: `dev`, image: null, hosted: null });
+    const created = overrides[`sandbox`]?.[`create`] ?? jest.fn().mockResolvedValue({ id: `s2`, name: `dev`, image: null, hosted: null });
     const prisma = {
         ...overrides,
-        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
-        $queryRaw: mock().mockResolvedValue([]),
-        $executeRaw: mock().mockResolvedValue(0),
+        $transaction: jest.fn((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        $executeRaw: jest.fn().mockResolvedValue(0),
         sandbox: {
-            update: mock().mockResolvedValue({}),
-            findUniqueOrThrow: mock().mockResolvedValue({ ownerId: `u1` }),
+            update: jest.fn().mockResolvedValue({}),
+            findUniqueOrThrow: jest.fn().mockResolvedValue({ ownerId: `u1` }),
             ...overrides[`sandbox`],
-            create: mock(async (args: { data: { tokenDigest: string } }) => {
+            create: jest.fn(async (args: { data: { tokenDigest: string } }) => {
                 mintedDigest = args.data.tokenDigest;
                 return (created as (input: unknown) => Promise<unknown>)(args);
             }),
-            findUnique: mock(() => Promise.resolve({ tokenDigest: mintedDigest })),
+            findUnique: jest.fn(() => Promise.resolve({ tokenDigest: mintedDigest })),
         },
-        user: { findUniqueOrThrow: mock().mockResolvedValue({ email: `owner@example.com` }), ...overrides[`user`] },
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ email: `owner@example.com` }), ...overrides[`user`] },
         hostedMachine: {
-            create: mock().mockResolvedValue({ region: `iad`, warm: false }),
-            count: mock().mockResolvedValue(0),
+            create: jest.fn().mockResolvedValue({ region: `iad`, warm: false }),
+            count: jest.fn().mockResolvedValue(0),
             ...overrides[`hostedMachine`],
         },
-        hostedPlan: { findUnique: mock().mockResolvedValue(null), ...overrides[`hostedPlan`] },
-        hostedCleanup: { upsert: mock().mockResolvedValue({}), deleteMany: mock().mockResolvedValue({ count: 0 }), ...overrides[`hostedCleanup`] },
+        hostedPlan: { findUnique: jest.fn().mockResolvedValue(null), ...overrides[`hostedPlan`] },
+        hostedCleanup: { upsert: jest.fn().mockResolvedValue({}), deleteMany: jest.fn().mockResolvedValue({ count: 0 }), ...overrides[`hostedCleanup`] },
         sandboxTrash: {
-            findUnique: mock().mockResolvedValue(trashRow),
-            findMany: mock().mockResolvedValue([]),
-            delete: mock().mockResolvedValue({}),
+            findUnique: jest.fn().mockResolvedValue(trashRow),
+            findMany: jest.fn().mockResolvedValue([]),
+            delete: jest.fn().mockResolvedValue({}),
             ...overrides[`sandboxTrash`],
         },
     };
@@ -100,7 +104,7 @@ const stubFly = () => {
 
 describe(`listTrash`, () => {
     it(`offers only rows whose window is still open: an expired one promises a recovery nothing can perform`, async () => {
-        const findMany = mock().mockResolvedValue([trashRow]);
+        const findMany = jest.fn().mockResolvedValue([trashRow]);
         const prisma = fakePrisma({ sandboxTrash: { findMany } });
         const rows = await listTrash(prisma, `u1`);
         expect(rows).toEqual([{ id: `t1`, name: `dev`, image: null, deletedAt: trashRow.deletedAt, purgeAfter: trashRow.purgeAfter, hosted: true }]);
@@ -111,7 +115,7 @@ describe(`listTrash`, () => {
 
     it(`reads a sandbox that ran on the owner's own computer as carrying no machine to restore`, async () => {
         const ownMachine = { ...trashRow, appName: null, machineId: null, volumeId: null, region: null };
-        const prisma = fakePrisma({ sandboxTrash: { findMany: mock().mockResolvedValue([ownMachine]) } });
+        const prisma = fakePrisma({ sandboxTrash: { findMany: jest.fn().mockResolvedValue([ownMachine]) } });
         expect((await listTrash(prisma, `u1`))[0]?.hosted).toBe(false);
     });
 });
@@ -119,20 +123,20 @@ describe(`listTrash`, () => {
 describe(`restoreSandbox`, () => {
     it(`refuses a row past its window rather than restoring onto a disk that may already be gone`, async () => {
         const expired = { ...trashRow, purgeAfter: new Date(Date.now() - 1000) };
-        const prisma = fakePrisma({ sandboxTrash: { findUnique: mock().mockResolvedValue(expired) } });
+        const prisma = fakePrisma({ sandboxTrash: { findUnique: jest.fn().mockResolvedValue(expired) } });
         await expect(restoreSandbox(prisma, config(), `u1`, `t1`)).rejects.toBeInstanceOf(TrashedSandboxGone);
     });
 
     it(`refuses another account's row: a trash id is not a capability`, async () => {
-        const prisma = fakePrisma({ sandboxTrash: { findUnique: mock().mockResolvedValue({ ...trashRow, ownerId: `u2` }) } });
+        const prisma = fakePrisma({ sandboxTrash: { findUnique: jest.fn().mockResolvedValue({ ...trashRow, ownerId: `u2` }) } });
         await expect(restoreSandbox(prisma, config(), `u1`, `t1`)).rejects.toBeInstanceOf(TrashedSandboxGone);
     });
 
     it(`reattaches the preserved machine and pushes the new identity onto it without starting it`, async () => {
         const fly = stubFly();
-        const create = mock().mockResolvedValue({ region: `iad`, warm: false });
-        const drop = mock().mockResolvedValue({});
-        const prisma = fakePrisma({ hostedMachine: { create, count: mock().mockResolvedValue(0) }, sandboxTrash: { delete: drop } });
+        const create = jest.fn().mockResolvedValue({ region: `iad`, warm: false });
+        const drop = jest.fn().mockResolvedValue({});
+        const prisma = fakePrisma({ hostedMachine: { create, count: jest.fn().mockResolvedValue(0) }, sandboxTrash: { delete: drop } });
         await restoreSandbox(prisma, config(), `u1`, `t1`);
 
         // The same app, machine and volume: a restore that provisioned new ones would come back on an empty disk.
@@ -149,9 +153,9 @@ describe(`restoreSandbox`, () => {
 
     it(`mints a fresh identity: the deleted sandbox's connect token died with its row`, async () => {
         stubFly();
-        const create = mock().mockResolvedValue({ id: `s2`, name: `dev`, image: null, hosted: null });
+        const create = jest.fn().mockResolvedValue({ id: `s2`, name: `dev`, image: null, hosted: null });
         const prisma = fakePrisma({
-            sandbox: { create, update: mock().mockResolvedValue({}), findUniqueOrThrow: mock().mockResolvedValue({ ownerId: `u1` }) },
+            sandbox: { create, update: jest.fn().mockResolvedValue({}), findUniqueOrThrow: jest.fn().mockResolvedValue({ ownerId: `u1` }) },
         });
         await restoreSandbox(prisma, config(), `u1`, `t1`);
         const [[minted]] = create.mock.calls as [[{ data: { name: string; ownerId: string; tokenDigest: string; tunnelId: string } }]];
@@ -162,8 +166,8 @@ describe(`restoreSandbox`, () => {
     it(`brings back an own-machine sandbox as a name and a setup to re-run, touching no provider`, async () => {
         const fly = stubFly();
         const ownMachine = { ...trashRow, appName: null, machineId: null, volumeId: null, region: null };
-        const drop = mock().mockResolvedValue({});
-        const prisma = fakePrisma({ sandboxTrash: { findUnique: mock().mockResolvedValue(ownMachine), delete: drop } });
+        const drop = jest.fn().mockResolvedValue({});
+        const prisma = fakePrisma({ sandboxTrash: { findUnique: jest.fn().mockResolvedValue(ownMachine), delete: drop } });
         await restoreSandbox(prisma, config(), `u1`, `t1`);
         expect(fly.calls).toHaveLength(0);
         expect(drop).toHaveBeenCalledTimes(1);
@@ -173,9 +177,9 @@ describe(`restoreSandbox`, () => {
 
 describe(`sweepSandboxTrash`, () => {
     it(`hands an expired row's app to the teardown queue and drops the row`, async () => {
-        const upsert = mock().mockResolvedValue({});
-        const drop = mock().mockResolvedValue({});
-        const findMany = mock().mockResolvedValue([{ id: `t1`, appName: `intentic-sbx-a` }]);
+        const upsert = jest.fn().mockResolvedValue({});
+        const drop = jest.fn().mockResolvedValue({});
+        const findMany = jest.fn().mockResolvedValue([{ id: `t1`, appName: `intentic-sbx-a` }]);
         const prisma = fakePrisma({ hostedCleanup: { upsert }, sandboxTrash: { findMany, delete: drop } });
         expect(await sweepSandboxTrash(prisma)).toEqual({ purged: 1 });
 
@@ -189,10 +193,10 @@ describe(`sweepSandboxTrash`, () => {
     });
 
     it(`queues nothing for a sandbox that held no machine`, async () => {
-        const upsert = mock().mockResolvedValue({});
+        const upsert = jest.fn().mockResolvedValue({});
         const prisma = fakePrisma({
             hostedCleanup: { upsert },
-            sandboxTrash: { findMany: mock().mockResolvedValue([{ id: `t1`, appName: null }]), delete: mock().mockResolvedValue({}) },
+            sandboxTrash: { findMany: jest.fn().mockResolvedValue([{ id: `t1`, appName: null }]), delete: jest.fn().mockResolvedValue({}) },
         });
         expect(await sweepSandboxTrash(prisma)).toEqual({ purged: 1 });
         expect(upsert).not.toHaveBeenCalled();

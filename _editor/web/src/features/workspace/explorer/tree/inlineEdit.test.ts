@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import { advanceEdit, type EditStep, IDLE, type InlineEdit, type InlineEditEvent } from "./inlineEdit";
 
 // Pins every move the inline field can make, as a table of state, event and step: what opens it and with which text,

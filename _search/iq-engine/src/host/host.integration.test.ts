@@ -1,6 +1,5 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";

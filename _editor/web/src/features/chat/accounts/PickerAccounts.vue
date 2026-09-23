@@ -185,8 +185,8 @@ const pickAccount = (id: string): void => {
             ref="accountsFilter"
             v-model="accountsQuery"
             variant="field"
-            :placeholder="t(`chat.pickerAccounts.filterAccounts`)"
-            :aria-label="t(`chat.pickerAccounts.filterAccounts2`)"
+            :placeholder="t(`shared.filterAccounts`)"
+            :aria-label="t(`shared.filterAccounts2`)"
             aria-controls="picker-account-list"
             @keydown.esc="escapeAccounts"
         />
@@ -198,7 +198,7 @@ const pickAccount = (id: string): void => {
             class="-mx-3 flex flex-col"
             :class="{ 'max-h-44 overflow-y-auto': accountsOpen }"
             role="group"
-            :aria-label="t(`chat.pickerAccounts.account`)"
+            :aria-label="t(`shared.account`)"
         >
             <button
                 v-for="a in accountsShown"
@@ -227,7 +227,7 @@ const pickAccount = (id: string): void => {
                     name="exclamation-triangle"
                     class="shrink-0 text-2xs text-warning"
                     :class="{ 'ml-auto': !a.headroom }"
-                    v-tooltip.top="a.detail ?? t(`chat.pickerAccounts.accountNeedsToReconnected`)"
+                    v-tooltip.top="a.detail ?? t(`shared.accountNeedsToReconnected`)"
                 />
             </button>
             <!-- Says so inside the list, where the rows would be; otherwise it reads as a list that lost its accounts. -->
@@ -246,7 +246,7 @@ const pickAccount = (id: string): void => {
             v-action="toggleAccounts"
         >
             <Icon :name="accountsOpen ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
-            <span>{{ accountsOpen ? t(`chat.pickerAccounts.showFewer`) : t(`chat.pickerAccounts.allAccounts`, { count: accountRows.length }) }}</span>
+            <span>{{ accountsOpen ? t(`shared.showFewer`) : t(`chat.pickerAccounts.allAccounts`, { count: accountRows.length }) }}</span>
             <span class="ml-auto flex min-w-0 items-center gap-2 truncate">
                 <span v-for="count in accountCapacity" :key="count.band" :class="count.tone">
                     <span class="tabular-nums">{{ count.count }}</span> {{ count.label }}
@@ -263,7 +263,7 @@ const pickAccount = (id: string): void => {
             ref="routedFilter"
             v-model="routedQuery"
             variant="field"
-            :placeholder="t(`chat.pickerAccounts.filterAccounts`)"
+            :placeholder="t(`shared.filterAccounts`)"
             :aria-label="t(`chat.pickerAccounts.filterSubscriptionAccounts`)"
             aria-controls="picker-routed-list"
             @keydown.esc="escapeRouted"
@@ -295,7 +295,7 @@ const pickAccount = (id: string): void => {
             v-action="toggleRouted"
         >
             <Icon :name="routedOpen ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
-            <span>{{ routedOpen ? t(`chat.pickerAccounts.showFewer`) : t(`chat.pickerAccounts.allAccounts`, { count: routedRows.length }) }}</span>
+            <span>{{ routedOpen ? t(`shared.showFewer`) : t(`chat.pickerAccounts.allAccounts`, { count: routedRows.length }) }}</span>
             <span class="ml-auto flex min-w-0 items-center gap-2 truncate">
                 <span v-for="count in routedCapacity" :key="count.band" :class="count.tone">
                     <span class="tabular-nums">{{ count.count }}</span> {{ count.label }}
@@ -309,7 +309,7 @@ const pickAccount = (id: string): void => {
 
     <!-- Harness axis (codex/grok): the provider's runtime, or its model through Claude Code; same subscription ids run under either. -->
     <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
-        <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.pickerAccounts.harness`) }}</span>
+        <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`shared.harness`) }}</span>
         <div class="flex items-center gap-1">
             <button
                 v-for="h in harnessOptions"

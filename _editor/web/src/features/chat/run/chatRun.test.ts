@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import type { Workflow, WorkflowRun, WorkflowStep, WorkflowStepRun } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 
 // Needs jsdom: pure arithmetic still reaches dagre through @intentic/ui's index. Real modules, not mocks, since the
 // layout itself is what's under test.

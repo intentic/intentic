@@ -4,3 +4,4 @@ export { errorMessage, noticeFrom, noticeOf, useAsyncAction, useConcurrentAction
 // type, and taking it from the barrel would pull every .vue component in behind it.
 export type { NoticeAction, NoticeModel, NoticeTone } from "../components/feedback/notice.js";
 export { useNow } from "../composables/useNow.js";
+export { useLatest } from "../composables/useLatest.js";

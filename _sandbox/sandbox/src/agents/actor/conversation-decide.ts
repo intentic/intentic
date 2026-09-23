@@ -5,7 +5,6 @@ import {
     type AgentSummary,
     type AgentWatch,
     type ForkedFrom,
-    RESUME_NOTES,
     type ResumeRouting,
     RETRY_LADDER_TRIES,
     type SessionOwner,
@@ -14,11 +13,23 @@ import {
 } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
-import type { AuthFailure, HeldTurn, OutageFailure } from "../../agent/run/turn/turn-resume.js";
+import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
 import type { CheckRun, CheckVerdict } from "../../agent/verification/turn-checks.js";
 import { opt } from "../../opt.js";
 import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
-import { edited, hold, joined, type QueueChange, type QueuedItem, released, removed, rerouted, returned, taken, type TurnQueue } from "./conversation-queue.js";
+import {
+    edited,
+    hold,
+    joined,
+    type QueueChange,
+    type QueuedItem,
+    released,
+    removed,
+    rerouted,
+    returned,
+    taken,
+    type TurnQueue,
+} from "./conversation-queue.js";
 import {
     type ConversationState,
     freshRuntime,
@@ -103,18 +114,16 @@ export type ConversationEvent =
     | { readonly kind: "rewind-released" }
     // A rewind restored files the session no longer describes; the next turn opens a fresh thread.
     | { readonly kind: "session-cleared" }
-    // A wall stranded the settling turn: a refused credential to re-mint, an outage to wait out, or a turn held whole.
-    | { readonly kind: "auth-refused"; readonly failure: AuthFailure }
-    | { readonly kind: "outage-stranded"; readonly failure: OutageFailure }
+    // A wall stranded the settling turn, or the door turned it away: held whole for a press or the resume pass.
     | { readonly kind: "turn-held"; readonly held: HeldTurn }
     // A turn settled with nothing held: the run got somewhere, so the stop ladder starts from its first rung again.
     | { readonly kind: "turn-got-somewhere" }
-    // A new turn supersedes every pending resume; the held turn it replaces is the answer, for its ledgers.
+    // A new turn supersedes the pending resume; the held turn it replaces is the answer, for its ledgers.
     | { readonly kind: "resume-superseded" }
     // A re-mint attempt starting or ending.
     | { readonly kind: "auth-firing"; readonly firing: boolean }
-    // One stranded record the resume pass is finished with.
-    | { readonly kind: "resume-dropped"; readonly record: "auth" | "outage" | "held" }
+    // The held turn the resume pass is finished with.
+    | { readonly kind: "resume-dropped" }
     // The held turn's one dispatch, a limit's appointment or a stop-ladder rung; answers whether it may go.
     | { readonly kind: "held-fired"; readonly ladder: boolean }
     // A spent stop ladder stands down: the hold stays for a press, never fired by the pass again; the count restarts.
@@ -249,7 +258,9 @@ const queueWrites = (before: TurnQueue, after: TurnQueue): readonly Conversation
     before === after ? [] : [{ kind: "queue-written", queue: after }, { kind: "persist" }];
 
 const withQueue = <R>(state: ConversationState, queue: TurnQueue, reply: R): Decision<R> =>
-    queue === state.queue ? unchanged(state, reply) : { state: { ...state, queue }, effects: [...queueWrites(state.queue, queue), ...BROADCAST], reply };
+    queue === state.queue
+        ? unchanged(state, reply)
+        : { state: { ...state, queue }, effects: [...queueWrites(state.queue, queue), ...BROADCAST], reply };
 
 // A frame that changes only the turn's runtime, and is card-visible.
 const shown = (state: ConversationState, turn: TurnRuntime): Decision<undefined> => ({
@@ -507,21 +518,20 @@ const onCheckRan = (state: ConversationState, check: CheckRun, now: number): Dec
         undefined,
     );
 
-// False for a turn that is itself an auth resume: a fresh token refused again means the credential is dead, not a
-// rotation, so its refusal is never recorded. Asked by the failure frame too, before the settle records anything.
-export const authResumable = (prompt: string): boolean => !prompt.startsWith(RESUME_NOTES.auth);
-
 const withResume = (state: ConversationState, resume: Partial<ConversationState["resume"]>): ConversationState => ({
     ...state,
     resume: { ...state.resume, ...resume },
 });
 
-// A stopped turn inherits the ladder's count so far; a limit starts none, its appointment being a single one.
-const onHeld = (state: ConversationState, held: HeldTurn, now: number): Decision<undefined> =>
-    unchanged(
-        withResume(state, { held: { ...held, recordedAt: now, fired: false, tries: held.reason === "stopped" ? state.resume.stopTries : 0 } }),
+// A stopped hold inherits the ladder's count; an outage or a refused credential says nothing of a stall, so restarts it.
+const onHeld = (state: ConversationState, held: HeldTurn, now: number): Decision<undefined> => {
+    const tries = held.reason === "stopped" ? state.resume.stopTries : 0;
+    const provider = held.reason === "outage" || held.reason === "auth";
+    return unchanged(
+        withResume(state, { held: { ...held, recordedAt: now, fired: false, tries }, ...(provider ? { stopTries: 0 } : {}) }),
         undefined,
     );
+};
 
 // The one dispatch a hold gets, stamped before the fire so it holds even if starting conflicts. A ladder rung also
 // spends one try, and a spent ladder fires no more whatever the pass asks.
@@ -595,16 +605,14 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "rewind-leased": onRewindLeased,
     "rewind-released": onRewindReleased,
     "session-cleared": (state, _event, _now, entry) => onSessionCleared(state, entry),
-    "auth-refused": (state, event, now) =>
-        unchanged(authResumable(event.failure.input.prompt) ? withResume(state, { auth: { ...event.failure, recordedAt: now } }) : state, undefined),
-    "outage-stranded": (state, event, now) => unchanged(withResume(state, { outage: { ...event.failure, recordedAt: now } }), undefined),
     "turn-held": (state, event, now) => onHeld(state, event.held, now),
     "turn-got-somewhere": (state) => unchanged(withResume(state, { stopTries: 0 }), undefined),
-    "resume-superseded": (state) => unchanged(withResume(state, { auth: undefined, outage: undefined, held: undefined }), state.resume.held),
+    "resume-superseded": (state) => unchanged(withResume(state, { held: undefined }), state.resume.held),
     "auth-firing": (state, event) => unchanged(withResume(state, { authFiring: event.firing }), undefined),
-    "resume-dropped": (state, event) => unchanged(withResume(state, { [event.record]: undefined }), undefined),
+    "resume-dropped": (state) => unchanged(withResume(state, { held: undefined }), undefined),
     "held-fired": (state, event) => onHeldFired(state, event.ladder),
-    "ladder-spent": (state) => unchanged(withResume(state, { held: state.resume.held && { ...state.resume.held, fired: true }, stopTries: 0 }), undefined),
+    "ladder-spent": (state) =>
+        unchanged(withResume(state, { held: state.resume.held && { ...state.resume.held, fired: true }, stopTries: 0 }), undefined),
     "turn-registered": (state) => unchanged({ ...state, steered: false }, undefined),
     "person-steered": (state) => unchanged({ ...state, steered: true }, undefined),
     "steer-reserved": onSteerReserved,

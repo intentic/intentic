@@ -109,7 +109,7 @@ const save = (): void => {
         <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
             <Button
                 size="small"
-                :label="skill === undefined ? t(`sandbox.skillForm.addSkill`) : t(`sandbox.skillForm.saveChanges`)"
+                :label="skill === undefined ? t(`sandbox.skillForm.addSkill`) : t(`shared.saveChanges`)"
                 :disabled="missing !== undefined || disabled"
                 @click="save"
             />

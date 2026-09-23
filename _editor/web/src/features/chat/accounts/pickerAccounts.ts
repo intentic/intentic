@@ -79,7 +79,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     // Harness chips for codex/grok; each names the runtime it selects (e.g. "ChatGPT"), never "Default".
     const harnessOptions = computed<readonly { label: string; value: AgentHarness }[]>(() => [
         { label: providerDisplayLabel(provider.value), value: `native` },
-        { label: t(`chat.accountsPickerAccounts.claudeCode`), value: `claude-code` },
+        { label: t(`shared.claudeCode`), value: `claude-code` },
     ]);
     // Read from the contract: choosable only where the provider's two harnesses point at different runtimes.
     const harnessChoosable = computed(() => contractHarnessChoosable(provider.value));

@@ -1,5 +1,5 @@
 import { computed, type Ref, ref, watch } from "vue";
-import { selectRange } from "../treeSelect";
+import { rangeSelect } from "../../../../lib/multiSelect";
 
 // Which rows the tree's verbs act on. Click selects, Ctrl/Cmd toggles and Shift ranges from the anchor; the lead is the
 // keyboard's cursor and the one tab stop; opening a file collapses the selection to it.
@@ -31,7 +31,7 @@ export const useTreeSelection = (host: TreeSelectionHost) => {
         lead.value = path;
     };
     const extendTo = (path: string): void => {
-        selection.value = new Set(selectRange(host.order.value, anchor.value ?? path, path));
+        selection.value = new Set(rangeSelect(host.order.value, anchor.value ?? undefined, path) ?? [path]);
         lead.value = path;
     };
     const toggleAt = (path: string): void => {

@@ -1,4 +1,3 @@
-import { test, expect, afterEach, spyOn, jest } from "bun:test";
 import {
     CI_FIX_PREFIX,
     ciFixConversationId,
@@ -15,7 +14,7 @@ import { ConversationIdSchema } from "../schemas/agent.js";
 
 const mockRandomValues = (values: readonly number[]) => {
     const remaining = [...values];
-    const getRandomValues = spyOn(crypto, "getRandomValues").mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
+    const getRandomValues = jest.spyOn(crypto, "getRandomValues").mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
         if (!(array instanceof Uint32Array)) {
             throw new TypeError(`Expected a Uint32Array`);
         }

@@ -54,10 +54,7 @@ const items = computed<MenuItem[]>(() => [
     // A link, not a command, so it carries its address via useMenuLink.
     ...(workspaceAgent.value === undefined
         ? []
-        : [
-              { separator: true },
-              { label: t(`workspace.workspaceScopeChip.seeChanges`), icon: `check-square`, ...link(`/agents/${workspaceAgent.value}`) },
-          ]),
+        : [{ separator: true }, { label: t(`shared.seeChanges`), icon: `check-square`, ...link(`/agents/${workspaceAgent.value}`) }]),
 ]);
 </script>
 

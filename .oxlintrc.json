@@ -8,11 +8,8 @@
     // Enumerating also pins the rule set across oxlint upgrades, so a bump cannot silently change what an agent
     // is being told to do mid-task.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    "plugins": ["typescript", "unicorn", "oxc", "import", "vue", "promise", "node"],
-    // Oxlint's own jest/vitest rules recognise a test function only when it is imported from "vitest" or
-    // "@jest/globals", so every one of them is silent on `import { it } from "bun:test"`. Test hygiene for the
-    // suites this repo actually runs lives in the plugin below, whose rules resolve each name to its import.
-    "jsPlugins": [{ "name": "bun-test", "specifier": "./_tools/oxlint/bun-test/index.ts" }],
+    // A suite uses the globals `bun test` defines; importing a value from "bun:test" removes them and hides it from `jest/`.
+    "plugins": ["typescript", "unicorn", "oxc", "import", "vue", "promise", "node", "jest"],
     "categories": {
         "correctness": "error",
         "suspicious": "error",
@@ -145,9 +142,9 @@
         // `oxlint-disable`, and every other rule here becomes advisory.
         "unicorn/no-abusive-eslint-disable": "error",
         // `.skipIf`, `.runIf` and `.todoIf` state the condition they wait on, so they are not disabled tests.
-        "bun-test/no-focused-tests": "error",
-        "bun-test/no-disabled-tests": "error",
-        "bun-test/no-identical-title": "error",
+        "jest/no-focused-tests": "error",
+        "jest/no-disabled-tests": "error",
+        "jest/no-identical-title": "error",
 
         // What an assertion is allowed to be
         // The only part of test QUALITY a linter can actually decide, and it is worth being precise about why
@@ -166,7 +163,7 @@
         // what the value should be. That is a shape, and a shape is something a linter can see.
         //
         /* THE BACKLOG WAS 328 AND IS NOW ZERO, so this is an ordinary rule rather than an authoring-side one. */
-        "bun-test/no-restricted-matchers": [
+        "jest/no-restricted-matchers": [
             "error",
             {
                 "toMatchSnapshot": "A snapshot records what the code DOES; a test is supposed to say what it must do. Assert the fields the behaviour is about — this repo has no snapshot tests and that is deliberate.",
@@ -376,7 +373,7 @@
         "typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false }],
         "no-console": ["error", { "allow": ["warn", "error"] }],
         "no-shadow": "error",
-        "bun-test/expect-expect": [
+        "jest/expect-expect": [
             "error",
             {
                 // The default list is just `expect`, so a suite that asserts through a shared helper reads as
@@ -391,7 +388,28 @@
         "unicorn/prefer-native-coercion-functions": "error",
         "no-unsafe-optional-chaining": "error",
         "prefer-regex-literals": "error",
-        "bun-test/no-standalone-expect": "error",
+        // Bun's `expect(value, message)` takes the failure message as a second argument.
+        "jest/valid-expect": ["error", { "maxArgs": 2 }],
+        "jest/require-to-throw-message": "off", // 101
+        "jest/no-conditional-expect": "off", // 67
+        // Reads prose such as "it (the row)" in any file as a commented-out test.
+        "jest/no-commented-out-tests": "off",
+        "jest/no-standalone-expect": [
+            "error",
+            {
+                "additionalTestBlockFunctions": [
+                    "test.if",
+                    "it.if",
+                    "test.skipIf",
+                    "it.skipIf",
+                    "test.todoIf",
+                    "it.todoIf",
+                    "describe.if",
+                    "describe.skipIf",
+                    "describe.todoIf"
+                ]
+            }
+        ],
         "typescript/no-explicit-any": "error",
         "unicorn/error-message": "error",
         "no-new-func": "error",
@@ -465,7 +483,7 @@
         {
             "files": ["**/*.test.ts", "**/*.integration.test.ts", "**/*.spec.ts"],
             "rules": {
-                // A `mock.module` must run before the `await import()` of what it intercepts, so a suite's imports
+                // A `jest.mock` must run before the `await import()` of what it intercepts, so a suite's imports
                 // are split around a statement and this rule has nothing useful to say.
                 "import/first": "off",
                 // A test may hold a deliberately wrong shape to assert the code rejects it.

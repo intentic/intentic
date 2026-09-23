@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { createMarkdownHistory, type DocumentState } from "@intentic/ui/markdown";
 
 /* The undo stack behind the markdown editing surface, which lives in the design system now (`@intentic/ui/markdown`) and is tested from here. */

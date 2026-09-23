@@ -1,6 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import { createTurnMetrics } from "./turn-metrics.js";
 import { toolCategoryOf } from "../../tools/tool-calls.js";
 

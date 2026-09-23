@@ -1,5 +1,4 @@
 import { buildApplication, buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
-import { test, expect } from "bun:test";
 import { captureCli } from "./testing.js";
 
 // Both ways a command reaches the terminal, in one app: through its context, and through the global it is a view of.

@@ -2,7 +2,6 @@
 // This is the one surface an outsider touches, so "nothing here reaches back into the workspace" is checked
 // against real output, not the source.
 import type { TranscriptRow, SharePayload } from "@intentic/sandbox-contract";
-import { afterEach, expect, it } from "bun:test";
 import { type App, createApp } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

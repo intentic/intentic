@@ -5,10 +5,10 @@ import type { Config } from "../../config.js";
 import type { OrpcContext } from "../../context.js";
 import { requireUser } from "../../guards.js";
 import { hostedEnabled } from "./hosted.js";
-import { applySubscription, entryTier, hostedPlanEnabled, hostedPrices, hostedSlotsOf, isComped, isOnPlan, slotsAtTier } from "./hosted-plan.js";
+import { applySubscription, entryTier, hostedPlanEnabled, hostedPrices, hostedSlotsOf, hostedSlotUse, isComped, isOnPlan } from "./hosted-plan.js";
 import { HostedMigrationRefused, type MigrationRefusal, migrateHosted } from "./migrate/hosted-migrate.js";
 import { StripeError, type StripeGateway, stripeGateway } from "./hosted-plan-stripe.js";
-import { hostedShapeFor, shapeOfRow, tierOfRow } from "./hosted-shape.js";
+import { hostedTierIn, shapeOfRow } from "./hosted-shape.js";
 import { hostedArrivalBudget, hostedBudgetOf, hostedOomsSince, usageMonth, usageResetsAt } from "./hosted-usage.js";
 import { DAY_MS } from "../../durations.js";
 
@@ -23,6 +23,7 @@ const billingUrl = (context: OrpcContext, query = ``): string => `${context.conf
 const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPlanHosted> => {
     const { prisma, config } = context;
     const now = new Date();
+    const free = hostedTierIn(config, FREE_TIER.id);
     const [slots, machines, budget] = await Promise.all([
         hostedSlotsOf(prisma, config, userId),
         prisma.hostedMachine.findMany({
@@ -52,8 +53,8 @@ const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPl
         ),
     );
     return {
-        slots: slots.total,
-        slotsByTier: Object.fromEntries([[FREE_TIER.id, slots.free], ...slots.paid]),
+        slots: [...slots.values()].reduce((sum, count) => sum + count, 0),
+        slotsByTier: Object.fromEntries(slots),
         machines: machines.map((machine, index) => {
             const [meter, oomsThisWeek] = meters[index] as (typeof meters)[number];
             return {
@@ -63,7 +64,7 @@ const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPl
                 wokeAt: machine.wokeAt?.toISOString() ?? null,
                 tier: machine.tier,
                 // The machine's own numbers, never the rung's: the two part company the moment a migration starts.
-                shape: shapeOfRow(config, tierOfRow(machine.tier), machine),
+                shape: shapeOfRow(machine),
                 usedMinutes: meter.usedMinutes,
                 allowanceMinutes: meter.metered ? meter.allowanceMinutes : null,
                 oomsThisWeek,
@@ -76,11 +77,7 @@ const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPl
             resetsAt: usageResetsAt(now).toISOString(),
             ...(budget.rampUntil === undefined ? {} : { rampUntil: budget.rampUntil.toISOString() }),
         },
-        freeTier: {
-            id: FREE_TIER.id,
-            shape: hostedShapeFor(config, FREE_TIER.id),
-            monthlyHours: config.hosted.monthlyHours,
-        },
+        freeTier: { id: free.id, shape: shapeOfRow(free), monthlyHours: free.monthlyHours },
     };
 };
 
@@ -143,7 +140,7 @@ const requireLadderTier = (id: string): HostedTier => {
 // A rung that can be BOUGHT; the free one is the lane, and no amount of money adds a slot at it.
 const requirePaidTier = (config: Config, id: string): HostedTier => {
     const tier = requireLadderTier(id);
-    if (tier.priceUsd === 0 || !hostedPrices(config).has(tier.id)) {
+    if (!hostedPrices(config).has(tier.id)) {
         throw new ORPCError(`BAD_REQUEST`, { message: `${tier.name} is not something this platform sells slots at` });
     }
     return tier;
@@ -274,11 +271,8 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
             if (machine === null || machine.sandbox.ownerId !== user.id) {
                 throw new ORPCError(`NOT_FOUND`, { message: `you have no hosted sandbox by that id` });
             }
-            const slots = await hostedSlotsOf(prisma, config, user.id);
-            const held = await prisma.hostedMachine.count({
-                where: { tier: tier.id, sandbox: { ownerId: user.id }, NOT: { sandboxId: input.sandboxId } },
-            });
-            if (held >= slotsAtTier(slots, tier.id)) {
+            const { left } = await hostedSlotUse(prisma, config, user.id, tier.id, input.sandboxId);
+            if (left <= 0) {
                 throw new ORPCError(`PRECONDITION_FAILED`, {
                     message: tier.priceUsd === 0 ? `you have no free slot left` : `buy a ${tier.name} slot first`,
                 });

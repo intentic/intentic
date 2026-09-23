@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { type DagEdge, type DagNode, type DagPlacement, laneKey, lanePath, layoutDag, layoutSignature } from "@intentic/ui/dag";
 
 // DagGraph refits its viewport when this signature changes; lives here because @intentic/ui ships no test runner. Each

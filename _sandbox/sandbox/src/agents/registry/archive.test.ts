@@ -1,5 +1,4 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { describe, it, expect, mock } from "bun:test";
 import { openConversationsDb } from "../../store/conversations-db.js";
 import { IN_MEMORY } from "../../store/sqlite.js";
 import { beginTurn, fakeTurns, fleetStoreOver } from "../../testing.js";
@@ -48,8 +47,8 @@ const noPresences = { of: () => undefined, refresh: async () => false, forget: (
 
 // Only `retire` and `remove` are exercised; the rest of the interface is unreachable from these paths.
 const stubWorktrees = (
-    retire = mock(async () => undefined),
-    remove = mock(async () => undefined),
+    retire = jest.fn(async () => undefined),
+    remove = jest.fn(async () => undefined),
 ): { worktrees: AgentWorktrees; retire: typeof retire; remove: typeof remove } => ({
     worktrees: { retire, remove } as unknown as AgentWorktrees,
     retire,
@@ -146,7 +145,7 @@ describe("archiveAgents", () => {
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         await beginTurn(conversations, turn({ conversationId: "c2" }), 1_000);
         await conversations.send("c2", { kind: "settle" }, 2_000).settled;
-        const retire = mock(async (id: string) => {
+        const retire = jest.fn(async (id: string) => {
             if (id === "c1") {
                 throw new Error("worktree busy");
             }
@@ -167,7 +166,10 @@ describe("archiveAgents", () => {
         const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         await agents.init();
         const { worktrees, retire } = stubWorktrees();
-        expect(await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["ghost"], 9_000)).toEqual({ archived: [], failed: [] });
+        expect(await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["ghost"], 9_000)).toEqual({
+            archived: [],
+            failed: [],
+        });
         expect(retire).not.toHaveBeenCalled();
     });
 });
@@ -183,7 +185,7 @@ describe("purgeArchived", () => {
         const { worktrees, remove } = stubWorktrees();
         await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["filed"], 9_000);
         const repos = worktreeOf(agents.entry("filed"))?.repos;
-        const purgeConversationState = mock(async () => {});
+        const purgeConversationState = jest.fn(async () => {});
 
         const removed = await purgeArchived({ agents, conversations, agentWorktrees: worktrees, logger, purgeConversationState });
 
@@ -216,7 +218,7 @@ describe("purgeArchived", () => {
             await beginTurn(conversations, turn({ conversationId: id }), 1_000);
             await conversations.send(id, { kind: "settle" }, 2_000).settled;
         }
-        const remove = mock(async (id: string) => {
+        const remove = jest.fn(async (id: string) => {
             if (id === "a") {
                 throw new Error("repo locked");
             }

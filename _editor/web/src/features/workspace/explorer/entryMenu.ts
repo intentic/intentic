@@ -46,9 +46,9 @@ export interface EntryMenuInput {
     readonly verbs: EntryVerbs;
 }
 
-const lockedNote = (): MenuItem => ({ label: t(`workspace.entryMenu.keptPrivateBySandbox`), icon: `lock`, disabled: true });
-const readOnlyNote = (): MenuItem => ({ label: t(`workspace.entryMenu.readOnlyChangingFiles`), icon: `lock`, disabled: true });
-const archiveNote = (): MenuItem => ({ label: t(`workspace.entryMenu.insideArchiveExtractTo`), icon: `box`, disabled: true });
+const lockedNote = (): MenuItem => ({ label: t(`shared.keptPrivateBySandbox`), icon: `lock`, disabled: true });
+const readOnlyNote = (): MenuItem => ({ label: t(`shared.readOnlyChangingFiles`), icon: `lock`, disabled: true });
+const archiveNote = (): MenuItem => ({ label: t(`shared.insideArchiveExtractTo`), icon: `box`, disabled: true });
 
 const withSeparator = (items: readonly MenuItem[]): MenuItem[] => (items.length === 0 ? [] : [{ separator: true }, ...items]);
 
@@ -112,7 +112,7 @@ export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
         { label: t(`workspace.entryMenu.newFolder`), icon: `folder`, command: verbs.newFolder },
         ...lead,
         ...entryVerbs(input),
-        ...(clipboardFull ? [{ label: t(`workspace.entryMenu.paste`), icon: `clone`, command: verbs.paste }] : []),
+        ...(clipboardFull ? [{ label: t(`shared.paste`), icon: `clone`, command: verbs.paste }] : []),
         ...withSeparator(tail),
     ];
 };

@@ -6,7 +6,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { type Device, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { setDaemonRoutes } from "../useDaemonRoutes";
 import { resetContractFreshness } from "../contractFreshness";
@@ -14,7 +13,7 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Sandbox slug the printed restart command names, so it targets this machine's sandbox specifically, and the checkout
 // the dev image was built from, which is the folder the restart runs in.
-mock.module(`../../environment/useEnvironment`, () => ({
+jest.mock(`../../environment/useEnvironment`, () => ({
     useEnvironment: () => ({ slug: ref(`sandbox-abc123`), localImage: ref({ base: `intentic-sandbox:dev`, root: `/home/ada/intentic` }) }),
 }));
 
@@ -25,9 +24,9 @@ const severingCalls: string[] = [];
 // The daemon's device list, which the card's fallback reads to find a machine already talking to this sandbox:
 // empty stands for "nothing to offer", where only the command remains.
 const fleet = ref<Device[]>([]);
-mock.module(`../../devices/useDevices`, () => ({
+jest.mock(`../../devices/useDevices`, () => ({
     useHostHolding: () => hostId,
-    useDevices: () => ({ devices: fleet, readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: mock() }),
+    useDevices: () => ({ devices: fleet, readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: jest.fn() }),
     runSeveringDeviceCommand: (id: string, command: string) => {
         severingCalls.push(`${id}:${command}`);
         return Promise.resolve(undefined);

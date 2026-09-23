@@ -2,7 +2,6 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultGit } from "@intentic/scaffold";
-import { expect, test } from "bun:test";
 import { headSha, mainLineBaseOf, turnPathsAcross } from "./changes.js";
 
 // A sync at the Stop commits a turn's edits onto its branch, so what a turn changed must be read from the main line it

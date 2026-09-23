@@ -1,4 +1,3 @@
-import { describe, it, expect, jest } from "bun:test";
 import type { ContainerSpec, ContainerState, DockerEngine } from "./docker.js";
 import { CONTAINER, CONTAINER_LABELS, DocumentServer, IMAGE, RESTART_POLICY, SETUP_DONE_MARKER } from "./document-server.js";
 

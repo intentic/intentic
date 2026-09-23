@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { isRateLimited, vendorFailureFrame, type VendorRule, withStderrTail } from "./vendor-errors.js";
 
 /* One classifier for every vendor's spent allowance, the order a runtime's own rules are read in, and stderr folding. */

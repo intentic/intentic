@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { normalizationEdits, type NormalizeEdit } from "./normalizeOnSave";
 
 /* Save-time normalization exists for the agent: its exact-string edits fail on invisible whitespace, so every saved file must land in ONE canonical shape. */

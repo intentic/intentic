@@ -4,7 +4,6 @@ import "@intentic/testing/dom";
 import type { ProgramAsk } from "@intentic/sandbox-contract";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h } from "vue";
 import ChatCommandBlock from "./ChatCommandBlock.vue";
 import { IconStub } from "@intentic/ui/testing";

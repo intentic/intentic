@@ -1,7 +1,6 @@
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, test, expect } from "bun:test";
 import { softwareAuthenticator } from "../../harness/passkey-authenticator.testing.js";
 import { memoryPasskeyStore } from "../../harness/route-stores.testing.js";
 import {

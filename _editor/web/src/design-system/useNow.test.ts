@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { effectScope, nextTick, ref, watchEffect } from "vue";
 import { useNow } from "@intentic/ui/async";
 

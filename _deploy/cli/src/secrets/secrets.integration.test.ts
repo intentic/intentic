@@ -2,7 +2,6 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DesiredStateGraph, ResourceNode } from "@intentic/graph";
-import { describe, it, expect } from "bun:test";
 import { collectSecrets, writeEnvExample } from "./secrets.js";
 
 const node = (id: string, inputs: ResourceNode["inputs"]): ResourceNode => ({ id, type: "x", inputs, dependsOn: [] });

@@ -4,28 +4,27 @@ import "@intentic/testing/dom";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { type Persona, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract";
 import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { waitFor, hoisted } from "@intentic/testing/bun";
+import { waitFor } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
-hoisted(() => {
+(() => {
     // jsdom has no ResizeObserver; AnchoredOverlay throws on open without one, as an unhandled rejection off the
     // assertion path.
-});
+})();
 
 const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
 // Upserts like the real route; creating a persona opens it immediately, so a mock that didn't add the persona would leave
 // creation tests asserting against a page that never redrew.
-const save = mock<(persona: Persona) => Promise<unknown>>().mockImplementation(async (persona) => {
+const save = jest.fn<(persona: Persona) => Promise<unknown>>().mockImplementation(async (persona) => {
     personas.value = [...personas.value.filter((entry) => entry.id !== persona.id), persona];
     return { ok: true };
 });
-const remove = mock<(id: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
+const remove = jest.fn<(id: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
 
-mock.module(`./usePersonas`, () => ({
+jest.mock(`./usePersonas`, () => ({
     usePersonas: () => ({
         personas,
         connected,
@@ -38,22 +37,22 @@ mock.module(`./usePersonas`, () => ({
 }));
 
 const accounts = ref<BrowserAccount[]>([]);
-mock.module(`../../extensions/useBrowserAccounts`, () => ({
+jest.mock(`../../extensions/useBrowserAccounts`, () => ({
     useBrowserAccounts: () => ({ accounts, accountOf: (id: string) => accounts.value.find((entry) => entry.id === id) }),
 }));
 
 // Mocked since the real composable reaches the sandbox client at import time, which jsdom has no environment for.
 const capabilities = ref<{ id: string; kind: string }[]>([]);
-mock.module(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
+jest.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 
 // Stubbed separately from the query mock below, which answers everything with a workspace tree; this suite is about the
 // persona, so the kit answers empty.
-mock.module(`./usePersonaKit`, () => {
-    const idle = { mutateAsync: mock().mockResolvedValue({ ok: true }), isPending: shallow(false) };
+jest.mock(`./usePersonaKit`, () => {
+    const idle = { mutateAsync: jest.fn().mockResolvedValue({ ok: true }), isPending: shallow(false) };
     return {
         usePersonaKit: () => ({
             kit: computed(() => ({ prompt: ``, skills: [] })),
-            readSkill: mock(),
+            readSkill: jest.fn(),
             error: shallow(undefined),
             isLoading: shallow(false),
             savePrompt: idle,
@@ -67,21 +66,21 @@ mock.module(`./usePersonaKit`, () => {
 // to be filtered out.
 const tree = ref<WorkspaceTreeEntry[]>([]);
 // <FolderPicker>'s lazy listing, the one daemon call the page itself makes.
-mock.module(`../client/sandboxRpc`, () => ({
-    sandboxRpc: fakeSandboxRpc({ workspace: { children: mock(async () => ({ entries: [], hidden: 0 })) } }),
+jest.mock(`../client/sandboxRpc`, () => ({
+    sandboxRpc: fakeSandboxRpc({ workspace: { children: jest.fn(async () => ({ entries: [], hidden: 0 })) } }),
 }));
 // Every name the graph imports from the raw client, since bun links an ESM import against exactly what this factory
 // returns; nothing here calls it.
-mock.module(`../client/sandboxClient`, () => ({
-    sandboxJson: mock(),
-    sandboxRequest: mock(),
-    sandboxError: mock(async () => new Error(`unused`)),
+jest.mock(`../client/sandboxClient`, () => ({
+    sandboxJson: jest.fn(),
+    sandboxRequest: jest.fn(),
+    sandboxError: jest.fn(async () => new Error(`unused`)),
 }));
 // The named parts of the workspace: the persona editor reads them to say which of them gain the persona being written.
 // Holds the `docs` folder of the tree below, so a persona starting there is one this area hands over.
 const areas = ref([{ id: `handbook`, label: `Handbook`, folders: [`docs`] }]);
-mock.module(`../areas/useAreas`, () => ({ useAreas: () => ({ areas }) }));
-mock.module(`../client/useSandboxQuery`, () => {
+jest.mock(`../areas/useAreas`, () => ({ useAreas: () => ({ areas }) }));
+jest.mock(`../client/useSandboxQuery`, () => {
     return {
         useSandboxQuery: () => ({
             query: { data: computed(() => ({ root: `/work`, tree: tree.value, hidden: 0 })), isPending: shallow(false) },

@@ -1,6 +1,5 @@
 import { Terminal } from "@xterm/headless";
 import type { Terminal as DomTerminal } from "@xterm/xterm";
-import { describe, it, expect } from "bun:test";
 import { urlLinksAt } from "./terminalUrlLinks";
 
 // Covers the buffer step plain-string tests can't: reading a real xterm buffer and mapping indices to columns. Uses

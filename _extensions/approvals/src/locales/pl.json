@@ -77,8 +77,7 @@
     },
     "hookSetBody": {
         "filesPinned": "Zatwierdzenie obejmuje też te pliki, bajt po bajcie:",
-        "fromProjectSettings": ".claude/settings.json przestrzeni roboczej",
-        "fromUserSettings": "~/.claude/settings.json"
+        "fromProjectSettings": ".claude/settings.json przestrzeni roboczej"
     },
     "postBody": {
         "showLess": "Pokaż mniej",

@@ -1,5 +1,4 @@
 import type { SSEStreamingApi } from "hono/streaming";
-import { test, expect } from "bun:test";
 import { createSseStream } from "./sse-stream.js";
 
 // A fake SSEStreamingApi that records the frames written, in order.

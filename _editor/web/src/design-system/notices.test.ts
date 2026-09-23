@@ -1,6 +1,5 @@
 import { type NoticeModel, rankNotices } from "@intentic/ui/notice";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
-import { describe, it, expect } from "bun:test";
 
 /* The two halves of "one voice per problem": what a caught thing turns into, and which of several the user reads first. */
 

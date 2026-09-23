@@ -1,5 +1,4 @@
 import type { RewindResult } from "@intentic/sandbox-contract";
-import { test, expect, mock } from "bun:test";
 import { rewindConversation, type RewindDeps } from "./rewind.js";
 import type { TurnCheckpoint } from "./turn-checkpoints.js";
 
@@ -70,7 +69,11 @@ const deps = (overrides: {
             page: async (_agent: unknown, window: { readonly before: number }) => {
                 expect(leaseHeld).toBe(true);
                 calls.push("read");
-                return { rows: [{ role: "user", text: "tidy the docs", messageId: overrides.held ?? TARGET.messageId }], from: window.before - 1, more: true };
+                return {
+                    rows: [{ role: "user", text: "tidy the docs", messageId: overrides.held ?? TARGET.messageId }],
+                    from: window.before - 1,
+                    more: true,
+                };
             },
             truncate: async (_agent: unknown, keep: number) => {
                 expect(leaseHeld).toBe(true);
@@ -78,7 +81,7 @@ const deps = (overrides: {
                 return 4;
             },
         },
-        logger: { warn: mock() },
+        logger: { warn: jest.fn() },
     } as unknown as RewindDeps;
     // Stands in for git in the isolated arm: records each command per repo, and fails for named repos to express a
     // missing checkout.
@@ -146,7 +149,17 @@ test("an isolated conversation resets its own checkout, per repo, and names no t
 
     // No `snapshot`: this moved the conversation's own branch; the workspace timeline has no row for it.
     expect(outcome).toEqual({ dropped: 4 });
-    expect(calls).toEqual(["read", "of", "reset:root", "clean:root", "reset:intent", "clean:intent", "truncate:2", "forgetCheckpoints:3", "clearSession"]);
+    expect(calls).toEqual([
+        "read",
+        "of",
+        "reset:root",
+        "clean:root",
+        "reset:intent",
+        "clean:intent",
+        "truncate:2",
+        "forgetCheckpoints:3",
+        "clearSession",
+    ]);
 });
 
 test("a repo whose checkout is gone is skipped, and the rest still go back", async () => {

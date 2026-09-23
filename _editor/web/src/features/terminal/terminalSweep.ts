@@ -1,3 +1,4 @@
+import { KINDS } from "./terminalMeta";
 import type { TerminalTab } from "./useTerminal";
 
 // Single definition of 'inactive', used by the bar-menu count and palette command so they agree. Quiet:
@@ -18,7 +19,7 @@ export interface SweepContext {
 export const inactiveTerminals = (tabs: readonly TerminalTab[], { now, focused, quietMs = QUIET_MS }: SweepContext): TerminalTab[] =>
     tabs.filter(
         (tab) =>
-            tab.kind !== `process` &&
+            !KINDS[tab.kind].logs &&
             tab.name !== focused &&
             tab.command === undefined &&
             (!tab.running || (tab.activityAt > 0 && now - tab.activityAt >= quietMs)),

@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { SshExecutor, SshSession, SshTarget } from "./ssh.js";
 import { connectWithRetry, inMemoryHostKeyStore, verifyHostKey } from "./ssh.js";
 

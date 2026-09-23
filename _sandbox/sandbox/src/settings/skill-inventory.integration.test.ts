@@ -5,7 +5,6 @@ import { dirname, join } from "node:path";
 import type { Capability, Persona, SandboxSettings, SkillSummary } from "@intentic/sandbox-contract";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
 import { readSkillText, skillInventory } from "./skill-inventory.js";
 import { writePersonaSkill } from "../personas/persona-kit.js";

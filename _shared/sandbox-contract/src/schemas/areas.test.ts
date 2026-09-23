@@ -1,5 +1,4 @@
 import { PUBLIC_DIR, STATE_DIR } from "@intentic/constants";
-import { describe, test, expect } from "bun:test";
 import { AreaFolderSchema } from "./areas.js";
 
 // What an area may name. These refusals are load-bearing rather than cosmetic: an area's folders become the fence

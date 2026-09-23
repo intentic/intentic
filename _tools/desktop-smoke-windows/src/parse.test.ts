@@ -1,5 +1,4 @@
 import type { WindowInfo } from "@intentic/desktop-automation";
-import { test, expect } from "bun:test";
 import {
     assistantReplied,
     asList,

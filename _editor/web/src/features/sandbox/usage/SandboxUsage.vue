@@ -93,7 +93,7 @@ const previous = computed(() => {
 // range changes. Folded by `providerGroup` so every locally-run model is one pill, however many deleted cards still own
 // an id.
 const providerOptions = computed(() => [
-    { label: t(`sandbox.sandboxUsage.allProviders`), value: `all` },
+    { label: t(`shared.allProviders`), value: `all` },
     ...providersIn(rows.value, providerGroup).map((provider) => ({ label: providerGroupLabel(provider), value: provider })),
 ]);
 
@@ -263,7 +263,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                 <span class="text-subtle">{{ comparedTo }}</span>
                             </template>
                             <span v-else class="text-subtle">{{
-                                comparedTo === undefined ? t(`sandbox.sandboxUsage.allTime`) : t(`sandbox.sandboxUsage.noSpendInPrevious`)
+                                comparedTo === undefined ? t(`shared.allTime`) : t(`sandbox.sandboxUsage.noSpendInPrevious`)
                             }}</span>
                         </div>
                     </Card>
@@ -389,9 +389,9 @@ const hasSpend = computed(() => current.value.length > 0);
                             <thead class="text-left text-subtle">
                                 <tr class="border-b border-line-subtle">
                                     <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.sandboxUsage.day`) }}</th>
-                                    <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.sandboxUsage.provider`) }}</th>
-                                    <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.sandboxUsage.model`) }}</th>
-                                    <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.sandboxUsage.agent`) }}</th>
+                                    <th class="py-1.5 pr-3 font-medium">{{ t(`shared.provider`) }}</th>
+                                    <th class="py-1.5 pr-3 font-medium">{{ t(`shared.model`) }}</th>
+                                    <th class="py-1.5 pr-3 font-medium">{{ t(`shared.agent`) }}</th>
                                     <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.turns`) }}</th>
                                     <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.in`) }}</th>
                                     <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.out`) }}</th>

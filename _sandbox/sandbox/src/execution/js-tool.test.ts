@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { JsExecutionPlan } from "./js-runtime.js";
 import { formatJsResult, JS_SERVER_NAME, JS_TOOL_NAME, jsToolDescription } from "./js-tool.js";
 

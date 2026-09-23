@@ -236,13 +236,21 @@ export function useWorkspaceTree() {
 
     const createDir = async (path: string): Promise<void> => {
         noteArriving(path, { kind: `write`, type: `dir` });
-        await settleEach([path], (dir) => [dir], (dir) => sandboxRpc.workspace.mkdir({ path: dir }));
+        await settleEach(
+            [path],
+            (dir) => [dir],
+            (dir) => sandboxRpc.workspace.mkdir({ path: dir }),
+        );
     };
     // A new, empty file. Same route as a save, but its row has to exist before the walk agrees and has to be taken back
     // if the write is refused, which is exactly what an editor save must not do.
     const createFile = async (path: string): Promise<void> => {
         noteArriving(path, { kind: `write`, type: `file` });
-        await settleEach([path], (file) => [file], (file) => uploadText(file, ``));
+        await settleEach(
+            [path],
+            (file) => [file],
+            (file) => uploadText(file, ``),
+        );
     };
     // Rename is the only single move (same parent, new name); every other op goes through a batch variant below. The
     // pair moves together: the old row goes and the new one arrives in the same frame, so nothing flickers between.
@@ -261,13 +269,21 @@ export function useWorkspaceTree() {
         for (const path of paths) {
             noteLeaving(path);
         }
-        await settleEach(paths, (path) => [path], (path) => sandboxRpc.workspace.delete({ path }));
+        await settleEach(
+            paths,
+            (path) => [path],
+            (path) => sandboxRpc.workspace.delete({ path }),
+        );
     };
     const copyEntries = async (pairs: readonly { from: string; to: string }[]): Promise<void> => {
         for (const { from, to } of pairs) {
             noteArriving(to, { kind: `write`, type: typeOf(from) });
         }
-        await settleEach(pairs, (pair) => [pair.to], (pair) => sandboxRpc.workspace.copy(pair));
+        await settleEach(
+            pairs,
+            (pair) => [pair.to],
+            (pair) => sandboxRpc.workspace.copy(pair),
+        );
     };
     // Unpacks an archive beside itself and answers where it landed. No provisional row: only the daemon, which can see
     // inside the archive and knows which names are free, can say what the new entry is called.
@@ -317,6 +333,11 @@ export function useWorkspaceTree() {
 
     // The tree entry for a root-relative path (size/type), or undefined when not in the loaded tree.
     const entry = (path: string | undefined): WorkspaceTreeEntry | undefined => (path === undefined ? undefined : entriesByPath.value.get(path));
+    // A folder's listing as loaded, the walk's own or a lazy load's; undefined until one has it. "" is the root.
+    const listingOf = (dir: string): readonly WorkspaceTreeEntry[] | undefined =>
+        dir === `` ? tree.value : (entriesByPath.value.get(dir)?.children ?? lazyChildren.value.get(dir));
+    // How many of a folder's own entries the daemon's entry budget cut from its listing.
+    const hiddenIn = (dir: string): number => (dir === `` ? rootHidden.value : (lazyHidden.value.get(dir) ?? 0));
 
     // Loads a dir's children if the walk left it unlisted (no-op once loaded or in flight). Used directly by callers
     // that need real contents without expanding the row (mobile drill-in, paste's name check).
@@ -360,6 +381,19 @@ export function useWorkspaceTree() {
                 lazyLoading.value.delete(path);
             }
         }
+    };
+
+    // Keeps the folder `dir` names listed while it is shown: one the walk skipped is asked for the moment it is looked at.
+    const keepListed = (dir: () => string | undefined): void => {
+        watch(
+            () => [dir(), listingOf(dir() ?? ``) === undefined] as const,
+            ([path, unlisted]) => {
+                if (path !== undefined && unlisted) {
+                    void loadChildren(path);
+                }
+            },
+            { immediate: true },
+        );
     };
 
     // Loads children for any expanded dir the walk left unlisted, whether opened by a click or restored from the
@@ -423,6 +457,9 @@ export function useWorkspaceTree() {
         barren,
         entriesByPath,
         entry,
+        listingOf,
+        hiddenIn,
+        keepListed,
         error,
         isLoading: query.isLoading,
         refetch: query.refetch,

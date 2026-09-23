@@ -1,5 +1,4 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { ScopeError } from "../policy.js";
 import { type CommandResult, describeResult, destructiveClasses, runCommand } from "./shell.js";
 

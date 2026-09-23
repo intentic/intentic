@@ -5,6 +5,9 @@ import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
 // states both on the wire. Provider and harness are switchable mid-conversation; a session id only resumes on
 // the runtime that minted it, so a switched turn omits it.
 
+// Where a fork was cut from, carried by its first turn: `keep` rows of `conversationId`, over `files` then or now.
+export type ForkLink = NonNullable<ProcedureInput<`agent.run`>["forkOf"]>;
+
 // Turn settings passed into a send: the active conversation's own provider/model/effort/thinking, captured at
 // send time.
 export interface TurnSettings {
@@ -91,8 +94,7 @@ export const turnRequestBody = (input: {
     readonly settings: TurnSettings;
     // Session this turn resumes, if the selection still matches the runtime and account that minted it.
     readonly resume: SessionRef | undefined;
-    // Fork point: the daemon copies rows from the source's record before running; `files` picks then or now.
-    readonly forkOf: { readonly conversationId: string; readonly keep: number; readonly files: "then" | "now" } | undefined;
+    readonly forkOf: ForkLink | undefined;
     // Files the user staged as chips. A path the daemon can't resolve refuses the send, since the user chose it.
     readonly attachmentPaths: string[];
     // Workspace paths read out of the text's own `@` tokens. Ride apart from the chips: nobody chose them, so the

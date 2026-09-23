@@ -3,7 +3,6 @@ import { mkdtemp, readdir, readlink, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, afterAll } from "bun:test";
 import { createPublicHandler } from "./public-serve.js";
 
 // The outbox over real HTTP: the actual headers a stranger's browser gets, plus conditional requests (no stale cache)

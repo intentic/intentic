@@ -1,5 +1,4 @@
 import type { IntenticApi, ViewRegistration } from "@intentic/extension-api";
-import { describe, it, expect, mock } from "bun:test";
 import { activate } from "./extension.js";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { extensionIdOf } from "@intentic/extension-manifest";
@@ -15,7 +14,7 @@ await registerExtensionMessages(extensionIdOf(manifest), messages);
 const capture = (project?: string) => {
     const views: ViewRegistration[] = [];
     const commands = new Map<string, () => unknown>();
-    const navigate = mock();
+    const navigate = jest.fn();
     const api = {
         workspace: { project: () => project },
         views: {

@@ -1,7 +1,6 @@
 import { type Capability, rawRoutePath } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
-import { test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
 import { browserPrepareBridge, createBrowserPrepareRoute } from "./browser-prepare.js";
 

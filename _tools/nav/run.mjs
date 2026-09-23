@@ -175,6 +175,7 @@ const compare = () => {
     row("physical lines", before.shape.lines.physical, after.shape.lines.physical);
     row("code lines", before.shape.lines.code, after.shape.lines.code);
     row("comment + blank lines", before.shape.lines.commentAndBlank, after.shape.lines.commentAndBlank);
+    costRow("test lines", before.shape.files.testLines, after.shape.files.testLines);
     const physicalDrop = before.shape.lines.physical - after.shape.lines.physical;
     const codeDrop = before.shape.lines.code - after.shape.lines.code;
     if (physicalDrop > 0) {

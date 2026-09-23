@@ -1,10 +1,10 @@
-import { chmod, readdir, rename, rm } from "node:fs/promises";
+import { chmod, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
 import { binDir } from "./config.js";
-import { agentAssetUrl, agentPath, download, launcherAssetUrl, launcherPath, type Probe, probeVersion } from "./release.js";
+import { agentAssetUrl, agentPath, download, launcherAssetUrl, launcherPath, renameIfPresent, versionOf } from "./release.js";
 
 // One environment to one exact release: download → probe → swap → restart through the supervisor → verify → roll back.
 
@@ -20,7 +20,8 @@ export type UpgradeOutcome =
 // The upgrade's effects behind one seam, so the step order is testable without a network, a disk or a running agent.
 export interface UpgradeExec {
     readonly fetchTo: (url: string, dest: string) => Promise<void>;
-    readonly probe: (binary: string) => Probe;
+    // The release the binary reports itself as; undefined where it does not run as an agent.
+    readonly probe: (binary: string) => string | undefined;
     readonly swap: (from: string, to: string) => Promise<void>;
     // The build the agent holding the pidfile runs now; undefined when none runs, which an upgrade leaves that way.
     readonly runningBuild: () => Promise<string | undefined>;
@@ -48,14 +49,11 @@ const piecesOf = (exec: UpgradeExec, version: string): readonly [...Piece[], Pie
 ];
 
 // The download is an agent of exactly the release asked for, or the machine keeps the one it has.
-const refusal = (probed: Probe, target: string): string | undefined => {
-    if (probed.kind === "unusable") {
+const refusal = (probed: string | undefined, target: string): string | undefined => {
+    if (probed === undefined) {
         return "what downloaded doesn't run as an agent, keeping the one you have.";
     }
-    if (probed.kind === "no-version-command") {
-        return "what downloaded doesn't answer `intentic-machine version`, keeping the one you have.";
-    }
-    return probed.version === target ? undefined : `the ${target} download reports itself as ${probed.version}, keeping the one you have.`;
+    return probed === target ? undefined : `the ${target} download reports itself as ${probed}, keeping the one you have.`;
 };
 
 // The binary can be current while the agent isn't: replacing the file doesn't touch the process.
@@ -108,12 +106,18 @@ const discardAll = async (exec: UpgradeExec, paths: readonly string[]): Promise<
 const restartOnto = async (exec: UpgradeExec, pieces: readonly Piece[], target: string, installed: string, log: Log): Promise<UpgradeOutcome> => {
     const came = await exec.restart();
     if (came === target) {
-        await discardAll(exec, pieces.map((piece) => piece.previous));
+        await discardAll(
+            exec,
+            pieces.map((piece) => piece.previous),
+        );
         return { kind: "upgraded", from: installed, to: target };
     }
     // The bytes are in place and something else is serving: a supervisor race or a survived process, not a bad build.
     if (came !== undefined) {
-        await discardAll(exec, pieces.map((piece) => piece.previous));
+        await discardAll(
+            exec,
+            pieces.map((piece) => piece.previous),
+        );
         return { kind: "agent-behind", installed: target, running: came };
     }
     log(`The new agent didn't stay running: putting the previous one back.`);
@@ -142,13 +146,19 @@ export const runUpgrade = async (exec: UpgradeExec, target: string, installed: s
     }
     const refused = refusal(exec.probe(pieces.at(-1)?.staged ?? `${agentPath}.new-${target}`), target);
     if (refused !== undefined) {
-        await discardAll(exec, pieces.map((piece) => piece.staged));
+        await discardAll(
+            exec,
+            pieces.map((piece) => piece.staged),
+        );
         return { kind: "failed", reason: refused };
     }
     const wasRunning = (await exec.runningBuild()) !== undefined;
     await swapIn(exec, pieces);
     if (!wasRunning) {
-        await discardAll(exec, pieces.map((piece) => piece.previous));
+        await discardAll(
+            exec,
+            pieces.map((piece) => piece.previous),
+        );
         return { kind: "upgraded", from: installed, to: target };
     }
     return await restartOnto(exec, pieces, target, installed, log);
@@ -180,20 +190,18 @@ const downloadProgress = (log: Log): ((received: number, total: number) => void)
 };
 
 // `swap` is a rename throughout: what lets a running executable be displaced on Windows and every step be undone.
-export const realUpgradeExec = (restart: () => Promise<string | undefined>, runningBuild: () => Promise<string | undefined>, log: Log): UpgradeExec => ({
+export const realUpgradeExec = (
+    restart: () => Promise<string | undefined>,
+    runningBuild: () => Promise<string | undefined>,
+    log: Log,
+): UpgradeExec => ({
     fetchTo: async (url, dest) => {
         await sweepStaged(dest);
         await download(url, dest, { resume: true, onProgress: downloadProgress(log) });
         await chmod(dest, 0o755);
     },
-    probe: probeVersion,
-    // A piece this environment never had (a first launcher) has nothing to set aside, and nothing to put back.
-    swap: async (from, to) =>
-        await rename(from, to).catch((error: NodeJS.ErrnoException) => {
-            if (error.code !== "ENOENT") {
-                throw error;
-            }
-        }),
+    probe: versionOf,
+    swap: renameIfPresent,
     runningBuild,
     restart,
     discard: async (path) => await rm(path, { force: true }).catch(() => undefined),
@@ -220,4 +228,5 @@ export const upgradeMessage = (outcome: UpgradeOutcome): string => {
 };
 
 // Whether an outcome leaves this environment on the release it was asked for, running it.
-export const upgradeLanded = (outcome: UpgradeOutcome): boolean => outcome.kind === "current" || outcome.kind === "upgraded" || outcome.kind === "restarted";
+export const upgradeLanded = (outcome: UpgradeOutcome): boolean =>
+    outcome.kind === "current" || outcome.kind === "upgraded" || outcome.kind === "restarted";

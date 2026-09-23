@@ -1,7 +1,6 @@
 // The strip a finished turn ends on: up to four tiles, the rest counted on the first, a press handing the viewer the
 // shot to open at, and a picture that is gone saying so rather than drawing a broken image.
 import "@intentic/testing/dom";
-import { describe, it, expect, afterEach, beforeEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { IconStub } from "@intentic/ui/testing";
@@ -12,20 +11,23 @@ const tiles = new Map<string, { url: string | undefined }>();
 // Every path a strip asked a tile or a view of, in order.
 const tileAsks: string[] = [];
 const viewAsks: string[] = [];
-mock.module("./shotPictures", () => ({
-    stripOf: (_agent: string | undefined, path: string) => {
+jest.mock("../../../workspace/home/thumbnails", () => ({
+    picture: (_agent: string | undefined, path: string, size: string) => {
+        if (size === `view`) {
+            viewAsks.push(path);
+            return undefined;
+        }
         tileAsks.push(path);
         return tiles.get(path);
-    },
-    viewOf: (_agent: string | undefined, path: string) => {
-        viewAsks.push(path);
-        return undefined;
     },
 }));
 
 // The viewport is the observer's to judge, which jsdom has none of: each case says when its strip comes near.
 const nearing: (() => void)[] = [];
-mock.module("../../../workspace/home/nearViewport", () => ({ whenNear: (_el: Element, near: () => void) => nearing.push(near), stopWaiting: () => {} }));
+jest.mock("../../../workspace/home/nearViewport", () => ({
+    whenNear: (_el: Element, near: () => void) => nearing.push(near),
+    stopWaiting: () => {},
+}));
 const comeNear = async (): Promise<void> => {
     for (const near of nearing.splice(0)) {
         near();
@@ -41,7 +43,7 @@ const shotsOf = (...names: string[]): ChatShot[] =>
     names.map((name, index) => ({ key: shotKey(`s${index}`, `${SHOTS}/${name}.png`), path: `${SHOTS}/${name}.png`, toolId: `s${index}`, turnId: 1 }));
 
 let app: App | undefined;
-const view = mock<(shot: ChatShot) => void>();
+const view = jest.fn<(shot: ChatShot) => void>();
 
 const mount = (shots: readonly ChatShot[]): HTMLElement => {
     const element = document.createElement(`div`);
@@ -78,7 +80,10 @@ describe(`ChatTurnShots`, () => {
         const element = mount(shots);
         await comeNear();
         expect(buttons(element).map((button) => button.getAttribute(`aria-label`))).toEqual([`Open before`, `Open after`]);
-        expect([...element.querySelectorAll(`img`)].map((image) => image.getAttribute(`src`))).toEqual([`blob:${SHOTS}/before.png`, `blob:${SHOTS}/after.png`]);
+        expect([...element.querySelectorAll(`img`)].map((image) => image.getAttribute(`src`))).toEqual([
+            `blob:${SHOTS}/before.png`,
+            `blob:${SHOTS}/after.png`,
+        ]);
         expect(element.textContent).not.toContain(`+`);
     });
 

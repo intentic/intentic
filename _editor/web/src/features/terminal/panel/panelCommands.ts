@@ -2,31 +2,26 @@ import { t } from "@intentic/ui/i18n";
 import type { Ref } from "vue";
 import type { CommandRegistration } from "../../../shell/commands/useCommands";
 import { showWorkTerminals } from "../useWorkTerminals";
-import type { TerminalStrip } from "./useTerminalStrip";
 
-// Every strip action as a command, registered while the panel is mounted. Tab-family chords match the workspace and chat
+// Every strip action as a command, registered while the strip is mounted. Tab-family chords match the workspace and chat
 // strips, gated on this panel's focus; the panel's own verbs keep private, ungated chords. Defaults are Ctrl+Shift+<key>,
 // dodging bare Ctrl (the shell's) and Ctrl+Alt (AltGr), and every one is rebindable per surface.
 
 export interface PanelVerbs {
     readonly activeName: Readonly<Ref<string | undefined>>;
-    readonly strip: Pick<
-        TerminalStrip,
-        | `renamingName`
-        | `beginRename`
-        | `openCustomize`
-        | `joinSelected`
-        | `selectedNames`
-        | `requestKill`
-        | `killable`
-        | `sweepInactive`
-        | `cycleTab`
-    >;
+    readonly renamingName: Readonly<Ref<string | undefined>>;
+    readonly selectedNames: Readonly<Ref<string[]>>;
+    readonly killable: Readonly<Ref<string[]>>;
+    readonly beginRename: (name: string) => void;
+    readonly openCustomize: (name: string, mode: `color` | `icon`) => void;
+    readonly joinSelected: () => void;
+    readonly requestKill: (names: string[]) => void;
+    readonly sweepInactive: () => void;
+    readonly cycleTab: (delta: number) => void;
     readonly unsplit: (name: string) => void;
     readonly splitTab: ((name: string) => void) | undefined;
     // Whether the strip may end sessions at all; a read-only panel registers none of the kills.
     readonly canKill: boolean;
-    readonly openFind: () => void;
 }
 
 type PanelCommand = Omit<CommandRegistration, `owner`>;
@@ -38,8 +33,8 @@ const onActive = (activeName: Readonly<Ref<string | undefined>>, act: (name: str
     }
 };
 
-const killCommands = ({ activeName, strip }: PanelVerbs): PanelCommand[] => {
-    const killActive = onActive(activeName, (name) => strip.requestKill([name]));
+const killCommands = ({ activeName, requestKill, selectedNames, killable, sweepInactive }: PanelVerbs): PanelCommand[] => {
+    const killActive = onActive(activeName, (name) => requestKill([name]));
     return [
         {
             command: `terminal.kill`,
@@ -49,8 +44,8 @@ const killCommands = ({ activeName, strip }: PanelVerbs): PanelCommand[] => {
             when: `tabSurface == 'terminal'`,
             // The selection first, else the focused session: the chord has the least aim of the three kill gestures.
             handler: (): void => {
-                if (strip.selectedNames.value.length > 0) {
-                    strip.requestKill(strip.selectedNames.value);
+                if (selectedNames.value.length > 0) {
+                    requestKill(selectedNames.value);
                     return;
                 }
                 killActive();
@@ -62,16 +57,16 @@ const killCommands = ({ activeName, strip }: PanelVerbs): PanelCommand[] => {
             icon: `trash`,
             keybinding: `Ctrl+Shift+Backspace`,
             when: `tabSurface == 'terminal'`,
-            handler: () => strip.requestKill(strip.killable.value),
+            handler: () => requestKill(killable.value),
         },
         // Unbound: tidying is occasional, and a chord for it would sit one slip from the one that kills your shell.
-        { command: `terminal.killInactive`, title: t(`terminal.terminalPanel.killInactive`), icon: `trash`, handler: strip.sweepInactive },
+        { command: `terminal.killInactive`, title: t(`terminal.terminalPanel.killInactive`), icon: `trash`, handler: sweepInactive },
     ];
 };
 
 export const panelCommands = (verbs: PanelVerbs): PanelCommand[] => {
-    const { activeName, strip, unsplit, splitTab, openFind } = verbs;
-    const renameActive = onActive(activeName, strip.beginRename);
+    const { activeName, renamingName, beginRename, openCustomize, joinSelected, cycleTab, unsplit, splitTab } = verbs;
+    const renameActive = onActive(activeName, beginRename);
     const commands: PanelCommand[] = [
         {
             command: `terminal.rename`,
@@ -82,7 +77,7 @@ export const panelCommands = (verbs: PanelVerbs): PanelCommand[] => {
             when: `tabSurface == 'terminal'`,
             handler: (): void => {
                 // Already editing (F2 lands in the field): starting again would wipe the draft.
-                if (strip.renamingName.value === undefined) {
+                if (renamingName.value === undefined) {
                     renameActive();
                 }
             },
@@ -91,20 +86,20 @@ export const panelCommands = (verbs: PanelVerbs): PanelCommand[] => {
             command: `terminal.changeColor`,
             title: t(`terminal.terminalPanel.changeColor2`),
             icon: `palette`,
-            handler: onActive(activeName, (name) => strip.openCustomize(name, `color`)),
+            handler: onActive(activeName, (name) => openCustomize(name, `color`)),
         },
         {
             command: `terminal.changeIcon`,
             title: t(`terminal.terminalPanel.changeIcon2`),
             icon: `star`,
-            handler: onActive(activeName, (name) => strip.openCustomize(name, `icon`)),
+            handler: onActive(activeName, (name) => openCustomize(name, `icon`)),
         },
         {
             command: `terminal.join`,
             title: t(`terminal.terminalPanel.joinSelected`),
             icon: `code`,
             keybinding: `Ctrl+Shift+G`,
-            handler: strip.joinSelected,
+            handler: joinSelected,
         },
         {
             command: `terminal.unsplit`,
@@ -122,28 +117,19 @@ export const panelCommands = (verbs: PanelVerbs): PanelCommand[] => {
                 showWorkTerminals.value = !showWorkTerminals.value;
             },
         },
-        // Cmd+F on a Mac, Ctrl+F elsewhere, gated to this panel so the page's own find keeps the chord everywhere else.
-        {
-            command: `terminal.find`,
-            title: t(`terminal.terminalPanel.find`),
-            icon: `search`,
-            keybinding: `Mod+F`,
-            when: `tabSurface == 'terminal'`,
-            handler: openFind,
-        },
         {
             command: `terminal.nextTab`,
             title: t(`ui.action.next`),
             keybinding: `Alt+PageDown`,
             when: `tabSurface == 'terminal'`,
-            handler: () => strip.cycleTab(1),
+            handler: () => cycleTab(1),
         },
         {
             command: `terminal.previousTab`,
             title: t(`terminal.terminalPanel.previous`),
             keybinding: `Alt+PageUp`,
             when: `tabSurface == 'terminal'`,
-            handler: () => strip.cycleTab(-1),
+            handler: () => cycleTab(-1),
         },
     ];
     if (splitTab !== undefined) {

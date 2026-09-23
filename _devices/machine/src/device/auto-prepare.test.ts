@@ -1,5 +1,4 @@
 import type { DeviceSandbox } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { autoPrepareArgs, newState, prepareTargets, runTick, ticksToSkip } from "./auto-prepare.js";
 
 /* The tick's DECISIONS, without timers or docker: which sandboxes it may touch, what a failure does to the next tick. */

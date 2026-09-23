@@ -2,7 +2,6 @@
 // send, what stops one that spends money each round, and that picking either is picking instead of the other.
 import "@intentic/testing/dom";
 import type { LoopDesign, Workflow } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -11,8 +10,8 @@ import { IconStub } from "@intentic/ui/testing";
 const loops = ref<LoopDesign[]>([]);
 const workflows = ref<Workflow[]>([]);
 
-mock.module(`../../../agents/fleet/useLoopDesigns`, () => ({ useLoopDesigns: () => ({ designs: loops }) }));
-mock.module(`../../../agents/fleet/useWorkflowRuns`, () => ({ useWorkflowRuns: () => ({ designs: workflows }) }));
+jest.mock(`../../../agents/fleet/useLoopDesigns`, () => ({ useLoopDesigns: () => ({ designs: loops }) }));
+jest.mock(`../../../agents/fleet/useWorkflowRuns`, () => ({ useWorkflowRuns: () => ({ designs: workflows }) }));
 
 const { default: ChatRunThroughMenu } = await import("./ChatRunThroughMenu.vue");
 

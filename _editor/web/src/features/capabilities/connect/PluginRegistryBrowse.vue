@@ -84,15 +84,9 @@ const pick = (entry: RegistryEntry): void => {
             <div class="flex flex-col gap-2">
                 <div class="flex gap-2">
                     <input v-model="url" placeholder="https://github.com/owner/registry" :class="ui.input('min-w-0 flex-1')" />
-                    <input
-                        v-model="token"
-                        type="password"
-                        autocomplete="off"
-                        :placeholder="t(`capabilities.pluginRegistryBrowse.token`)"
-                        :class="ui.input('w-28')"
-                    />
+                    <input v-model="token" type="password" autocomplete="off" :placeholder="t(`shared.token`)" :class="ui.input('w-28')" />
                     <Button
-                        :label="t(`capabilities.pluginRegistryBrowse.browse`)"
+                        :label="t(`shared.browse`)"
                         size="small"
                         :disabled="url.trim().length === 0 || browsing"
                         :loading="browsing"

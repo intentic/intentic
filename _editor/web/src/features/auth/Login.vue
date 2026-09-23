@@ -105,7 +105,7 @@ watch(
 
             <h1 class="headline">
                 <span class="beat"
-                    ><span class="entry-display">{{ t(`auth.login.signIn`) }}</span
+                    ><span class="entry-display">{{ t(`shared.signIn`) }}</span
                     ><span class="entry-stop">.</span></span
                 >
                 <span class="beat"
@@ -134,7 +134,7 @@ watch(
                 <!-- The site's primary button style (@intentic/entry-css), shown only when Google's embedded button could not render. -->
                 <Button
                     v-if="!googleReady"
-                    :label="desktop ? t(`auth.login.continueGoogleInBrowser`) : t(`auth.login.continueGoogle`)"
+                    :label="desktop ? t(`shared.continueGoogleInBrowser`) : t(`shared.continueGoogle`)"
                     class="w-full justify-center"
                     @click="redirectSignIn"
                 >
@@ -143,7 +143,7 @@ watch(
 
                 <!-- Embedded-button failures are handled by the direct login path. -->
                 <button v-if="googleReady && !desktop" type="button" class="escape" v-action="redirectSignIn">
-                    {{ t(`auth.login.troubleSigningInUse`) }}
+                    {{ t(`shared.troubleSigningInUse`) }}
                 </button>
 
                 <p class="fine">
@@ -151,7 +151,7 @@ watch(
                     <!-- Named separately from Terms since breaching it can destroy a hosted machine without notice. -->
                     <a href="https://intentic.dev/terms/" target="_blank" rel="noopener">{{ t(`auth.login.terms`) }}</a
                     >, <a href="https://intentic.dev/acceptable-use/" target="_blank" rel="noopener">{{ t(`auth.login.acceptableUsePolicy`) }}</a>
-                    {{ t(`auth.login.and`) }}
+                    {{ t(`shared.and`) }}
                     <a href="https://intentic.dev/privacy/" target="_blank" rel="noopener">{{ t(`auth.login.privacyPolicy`) }}</a
                     >.
                 </p>

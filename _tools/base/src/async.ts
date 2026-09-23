@@ -2,8 +2,8 @@ import { errorMessage } from "./errors.js";
 import type { IDisposable } from "./lifecycle.js";
 
 // Delayer restarts on every call (a search box); Coalescer opens on the first call and holds the window (a watcher that
-// never goes quiet); SingleFlight shares one run per key; retry loops with a delay. Plus sleep, pollUntil and
-// createBackoff below. All are disposables: a pending timer is a live handle.
+// never goes quiet); SingleFlight shares one run per key; keyedLock queues them; retry loops with a delay. Plus sleep,
+// pollUntil and createBackoff below. All are disposables: a pending timer is a live handle.
 
 // Trailing debounce: `trigger` restarts the wait, so the task runs once, `delay` after the last call; every caller in
 // the window shares that result. Superseded callers are not rejected, only the effect was requested.
@@ -147,6 +147,22 @@ export class SingleFlight<K, T> implements IDisposable {
         this.running.clear();
     }
 }
+
+// One run at a time per key, each after the last however it ended; a key is forgotten once its queue drains.
+export const keyedLock = <K>(): (<T>(key: K, task: () => Promise<T>) => Promise<T>) => {
+    const tails = new Map<K, Promise<unknown>>();
+    return (key, task) => {
+        const next = (tails.get(key) ?? Promise.resolve()).then(task, task);
+        const tail = next.catch(() => undefined);
+        tails.set(key, tail);
+        void tail.then(() => {
+            if (tails.get(key) === tail) {
+                tails.delete(key);
+            }
+        });
+        return next;
+    };
+};
 
 // Attempts, waits, attempts again; when attempts run out, throws the last attempt's own error, since that is what a
 // caller can act on.

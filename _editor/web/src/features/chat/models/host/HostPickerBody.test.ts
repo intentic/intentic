@@ -8,13 +8,12 @@
 // plain cancel: the version that answered on dismissal meant a user who dragged the effort meter and changed
 // their mind had armed the tier they were backing out of.
 import "@intentic/testing/dom";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, defineComponent, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as uiOriginal from "@intentic/ui";
 
 /* The model list itself is the app's own panel and has its own suite. */
-mock.module(`../ModelPicker.vue`, () => ({
+jest.mock(`../ModelPicker.vue`, () => ({
     default: defineComponent({
         setup:
             (_props, { emit, slots }) =>
@@ -39,7 +38,7 @@ mock.module(`../ModelPicker.vue`, () => ({
                 ]),
     }),
 }));
-mock.module(`../../accounts/PickerAccounts.vue`, () => ({
+jest.mock(`../../accounts/PickerAccounts.vue`, () => ({
     default: defineComponent({
         setup:
             (_props, { emit }) =>
@@ -48,7 +47,7 @@ mock.module(`../../accounts/PickerAccounts.vue`, () => ({
     }),
 }));
 // The meter itself is tested elsewhere; this stub checks which rungs the panel hands it and what it emits.
-mock.module(`../../composer/EffortMeter.vue`, () => ({
+jest.mock(`../../composer/EffortMeter.vue`, () => ({
     default: defineComponent({
         props: { efforts: { type: Array, default: () => [] } },
         emits: [`pick`],
@@ -65,7 +64,7 @@ mock.module(`../../composer/EffortMeter.vue`, () => ({
 }));
 // The kit's action button is PrimeVue's underneath and wants its plugin; the commit bar only needs it to carry a
 // label, a disabled state and a click.
-mock.module(`@intentic/ui`, () => ({
+jest.mock(`@intentic/ui`, () => ({
     ...uiOriginal,
     Button: defineComponent({
         props: { label: String, disabled: Boolean },
@@ -75,7 +74,7 @@ mock.module(`@intentic/ui`, () => ({
                 h(`button`, { disabled: props.disabled, onClick: attrs[`onClick`] }, props.label),
     }),
 }));
-mock.module(`../../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => true) }) }));
+jest.mock(`../../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => true) }) }));
 
 const { dismissModelPick, modelRequest, requestModelPick, settleModelPick } = await import("./hostModelPicker");
 const { modelLabelFor, providerModels } = await import("../../accounts/providerCatalog");
@@ -111,7 +110,7 @@ afterEach(() => {
 /* THE ROW SELECTS, THE BAR ANSWERS. */
 it(`selects a model row without settling, and answers when the bar is pressed`, async () => {
     const anchor = document.createElement(`button`);
-    const settled = mock();
+    const settled = jest.fn();
     const result = requestModelPick({ anchor, provider: `claude`, model: `claude-haiku-4-5`, action: `Fix with agent` });
     void result.then(settled);
     const element = mount();
@@ -185,7 +184,7 @@ it(`drops the account and harness when the selection moves to another provider`,
 /* THE TIER IS A SETTING OF THE ANSWER, not the answer: choosing a rung leaves the panel open, and the press that ends it carries the rung. */
 it(`carries the tier into the answer`, async () => {
     const anchor = document.createElement(`button`);
-    const settled = mock();
+    const settled = jest.fn();
     const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, chooseRun: true, action: `Fix with agent` });
     void result.then(settled);
     const element = mount();
@@ -373,7 +372,7 @@ it(`offers no run settings to a caller that has not said it carries them`, () =>
 /* NOTHING CHOSEN IS A REAL STATE the panel opens in — an automation rung added past the end of its ladder arrives with a blank pair. */
 it(`refuses the press until a model has been chosen`, async () => {
     const anchor = document.createElement(`button`);
-    const settled = mock();
+    const settled = jest.fn();
     const result = requestModelPick({ anchor, provider: ``, model: ``, action: `Use this model` });
     void result.then(settled);
     const element = mount();

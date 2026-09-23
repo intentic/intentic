@@ -233,26 +233,53 @@ impl Said {
     }
 }
 
-/// Live output to the terminal AND the log — pulls and builds, where progress is the user experience and
-/// the log is the postmortem. `ok` is false on a non-zero exit (the caller decides whether that ends the
-/// flow — a failed pull may fall back to a local image).
-pub fn stream(args: &[&str], log: &Log) -> Result<Streamed> {
-    let mut child = docker(args)
+/// How a streamed command's output reaches the terminal: byte for byte, or as the lines `keep` lets through to `show`.
+#[derive(Clone, Copy)]
+pub enum Shown {
+    Raw,
+    Lines {
+        keep: fn(&str) -> bool,
+        show: fn(&str),
+    },
+}
+
+/// Live output to the terminal and the log; `ok` is false on a non-zero exit, and the caller decides what that ends.
+pub fn stream(args: &[&str], stdin: Option<&[u8]>, shown: Shown, log: &Log) -> Result<Streamed> {
+    let mut command = docker(args);
+    command
+        // Every image's `RUN --mount=type=cache` fails the legacy builder, which a host's `DOCKER_BUILDKIT=0` would pick.
+        .env("DOCKER_BUILDKIT", "1")
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    if stdin.is_some() {
+        command.stdin(Stdio::piped());
+    }
+    let mut child = command
         .spawn()
         .map_err(|err| Fail(format!("could not run docker: {err}")))?;
-    let stdout = child.stdout.take().expect("stdout was piped");
-    let stderr = child.stderr.take().expect("stderr was piped");
-    let out_log = log.clone();
-    let err_log = log.clone();
+    if let Some(input) = stdin {
+        child
+            .stdin
+            .take()
+            .expect("stdin was piped")
+            .write_all(input)
+            .map_err(|err| Fail(format!("could not write to docker's stdin: {err}")))?;
+    }
     let said = Said::default();
-    let out_said = said.clone();
-    let err_said = said.clone();
-    let out_thread =
-        std::thread::spawn(move || tee(stdout, &out_log, &mut std::io::stdout(), &out_said));
-    let err_thread =
-        std::thread::spawn(move || tee(stderr, &err_log, &mut std::io::stderr(), &err_said));
+    let out_thread = pump(
+        child.stdout.take().expect("stdout was piped"),
+        std::io::stdout(),
+        shown,
+        log,
+        &said,
+    );
+    let err_thread = pump(
+        child.stderr.take().expect("stderr was piped"),
+        std::io::stderr(),
+        shown,
+        log,
+        &said,
+    );
     let status = child
         .wait()
         .map_err(|err| Fail(format!("docker did not finish: {err}")))?;
@@ -264,46 +291,18 @@ pub fn stream(args: &[&str], log: &Log) -> Result<Streamed> {
     })
 }
 
-/// `stream`, with stdin fed from `input` — the stdin `docker build -t <tag> -` shape, where progress is the
-/// user experience (the terminal) and the log is the postmortem.
-///
-/// BUILDKIT IS FORCED ON, not merely assumed. Every apt block in the sandbox image, in a feature pack and in
-/// an overlay fragment carries `RUN --mount=type=cache` (the build-cache contract in the core Dockerfile's
-/// header), and the legacy builder does not merely ignore that flag — it fails the build outright. This runs on
-/// whatever machine the owner keeps their sandbox on, so a host with `DOCKER_BUILDKIT=0` in its environment or
-/// daemon config would otherwise turn a rebuild into a hard error the owner cannot read. Docker has defaulted
-/// to BuildKit since 23, so this only ever overrides an explicit opt-out.
-pub fn stream_with_stdin(args: &[&str], input: &[u8], log: &Log) -> Result<bool> {
-    let mut child = docker(args)
-        .env("DOCKER_BUILDKIT", "1")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|err| Fail(format!("could not run docker: {err}")))?;
-    child
-        .stdin
-        .take()
-        .expect("stdin was piped")
-        .write_all(input)
-        .map_err(|err| Fail(format!("could not write to docker's stdin: {err}")))?;
-    let stdout = child.stdout.take().expect("stdout was piped");
-    let stderr = child.stderr.take().expect("stderr was piped");
-    let out_log = log.clone();
-    let err_log = log.clone();
-    // A build's output is read from the log, not from a caller's message, so nothing keeps its tail.
-    let out_said = Said::default();
-    let err_said = Said::default();
-    let out_thread =
-        std::thread::spawn(move || tee(stdout, &out_log, &mut std::io::stdout(), &out_said));
-    let err_thread =
-        std::thread::spawn(move || tee(stderr, &err_log, &mut std::io::stderr(), &err_said));
-    let status = child
-        .wait()
-        .map_err(|err| Fail(format!("docker did not finish: {err}")))?;
-    let _ = out_thread.join();
-    let _ = err_thread.join();
-    Ok(status.success())
+fn pump(
+    from: impl Read + Send + 'static,
+    mut terminal: impl Write + Send + 'static,
+    shown: Shown,
+    log: &Log,
+    said: &Said,
+) -> std::thread::JoinHandle<()> {
+    let (log, said) = (log.clone(), said.clone());
+    std::thread::spawn(move || match shown {
+        Shown::Raw => tee(from, &log, &mut terminal, &said),
+        Shown::Lines { keep, show } => sift(from, &log, keep, show, &said),
+    })
 }
 
 fn tee(mut from: impl Read, log: &Log, terminal: &mut impl Write, said: &Said) {
@@ -317,38 +316,6 @@ fn tee(mut from: impl Read, log: &Log, terminal: &mut impl Write, said: &Said) {
         log.write(&buf[..read]);
         said.push(&String::from_utf8_lossy(&buf[..read]));
     }
-}
-
-/* `stream`, but the terminal sees LINES and gets to refuse them — the pull's shape when a person is watching. */
-pub fn stream_lines(
-    args: &[&str],
-    log: &Log,
-    keep: fn(&str) -> bool,
-    show: fn(&str),
-) -> Result<Streamed> {
-    let mut child = docker(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|err| Fail(format!("could not run docker: {err}")))?;
-    let stdout = child.stdout.take().expect("stdout was piped");
-    let stderr = child.stderr.take().expect("stderr was piped");
-    let out_log = log.clone();
-    let err_log = log.clone();
-    let said = Said::default();
-    let out_said = said.clone();
-    let err_said = said.clone();
-    let out_thread = std::thread::spawn(move || sift(stdout, &out_log, keep, show, &out_said));
-    let err_thread = std::thread::spawn(move || sift(stderr, &err_log, keep, show, &err_said));
-    let status = child
-        .wait()
-        .map_err(|err| Fail(format!("docker did not finish: {err}")))?;
-    let _ = out_thread.join();
-    let _ = err_thread.join();
-    Ok(Streamed {
-        ok: status.success(),
-        said: said.into_inner(),
-    })
 }
 
 /// Line-buffered because the decision is per LINE and the kernel's read sizes are not: a chunk boundary
@@ -684,15 +651,15 @@ fn is_layer_chatter(line: &str) -> bool {
 /// One attempt. A pipe gets docker's own output byte for byte — it is what an install log has always held,
 /// and the desktop app counts those same layer lines for its bar. A terminal gets the count instead.
 fn pull_once(image: &str, log: &Log) -> Result<Streamed> {
-    if !crate::ui::is_rich() {
-        return stream(&["pull", image], log);
-    }
-    stream_lines(
-        &["pull", image],
-        log,
-        |line| !crate::ui::pull_line(line),
-        crate::ui::note,
-    )
+    let shown = if crate::ui::is_rich() {
+        Shown::Lines {
+            keep: |line| !crate::ui::pull_line(line),
+            show: crate::ui::note,
+        }
+    } else {
+        Shown::Raw
+    };
+    stream(&["pull", image], None, shown, log)
 }
 
 #[cfg(test)]

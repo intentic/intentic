@@ -3,7 +3,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";

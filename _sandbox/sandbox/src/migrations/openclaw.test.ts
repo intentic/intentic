@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { PlannedItem } from "./adapter-shared.js";
 import { parseJson5ish } from "./json5ish.js";
 import { detectOpenclaw, planOpenclaw } from "./openclaw.js";

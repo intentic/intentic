@@ -9,7 +9,7 @@ import { rememberedProviderFor } from "../../chat/run/turnDefaults";
 import { useChat } from "../../chat/run/useChat";
 import { chatStrip } from "../../chat/panel/useChat-strip";
 import { onScreen } from "../../../shell/window/onScreen";
-import { asStarted, claimedCard } from "./useAgents-provisional";
+import { asStarted, overlaid } from "./useAgents-provisional";
 import { archived, heldWakes, markSeen, registry, sameEntries, snapshotFingerprint } from "./useAgents-registry";
 
 // Fleet view: registry (authoritative status/branch/cost) merged with open tabs by conversationId (live state),
@@ -218,7 +218,7 @@ export const fleet = computed<FleetAgent[]>(() => {
             // tab as unregistered. The turn's own start rides with it, or the card's elapsed clock would count from
             // the previous turn.
             const startedAt = sendingNow(agent, live.get(agent.id));
-            const shown = claimedCard(startedAt === undefined ? card : asStarted(card, startedAt), agent, undefined);
+            const shown = overlaid(startedAt === undefined ? card : asStarted(card, startedAt), agent, undefined);
             return shown === undefined ? [] : [shown];
         }),
         ...held,

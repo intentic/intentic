@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { Button, formatBytes, ImageView, type ImageViewState, isRenderableImage, SegmentedControl, useDevice, ui } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
-import { type Component, computed, ref, shallowRef, watch } from "vue";
+import { Button, formatBytes, ImageView, type ImageViewState, SegmentedControl, useDevice, ui } from "@intentic/ui";
+import { extensionOf, formatOf } from "@intentic/ui/file-format";
+import { errorMessage, useLatest } from "@intentic/ui/async";
+import { computed, ref, watch } from "vue";
 import { sandboxBlob } from "../../sandbox/client/sandboxClient";
 import { useLayout } from "../../../shell/window/useLayout";
-import { type RegisteredViewer, renderViewerForExtension } from "../../../core-views/viewerRegistry";
+import { type RegisteredViewer, renderViewerForExtension, useViewerComponent } from "../../../core-views/viewerRegistry";
 import ImageCompareView from "./ImageCompareView.vue";
 import { compareSides, type ImageSize, imageSize, type SidesComparison } from "./imageSides";
 import { useT } from "@intentic/ui/i18n";
@@ -24,37 +25,15 @@ const { diffLayout } = useLayout();
 // Two panes need the width for two; on a phone or Unified layout (DiffToolbar, same as DiffView) they stack
 // instead of shrinking to thumbnails.
 const split = computed(() => !mobile.value && diffLayout.value === `split` && before !== undefined && after !== undefined);
-// Path decides rendering via the kit's isRenderableImage, not the workspace's file-type resolver: showing a
-// picture here can't be switched off by disabling a viewer extension.
-const renderable = computed(() => isRenderableImage(path));
+// A raster picture draws here whatever viewers are on; an SVG is markup, drawn by its viewer.
+const renderable = computed(() => formatOf(path).category === `image` && formatOf(path).binary === true);
 const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
-const extension = computed(() => {
-    const dot = filename.value.lastIndexOf(`.`);
-    return dot > 0 ? filename.value.slice(dot + 1) : ``;
-});
 
 // The extension viewer that can draw this format from bytes, for everything that isn't a picture. Reactive: switching
 // the viewers extension off mid-review drops the panes to the download floor, the same as opening the file would.
-const viewer = computed<RegisteredViewer | undefined>(() => (renderable.value ? undefined : renderViewerForExtension(extension.value)));
-// Its component, imported once for both panes; a stale import (viewer changed under it) is dropped by the token.
-const viewerComponent = shallowRef<Component>();
-let viewerSeq = 0;
-watch(
-    viewer,
-    (next) => {
-        const token = ++viewerSeq;
-        viewerComponent.value = undefined;
-        if (next === undefined) {
-            return;
-        }
-        void next.component().then((component) => {
-            if (token === viewerSeq) {
-                viewerComponent.value = component;
-            }
-        });
-    },
-    { immediate: true },
-);
+const viewer = computed<RegisteredViewer | undefined>(() => (renderable.value ? undefined : renderViewerForExtension(extensionOf(path))));
+// Imported once for both panes.
+const viewerComponent = useViewerComponent(viewer);
 
 interface Side {
     readonly url?: string;
@@ -85,13 +64,12 @@ const COMPARE_OPTIONS = computed((): { label: string; value: CompareMode; title:
 const overlayable = computed(() => renderable.value && loaded.value.before.url !== undefined && loaded.value.after.url !== undefined);
 const overlay = computed(() => overlayable.value && compareMode.value !== `sides`);
 
-// One fetch per present side, each revoking its own object URL on prop change or unmount. A monotonic token
-// drops a stale response for a file already left.
-let seq = 0;
+// One fetch per present side, each revoking its own object URL on prop change or unmount.
+const latestSides = useLatest();
 watch(
     () => [before, after] as const,
     ([beforeUrl, afterUrl], _previous, onCleanup) => {
-        const token = ++seq;
+        const isLatest = latestSides();
         const created: string[] = [];
         onCleanup(() => {
             for (const url of created) {
@@ -113,7 +91,7 @@ watch(
             }
             void sandboxBlob(source, undefined, at).then(
                 (blob) => {
-                    if (token !== seq) {
+                    if (!isLatest()) {
                         return;
                     }
                     const url = URL.createObjectURL(blob);
@@ -121,21 +99,21 @@ watch(
                     loaded.value = { ...loaded.value, [side]: { url, size: blob.size, blob, loading: false } };
                     // Natural size, fetched separately since decoding must not hold up drawing the picture.
                     void imageSize(blob).then((natural) => {
-                        if (token === seq && natural !== undefined) {
+                        if (isLatest() && natural !== undefined) {
                             loaded.value = { ...loaded.value, [side]: { ...loaded.value[side], natural } };
                         }
                     });
                     // A text-fed viewer (an .svg) gets the markup, decoded once here rather than by each pane.
                     if (viewer.value?.fetch === `text`) {
                         void blob.text().then((text) => {
-                            if (token === seq) {
+                            if (isLatest()) {
                                 loaded.value = { ...loaded.value, [side]: { ...loaded.value[side], text } };
                             }
                         });
                     }
                 },
                 (error: unknown) => {
-                    if (token === seq) {
+                    if (isLatest()) {
                         loaded.value = { ...loaded.value, [side]: { error: errorMessage(error, `Couldn't load this side.`), loading: false } };
                     }
                 },
@@ -146,16 +124,17 @@ watch(
 );
 
 // Asked once both sides are in hand, of the bytes rather than of the reviewer's eyes.
+const latestVerdict = useLatest();
 watch(
     () => [loaded.value.before.blob, loaded.value.after.blob] as const,
     ([beforeBlob, afterBlob]) => {
+        const isLatest = latestVerdict();
         comparison.value = undefined;
         if (beforeBlob === undefined || afterBlob === undefined) {
             return;
         }
-        const token = seq;
         void compareSides(beforeBlob, afterBlob).then((verdict) => {
-            if (token === seq) {
+            if (isLatest()) {
                 comparison.value = verdict;
             }
         });
@@ -239,7 +218,13 @@ const panes = computed(() =>
                 <span class="min-w-0 truncate" v-tooltip.bottom.overflow="verdict">{{ verdict }}</span>
             </template>
             <span class="flex-1"></span>
-            <SegmentedControl v-if="overlayable" :model-value="compareMode" :options="COMPARE_OPTIONS" size="xs" @update:model-value="(value: string) => (compareMode = value as CompareMode)" />
+            <SegmentedControl
+                v-if="overlayable"
+                :model-value="compareMode"
+                :options="COMPARE_OPTIONS"
+                size="xs"
+                @update:model-value="(value: string) => (compareMode = value as CompareMode)"
+            />
         </div>
 
         <!-- One pane for two pictures: the reading for a change too small to see across two panes. -->
@@ -297,7 +282,7 @@ const panes = computed(() =>
                         :view="panes.length > 1 ? view : undefined"
                         @update:view="(next) => (view = next)"
                     />
-<!-- The extension's own rendering of this format, one instance per side, fed exactly the content prop its manifest names. -->
+                    <!-- The extension's own rendering of this format, one instance per side, fed exactly the content prop its manifest names. -->
                     <component
                         :is="viewerComponent"
                         v-else-if="viewerComponent && viewerContent(pane.side)"

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { quieted } from "./repeats.js";
 
 // The rule the five-second poll agent leans on. Tested with a clock of its own because the thing being measured is a

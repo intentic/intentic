@@ -153,7 +153,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                 severity="secondary"
                 :text="true"
                 class="min-w-0"
-                v-tooltip.bottom="t(`workspace.markdownViewer.outline`)"
+                v-tooltip.bottom="t(`shared.outline`)"
                 @click="overlayOpen = !overlayOpen"
             >
                 <Icon name="align-left" class="shrink-0 text-subtle" aria-hidden="true" />
@@ -245,7 +245,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
         </div>
 
         <!-- Same outline, for panes that can't dock one (or a peek after the rail is off); anchored to the section button on desktop, a sheet on phone. -->
-        <ResponsiveOverlay v-model="overlayOpen" :anchor="opener" :header="t(`workspace.markdownViewer.outline`)" panel-class="max-h-[60vh] w-72 p-2">
+        <ResponsiveOverlay v-model="overlayOpen" :anchor="opener" :header="t(`shared.outline`)" panel-class="max-h-[60vh] w-72 p-2">
             <MarkdownOutline :headings="outline.headings.value" :active="outline.active.value" @jump="jumpFromOverlay" />
         </ResponsiveOverlay>
     </div>

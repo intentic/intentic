@@ -1,6 +1,5 @@
 // The guide panel renders whatever the catalog says, so the only thing worth pinning is that the split is
 // faithful: no character of a step is lost, dropped or promoted to a literal it wasn't marked as.
-import { it, expect } from "bun:test";
 import { guideParts, guidePartsPrefixed } from "./credentialGuide";
 
 it(`marks backticked runs as literals and leaves the prose alone`, () => {

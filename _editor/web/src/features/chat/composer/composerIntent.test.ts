@@ -1,7 +1,6 @@
 // What the next Send press means, asserted as precedence: every state below can hold alongside the
 // ones under it (a plan pending while a turn streams while an edit is armed), and these tests pin the
 // order that resolves them.
-import { it, expect } from "bun:test";
 import {
     type ComposerSituation,
     type ComposerWords,

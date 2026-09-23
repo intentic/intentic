@@ -61,7 +61,7 @@ const send = async (): Promise<void> => {
             </p>
             <!-- Quiet, because the common reason to press it twice is impatience with a mail that is already on its way. -->
             <button type="button" :class="ui.linkButton(`text-muted underline hover:text-content`)" :disabled="sending" v-action="send">
-                {{ sending ? t(`setup.setupHandoff.sending`) : t(`setup.setupHandoff.sendAgain`) }}
+                {{ sending ? t(`shared.sending`) : t(`shared.sendItAgain`) }}
             </button>
         </template>
         <Button

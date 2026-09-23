@@ -1,6 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import { type AgentSummary, fixAttemptId, type PushRun, pushFixConversationId } from "@intentic/sandbox-contract";
-import { test, expect, mock, jest } from "bun:test";
 import { computed, ref, shallowRef } from "vue";
 import { freshImport, mocked } from "@intentic/testing/bun";
 import { fixSignature, pushFixPrompt, pushNudgePrompt, refusalSummary } from "../health/fixProposal";
@@ -12,7 +11,7 @@ import { modelLabelFor } from "../../chat/accounts/providerCatalog";
 // real module does not export only reaches a graph the mocks were registered before.
 
 /* The watcher's stamp, which decides whether a verdict is still about the tree in front of the user. */
-mock.module(`../changes/live/useWorkspaceLive`, () => {
+jest.mock(`../changes/live/useWorkspaceLive`, () => {
     let lastAt = 1;
     return {
         workspaceChangedSince: (at: number) => lastAt === 0 || lastAt > at,
@@ -22,21 +21,21 @@ mock.module(`../changes/live/useWorkspaceLive`, () => {
     };
 });
 
-mock.module(`../changes/useChanges`, () => {
+jest.mock(`../changes/useChanges`, () => {
     // One of each, shared like the real module's singletons; a fresh spy per call would give the flow a different
     // `syncAll` than the one under assertion.
     const actionBusy = ref(false);
     const failures = ref(new Map<string, { action: string; detail: string; run?: PushRun }>());
-    const syncAll = mock(async () => {});
+    const syncAll = jest.fn(async () => {});
     return { COMMIT_SCOPE: `commit`, useChanges: () => ({ actionBusy, failures, syncAll }) };
 });
 
 // Push runs live behind useChanges (mocked above); this seam only tracks the terminal a refused push ran in,
 // one per repo, like the daemon.
-mock.module(`./usePushRun`, () => {
+jest.mock(`./usePushRun`, () => {
     const sessions = new Map<string, string>();
     return {
-        usePushRun: (repo: string) => ({ terminal: computed(() => sessions.get(repo)), showTerminal: mock() }),
+        usePushRun: (repo: string) => ({ terminal: computed(() => sessions.get(repo)), showTerminal: jest.fn() }),
         clearPushTerminals: () => sessions.clear(),
         // Sets where a repo's push is running, as the daemon would name it.
         pushTerminal: (repo: string, session: string | undefined): void => {
@@ -51,7 +50,7 @@ mock.module(`./usePushRun`, () => {
 
 // The pinned entry carries its own effort, so the tier the proposal names comes off the entry, not a shared setting.
 // Filed under `pre-push-fix`, this flow's own job.
-mock.module(`../../sandbox/overview/useSandboxSettings`, () => ({
+jest.mock(`../../sandbox/overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({
         settings: ref({ modelRoles: { "pre-push-fix": [{ provider: `claude`, model: `claude-sonnet-4-5`, effort: `high` }] } }),
     }),
@@ -59,24 +58,24 @@ mock.module(`../../sandbox/overview/useSandboxSettings`, () => ({
 
 // Resolves against what this sandbox can reach, so the proposal names a model that can actually be sent; provider
 // readiness is a different suite's business.
-mock.module(`../../chat/session/access`, () => ({ providerReady: () => true }));
+jest.mock(`../../chat/session/access`, () => ({ providerReady: () => true }));
 
-mock.module(`../../agents/fleet/sessionSuggestion`, () => ({
-    composeSession: mock((draft: { prompt: string }) => ({
+jest.mock(`../../agents/fleet/sessionSuggestion`, () => ({
+    composeSession: jest.fn((draft: { prompt: string }) => ({
         draft,
-        selection: { apply: mock(), account: { value: undefined }, harness: { value: undefined } },
+        selection: { apply: jest.fn(), account: { value: undefined }, harness: { value: undefined } },
     })),
-    startSession: mock(),
+    startSession: jest.fn(),
 }));
 
 // The fleet as the stream keeps it and the archive as it is pulled: what a press is planned against. Shared refs,
 // like the real module's, so a case sets the roster and the flow reads that same one.
-mock.module(`../../agents/fleet/useAgents-registry`, () => {
-    return { registry: shallowRef<AgentSummary[]>([]), archived: shallowRef<AgentSummary[]>([]), loadArchived: mock(async () => {}) };
+jest.mock(`../../agents/fleet/useAgents-registry`, () => {
+    return { registry: shallowRef<AgentSummary[]>([]), archived: shallowRef<AgentSummary[]>([]), loadArchived: jest.fn(async () => {}) };
 });
-mock.module(`../../agents/fleet/useAgents-archive`, () => ({ archive: mock(async () => {}) }));
-mock.module(`../../agents/fleet/agentActions`, () => ({ stopAgent: mock(async () => {}) }));
-mock.module(`../../agents/fleet/useAgents-actions`, () => ({ open: mock() }));
+jest.mock(`../../agents/fleet/useAgents-archive`, () => ({ archive: jest.fn(async () => {}) }));
+jest.mock(`../../agents/fleet/agentActions`, () => ({ stopAgent: jest.fn(async () => {}) }));
+jest.mock(`../../agents/fleet/useAgents-actions`, () => ({ open: jest.fn() }));
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 // A fix agent as the roster reports it; `status` is what each case is about.
@@ -379,7 +378,7 @@ test(`starting a fix with a picked model re-points the session before starting`,
     await pushRefused(loaded);
 
     await flow.startFix({ provider: `cursor`, model: `composer-2.5`, label: `Composer 2.5` });
-    const composed = mocked(suggestion.composeSession).mock.results[0]?.value as { selection: { apply: ReturnType<typeof mock> } };
+    const composed = mocked(suggestion.composeSession).mock.results[0]?.value as { selection: { apply: ReturnType<typeof jest.fn> } };
     expect(composed.selection.apply).toHaveBeenCalledWith({ kind: `selectModel`, pick: { provider: `cursor`, value: `composer-2.5` } });
     expect(suggestion.startSession).toHaveBeenCalledWith(composed);
     expect(flow.question.value).toBeUndefined();

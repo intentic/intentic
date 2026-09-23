@@ -14,12 +14,7 @@ import PickerRunSettings from "../../../chat/models/run-settings/PickerRunSettin
 import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
 import type { PickerEntry } from "../../../chat/models/modelPickerState";
 import { providerDisplayLabel } from "../../../chat/accounts/providerCatalog";
-import {
-    carryPinKnobs,
-    defaultPinRunSettings,
-    honoredPinKnobs,
-    usePickerRunSettings,
-} from "../../../chat/models/run-settings/pickerRunSettings";
+import { carryPinKnobs, defaultPinRunSettings, honoredPinKnobs, usePickerRunSettings } from "../../../chat/models/run-settings/pickerRunSettings";
 import { useChat } from "../../../chat/run/useChat";
 import { useT } from "@intentic/ui/i18n";
 
@@ -64,7 +59,7 @@ const { hasContent: runSettingsShown } = usePickerRunSettings(
 const harnessChoosable = computed(() => contractHarnessChoosable(provider.value));
 const harnessOptions = computed(() => [
     { label: providerDisplayLabel(provider.value), value: `native` },
-    { label: t(`sandbox.modelPinPickerBody.claudeCode`), value: `claude-code` },
+    { label: t(`shared.claudeCode`), value: `claude-code` },
 ]);
 
 // What this provider/harness pair cannot do, straight off its declared record: the honest half of a choice made
@@ -134,7 +129,7 @@ const unpickable = (entry: PickerEntry): boolean =>
 
                 <!-- Harness axis: the provider's own runtime, or its model through Claude Code. -->
                 <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`sandbox.modelPinPickerBody.harness`) }}</span>
+                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`shared.harness`) }}</span>
                     <div class="flex items-center gap-1">
                         <button
                             v-for="option in harnessOptions"
@@ -152,11 +147,9 @@ const unpickable = (entry: PickerEntry): boolean =>
 
                 <!-- Model limits must be visible before an unattended run starts. -->
                 <div v-if="limitations.length > 0" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{
-                        t(`sandbox.modelPinPickerBody.notAvailableHere`)
-                    }}</span>
-                    <InfoHint :label="t(`sandbox.modelPinPickerBody.whatIsntAvailableHere`)" :text="`${limitations.length}`" class="shrink-0">
-                        <span class="block text-xs font-medium text-content">{{ t(`sandbox.modelPinPickerBody.notAvailableHere`) }}</span>
+                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`shared.notAvailableHere`) }}</span>
+                    <InfoHint :label="t(`shared.whatIsntAvailableHere`)" :text="`${limitations.length}`" class="shrink-0">
+                        <span class="block text-xs font-medium text-content">{{ t(`shared.notAvailableHere`) }}</span>
                         <ul class="mt-1 flex flex-col gap-1 text-xs">
                             <li v-for="limit in limitations" :key="limit" class="flex items-start gap-1.5">
                                 <span class="mt-[0.4rem] h-1 w-1 shrink-0 rounded-full bg-line-strong" aria-hidden="true"></span>

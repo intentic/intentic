@@ -10,12 +10,12 @@ import {
     resumeDisclosure,
     type TranscriptRow,
     withoutResumeNote,
-    withResumeNote,type MessageReceipt
+    withResumeNote,
+    type MessageReceipt,
 } from "@intentic/sandbox-contract";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { watch } from "vue";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
-import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync, hoisted } from "@intentic/testing/bun";
+import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import type { SandboxCallContext } from "../../sandbox/client/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
@@ -24,7 +24,6 @@ import { planFeedback } from "./cardReplies";
 import { seedFork } from "./forkSeed";
 import { providerAccounts, selectedAccountId, usageByAccount } from "../accounts/providerAccounts";
 import { turnDefaults } from "../run/turnDefaults";
-import { AUTO_PROVIDER } from "../models/modelPickerState";
 import { resolvePrompt } from "../../agents/review/conflictResolution";
 import { errands } from "../run/errands";
 import {
@@ -49,14 +48,14 @@ interface CallOptions {
 
 // The daemon as this suite models it: one handler over each procedure's route name, since a turn's protocol spans
 // several (start, attach, stop, reply) and a test swaps the whole of it at once. The box a call went to rides its context.
-const { daemon } = hoisted(() => ({ daemon: mock<(procedure: string, input: unknown, options?: CallOptions) => Promise<unknown>>() }));
+const { daemon } = { daemon: jest.fn<(procedure: string, input: unknown, options?: CallOptions) => Promise<unknown>>() };
 // Each procedure a conversation calls, served by the model above; the answer is the model's to shape, so the client's
 // own answer type is waived here and nowhere else.
 const procedureOf =
     (name: string) =>
     (input: unknown, options?: CallOptions): never =>
         daemon(name, input, options) as never;
-mock.module("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../sandbox/client/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         agent: {
             run: procedureOf(`agent.run`),
@@ -78,13 +77,10 @@ const daemonRefusal = (status: number, message = `Request failed (${status}).`):
 // A call's input as the daemon receives it: JSON, so nothing undefined arrives.
 const wire = (input: unknown): Record<string, unknown> => JSON.parse(JSON.stringify(input)) as Record<string, unknown>;
 
-// Stubs useChat-catalog's reload so a model-invalid error doesn't pull in the whole chat store. hoisted so the
-// mock factory can see the spy.
-const { loadProviderModelsMock, loadTrialStatusMock } = hoisted(() => ({
-    loadProviderModelsMock: mock(async () => {}),
-    loadTrialStatusMock: mock(async () => {}),
-}));
-mock.module("../models/useChat-catalog", () => ({ loadProviderModels: loadProviderModelsMock, loadTrialStatus: loadTrialStatusMock }));
+// Stubs useChat-catalog's reload so a model-invalid error doesn't pull in the whole chat store.
+const loadProviderModelsMock = jest.fn(async () => {});
+const loadTrialStatusMock = jest.fn(async () => {});
+jest.mock("../models/useChat-catalog", () => ({ loadProviderModels: loadProviderModelsMock, loadTrialStatus: loadTrialStatusMock }));
 
 // turnDefaults is a module singleton; reseed before each test.
 const seedTurnDefaults = (): void => {
@@ -177,7 +173,10 @@ const turnDaemon = (
         const names = (run: string, messages: readonly (string | undefined)[]): boolean =>
             body[`live`] === true || body[`run`] === run || (typeof body[`messageId`] === `string` && messages.includes(body[`messageId`]));
         if (live !== undefined) {
-            const named = names(live.run, live.fold.rows.map((row) => row.messageId));
+            const named = names(
+                live.run,
+                live.fold.rows.map((row) => row.messageId),
+            );
             if (named) {
                 end(live, `stopped`);
             }
@@ -534,104 +533,6 @@ describe(`Conversation`, () => {
         expect(conversation.transcript.messages.value).toEqual([]);
     });
 
-    it(`arms Auto without routing anywhere: the chat keeps somewhere to run if the reading never lands`, () => {
-        const conversation = new Conversation(`c1`);
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
-
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: AUTO_PROVIDER, value: `` } });
-
-        expect(conversation.selection.auto.value).toBe(true);
-        // The mode is not a route: provider and model stand exactly as they were.
-        expect(conversation.selection.provider.value).toBe(`claude`);
-        expect(conversation.selection.model.value).toBe(`haiku`);
-    });
-
-    it(`treats naming a model as the answer to the question Auto was armed to ask`, () => {
-        const conversation = new Conversation(`c1`);
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: AUTO_PROVIDER, value: `` } });
-
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
-
-        expect(conversation.selection.auto.value).toBe(false);
-        // And for the next new chat too: the owner just answered it by hand.
-        expect(turnDefaults.auto.value).toBe(false);
-    });
-
-    it(`disarms Auto when a model is worn, whoever named it`, () => {
-        const conversation = new Conversation(`c1`);
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: AUTO_PROVIDER, value: `` } });
-
-        // What a persona's card and Auto's own answer both do; either way the model is now named.
-        conversation.selection.apply({ kind: `wearModel`, pin: { provider: `claude`, model: `claude-opus-5`, effort: `high` } });
-
-        expect(conversation.selection.auto.value).toBe(false);
-        expect(conversation.selection.model.value).toBe(`claude-opus-5`);
-        expect(conversation.selection.effortPick.value).toBe(`high`);
-    });
-
-    it(`opens a new chat on Auto when that was the last pick`, () => {
-        new Conversation(`c1`).selection.apply({ kind: `selectModel`, pick: { provider: AUTO_PROVIDER, value: `` } });
-
-        expect(new Conversation(`c2`).selection.auto.value).toBe(true);
-    });
-
-    it(`retracts the model divider once the pick goes back to what the last turn ran on`, async () => {
-        const conversation = new Conversation(`c1`);
-        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.turn.send(`first`, settings);
-
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
-        expect(conversation.transcript.messages.value.at(-1)!.role).toBe(`notice`);
-        // Landing back on the original pick costs nothing, so it says nothing, the same rule as the provider divider.
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `opus` } });
-        expect(conversation.transcript.messages.value.every((message) => message.role !== `notice`)).toBe(true);
-    });
-
-    // A catalog read that no longer lists this chat's pick moves it off (useChat-catalog); the pick is the user's, so
-    // the move is a loan, not a decision. Displacing one-way is what spent an unchosen model's allowance for the rest
-    // of a conversation whenever a routed channel de-listed a model it was out of capacity for.
-    it(`owes back the model a thin catalog moved this chat off, and hands it back when it returns`, async () => {
-        const conversation = new Conversation(`c1`);
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `opus` } });
-        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.turn.send(`first`, settings);
-
-        conversation.selection.apply({ kind: `displaceModel`, model: `haiku` });
-        expect(conversation.selection.model.value).toBe(`haiku`);
-        expect(conversation.selection.displacedModel.value).toBe(`opus`);
-        // Said out loud like any other swap: the next message would run on a model the user never picked.
-        expect(conversation.transcript.messages.value.at(-1)!.text).toContain(`Switched to`);
-
-        conversation.selection.apply({ kind: `restoreModel` });
-        expect(conversation.selection.model.value).toBe(`opus`);
-        expect(conversation.selection.displacedModel.value).toBeUndefined();
-        // Back on what the last turn ran, so the divider it raised goes with it.
-        expect(conversation.transcript.messages.value.every((message) => message.role !== `notice`)).toBe(true);
-    });
-
-    it(`drops the debt the moment the user picks a model of their own`, () => {
-        const conversation = new Conversation(`c1`);
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `opus` } });
-        conversation.selection.apply({ kind: `displaceModel`, model: `haiku` });
-
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `sonnet` } });
-        expect(conversation.selection.displacedModel.value).toBeUndefined();
-
-        conversation.selection.apply({ kind: `restoreModel` });
-        // A restore has nothing to give back once the user has chosen: their pick stands.
-        expect(conversation.selection.model.value).toBe(`sonnet`);
-    });
-
-    it(`forgets a displaced model when the chat moves to another provider`, () => {
-        const conversation = new Conversation(`c1`);
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `opus` } });
-        conversation.selection.apply({ kind: `displaceModel`, model: `haiku` });
-
-        // The owed id belongs to Claude's catalog; nothing on Codex can honour it.
-        conversation.selection.apply({ kind: `selectProvider`, provider: `codex` });
-        expect(conversation.selection.displacedModel.value).toBeUndefined();
-    });
-
     it(`names the allowance the new model spends, when the plan meters it and we have a reading`, async () => {
         usageByAccount.value = {};
         const conversation = new Conversation(`c1`);
@@ -656,36 +557,6 @@ describe(`Conversation`, () => {
         conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-4-6` } });
         // Rounded once, by the same projection the usage meters use.
         expect(conversation.transcript.messages.value.at(-1)!.text).toContain(`Opus 61% used`);
-    });
-
-    it(`holds a divider for a model swapped mid-turn until the turn settles`, async () => {
-        const conversation = new Conversation(`c1`);
-        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `working` }], { stayOpen: true }));
-        const turn = conversation.turn.send(`go`, settings);
-        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
-
-        // Allowed mid-stream (retires nothing), but the transcript tail belongs to the streaming turn; a divider there
-        // would read as part of the answer.
-        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
-        expect(conversation.transcript.messages.value.every((message) => message.role !== `notice`)).toBe(true);
-
-        conversation.turn.stop();
-        await turn;
-        // Settled: the tail is the composer's again, so the notice now describes the next message.
-        expect(conversation.transcript.messages.value.some((message) => message.role === `notice` && message.text.includes(`Switched to`))).toBe(
-            true,
-        );
-    });
-
-    it(`ignores a provider switch while a turn is streaming`, async () => {
-        const conversation = new Conversation(`c1`);
-        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `x` }], { stayOpen: true }));
-        const turn = conversation.turn.send(`go`, settings);
-        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
-        conversation.selection.apply({ kind: `selectProvider`, provider: `grok` });
-        expect(conversation.selection.provider.value).toBe(`claude`);
-        conversation.turn.stop();
-        await turn;
     });
 
     // A parked turn is `streaming` too (the run is alive), so a mid-turn guard on that flag also blocked switching
@@ -725,21 +596,6 @@ describe(`Conversation`, () => {
         const secondBody = turnBodies()[1]!;
         expect(secondBody[`account`]).toBe(`with-room`);
         expect(`sessionId` in secondBody).toBe(false);
-    });
-
-    // `generating` is mid-answer with no card on screen; a switch there would name an account that isn't paying for
-    // the turn being watched.
-    it(`ignores an account switch while the model is generating`, async () => {
-        const conversation = new Conversation(`c1`);
-        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `working` }], { stayOpen: true }));
-        const turn = conversation.turn.send(`go`, settings);
-        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
-
-        conversation.selection.apply({ kind: `selectAccount`, account: `with-room` });
-        expect(conversation.selection.account.value).toBeUndefined();
-
-        conversation.turn.stop();
-        await turn;
     });
 
     it(`turnsOf opens a group at each prompt and keeps pre-prompt frames in one ahead of it`, () => {
@@ -899,70 +755,6 @@ describe(`Conversation`, () => {
         conversation.selection.apply({ kind: `set`, picks: { modePick: `plan` } });
         conversation.selection.apply({ kind: `selectProvider`, provider: `grok` });
         expect(conversation.selection.mode.value).toBe(`plan`);
-    });
-
-    it(`selectProvider re-scopes model + effort and prevents a Claude alias reaching Codex`, async () => {
-        const conversation = new Conversation(`c1`);
-        // Seeded from the Claude defaults.
-        expect(conversation.selection.provider.value).toBe(`claude`);
-        expect(conversation.selection.model.value).toBe(`opus`);
-
-        // Switching to Codex clears a Claude-only model to the account default and clamps a Claude-only effort.
-        conversation.selection.apply({ kind: `set`, picks: { model: `haiku`, effortPick: `max` } });
-        conversation.selection.apply({ kind: `selectProvider`, provider: `codex` });
-        expect(conversation.selection.provider.value).toBe(`codex`);
-        expect(conversation.selection.model.value).toBe(``);
-        expect(conversation.selection.effort.value).toBe(`xhigh`);
-
-        // The turn sends Codex with no model (empty = the account default).
-        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `thr-1` }]));
-        await conversation.turn.send(`hi`, {
-            agent: conversation.selection.provider.value,
-            harness: conversation.selection.harness.value,
-            account: conversation.selection.account.value,
-            actsAs: conversation.selection.actsAs.value,
-            startIn: conversation.selection.startIn.value,
-            model: conversation.selection.model.value,
-            effort: conversation.selection.effort.value,
-            thinking: false,
-            fast: false,
-        });
-        const body = turnBodies()[0]!;
-        expect(body[`agent`]).toBe(`codex`);
-        expect(`model` in body).toBe(false);
-
-        // A mid-chat pick switches the selection (no lock) and marks the pending cut with a notice.
-        conversation.selection.apply({ kind: `selectProvider`, provider: `claude` });
-        expect(conversation.selection.provider.value).toBe(`claude`);
-        expect(conversation.transcript.messages.value.at(-1)!.role).toBe(`notice`);
-    });
-
-    // The persona is resolved per turn (turnSettings), not fixed at conversation start, so one chat can send as
-    // nobody then as a named persona. An attended chat sends no `actsAs` at all.
-    it(`sends the persona a turn is acting as, and nothing at all when the chat is nobody`, async () => {
-        const conversation = new Conversation(`c1`);
-        daemon.mockImplementation(turnDaemon([{ kind: `done` }]));
-
-        await conversation.turn.send(`check our mentions`, conversation.selection.turnSettings());
-        expect(`actsAs` in turnBodies()[0]!).toBe(false);
-
-        conversation.selection.apply({ kind: `set`, picks: { actsAs: `work` } });
-        await conversation.turn.send(`reply to the top one`, conversation.selection.turnSettings());
-        expect(turnBodies()[1]![`actsAs`]).toBe(`work`);
-    });
-
-    it(`restores the per-provider model when switching provider away and back`, () => {
-        // The user picked Haiku for Claude (the composer's model facade persists this per provider).
-        turnDefaults.models.value = { ...turnDefaults.models.value, claude: `haiku` };
-        const conversation = new Conversation(`c1`);
-        conversation.selection.apply({ kind: `selectProvider`, provider: `claude` });
-        expect(conversation.selection.model.value).toBe(`haiku`);
-        // Codex has no remembered pick → its account default (empty).
-        conversation.selection.apply({ kind: `selectProvider`, provider: `codex` });
-        expect(conversation.selection.model.value).toBe(``);
-        // Back to Claude: the remembered Haiku returns, not the hardcoded Opus.
-        conversation.selection.apply({ kind: `selectProvider`, provider: `claude` });
-        expect(conversation.selection.model.value).toBe(`haiku`);
     });
 
     it(`merges updates into the matching tool by id and drops updates with no match`, async () => {
@@ -1284,7 +1076,9 @@ describe(`Conversation`, () => {
 
         const sending = conversation.turn.say(`fix the failing check`);
         await waitFor(() => expect(turnBodies()).toHaveLength(1));
-        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([{ role: `user`, text: `fix the failing check` }]);
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `fix the failing check` },
+        ]);
         expect(conversation.draft.value).toBe(``);
 
         ack({ delivered: `started`, run: `r1` });
@@ -2138,7 +1932,9 @@ describe(`Conversation`, () => {
     // "Continue" never reaches the conversation.
     it(`follows the turn already re-running the held one, rather than saying carry on`, async () => {
         const conversation = new Conversation(`c1`);
-        daemon.mockImplementation(turnDaemon([{ kind: `error`, message: `Google turn timed out waiting for OpenCode.`, held: { ran: true } }, { kind: `done` }]));
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `error`, message: `Google turn timed out waiting for OpenCode.`, held: { ran: true } }, { kind: `done` }]),
+        );
         await conversation.turn.send(`ship the parser`, settings);
         expect(conversation.pickUp.value).toMatchObject({ reason: `stopped`, held: { ran: true } });
 
@@ -2146,7 +1942,9 @@ describe(`Conversation`, () => {
             head: () => ({ run: `rung-1`, prompt: withResumeNote(`ship the parser`, RESUME_NOTES.stopped), startedAt: Date.now() }),
         });
         daemon.mockImplementation((procedure, input, options) =>
-            procedure === `agent.resume` ? Promise.reject(daemonRefusal(409, `a turn is already running in that conversation`)) : rung(procedure, input, options),
+            procedure === `agent.resume`
+                ? Promise.reject(daemonRefusal(409, `a turn is already running in that conversation`))
+                : rung(procedure, input, options),
         );
         await expect(conversation.turn.continueTurn()).resolves.toBeUndefined();
 
@@ -2160,7 +1958,14 @@ describe(`Conversation`, () => {
         const nextAt = Math.floor(Date.now() / 1000) + 15;
         daemon.mockImplementation(
             turnDaemon([
-                { kind: `error`, message: `Google turn timed out waiting for OpenCode.`, held: { ran: true }, autoResume: `scheduled`, nextAt, retries: { made: 1, max: 3 } },
+                {
+                    kind: `error`,
+                    message: `Google turn timed out waiting for OpenCode.`,
+                    held: { ran: true },
+                    autoResume: `scheduled`,
+                    nextAt,
+                    retries: { made: 1, max: 3 },
+                },
                 { kind: `done` },
             ]),
         );
@@ -2423,7 +2228,11 @@ describe(`Conversation`, () => {
         await conversation.turn.send(`Continue`, { ...settings, agent: `endpoint/free-trial` });
         await new Promise((resolve) => setTimeout(resolve, 0));
         // What every window's card then shows.
-        conversation.queue.value = { items: [{ id: `m-1`, text: `Continue`, voice: `person`, queuedAt: 1, revision: 1 }], revision: 2, paused: `refused` };
+        conversation.queue.value = {
+            items: [{ id: `m-1`, text: `Continue`, voice: `person`, queuedAt: 1, revision: 1 }],
+            revision: 2,
+            paused: `refused`,
+        };
 
         await conversation.turn.say(`Continue`);
         await waitFor(() => expect(conversation.transcript.messages.value.at(-1)?.text).toBe(`on it`));

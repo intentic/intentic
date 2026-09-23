@@ -2,7 +2,6 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GitRunner } from "@intentic/scaffold";
-import { test, expect, afterEach } from "bun:test";
 import { lockShrinkage, shrunkSurfaces } from "@intentic/constants/contract-shrink";
 import { claimedContractShrink } from "./contract-shrink.js";
 

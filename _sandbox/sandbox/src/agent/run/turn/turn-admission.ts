@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { keyedLock } from "@intentic/base/async";
 import { MENTION_LIMIT, type MessageReceipt } from "@intentic/sandbox-contract";
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../agents/actor/conversation-holdings.js";
 import type { QueuedItem } from "../../../agents/actor/conversation-queue.js";
@@ -183,22 +184,6 @@ const turnOf = (services: Services, batch: readonly QueuedItem[]): Turn => {
     };
 };
 
-// One piece of work per conversation at a time, each after the last however that one ended.
-const oneAtATime = (): (<T>(conversationId: string, work: () => Promise<T>) => Promise<T>) => {
-    const tails = new Map<string, Promise<unknown>>();
-    return (conversationId, work) => {
-        const next = (tails.get(conversationId) ?? Promise.resolve()).then(work, work);
-        const tail = next.catch(() => undefined);
-        tails.set(conversationId, tail);
-        void tail.then(() => {
-            if (tails.get(conversationId) === tail) {
-                tails.delete(conversationId);
-            }
-        });
-        return next;
-    };
-};
-
 // A person's turn in flight, with the messages it delivers: a refusal at the door hands them back to the queue.
 interface Carrying {
     readonly run: LiveRun;
@@ -210,7 +195,8 @@ export const createAdmission = (
     services: () => Services,
     start: TurnStarter["start"],
 ): Pick<TurnStarter, "say" | "steerIn" | "drain" | "unqueue" | "reword" | "release"> => {
-    const inTurn = oneAtATime();
+    // One piece of work per conversation at a time.
+    const inTurn = keyedLock<string>();
     const carrying = new Map<string, readonly Carrying[]>();
 
     const kept = (conversationId: string, receipts: ReadonlyMap<string, MessageReceipt>): void => {

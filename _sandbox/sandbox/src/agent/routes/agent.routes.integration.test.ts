@@ -1,6 +1,5 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, test } from "bun:test";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 
 import { createApp } from "../../app.js";
@@ -117,7 +116,10 @@ test("a rewind naming a message its position no longer holds is refused as stale
     const client = clientFor(
         createApp(
             services({
-                transcripts: { ...transcripts, page: async () => ({ rows: [{ role: "user", text: "the reworded ask", messageId: "m-after" }], from: 0, more: false }) },
+                transcripts: {
+                    ...transcripts,
+                    page: async () => ({ rows: [{ role: "user", text: "the reworded ask", messageId: "m-after" }], from: 0, more: false }),
+                },
                 history: {
                     ...history,
                     restore: async (id) => {
@@ -285,12 +287,16 @@ describe("the conversation's queue", () => {
         await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
         await client.agent.run({ prompt: "and the changelog", conversationId: "conv-edit", agent: "grok", messageId: "m-e" });
 
-        expect(await client.agent.queueEdit({ conversationId: "conv-edit", id: "m-e", revision: 1, text: "and the changelog, briefly" })).toMatchObject({
+        expect(
+            await client.agent.queueEdit({ conversationId: "conv-edit", id: "m-e", revision: 1, text: "and the changelog, briefly" }),
+        ).toMatchObject({
             items: [{ id: "m-e", text: "and the changelog, briefly", revision: 2 }],
             revision: 2,
         });
         // Another device still holding revision 1 cannot rewrite or take back words it has not seen.
-        expect(await errorCode(client.agent.queueEdit({ conversationId: "conv-edit", id: "m-e", revision: 1, text: "skip it" }))).toBe("PRECONDITION_FAILED");
+        expect(await errorCode(client.agent.queueEdit({ conversationId: "conv-edit", id: "m-e", revision: 1, text: "skip it" }))).toBe(
+            "PRECONDITION_FAILED",
+        );
         expect(await errorCode(client.agent.queueRemove({ conversationId: "conv-edit", id: "m-e", revision: 1 }))).toBe("PRECONDITION_FAILED");
         expect(await errorCode(client.agent.queueEdit({ conversationId: "conv-edit", id: "m-e", revision: 2, text: "  " }))).toBe("BAD_REQUEST");
         expect(await client.agent.queueRemove({ conversationId: "conv-edit", id: "m-e", revision: 2 })).toEqual({ items: [], revision: 3 });
@@ -308,7 +314,11 @@ describe("the conversation's queue", () => {
             createApp(
                 services({
                     async *agent(request) {
-                        const { id, wait } = request.hooks.cards.create("question", { kind: "question", requestId: "", cancelled: true }, request.spec.conversationId);
+                        const { id, wait } = request.hooks.cards.create(
+                            "question",
+                            { kind: "question", requestId: "", cancelled: true },
+                            request.spec.conversationId,
+                        );
                         yield { kind: "question", requestId: id, questions: [] };
                         requestId?.(id);
                         const { resolved } = await wait(request.signal);
@@ -322,12 +332,26 @@ describe("the conversation's queue", () => {
         const run = await startedRun(client, { prompt: "rename Credits?", conversationId: "conv-card", isolated: true });
         const card = await raised;
 
-        expect(await client.agent.run({ prompt: "and keep the old name as an alias", conversationId: "conv-card", isolated: true, messageId: "m-alias" })).toEqual({
+        expect(
+            await client.agent.run({
+                prompt: "and keep the old name as an alias",
+                conversationId: "conv-card",
+                isolated: true,
+                messageId: "m-alias",
+            }),
+        ).toEqual({
             delivered: "queued",
         });
         await client.agent.reply({ kind: "question", requestId: card, answers: {} });
         await waitFor(async () => expect(await queueOf(client, "conv-card")).toEqual({ items: [], revision: 2 }), SETTLES);
-        expect(await client.agent.run({ prompt: "and keep the old name as an alias", conversationId: "conv-card", isolated: true, messageId: "m-alias" })).toEqual({
+        expect(
+            await client.agent.run({
+                prompt: "and keep the old name as an alias",
+                conversationId: "conv-card",
+                isolated: true,
+                messageId: "m-alias",
+            }),
+        ).toEqual({
             delivered: "steered",
             run,
             duplicate: true,
@@ -355,8 +379,17 @@ describe("the conversation's queue", () => {
         );
         await runAgentTurn(client, { prompt: "fix the pipeline", conversationId: "conv-refused", isolated: true, messageId: "m-refused" });
 
-        await waitFor(async () => expect(await queueOf(client, "conv-refused")).toMatchObject({ items: [{ id: "m-refused", text: "fix the pipeline" }], paused: "refused" }), SETTLES);
-        expect(await client.agent.run({ prompt: "fix the pipeline", conversationId: "conv-refused", isolated: true, messageId: "m-refused" })).toEqual({
+        await waitFor(
+            async () =>
+                expect(await queueOf(client, "conv-refused")).toMatchObject({
+                    items: [{ id: "m-refused", text: "fix the pipeline" }],
+                    paused: "refused",
+                }),
+            SETTLES,
+        );
+        expect(
+            await client.agent.run({ prompt: "fix the pipeline", conversationId: "conv-refused", isolated: true, messageId: "m-refused" }),
+        ).toEqual({
             delivered: "queued",
             duplicate: true,
         });

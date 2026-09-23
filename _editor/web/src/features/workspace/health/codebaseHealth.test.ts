@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import type { WorkspaceHotspot } from "@intentic/api-contract";
 import { formatCount, hotspotRows, median, moduleRows, perFile, splitPath } from "./codebaseHealth";
 

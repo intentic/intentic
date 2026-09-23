@@ -1,7 +1,7 @@
 /* Source-consumed by the web app's Vite (default export → ./src/index.ts). */
 {
     "compilerOptions": {
-        "types": ["node", "bun"],
+        "types": ["node", "bun", "@intentic/testing/globals"],
         "noEmit": true,
         "rootDir": "./src",
         "tsBuildInfoFile": "./.cache/tsbuildinfo",

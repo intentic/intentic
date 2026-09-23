@@ -2,7 +2,6 @@
 // and the files put away while a kind is drilled.
 import "@intentic/testing/dom";
 import { type AgentProvider, providerLabel } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import type { PickerEntry } from "../models/modelPickerState";
@@ -11,15 +10,15 @@ import type { QuickPick, QuickPickSources } from "./composerQuickPick";
 // Needs jsdom: the kit's barrel reads matchMedia at import time (its device tracker), which jsdom lacks.
 
 // modelPickerState imports conversation.ts for the live catalogs; stub its side-effects so the import is inert.
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: mock() }));
-mock.module("../models/useChat-catalog", () => ({ loadProviderModels: mock(async () => {}) }));
+jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: jest.fn() }));
+jest.mock("../models/useChat-catalog", () => ({ loadProviderModels: jest.fn(async () => {}) }));
 // The other-boxes poll is the placement menu's concern; here it only has to be started and stopped.
-mock.module("../../sandbox/live/fleetAcross", () => ({ subscribe: () => () => {} }));
+jest.mock("../../sandbox/live/fleetAcross", () => ({ subscribe: () => () => {} }));
 
 // The file list under the settings, driven by hand; `seen` records what the picker asked it for.
 const files = ref<readonly string[]>([]);
 const seen = { query: ref(``), active: ref(false) };
-mock.module("../../workspace/search/useFuzzyFiles", () => ({
+jest.mock("../../workspace/search/useFuzzyFiles", () => ({
     useFuzzyFiles: (query: { value: string }, active: { value: boolean }) => {
         seen.query = query as never;
         seen.active = active as never;

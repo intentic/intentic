@@ -2,7 +2,8 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { explorerColorClass, type IconName, iconForEntry } from "@intentic/ui";
-import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { focusField } from "../explorer/tree/useTreeEdits";
 import { stopWaiting, whenNear } from "./nearViewport";
 import { thumbnailKind, thumbnailUrl } from "./thumbnails";
 import { useT } from "@intentic/ui/i18n";
@@ -65,13 +66,6 @@ const icon = computed<IconName>(() => (locked ? `lock` : iconForEntry(entry.name
 // Always the colourful hue, whatever the tree's own setup: a 2rem glyph in the minimal setup's grey reads as disabled.
 const color = computed(() => (locked ? `text-subtle` : explorerColorClass(`colorful`, entry.name, entry.type, dimmed)));
 const quiet = computed(() => dimmed || locked || pending);
-
-// Focus and select the name the moment the field mounts; only one is ever rendered at a time.
-const focusField = (vnode: VNode): void => {
-    const el = vnode.el as HTMLInputElement;
-    el.focus();
-    el.select();
-};
 
 // --- The thumbnail: fetched once the tile is near the viewport, never for a folder of four hundred off-screen shots. ---
 const kind = computed(() => (locked || pending ? undefined : thumbnailKind(entry)));
@@ -198,7 +192,7 @@ const seekFrame = (event: Event): void => {
                 v-if="entry.link !== undefined"
                 name="link"
                 class="absolute right-2 bottom-0 text-[0.65rem] text-subtle"
-                :aria-label="t(`workspace.homeTile.link`)"
+                :aria-label="t(`shared.link`)"
             />
         </span>
         <!-- The field owns its keys (arrows move the caret, Enter commits, Escape cancels); none reach the home. -->

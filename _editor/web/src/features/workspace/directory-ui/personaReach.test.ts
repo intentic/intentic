@@ -1,6 +1,5 @@
 import type { Persona } from "@intentic/sandbox-contract";
-import { it, expect } from "bun:test";
-import { reachOf, reachSentence } from "./personaReach";
+import { lensPersonaId, lensRefuses, reachOf, reachSentence } from "./personaReach";
 
 /* The lens is arithmetic on paths, and every one of these is a way it could be wrong on a real workspace: a fence that greys out the road to its own folder. */
 
@@ -61,4 +60,13 @@ it(`names the folders it is fenced to, in a sentence`, () => {
     for (const folder of folders) {
         expect(sentence).toContain(folder);
     }
+});
+
+it(`dims through the lens only while a persona is read as, and only what its fence refuses`, () => {
+    const personas = [{ ...card({ folders: [`src`] }), id: `web` }];
+    expect([lensRefuses(personas, `README.md`), lensRefuses(personas, `src/main.ts`)]).toEqual([false, false]);
+
+    lensPersonaId.value = `web`;
+    expect([lensRefuses(personas, `README.md`), lensRefuses(personas, `src/main.ts`), lensRefuses(personas, `src`)]).toEqual([true, false, false]);
+    lensPersonaId.value = undefined;
 });

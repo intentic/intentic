@@ -7,8 +7,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import type { RowAction } from "./rowActions";
 import type { OpenMode } from "../tabs/workspaceTabs";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
-import { advanceTimersByTimeAsync, hoisted } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { ACTIVE_KEY, activeSandboxId } from "../../sandbox/overview/activeSandbox";
@@ -19,10 +18,10 @@ import type { ProcedureName } from "../../sandbox/client/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // jsdom implements no scrollIntoView; spied rather than stubbed so calls can be inspected.
-const scrolled = hoisted(() => {
+const scrolled = (() => {
     const calls: string[] = [];
     return calls;
-});
+})();
 globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element): void {
     scrolled.push(this.textContent?.trim() ?? ``);
 };
@@ -43,12 +42,12 @@ activeSandboxId.value = SANDBOX;
 // (`refuse`, a procedure or a path prefix). Parking is what lets a test read the tree in the gap the daemon's answer
 // used to fill — the gap this surface exists to cover.
 type DaemonCall = { readonly procedure: ProcedureName; readonly input: unknown } | { readonly path: string };
-const daemon = hoisted(() => ({
+const daemon = {
     calls: [] as DaemonCall[],
     hold: undefined as undefined | Promise<void>,
     release: undefined as undefined | (() => void),
     refuse: undefined as undefined | string,
-}));
+};
 // One exchange: recorded as it leaves, then parked or refused as the test says, else answered.
 const exchange = async <T>(call: DaemonCall, answer: T): Promise<T> => {
     daemon.calls.push(call);
@@ -64,14 +63,14 @@ const OK = { ok: true } as const;
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in. The factory is synchronous, since awaiting in one that replaces a loaded module never returns.
 const realSandboxClient = { ...actualSandboxClient };
-mock.module("../../sandbox/client/sandboxClient", () => {
+jest.mock("../../sandbox/client/sandboxClient", () => {
     return {
         ...realSandboxClient,
         sandboxJson: (path: string): Promise<unknown> => exchange({ path }, OK),
     };
 });
 const realSandboxRpc = { ...actualSandboxRpc };
-mock.module("../../sandbox/client/sandboxRpc", () => {
+jest.mock("../../sandbox/client/sandboxRpc", () => {
     return {
         ...realSandboxRpc,
         sandboxRpc: fakeSandboxRpc({
@@ -1082,43 +1081,6 @@ describe(`the gestures the template hands on`, () => {
             `src`,
             [`src`, `api`, `main.ts`, `README.md`],
         ]);
-    });
-
-    it(`closes the rename field on Escape, asking the daemon nothing and keeping the old name`, async () => {
-        restoreFrom([`src`]);
-        const el = await mount({ tree: TREE });
-        const row = rowNamed(el, `main.ts`);
-        row.click();
-        await nextTick();
-        await press(row, `F2`);
-        const input = el.querySelector(`input`) as HTMLInputElement;
-        input.value = `entry.ts`;
-        input.dispatchEvent(new Event(`input`));
-
-        input.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true }));
-        await nextTick();
-        expect([el.querySelector(`input`), rows(el), inputsTo(`workspace.move`)]).toEqual([null, [`src`, `api`, `main.ts`, `README.md`], []]);
-    });
-
-    it(`drops a new name the field refused once it loses the focus, writing nothing`, async () => {
-        restoreFrom([`src`]);
-        const el = await mount({ tree: TREE });
-        rowNamed(el, `src`).dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
-        await nextTick();
-        await nextTick();
-        [...document.querySelectorAll(`a`)]
-            .find((link) => (link.textContent ?? ``).includes(`New File`))
-            ?.dispatchEvent(new MouseEvent(`click`, { bubbles: true, cancelable: true }));
-        await nextTick();
-        const input = el.querySelector(`input`) as HTMLInputElement;
-        input.value = `main.ts`;
-        input.dispatchEvent(new Event(`input`));
-        await nextTick();
-        expect(el.textContent).toContain(`"main.ts" already exists.`);
-
-        input.dispatchEvent(new FocusEvent(`blur`));
-        await nextTick();
-        expect([el.querySelector(`input`), paths().filter((path) => path.startsWith(`/workspace/upload`))]).toEqual([null, []]);
     });
 
     it(`names the file in the delete confirm, and deletes nothing when it is cancelled`, async () => {

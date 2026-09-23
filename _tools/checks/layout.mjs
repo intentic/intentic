@@ -1,19 +1,14 @@
 #!/usr/bin/env node
 // Checks directory layout an agent has to navigate: ghosts (repaired, not reported), fan-out, near-duplicate sibling
 // names, directory name vs npm name, basename collisions, and dead names. Fan-out and basename collisions are ratcheted
-// via `_tools/checks/baselines/layout.json`, which may only shrink.
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+// via `_tools/checks/baselines/layout-{fan-out,collisions}.json`, which may only shrink.
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { ADOPTING, allowOne, ratchet } from "./lib/ratchet.mjs";
 import { finish } from "./lib/report.mjs";
-import { EXCLUDED, packages, root, SKIP_DIRS, trackedFiles, untrackedFiles, writesBaselines } from "./lib/repo.mjs";
+import { EXCLUDED, packages, root, SKIP_DIRS, trackedFiles, untrackedFiles } from "./lib/repo.mjs";
 
-const BASELINE = join(root, "_tools/checks/baselines/layout.json");
-const writeBaseline = process.argv.includes("--write-baseline");
-// One entry recorded at what the tree now has, for a directory a change grew ON PURPOSE. The blunt instrument beside it
-// is `--write-baseline`, which adopts EVERY finding — run from an agent's worktree that silently launders every other
-// conversation's drift into the commit, which is why growing one directory needed a hand-edit of a shared file and
-// therefore usually did not happen at all.
-// `` when the flag is there with nothing after it, which is a mistake to report rather than a run to do quietly.
+// One directory a change grew on purpose, recorded at what it holds; `` when the flag names nothing, which is an error.
 const allow = process.argv.includes("--allow") ? (process.argv[process.argv.indexOf("--allow") + 1] ?? "") : undefined;
 const prune = process.argv.includes("--prune");
 const MAX_FILES_PER_DIR = 30;
@@ -267,19 +262,7 @@ for (const path of tracked) {
 }
 
 // The two ratchets.
-const asObject = (map) => Object.fromEntries([...map].sort(([a], [b]) => a.localeCompare(b)));
-if (writeBaseline) {
-    writeFileSync(BASELINE, `${JSON.stringify({ fanOut: asObject(fanOut), collisions: asObject(collisions) }, null, 4)}\n`);
-    console.log(`layout: baseline written, ${fanOut.size} over-full directories and ${collisions.size} packages with colliding basenames`);
-    process.exit(0);
-}
-const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : { fanOut: {}, collisions: {} };
-
-// ONE deliberate growth, recorded by name. The rule it relaxes is the one rule here that nobody's turn causes on its
-// own: a directory reaches 31 files because thirty other files were already in it, and the turn that adds the thirty-
-// first is the one told about it. Splitting the directory is the better answer and stays the default the failure
-// prints; when it is not the right answer, this is the way to say so in a line a reviewer can see, rather than by
-// hand-editing a file every other conversation is also holding.
+const RATCHETS = { fanOut: "layout-fan-out", collisions: "layout-collisions" };
 if (allow !== undefined) {
     const found = fanOut.has(allow) ? "fanOut" : collisions.has(allow) ? "collisions" : undefined;
     if (found === undefined) {
@@ -291,58 +274,18 @@ if (allow !== undefined) {
         process.exit(2);
     }
     const count = (found === "fanOut" ? fanOut : collisions).get(allow);
-    const next = { fanOut: { ...baseline.fanOut }, collisions: { ...baseline.collisions } };
-    next[found][allow] = count;
-    writeFileSync(
-        BASELINE,
-        `${JSON.stringify({ fanOut: asObject(new Map(Object.entries(next.fanOut))), collisions: asObject(new Map(Object.entries(next.collisions))) }, null, 4)}\n`,
-    );
+    allowOne(RATCHETS[found], allow, count);
     console.log(
         `layout: recorded ${allow} at ${count}; the entry rides your next commit, and the ratchet lowers it again on its own once the tree beats it`,
     );
     process.exit(0);
 }
-
-// A ratcheted rule fails only on growth; an entry the tree has beaten is tightened to what it now has (or dropped, at
-// zero) instead of failing.
-const ratchet = (found, allowed, describe) => {
-    const grown = [...found]
-        .filter(([key, count]) => count > (allowed[key] ?? 0))
-        .map(([key, count]) => `${describe(key, count)}${allowed[key] === undefined ? "" : `, the baseline allows ${allowed[key]}`}`);
-    const tightened = [];
-    const next = { ...allowed };
-    for (const [key, count] of Object.entries(allowed)) {
-        const now = found.get(key) ?? 0;
-        if (now < count) {
-            tightened.push(`${key}: ${count} → ${now}`);
-            if (now === 0) {
-                delete next[key];
-            } else {
-                next[key] = now;
-            }
-        }
-    }
-    return [grown, tightened, next];
-};
-const [fanOutGrown, fanOutTightened, fanOutNext] = ratchet(fanOut, baseline.fanOut ?? {}, (dir, count) => `${dir}: ${count} files`);
-const [collisionsGrown, collisionsTightened, collisionsNext] = ratchet(
-    collisions,
-    baseline.collisions ?? {},
-    (pkg, count) => `${pkg}: ${count} colliding basename(s)`,
-);
-const tightened = [...fanOutTightened, ...collisionsTightened];
-if (tightened.length > 0) {
-    if (writesBaselines()) {
-        writeFileSync(
-            BASELINE,
-            `${JSON.stringify({ fanOut: asObject(new Map(Object.entries(fanOutNext))), collisions: asObject(new Map(Object.entries(collisionsNext))) }, null, 4)}\n`,
-        );
-        console.log(`layout: tightened _tools/checks/baselines/layout.json to what the tree has (${tightened.join(", ")}); it rides the next commit`);
-    } else {
-        console.log(
-            `layout: the tree beats its baseline (${tightened.join(", ")}); the checkout that commits tightens _tools/checks/baselines/layout.json on its next run`,
-        );
-    }
+const overLimit = (name, found, describe) =>
+    ratchet("layout", name, found).grown.map(({ key, count, allowed }) => `${describe(key, count)}${allowed === 0 ? "" : `, the baseline allows ${allowed}`}`);
+const fanOutGrown = overLimit(RATCHETS.fanOut, fanOut, (dir, count) => `${dir}: ${count} files`);
+const collisionsGrown = overLimit(RATCHETS.collisions, collisions, (pkg, count) => `${pkg}: ${count} colliding basename(s)`);
+if (ADOPTING) {
+    process.exit(0);
 }
 const twinsRetired = [...TOLERATED_TWINS.keys()].filter((key) => !seenTwins.has(key));
 if (twinsRetired.length > 0) {

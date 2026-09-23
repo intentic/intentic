@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import { makeFixtureWorkspace } from "../testing.js";
 import { filterScope, langOf, sweep } from "./scan.js";
 import type { FileEntry } from "../types.js";

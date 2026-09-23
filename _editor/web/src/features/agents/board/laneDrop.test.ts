@@ -1,5 +1,3 @@
-import { describe, it, expect } from "bun:test";
-
 // No mocks: laneDrop reads the lane machine from agentStatus, a pure leaf; the fleet store import is type-only and
 // erased.
 import { dropActionFor, dropActionLabel, dropHint, dropRejection, type DropAction, pendingOf } from "./laneDrop";

@@ -3,7 +3,6 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Logger, pino } from "pino";
-import { test, expect } from "bun:test";
 import { claimBootMarker } from "./boot-marker.js";
 import { processIdentity, type ProcessIdentity } from "../resources/proc-stat.js";
 

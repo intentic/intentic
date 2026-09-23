@@ -4,17 +4,16 @@ import "@intentic/testing/dom";
 import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { effectScope, type EffectScope, ref } from "vue";
 import * as actualSandboxRpc from "../sandbox/client/sandboxRpc";
 import type { ProcedureInput } from "../sandbox/client/sandboxRpc";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 
 // The one daemon call under test; each case says what it answers.
-const probe = mock<(input: ProcedureInput<`capabilities.probe`>) => Promise<CapabilityProbe>>();
+const probe = jest.fn<(input: ProcedureInput<`capabilities.probe`>) => Promise<CapabilityProbe>>();
 // Snapshotted before the mock replaces the module: a namespace is a live binding.
 const realSandboxRpc = { ...actualSandboxRpc };
-mock.module(`../sandbox/client/sandboxRpc`, () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ capabilities: { probe } }) }));
+jest.mock(`../sandbox/client/sandboxRpc`, () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ capabilities: { probe } }) }));
 
 const { useCapabilityForm } = await import("./capabilityForm");
 const { useCapabilityProbe } = await import("./capabilityProbe");

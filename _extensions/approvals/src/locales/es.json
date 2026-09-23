@@ -41,7 +41,6 @@
         "goingAhead": "Sigue adelante",
         "hookLedgerUnreadable": "No se pudo leer el registro de los hooks que aprobaste, así que ningún hook del espacio de trabajo se ejecuta hasta que vuelvas a aprobar uno.",
         "hookSetTitle": "Hook de Claude Code | {count} hooks de Claude Code",
-        "hooks": "Hooks",
         "hooksFound": "Encontrado por un turno",
         "hooksWaiting": "Hooks que esperan tu sí",
         "inProgress": "en curso",
@@ -77,8 +76,7 @@
     },
     "hookSetBody": {
         "filesPinned": "La aprobación también cubre estos archivos, byte a byte:",
-        "fromProjectSettings": ".claude/settings.json del espacio de trabajo",
-        "fromUserSettings": "~/.claude/settings.json"
+        "fromProjectSettings": ".claude/settings.json del espacio de trabajo"
     },
     "postBody": {
         "showLess": "Mostrar menos",

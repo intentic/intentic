@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { promisify } from "node:util";
-import { test, expect, afterAll } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { liveWindow, selectWindow } from "./terminal-help.js";
 import { captureScrollback } from "./terminal-session.js";

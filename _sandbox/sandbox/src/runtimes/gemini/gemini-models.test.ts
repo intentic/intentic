@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { humanizeModelId } from "@intentic/sandbox-contract";
 import { discoverGeminiModels, isChatModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
 

@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { type HookPlace, settingsHookSet } from "./settings-hooks.js";
 
 // The digest a hook approval pins, against real settings files and scripts in a temp tree.
@@ -43,7 +42,9 @@ describe("settingsHookSet", () => {
     test("both sources are read, each hook listed with where it comes from and what it runs", async () => {
         const place = fresh();
         await writeText(join(place.configDir, "settings.json"), JSON.stringify({ hooks: { SessionStart: [hook("echo hi")] } }));
-        await projectSettings(place, { hooks: { PreToolUse: [hook("./check.sh", "Bash")], Stop: [{ hooks: [{ type: "http", url: "https://example.com/stop" }] }] } });
+        await projectSettings(place, {
+            hooks: { PreToolUse: [hook("./check.sh", "Bash")], Stop: [{ hooks: [{ type: "http", url: "https://example.com/stop" }] }] },
+        });
 
         const set = await settingsHookSet(place);
         expect(set?.hooks).toEqual([
@@ -60,7 +61,11 @@ describe("settingsHookSet", () => {
         await projectSettings(place, settings);
         const first = (await settingsHookSet(place))?.digest;
 
-        await projectSettings(place, { model: "opus", hooks: { PreToolUse: [{ hooks: [{ command: "echo a", type: "command" }], matcher: "Bash" }, hook("echo b", "Edit")] } }, 4);
+        await projectSettings(
+            place,
+            { model: "opus", hooks: { PreToolUse: [{ hooks: [{ command: "echo a", type: "command" }], matcher: "Bash" }, hook("echo b", "Edit")] } },
+            4,
+        );
         expect((await settingsHookSet(place))?.digest).toBe(first);
 
         await projectSettings(place, { hooks: { PreToolUse: [hook("echo b", "Edit"), hook("echo a", "Bash")] }, model: "opus" });
@@ -80,7 +85,11 @@ describe("settingsHookSet", () => {
         });
 
         const before = await settingsHookSet(place);
-        expect(before?.scripts.map((script) => script.path)).toEqual(["$CLAUDE_PROJECT_DIR/.claude/hooks/check.mjs", "$CLAUDE_PROJECT_DIR/tools/lint", "~/bin/guard.sh"]);
+        expect(before?.scripts.map((script) => script.path)).toEqual([
+            "$CLAUDE_PROJECT_DIR/.claude/hooks/check.mjs",
+            "$CLAUDE_PROJECT_DIR/tools/lint",
+            "~/bin/guard.sh",
+        ]);
 
         await writeText(join(place.cwd, ".claude", "hooks", "check.mjs"), "console.log(2);\n");
         const after = await settingsHookSet(place);
@@ -137,7 +146,10 @@ describe("settingsHookSet", () => {
             "---\nname: deploy\nhooks:\n  PreToolUse:\n    - matcher: Bash\n      hooks:\n        - type: command\n          command: ./.claude/check.sh\n---\nDeploy.\n",
         );
         await writeText(join(place.cwd, ".claude", "check.sh"), "exit 0\n");
-        await writeText(join(place.configDir, "agents", "reviewer.md"), "---\nname: reviewer\nhooks:\n  Stop:\n    - hooks:\n        - type: command\n          command: echo bye\n---\n");
+        await writeText(
+            join(place.configDir, "agents", "reviewer.md"),
+            "---\nname: reviewer\nhooks:\n  Stop:\n    - hooks:\n        - type: command\n          command: echo bye\n---\n",
+        );
 
         const set = await settingsHookSet(place);
         expect(set?.hooks).toEqual([

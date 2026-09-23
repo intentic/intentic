@@ -1,8 +1,7 @@
 import "@intentic/testing/dom";
-import { afterEach, describe, expect, it } from "bun:test";
 import { setTerminalMeta, TERMINAL_COLORS } from "../terminalMeta";
 import type { TerminalTab } from "../useTerminal";
-import { clearedLabel, segmentColor, iconFor, labelFor, tooltipFor, stripIndex } from "./stripSegments";
+import { clearedLabel, cycled, segmentColor, iconFor, labelFor, tooltipFor, stripIndex } from "./stripSegments";
 
 // Pins what a pill says: the reader's overrides over the tab's facts over the strip position, the kind's glyph by
 // default, and a tooltip that leads with the running command and otherwise says what the session is.
@@ -47,5 +46,17 @@ describe(`a pill`, () => {
         [`nothing for a live shell at its prompt`, tab(), undefined],
     ])(`tells %s`, (_, of, tooltip) => {
         expect(tooltipFor(of)).toBe(tooltip);
+    });
+});
+
+describe(`cycling tabs`, () => {
+    const groups = [[`a`], [`b`, `c`], [`d`]];
+    it.each<[string, readonly (readonly string[])[], string | undefined, number, string | undefined]>([
+        [`forward through a split`, groups, `b`, 1, `c`],
+        [`back past the start to the end`, groups, `a`, -1, `d`],
+        [`forward past the end to the start`, groups, `d`, 1, `a`],
+        [`nowhere with a single session`, [[`a`]], `a`, 1, undefined],
+    ])(`walks %s`, (_, of, active, delta, next) => {
+        expect(cycled(of, active, delta)).toBe(next);
     });
 });

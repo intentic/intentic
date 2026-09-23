@@ -1,5 +1,4 @@
 import { compareUnrankedModelIds, MINTED_PROVIDERS, type Model } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { seedModelsOf } from "../../runtimes/minted/minted-provider.js";
 import { servedModels } from "./provider-registry.js";
 

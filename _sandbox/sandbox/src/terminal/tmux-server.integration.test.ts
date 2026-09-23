@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { test, expect } from "bun:test";
 import { createLogger } from "../logger.js";
 import { pinTmuxServer, tmuxServerLeaked } from "./tmux-server.js";
 

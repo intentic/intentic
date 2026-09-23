@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { resolveBridgeCall } from "./directoryUiVerbs";
 
 // The bridge's allowlist IS the security boundary, these lock it down: only known verbs resolve, each to exactly one

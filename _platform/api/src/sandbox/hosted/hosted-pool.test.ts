@@ -1,5 +1,4 @@
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../../config.js";
 import { reconcileHostedPool } from "./hosted-pool.js";
@@ -8,7 +7,7 @@ import { hostedInstanceId } from "./hosted.js";
 // Pins the pool's promises: warm machines never boot the sandbox, stock converges on the target per region, a drifted
 // image is rebuilt, and switching the pool off empties it rather than stranding it behind the reaper.
 
-const logger = { info: mock(), warn: mock(), error: mock() } as never;
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never;
 
 const config = (over?: Partial<Config[`hosted`]>): Config =>
     ({
@@ -56,18 +55,18 @@ const poolRow = (over?: Record<string, unknown>) => ({
 });
 
 // Counts exist for the refill's room-left check (hosted-capacity.ts); only read on a platform with a ceiling.
-const fakePrisma = (overrides?: Record<string, Record<string, ReturnType<typeof mock>>>) =>
+const fakePrisma = (overrides?: Record<string, Record<string, ReturnType<typeof jest.fn>>>) =>
     ({
         hostedPoolMachine: {
-            findMany: mock().mockResolvedValue([]),
-            count: mock().mockResolvedValue(0),
-            create: mock().mockResolvedValue({}),
-            update: mock().mockResolvedValue({}),
-            delete: mock().mockResolvedValue({}),
+            findMany: jest.fn().mockResolvedValue([]),
+            count: jest.fn().mockResolvedValue(0),
+            create: jest.fn().mockResolvedValue({}),
+            update: jest.fn().mockResolvedValue({}),
+            delete: jest.fn().mockResolvedValue({}),
             ...overrides?.[`hostedPoolMachine`],
         },
-        hostedMachine: { findUnique: mock().mockResolvedValue(null), count: mock().mockResolvedValue(0), ...overrides?.[`hostedMachine`] },
-        hostedBuild: { count: mock().mockResolvedValue(0), ...overrides?.[`hostedBuild`] },
+        hostedMachine: { findUnique: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), ...overrides?.[`hostedMachine`] },
+        hostedBuild: { count: jest.fn().mockResolvedValue(0), ...overrides?.[`hostedBuild`] },
     }) as never;
 
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
@@ -99,7 +98,7 @@ afterEach(() => {
 
 describe(`reconcileHostedPool`, () => {
     it(`builds toward the target in BOTH regions, and the warm boot is the daemon's prewarm over the real image`, async () => {
-        const create = mock().mockResolvedValue({});
+        const create = jest.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         await reconcileHostedPool(fakePrisma({ hostedPoolMachine: { create } }), config(), logger);
         const machines = calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`));
@@ -124,11 +123,11 @@ describe(`reconcileHostedPool`, () => {
     });
 
     it(`builds nothing once the fleet is at the ceiling the provider allows`, async () => {
-        const create = mock().mockResolvedValue({});
+        const create = jest.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         const prisma = fakePrisma({
-            hostedPoolMachine: { create, count: mock().mockResolvedValue(4) },
-            hostedMachine: { findUnique: mock().mockResolvedValue(null), count: mock().mockResolvedValue(96) },
+            hostedPoolMachine: { create, count: jest.fn().mockResolvedValue(4) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(96) },
         });
         await reconcileHostedPool(prisma, config({ maxMachines: 100 }), logger);
         expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(0);
@@ -136,11 +135,11 @@ describe(`reconcileHostedPool`, () => {
     });
 
     it(`builds up to the room the ceiling leaves`, async () => {
-        const create = mock().mockResolvedValue({});
+        const create = jest.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         const prisma = fakePrisma({
-            hostedPoolMachine: { create, count: mock().mockResolvedValue(0) },
-            hostedMachine: { findUnique: mock().mockResolvedValue(null), count: mock().mockResolvedValue(96) },
+            hostedPoolMachine: { create, count: jest.fn().mockResolvedValue(0) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(96) },
         });
         await reconcileHostedPool(prisma, config({ maxMachines: 100 }), logger);
         expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(2);
@@ -148,7 +147,7 @@ describe(`reconcileHostedPool`, () => {
 
     // The edge replays to `<prefix>-<id>` with no lookup; a pool app named otherwise couldn't serve a later claim.
     it(`names each warm app after a connect token it mints, and keeps that token in the row, not the machine`, async () => {
-        const create = mock().mockResolvedValue({});
+        const create = jest.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         await reconcileHostedPool(fakePrisma({ hostedPoolMachine: { create } }), config({ regionEu: `` }), logger);
         const app = calls.find((entry) => entry.method === `POST` && entry.url.endsWith(`/apps`))?.body as { app_name: string };
@@ -162,30 +161,15 @@ describe(`reconcileHostedPool`, () => {
         expect(machine.config.env[`CONNECT_TOKEN`]).toBeUndefined();
     });
 
-    it(`replaces standing stock that carries no identity`, async () => {
-        const deleteRow = mock().mockResolvedValue({});
-        const calls = stubFetch([
-            { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ id: `m1`, state: `stopped` }) },
-            ...builderRoutes,
-        ]);
-        await reconcileHostedPool(
-            fakePrisma({ hostedPoolMachine: { findMany: mock().mockResolvedValue([poolRow({ token: `` })]), delete: deleteRow } }),
-            config({ regionEu: `` }),
-            logger,
-        );
-        expect(deleteRow).toHaveBeenCalledWith({ where: { id: `p1` } });
-        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.endsWith(`/apps/${poolRow().appName}?force=true`))).toBe(true);
-    });
-
     it(`flips a build to ready once its prewarm boot is observed stopped`, async () => {
-        const update = mock().mockResolvedValue({});
+        const update = jest.fn().mockResolvedValue({});
         stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ id: `m1`, state: `stopped` }) },
             ...builderRoutes,
         ]);
         const prisma = fakePrisma({
             hostedPoolMachine: {
-                findMany: mock().mockResolvedValue([
+                findMany: jest.fn().mockResolvedValue([
                     poolRow({ state: `building` }),
                     poolRow({ id: `p2`, appName: `intentic-sbx-pool-arn`, region: `arn` }),
                 ]),
@@ -198,12 +182,12 @@ describe(`reconcileHostedPool`, () => {
 
     // Claims take the oldest row first, so a phantom `ready` row would be handed out before any live machine.
     it(`replaces standing stock Fly no longer has: a ready row is a claim about a machine, not proof of one`, async () => {
-        const del = mock().mockResolvedValue({});
+        const del = jest.fn().mockResolvedValue({});
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ error: `machine not found` }, 404) },
             ...builderRoutes,
         ]);
-        const prisma = fakePrisma({ hostedPoolMachine: { findMany: mock().mockResolvedValue([poolRow()]), delete: del } });
+        const prisma = fakePrisma({ hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow()]), delete: del } });
         await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(poolRow().appName))).toBe(true);
         expect(del).toHaveBeenCalledWith({ where: { id: `p1` } });
@@ -213,15 +197,15 @@ describe(`reconcileHostedPool`, () => {
 
     // Tearing down a late-noticed build would pay for the same pull twice.
     it(`banks a build that finished while nobody was watching, however late it is noticed`, async () => {
-        const update = mock().mockResolvedValue({});
-        const del = mock().mockResolvedValue({});
+        const update = jest.fn().mockResolvedValue({});
+        const del = jest.fn().mockResolvedValue({});
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ id: `m1`, state: `stopped` }) },
             ...builderRoutes,
         ]);
         const stale = new Date(Date.now() - 60 * 60 * 1000);
         const prisma = fakePrisma({
-            hostedPoolMachine: { findMany: mock().mockResolvedValue([poolRow({ state: `building`, createdAt: stale })]), update, delete: del },
+            hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow({ state: `building`, createdAt: stale })]), update, delete: del },
         });
         await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
         expect(update).toHaveBeenCalledWith({ where: { id: `p1` }, data: { state: `ready` } });
@@ -231,9 +215,9 @@ describe(`reconcileHostedPool`, () => {
 
     it(`keeps standing stock when Fly cannot be asked, and while a machine is mid-transition`, async () => {
         for (const respond of [() => json({ error: `internal` }, 500), () => json({ id: `m1`, state: `started` })]) {
-            const del = mock().mockResolvedValue({});
+            const del = jest.fn().mockResolvedValue({});
             const calls = stubFetch([{ match: (method, url) => method === `GET` && url.includes(`/machines/`), respond }, ...builderRoutes]);
-            const prisma = fakePrisma({ hostedPoolMachine: { findMany: mock().mockResolvedValue([poolRow()]), delete: del } });
+            const prisma = fakePrisma({ hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow()]), delete: del } });
             // oxlint-disable-next-line eslint/no-await-in-loop -- two readings of the same row, one at a time
             await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
             expect(del).not.toHaveBeenCalled();
@@ -244,10 +228,10 @@ describe(`reconcileHostedPool`, () => {
     });
 
     it(`replaces a machine whose image drifted from config: its warm rootfs is the wrong rootfs`, async () => {
-        const del = mock().mockResolvedValue({});
+        const del = jest.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         const prisma = fakePrisma({
-            hostedPoolMachine: { findMany: mock().mockResolvedValue([poolRow({ image: `ghcr.io/intentic/sandbox:old` })]), delete: del },
+            hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow({ image: `ghcr.io/intentic/sandbox:old` })]), delete: del },
         });
         await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(poolRow().appName))).toBe(true);
@@ -257,11 +241,11 @@ describe(`reconcileHostedPool`, () => {
     });
 
     it(`drains the whole pool when it is switched off: nothing in it is ever somebody's`, async () => {
-        const del = mock().mockResolvedValue({});
+        const del = jest.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         const prisma = fakePrisma({
             hostedPoolMachine: {
-                findMany: mock().mockResolvedValue([poolRow(), poolRow({ id: `p2`, appName: `intentic-sbx-pool-two` })]),
+                findMany: jest.fn().mockResolvedValue([poolRow(), poolRow({ id: `p2`, appName: `intentic-sbx-pool-two` })]),
                 delete: del,
             },
         });
@@ -274,11 +258,11 @@ describe(`reconcileHostedPool`, () => {
     // A crashed claim's app may already carry a sandbox's tokens, so adopted vs. unadopted decides drop vs. destroy.
     it(`collects a crashed claim: drops the row when adopted, destroys the machine when not`, async () => {
         const stale = new Date(Date.now() - 16 * 60 * 1000);
-        const del = mock().mockResolvedValue({});
+        const del = jest.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         const adopted = fakePrisma({
-            hostedPoolMachine: { findMany: mock().mockResolvedValue([poolRow({ state: `claimed`, updatedAt: stale })]), delete: del },
-            hostedMachine: { findUnique: mock().mockResolvedValue({ id: `h1` }) },
+            hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow({ state: `claimed`, updatedAt: stale })]), delete: del },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ id: `h1` }) },
         });
         await reconcileHostedPool(adopted, config({ regionEu: `` }), logger);
         expect(del).toHaveBeenCalledWith({ where: { id: `p1` } });
@@ -287,7 +271,7 @@ describe(`reconcileHostedPool`, () => {
         del.mockClear();
         calls.length = 0;
         const unadopted = fakePrisma({
-            hostedPoolMachine: { findMany: mock().mockResolvedValue([poolRow({ state: `claimed`, updatedAt: stale })]), delete: del },
+            hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow({ state: `claimed`, updatedAt: stale })]), delete: del },
         });
         await reconcileHostedPool(unadopted, config({ regionEu: `` }), logger);
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(poolRow().appName))).toBe(true);
@@ -296,11 +280,11 @@ describe(`reconcileHostedPool`, () => {
 
     it(`drains around an adopted claim: the row goes, the user's machine stays`, async () => {
         const stale = new Date(Date.now() - 16 * 60 * 1000);
-        const del = mock().mockResolvedValue({});
+        const del = jest.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         const prisma = fakePrisma({
-            hostedPoolMachine: { findMany: mock().mockResolvedValue([poolRow({ state: `claimed`, updatedAt: stale })]), delete: del },
-            hostedMachine: { findUnique: mock().mockResolvedValue({ id: `h1` }) },
+            hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow({ state: `claimed`, updatedAt: stale })]), delete: del },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ id: `h1` }) },
         });
         await reconcileHostedPool(prisma, config({ poolSize: 0 }), logger);
         expect(del).toHaveBeenCalledWith({ where: { id: `p1` } });
@@ -308,10 +292,10 @@ describe(`reconcileHostedPool`, () => {
     });
 
     it(`leaves a fresh claim alone: it is a hand-off in flight, not stock and not garbage`, async () => {
-        const del = mock().mockResolvedValue({});
+        const del = jest.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         const prisma = fakePrisma({
-            hostedPoolMachine: { findMany: mock().mockResolvedValue([poolRow({ state: `claimed` })]), delete: del },
+            hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow({ state: `claimed` })]), delete: del },
         });
         await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
         expect(del).not.toHaveBeenCalled();

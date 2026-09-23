@@ -143,7 +143,7 @@ watch(
                 <span class="flex min-w-0 flex-col">
                     <span class="flex items-center gap-2 text-sm text-content">
                         <Icon name="pencil" class="w-4 shrink-0 text-center text-xs text-subtle" />
-                        {{ t(`sandbox.personaKitFields.systemPrompt`) }}
+                        {{ t(`shared.systemPrompt`) }}
                     </span>
                     <span class="text-xs text-subtle">
                         <template v-if="picked === `custom`">{{ t(`sandbox.personaKitFields.ownWordsReplacingSandboxs`) }}</template>
@@ -203,14 +203,14 @@ watch(
                 />
 
                 <!-- New skills use the same disclosure row as existing skills. -->
-                <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`sandbox.personaKitFields.newSkill`)" @update:open="close">
+                <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`shared.newSkill`)" @update:open="close">
                     <template #below>
                         <SkillForm :disabled="busy" @save="save" @cancel="close" />
                     </template>
                 </DisclosureRow>
 
                 <!-- Hidden while something is open, so only one skill is ever being written or read at a time. -->
-                <RowNote v-else-if="openName === undefined" variant="action" :label="t(`sandbox.personaKitFields.writeSkill`)" @click="startAdd" />
+                <RowNote v-else-if="openName === undefined" variant="action" :label="t(`shared.writeSkill`)" @click="startAdd" />
             </RowGroup>
         </div>
 

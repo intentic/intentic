@@ -3,7 +3,6 @@ import { writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { armPasskeys, listPasskeys } from "./passkeys.js";
 

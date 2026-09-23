@@ -4,14 +4,13 @@ import { mkdir, rename, rm, symlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import { type Log, spawnDetached } from "@intentic/local-agent";
+import type { Log } from "@intentic/local-agent";
 import { DEV_VERSION } from "@intentic/sandbox-contract";
-import { agentLogPath, binDir } from "./config.js";
+import { binDir } from "./config.js";
 import { adoptRunningDistros } from "./environments/commands.js";
-import { machineTarget, siblingVersions, UPGRADE_ENV, upgradeHere } from "./environments/machine-upgrade.js";
+import { launchUpgrade, UPGRADE_ENV, upgradeHereToMachine } from "./environments/machine-upgrade.js";
 import { runningAsInstalledAgent } from "./installed.js";
-import { agentPath, download, launcherAssetUrl, launcherPath, publishedVersion, setAside } from "./release.js";
-import { machineLauncher } from "./supervision.js";
+import { agentPath, download, launcherAssetUrl, launcherPath } from "./release.js";
 import { type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 
@@ -47,17 +46,10 @@ export const selfUpdateBeforeSetup = async (
     }
 };
 
-// The newest release the channel or any side of this PC has: setup never leaves this side behind the rest of it.
-const machineUpgradeHere = async (out: Log): Promise<UpgradeOutcome> => {
-    const [published, siblings] = await Promise.all([publishedVersion(), siblingVersions()]);
-    const target = machineTarget(published, [MACHINE_VERSION, ...siblings]);
-    return target === undefined ? { kind: "failed", reason: "couldn't reach the release channel" } : await upgradeHere(target, false, out);
-};
-
 export const realSelfUpdateIo = (out: Log): SelfUpdateIo => ({
     installed: MACHINE_VERSION,
     installedAgent: runningAsInstalledAgent,
-    upgrade: async () => await machineUpgradeHere(out),
+    upgrade: async () => await upgradeHereToMachine(out),
     reexec: (args, version) => {
         const child = spawnSync(agentPath, [...args], { stdio: "inherit", env: { ...process.env, [UPGRADE_ENV]: version }, windowsHide: true });
         process.exit(child.status ?? 1);
@@ -141,7 +133,7 @@ const windowsPathRepair = (out: Log): void => {
     }
 };
 
-// The windowless launcher, pinned to this agent's release; an upgrade replaces it together with the agent afterwards.
+// The windowless launcher where there is none yet, pinned to this agent's release; an upgrade replaces it with the agent.
 const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     if (process.platform !== "win32" || MACHINE_VERSION === DEV_VERSION || existsSync(launcherPath)) {
         return;
@@ -150,7 +142,6 @@ const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     try {
         await rm(staged, { force: true });
         await download(launcherAssetUrl(MACHINE_VERSION), staged);
-        await setAside(launcherPath, `${launcherPath}.old`);
         await rename(staged, launcherPath);
     } catch (error) {
         await rm(staged, { force: true }).catch(() => undefined);
@@ -183,7 +174,7 @@ export const completeSetup = async (out: Log): Promise<void> => {
         return;
     }
     delete process.env[UPGRADE_ENV];
-    await spawnDetached(agentLogPath, machineLauncher(), ["upgrade", "--level"], { finishes: true }).catch((error: unknown) =>
+    await launchUpgrade(true).catch((error: unknown) =>
         out(`note: couldn't bring the rest of this PC to this release (${errorMessage(error)}); it catches up within the hour.`),
     );
 };

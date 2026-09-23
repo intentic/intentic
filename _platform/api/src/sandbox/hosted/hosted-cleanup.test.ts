@@ -1,7 +1,6 @@
 import { FREE_TIER } from "@intentic/constants";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { configSchema } from "../../config.js";
 import { fakeHostedAppLock, testIngressConfig } from "../../testing.js";
@@ -10,8 +9,8 @@ import { assertHostedIdentity, HostedProvisionCancelled, reconcileHostedCleanup,
 import { provisionHosted } from "./hosted.js";
 import * as hostedImageOriginal from "./build/hosted-image.js";
 
-mock.module(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
-mock.module(`./build/hosted-image.js`, () => ({
+jest.mock(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
+jest.mock(`./build/hosted-image.js`, () => ({
     ...hostedImageOriginal,
     resolveHostedImage: async () => `registry.test/sandbox@sha256:abc`,
 }));
@@ -24,7 +23,7 @@ const config = configSchema.parse({
     ingress: testIngressConfig,
     hosted: { flyApiToken: `fly`, flyOrg: `org` },
 });
-const logger = { info: mock(), warn: mock(), error: mock() } as unknown as Logger;
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as unknown as Logger;
 const args = { sandboxId: `s1`, connectToken: `token`, ownerEmail: `owner@example.test`, region: `iad`, tier: FREE_TIER.id };
 const appName = `${config.hosted.appPrefix}-${connectTokenIdentity(args.connectToken).tunnelId}`;
 
@@ -43,43 +42,43 @@ const fixture = () => {
         },
     };
     const db = {
-        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(db)),
-        $queryRaw: mock().mockResolvedValue([]),
-        $executeRaw: mock().mockResolvedValue(0),
+        $transaction: jest.fn((work: (tx: unknown) => Promise<unknown>) => work(db)),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        $executeRaw: jest.fn().mockResolvedValue(0),
         sandbox: {
-            findUnique: mock(async () => state.sandbox),
-            findUniqueOrThrow: mock(async () => state.sandbox),
-            update: mock(async ({ data }: { data: Record<string, unknown> }) => Object.assign(state.sandbox, data)),
+            findUnique: jest.fn(async () => state.sandbox),
+            findUniqueOrThrow: jest.fn(async () => state.sandbox),
+            update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => Object.assign(state.sandbox, data)),
         },
         hostedMachine: {
-            findUnique: mock(async () => state.sandbox.hosted),
-            count: mock(async () => (state.sandbox.hosted === null ? 0 : 1)),
-            create: mock(async ({ data }: { data: { appName: string; wokeAt: Date | null } }) => {
+            findUnique: jest.fn(async () => state.sandbox.hosted),
+            count: jest.fn(async () => (state.sandbox.hosted === null ? 0 : 1)),
+            create: jest.fn(async ({ data }: { data: { appName: string; wokeAt: Date | null } }) => {
                 state.sandbox.hosted = { id: `h1`, ...data };
             }),
-            delete: mock(async () => {
+            delete: jest.fn(async () => {
                 state.sandbox.hosted = null;
             }),
         },
-        hostedPlan: { findUnique: mock().mockResolvedValue(null) },
+        hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
         hostedPoolMachine: {
-            findMany: mock().mockResolvedValue([]),
-            deleteMany: mock().mockResolvedValue({ count: 1 }),
-            updateMany: mock().mockResolvedValue({ count: 1 }),
-            delete: mock().mockResolvedValue({}),
+            findMany: jest.fn().mockResolvedValue([]),
+            deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            delete: jest.fn().mockResolvedValue({}),
         },
         hostedCleanup: {
-            create: mock(async ({ data }: { data: { appName: string } }) => {
+            create: jest.fn(async ({ data }: { data: { appName: string } }) => {
                 pending.add(data.appName);
             }),
-            upsert: mock(async ({ create }: { create: { appName: string } }) => {
+            upsert: jest.fn(async ({ create }: { create: { appName: string } }) => {
                 pending.add(create.appName);
             }),
-            deleteMany: mock(async ({ where }: { where: { appName: string } }) => {
+            deleteMany: jest.fn(async ({ where }: { where: { appName: string } }) => {
                 pending.delete(where.appName);
             }),
-            findMany: mock(async () => [...pending].map((name) => ({ appName: name }))),
-            findUnique: mock(async ({ where }: { where: { appName: string } }) => (pending.has(where.appName) ? { appName: where.appName } : null)),
+            findMany: jest.fn(async () => [...pending].map((name) => ({ appName: name }))),
+            findUnique: jest.fn(async ({ where }: { where: { appName: string } }) => (pending.has(where.appName) ? { appName: where.appName } : null)),
         },
     };
     return { db, prisma: db as unknown as PrismaClient, state, pending };
@@ -218,7 +217,7 @@ describe(`hosted cancellation`, () => {
 
     it(`does not destroy an existing app when its create request is refused`, async () => {
         const { prisma, pending } = fixture();
-        const fetch = mock().mockResolvedValue(Response.json({ error: `app name already exists` }, { status: 422 }));
+        const fetch = jest.fn().mockResolvedValue(Response.json({ error: `app name already exists` }, { status: 422 }));
         stubGlobal(`fetch`, fetch);
         await expect(provisionHosted(prisma, config, logger, args)).rejects.toThrow(`app name already exists`);
         expect(fetch).toHaveBeenCalledTimes(1);

@@ -1,7 +1,5 @@
 import "@intentic/testing/dom";
 import type { ConversationQueue } from "@intentic/sandbox-contract";
-import { hoisted } from "@intentic/testing/bun";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { createApp, h, nextTick, ref, shallowRef } from "vue";
 import * as useAgentsOriginal from "../../../agents/fleet/useAgents";
 import * as sessionsOriginal from "../../run/useChat-sessions";
@@ -11,20 +9,20 @@ import * as sessionsOriginal from "../../run/useChat-sessions";
 
 // The fleet roster as agentById answers it, by conversation id; a status, the run it names and its queue are all a turn's
 // standing is read from here.
-const { roster, hydrateOnce } = await hoisted(async () => {
+const { roster, hydrateOnce } = await (async () => {
     const { ref: vueRef } = await import(`vue`);
     return {
         roster: vueRef<Record<string, { readonly status: string; readonly run?: string; readonly queue?: ConversationQueue }>>({}),
-        hydrateOnce: mock(),
+        hydrateOnce: jest.fn(),
     };
-});
+})();
 // Held before the mock replaces the module's binding, which would otherwise answer with the mock itself.
 const { useAgents } = useAgentsOriginal;
-mock.module("../../../agents/fleet/useAgents", () => ({
+jest.mock("../../../agents/fleet/useAgents", () => ({
     ...useAgentsOriginal,
     useAgents: () => ({ ...useAgents(), agentById: (id: string) => roster.value[id] }),
 }));
-mock.module("../../run/useChat-sessions", () => ({ ...sessionsOriginal, hydrateOnce }));
+jest.mock("../../run/useChat-sessions", () => ({ ...sessionsOriginal, hydrateOnce }));
 
 const { usePaneAttach } = await import("./paneAttach");
 const { Conversation } = await import("../../session/conversation");

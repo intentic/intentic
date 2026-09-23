@@ -10,11 +10,15 @@ import { usePaneView } from "../panel/useChat-view";
 // doors (reword, take back) and, when the queue is held, the one press that lets it go.
 
 const t = useT();
-const props = defineProps<{
-    /** What happens to what waits while nothing holds it (composerSend.queuedHint). */
-    hint: string;
-}>();
-const { queued, queuePaused, streaming, unqueue, reword, resumeQueue } = usePaneView();
+const { queued, queuePaused, streaming, awaitingDecision, unqueue, reword, resumeQueue } = usePaneView();
+
+// What happens to what waits while nothing holds it: a parked turn takes it once answered, a running one ends first.
+const hint = computed(() => {
+    if (!streaming.value) {
+        return t(`chat.chatQueue.goesWhenFree`);
+    }
+    return awaitingDecision.value ? t(`chat.chatQueue.goesAfterAnswer`) : t(`chat.chatQueue.goesAfterTurn`);
+});
 
 // The message being reworded here, and the words it is being given; one at a time.
 const rewording = ref<{ readonly id: string; text: string } | undefined>();
@@ -65,7 +69,7 @@ const save = async (message: QueuedMessage): Promise<void> => {
                     @keydown.esc.prevent="rewording = undefined"
                 />
                 <div class="flex justify-end gap-1">
-                    <Button size="small" :text="true" @click="rewording = undefined">{{ t(`chat.chatQueue.cancel`) }}</Button>
+                    <Button size="small" :text="true" @click="rewording = undefined">{{ t(`shared.cancel`) }}</Button>
                     <Button size="small" type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
                 </div>
             </form>
@@ -98,7 +102,7 @@ const save = async (message: QueuedMessage): Promise<void> => {
             </button>
         </div>
         <p v-if="queuePaused === undefined" class="flex items-center gap-2 px-1 text-2xs text-subtle">
-            <span class="min-w-0 flex-1">{{ props.hint }}</span>
+            <span class="min-w-0 flex-1">{{ hint }}</span>
             <!-- Nothing runs here, yet it waits: a recovery the sandbox runs first, or a turn in another window. -->
             <Button v-if="!streaming" size="small" :text="true" class="shrink-0" @click="resumeQueue()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
         </p>

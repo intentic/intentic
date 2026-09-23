@@ -1,6 +1,5 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import { createResidentEngine, type ResidentEngine } from "./index.js";
 import { makeFixtureWorkspace } from "./testing.js";
 import type { QueryRequest } from "./types.js";

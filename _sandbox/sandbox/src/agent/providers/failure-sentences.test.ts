@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import {
     isAuthFailureText,
     isContextOverflowText,
@@ -191,14 +190,20 @@ test("does not read other refusals as a version floor", () => {
 test.each([
     ["Anthropic", "API Error: 400 prompt is too long: 214535 tokens > 200000 maximum"],
     ["the Claude CLI", "Prompt is too long"],
-    ["OpenAI's code", 'API Error: 400 {"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Input tokens exceed the configured limit"}}'],
+    [
+        "OpenAI's code",
+        'API Error: 400 {"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Input tokens exceed the configured limit"}}',
+    ],
     ["OpenAI chat completions", "This model's maximum context length is 128000 tokens. However, your messages resulted in 130533 tokens."],
     ["OpenAI Responses", "Your input exceeds the context window of this model. Please adjust your input and try again."],
     ["the Codex CLI", "Codex ran out of room in the model's context window. Start a new thread or clear earlier history before retrying."],
     ["xAI", "This model's maximum prompt length is 131072 but the request contains 145312 tokens."],
     ["Gemini", "The input token count (1210004) exceeds the maximum number of tokens allowed (1048576)."],
     ["Kimi", "Invalid request: Your request exceeded model token limit: 262144"],
-    ["the Claude CLI's compaction breaker", "Autocompact is thrashing: the context refilled to the limit within 3 turns of the previous compact, 3 times in a row."],
+    [
+        "the Claude CLI's compaction breaker",
+        "Autocompact is thrashing: the context refilled to the limit within 3 turns of the previous compact, 3 times in a row.",
+    ],
 ])("reads %s's overflow sentence as a session past its window", (_provider, sentence) => {
     expect(isContextOverflowText(sentence)).toBe(true);
 });
@@ -206,6 +211,8 @@ test.each([
 // "Too long" alone names plenty that a fresh session would not fix: a path, an argument, one tool's output.
 test("does not read other length refusals as a session past its window", () => {
     expect(isContextOverflowText("ENAMETOOLONG: name too long, open '/work/a/very/long/path'")).toBe(false);
-    expect(isContextOverflowText("API Error: 400 tool_use.input.command: String should have at most 100000 characters, the value is too long")).toBe(false);
+    expect(isContextOverflowText("API Error: 400 tool_use.input.command: String should have at most 100000 characters, the value is too long")).toBe(
+        false,
+    );
     expect(isContextOverflowText(KIMI_403)).toBe(false);
 });

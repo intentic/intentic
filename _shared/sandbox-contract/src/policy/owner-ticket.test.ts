@@ -1,5 +1,4 @@
 import { generateKeyPairSync } from "node:crypto";
-import { describe, it, expect } from "bun:test";
 import { mintReachabilityGrant, verifyReachabilityGrant } from "../protocol/ingress-contract.js";
 import { isOwnerTicket, mintOwnerTicket, OWNER_TICKET_TTL_MS, publicKeyPemOf, verifyOwnerTicket } from "./owner-ticket.js";
 

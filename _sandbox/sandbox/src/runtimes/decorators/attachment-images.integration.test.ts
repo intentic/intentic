@@ -1,7 +1,6 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { loadAttachments } from "./attachment-images.js";
 
 /* Which attachments a runtime is handed as pictures and which it is told about by path, read off a real temp tree. */

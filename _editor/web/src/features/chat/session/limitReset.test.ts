@@ -1,14 +1,13 @@
 import type { LimitResetStatus } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, mock } from "bun:test";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Pins what the strip may ask and how often: once per account, never on a timer, and a failure isn't cached as an
 // answer. The daemon's probe rate-limits reads hard enough to cost neighboring meters their freshness.
 
 // The ask and the claim, as the daemon answers each.
-const answers = mock();
-const claims = mock();
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ usage: { limitReset: answers, claimLimitReset: claims } }) }));
+const answers = jest.fn();
+const claims = jest.fn();
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ usage: { limitReset: answers, claimLimitReset: claims } }) }));
 
 const { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } = await import("./limitReset");
 

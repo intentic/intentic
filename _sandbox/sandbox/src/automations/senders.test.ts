@@ -1,5 +1,4 @@
 import type { Automation } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { senderLane } from "./senders.js";
 
 const automation = (extra: Partial<Automation> = {}): Automation => ({

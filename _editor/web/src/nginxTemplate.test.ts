@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, it, expect } from "bun:test";
 
 // Pins the one coupling between nginx.conf and entrypoint.sh: the entrypoint renders the template with an
 // envsubst RESTRICTED to a named list (an unrestricted one would blank every $uri), so a `${…}` the list does

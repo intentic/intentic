@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, beforeEach } from "bun:test";
 import { activateVersion, engineVersionDir, forgetEngineStates, quarantineVersion } from "./engine-store.js";
 import { forgetEngineResolution, resolveEngine } from "./engine-resolve.js";
 

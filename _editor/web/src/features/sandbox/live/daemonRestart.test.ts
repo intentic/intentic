@@ -1,31 +1,30 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { it, expect, beforeEach, mock } from "bun:test";
 import { ref } from "vue";
 
 // Needs jsdom: the stream router's import chain reaches the app's environment read at module eval.
 
 // Mocks the router, analytics and sandbox client so only the wire between the stream router and the fleet store is
 // exercised.
-mock.module("../../../router", () => ({ router: { push: mock() } }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 const activeSandboxId = ref<string | undefined>(undefined);
 const reachable = ref(false);
-mock.module("../client/useSandbox", () => ({
+jest.mock("../client/useSandbox", () => ({
     useSandbox: () => ({ activeSandboxId, reachable }),
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
 }));
 // Declared outside the factory with a path-only signature: the real `sandboxJson<T>` is generic, and an
 // implementation returning one concrete shape cannot satisfy it.
-const sandboxJsonMock = mock(async (..._args: unknown[]): Promise<unknown> => ({}));
+const sandboxJsonMock = jest.fn(async (..._args: unknown[]): Promise<unknown> => ({}));
 // Every name the app's graph imports from the daemon client, since bun links an ESM import against exactly what
 // this factory returns; only the two below are ever called here.
-mock.module("../client/sandboxClient", () => ({
+jest.mock("../client/sandboxClient", () => ({
     sandboxJson: (...args: unknown[]) => sandboxJsonMock(...args),
-    sandboxRequest: mock(),
-    sandboxBlob: mock(),
-    sandboxUpload: mock(),
-    sandboxError: mock(async () => new Error(`unused`)),
+    sandboxRequest: jest.fn(),
+    sandboxBlob: jest.fn(),
+    sandboxUpload: jest.fn(),
+    sandboxError: jest.fn(async () => new Error(`unused`)),
 }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";

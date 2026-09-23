@@ -5,16 +5,15 @@
 import "@intentic/testing/dom";
 import type { DeviceFlowLine } from "@intentic/sandbox-contract";
 import { AsyncIteratorClass } from "@orpc/client";
-import { it, expect, mock } from "bun:test";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { SandboxHttpError } from "../client/sandboxHttpError";
 import type { SandboxRpc } from "../client/sandboxRpc";
 
 // The typed client is the whole environment this module needs; the raw client is mocked too since the module reaches
 // for it at import time.
-const flow = mock<SandboxRpc[`system`][`runDeviceAgentFlow`]>();
-mock.module(`../client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ system: { runDeviceAgentFlow: flow } }) }));
-mock.module(`../client/sandboxClient`, () => ({ sandboxJson: mock(), sandboxRequest: mock(), sandboxError: mock() }));
+const flow = jest.fn<SandboxRpc[`system`][`runDeviceAgentFlow`]>();
+jest.mock(`../client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ system: { runDeviceAgentFlow: flow } }) }));
+jest.mock(`../client/sandboxClient`, () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn(), sandboxError: jest.fn() }));
 
 const { runDeviceAgentFlow } = await import("./useDevices");
 

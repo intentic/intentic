@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { withConcurrency } from "./concurrency";
 
 // A command whose completion the test controls: `calls` records every input it was actually invoked with,

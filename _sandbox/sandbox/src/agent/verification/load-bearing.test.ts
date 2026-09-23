@@ -1,5 +1,4 @@
 import type { GitRunner } from "@intentic/scaffold";
-import { describe, test, expect } from "bun:test";
 import { defencesOf, MAX_PROBES, probeCost, probeRank } from "./load-bearing.js";
 
 // A fixed clock, so the age boundary is a fact this file states rather than one it waits for.

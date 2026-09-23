@@ -1,6 +1,5 @@
 import { deriveTitle } from "@intentic/sandbox-contract";
 import type { Hono } from "hono";
-import { test, expect } from "bun:test";
 import { createApp } from "../../app.js";
 import type { AppEnv } from "../../app-env.js";
 import { clientFor, collect, proven } from "../../harness/route-client.testing.js";
@@ -203,9 +202,21 @@ test("what the daemon keeps is one flag away: every row naming the conversation 
     expect(Object.keys(rows).toSorted()).toEqual(["conversation", "conversation_repo"]);
     expect(rows["conversation"]?.map((row) => row["id"])).toEqual(["fair-sage-ey2r"]);
     // The record as stored: its repos are rows of their own, not a copy inside it.
-    expect(rows["conversation"]?.[0]?.["record"]).toMatchObject({ sessionId: "sess-pipeline", placement: { kind: "worktree", branch: "agent/fair-sage-ey2r" } });
+    expect(rows["conversation"]?.[0]?.["record"]).toMatchObject({
+        sessionId: "sess-pipeline",
+        placement: { kind: "worktree", branch: "agent/fair-sage-ey2r" },
+    });
     expect(rows["conversation_repo"]).toEqual([
-        { conversation_id: "fair-sage-ey2r", position: 0, repo: "root", base: "a".repeat(40), landed_tip: null, landed_head: null, landed_at: null, absorbed: null },
+        {
+            conversation_id: "fair-sage-ey2r",
+            position: 0,
+            repo: "root",
+            base: "a".repeat(40),
+            landed_tip: null,
+            landed_head: null,
+            landed_at: null,
+            absorbed: null,
+        },
     ]);
     expect(body.stored?.unit).toEqual({ dir: conversationUnit(testConfig.historyRoot, "fair-sage-ey2r"), files: [], total: 0 });
     expect(JSON.stringify(body.stored)).not.toContain("clear-marsh-8c46");
@@ -247,7 +258,10 @@ test("a message to an idle conversation opens a turn on it, carrying whose words
     await runAgentTurn(client, { prompt: PIPELINE_PROMPT, conversationId: "fair-sage-ey2r", isolated: true });
     await runAgentTurn(client, { prompt: PUBLISH_PROMPT, conversationId: "clear-marsh-8c46", isolated: true });
     prompts.length = 0;
-    const { status, body } = await sendMessage(app, "fair-sage-ey2r", { to: "clear-marsh", message: "the lockfile is mine this hour, leave it alone" });
+    const { status, body } = await sendMessage(app, "fair-sage-ey2r", {
+        to: "clear-marsh",
+        message: "the lockfile is mine this hour, leave it alone",
+    });
     expect(status).toBe(200);
     expect(body).toMatchObject({ ok: true, to: "clear-marsh-8c46", delivery: "turn" });
     // The route answers the moment the run is registered, like every other detached start; attaching to it is the

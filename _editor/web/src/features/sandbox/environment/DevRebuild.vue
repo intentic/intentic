@@ -221,7 +221,7 @@ const checkout = computed(() => {
                 :open="confirming"
                 :header="t(`sandbox.devRebuild.rebuildCheckout2`)"
                 header-icon="box"
-                :confirm-label="t(`sandbox.devRebuild.rebuildNow`)"
+                :confirm-label="t(`shared.rebuildNow`)"
                 confirm-icon="bolt"
                 :destructive="false"
                 @cancel="confirming = false"

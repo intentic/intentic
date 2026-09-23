@@ -1,6 +1,5 @@
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../../workspace/layout/workspace-setup.js";
 import { SPAWN_NOTE_HEADER } from "../subagents/spawn-note.js";
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";

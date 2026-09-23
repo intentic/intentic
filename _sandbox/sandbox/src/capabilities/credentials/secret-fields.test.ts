@@ -1,5 +1,4 @@
 import { type Capability, type CapabilityKind, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { partitionSecretValues } from "./secret-fields.js";
 
 // Pins that a vaulted entry (secret fields replaced by VAULTED) still passes CapabilitySchema; a kind whose echo omits

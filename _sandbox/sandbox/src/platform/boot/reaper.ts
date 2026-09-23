@@ -5,8 +5,14 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { AGENT_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import type { Logger } from "pino";
-import { closeBrowserSession, closeBrowserSessionsFor, idleBrowserSessionNames, runningBrowserOwners } from "../../browser/sessions/browser-sessions.js";
-import { type Leftover, leftoverProcesses, ownProcessGroup, scanProcesses, signalFor } from "./leftovers.js";
+import {
+    closeBrowserSession,
+    closeBrowserSessionsFor,
+    idleBrowserSessionNames,
+    runningBrowserOwners,
+} from "../../browser/sessions/browser-sessions.js";
+import { createProcessScanner } from "../resources/process-scan.js";
+import { type Leftover, leftoverProcesses, ownProcessGroup, signalFor } from "./leftovers.js";
 
 // Reclaims everything a conversation holds (processes, tmux terminals, browser records, scratch /tmp state) once the
 // turn registry reports it stopped, on one clock instead of one policy per resource kind. Archive and discard bypass
@@ -160,6 +166,7 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
     const browserIdleMs = deps.browserIdleMs ?? BROWSER_IDLE_MS;
     const intervalMs = deps.intervalMs ?? SWEEP_INTERVAL_MS;
     const group = ownProcessGroup();
+    const scanProcesses = createProcessScanner();
 
     // Owner → when first known stopped; cleared when the owner runs again, resetting its grace window.
     const stoppedAt = new Map<string, number>();

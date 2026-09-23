@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { capabilitiesOf, limitationsOf } from "./agent-catalog.js";
 import type { AgentCapabilities } from "./agent-runtimes.js";
 

@@ -1,6 +1,5 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { ActivityEvent, AgentEvent } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { createOutboundSniffer } from "./outbound.js";

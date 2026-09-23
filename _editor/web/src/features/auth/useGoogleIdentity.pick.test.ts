@@ -3,12 +3,11 @@
 // ordinary way is handed back the very account the reader just rejected, which is what made the app's switch press
 // land on the same refusal every time.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { freshImport, hoisted } from "@intentic/testing/bun";
+import { freshImport } from "@intentic/testing/bun";
 
 // Configured client id, overriding bun.setup.ts's empty default, so the storage key below is the real one.
 // Assigned, not `??=`, since the setup file already ran.
-hoisted(() => {
+(() => {
     globalThis.window.env = {
         production: false,
         api: { url: `http://localhost` },
@@ -16,10 +15,10 @@ hoisted(() => {
         analytics: { posthogKey: ``, posthogHost: `` },
         afterSignOut: ``,
     };
-});
+})();
 
 // An ordinary browser: the desktop webview's own posture is useGoogleIdentity.desktop.test.ts's subject.
-mock.module(`../../app/environments/desktop`, () => ({ desktopVersion: () => undefined }));
+jest.mock(`../../app/environments/desktop`, () => ({ desktopVersion: () => undefined }));
 
 // The module is one instance holding one credential and one mint, so each test takes its own copy rather than the
 // state the last one left: a mint nothing settled is still in flight, and GIS still initialized for it.
@@ -41,10 +40,10 @@ const credential = (email: string): string => {
 const HELD = credential(`first@example.com`);
 const PICKED = credential(`second@example.com`);
 
-const initialize = mock();
-const prompt = mock();
-const cancel = mock();
-const disableAutoSelect = mock();
+const initialize = jest.fn();
+const prompt = jest.fn();
+const cancel = jest.fn();
+const disableAutoSelect = jest.fn();
 
 // The credential callback GIS was last initialized with; calling it is what a click on Google's chooser does.
 const choose = (response: { credential: string }): void => {
@@ -61,7 +60,7 @@ beforeEach(() => {
     prompt.mockReset();
     cancel.mockReset();
     disableAutoSelect.mockReset();
-    window.google = { accounts: { id: { initialize, renderButton: mock(), prompt, cancel, disableAutoSelect } } };
+    window.google = { accounts: { id: { initialize, renderButton: jest.fn(), prompt, cancel, disableAutoSelect } } };
 });
 
 afterEach(() => {

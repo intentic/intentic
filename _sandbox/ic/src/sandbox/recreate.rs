@@ -865,7 +865,7 @@ pub(crate) fn build_overlay(tag: &str, overlay: &Path, pull: bool, log: &Log) {
         args.push("--pull");
     }
     args.extend_from_slice(&["-t", tag, "-"]);
-    let _ = docker::stream_with_stdin(&args, &content, log);
+    let _ = docker::stream(&args, Some(&content), docker::Shown::Raw, log);
 }
 
 /// The overlay a re-basing recreate builds and the hash its container carries, derived together because they have

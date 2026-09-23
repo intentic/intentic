@@ -2,8 +2,9 @@
 import type { PartialFileDiff } from "@intentic/sandbox-contract";
 import { formatBytes } from "@intentic/ui";
 import { computed } from "vue";
-import { type LineStat, nameExt } from "@intentic/code-read";
-import { isDelimitedPath, isDocumentPath, isProsePath, rendersAsBytes } from "../explorer/fileType";
+import type { LineStat } from "@intentic/code-read";
+import { extensionOf, formatOf } from "@intentic/ui/file-format";
+import { rendersAsBytes } from "../explorer/fileType";
 import { useLayout } from "../../../shell/window/useLayout";
 import { compareViewerForExtension } from "../../../core-views/viewerRegistry";
 import { derivedDiffSource } from "../changes/diffRaw";
@@ -48,21 +49,25 @@ const emit = defineEmits<{ stat: [LineStat | undefined] }>();
 // A document's whole two sides read as tracked changes when the toolbar's reading says so (DiffToolbar, the same
 // preference); a partial or binary diff has no text to word.
 const { diffProse, diffDocument, setDiffDocument } = useLayout();
-const prose = computed(() => diffProse.value && isProsePath(path));
+const reads = computed(() => formatOf(path).reads);
+const prose = computed(() => diffProse.value && (reads.value === `markdown` || reads.value === `plain`));
 
 // The viewer drawing this document's two versions as one, with both sides' bytes to hand it; a one-sided diff (a
 // file added or deleted) has nothing to align and reads as text.
 const redline = computed(() => {
-    const compare = isDocumentPath(path) && diffDocument.value === `changes` ? compareViewerForExtension(nameExt(path).ext)?.compare : undefined;
+    const compare =
+        reads.value === `document` && diffDocument.value === `changes` ? compareViewerForExtension(extensionOf(path))?.compare : undefined;
     return compare !== undefined && beforeRaw !== undefined && afterRaw !== undefined ? { compare, before: beforeRaw, after: afterRaw } : undefined;
 });
 
 // The derived-text reading of a document, when the side URLs name a diff the daemon can render both versions of.
 const source = computed(() => derivedDiffSource({ beforeRaw, afterRaw }));
-const derived = computed(() => redline.value === undefined && diffDocument.value !== `sides` && isDocumentPath(path) && source.value !== undefined);
+const derived = computed(
+    () => redline.value === undefined && diffDocument.value !== `sides` && reads.value === `document` && source.value !== undefined,
+);
 
 // Delimited text as a grid, when whole sides are here to parse; a partial (oversized) csv keeps the line diff.
-const table = computed(() => diffDocument.value !== `sides` && isDelimitedPath(path) && partial === undefined);
+const table = computed(() => diffDocument.value !== `sides` && reads.value === `table` && partial === undefined);
 const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
 const beforeSheets = computed(() => (before === undefined ? [] : [sheetOfDelimited(before, filename.value)]));
 const afterSheets = computed(() => (after === undefined ? [] : [sheetOfDelimited(after, filename.value)]));

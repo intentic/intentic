@@ -12,13 +12,14 @@ import { type HostLink, LINK_STAMP_MS, type LinkReading, linkStatePath, readLink
 import { connect } from "./device/connection.js";
 import { type Children, superviseChildren } from "./environments/children.js";
 import { type AutoUpgrade, startAutoUpgrade } from "./environments/auto-upgrade.js";
-import { childrenOf, readMachineConfig, SUPERVISOR_ENV, supervisedByWindows, updateMachineConfig, withoutChild } from "./environments/machine.js";
+import { heldDistros, SUPERVISOR_ENV, supervisedByWindows, updateMachineConfig, withoutChild } from "./environments/machine.js";
 import { UPGRADE_ENV } from "./environments/machine-upgrade.js";
 import { sweepBin } from "./release.js";
 import { assertSupervisor, machineLauncher, readResident, retireResident, startResident } from "./supervision.js";
 import { mirrorHeartbeatPath, readState } from "./sync/config.js";
 import { runMirrorWatch } from "./sync/mirror.js";
 import { MACHINE_VERSION } from "./version.js";
+import { WINDOWS_SIDE } from "./wsl.js";
 
 // This environment's one resident process; it re-reads what it serves every tick, so only a new binary or `run` restarts it.
 
@@ -45,12 +46,8 @@ interface Served {
 
 // Throws on a file that exists and will not parse: "nothing to serve" retires the login entry, which only a fresh install undoes.
 const readServed = async (): Promise<Served> => {
-    const [links, state, machine] = await Promise.all([
-        readLinks(),
-        readState(),
-        process.platform === "win32" ? readMachineConfig() : Promise.resolve({}),
-    ]);
-    return { links, pairings: state.pairings.length, children: childrenOf(machine) };
+    const [links, state, children] = await Promise.all([readLinks(), readState(), heldDistros()]);
+    return { links, pairings: state.pairings.length, children };
 };
 
 const nothingToServe = (served: Served): boolean => served.links.length === 0 && served.pairings === 0 && served.children.length === 0;
@@ -172,10 +169,9 @@ interface Runtime {
 // The machine-wide duties (the one Docker engine's next images, the PC's own upgrades) are the root's alone.
 const runtimeOf = (supervised: boolean, log: Log): Runtime => {
     const connections = new Map<string, Connection>();
-    const children =
-        process.platform === "win32"
-            ? superviseChildren(log, async (distro) => void (await updateMachineConfig((config) => withoutChild(config, distro))))
-            : undefined;
+    const children = WINDOWS_SIDE
+        ? superviseChildren(log, async (distro) => void (await updateMachineConfig((config) => withoutChild(config, distro))))
+        : undefined;
     const autoPrepare = supervised ? undefined : startAutoPrepare(log);
     const autoUpgrade = supervised ? undefined : startAutoUpgrade(log);
     const finish = async (code: number): Promise<never> => {
@@ -248,7 +244,7 @@ const serving = (served: Served): string =>
     [
         plural(served.links.length, "linked sandbox"),
         plural(served.pairings, "sync pairing"),
-        ...(process.platform === "win32" ? [plural(served.children.length, "WSL distro")] : []),
+        ...(WINDOWS_SIDE ? [plural(served.children.length, "WSL distro")] : []),
     ].join(", ");
 
 // The foreground agent a supervisor runs (systemd, launchd, the logon task, or the Windows side for a distro).

@@ -6,7 +6,6 @@ import { promisify } from "node:util";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { PushRun } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect, afterEach } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";

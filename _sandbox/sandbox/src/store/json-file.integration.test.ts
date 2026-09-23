@@ -2,7 +2,6 @@ import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { test, expect, afterEach } from "bun:test";
 import { z } from "zod";
 import { type JsonFile, jsonFile, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
 

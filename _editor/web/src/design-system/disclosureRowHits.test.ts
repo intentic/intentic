@@ -4,7 +4,6 @@
 // open a row, which belong to a control, and which parts of an open row close it again.
 import "@intentic/testing/dom";
 import { DisclosureRow } from "@intentic/ui";
-import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
 // Vue stamps each event with `Date.now()` and drops it on any handler added at or after that stamp. Under jsdom both

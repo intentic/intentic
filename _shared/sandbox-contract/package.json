@@ -73,6 +73,17 @@
                 "default": "./dist/protocol/peer-dial.js"
             }
         },
+        "./upgrade-relay": {
+            "types": "./dist/protocol/upgrade-relay.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/upgrade-relay.ts",
+                "default": "./dist/protocol/upgrade-relay.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/upgrade-relay.ts",
+                "default": "./dist/protocol/upgrade-relay.js"
+            }
+        },
         "./peer-mcp-server": {
             "types": "./dist/protocol/peer-mcp-server.d.ts",
             "import": {

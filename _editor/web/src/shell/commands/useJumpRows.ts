@@ -52,7 +52,7 @@ const headingOf = (kind: JumpKind, recent: boolean): string => {
         case `agent`:
             return t(`shell.quickOpen.agents`);
         case `file`:
-            return recent ? t(`shell.quickOpen.recentlyOpened`) : t(`shell.quickOpen.files`);
+            return recent ? t(`shell.quickOpen.recentlyOpened`) : t(`shared.files`);
         case `terminal`:
             return t(`shell.quickOpen.terminals`);
         default:
@@ -104,32 +104,34 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
         if (!wants(`agent`)) {
             return [];
         }
-        return fleet.value
-            .flatMap((agent): PaletteRow[] => {
-                const title = agentDisplayTitle(agent, previewOf(agent.id));
-                // The branch stands in for the id: it is the spelling a reader has actually seen (`agent/<id>`).
-                const score = nameScore(title, agent.branch ?? agent.id, text.value);
-                if (score === undefined) {
-                    return [];
-                }
-                const meta = agentStatusMeta(agent.status);
-                return [
-                    {
-                        kind: `agent`,
-                        key: `agent:${agent.id}`,
-                        score,
-                        title,
-                        detail: meta.label,
-                        icon: meta.icon,
-                        tone: meta.class,
-                        chord: undefined,
-                        recent: false,
-                        run: () => openAgent(agent.id),
-                    },
-                ];
-            })
-            // Stable, so an unqueried palette keeps the fleet's own order: what needs you, then what you touched last.
-            .toSorted((left, right) => right.score - left.score);
+        return (
+            fleet.value
+                .flatMap((agent): PaletteRow[] => {
+                    const title = agentDisplayTitle(agent, previewOf(agent.id));
+                    // The branch stands in for the id: it is the spelling a reader has actually seen (`agent/<id>`).
+                    const score = nameScore(title, agent.branch ?? agent.id, text.value);
+                    if (score === undefined) {
+                        return [];
+                    }
+                    const meta = agentStatusMeta(agent.status);
+                    return [
+                        {
+                            kind: `agent`,
+                            key: `agent:${agent.id}`,
+                            score,
+                            title,
+                            detail: meta.label,
+                            icon: meta.icon,
+                            tone: meta.class,
+                            chord: undefined,
+                            recent: false,
+                            run: () => openAgent(agent.id),
+                        },
+                    ];
+                })
+                // Stable, so an unqueried palette keeps the fleet's own order: what needs you, then what you touched last.
+                .toSorted((left, right) => right.score - left.score)
+        );
     });
 
     // Idle while a session reference is showing, and while the query is scoped to another kind.
@@ -165,7 +167,10 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
         }
         // Unscoped, only the sessions someone keeps — an agent's own shell, a job and a background process are listed
         // when the palette is pointed at terminals and not before, exactly as the panel's strip hides them.
-        const kept = parsed.value.kind === `terminal` ? sessions.value : sessions.value.filter((session) => session.kind === `shell` || session.kind === `panel`);
+        const kept =
+            parsed.value.kind === `terminal`
+                ? sessions.value
+                : sessions.value.filter((session) => session.kind === `shell` || session.kind === `panel`);
         return kept
             .flatMap((session): PaletteRow[] => {
                 const title = session.label ?? session.name;
@@ -219,7 +224,9 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
                 // Remembered on the press, not on success: what the reader reached for is the same either way.
                 rememberCommand(entry.command);
                 // A throwing command is its owner's bug: contain it to the console, never the palette.
-                void Promise.resolve(executeCommand(entry.command)).catch((caught: unknown) => console.error(`command ${entry.command} failed`, caught));
+                void Promise.resolve(executeCommand(entry.command)).catch((caught: unknown) =>
+                    console.error(`command ${entry.command} failed`, caught),
+                );
             },
         };
     };
@@ -246,7 +253,7 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
             return [
                 {
                     kind: `agent`,
-                    heading: t(`shell.quickOpen.agent`),
+                    heading: t(`shared.agent`),
                     rows: [
                         {
                             kind: `agent`,

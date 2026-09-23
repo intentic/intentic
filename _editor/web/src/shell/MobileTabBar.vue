@@ -75,7 +75,7 @@ const chatBadge = computed<ViewBadge | undefined>(() => {
 const chatTab = computed<Tab>(() => ({
     id: `chat`,
     to: mobileChatPath(active.value.conversationId),
-    label: t(`shell.mobileTabBar.chat`),
+    label: t(`shared.chat`),
     match: (route) => route.path.startsWith(`/agents/`),
     ...(chatBadge.value === undefined ? {} : { badge: chatBadge.value }),
 }));
@@ -108,7 +108,7 @@ const tabs = computed<readonly Tab[]>(() => [
     {
         id: `agents`,
         to: `/agents`,
-        label: t(`shell.mobileTabBar.agents`),
+        label: t(`shared.agents`),
         // The desktop rail's tile, on a phone: one derivation (agentsTile.ts) for both, so a count that follows
         // the board's scope cannot follow it in one shell and not the other.
         ...(agentsBadge.value === undefined ? {} : { badge: agentsBadge.value }),
@@ -125,12 +125,12 @@ const tabs = computed<readonly Tab[]>(() => [
                   /* The queue when the pack is on; the workspace's OWN review: its Changes panel, when it is off. */
                   id: `approvals`,
                   to: approvalsTile.value?.to ?? `/workspace?panel=changes`,
-                  label: t(`shell.mobileTabBar.review`),
+                  label: t(`shared.review`),
                   ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }),
                   ...(approvalsTile.value === undefined ? { panel: `changes` as const } : {}),
               },
           ]),
-    { id: `menu`, to: `/menu`, label: t(`shell.mobileTabBar.menu`), ...(menuBadge.value === undefined ? {} : { badge: menuBadge.value }) },
+    { id: `menu`, to: `/menu`, label: t(`shared.menu`), ...(menuBadge.value === undefined ? {} : { badge: menuBadge.value }) },
 ]);
 
 // Same order as the rail's tileLabel; the only spot badge, running work and note are spelled out for a screen reader.

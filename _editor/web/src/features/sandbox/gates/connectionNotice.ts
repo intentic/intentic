@@ -150,7 +150,7 @@ const suspendedNotice = (input: ConnectionNoticeInput, name: string): Connection
     return {
         title: t(`sandbox.connectionNotice.hostedSandboxesSwitchedOff`),
         body: t(`sandbox.connectionNotice.weWontStartMachine`),
-        action: { kind: `setup`, label: t(`sandbox.connectionNotice.runOnMyComputer`) },
+        action: { kind: `setup`, label: t(`shared.runOnMyComputer`) },
         waiting: false,
     };
 };

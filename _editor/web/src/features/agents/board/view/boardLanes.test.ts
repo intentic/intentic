@@ -1,7 +1,6 @@
 import "@intentic/testing/dom";
 import type { AutomationApproval, WorkflowRun } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
-import { afterEach, describe, expect, it } from "bun:test";
 import { type EffectScope, effectScope, ref, shallowRef } from "vue";
 import { NO_ATTENTION } from "../../fleet/agentStatus";
 import { type FleetAgent, laneGroups } from "../../fleet/useAgents-fleet";
@@ -251,9 +250,9 @@ describe(`a lane under a dragged card`, () => {
 describe(`the lanes' heads`, () => {
     it(`runs Attention, Active, Finished, each with its dot and what it says empty`, () => {
         expect(laneHeads()).toEqual([
-            { key: `attention`, label: t(`agents.agentsView.attention`), dot: `bg-warning`, empty: t(`agents.agentsView.nothingNeedsRightNow`) },
-            { key: `active`, label: t(`agents.agentsView.active`), dot: `bg-success`, empty: t(`agents.agentsView.noAgentsWorkingStart`) },
-            { key: `finished`, label: t(`agents.agentsView.finished`), dot: `bg-line-strong`, empty: t(`agents.agentsView.finishedAgentsLandWork`) },
+            { key: `attention`, label: t(`shared.attention`), dot: `bg-warning`, empty: t(`agents.agentsView.nothingNeedsRightNow`) },
+            { key: `active`, label: t(`shared.active`), dot: `bg-success`, empty: t(`agents.agentsView.noAgentsWorkingStart`) },
+            { key: `finished`, label: t(`shared.finished`), dot: `bg-line-strong`, empty: t(`agents.agentsView.finishedAgentsLandWork`) },
         ]);
     });
 });

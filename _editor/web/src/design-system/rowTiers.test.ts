@@ -7,7 +7,6 @@
 // a <RowNote> pads from the same tier.
 import "@intentic/testing/dom";
 import { DisclosureRow, ROW_TIERS, Row, RowGroup, RowNote, SkeletonRows } from "@intentic/ui";
-import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 
 const mounted: { app: App; host: HTMLElement }[] = [];

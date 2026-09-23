@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 // @ts-expect-error: plain .mjs build script, no declarations
 import { extShims, shimsDir } from "../../scripts/generate-ext-shims.mjs";
 

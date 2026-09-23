@@ -3,7 +3,6 @@
 // a hole punched in the section — card-in-card, the shape this prop exists to make unavailable. Mounted for real
 // (jsdom, plain Vue) because the whole question is what the DOM ends up holding.
 import "@intentic/testing/dom";
-import { describe, test, expect } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 import { MarkdownDocument } from "@intentic/ui";
 

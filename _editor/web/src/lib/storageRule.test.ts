@@ -1,7 +1,6 @@
 // Needs jsdom: reaching the app's real key builders pulls in composables that touch browser globals at import time. The
 // rule is one predicate; what's pinned is that the three heavy reads actually carry the mark.
 import "@intentic/testing/dom";
-import { describe, it, expect } from "bun:test";
 import { mirrors, UNPERSISTED } from "./queryPersistence";
 import { agentTranscriptKey } from "../features/chat/transcript/agentTranscript";
 import { agentFileDiffKey } from "../features/agents/review/useAgentChanges";

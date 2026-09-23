@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { hostSshIdFromToken, PORT_SLOT_COUNT, portSlotsFromToken, sandboxIdFromToken } from "./tunnel-ids.js";
 
 const TOKEN = "connect-token-one";

@@ -1,7 +1,6 @@
 // The conversation's one viewer: where it opens, how the keys and the filmstrip move it, what its caption says, and
 // that Open in workspace hands the file to the surface. The kit's box is stood in by one that draws its slot while open.
 import "@intentic/testing/dom";
-import { describe, it, expect, afterEach, beforeEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import * as actualUi from "@intentic/ui";
@@ -11,13 +10,16 @@ import { type ChatShot, shotKey } from "./shots";
 
 // Snapshotted before the mock replaces the module: a namespace is a live binding.
 const realUi = { ...actualUi };
-mock.module("@intentic/ui", () => ({
+jest.mock("@intentic/ui", () => ({
     ...realUi,
     Modal: defineComponent({
         name: `Modal`,
         props: { open: Boolean },
         emits: [`update:open`, `show`],
-        setup: (props, { slots }) => () => (props.open ? h(`div`, { "data-modal": `` }, slots[`default`]?.()) : null),
+        setup:
+            (props, { slots }) =>
+            () =>
+                props.open ? h(`div`, { "data-modal": `` }, slots[`default`]?.()) : null,
     }),
 }));
 
@@ -27,13 +29,16 @@ const originals = new Map<string, string>();
 // Every path a view was asked for, in order: the one on screen and the neighbours fetched ahead of the arrows.
 const viewAsks: string[] = [];
 const downloads: string[] = [];
-mock.module("./shotPictures", () => ({
-    viewOf: (_agent: string | undefined, path: string) => {
-        viewAsks.push(path);
+jest.mock("../../../workspace/home/thumbnails", () => ({
+    picture: (_agent: string | undefined, path: string, size: string) => {
+        if (size === `original`) {
+            return originals.has(path) ? { url: originals.get(path) } : undefined;
+        }
+        if (size === `view`) {
+            viewAsks.push(path);
+        }
         return { url: files.get(path) };
     },
-    stripOf: (_agent: string | undefined, path: string) => ({ url: files.get(path) }),
-    originalOf: (_agent: string | undefined, path: string) => (originals.has(path) ? { url: originals.get(path) } : undefined),
     downloadOriginal: async (_agent: string | undefined, path: string) => {
         downloads.push(path);
     },
@@ -56,7 +61,7 @@ const PROMPTS = new Map([
 ]);
 
 let app: App | undefined;
-const openFile = mock<(path: string) => void>();
+const openFile = jest.fn<(path: string) => void>();
 const open = ref(true);
 
 const mount = (start: string | undefined): HTMLElement => {

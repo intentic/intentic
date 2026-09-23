@@ -1,14 +1,13 @@
 // jsdom: fleetScope declares an account preference read from localStorage and announced on a BroadcastChannel at module
 // load, neither of which exists in the node environment.
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { ref } from "vue";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 
 const sandboxes = ref<{ id: string; name: string; image: string | null; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
-const select = mock();
-mock.module("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId, select }) }));
+const select = jest.fn();
+jest.mock("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId, select }) }));
 
 // The store this reads from, stubbed to the shape its surfaces see; what it does with the network is fleetAcross's own
 // business.
@@ -17,17 +16,17 @@ const silentBoxes = ref<unknown[]>([]);
 // `boxAttention` stubbed to its two real answers: a number, or undefined for a box that's never answered, the case the
 // sum below must not turn into a zero.
 const boxAttention = (box: { attention?: number }): number | undefined => box.attention;
-mock.module("../../sandbox/live/fleetAcross", () => ({
+jest.mock("../../sandbox/live/fleetAcross", () => ({
     otherBoxes,
     silentBoxes,
     boxAttention,
-    subscribe: mock(),
-    refreshAcross: mock(),
-    markSeenAcross: mock(),
+    subscribe: jest.fn(),
+    refreshAcross: jest.fn(),
+    markSeenAcross: jest.fn(),
 }));
 
-const landOnAfterSwitch = mock();
-mock.module("../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch }));
+const landOnAfterSwitch = jest.fn();
+jest.mock("../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch }));
 
 const { acrossAttention, boxNameOf, isRemote, openInSandbox, otherFleet, partialAnswer, fleetScope, readingAcross, scopeOffered } =
     await import("./fleetScope");
@@ -113,10 +112,7 @@ describe("another box's agents as board cards", () => {
     // A box read at a distance is polled, not streamed, so its own answer to a press is the slowest thing on the board;
     // the press draws at once, and only on the box it was made in, since agent ids are minted per daemon.
     it("draws a press on another box's card at once, and on no other box's card with the same id", () => {
-        otherBoxes.value = [
-            boxOf(`sbx-laptop`, `Laptop`, [agent({ status: `error` })]),
-            boxOf(`sbx-desk`, `Desk`, [agent({ status: `error` })]),
-        ];
+        otherBoxes.value = [boxOf(`sbx-laptop`, `Laptop`, [agent({ status: `error` })]), boxOf(`sbx-desk`, `Desk`, [agent({ status: `error` })])];
 
         const press = claim(`a1`, `sbx-laptop`, `land`);
         expect(otherFleet.value.map((card) => [card.sandboxId, card.status])).toEqual([

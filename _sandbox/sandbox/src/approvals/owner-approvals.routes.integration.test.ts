@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "bun:test";
 import { createApp } from "../app.js";
 import { workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import { gateSettingsHooks } from "../guard/hook-approvals.js";
@@ -21,12 +20,23 @@ const sandbox = async () => {
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "owner-approvals-")));
     const historyRoot = mkdtempSync(join(tmpdir(), "owner-approvals-history-"));
     await mkdir(join(workspace.root, ".claude"), { recursive: true });
-    await writeFile(join(workspace.root, ".claude", "settings.json"), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }] } }));
-    const place = { cwd: workspace.root, home: join(historyRoot, "home"), configDir: join(historyRoot, "home", ".claude"), readable: (path: string) => path };
+    await writeFile(
+        join(workspace.root, ".claude", "settings.json"),
+        JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }] } }),
+    );
+    const place = {
+        cwd: workspace.root,
+        home: join(historyRoot, "home"),
+        configDir: join(historyRoot, "home", ".claude"),
+        readable: (path: string) => path,
+    };
     const digest = (await gateSettingsHooks(historyRoot, place, undefined)).set?.digest ?? "";
     const dir = join(workspaceExtensionsRoot(workspace.root), "stranger");
     await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, "intentic-extension.json"), JSON.stringify({ publisher: "acme", name: "stranger", version: "1.0.0", engines: { intentic: "^2.0.0" } }));
+    await writeFile(
+        join(dir, "intentic-extension.json"),
+        JSON.stringify({ publisher: "acme", name: "stranger", version: "1.0.0", engines: { intentic: "^2.0.0" } }),
+    );
     const app = createApp(
         services({
             workspace,
@@ -46,7 +56,9 @@ const sandbox = async () => {
 };
 
 const post = (app: ReturnType<typeof createApp>, path: string, headers: Record<string, string>, body?: object): Promise<Response> =>
-    Promise.resolve(app.request(path, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body ?? {}) }));
+    Promise.resolve(
+        app.request(path, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body ?? {}) }),
+    );
 
 test("no token a program holds approves a hook set or a workspace extension; the owner's session does", async () => {
     const { app, digest, extensionDigest } = await sandbox();

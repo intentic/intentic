@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { DEFAULT_PHONE_ID, phoneModels, phoneById, phoneOuterSize, phonePickerGroups, phoneScale } from "./phoneModels";
 
 // The phone catalogue: what the stage is asked to draw, and how big it draws it. Pure, so the arithmetic is pinned

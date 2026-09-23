@@ -1,6 +1,5 @@
 import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
 import { MANIFESTS, recipeFor } from "@intentic/workspace-setup";
-import { test, expect } from "bun:test";
 
 // An isolated turn mirrors only tracked files, so a marker not in MIRRORED_DIRS reads ready with nothing installed.
 // Checks every recipe's marker is mirrored and a bare directory name, so a new ecosystem is covered automatically.

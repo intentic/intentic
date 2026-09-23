@@ -1,8 +1,9 @@
-import { open, readdir, realpath, stat } from "node:fs/promises";
+import { open, realpath, stat } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { PUBLIC_DIR } from "@intentic/workspace-ignore";
 import { escapeHtml } from "@intentic/base/format";
 import type { Refusal } from "../panels/interstitial.js";
+import { walkTree } from "../platform/resources/storage/storage-walk.js";
 
 // Everything under public/ is served to anyone with the URL, no auth. Every guard runs at serve time against the bytes
 // on disk, since the write path can't be trusted and a file safe today may not be tomorrow.
@@ -226,39 +227,37 @@ export const listPublicFiles = async (root: string): Promise<PublicEntry[]> => {
     if (realRoot === undefined) {
         return entries;
     }
-    const walk = async (dir: string, rel: string, depth: number): Promise<void> => {
-        if (depth > MAX_DEPTH || entries.length >= MAX_ENTRIES) {
-            return;
+    // A link is gathered like a file, then kept only if what it resolves to is one.
+    const found: string[] = [];
+    await walkTree(realRoot, 1, {
+        folder: (_path, depth) => (depth >= MAX_DEPTH || found.length >= MAX_ENTRIES ? "skip" : depth + 1),
+        file: (file) => {
+            found.push(file.path);
+        },
+        link: (path) => {
+            found.push(path);
+        },
+    });
+    for (const abs of found) {
+        if (entries.length >= MAX_ENTRIES) {
+            break;
         }
-        const dirents = await readdir(dir, { withFileTypes: true }).catch(() => []);
-        for (const dirent of dirents) {
-            if (entries.length >= MAX_ENTRIES) {
-                return;
-            }
-            const path = rel === "" ? dirent.name : `${rel}/${dirent.name}`;
-            if (dirent.isDirectory()) {
-                await walk(join(dir, dirent.name), path, depth + 1);
-                continue;
-            }
-            const abs = join(dir, dirent.name);
-            const stats = await stat(abs).catch(() => undefined);
-            if (stats === undefined || !stats.isFile()) {
-                continue;
-            }
-            const entry = { path, size: stats.size, modifiedAt: stats.mtimeMs };
-            // Judged on the resolved name, like the serve path, so the two can never disagree about a symlink; one
-            // whose bytes escape reports here as `escapes`.
-            const real = await realpath(abs).catch(() => undefined);
-            if (real === undefined || !real.startsWith(realRoot + sep)) {
-                entries.push({ ...entry, blocked: "escapes" });
-                continue;
-            }
-            const realRel = relative(realRoot, real).split(sep).join("/");
-            const blocked =
-                blockByName(realRel) ?? (stats.size > MAX_BYTES ? ("too-large" as const) : await blockByContent(real, contentTypeOf(realRel).type));
-            entries.push(blocked === undefined ? entry : { ...entry, blocked });
+        const stats = await stat(abs).catch(() => undefined);
+        if (stats === undefined || !stats.isFile()) {
+            continue;
         }
-    };
-    await walk(root, "", 1);
+        const entry = { path: relative(realRoot, abs).split(sep).join("/"), size: stats.size, modifiedAt: stats.mtimeMs };
+        // Judged on the resolved name, like the serve path, so the two can never disagree about a symlink; one whose
+        // bytes escape reports here as `escapes`.
+        const real = await realpath(abs).catch(() => undefined);
+        if (real === undefined || !real.startsWith(realRoot + sep)) {
+            entries.push({ ...entry, blocked: "escapes" });
+            continue;
+        }
+        const realRel = relative(realRoot, real).split(sep).join("/");
+        const blocked =
+            blockByName(realRel) ?? (stats.size > MAX_BYTES ? ("too-large" as const) : await blockByContent(real, contentTypeOf(realRel).type));
+        entries.push(blocked === undefined ? entry : { ...entry, blocked });
+    }
     return entries.toSorted((left, right) => left.path.localeCompare(right.path));
 };

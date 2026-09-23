@@ -1,14 +1,14 @@
 // What a sent prompt's attachments are drawn AS. The rule under test is one line: a bubble is what the user said, and
 // what they brought with it is not one — so nothing in this row may wear the prompt's own surface.
 import "@intentic/testing/dom";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { IconStub } from "@intentic/ui/testing";
 import { CHAT_SURFACE } from "../tools/chatToolSurface";
+import type { PendingAttachment } from "../drafts/useChatAttachments";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 
-mock.module("../drafts/attachmentPeeks", () => ({
+jest.mock("../drafts/attachmentPeeks", () => ({
     attachmentPeek: () => ({
         present: true,
         size: 2_400_000,
@@ -21,10 +21,13 @@ mock.module("../drafts/attachmentPeeks", () => ({
 
 let app: App | undefined;
 
-const mount = (attachments: readonly { name: string; path: string; previewUrl?: string }[]): HTMLElement => {
+const mount = (
+    attachments: readonly (Pick<PendingAttachment, `name` | `path`> & Partial<PendingAttachment>)[],
+    props: Record<string, unknown> = {},
+): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(ChatAttachmentStrip, { attachments }) });
+    app = createApp({ render: () => h(ChatAttachmentStrip, { attachments, ...props }) });
     app.provide(CHAT_SURFACE, { imageUrl: () => undefined, openFile: () => undefined });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -67,4 +70,22 @@ it("leaves a log to the file chip's own lead lines", () => {
 
     expect(element.querySelector(`audio`)).toBeNull();
     expect(element.textContent).toContain(`starting setup`);
+});
+
+// The composer's row: a picture still going up is a chip naming it, framed and removable, not the sent bubble's bare thumbnail.
+it("stages a picture as a removable chip that names it, and hands the press back with the attachment", () => {
+    const staged = {
+        id: `u1`,
+        name: `shot.png`,
+        path: `${STATE_DIR}/x/shot.png`,
+        previewUrl: `blob:shot`,
+        status: `uploading` as const,
+        progress: 0.5,
+    };
+    const remove = jest.fn();
+    const element = mount([staged], { staged: true, onRemove: remove });
+
+    expect(element.textContent).toContain(`shot.png`);
+    element.querySelector<HTMLButtonElement>(`button[aria-label="Remove attachment"]`)?.click();
+    expect(remove).toHaveBeenCalledWith(staged);
 });

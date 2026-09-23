@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { exitControlPort, exitInterface, exitProxyPort, exitRouteTable } from "./exit-paths.js";
 
 // Derived-name rules pinned here so a promise something downstream relies on isn't rediscovered from the

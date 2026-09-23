@@ -4,8 +4,6 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { chatRun, showRun } from "../run/chatRun";
 import { useChat } from "../run/useChat";
@@ -27,23 +25,23 @@ import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 
 // useDevice reads matchMedia at module load (matches:false keeps it desktop, the only form factor with panes); jsdom
 // implements neither IntersectionObserver nor scrollIntoView.
-hoisted(() => {
+(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
         unobserve(): void {}
         disconnect(): void {}
     } as unknown as typeof globalThis.IntersectionObserver;
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-});
+})();
 
 // The workflow ledger as the panel sees it, driven directly by these tests.
 const runs = ref<WorkflowRun[]>([]);
 // An empty roster avoids driving the real fleet queries in a test about which chat the panel shows; none of these
 // fixtures fork.
-mock.module(`../../agents/fleet/useAgents`, () => {
+jest.mock(`../../agents/fleet/useAgents`, () => {
     return { useAgents: () => ({ fleet: computed(() => []), agentById: () => undefined }) };
 });
-mock.module(`../../agents/fleet/useWorkflowRuns`, () => ({
+jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
     ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs, designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));

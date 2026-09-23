@@ -1,4 +1,3 @@
-import { expect, test } from "bun:test";
 import { siblingModule, workerCalls } from "./worker-calls.js";
 
 // Pins the channel's promises against a real worker thread: answers find their own calls, a refusal costs only its

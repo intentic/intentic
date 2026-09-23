@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { mintConnectToken, mintSetupCode } from "./mint-sandbox.js";
 
 // Both of these travel as argv: `ic sandbox connect <code>`, and the shell one-liner the setup page hands out.

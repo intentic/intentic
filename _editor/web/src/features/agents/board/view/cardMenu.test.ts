@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { t } from "@intentic/ui/i18n";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import type { MenuItem } from "primevue/menuitem";
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
 import { NO_ATTENTION, reviewAction } from "../../fleet/agentStatus";
@@ -32,16 +31,16 @@ const facts = (over: Partial<MenuFacts> = {}): MenuFacts => ({
     boxName: undefined,
     ...over,
 });
-const actions = (): { [K in keyof MenuActions]: ReturnType<typeof mock> & MenuActions[K] } => ({
-    focusAgent: mock(),
-    keepAgent: mock(),
-    reviewAgent: mock(),
-    closeAgent: mock(),
-    copySessionName: mock(async () => undefined),
-    openInSandbox: mock(),
-    stopWatching: mock(async () => undefined),
-    restore: mock(async () => undefined),
-    archive: mock(async () => undefined),
+const actions = (): { [K in keyof MenuActions]: ReturnType<typeof jest.fn> & MenuActions[K] } => ({
+    focusAgent: jest.fn(),
+    keepAgent: jest.fn(),
+    reviewAgent: jest.fn(),
+    closeAgent: jest.fn(),
+    copySessionName: jest.fn(async () => undefined),
+    openInSandbox: jest.fn(),
+    stopWatching: jest.fn(async () => undefined),
+    restore: jest.fn(async () => undefined),
+    archive: jest.fn(async () => undefined),
 });
 // The rows as a reader sees them: a label, or a rule between groups.
 const rows = (items: readonly MenuItem[]): string[] => items.map((item) => (item.separator === true ? `—` : String(item.label)));
@@ -70,7 +69,7 @@ describe(`what a card's menu offers`, () => {
     it(`keeps a look, and leaves the review to the card's own tap on a phone`, () => {
         expect(rows(menuItemsFor(landed, facts({ peeked: true, mobile: true }), actions()))).toEqual([
             t(`ui.action.open`),
-            t(`agents.agentsView.keepOpen`),
+            t(`shared.keepOpen`),
             `—`,
             t(`agents.agentsView.copySessionName`),
             `—`,
@@ -79,11 +78,7 @@ describe(`what a card's menu offers`, () => {
     });
 
     it(`restores an archived card, and closes a draft that has nothing to file`, () => {
-        expect(rows(menuItemsFor(card(`old`, { archivedAt: 9 }), facts(), actions()))).toEqual([
-            t(`ui.action.open`),
-            `—`,
-            t(`agents.agentsView.restore`),
-        ]);
+        expect(rows(menuItemsFor(card(`old`, { archivedAt: 9 }), facts(), actions()))).toEqual([t(`ui.action.open`), `—`, t(`shared.restore`)]);
         expect(rows(menuItemsFor(card(`new`, { status: `draft` }), facts(), actions()))).toEqual([t(`ui.action.open`), `—`, t(`ui.action.close`)]);
     });
 
@@ -105,7 +100,7 @@ describe(`what a card's menu offers`, () => {
         const items = menuItemsFor(landed, facts({ peeked: true }), act);
         for (const label of [
             t(`ui.action.open`),
-            t(`agents.agentsView.keepOpen`),
+            t(`shared.keepOpen`),
             reviewAction(landed)!,
             t(`agents.agentsView.copySessionName`),
             t(`agents.agentsView.archive`),
@@ -134,17 +129,21 @@ describe(`the one menu`, () => {
     });
     const menuOf = () => {
         const focus = {
-            focusAgent: mock(),
-            keepAgent: mock(),
-            reviewAgent: mock(),
-            closeAgent: mock(),
+            focusAgent: jest.fn(),
+            keepAgent: jest.fn(),
+            reviewAgent: jest.fn(),
+            closeAgent: jest.fn(),
             agentHref: (agent: FleetAgent) => `/agents/${agent.id}`,
         };
-        const agents = { stopWatching: mock(async () => undefined), restore: mock(async () => undefined), archive: mock(async () => undefined) };
+        const agents = {
+            stopWatching: jest.fn(async () => undefined),
+            restore: jest.fn(async () => undefined),
+            archive: jest.fn(async () => undefined),
+        };
         const effects = effectScope();
         running.push(effects);
         const menu = effects.run(() => useCardMenu({ mobile: ref(false), peeked: (id) => id === `a1`, focus, agents }))!;
-        const show = mock((_event: Event) => undefined);
+        const show = jest.fn((_event: Event) => undefined);
         menu.cardMenu.value = { show };
         return { menu, show, focus };
     };
@@ -157,7 +156,7 @@ describe(`the one menu`, () => {
         expect(show.mock.calls).toEqual([[event]]);
         expect(rows(menu.cardMenuItems.value)).toEqual([
             t(`ui.action.open`),
-            t(`agents.agentsView.keepOpen`),
+            t(`shared.keepOpen`),
             reviewAction(landed)!,
             `—`,
             t(`agents.agentsView.copySessionName`),
@@ -171,7 +170,7 @@ describe(`the one menu`, () => {
     // jsdom has no clipboard; this one records what was written, then refuses as an insecure context would.
     it(`copies the bare session name through the pressed card's document, and says nothing when refused`, async () => {
         const written: string[] = [];
-        const writeText = mock(async (text: string) => {
+        const writeText = jest.fn(async (text: string) => {
             written.push(text);
         });
         Object.defineProperty(navigator, `clipboard`, { configurable: true, value: { writeText } });

@@ -1,26 +1,24 @@
 import { type Persona, PersonaSchema } from "@intentic/sandbox-contract";
-import { describe, it, expect, afterEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { rpcKey } from "../../../lib/queryKeys";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import type { ProcedureInput } from "../client/sandboxRpc";
 
 // Every daemon call the module made, in order, and what the fake daemon answers to the list read.
-const calls = hoisted(() => ({
+const calls = {
     made: [] as { procedure: string; input?: unknown }[],
     listed: [] as Persona[],
-}));
-const list = mock(async () => {
+};
+const list = jest.fn(async () => {
     calls.made.push({ procedure: `personas.list` });
     return { personas: calls.listed, connected: [] };
 });
-const save = mock(async (persona: ProcedureInput<`personas.save`>) => {
+const save = jest.fn(async (persona: ProcedureInput<`personas.save`>) => {
     calls.made.push({ procedure: `personas.save`, input: persona });
     return { ok: true as const };
 });
-const invalidateQueries = mock(async () => undefined);
-mock.module("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries } }));
-mock.module("../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ personas: { list, save } }) }));
+const invalidateQueries = jest.fn(async () => undefined);
+jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries } }));
+jest.mock("../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ personas: { list, save } }) }));
 
 const { ensureProjectPersona, projectPersonaPersona, projectPersonaId } = await import("./projectPersona");
 

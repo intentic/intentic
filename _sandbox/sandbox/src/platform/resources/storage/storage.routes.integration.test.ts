@@ -2,7 +2,6 @@ import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
-import { afterEach, expect, test } from "bun:test";
 import type { OrpcContext } from "../../../app-env.js";
 import type { Services } from "../../../composition.js";
 import { statePath } from "../../../state-paths.js";
@@ -52,7 +51,11 @@ test("a scan sizes every category, names its biggest parts, and says what a clea
 
     const report = await call(routes.scanStorage, undefined, { context });
     expect(report.scanning).toBe(false);
-    expect(report.scan).toMatchObject({ outcome: "complete", unreadable: 0, disk: { usedBytes: expect.any(Number), totalBytes: expect.any(Number) } });
+    expect(report.scan).toMatchObject({
+        outcome: "complete",
+        unreadable: 0,
+        disk: { usedBytes: expect.any(Number), totalBytes: expect.any(Number) },
+    });
     expect(report.scan?.categories).toEqual([
         {
             id: "trash",
@@ -118,5 +121,7 @@ test("a category that may not be cleaned is refused by name, and nothing in it m
 
 test("a category the contract does not know is refused before anything runs", async () => {
     const { roots } = await storageTree();
-    await expect(call(routesOver(roots).cleanStorage, { category: "everything" } as never, { context })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(call(routesOver(roots).cleanStorage, { category: "everything" } as never, { context })).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+    });
 });

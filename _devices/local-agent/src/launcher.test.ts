@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { cliLauncher, quotedCommandLine, stubCommand } from "./launcher.js";
 
 // A bun-compiled binary re-injects its own entry (argv[1]) on every launch, so passing it again shifts the real

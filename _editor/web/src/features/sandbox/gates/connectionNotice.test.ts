@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { classifyFailure, type ConnectionFailure } from "../live/connection";
 import { DETACHED_AFTER_MS } from "../overview/availability";
 import { RESTART_PATIENCE_MS } from "../live/sandboxRestart";

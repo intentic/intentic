@@ -1,6 +1,5 @@
 // Which pictures a turn stands for at its end, and in what order: the calls' own image entries, a delegation's
 // included, a file shown twice kept once where it was last shown, and the user's own attachments left out.
-import { describe, expect, it } from "bun:test";
 import { STATE_DIR } from "@intentic/constants";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import type { ChatMessage, ChatTurn } from "../transcript";
@@ -58,7 +57,10 @@ describe(`shotsOfTurn`, () => {
         const turn = turnOf(
             row({ role: `user`, text: `check it` }),
             row({ role: `assistant`, tools: [shot(`s1`, `${SHOTS}/page.png`), shot(`s2`, `${SHOTS}/menu.png`)] }),
-            row({ role: `assistant`, tools: [shot(`r1`, `${SHOTS}/page.png`, { name: `Read`, content: [{ type: `image`, path: `${SHOTS}/page.png` }] })] }),
+            row({
+                role: `assistant`,
+                tools: [shot(`r1`, `${SHOTS}/page.png`, { name: `Read`, content: [{ type: `image`, path: `${SHOTS}/page.png` }] })],
+            }),
         );
         expect(shotsOfTurn(turn, NONE).map((entry) => entry.toolId)).toEqual([`s2`, `r1`]);
     });
@@ -73,7 +75,10 @@ describe(`shotsOfTurn`, () => {
     it(`finds nothing in a turn whose calls carried no picture`, () => {
         const turn = turnOf(
             row({ role: `user`, text: `run the tests` }),
-            row({ role: `assistant`, tools: [{ id: `b1`, name: `Bash`, category: `execute`, status: `completed`, content: [{ type: `text`, text: `ok` }] }] }),
+            row({
+                role: `assistant`,
+                tools: [{ id: `b1`, name: `Bash`, category: `execute`, status: `completed`, content: [{ type: `text`, text: `ok` }] }],
+            }),
         );
         expect(shotsOfTurn(turn, NONE)).toEqual([]);
     });

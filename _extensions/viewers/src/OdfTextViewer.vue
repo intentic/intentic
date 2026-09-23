@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useLatest } from "@intentic/extension-ui";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DocumentPaper from "./DocumentPaper.vue";
 import { readTextDocument } from "./odf/document";
@@ -13,8 +14,7 @@ const paper = ref<InstanceType<typeof DocumentPaper>>();
 const loading = ref(true);
 const error = ref<string>();
 const empty = ref(false);
-// Drops a stale render when the open file changes mid-parse (a new blob prop supersedes the in-flight one).
-let seq = 0;
+const latest = useLatest();
 // The package holds blob URLs for the document's pictures; they leak until it is disposed.
 let open: OdfPackage | undefined;
 
@@ -28,14 +28,14 @@ const render = async (source: Blob): Promise<void> => {
     if (host === undefined) {
         return;
     }
-    const id = ++seq;
+    const isLatest = latest();
     loading.value = true;
     error.value = undefined;
     empty.value = false;
     host.replaceChildren();
     try {
         const bytes = new Uint8Array(await source.arrayBuffer());
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         release();
@@ -54,12 +54,12 @@ const render = async (source: Blob): Promise<void> => {
             host.append(page);
         }
     } catch (caught) {
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         error.value = caught instanceof Error ? caught.message : `Could not render this document.`;
     } finally {
-        if (id === seq) {
+        if (isLatest()) {
             loading.value = false;
         }
     }
@@ -71,10 +71,7 @@ watch(
     () => blob,
     (next) => void render(next),
 );
-onBeforeUnmount(() => {
-    seq += 1;
-    release();
-});
+onBeforeUnmount(release);
 </script>
 
 <template>

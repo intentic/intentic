@@ -65,7 +65,9 @@ export {
     InfoDialog,
     InfoHint,
     InfoTable,
-    isRenderableImage,
+    // What a file is by its name (category, label, whether it is ever text), the table the shell's own surfaces read.
+    type FileFormat,
+    formatOf,
     Markdown,
     // An editable markdown document (author-facing), unlike `Markdown`'s read-only render.
     MarkdownDocument,
@@ -140,6 +142,8 @@ export {
     useListNavigation,
     // A ticking clock (`useNow`) and a busy/error flag for one mutation at a time (`useAsyncAction`).
     useNow,
+    // Drops an answer a newer request has superseded: `const current = begin(); …; if (!current()) return;`.
+    useLatest,
     errorMessage,
     noticeFrom,
     noticeOf,

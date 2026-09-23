@@ -1,5 +1,4 @@
 import type { TranscriptRow } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { TranscriptClock } from "./transcriptClock";
 import type { AttachEntry, AttachHead } from "../run/turnStream";

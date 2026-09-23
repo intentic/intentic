@@ -41,7 +41,7 @@ const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
 </script>
 
 <template>
-    <HubLayout :title="t(`settings.title`)" :route-name="HUB" :default-slug="DEFAULT" :groups="GROUPS" :ready="!planLoading">
+    <HubLayout :title="t(`shared.settings`)" :route-name="HUB" :default-slug="DEFAULT" :groups="GROUPS" :ready="!planLoading">
         <template #default="{ slug }">
             <SettingsProfile v-if="slug === `profile`" />
             <SettingsBilling v-else-if="slug === `billing`" />

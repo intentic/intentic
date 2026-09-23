@@ -2,7 +2,6 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MINTED_PROVIDERS, type MintedProvider, type MintedVariant, mintedVariants, type Model, ModelSchema } from "@intentic/sandbox-contract";
-import { describe, test, expect } from "bun:test";
 import { z } from "zod";
 import { jsonFile } from "../../store/json-file.js";
 import { createMintedCatalog } from "./minted-catalog.js";

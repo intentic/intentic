@@ -1,6 +1,5 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Logger } from "pino";
-import { test, expect } from "bun:test";
 import { checkRunningIn } from "../workspace/deps/checks-in-flight.js";
 import { type RuleCommandDeps, runRuleCommand } from "./rule-command.js";
 

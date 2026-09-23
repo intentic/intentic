@@ -1,5 +1,4 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { describe, it, expect } from "bun:test";
 import { bandOfIndex, homeLayout, rowIndexOf } from "./homeLayout";
 import type { HomeGroup } from "./homeOrder";
 

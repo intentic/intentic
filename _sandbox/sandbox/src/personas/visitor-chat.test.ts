@@ -1,5 +1,4 @@
 import { VISITOR_CHAT_PERSONA, PersonaPowersSchema } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { memoryPersonasStore } from "../harness/route-stores.testing.js";
 import { ensureVisitorChatPersona } from "./visitor-chat.js";
 

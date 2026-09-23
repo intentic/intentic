@@ -3,7 +3,6 @@
 // so in a word, and these pin that the glyph says it now — and that the settings themselves are still there, one
 // press away, for every shape of file the bar serves.
 import "@intentic/testing/dom";
-import { it, expect, afterEach, jest } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

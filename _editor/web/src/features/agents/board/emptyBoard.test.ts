@@ -4,8 +4,6 @@
 import "@intentic/testing/dom";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { createApp, h, nextTick } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { endpointProviders, endpointsLoaded, trialStatus } from "../../chat/accounts/providerCatalog";
@@ -18,9 +16,9 @@ import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals as other mounted-component tests; matches:false keeps the device desktop.
-hoisted(() => {
+(() => {
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-});
+})();
 
 // Unmounted after each test: the board registers Mod+Z / filter commands in a module-level registry and throws "already
 // registered" on a second mount without this.

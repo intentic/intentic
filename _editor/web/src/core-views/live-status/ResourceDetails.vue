@@ -67,7 +67,7 @@ const logoFailed = reactive(new Set<string>());
                 <Button
                     v-if="deployment?.komodoDeploymentUrl"
                     as="a"
-                    :label="t(`views.resourceDetails.komodo`)"
+                    :label="t(`shared.komodo`)"
                     size="small"
                     :text="true"
                     :href="deployment.komodoDeploymentUrl"
@@ -124,7 +124,7 @@ const logoFailed = reactive(new Set<string>());
         <!-- Live reality join: is the planned resource actually running, and on what image. -->
         <div v-if="deployment" class="border-t border-line-subtle pt-2">
             <div class="flex items-center gap-2">
-                <h4 class="text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`views.resourceDetails.runningNow`) }}</h4>
+                <h4 class="text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.runningNow`) }}</h4>
                 <StatusBadge
                     :variant="deployment.live ? 'success' : 'neutral'"
                     :label="deployment.live ? 'live' : t(`views.resourceDetails.notDeployed`)"

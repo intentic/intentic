@@ -1,7 +1,6 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { type BackgroundJob, noteJobShell, openBackgroundJob } from "../tools/background-jobs.js";
 import { openSpawnedChild, resetSubagents, settleSpawnedChild } from "./subagents.js";
 import { waitForWork } from "./work-wait.js";

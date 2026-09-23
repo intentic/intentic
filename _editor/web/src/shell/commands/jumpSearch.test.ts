@@ -1,4 +1,3 @@
-import { it, expect } from "bun:test";
 import { groupJumpRows, JUMP_KINDS, type JumpKind, jumpScopes, parseJumpQuery, type ScoredRow, scopedQuery, UNSCOPED_CAP } from "./jumpSearch";
 
 // Pins the two rules that make one palette work for four kinds of row: the first character is the scope (and nothing

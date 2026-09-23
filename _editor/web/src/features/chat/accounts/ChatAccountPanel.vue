@@ -5,7 +5,7 @@ import { RouterLink } from "vue-router";
 import { isTrialProvider, PROVIDER_VENDOR } from "@intentic/sandbox-contract";
 import { accessKnown, providerReady, trialExhausted } from "../session/access";
 import { connectIntroDismissed } from "../../connect/connectIntro";
-import { anythingConnected } from "../../connect/connectLanes";
+import { CONNECT_LANES } from "../../connect/connectLanes";
 import { endpointProviders, providerDisplayLabel, trialStatus } from "./providerCatalog";
 import { turnDefaults } from "../run/turnDefaults";
 import { useChat } from "../run/useChat";
@@ -52,7 +52,8 @@ const showIntro = computed(
         trialStatus.value.available &&
         // Only while there is still plenty left: past halfway the trial strip takes over and says the same thing louder.
         trialStatus.value.remaining > trialStatus.value.allowance / 2 &&
-        !anythingConnected(providerReady, localReady.value),
+        !localReady.value &&
+        !CONNECT_LANES.some((lane) => lane.providers.some(providerReady)),
 );
 </script>
 
@@ -64,7 +65,9 @@ const showIntro = computed(
         class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-card px-4 py-3 text-2xs text-muted"
     >
         <Icon name="spinner" spin class="shrink-0 text-link" />
-        <span class="min-w-0 flex-1 text-left">{{ t(`chat.chatAccountPanel.signInWaiting`, { provider: providerDisplayLabel(live.provider) }) }}</span>
+        <span class="min-w-0 flex-1 text-left">{{
+            t(`chat.chatAccountPanel.signInWaiting`, { provider: providerDisplayLabel(live.provider) })
+        }}</span>
         <span class="shrink-0 font-semibold text-link">{{ t(`chat.chatAccountPanel.finishSignIn`) }}</span>
     </RouterLink>
 
@@ -79,7 +82,7 @@ const showIntro = computed(
         }}</span>
         <ChatChooseModelButton />
         <RouterLink to="/connect" :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)">
-            {{ t(`chat.chatAccountPanel.connectAModel`) }}
+            {{ t(`shared.connectAModel`) }}
         </RouterLink>
     </div>
 
@@ -92,7 +95,7 @@ const showIntro = computed(
         <Icon name="sparkles" class="shrink-0 text-link" />
         <span class="min-w-[14rem] flex-1 text-left">{{ t(`chat.chatAccountPanel.introOffer`) }}</span>
         <RouterLink to="/connect" :class="ui.linkButton(`shrink-0 text-2xs`)">
-            {{ t(`chat.chatAccountPanel.connectAModel`) }}
+            {{ t(`shared.connectAModel`) }}
         </RouterLink>
         <button type="button" :class="ui.textAction(`shrink-0 text-2xs text-subtle`)" @click="connectIntroDismissed = true">
             {{ t(`ui.action.dismiss`) }}

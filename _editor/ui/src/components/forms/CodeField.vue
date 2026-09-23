@@ -3,6 +3,7 @@
 import { computed, ref, useAttrs, watch } from "vue";
 import type { ShikiLang } from "@intentic/code-read/langs";
 import { useHighlighter } from "../../composables/useHighlighter.js";
+import { useLatest } from "../../composables/useLatest.js";
 
 const {
     lang,
@@ -36,17 +37,17 @@ const { highlight } = useHighlighter();
 const html = ref<string | undefined>(undefined);
 
 // v-html trusts Shiki's escaped output (only `<span style>` tokens); a stale result is dropped if outdated.
-let seq = 0;
+const latest = useLatest();
 watch(
     () => [shown.value, lang] as const,
     ([text, grammar]) => {
-        const id = ++seq;
+        const isLatest = latest();
         if (grammar === undefined) {
             html.value = undefined;
             return;
         }
         void highlight(text, grammar).then((out) => {
-            if (id === seq) {
+            if (isLatest()) {
                 html.value = out;
             }
         });

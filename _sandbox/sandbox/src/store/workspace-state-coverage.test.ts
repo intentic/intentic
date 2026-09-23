@@ -2,7 +2,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 
 // Checks every workspace-root .intentic path is built through statePath, whose WorkspaceStatePath union makes an
 // undeclared path a compile error; this file now only checks declared entries are actually used.

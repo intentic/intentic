@@ -2,7 +2,6 @@ import "@intentic/testing/dom";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { LOCALE_CODES, LOCALE_KEY, negotiate } from "@intentic/ui/locales";
-import { describe, it, expect, beforeEach } from "bun:test";
 
 // index.html's pre-paint script picks the language before any module loads, so it cannot import `negotiate` — it
 // spells the rule out in ES5. This runs the real script and fails if its answer ever parts from the module's.

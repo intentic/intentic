@@ -1,4 +1,3 @@
-import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { freshImport, advanceTimersByTimeAsync, stubGlobal } from "@intentic/testing/bun";
 
 // Pins the module's three promises to its callers (an error handler, an unload hook, a perf recorder): it never
@@ -18,14 +17,14 @@ class RecordingRequest extends Request {
 }
 stubGlobal(`Request`, RecordingRequest);
 
-mock.module(`../features/sandbox/client/sandboxTarget`, () => ({ currentSandboxTarget: () => currentTarget }));
-mock.module(`../features/sandbox/client/sandboxAuthFetch`, () => ({
+jest.mock(`../features/sandbox/client/sandboxTarget`, () => ({ currentSandboxTarget: () => currentTarget }));
+jest.mock(`../features/sandbox/client/sandboxAuthFetch`, () => ({
     sandboxAuthenticatedFetch: async (request: Request) => {
         fetched.push({ body: JSON.parse(await request.clone().text()) });
         return new Response(`{}`);
     },
 }));
-mock.module(`./buildEpoch`, () => ({ buildId: () => `test-build` }));
+jest.mock(`./buildEpoch`, () => ({ buildId: () => `test-build` }));
 
 let currentTarget: typeof target | undefined = target;
 

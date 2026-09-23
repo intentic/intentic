@@ -1,6 +1,5 @@
 import { link, lstat, lutimes, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
 import { statePath } from "../../../state-paths.js";
 import type { RunningProgram } from "./running-programs.js";
 import { type CleanDeps, cleanCategory } from "./storage-clean.js";
@@ -15,10 +14,11 @@ const OLD = 30 * 24 * HOUR;
 
 afterEach(removeStorageTrees);
 
-const exists = (path: string): Promise<boolean> => lstat(path).then(
-    () => true,
-    () => false,
-);
+const exists = (path: string): Promise<boolean> =>
+    lstat(path).then(
+        () => true,
+        () => false,
+    );
 
 const depsOver = (roots: CleanDeps["roots"], over: Partial<Omit<CleanDeps, "roots">> = {}): CleanDeps => ({
     roots,
@@ -106,7 +106,13 @@ describe("cleanCategory", () => {
         });
         expect(await exists(weights)).toBe(true);
 
-        expect(await cleanCategory("modelWeights", depsOver(roots))).toEqual({ category: "modelWeights", freedBytes: 2048, removed: 1, kept: 0, failed: 0 });
+        expect(await cleanCategory("modelWeights", depsOver(roots))).toEqual({
+            category: "modelWeights",
+            freedBytes: 2048,
+            removed: 1,
+            kept: 0,
+            failed: 0,
+        });
         expect(await exists(weights)).toBe(false);
     });
 

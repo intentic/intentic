@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
 import { gitInit } from "@intentic/scaffold";
-import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import type { Services } from "../composition.js";
 import { seedStarterSite, STARTER_BAKED_DIR, workspaceArrivedEmpty } from "./starter-site.js";
 
@@ -42,7 +41,7 @@ const services = (arrivedEmpty = true): Services =>
         workspace: { root },
         workspaceArrivedEmpty: arrivedEmpty,
         config: { historyRoot: history, zone: "sbx.test", connectToken: "", sandbox: { publicUrl: "" } },
-        processes: { start: mock((key: string, spec: { command: string; cwd: string }) => Promise.resolve(void started.push({ key, spec }))) },
+        processes: { start: jest.fn((key: string, spec: { command: string; cwd: string }) => Promise.resolve(void started.push({ key, spec }))) },
     }) as unknown as Services;
 
 beforeEach(async () => {

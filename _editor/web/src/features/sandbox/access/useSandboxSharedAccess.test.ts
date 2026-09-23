@@ -1,16 +1,15 @@
 import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 import type { SandboxSummary } from "@intentic/api-contract";
 
 const active = ref<SandboxSummary | undefined>({ id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, role: `owner` } as SandboxSummary);
 const reachable = ref(true);
-mock.module("../client/useSandbox", () => ({ useSandbox: () => ({ active, reachable }) }));
+jest.mock("../client/useSandbox", () => ({ useSandbox: () => ({ active, reachable }) }));
 
-const sandboxJson = mock<(_path: string) => Promise<unknown>>();
-mock.module("../client/sandboxClient", () => ({ sandboxJson: (...args: Parameters<typeof sandboxJson>) => sandboxJson(...args) }));
+const sandboxJson = jest.fn<(_path: string) => Promise<unknown>>();
+jest.mock("../client/sandboxClient", () => ({ sandboxJson: (...args: Parameters<typeof sandboxJson>) => sandboxJson(...args) }));
 
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { useSandboxSharedAccess } = await import("./useSandboxSharedAccess");

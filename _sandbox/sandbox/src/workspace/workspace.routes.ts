@@ -370,10 +370,10 @@ export const createWorkspaceRoutes = (services: Services) => {
             const fence = await fenceFor(context);
             const repoIds = fencedRepos(fence, await discoverRepos(services.workspace.root));
             return {
-                repos: [
-                    ...(fence === undefined ? [{ repo: "root", modules: readModules(services.workspace.root) }] : []),
-                    ...repoIds.map((repo) => ({ repo, modules: readModules(join(services.workspace.root, repo)) })),
-                ],
+                repos: await Promise.all([
+                    ...(fence === undefined ? [readModules(services.workspace.root).then((modules) => ({ repo: "root", modules }))] : []),
+                    ...repoIds.map(async (repo) => ({ repo, modules: await readModules(join(services.workspace.root, repo)) })),
+                ]),
             };
         }),
         addRepo: i.addRepo.handler(async ({ input }) => {

@@ -2,7 +2,6 @@ import "@intentic/testing/dom";
 import { STATE_DIR } from "@intentic/constants";
 import type { FileContribution } from "@intentic/extension-manifest";
 import { staleQueryKeys } from "@intentic/sandbox-contract";
-import { describe, it, expect, beforeEach } from "bun:test";
 import { contributedFileBindings, registerFileBindings } from "./fileBindings";
 
 // Registry of extensions' contributes.files bindings; contributedFileBindings() feeds workspaceChanged invalidation via

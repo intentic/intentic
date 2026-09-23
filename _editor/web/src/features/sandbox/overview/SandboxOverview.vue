@@ -273,7 +273,7 @@ const removeLogo = async (): Promise<void> => {
                 class="flex flex-col gap-1.5 rounded-lg bg-canvas px-3 py-2.5 text-2xs"
             >
                 <div v-if="info?.image" class="flex items-start justify-between gap-3">
-                    <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.image`) }}</dt>
+                    <dt class="text-subtle">{{ t(`shared.image2`) }}</dt>
                     <dd class="min-w-0 text-right">
                         <div class="truncate font-mono text-content">{{ info.image }}</div>
                         <div v-if="installed" class="mt-0.5 font-mono text-subtle">

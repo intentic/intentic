@@ -1,4 +1,3 @@
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
@@ -8,7 +7,7 @@ import { forgetProviderCapacity, noteProviderAtCapacity } from "./hosted-capacit
 // Every other sweep here acts on the gap between the platform's rows and Fly, but never reported the gap itself. These
 // tests pin what this watch has to say out loud.
 
-const logger = { info: mock(), warn: mock(), error: mock() } as never;
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never;
 
 const config = (over: Record<string, unknown> = {}): Config =>
     ({
@@ -73,20 +72,20 @@ type Reach = { reachable: number; unreachable: number };
 const prismaWith = (machines: unknown[], pooled: unknown[], reach: Reach = { reachable: 0, unreachable: 0 }) =>
     ({
         sandbox: {
-            count: mock().mockImplementation((args: { where: { bootReport: { equals: string } } }) =>
+            count: jest.fn().mockImplementation((args: { where: { bootReport: { equals: string } } }) =>
                 Promise.resolve(args.where.bootReport.equals === `reachable` ? reach.reachable : reach.unreachable),
             ),
         },
-        hostedMachine: { findMany: mock().mockResolvedValue(machines), count: mock().mockResolvedValue(machines.length) },
+        hostedMachine: { findMany: jest.fn().mockResolvedValue(machines), count: jest.fn().mockResolvedValue(machines.length) },
         hostedPoolMachine: {
-            findMany: mock().mockResolvedValue(pooled),
-            count: mock().mockImplementation((args?: { where?: Record<string, unknown> }) =>
+            findMany: jest.fn().mockResolvedValue(pooled),
+            count: jest.fn().mockImplementation((args?: { where?: Record<string, unknown> }) =>
                 Promise.resolve(
                     args?.where === undefined ? pooled.length : pooled.filter((row) => (row as { state?: string }).state === `ready`).length,
                 ),
             ),
         },
-        hostedBuild: { count: mock().mockResolvedValue(0) },
+        hostedBuild: { count: jest.fn().mockResolvedValue(0) },
     }) as unknown as PrismaClient;
 
 const taken = (appName: string) => ({ appName, region: `iad`, wokeAt: null, sandboxId: `s1`, sandbox: { owner: { email: `o@test` } } });
@@ -269,7 +268,7 @@ describe(`hosted health`, () => {
     // No ingress means no hosted lane at all (hostedEnabled → ingressEnabled), so there is no edge to ask and
     // nothing to alarm about. Pinned because the edge probe must never fire on a platform that has no edge.
     it(`asks no edge when the platform has no ingress configured`, async () => {
-        const fetchSpy = mock();
+        const fetchSpy = jest.fn();
         stubGlobal(`fetch`, fetchSpy);
         const noIngress = { ...config({ poolSize: 1, regionEu: `` }), ingress: { url: ``, signingKey: ``, zone: `` } } as never;
         expect(await sweepHostedHealth(prismaWith([], []), noIngress, logger)).toBeUndefined();
@@ -277,7 +276,7 @@ describe(`hosted health`, () => {
     });
 
     it(`does nothing at all when the lane is off`, async () => {
-        const fetchSpy = mock();
+        const fetchSpy = jest.fn();
         stubGlobal(`fetch`, fetchSpy);
         expect(await sweepHostedHealth(prismaWith([], []), config({ flyApiToken: `` }), logger)).toBeUndefined();
         expect(fetchSpy).not.toHaveBeenCalled();

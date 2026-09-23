@@ -4,8 +4,10 @@ import {
     type ModelPin,
     type AgentTurn,
     type ParkedRequest,
+    breakArmed,
     profileOf,
     RESUME_NOTES,
+    type ResumeReason,
     type ResumeRouting,
     RETRY_LADDER_TRIES,
     retryLadderDelay,
@@ -26,6 +28,7 @@ import { consumeEntry, type JournalEntry, type JournalledTurn, resumeBars, spend
 import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { HeldRecord } from "../../../agents/actor/conversation-state.js";
+import { opt } from "../../../opt.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
 
 // Re-runs a turn once its blocker clears. Two kinds live here and should not be confused: the daemon's own bookkeeping
@@ -34,49 +37,20 @@ import type { VerificationStanding } from "../../verification/agent-verification
 // that conversation's own policy (turn-break.ts), because a re-run spends the reader's budget on a turn they sent once.
 // What is pending lives in each conversation's actor; a new turn on the conversation supersedes it.
 
-// The attempt budget spends in under an hour; past this a resume is worse than staying dead.
-const OUTAGE_STALE_AFTER_MS = 60 * 60_000;
+// The wall a held turn stopped at; `stopped` is a death with nothing to repair, `door` a refusal before the model saw it.
+export type HeldReason = "limit" | "stopped" | "overflow" | "door" | "outage" | "auth";
 
-// Bounds how long a request may promise a resume is coming before abandonResume ends the wait.
-const AUTH_RESUME_DEADLINE_MS = 60_000;
-
-// Shown when the deadline lapses; names the fix (reconnect) rather than the mechanism.
-const AUTH_GAVE_UP = "The Claude sign-in this turn ran on could not be renewed in time: reconnect the account, then send again.";
-
-export interface AuthFailure {
-    readonly input: AgentTurn & { conversationId: string };
-    // The session the failed turn last reported; holds whatever partial work preceded the 401.
-    readonly sessionId?: string;
-    // account says which credential to re-mint; refusedToken is what the rotation must supersede, not replay.
-    readonly account: string;
-    readonly refusedToken: string;
-}
-
-
-export interface OutageFailure {
-    readonly input: AgentTurn & { conversationId: string };
-    // The session the failed turn last reported; may hold most of the work for a mid-turn 500.
-    readonly sessionId?: string;
-    // The breaker's key: a Claude outage never gates a Codex conversation's resume.
-    readonly provider: string;
-}
-
-// A turn a wall stranded, held for a press or, where the conversation's policy says so, an automatic fire: at the
-// reopen instant for a spent allowance, on a bounded ladder for one that stopped short, at once and on no policy for
-// one whose session outgrew the window. No staleness sweep: a press is a deliberate pick-up however long it's been.
+// A turn a wall stranded, held for a press (however long it takes) or the resume pass (RUNGS).
 export interface HeldTurn {
     readonly input: TurnInput & { conversationId: string };
-    // What killed it: a spent allowance, anything else that left nothing to repair (a hung runtime, a crash), a
-    // refusal at the door of a turn no sender keeps the words of (turn-runs.ts holdTurnedAway), which only a press
-    // sends, or a session past the model's window, which the pass re-runs fresh at once.
-    readonly reason: "limit" | "stopped" | "door" | "overflow";
+    readonly reason: HeldReason;
     // The run a door refusal ended, whose recorded rows are no history: the model never saw them.
     readonly run?: string;
     // The session the failed turn last reported; kept even when unused, so the fire can decide via `ran`.
     readonly sessionId?: string;
     // Epoch seconds the allowance reopens. Absent (Grok, Cursor publish none) means press-only, never guessed.
     readonly reopensAt?: number;
-    // Whether the refused turn ran before the allowance stopped it; false makes its session unsafe to reuse.
+    // Whether the provider answered before the wall; false makes its session unsafe to reuse.
     readonly ran: boolean;
     // What the turn left behind at death (paths edited, verification, checklist); absent when refused at the door.
     readonly standing?: VerificationStanding | undefined;
@@ -88,6 +62,8 @@ export interface HeldTurn {
     readonly move?: { readonly account: string; readonly carry: boolean } | undefined;
     // Set when the other account refuses the carried session, so the retry opens fresh instead of replaying it.
     readonly carryRefused?: boolean | undefined;
+    // An auth hold's credential: the account to re-mint, and the refused token the rotation must supersede, not replay.
+    readonly remint?: { readonly account: string; readonly refusedToken: string } | undefined;
 }
 
 // The turn's own fields come from the held copy; routing (agent/harness/account/model) comes from the press when named.
@@ -123,54 +99,57 @@ const movesAccount = (input: AgentTurn, routing: ResumeRouting | undefined): boo
     routing.harness === (input.harness ?? "native") &&
     routing.account !== input.account;
 
-// A turn the door turned away, sent again: its own session (if any) never saw it, and stays unless the press moved
-// runtimes. Not restated: a resume the door turned away keeps the note that says where its work stands. Every run
-// turned away on the way here is named, since each recorded the same words the model is about to be sent.
-const doorRerun = (held: HeldTurn, routing: ResumeRouting | undefined): TurnInput & { conversationId: string } => {
-    const unseenRuns = [...(held.input.unseenRuns ?? []), ...(held.run === undefined ? [] : [held.run])];
-    const turn = resumedTurn({ input: reroutedInput(held.input, routing) }, RESUME_NOTES.door, { fresh: retiresSession(held.input, routing) });
-    return { ...turn, unseenRuns };
-};
+// A re-run's note, whether it opens fresh, and whether it replaces an earlier attempt's note rather than keeping it.
+interface RerunNote {
+    readonly reason: ResumeReason;
+    readonly fresh?: true;
+    readonly restate?: true;
+}
 
-// The note a held turn's re-run carries, and whether it opens fresh. `restate` applies on every arm: the note must
-// describe this attempt's own starting point, not the last one's.
-const rerunOf = (held: HeldTurn, routing: ResumeRouting | undefined): { readonly note: string; readonly options: { readonly fresh?: boolean; readonly restate: true } } => {
-    // The one wall whose own session is the obstacle: fresh whatever ran, with the hand-off the record seeds.
-    if (held.reason === "overflow") {
-        return { note: RESUME_NOTES.overflow, options: { fresh: true, restate: true } };
-    }
+// Keeps the session when the turn ran and nothing retires it; fresh otherwise, `switched` if it ran and `refused` if not.
+const wallNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNote => {
     if (held.ran && held.carryRefused !== true && !retiresSession(held.input, routing)) {
-        // Same session either way; the note says only what the model cannot see: which wall it hit, and whether the
-        // account changed under it.
-        const note =
-            held.reason === "stopped" ? RESUME_NOTES.stopped : movesAccount(held.input, routing) ? RESUME_NOTES.carried : RESUME_NOTES.limit;
-        return { note, options: { restate: true } };
+        return { reason: held.reason === "stopped" ? "stopped" : movesAccount(held.input, routing) ? "carried" : "limit", restate: true };
     }
-    // A stopped turn that never got the provider to answer has nothing to carry: it opens fresh and says so.
     if (held.reason === "stopped") {
-        return { note: RESUME_NOTES.stopped, options: { fresh: true, restate: true } };
+        return { reason: "stopped", fresh: true, restate: true };
     }
-    // Fresh otherwise: a turn that never ran has a session not worth reusing; one that did is moving without it.
-    return { note: held.ran ? RESUME_NOTES.switched : RESUME_NOTES.refused, options: { fresh: true, restate: true } };
+    return { reason: held.ran ? "switched" : "refused", fresh: true, restate: true };
 };
 
-// Undefined when nothing is held or a turn already runs (a repeat press is free). Not consumed here: the started turn
-// supersedes it, and its exit re-arms it if refused again. `routing` overrides the held turn's own.
+const rerunNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNote => {
+    switch (held.reason) {
+        case "auth":
+        case "outage":
+            return { reason: held.reason };
+        // Its own session never saw it, and stays unless the press moved runtimes.
+        case "door":
+            return retiresSession(held.input, routing) ? { reason: "door", fresh: true } : { reason: "door" };
+        // The one wall whose own session is the obstacle: fresh whatever ran, with the hand-off the record seeds.
+        case "overflow":
+            return { reason: "overflow", fresh: true, restate: true };
+        default:
+            return wallNote(held, routing);
+    }
+};
+
+// A held turn sent again where `routing` points; a door refusal's run joins those whose rows the model never saw.
+const rerunOf = (held: HeldTurn, routing?: ResumeRouting): TurnInput & { conversationId: string } => {
+    const turn = resumedTurn({ input: reroutedInput(held.input, routing), sessionId: held.sessionId }, rerunNote(held, routing));
+    return held.run === undefined ? turn : { ...turn, unseenRuns: [...(held.input.unseenRuns ?? []), held.run] };
+};
+
+// Undefined when nothing a press answers for is held (an outage or a refused credential is the pass's) or a turn runs.
 export const fireHeldResume = async (
     services: Pick<Services, "conversations" | "turns">,
     conversationId: string,
     routing?: ResumeRouting,
 ): Promise<StartedRun | undefined> => {
     const held = services.conversations.state(conversationId)?.resume.held;
-    if (held === undefined) {
+    if (held === undefined || held.reason === "auth" || held.reason === "outage") {
         return undefined;
     }
-    if (held.reason === "door") {
-        return services.turns.start(doorRerun(held, routing));
-    }
-    const failure = { input: reroutedInput(held.input, routing), ...(held.sessionId !== undefined ? { sessionId: held.sessionId } : {}) };
-    const { note, options } = rerunOf(held, routing);
-    return services.turns.start(resumedTurn(failure, note, options));
+    return services.turns.start(rerunOf(held, routing));
 };
 
 // The one reader for every ending's question. Two callers must agree about the same turn — the failure frame promises
@@ -192,20 +171,19 @@ export const breakPolicyFor = async (
 };
 
 // `fresh` drops a session that holds only one unanswered message, for a record-seeded handoff instead of replaying
-// provider filler. `restate` replaces an existing resume note rather than stacking one, since the reason can change
-// between attempts.
+// provider filler. A note already on the prompt stays unless `restate` replaces it, and `resume` names the one it keeps.
 const resumedTurn = (
-    failure: { readonly input: TurnInput & { conversationId: string }; readonly sessionId?: string },
-    note: string,
-    options: { readonly fresh?: boolean; readonly restate?: boolean } = {},
+    failure: { readonly input: TurnInput & { conversationId: string }; readonly sessionId?: string | undefined },
+    { reason, fresh, restate }: RerunNote,
 ): TurnInput & { conversationId: string } => {
     // Destructured out first so `fresh` can unset it, rather than leaving the carried session in place via a spread.
-    const { sessionId: _carried, ...rest } = failure.input;
-    const sessionId = options.fresh === true ? undefined : (failure.sessionId ?? _carried);
-    const prompt = options.restate === true ? withoutResumeNote(failure.input.prompt) : failure.input.prompt;
+    const { sessionId: carried, ...rest } = failure.input;
+    const sessionId = fresh === true ? undefined : (failure.sessionId ?? carried);
+    const resume = restate === true ? reason : (failure.input.resume ?? reason);
     return {
         ...rest,
-        prompt: withResumeNote(prompt, note),
+        prompt: withResumeNote(restate === true ? withoutResumeNote(failure.input.prompt) : failure.input.prompt, RESUME_NOTES[resume]),
+        resume,
         ...(sessionId === undefined ? {} : { sessionId }),
     };
 };
@@ -230,7 +208,8 @@ const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): 
     if (turn.model !== undefined || turn.agent !== undefined) {
         return turn;
     }
-    const pinned = (await personaRunModel(services, turn.actsAs)) ?? (turn.runRole === undefined ? undefined : await runRoleModel(services, turn.runRole));
+    const pinned =
+        (await personaRunModel(services, turn.actsAs)) ?? (turn.runRole === undefined ? undefined : await runRoleModel(services, turn.runRole));
     if (pinned === undefined) {
         return turn;
     }
@@ -277,121 +256,18 @@ export interface TurnResumeScheduler {
     readonly tick: (now?: number) => Promise<void>;
 }
 
-// What one attempt settled: whether the pending entry is finished with. `retry` exists so an attempt that achieved
-// nothing doesn't consume the entry permanently; bounded by AUTH_RESUME_DEADLINE_MS.
-type AuthVerdict = "resumed" | "dead" | "retry";
+// The attempt budget spends in under an hour; past this a resume is worse than staying dead.
+const OUTAGE_STALE_AFTER_MS = 60 * 60_000;
 
-// Re-mints the refused token and re-runs the turn. Adopts a token already rotated elsewhere, refreshing only if the
-// store still holds the refused one; a genuinely dead credential returns undefined and the reconnect frame stands.
-const fireAuthResume = async (services: Services, failure: AuthFailure): Promise<AuthVerdict> => {
-    const conversationId = failure.input.conversationId;
-    // A throw isn't an answer: undefined means a known-dead credential; a throw means the question was never asked.
-    let replacement: string | undefined;
-    try {
-        replacement = await replaceRejectedToken(services.claudeStore, failure.account, failure.refusedToken);
-    } catch (error) {
-        services.logger.warn({ err: error, account: failure.account }, "auth auto-resume could not re-mint the refused token");
-        return "retry";
-    }
-    // Nothing new to run: the credential is revoked, or re-mint handed back the very token that was just refused.
-    if (replacement === undefined || replacement === failure.refusedToken) {
-        const settled = await services.conversations.send(conversationId, {
-            kind: "resume-abandoned",
-            reason: "The Claude sign-in this turn ran on could not be renewed: reconnect the account, then send again.",
-        }).settled;
-        // Still unwinding the very turn this is about; come back next pass once something is left to settle.
-        return settled ? "dead" : "retry";
-    }
-    if ((await services.turns.start(resumedTurn(failure, RESUME_NOTES.auth))) === undefined) {
-        // Could be a live turn already owning the conversation; a superseding one clears this via clearPendingResume.
-        return "retry";
-    }
-    services.logger.info({ conversationId, account: failure.account }, "auth auto-resume fired");
-    return "resumed";
-};
+// How long a request may promise a re-mint before the pass says none is coming.
+const AUTH_RESUME_DEADLINE_MS = 60_000;
 
-// Every conversation whose credential died, re-minted and re-run, or, past the deadline, told nothing is coming. The
-// deadline exists because a silently absent resume looks identical to one about to happen.
-const runAuthPass = async (services: Services, now: number): Promise<void> => {
-    // Snapshotted before the loop: an await mid-iteration could pick up a failure recorded by a turn still settling.
-    for (const { conversationId, record: failure } of services.conversations.stranded("auth")) {
-        if (now - failure.recordedAt > AUTH_RESUME_DEADLINE_MS) {
-            // Checked ahead of the in-flight gate: a still-running attempt at the deadline is exactly the wedged case
-            // this must catch.
-            if (await services.conversations.send(conversationId, { kind: "resume-abandoned", reason: AUTH_GAVE_UP }, now).settled) {
-                services.conversations.send(conversationId, { kind: "resume-dropped", record: "auth" });
-                services.logger.warn({ conversationId, account: failure.account }, "auth auto-resume gave up, the request is settled as failed");
-            }
-            continue;
-        }
-        if (services.conversations.state(conversationId)?.resume.authFiring === true) {
-            continue;
-        }
-        services.conversations.send(conversationId, { kind: "auth-firing", firing: true });
-        try {
-            if ((await fireAuthResume(services, failure)) !== "retry") {
-                services.conversations.send(conversationId, { kind: "resume-dropped", record: "auth" });
-            }
-        } finally {
-            services.conversations.send(conversationId, { kind: "auth-firing", firing: false });
-        }
-    }
-};
+// Both name the fix (reconnect) rather than the mechanism.
+const AUTH_GAVE_UP = "The Claude sign-in this turn ran on could not be renewed in time: reconnect the account, then send again.";
+const AUTH_DEAD = "The Claude sign-in this turn ran on could not be renewed: reconnect the account, then send again.";
 
-// Offers each stranded conversation to the shared breaker, oldest first; firing moves the breaker's clock, so the rest
-// on the same provider are refused within this pass. Posture is read fresh per conversation, not snapshotted at
-// failure.
-const runOutagePass = async (services: Services, now: number): Promise<void> => {
-    const stranded = services.conversations.stranded("outage");
-    for (const { conversationId, record: failure } of stranded) {
-        // Unresumed within the hour means attempts spent or an unanswered toggle; either way the user has moved on.
-        if (now - failure.recordedAt > OUTAGE_STALE_AFTER_MS) {
-            // Stops the request promising a return; the entry stays until the abandon lands, for a turn still unwinding.
-            const settled = await services.conversations.send(
-                conversationId,
-                {
-                    kind: "resume-abandoned",
-                    reason: `${failure.provider} was down when this turn ran and the hour it had to come back has passed: send again to pick it up.`,
-                },
-                now,
-            ).settled;
-            if (settled) {
-                services.conversations.send(conversationId, { kind: "resume-dropped", record: "outage" });
-            }
-            continue;
-        }
-        // Cheap synchronous breaker check first, policy read second: an unarmed chat costs the armed ones nothing.
-        if (!outageRetryDue(failure.provider, now) || (await breakPolicyFor(services, conversationId, "outage")) !== "retry") {
-            continue;
-        }
-        // Counted at dispatch, before the turn starts, so it closes the window even if starting this one conflicts.
-        outageRetryFired(failure.provider, now);
-        // Dropped before firing: a conflict means a live turn owns it already; a re-failure re-records its own entry.
-        services.conversations.send(conversationId, { kind: "resume-dropped", record: "outage" });
-        if ((await services.turns.start(resumedTurn(failure, RESUME_NOTES.outage))) !== undefined) {
-            services.logger.info({ conversationId, provider: failure.provider, waiting: stranded.length }, "provider-outage auto-resume fired");
-        }
-    }
-};
-
-// Performs a booked move, its one dispatch stamped first: re-points the held turn at the policy's account, with or
-// without its session, via the same door a press uses.
-const fireBookedMove = async (
-    services: Services,
-    input: AgentTurn & { conversationId: string },
-    move: NonNullable<HeldTurn["move"]>,
-): Promise<void> => {
-    if (!services.conversations.send(input.conversationId, { kind: "held-fired", ladder: false }).reply) {
-        return;
-    }
-    const routing: ResumeRouting = { agent: input.agent ?? "claude", harness: input.harness ?? "native", account: move.account, carry: move.carry };
-    if ((await services.turns.resume(input.conversationId, routing)) !== undefined) {
-        services.logger.info(
-            { conversationId: input.conversationId, account: move.account, carry: move.carry },
-            "usage-limit move fired: the owner's policy moved the held turn to another account",
-        );
-    }
-};
+// A ladder that stops without a word reads as one still climbing, so it says so and names the count it spent.
+const STOP_LADDER_GAVE_UP = `This turn was picked back up ${RETRY_LADDER_TRIES} times and got nowhere each time, so nothing more is sent automatically. Send again to carry on.`;
 
 // A spent allowance names an instant to keep; a stopped turn has none, so its rung is measured from when the hold was
 // recorded.
@@ -405,98 +281,158 @@ const stopRungAt = (recordedAt: number, tries: number): number | undefined => {
 // origin and states the very instant the pass will then act on. Keeps every piece of ladder arithmetic in this module.
 export const stopResumeAt = (tries: number, now: number = Date.now()): number | undefined => stopRungAt(now, tries);
 
-// Said out loud rather than going quiet: a ladder that stopped without a word is indistinguishable from one still
-// climbing, and the reader is owed the count it spent on their allowance.
-const STOP_LADDER_GAVE_UP = `This turn was picked back up ${RETRY_LADDER_TRIES} times and got nowhere each time, so nothing more is sent automatically. Send again to carry on.`;
+// The breaker's key is the provider that served the turn: a Claude outage never gates a Codex conversation's resume.
+const providerOf = (held: HeldTurn): string => held.input.agent ?? "claude";
 
-// One rung of the stop ladder, bounded because it fires repeatedly: three tries that achieve nothing, then it stands down,
-// says so, and leaves the hold for a press, so carrying on re-runs the turn rather than appending a message.
-const runStopRung = async (services: Services, conversationId: string, held: HeldRecord, now: number): Promise<void> => {
-    if (held.fired || (await breakPolicyFor(services, conversationId, "stopped")) !== "retry") {
-        return;
+// Fire it (re-pointed by a booked move) or give up with the card's words, once `armedBy`'s policy is armed; undefined waits.
+type Verdict = { readonly armedBy?: TurnBreak; readonly gaveUp?: string; readonly routing?: ResumeRouting } | undefined;
+
+// When a hold is due or given up, what a landed give-up leaves (dropped, or the ladder stood down), and how it fires.
+interface Rung {
+    readonly verdict: (held: HeldRecord, now: number) => Verdict;
+    readonly spent: "resume-dropped" | "ladder-spent";
+    readonly fire: (services: Services, held: HeldRecord, routing: ResumeRouting | undefined, now: number) => Promise<void>;
+}
+
+// A held turn's re-run, logged once it starts; undefined means a live turn already owns the conversation.
+const rerun = async (services: Services, held: HeldTurn, routing?: ResumeRouting): Promise<StartedRun | undefined> => {
+    const started = await services.turns.start(rerunOf(held, routing));
+    if (started !== undefined) {
+        const { conversationId } = held.input;
+        services.logger.info({ conversationId, reason: held.reason, ...opt("account", routing?.account) }, "held turn re-run fired");
     }
-    const dueAt = stopRungAt(held.recordedAt, held.tries);
-    if (dueAt === undefined) {
-        if (await services.conversations.send(conversationId, { kind: "resume-abandoned", reason: STOP_LADDER_GAVE_UP }, now).settled) {
-            services.conversations.send(conversationId, { kind: "ladder-spent" });
+    return started;
+};
+
+// The hold's one dispatch, stamped before the start so it holds even if starting conflicts; a ladder rung spends a try.
+const dispatch =
+    (ladder: boolean): Rung["fire"] =>
+    async (services, held, routing) => {
+        if (services.conversations.send(held.input.conversationId, { kind: "held-fired", ladder }).reply) {
+            await rerun(services, held, routing);
         }
+    };
+
+// `retry` keeps the hold: a throw never asked the question, and a turn still unwinding cannot yet be told the answer.
+const remintAndRerun = async (services: Services, held: HeldTurn): Promise<"resumed" | "dead" | "retry"> => {
+    const { remint } = held;
+    if (remint === undefined) {
+        return "dead";
+    }
+    let replacement: string | undefined;
+    try {
+        replacement = await replaceRejectedToken(services.claudeStore, remint.account, remint.refusedToken);
+    } catch (error) {
+        services.logger.warn({ err: error, account: remint.account }, "auth auto-resume could not re-mint the refused token");
+        return "retry";
+    }
+    // Nothing new to run: the credential is revoked, or re-mint handed back the very token that was just refused.
+    if (replacement === undefined || replacement === remint.refusedToken) {
+        const settled = await services.conversations.send(held.input.conversationId, { kind: "resume-abandoned", reason: AUTH_DEAD }).settled;
+        return settled ? "dead" : "retry";
+    }
+    return (await rerun(services, held)) === undefined ? "retry" : "resumed";
+};
+
+// One re-mint in flight per conversation, so a slow one isn't refired by the next pass underneath itself.
+const fireAuthResume: Rung["fire"] = async (services, held) => {
+    const { conversationId } = held.input;
+    if (services.conversations.state(conversationId)?.resume.authFiring === true) {
         return;
     }
-    // Both stamped before the fire, like the outage pass's dispatch count, so they hold even if starting conflicts.
-    if (dueAt > now || !services.conversations.send(conversationId, { kind: "held-fired", ladder: true }).reply) {
-        return;
-    }
-    if ((await services.turns.resume(conversationId)) !== undefined) {
-        services.logger.info({ conversationId, attempt: held.tries + 1, maxAttempts: RETRY_LADDER_TRIES }, "stopped-turn auto-resume fired");
+    services.conversations.send(conversationId, { kind: "auth-firing", firing: true });
+    try {
+        if ((await remintAndRerun(services, held)) !== "retry") {
+            services.conversations.send(conversationId, { kind: "resume-dropped" });
+        }
+    } finally {
+        services.conversations.send(conversationId, { kind: "auth-firing", firing: false });
     }
 };
 
-// Fires the held turn at reopen, only when armed: an absent or already-past instant is never scheduled (avoiding an
-// infinite loop on a stale one). `fired` marks the one dispatch without deleting the entry, keeping a press idempotent
-// after.
-const runLimitRung = async (services: Services, conversationId: string, held: HeldRecord, now: number): Promise<void> => {
-    // A booked move goes first, at once; `fired` is stamped before the start so it holds even if starting conflicts.
-    if (!held.fired && held.move !== undefined) {
-        await fireBookedMove(services, held.input, held.move);
+// A door hold has no rung: whether a turn goes past the wall that stopped it is a person's call, not a clock's.
+const RUNGS: { readonly [R in HeldReason]?: Rung } = {
+    // On no policy; the deadline comes before the in-flight gate, since a wedged attempt is exactly what it must catch.
+    auth: {
+        verdict: (held, now) => (now - held.recordedAt > AUTH_RESUME_DEADLINE_MS ? { gaveUp: AUTH_GAVE_UP } : {}),
+        spent: "resume-dropped",
+        fire: fireAuthResume,
+    },
+    // Offered to the shared breaker oldest first: firing moves its clock, so the rest on the same provider wait.
+    outage: {
+        verdict: (held, now) => {
+            if (now - held.recordedAt > OUTAGE_STALE_AFTER_MS) {
+                return {
+                    gaveUp: `${providerOf(held)} was down when this turn ran and the hour it had to come back has passed: send again to pick it up.`,
+                };
+            }
+            return outageRetryDue(providerOf(held), now) ? { armedBy: "outage" } : undefined;
+        },
+        spent: "resume-dropped",
+        // Counted and dropped at dispatch, so the breaker's window closes even if starting conflicts.
+        fire: async (services, held, _routing, now) => {
+            outageRetryFired(providerOf(held), now);
+            services.conversations.send(held.input.conversationId, { kind: "resume-dropped" });
+            await rerun(services, held);
+        },
+    },
+    // A bounded ladder, since it fires repeatedly: spent, it stands down and says so, leaving the hold for a press.
+    stopped: {
+        verdict: (held, now) => {
+            const dueAt = stopRungAt(held.recordedAt, held.tries);
+            if (dueAt === undefined) {
+                return { armedBy: "stopped", gaveUp: STOP_LADDER_GAVE_UP };
+            }
+            return dueAt <= now ? { armedBy: "stopped" } : undefined;
+        },
+        spent: "ladder-spent",
+        fire: dispatch(true),
+    },
+    // The daemon's own remedy, fired at once and on no policy: a press or a clock would only resume the overflowed session.
+    overflow: { verdict: () => ({}), spent: "resume-dropped", fire: dispatch(false) },
+    // A booked move goes at once; else the reopen instant, never one already past at the refusal (it would loop).
+    limit: {
+        verdict: (held, now) => {
+            if (held.move !== undefined) {
+                const { input, move } = held;
+                return { routing: { agent: input.agent ?? "claude", harness: input.harness ?? "native", account: move.account, carry: move.carry } };
+            }
+            const reopensAt = held.reopensAt === undefined ? undefined : held.reopensAt * 1000;
+            return reopensAt !== undefined && reopensAt <= now && reopensAt > held.recordedAt ? { armedBy: "limit" } : undefined;
+        },
+        spent: "resume-dropped",
+        fire: dispatch(false),
+    },
+};
+
+// A given-up hold tells the card first; what it leaves waits until that lands, for a turn still unwinding.
+const runRung = async (services: Services, conversationId: string, held: HeldRecord, now: number): Promise<void> => {
+    const rung = RUNGS[held.reason];
+    const verdict = held.fired || rung === undefined ? undefined : rung.verdict(held, now);
+    if (verdict === undefined || rung === undefined) {
         return;
     }
-    const reopensAt = held.reopensAt;
-    if (held.fired || reopensAt === undefined || reopensAt * 1000 > now || reopensAt * 1000 <= held.recordedAt) {
+    if (verdict.armedBy !== undefined && !breakArmed(await breakPolicyFor(services, conversationId, verdict.armedBy))) {
         return;
     }
-    // `move` implies the appointment: an account with room was tried at once, and this is the fallback it keeps.
-    if ((await breakPolicyFor(services, conversationId, "limit")) === "wait" || !services.conversations.send(conversationId, { kind: "held-fired", ladder: false }).reply) {
+    if (verdict.gaveUp === undefined) {
+        await rung.fire(services, held, verdict.routing, now);
         return;
     }
-    if ((await services.turns.resume(conversationId)) !== undefined) {
-        services.logger.info({ conversationId, reopensAt }, "usage-limit auto-resume fired: the allowance window reopened");
+    if (await services.conversations.send(conversationId, { kind: "resume-abandoned", reason: verdict.gaveUp }, now).settled) {
+        services.conversations.send(conversationId, { kind: rung.spent });
+        services.logger.warn({ conversationId, reason: held.reason }, "resume pass gave up the held turn, the request is settled as failed");
     }
 };
 
-// A session past the model's window, re-run once in a fresh one and at once: the daemon's own remedy, fired on no
-// policy, since holding it for a press or a clock would only resume the session that overflowed.
-const runFreshRung = async (services: Services, conversationId: string, held: HeldRecord): Promise<void> => {
-    if (held.fired || !services.conversations.send(conversationId, { kind: "held-fired", ladder: false }).reply) {
-        return;
-    }
-    if ((await services.turns.resume(conversationId)) !== undefined) {
-        services.logger.info({ conversationId }, "context-overflow re-run fired: a fresh session carries the hand-off");
-    }
-};
-
-// One held record's rung, by the wall that put it there.
-const runHeldRung = (services: Services, conversationId: string, held: HeldRecord, now: number): Promise<void> => {
-    switch (held.reason) {
-        case "stopped":
-            return runStopRung(services, conversationId, held, now);
-        case "overflow":
-            return runFreshRung(services, conversationId, held);
-        default:
-            return runLimitRung(services, conversationId, held, now);
-    }
-};
-
-// Every hold is one record per conversation, whichever wall put it there, so the shapes of wait are routed by reason
-// rather than by one of them quietly falling through another's gates.
-const runHeldPass = async (services: Services, now: number): Promise<void> => {
-    // Snapshotted, not iterated live: every branch below stamps or drops the very records this walks. A door hold is
-    // left out: whether a turn goes past the wall that stopped it is a person's call, not a clock's.
-    const stranded = services.conversations.stranded("held").filter(({ record }) => record.reason !== "door");
-    for (const { conversationId, record: held } of stranded) {
-        await runHeldRung(services, conversationId, held, now);
-    }
-};
-
-// Polls all three kinds of stranded record. Auth has no gate, it's the daemon's own bookkeeping, not the user's budget; outage
-// waits on the shared per-provider breaker; the held pass covers the two the reader answers for, a limit's one
-// appointment and a stopped turn's bounded ladder.
+// One pass over every held turn, oldest first; snapshotted, since every rung stamps or drops the records it walks.
 export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000): TurnResumeScheduler => {
     let timer: NodeJS.Timeout | undefined;
 
     const tick = async (now: number = Date.now()): Promise<void> => {
-        await runAuthPass(services, now);
-        await runOutagePass(services, now);
-        await runHeldPass(services, now);
+        for (const { conversationId, record } of services.conversations.stranded()) {
+            await runRung(services, conversationId, record, now);
+        }
     };
 
     return {
@@ -524,9 +460,10 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
     // Set before the placeholder returns, read after its run unwinds; a closure since the pump owns the generator.
     let followUp: (AgentTurn & { conversationId: string }) | undefined;
     // Unlike resumedTurn (which repeats the original prompt), this turn's prompt is the user's answer itself.
-    const resumed = (answer: string, mode?: AgentTurn["permissionMode"]): AgentTurn & { conversationId: string } => ({
+    const resumed = (answer: string, mode?: AgentTurn["permissionMode"]): TurnInput & { conversationId: string } => ({
         ...entry.turn,
         prompt: withResumeNote(answer, RESUME_NOTES.answered),
+        resume: "answered",
         ...(sessionId !== undefined ? { sessionId } : {}),
         ...(mode !== undefined ? { permissionMode: mode } : {}),
     });
@@ -713,6 +650,5 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
 };
 
 // Uses resumedTurn's own rules for the prompt and session; the journal just renames the fields a failure record uses.
-const restartTurnOf = (entry: JournalledTurn): AgentTurn & { conversationId: string } =>
-    resumedTurn({ input: entry.turn, ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}) }, RESUME_NOTES.restart);
-
+const restartTurnOf = (entry: JournalledTurn): TurnInput & { conversationId: string } =>
+    resumedTurn({ input: entry.turn, sessionId: entry.sessionId }, { reason: "restart" });

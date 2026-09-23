@@ -1,4 +1,3 @@
-import { expect, test } from "bun:test";
 import { parseProcStat } from "./proc-stat.js";
 
 test("a full stat line yields the comm, both CPU counters, the start time and the resident pages", () => {

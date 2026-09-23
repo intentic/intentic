@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { subscribeRuntimeChanges } from "../system/runtime-watch.js";
 import { fileActivityStore } from "./activity-store.js";

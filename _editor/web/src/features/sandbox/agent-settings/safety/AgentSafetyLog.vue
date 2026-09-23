@@ -154,7 +154,6 @@ const commandSummary = (program: string): string => {
     const firstLine = trimmed.split(`\n`)[0]?.trim() ?? ``;
     return firstLine || program;
 };
-
 </script>
 
 <template>
@@ -171,7 +170,7 @@ const commandSummary = (program: string): string => {
             </template>
         </FilterBar>
 
-        <RowGroup :label="t(`sandbox.agentSafetyLog.recentDecisions`)">
+        <RowGroup :label="t(`shared.recentDecisions`)">
             <SkeletonRows v-if="isLoading" :rows="4" description />
 
             <RowNote v-else-if="error !== undefined" variant="block">

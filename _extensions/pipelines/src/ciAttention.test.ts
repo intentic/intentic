@@ -1,5 +1,4 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { inFlightNote } from "./ciAttention";
 
 // The rail's other sentence: not "is this branch red" (ciStreaks) but "is CI doing anything right now". It must count

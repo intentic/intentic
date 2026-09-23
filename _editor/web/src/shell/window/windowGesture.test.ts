@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { describe, it, expect } from "bun:test";
 import { type Layout, type Press, pressOf, windowGesture } from "./windowGesture";
 
 /* The page as the frameless window's handle (desktop-app windows.rs): what a press moves, and what it leaves alone. */

@@ -15,6 +15,6 @@ const { canShip: canOperate } = useRole();
 <template>
     <RowGroup :label="t(`sandbox.importCard.import`)">
         <RowNote v-if="canOperate" variant="block"><ArrivalPanel /></RowNote>
-        <RowNote v-else icon="lock">{{ t(`sandbox.importCard.ownerOnly`) }}</RowNote>
+        <RowNote v-else icon="lock">{{ t(`shared.ownerOnly`) }}</RowNote>
     </RowGroup>
 </template>

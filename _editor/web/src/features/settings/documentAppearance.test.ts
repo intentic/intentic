@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach } from "bun:test";
 import { receivePreferenceChange } from "@intentic/ui/preference";
 import { freshImport } from "@intentic/testing/bun";
 

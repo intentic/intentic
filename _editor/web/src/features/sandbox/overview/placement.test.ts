@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { placementKind, sandboxPlacement, slugFromDaemonUrl } from "./placement";
 
 // Words come from the catalog, which a node suite has not loaded; what is worth asserting here is the rule — which

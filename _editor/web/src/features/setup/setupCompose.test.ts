@@ -1,5 +1,4 @@
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import type { ComposeArgs } from "./setupCompose";
 import { composeBootstrap, composeFile } from "./setupCompose";
 

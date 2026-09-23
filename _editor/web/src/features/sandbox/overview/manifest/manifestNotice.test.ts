@@ -1,6 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { ManifestProblemReport } from "@intentic/sandbox-contract";
-import { describe, test, expect } from "bun:test";
 import { manifestNotices } from "./manifestNotice";
 
 // Pins the wording rules for manifest notices (title, impact tag, per-problem lines and repairs).

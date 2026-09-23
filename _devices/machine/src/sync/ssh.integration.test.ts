@@ -2,7 +2,6 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REFERENCE_DIR, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import { describe, it, expect } from "bun:test";
 
 import { convergePlan, mutagenCreateArgs, sessionMatchesSpec, sessionName, type SyncSessionSpec } from "./mutagen.js";
 import {

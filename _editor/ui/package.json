@@ -54,9 +54,9 @@
             "types": "./src/icons/iconSets.ts",
             "default": "./src/icons/iconSets.ts"
         },
-        "./file-icon": {
-            "types": "./src/icons/fileIcon.ts",
-            "default": "./src/icons/fileIcon.ts"
+        "./file-format": {
+            "types": "./src/lib/fileFormat.ts",
+            "default": "./src/lib/fileFormat.ts"
         },
         "./glyph": {
             "types": "./src/icons/glyph.ts",

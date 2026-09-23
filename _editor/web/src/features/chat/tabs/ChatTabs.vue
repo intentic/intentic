@@ -168,12 +168,12 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
 const barMenu = ref<{ show: (event: Event) => void } | undefined>();
 const barVerbs = (): MenuItem[] => [
     {
-        label: t(`chat.chatTabs.closeFinished`),
+        label: t(`shared.closeFinished`),
         disabled: tabsInLane(`finished`).size === 0,
         shortcut: commandShortcut(`chat.closeFinishedTabs`),
         command: () => emit(`close`, tabsInLane(`finished`)),
     },
-    { label: t(`chat.chatTabs.closeAll`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
+    { label: t(`shared.closeAll2`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
     { separator: true },
     // The chat's other two homes, in the header buttons' own order: move within this window, then leave it.
     {
@@ -233,7 +233,7 @@ onMounted(() => {
     const entries: Omit<CommandRegistration, `owner`>[] = [
         {
             command: `chat.rename`,
-            title: t(`chat.chatTabs.rename`),
+            title: t(`shared.rename`),
             icon: `pencil`,
             keybinding: `F2`,
             when: `tabSurface == 'chat'`,
@@ -259,7 +259,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeOtherTabs`,
-            title: t(`chat.chatTabs.closeOthers`),
+            title: t(`shared.closeOthers`),
             icon: `times`,
             keybinding: `Ctrl+Shift+,`,
             when: `tabSurface == 'chat'`,
@@ -272,7 +272,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeTabsToRight`,
-            title: t(`chat.chatTabs.closeToRight`),
+            title: t(`shared.closeToRight`),
             icon: `times`,
             keybinding: `Ctrl+Shift+.`,
             when: `tabSurface == 'chat'`,
@@ -287,7 +287,7 @@ onMounted(() => {
             // Unbound by default, no file-tab equivalent for "finished"; still reachable via the palette and
             // Keybindings.
             command: `chat.closeFinishedTabs`,
-            title: t(`chat.chatTabs.closeFinished`),
+            title: t(`shared.closeFinished`),
             icon: `times`,
             when: `tabSurface == 'chat'`,
             handler: (): void => {
@@ -299,7 +299,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeAllTabs`,
-            title: t(`chat.chatTabs.closeAll`),
+            title: t(`shared.closeAll2`),
             icon: `times`,
             keybinding: `Ctrl+Shift+Backspace`,
             when: `tabSurface == 'chat'`,
@@ -324,7 +324,7 @@ onMounted(() => {
         {
             // Unbound, like Close Finished, reachable from the row menu; takes back the column, the chat stays open.
             command: `chat.closePane`,
-            title: t(`chat.chatTabs.closePane`),
+            title: t(`shared.closePane`),
             when: `tabSurface == 'chat'`,
             handler: () => closePane(activeId.value),
         },
@@ -379,8 +379,8 @@ const openHistory = (event: Event): void => {
                 v-model="edit.draft"
                 type="text"
                 maxlength="80"
-                :aria-label="t(`chat.chatTabs.chatTitle`)"
-                :placeholder="active.isolated.value ? t(`chat.chatTabs.newAgent`) : t(`chat.chatTabs.newChat`)"
+                :aria-label="t(`shared.chatTitle`)"
+                :placeholder="active.isolated.value ? t(`shared.newAgent`) : t(`shared.newChat`)"
                 class="ui-field-box ui-field-inline h-7 min-w-0 flex-1 select-text px-2 text-2xs"
                 @keydown.enter.stop.prevent="edit.commit()"
                 @keydown.esc.stop.prevent="edit.cancel()"
@@ -404,7 +404,7 @@ const openHistory = (event: Event): void => {
                 <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
                 <OriginMark :origin="originOf(active)" compact />
                 <!-- Off the board but still open; the box glyph is the same one the cards wear. -->
-                <span v-if="isArchived(active)" class="flex shrink-0 items-center" :aria-label="t(`chat.chatTabs.archived`)">
+                <span v-if="isArchived(active)" class="flex shrink-0 items-center" :aria-label="t(`shared.archived`)">
                     <Icon name="box" class="text-2xs text-subtle" />
                 </span>
                 <!-- Italic while this chat is only being looked at (Conversation.peek), the same mark the rail cards and the workspace preview tab wear. -->
@@ -418,7 +418,7 @@ const openHistory = (event: Event): void => {
                 <PresenceAvatars
                     v-if="active.session.value !== undefined"
                     :members="viewersOfSession(active.session.value.id)"
-                    :label="t(`chat.chatTabs.inChat`)"
+                    :label="t(`shared.inChat`)"
                 />
                 <!-- The other sessions (running, attention) as two compact marks instead of a truncated title. -->
                 <span
@@ -459,8 +459,8 @@ const openHistory = (event: Event): void => {
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="keepChat(active.conversationId)"
-                v-tooltip.bottom="t(`chat.chatTabs.keepOpenOtherwiseChat`)"
-                :aria-label="t(`chat.chatTabs.keepChatOpen`)"
+                v-tooltip.bottom="t(`shared.keepOpenOtherwiseChat`)"
+                :aria-label="t(`shared.keepChatOpen`)"
             >
                 <Icon name="pin" class="text-sm" />
             </button>
@@ -468,8 +468,8 @@ const openHistory = (event: Event): void => {
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="startAgent()"
-                v-tooltip.bottom="t(`chat.chatTabs.newAgent`)"
-                :aria-label="t(`chat.chatTabs.newAgent`)"
+                v-tooltip.bottom="t(`shared.newAgent`)"
+                :aria-label="t(`shared.newAgent`)"
             >
                 <Icon name="plus" class="text-sm" />
             </button>
@@ -505,7 +505,7 @@ const openHistory = (event: Event): void => {
 
         <!-- Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no ellipsis (there's no chooser to promise). -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
-            <Button size="small" @click="startAgent()"> <Icon name="plus" />{{ t(`chat.chatTabs.newAgent`) }} </Button>
+            <Button size="small" @click="startAgent()"> <Icon name="plus" />{{ t(`shared.newAgent`) }} </Button>
             <button type="button" class="composer-ghost h-7 gap-1.5 px-2 text-2xs" @click="openHistory">
                 <Icon name="history" class="text-2xs" />
                 <span>{{ t(`chat.chatTabs.pastChats`) }}</span>
@@ -528,8 +528,8 @@ const openHistory = (event: Event): void => {
                     v-model="query"
                     variant="field"
                     clearable
-                    :aria-label="t(`chat.chatTabs.searchChats`)"
-                    :placeholder="t(`chat.chatTabs.searchChats2`)"
+                    :aria-label="t(`shared.searchChats`)"
+                    :placeholder="t(`shared.searchChats2`)"
                     class="m-1 shrink-0"
                 />
                 <div class="flex min-h-0 max-h-80 flex-col gap-0.5 overflow-auto p-1 pt-0">

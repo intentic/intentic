@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h } from "vue";
 import RuleCommand from "./RuleCommand.vue";
 

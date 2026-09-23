@@ -1,7 +1,6 @@
 import "@intentic/testing/dom";
 import type { TerminalScrollback } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { type EffectScope, effectScope } from "vue";
 import type { TerminalSession } from "../terminalSession";
 import { useScrollbackView } from "./useScrollbackView";
@@ -14,10 +13,10 @@ const history = (name: string): TerminalScrollback => ({ name, text: `$ pnpm bui
 const scopes: EffectScope[] = [];
 
 const stage = (over: { split?: boolean } = {}) => {
-    const term = { hasSelection: mock(() => true), focus: mock() };
+    const term = { hasSelection: jest.fn(() => true), focus: jest.fn() };
     const session = unstubbed<TerminalSession>(`session`, { name: `web-1`, term: unstubbed<TerminalSession[`term`]>(`term`, term) });
-    const read = mock(async (name: string) => history(name));
-    const splitTab = mock((_name: string) => undefined);
+    const read = jest.fn(async (name: string) => history(name));
+    const splitTab = jest.fn((_name: string) => undefined);
     const scope = effectScope();
     scopes.push(scope);
     const view = scope.run(() =>
@@ -27,7 +26,7 @@ const stage = (over: { split?: boolean } = {}) => {
             splitTab: over.split === false ? undefined : splitTab,
         }),
     )!;
-    const show = mock((_event: Event) => undefined);
+    const show = jest.fn((_event: Event) => undefined);
     view.gridMenu.value = { show };
     return { term, read, splitTab, show, view };
 };

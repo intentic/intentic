@@ -111,7 +111,7 @@ const repair = async (): Promise<void> => {
                     <template #icon><Icon name="arrow-up-right" /></template>
                 </Button>
                 <p v-if="canRepair" class="text-xs text-muted">
-                    {{ t(`sandbox.containerHealthCard.replacesContainer`, { host: host?.label ?? t(`sandbox.containerHealthCard.thisMachine`) }) }}
+                    {{ t(`sandbox.containerHealthCard.replacesContainer`, { host: host?.label ?? t(`shared.thisMachine`) }) }}
                 </p>
                 <p v-else-if="!isOwner" class="text-xs text-muted">{{ t(`sandbox.containerHealthCard.onlySandboxsOwnerReconnect`) }}</p>
                 <p v-else class="text-xs text-muted">{{ t(`sandbox.containerHealthCard.connectComputerRunsSandbox`) }}</p>

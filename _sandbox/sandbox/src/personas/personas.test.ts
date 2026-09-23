@@ -1,5 +1,4 @@
 import { type Capability, type Persona, type PersonaPowers, VISITOR_CHAT_PERSONA, PersonaPowersSchema } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import {
     personaCapabilities,
     personaCliEnv,

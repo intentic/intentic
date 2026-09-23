@@ -2,7 +2,6 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AutomationApproval, Persona, WorkflowRun } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { type EffectScope, effectScope, nextTick, ref, shallowRef } from "vue";
 import { projectScope } from "../../../../app/projectScope";
 import { NO_ATTENTION } from "../../fleet/agentStatus";
@@ -170,7 +169,7 @@ describe(`the board's scope`, () => {
         const { scope } = scopeOf([inShop, elsewhere]);
         expect(scope.ownerOptions.value.map((option) => option.value)).toEqual([`everyone`, ME, ADA]);
         expect(scope.scopeOptions.value).toEqual([
-            { label: t(`agents.agentsView.sandbox`), value: `box` },
+            { label: t(`shared.sandbox`), value: `box` },
             { label: t(`agents.agentsView.allSandboxes`), value: `all` },
         ]);
     });

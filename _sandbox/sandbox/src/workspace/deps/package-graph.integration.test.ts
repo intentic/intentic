@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { readPackageGraph } from "./package-graph.js";
 
 const scaffold = async (files: Record<string, string>): Promise<string> => {

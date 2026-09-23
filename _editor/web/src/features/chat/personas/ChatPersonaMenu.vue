@@ -53,7 +53,7 @@ const closeMenu = (event: MouseEvent): void => {
                 @click="closeMenu"
             >
                 <Icon name="plus" class="shrink-0 text-xs text-subtle" />
-                <span class="text-sm text-content md:text-xs">{{ t(`chat.chatPersonaMenu.setUpPersona`) }}</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`shared.setUpPersona`) }}</span>
             </RouterLink>
         </template>
 
@@ -69,7 +69,7 @@ const closeMenu = (event: MouseEvent): void => {
             >
                 <Icon name="users" class="mt-0.5 shrink-0 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
-                    <span class="text-sm text-content md:text-xs">{{ t(`chat.chatPersonaMenu.anyone`) }}</span>
+                    <span class="text-sm text-content md:text-xs">{{ t(`shared.anyone`) }}</span>
                     <span class="text-2xs text-subtle">{{ t(`chat.chatPersonaMenu.everyAccountYouveConnected`) }}</span>
                 </span>
                 <Icon v-if="picked === undefined" name="check" class="ml-auto mt-0.5 shrink-0 text-2xs text-primary-500" aria-hidden="true" />
@@ -109,7 +109,7 @@ const closeMenu = (event: MouseEvent): void => {
                 @click="closeMenu"
             >
                 <Icon name="cog" class="shrink-0 text-xs text-subtle" />
-                <span class="text-2xs text-subtle">{{ t(`chat.chatPersonaMenu.managePersonas`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`shared.managePersonas`) }}</span>
             </RouterLink>
         </template>
     </div>

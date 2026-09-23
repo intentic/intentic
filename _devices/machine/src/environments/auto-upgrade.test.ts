@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import { autoUpgradeDecision, type AutoUpgradeReading, retryAfterMs } from "./auto-upgrade.js";
 
 const HOUR = 60 * 60_000;

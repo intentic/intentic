@@ -1,5 +1,5 @@
-import { apiContract, AnnounceRefusalSchema, BootReportSchema, HostedStatusSchema, SetupReportSchema } from "@intentic/api-contract";
-import { FREE_TIER } from "@intentic/constants";
+import { type AnnounceRefusal, apiContract, type BootReport, HostedStatusSchema, type SetupReport } from "@intentic/api-contract";
+import { FREE_TIER, hostedTier } from "@intentic/constants";
 import type { MemberRole } from "@intentic/sandbox-contract";
 import { GrantedRoleSchema, localHostname } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -37,8 +37,7 @@ import {
     kickHostedCleanup,
     releaseHosted,
 } from "./hosted/hosted-cleanup.js";
-import { hostedPlanEnabled, hostedSlotsOf, onHostedPlan } from "./hosted/hosted-plan.js";
-import { tierOfRow } from "./hosted/hosted-shape.js";
+import { hostedPlanEnabled, hostedSlotUse, onHostedPlan } from "./hosted/hosted-plan.js";
 import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from "./hosted/abuse/hosted-source.js";
 import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
 import { dropHostedMachine, hostedArrivalBudget, hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
@@ -136,7 +135,11 @@ const restartOrRebuild = async (
 };
 
 // A row gone mid-start (trash, release, the idle sweep) leaves nothing to bill the run, so the machine is stopped again.
-const openStretchOrStop = async (context: OrpcContext, hosted: { id: string; sandboxId: string; appName: string; machineId: string }, ownerId: string): Promise<void> => {
+const openStretchOrStop = async (
+    context: OrpcContext,
+    hosted: { id: string; sandboxId: string; appName: string; machineId: string },
+    ownerId: string,
+): Promise<void> => {
     if (await openHostedStretch(context.prisma, { ...hosted, ownerId })) {
         return;
     }
@@ -164,13 +167,9 @@ const assertHostedAllowance = async (
         }
         throw error;
     }
-    // An arrival always lands on the free rung, so the gate is that rung's allowance; a paid slot is not a way to
-    // be handed a second free machine, and the machine that stands on it got there by moving up (hosted-migrate.ts).
-    const [used, slots] = await Promise.all([
-        context.prisma.hostedMachine.count({ where: { tier: FREE_TIER.id, sandbox: { ownerId: userId } } }),
-        hostedSlotsOf(context.prisma, context.config, userId),
-    ]);
-    if (used >= slots.free) {
+    // An arrival lands on the free rung, so a paid slot never earns a second free machine; paid ones are reached by moving up.
+    const { used, left } = await hostedSlotUse(context.prisma, context.config, userId, FREE_TIER.id);
+    if (left <= 0) {
         throw new ORPCError(`BAD_REQUEST`, { message: slotsMessage(used) });
     }
     const budget = await hostedArrivalBudget(context.prisma, context.config, userId);
@@ -217,12 +216,6 @@ const toSummary = (
     context: OrpcContext,
 ) => {
     const zone = intenticZoneOf(context);
-    // Validated on write; this parse only shields rows written before the schema existed.
-    const report = SetupReportSchema.safeParse(sandbox.setupReport);
-    // Same shield: an older image that never wrote a boot report reads as having said nothing.
-    const boot = BootReportSchema.safeParse(sandbox.bootReport);
-    // Refusal record; written whole by the announce route.
-    const refusal = AnnounceRefusalSchema.safeParse(sandbox.announceRefusal);
     return {
         id: sandbox.id,
         name: sandbox.name,
@@ -230,9 +223,10 @@ const toSummary = (
         daemonUrl: sandbox.daemonUrl,
         lastSeenAt: isoOrNull(sandbox.lastSeenAt),
         setupCodeClaimedAt: isoOrNull(sandbox.setupCodeClaimedAt),
-        setupReport: report.success ? report.data : null,
-        bootReport: boot.success ? boot.data : null,
-        announceRefusal: refusal.success ? refusal.data : null,
+        // Each report is validated whole on write, so the row holds it as the contract states it.
+        setupReport: sandbox.setupReport as SetupReport | null,
+        bootReport: sandbox.bootReport as BootReport | null,
+        announceRefusal: sandbox.announceRefusal as AnnounceRefusal | null,
         // The removal's own word, and the only thing that lets the browser say "gone" instead of waiting forever.
         removedAt: isoOrNull(sandbox.removedAt),
         removedBy: sandbox.removedBy,
@@ -345,10 +339,9 @@ export const sandboxRoutes = {
         if (!hostedEnabled(context.config)) {
             return { enabled: false, remaining: 0 };
         }
-        const [used, slots, budget, plan, capacity, suspension] = await Promise.all([
+        const [slots, budget, plan, capacity, suspension] = await Promise.all([
             // The free rung's, like the gate above: the card offers a machine, and the one on offer is a free one.
-            context.prisma.hostedMachine.count({ where: { tier: FREE_TIER.id, sandbox: { ownerId: user.id } } }),
-            hostedSlotsOf(context.prisma, context.config, user.id),
+            hostedSlotUse(context.prisma, context.config, user.id, FREE_TIER.id),
             // Included so the card states the ceiling before it's spent; omitted entirely when unmetered.
             hostedArrivalBudget(context.prisma, context.config, user.id),
             // Separate from unmetered: a ceiling-less platform is also unmetered, but its card must not claim an
@@ -362,7 +355,7 @@ export const sandboxRoutes = {
         return {
             enabled: true,
             // A suspended account is offered nothing, whatever its slots say.
-            remaining: suspension === undefined ? Math.max(0, slots.free - used) : 0,
+            remaining: suspension === undefined ? Math.max(0, slots.left) : 0,
             // Absent unless true: a lane with room says nothing, so this can't age into a false scare.
             ...(capacity.full ? { full: true } : {}),
             ...(budget.metered ? { hours: hoursOf(budget) } : {}),
@@ -511,7 +504,7 @@ export const sandboxRoutes = {
                 ownerEmail: user.email.toLowerCase(),
                 region: hosted.region,
                 // The machine's own rung: a restart puts back the guest it had, never the one a new machine gets.
-                tier: tierOfRow(hosted.tier),
+                tier: hostedTier(hosted.tier).id,
             };
             const rebuilt = await restartOrRebuild(context, args, hosted, sandbox.ownerId);
             // A rebuild stamps `wokeAt` at creation; opening a stretch here too would meter one boot twice.

@@ -3,7 +3,6 @@
 // rather than claiming anything, and for a spent trial, which is connected but out of allowance.
 import "@intentic/testing/dom";
 import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
@@ -17,22 +16,22 @@ const endpointsLoaded = ref(true);
 const nativeConnectFlow = ref<{ provider: AgentProvider; url: string; code: string } | undefined>(undefined);
 const translatorConnectFlow = ref<undefined>(undefined);
 const provider = ref<AgentProvider>(`claude`);
-const selectModel = mock();
-const startConnect = mock();
-const connectTranslator = mock();
+const selectModel = jest.fn();
+const startConnect = jest.fn();
+const connectTranslator = jest.fn();
 
 // The two reads `accessKnown` needs, mocked at their source so `accessKnown` itself runs unmocked.
-mock.module(`./providerAccounts`, () => ({
+jest.mock(`./providerAccounts`, () => ({
     ...providerAccountsOriginal,
     accountsLoaded,
 }));
-mock.module(`./providerCatalog`, () => ({
+jest.mock(`./providerCatalog`, () => ({
     ...providerCatalogOriginal,
     endpointsLoaded,
 }));
 
 // The pane's view the real panel injects from ChatPane; mounted bare here and handed over directly.
-mock.module(`../run/useChat`, () => ({
+jest.mock(`../run/useChat`, () => ({
     useChat: () => ({
         nativeConnectFlow,
         translatorConnectFlow,
@@ -51,7 +50,7 @@ mock.module(`../run/useChat`, () => ({
         completeTranslator: () => {},
     }),
 }));
-mock.module(`../panel/useChat-view`, () => ({
+jest.mock(`../panel/useChat-view`, () => ({
     usePaneView: () => ({
         connected,
         provider,
@@ -62,9 +61,9 @@ mock.module(`../panel/useChat-view`, () => ({
         selectAccount: () => {},
     }),
 }));
-mock.module(`vue-router`, () => ({
+jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
-    useRouter: () => ({ push: mock() }) as never,
+    useRouter: () => ({ push: jest.fn() }) as never,
     RouterLink: RouterLinkStub as never,
 }));
 

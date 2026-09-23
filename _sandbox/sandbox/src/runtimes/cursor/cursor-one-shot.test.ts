@@ -1,21 +1,20 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import { test, expect, beforeEach, mock, jest } from "bun:test";
 import type { Services } from "../../composition.js";
 import { cursorOneShot } from "./cursor-one-shot.js";
 
-const created = mock<(options: unknown) => Promise<{ send: typeof send; close: () => void }>>();
-const send = mock<(prompt: string, options: unknown) => Promise<{ wait: typeof wait; cancel: () => Promise<void> }>>();
-const wait = mock<() => Promise<{ status: string; error?: { message?: string } }>>();
-const cancel = mock<() => Promise<void>>();
-const close = mock<() => void>();
+const created = jest.fn<(options: unknown) => Promise<{ send: typeof send; close: () => void }>>();
+const send = jest.fn<(prompt: string, options: unknown) => Promise<{ wait: typeof wait; cancel: () => Promise<void> }>>();
+const wait = jest.fn<() => Promise<{ status: string; error?: { message?: string } }>>();
+const cancel = jest.fn<() => Promise<void>>();
+const close = jest.fn<() => void>();
 
 // One class per kind, not one per call: the runtime tells a spent allowance from any other failure by `instanceof`,
 // and a factory minting a fresh class each time would answer no to every check.
 class RateLimitError extends Error {}
 class AuthenticationError extends Error {}
 
-mock.module("./cursor-sdk.js", () => ({
+jest.mock("./cursor-sdk.js", () => ({
     CURSOR_SDK_MISSING: `missing sdk`,
     cursorSdk: async () => ({ Agent: { create: created }, RateLimitError, AuthenticationError }),
 }));
@@ -79,7 +78,7 @@ test("a reply carrying no text is a rung that did not answer", async () => {
 // Two accounts and the ledger between them, written by the helper and read back by its own next attempt.
 const fleet = () => {
     const ledger: Record<string, Record<string, { at: number; message: string }>> = {};
-    const refresh = mock(async () => undefined);
+    const refresh = jest.fn(async () => undefined);
     const deps = unstubbed<Services>(`services`, {
         cursorStore: unstubbed<Services[`cursorStore`]>(`cursorStore`, {
             credentials: async () => [

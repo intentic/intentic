@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { INSTALL_SCRIPTS, INSTALL_SCRIPTS_DIR } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
-import { describe, it, expect } from "bun:test";
 
 // The four installers that put this agent on a machine, held to what little they still do. Each dialect's
 // bootstrap block (curl|sh / irm|iex, standalone, no imports) still has to exist twice, and what goes wrong in

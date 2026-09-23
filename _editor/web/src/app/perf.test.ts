@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn, jest } from "bun:test";
 import { recordPerf, stalledPaths } from "./perf";
 
 // `stalledPaths` is what the connecting gate turns into an accusation ("this route is what you are waiting on"), so a
@@ -6,7 +5,7 @@ import { recordPerf, stalledPaths } from "./perf";
 
 beforeEach(() => {
     // Slow spans warn by design; the suite is not the place to read them.
-    spyOn(console, `warn`).mockImplementation(() => {});
+    jest.spyOn(console, `warn`).mockImplementation(() => {});
 });
 
 afterEach(() => {

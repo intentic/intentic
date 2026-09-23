@@ -1,5 +1,3 @@
-import { test, expect } from "bun:test";
-
 import { validateOutputs } from "./outputs-check.js";
 
 test("accepts outputs declared for the kind", () => {

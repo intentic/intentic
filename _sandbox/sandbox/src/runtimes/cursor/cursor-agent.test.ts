@@ -3,7 +3,6 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
-import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
 import { createCursorAgent, type CursorAgentDeps, FIRST_DELTA_MS } from "./cursor-agent.js";
@@ -14,10 +13,10 @@ import { memoryFleet } from "../../testing.js";
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
 
-const create = mock<(options: unknown) => Promise<unknown>>();
-const cancel = mock<() => Promise<void>>();
+const create = jest.fn<(options: unknown) => Promise<unknown>>();
+const cancel = jest.fn<() => Promise<void>>();
 
-mock.module("./cursor-sdk.js", () => ({
+jest.mock("./cursor-sdk.js", () => ({
     CURSOR_SDK_MISSING: `missing sdk`,
     cursorSdk: async () => ({
         Agent: { create },

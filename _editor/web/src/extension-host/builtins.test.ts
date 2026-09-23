@@ -8,10 +8,9 @@ import type {
     ViewRegistration,
 } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
-import { registerCatalog } from "@intentic/ui/i18n";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { isIconName } from "@intentic/ui/icons";
 import * as activity from "@intentic/ext-activity";
-import { describe, it, expect } from "bun:test";
 
 // Exercises each compiled-in extension package the way loadBuiltins does: activate() against a minimal fake
 // IntenticApi, without the app singletons createExtensionApi pulls in. Proves the packages register a working view
@@ -29,9 +28,7 @@ const { coreViews } = await import("../core-views/coreViews");
 // title reads as a word here instead of the key it was translated from.
 await Promise.all(
     [...builtinModules.values()].map((module) =>
-        module.messages === undefined
-            ? Promise.resolve()
-            : registerCatalog({ namespace: `ext.${extensionIdOf(module.manifest)}`, ...module.messages }),
+        module.messages === undefined ? Promise.resolve() : registerExtensionMessages(extensionIdOf(module.manifest), module.messages),
     ),
 );
 

@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { ConversationActors } from "./actor/conversation-actors.js";
 import type { AgentsRegistry } from "./registry/agents-registry.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";

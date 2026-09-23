@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { judgeAnswer } from "./command-judge.js";
 import { readRoleAnswer, UnusableAnswerError } from "../models/role-answer.js";
 

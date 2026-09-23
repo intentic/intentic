@@ -49,7 +49,7 @@ export const useBoardCommands = (host: CommandsHost): void => {
             registerCommand({
                 owner: `builtin`,
                 command: `agents.filter`,
-                title: t(`agents.agentsView.filter`),
+                title: t(`shared.filter`),
                 category: AGENTS,
                 icon: `search`,
                 // Focus and select, so a chord typed over a stale query starts fresh instead of needing it cleared first.

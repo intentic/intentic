@@ -1,7 +1,6 @@
 // Offers the desktop app install as an alternative to the terminal command; makes no sense inside the desktop
 // app itself. What the panel explains (the command, its removal line) is the same in both windows.
 import "@intentic/testing/dom";
-import { it, expect, mock } from "bun:test";
 import { createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -9,10 +8,10 @@ import { IconStub } from "@intentic/ui/testing";
 
 // The one fact that decides this: whether the app has marked this webview as its own.
 const version = { value: undefined as string | undefined };
-mock.module(`../../app/environments/desktop`, () => ({
+jest.mock(`../../app/environments/desktop`, () => ({
     desktopVersion: () => version.value,
 }));
-mock.module(`../../app/environments/desktopDownloads`, () => ({
+jest.mock(`../../app/environments/desktopDownloads`, () => ({
     DESKTOP_DOWNLOADS: { windows: `https://intentic.dev/desktop/windows`, linuxAppImage: `https://intentic.dev/desktop/linux` },
 }));
 

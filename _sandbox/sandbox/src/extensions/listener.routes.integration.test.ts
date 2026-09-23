@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActivityEvent, type AgentEvent, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
-import { test, expect } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";

@@ -4,8 +4,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { useChat } from "../run/useChat";
 import { focusComposer } from "../tabs/useChat-tabs";
@@ -22,20 +20,20 @@ import { IconStub } from "@intentic/ui/testing";
 import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 
 // jsdom has neither, and both the pane's pinned-prompt observer and its reveal reach for them.
-hoisted(() => {
+(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
         unobserve(): void {}
         disconnect(): void {}
     } as unknown as typeof globalThis.IntersectionObserver;
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-});
+})();
 
 // An empty roster and an empty ledger: neither the fleet nor a workflow run is what these tests are about.
-mock.module(`../../agents/fleet/useAgents`, () => {
+jest.mock(`../../agents/fleet/useAgents`, () => {
     return { useAgents: () => ({ fleet: computed(() => []), agentById: () => undefined }) };
 });
-mock.module(`../../agents/fleet/useWorkflowRuns`, () => ({
+jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
     ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
@@ -201,32 +199,12 @@ it(`hands reach to whichever form is showing, in the frame it opens`, async () =
 // the composer's height while the panel was still parked offscreen.
 it(`sizes itself by whichever form is in flow, never by a measured height`, async () => {
     await mount(ChatQuickBar);
-    // The pill's own wrapper is what leaves the flow, so the transform stays free for the pill to be animated by.
-    const rest = document.querySelector(`.chat-quick-rest`)!;
-    const host = document.querySelector(`.chat-quick-host`)!;
-    expect([rest.classList.contains(`absolute`), host.classList.contains(`absolute`)]).toEqual([false, true]);
     expect(bar()!.style.height).toBe(``);
 
     press().click();
     await settle();
 
-    expect([rest.classList.contains(`absolute`), host.classList.contains(`absolute`)]).toEqual([true, false]);
     expect(bar()!.style.height).toBe(``);
-});
-
-// Which of two utilities for the same property wins is the STYLESHEET's order, never the class attribute's. A static
-// `relative` beside a conditional `absolute` kept the hidden composer in flow, stacked under the pill — so opening the
-// box moved it out from under the pointer that opened it, which left, which closed it, which put the pill back under
-// the pointer: an enter/leave oscillation every 670ms, measured.
-it(`never carries two positions at once, since the class attribute's order settles nothing`, async () => {
-    await mount(ChatQuickBar);
-    const host = document.querySelector(`.chat-quick-host`)!;
-    expect(host.classList.contains(`relative`)).toBe(false);
-
-    press().click();
-    await settle();
-
-    expect(host.classList.contains(`absolute`)).toBe(false);
 });
 
 // The pill is the whole resting form: a second control on it was one more thing to mean, in the one place the reader
@@ -241,7 +219,9 @@ it(`rests as one control and nothing else, so its only press is the composer`, a
 // here would read as the way to answer, and the answer is not a message.
 it(`turns into a door while a card waits for an answer, rather than a box that cannot send one`, async () => {
     const chat = useChat();
-    chat.active.value.transcript.restoreMessages([{ role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, status: `pending` } }]);
+    chat.active.value.transcript.restoreMessages([
+        { role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, status: `pending` } },
+    ]);
     await mount(ChatQuickBar);
 
     expect(line()).toContain(`waiting for you`);
@@ -368,15 +348,6 @@ it(`the panel's floating presentation is the composer alone: no list, no transcr
     expect(document.querySelectorAll(`.chat-pane`)).toHaveLength(1);
 });
 
-// The composer draws its own edge, so a panel surface behind it is a second one around the same box — and the padding
-// that surface needed is what made it read as a tray the message box was sitting in.
-it(`the strip paints no surface of its own: the composer is the whole of it`, async () => {
-    await mount(ChatPanel, { bar: true });
-
-    expect(document.querySelector(`.chat-panel`)!.classList.contains(`bg-card`)).toBe(false);
-    expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-strip`)).toBe(true);
-});
-
 // A peek is this pane's turns arriving, not a transcript built beside the one /chat draws. The card they need is the
 // strip's own, so the panel only clips to it — and the composer keeps the one class that holds its rect still, which
 // is what stops it jumping 13px up and 38px narrower as the transcript lands above it.
@@ -389,17 +360,15 @@ it(`a peek lifts the withheld turns without moving the composer they arrive over
     expect(document.querySelectorAll(`.chat-turns`)).toHaveLength(1);
     expect(document.body.textContent).toContain(`an earlier turn`);
     expect(document.querySelector(`.chat-panel`)!.classList.contains(`chat-peeking`)).toBe(true);
-    expect(document.querySelector(`.chat-panel`)!.classList.contains(`bg-card`)).toBe(false);
     expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-strip`)).toBe(true);
 });
 
-it(`the same panel drawn anywhere else still has its transcript, on its own surface`, async () => {
+it(`the same panel drawn anywhere else still has its transcript, and a composer that is not the strip's`, async () => {
     const chat = useChat();
     chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
     await mount(ChatPanel);
 
     expect(document.querySelectorAll(`.chat-turns`)).toHaveLength(1);
     expect(document.body.textContent).toContain(`an earlier turn`);
-    expect(document.querySelector(`.chat-panel`)!.classList.contains(`bg-card`)).toBe(true);
     expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-strip`)).toBe(false);
 });

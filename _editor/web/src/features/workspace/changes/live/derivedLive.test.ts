@@ -2,7 +2,6 @@
 // so a workspace change can never stand in for this — which is why it is its own epoch rather than a reuse of the
 // file's own, and why a viewer that watched only the file sat on an empty pane forever.
 import { resetSandboxScope } from "@intentic/extension-api";
-import { it, expect, beforeEach } from "bun:test";
 import { changeEpochOf, derivedEpochOf, markDerivedChanged, sidecarQueue } from "./useWorkspaceLive";
 
 const IDLE = { enabled: true, queued: 0, deriving: [], sweeping: false, broken: false };

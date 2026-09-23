@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { bucketOf, digestOf } from "./digest.js";
 
 describe(`digestOf`, () => {

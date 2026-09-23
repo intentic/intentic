@@ -5,7 +5,6 @@ import { STATE_DIR } from "@intentic/constants";
 import { workspacePaths } from "../workspace/workspace.js";
 import type { Capability } from "@intentic/sandbox-contract";
 
-import { test, expect } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 
 import { createApp } from "../app.js";

@@ -1,21 +1,20 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import type { MenuItem } from "primevue/menuitem";
-import { describe, it, expect, mock } from "bun:test";
 import { type EntryMenuInput, type EntryVerbs, entryMenuItems } from "./entryMenu";
 
 const file: WorkspaceTreeEntry = { name: `a.ts`, path: `src/a.ts`, type: `file` };
 const dir: WorkspaceTreeEntry = { name: `src`, path: `src`, type: `dir`, children: [] };
 
 const verbs = (): EntryVerbs => ({
-    newFile: mock(),
-    newFolder: mock(),
-    rename: mock(),
-    extract: mock(),
-    keepFolder: mock(),
-    remove: mock(),
-    cut: mock(),
-    copy: mock(),
-    paste: mock(),
+    newFile: jest.fn(),
+    newFolder: jest.fn(),
+    rename: jest.fn(),
+    extract: jest.fn(),
+    keepFolder: jest.fn(),
+    remove: jest.fn(),
+    cut: jest.fn(),
+    copy: jest.fn(),
+    paste: jest.fn(),
 });
 const input = (over: Partial<EntryMenuInput> = {}): EntryMenuInput => ({
     target: file,

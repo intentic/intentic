@@ -1,5 +1,4 @@
 import { localDaemonUrlInsecure } from "@intentic/sandbox-run";
-import { it, expect, mock } from "bun:test";
 import {
     candidatesFor,
     certifiedLoopbackUrl,
@@ -55,7 +54,7 @@ it(`offers no loopback candidate for a machine the platform put somewhere this b
 });
 
 it(`never reaches for the machine when the sandbox cannot be on it`, async () => {
-    const fetchMock = mock();
+    const fetchMock = jest.fn();
     expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } }, fetchMock)).toEqual({
         kind: `public`,
         base: TUNNEL,
@@ -81,35 +80,35 @@ it(`accepts a loopback candidate only when the daemon behind it names THIS sandb
         await probeEndpoint(
             local,
             id,
-            mock(async () => health(id)),
+            jest.fn(async () => health(id)),
         ),
     ).toBe(true);
     expect(
         await probeEndpoint(
             local,
             id,
-            mock(async () => health(`0123456789ab`)),
+            jest.fn(async () => health(`0123456789ab`)),
         ),
     ).toBe(false);
     expect(
         await probeEndpoint(
             local,
             id,
-            mock(async () => health(undefined)),
+            jest.fn(async () => health(undefined)),
         ),
     ).toBe(false);
     expect(
         await probeEndpoint(
             local,
             id,
-            mock(async () => new Response(`<html>`, { status: 200 })),
+            jest.fn(async () => new Response(`<html>`, { status: 200 })),
         ),
     ).toBe(false);
     expect(
         await probeEndpoint(
             local,
             id,
-            mock(async () => new Response(``, { status: 502 })),
+            jest.fn(async () => new Response(``, { status: 502 })),
         ),
     ).toBe(false);
 });
@@ -119,7 +118,7 @@ it(`treats every way a loopback call can be refused as the same instruction: use
     const local = { kind: `local` as const, base: certifiedLoopbackUrl(id, CERT_HOST)! };
     // Models Safari's mixed-content refusal, a declined LNA prompt, and nothing listening: all reject the fetch the
     // same way.
-    const refused = mock(async () => {
+    const refused = jest.fn(async () => {
         throw new TypeError(`Failed to fetch`);
     });
     expect(await probeEndpoint(local, id, refused)).toBe(false);
@@ -128,18 +127,18 @@ it(`treats every way a loopback call can be refused as the same instruction: use
 it(`qualifies the tunnel too, now that something ranks below it`, async () => {
     const id = await sandboxIdOf(TOKEN);
     const tunnel = { kind: `public` as const, base: TUNNEL };
-    const answering = mock(async () => health(id));
+    const answering = jest.fn(async () => health(id));
     expect(await probeEndpoint(tunnel, id, answering)).toBe(true);
     expect(answering).toHaveBeenCalledWith(`${TUNNEL}/health`, expect.anything());
 
-    const offline = mock(async () => {
+    const offline = jest.fn(async () => {
         throw new TypeError(`Failed to fetch`);
     });
     expect(await probeEndpoint(tunnel, id, offline)).toBe(false);
 });
 
 it(`takes the tunnel on trust when nothing ranks below it`, async () => {
-    const fetchMock = mock();
+    const fetchMock = jest.fn();
     expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } }, fetchMock)).toEqual({
         kind: `public`,
         base: TUNNEL,
@@ -152,7 +151,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
     expect(
         await selectEndpoint(
             { daemonUrl: TUNNEL, token: TOKEN, ...anywhere },
-            mock(async () => health(id)),
+            jest.fn(async () => health(id)),
         ),
     ).toEqual({
         kind: `local`,
@@ -160,7 +159,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
     });
 
     // Certificate lookup fails but everything else answers: falls to the tunnel, not the plain loopback.
-    const noCertificate = mock(async (input: string | URL | Request) => {
+    const noCertificate = jest.fn(async (input: string | URL | Request) => {
         if (String(input).startsWith(certifiedLoopbackUrl(id, CERT_HOST)!)) {
             throw new TypeError(`Failed to fetch`);
         }
@@ -169,7 +168,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
     expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere }, noCertificate)).toEqual({ kind: `public`, base: TUNNEL });
 
     // Only the plain loopback address answers: models being offline, which is what plain http exists for.
-    const offline = mock(async (input: string | URL | Request) => {
+    const offline = jest.fn(async (input: string | URL | Request) => {
         if (!String(input).startsWith(localDaemonUrlInsecure(id))) {
             throw new TypeError(`Failed to fetch`);
         }
@@ -183,7 +182,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
     expect(
         await selectEndpoint(
             { daemonUrl: TUNNEL, token: TOKEN, ...anywhere },
-            mock(async () => {
+            jest.fn(async () => {
                 throw new TypeError(`Failed to fetch`);
             }),
         ),
@@ -213,7 +212,7 @@ it(`blames the shortcut only when the tunnel answers and the shortcut does not: 
     const local = { kind: `local` as const, base: certifiedLoopbackUrl(id, CERT_HOST) as string };
     // Each lane answers or hangs up on its own base, so the four combinations are one fetch fake apiece.
     const lanes = (shortcut: boolean, tunnel: boolean) =>
-        mock(async (input: RequestInfo | URL) => {
+        jest.fn(async (input: RequestInfo | URL) => {
             const up = String(input).startsWith(TUNNEL) ? tunnel : shortcut;
             if (!up) {
                 throw new TypeError(`Failed to fetch`);

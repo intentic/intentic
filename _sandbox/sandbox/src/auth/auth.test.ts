@@ -1,7 +1,6 @@
 import { generateKeyPairSync } from "node:crypto";
 import type { ProofMethod } from "@intentic/sandbox-contract";
 import { mintOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
-import { describe, test, expect } from "bun:test";
 import {
     authorizeMaintainer,
     createAuthorizer,

@@ -92,7 +92,7 @@ export const useScrollbackView = ({ sessionOf, read, splitTab }: ScrollbackViewH
                     session.term.focus();
                 },
             },
-            { label: t(`terminal.terminalPanel.paste`), command: () => pasteIntoTerminal(session) },
+            { label: t(`shared.paste`), command: () => pasteIntoTerminal(session) },
             { separator: true },
             { label: t(`terminal.terminalPanel.fullScrollback`), command: () => void openScrollback(name) },
         ];

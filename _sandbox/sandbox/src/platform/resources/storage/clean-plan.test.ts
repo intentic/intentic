@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import { describe, expect, test } from "bun:test";
 import { statePath } from "../../../state-paths.js";
 import { type CleanCandidate, planClean } from "./clean-plan.js";
 
@@ -32,7 +31,12 @@ describe("planClean", () => {
     test("keeps what is not one of the category's items: its folder, another category's path, anything off the volumes", () => {
         const plan = planClean(
             "trash",
-            [candidate(inHistory("trash")), candidate(inHistory("worktrees", "fair-sage-ey2r")), candidate("/etc"), candidate(inHistory("trash", "a", "b"))],
+            [
+                candidate(inHistory("trash")),
+                candidate(inHistory("worktrees", "fair-sage-ey2r")),
+                candidate("/etc"),
+                candidate(inHistory("trash", "a", "b")),
+            ],
             roots,
             NOW,
         );
@@ -52,7 +56,8 @@ describe("planClean", () => {
     });
 
     test("the day before now is kept, the moment past it is not", () => {
-        const log = (age: number): CleanCandidate => candidate(inHistory("logs", "terminals", `web-1-%${age}.log`), { folder: false, newestMs: NOW - age });
+        const log = (age: number): CleanCandidate =>
+            candidate(inHistory("logs", "terminals", `web-1-%${age}.log`), { folder: false, newestMs: NOW - age });
         const plan = planClean("logs", [log(24 * HOUR - 1), log(24 * HOUR)], roots, NOW);
         expect(plan.targets.map((target) => target.path)).toEqual([inHistory("logs", "terminals", `web-1-%${24 * HOUR}.log`)]);
         expect(plan.kept).toEqual([{ path: inHistory("logs", "terminals", `web-1-%${24 * HOUR - 1}.log`), reason: "recent" }]);
@@ -68,7 +73,9 @@ describe("planClean", () => {
 
     test("anything a running program holds stays, however old", () => {
         const weights = statePath(WORKSPACE_ROOT, ".intentic/local/cache/", "models", "Qwen3.5-2B-Q4_K_M.gguf");
-        expect(planClean("modelWeights", [candidate(weights, { folder: false, busy: true })], roots, NOW).kept).toEqual([{ path: weights, reason: "busy" }]);
+        expect(planClean("modelWeights", [candidate(weights, { folder: false, busy: true })], roots, NOW).kept).toEqual([
+            { path: weights, reason: "busy" },
+        ]);
     });
 
     test("only profile folders go from the browser's store: the files beside them are its accounts' state", () => {

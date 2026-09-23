@@ -1,5 +1,4 @@
 import { type AgentEvent, CLAUDE_CODE, CODEX, type PermissionMode } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, type PlanPhaseResult, planMode } from "./plan-mode.js";
 import { parkedCards } from "../../agents/actor/parked-cards.js";

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { conversationRedirect } from "./conversationLink";
 
 // The regression this file exists for: the daemon has always linked notifications to `/?conversation=<id>`, and

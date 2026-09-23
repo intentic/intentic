@@ -7,17 +7,15 @@
 // `join(x, "..")` where x is computed — an operation, not a position claim
 // files that cannot import (see MAY_SPELL_A_ROOT below)
 // `homedir()`-based `.intentic`, a different directory from the workspace state dir
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { repoRoot } from "../constants/src/node.mjs";
-import { subjectFiles, subjectScope, writesBaselines } from "./lib/repo.mjs";
+import { ADOPTING, ratchet } from "./lib/ratchet.mjs";
+import { subjectFiles } from "./lib/repo.mjs";
 
 const root = repoRoot(import.meta.url);
 
 // Standing spellings the constants sweep didn't finish are held per file in this baseline: a count may only shrink or
 // be deleted, never grow. `--write-baseline` adopts the current findings, for the one occasion that's legitimate.
-const BASELINE = join(root, "_tools/checks/baselines/path-literals.json");
-const writeBaseline = process.argv.includes("--write-baseline");
 
 // Files allowed to spell a root literally, each for a reason about reach, not taste.
 const MAY_SPELL_A_ROOT = new Set([
@@ -151,55 +149,14 @@ for (const { at } of findings) {
     const path = at.slice(0, at.lastIndexOf(":"));
     perFile.set(path, (perFile.get(path) ?? 0) + 1);
 }
-// A scoped run read a handful of files, so it knows nothing about the rest: every baselined file it did not look at
-// would read as zero findings. It may still REFUSE what it found (the grown list below is per file, against that file's
-// own entry) but it may never write, which is what keeps `--paths` from erasing the baseline it never measured.
-const scoped = subjectScope() !== undefined;
-if (writeBaseline) {
-    if (scoped) {
-        console.error(`path-literals: --write-baseline adopts the whole tree's findings, so it cannot run under --paths`);
-        process.exit(2);
-    }
-    const sorted = Object.fromEntries([...perFile].sort(([a], [b]) => a.localeCompare(b)));
-    writeFileSync(BASELINE, `${JSON.stringify(sorted, null, 4)}\n`);
-    console.log(`path-literals: baseline written, ${findings.length} standing findings in ${perFile.size} files`);
+const { grown: over } = ratchet("path-literals", "path-literals", perFile);
+if (ADOPTING) {
     process.exit(0);
 }
-const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : {};
-
-const grown = [];
-for (const [path, count] of perFile) {
-    const allowed = baseline[path] ?? 0;
-    if (count > allowed) {
-        grown.push(...findings.filter(({ at }) => at.startsWith(`${path}:`)).map(({ at, why }) => `${at}  ${why}`));
-        grown.push(`  ${path}: ${count} spelling(s), the baseline allows ${allowed}`);
-    }
-}
-// A baseline entry the tree has beaten is tightened, never failed: only this check may lower it (via writesBaselines),
-// so a shrink can't slip and can't become everyone else's merge conflict.
-const tightened = [];
-const next = { ...baseline };
-for (const [path, allowed] of scoped ? [] : Object.entries(baseline)) {
-    const now = perFile.get(path) ?? 0;
-    if (now < allowed) {
-        tightened.push(`${path}: ${allowed} → ${now}`);
-        if (now === 0) {
-            delete next[path];
-        } else {
-            next[path] = now;
-        }
-    }
-}
-if (tightened.length > 0) {
-    if (writesBaselines()) {
-        writeFileSync(BASELINE, `${JSON.stringify(Object.fromEntries(Object.entries(next).sort(([a], [b]) => a.localeCompare(b))), null, 4)}\n`);
-        console.log(`path-literals: tightened _tools/checks/baselines/path-literals.json to what the tree has (${tightened.join(", ")}); it rides the next commit`);
-    } else {
-        console.log(
-            `path-literals: the tree beats its baseline (${tightened.join(", ")}); the checkout that commits tightens _tools/checks/baselines/path-literals.json on its next run`,
-        );
-    }
-}
+const grown = over.flatMap(({ key, count, allowed }) => [
+    ...findings.filter(({ at }) => at.startsWith(`${key}:`)).map(({ at, why }) => `${at}  ${why}`),
+    `  ${key}: ${count} spelling(s), the baseline allows ${allowed}`,
+]);
 
 if (grown.length > 0) {
     for (const line of grown) {

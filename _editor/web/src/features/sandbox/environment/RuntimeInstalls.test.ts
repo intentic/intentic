@@ -2,19 +2,17 @@
 // never resolve without one.
 import "@intentic/testing/dom";
 import type { EnvironmentRecurring } from "@intentic/api-contract";
-import { it, expect, afterEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Fetch is stubbed to fail, mirroring an offline sandbox, so every mark paints its glyph tier.
-hoisted(() => {
+(() => {
     globalThis.fetch = (() => Promise.resolve({ ok: false })) as unknown as typeof globalThis.fetch;
-});
+})();
 
 // Starting a turn opens a chat through app-wide singletons; this captures the press instead.
 const started: string[] = [];
-mock.module(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt: string) => started.push(prompt) }));
+jest.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt: string) => started.push(prompt) }));
 
 const { default: RuntimeInstalls } = await import("./RuntimeInstalls.vue");
 

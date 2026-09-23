@@ -10,7 +10,7 @@ import {
     providerLabel,
     providerSpec,
 } from "@intentic/sandbox-contract";
-import { Button, formatTokens, Notice, type NoticeModel, Row, RowGroup, SegmentedControl } from "@intentic/ui";
+import { Button, formatTokens, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { hasSignIn, providerReady } from "../../chat/session/access";
@@ -21,6 +21,7 @@ import { refreshConnections, subscriptionOnly } from "../../chat/accounts/useCha
 import { blockedReason, isSpent, liveUsage, type PlanHeadroom, planHeadroom } from "../../chat/session/usageStatus";
 import { useSandbox } from "../client/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
+import EstatePicker from "./EstatePicker.vue";
 import ConnectionRow from "./ConnectionRow.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -79,24 +80,13 @@ const ROUTED_ROW = computed((): Record<KeyedProvider, { title: string }> => ({
 
 /* Codex, Kimi and Gemini own no native account: the subscription row IS their connection. */
 const hasNativeAccounts = computed(() => hasSignIn(managedProvider.value) && !subscriptionOnly(managedProvider.value));
-/* WHICH ESTATE TO SIGN IN TO, and the ONLY provider fact this card asks the user for before a sign-in starts. */
-const estates = computed(() => {
-    const variants = mintedVariants(managedProvider.value) ?? [];
-    return variants.length > 1 ? variants : [];
-});
-// Defaults to the list's first entry (the daemon's own default); reset on provider switch.
+// Which estate to sign in to, the only provider fact asked before a sign-in starts; reset on provider switch.
 const estate = ref<string | undefined>(undefined);
 watch(managedProvider, () => {
     estate.value = undefined;
 });
-const chosenEstate = computed<string>({
-    get: () => estate.value ?? estates.value[0]?.id ?? ``,
-    set: (value) => {
-        estate.value = value;
-    },
-});
-// Blank estate means no choice offered; the daemon reads blank as "take the default".
-const connectHere = (): void => void startConnect(chosenEstate.value === `` ? undefined : chosenEstate.value);
+const offersEstates = computed(() => (mintedVariants(managedProvider.value)?.length ?? 0) > 1);
+const connectHere = (): void => void startConnect(estate.value);
 // Grok holds a single account (OpenCode owns the xAI credential); hides "connect another" once linked.
 const canConnectMore = computed(() => managedProvider.value !== `grok` || managedAccounts.value.length === 0);
 // Whether a sign-in is live for this row; switching providers mid-sign-in hides the flow, not moves it.
@@ -283,9 +273,7 @@ watch(() => route.query[`connect`], focusConnect);
                     <span
                         class="h-1.5 w-1.5 shrink-0 rounded-full"
                         :class="!accountsLoaded ? 'bg-content/25' : providerReady(tab.value) ? 'bg-success' : 'bg-content/25'"
-                        :aria-label="
-                            !accountsLoaded ? `checking` : providerReady(tab.value) ? `connected` : t(`sandbox.aiAccountSection.notConnected`)
-                        "
+                        :aria-label="!accountsLoaded ? `checking` : providerReady(tab.value) ? `connected` : t(`shared.notConnected`)"
                     />
                     {{ tab.label }}
                     <!-- "Free" shown on the chip itself, not only after opening it, so comparing providers doesn't require opening each one. -->
@@ -350,7 +338,7 @@ watch(() => route.query[`connect`], focusConnect);
                     <template #control>
                         <Button
                             v-if="account.needsReauth && canConnectMore && !nativeFlowLive"
-                            :label="t(`sandbox.aiAccountSection.reconnect`)"
+                            :label="t(`shared.reconnect`)"
                             size="small"
                             :loading="accountBusy === managedProvider"
                             @click="connectHere"
@@ -371,7 +359,7 @@ watch(() => route.query[`connect`], focusConnect);
                     v-if="accountRows.length === 0"
                     :title="t(`sandbox.aiAccountSection.account`, { managedLabel })"
                     state="missing"
-                    :note="flowNote(nativeFlowLive) ?? t(`sandbox.aiAccountSection.notConnected`)"
+                    :note="flowNote(nativeFlowLive) ?? t(`shared.notConnected`)"
                     :note-busy="nativeFlowLive && connectSent"
                 >
                     <template #control>
@@ -389,16 +377,14 @@ watch(() => route.query[`connect`], focusConnect);
                             <template #icon><Icon name="link" /></template>
                         </Button>
                     </template>
-                    <template v-if="nativeFlowLive || estates.length > 0" #below>
+                    <template v-if="nativeFlowLive || offersEstates" #below>
                         <!-- Estate chooser sits where the sign-in unfolds and is replaced by it, since choosing the estate is the connect's first step, not a separate setting. -->
                         <ConnectFlow v-if="nativeFlowLive" kind="native" :provider="managedProvider" />
-                        <SegmentedControl
+                        <EstatePicker
                             v-else
-                            v-model="chosenEstate"
-                            size="xs"
-                            wrap
-                            :options="estates.map((variant) => ({ label: variant.label, value: variant.id }))"
-                            :aria-label="t(`sandbox.aiAccountSection.plan`, { managedLabel })"
+                            v-model="estate"
+                            :provider="managedProvider"
+                            :label="t(`sandbox.aiAccountSection.plan`, { managedLabel })"
                         />
                     </template>
                 </ConnectionRow>
@@ -423,15 +409,13 @@ watch(() => route.query[`connect`], focusConnect);
                             @click.stop="cancelConnect"
                         />
                     </template>
-                    <template v-if="nativeFlowLive || estates.length > 0" #below>
+                    <template v-if="nativeFlowLive || offersEstates" #below>
                         <ConnectFlow v-if="nativeFlowLive" kind="native" :provider="managedProvider" />
-                        <SegmentedControl
+                        <EstatePicker
                             v-else
-                            v-model="chosenEstate"
-                            size="xs"
-                            wrap
-                            :options="estates.map((variant) => ({ label: variant.label, value: variant.id }))"
-                            :aria-label="t(`sandbox.aiAccountSection.plan`, { managedLabel })"
+                            v-model="estate"
+                            :provider="managedProvider"
+                            :label="t(`sandbox.aiAccountSection.plan`, { managedLabel })"
                         />
                     </template>
                 </ConnectionRow>
@@ -468,7 +452,7 @@ watch(() => route.query[`connect`], focusConnect);
                     :key="`connect-${routedProvider}`"
                     :title="ROUTED_ROW[routedProvider].title"
                     state="missing"
-                    :note="flowNote(routedFlowLive) ?? t(`sandbox.aiAccountSection.notConnected`)"
+                    :note="flowNote(routedFlowLive) ?? t(`shared.notConnected`)"
                     :note-busy="routedFlowLive && connectSent"
                 >
                     <template #control>
@@ -526,7 +510,7 @@ watch(() => route.query[`connect`], focusConnect);
                         <span class="flex w-[1.125rem] shrink-0 justify-center">
                             <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
                         </span>
-                        {{ expanded ? t(`sandbox.aiAccountSection.showLess`) : t(`sandbox.aiAccountSection.showMoreAccounts`, { collapsedCount }) }}
+                        {{ expanded ? t(`shared.showLess`) : t(`sandbox.aiAccountSection.showMoreAccounts`, { collapsedCount }) }}
                     </span>
                 </template>
             </Row>

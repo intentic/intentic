@@ -1,7 +1,6 @@
 // Asserts which reading the badge shows in each state, not its markup; every number is final so nothing here is
 // provisional. Mounted with plain Vue, as markdownFigures.test does.
 import "@intentic/testing/dom";
-import { describe, it, expect } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 
 import ReviewStat from "./ReviewStat.vue";

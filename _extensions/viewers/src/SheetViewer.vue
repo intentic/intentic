@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, SegmentedControl } from "@intentic/extension-ui";
+import { Icon, SegmentedControl, useLatest } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { SheetRows } from "./sheetProtocol";
 import { createSheetWorkerClient } from "./sheetWorkerClient";
@@ -14,9 +14,8 @@ const active = ref(``);
 const activeRows = ref<SheetRows>([]);
 const loading = ref(true);
 const error = ref<string>();
-// Drops a stale parse when the open file changes, and a stale render when tabs are switched in quick succession.
-let seq = 0;
-let renderSeq = 0;
+const latestFile = useLatest();
+const latestSheet = useLatest();
 let client: ReturnType<typeof createSheetWorkerClient> | undefined;
 
 const tabOptions = computed(() => sheets.value.map((name) => ({ label: name, value: name })));
@@ -27,25 +26,26 @@ const columnCount = computed(() => activeRows.value.reduce((widest, row) => Math
 const headerRow = computed(() => activeRows.value[0]);
 const bodyRows = computed(() => activeRows.value.slice(1));
 
-const renderSheet = async (name: string, id: number, target: NonNullable<typeof client>): Promise<void> => {
-    const selected = ++renderSeq;
+// A sheet rendered for a workbook since replaced is dropped too: every load swaps `client` first.
+const renderSheet = async (name: string, target: NonNullable<typeof client>): Promise<void> => {
+    const isLatest = latestSheet();
     active.value = name;
     activeRows.value = [];
     loading.value = true;
     error.value = undefined;
     try {
         const rows = await target.render(name);
-        if (id !== seq || selected !== renderSeq || target !== client) {
+        if (!isLatest() || target !== client) {
             return;
         }
         activeRows.value = rows;
     } catch (caught) {
-        if (id !== seq || selected !== renderSeq || target !== client) {
+        if (!isLatest() || target !== client) {
             return;
         }
         error.value = caught instanceof Error ? caught.message : `Could not read this spreadsheet.`;
     } finally {
-        if (id === seq && selected === renderSeq && target === client) {
+        if (isLatest() && target === client) {
             loading.value = false;
         }
     }
@@ -53,13 +53,12 @@ const renderSheet = async (name: string, id: number, target: NonNullable<typeof 
 
 const select = (name: string): void => {
     if (client !== undefined) {
-        void renderSheet(name, seq, client);
+        void renderSheet(name, client);
     }
 };
 
 const render = async (source: Blob): Promise<void> => {
-    const id = ++seq;
-    renderSeq += 1;
+    const isLatest = latestFile();
     client?.close();
     client = undefined;
     loading.value = true;
@@ -69,17 +68,17 @@ const render = async (source: Blob): Promise<void> => {
     activeRows.value = [];
     try {
         const buffer = await source.arrayBuffer();
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         const { default: SheetWorker } = await import(`./sheetWorker?worker`);
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         const next = createSheetWorkerClient(new SheetWorker());
         client = next;
         const names = await next.load(buffer);
-        if (id !== seq || next !== client) {
+        if (!isLatest() || next !== client) {
             return;
         }
         sheets.value = names;
@@ -88,9 +87,9 @@ const render = async (source: Blob): Promise<void> => {
             loading.value = false;
             return;
         }
-        await renderSheet(first, id, next);
+        await renderSheet(first, next);
     } catch (caught) {
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         error.value = caught instanceof Error ? caught.message : `Could not read this spreadsheet.`;
@@ -103,11 +102,7 @@ watch(
     () => blob,
     (next) => void render(next),
 );
-onBeforeUnmount(() => {
-    seq += 1;
-    renderSeq += 1;
-    client?.close();
-});
+onBeforeUnmount(() => client?.close());
 </script>
 
 <template>

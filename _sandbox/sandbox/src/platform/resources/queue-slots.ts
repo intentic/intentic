@@ -1,16 +1,14 @@
-import { readdir, readFile, readlink } from "node:fs/promises";
+import { readdir, readlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readText } from "./cgroup.js";
+import { listPids, procUnits } from "./process-scan.js";
 import { parseProcStat } from "./proc-stat.js";
 
 // Holders are read off fd 9, which queue-run keeps open on its slot; /proc/locks omits this namespace's own flocks.
 const QUEUE_SLOT_FD = 9;
 
-// USER_HZ, the unit /proc/<pid>/stat counts start time in; node cannot ask `getconf CLK_TCK`.
-const CLOCK_TICKS_PER_SECOND = 100;
-
 const SLOT_FILE = /^slot\.\d+$/u;
-const NUMERIC = /^\d+$/u;
 
 export interface HeldSlot {
     readonly pool: string;
@@ -42,14 +40,10 @@ export const slotFromFdTarget = (root: string, target: string): { readonly pool:
     return { pool, slot };
 };
 
-const holderAgeSeconds = async (pid: number, uptimeSeconds: number): Promise<number | undefined> => {
-    const started = await readFile(`/proc/${pid}/stat`, "utf8")
-        .then(parseProcStat)
-        .catch(() => undefined);
-    if (started?.startTimeTicks === undefined) {
-        return undefined;
-    }
-    return Math.max(0, Math.round(uptimeSeconds - started.startTimeTicks / CLOCK_TICKS_PER_SECOND));
+const holderAgeSeconds = async (pid: number, uptimeSeconds: number, ticksPerSecond: number): Promise<number | undefined> => {
+    const stat = await readText(`/proc/${pid}/stat`);
+    const started = stat === undefined ? undefined : parseProcStat(stat)?.startTimeTicks;
+    return started === undefined ? undefined : Math.max(0, Math.round(uptimeSeconds - started / ticksPerSecond));
 };
 
 // One row per slot: a pipeline inherits fd 9 to every member, and the oldest of them took it.
@@ -67,24 +61,21 @@ export const oldestPerSlot = (holders: readonly HeldSlot[]): HeldSlot[] => {
 
 // Never throws: a missing queue directory is a sandbox that has not run a heavy command yet.
 export const heldSlots = async (root = queueRoot()): Promise<HeldSlot[]> => {
-    const [uptimeText, entries] = await Promise.all([readFile("/proc/uptime", "utf8").catch(() => ""), readdir("/proc").catch(() => [] as string[])]);
-    const uptimeSeconds = Number(uptimeText.trim().split(/\s+/u)[0]);
+    const [uptimeText, pids, { ticksPerSecond }] = await Promise.all([readText("/proc/uptime"), listPids(), procUnits()]);
+    const uptimeSeconds = Number((uptimeText ?? "").trim().split(/\s+/u)[0]);
     if (!Number.isFinite(uptimeSeconds)) {
         return [];
     }
     const found = await Promise.all(
-        entries
-            .filter((entry) => NUMERIC.test(entry))
-            .map(async (entry): Promise<HeldSlot | undefined> => {
-                const pid = Number(entry);
-                const target = await readlink(`/proc/${pid}/fd/${QUEUE_SLOT_FD}`).catch(() => undefined);
-                const slot = target === undefined ? undefined : slotFromFdTarget(root, target);
-                if (slot === undefined) {
-                    return undefined;
-                }
-                const age = await holderAgeSeconds(pid, uptimeSeconds);
-                return age === undefined ? undefined : { ...slot, pid, holderAgeSeconds: age };
-            }),
+        pids.map(async (pid): Promise<HeldSlot | undefined> => {
+            const target = await readlink(`/proc/${pid}/fd/${QUEUE_SLOT_FD}`).catch(() => undefined);
+            const slot = target === undefined ? undefined : slotFromFdTarget(root, target);
+            if (slot === undefined) {
+                return undefined;
+            }
+            const age = await holderAgeSeconds(pid, uptimeSeconds, ticksPerSecond);
+            return age === undefined ? undefined : { ...slot, pid, holderAgeSeconds: age };
+        }),
     );
     return oldestPerSlot(found.filter((slot) => slot !== undefined));
 };

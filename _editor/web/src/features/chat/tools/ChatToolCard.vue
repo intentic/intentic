@@ -78,7 +78,7 @@ const openFile = surface.openFile;
 // A picture opens in the conversation's viewer where there is one, else as a file.
 const viewPicture = surface.viewPicture ?? (openFile === undefined ? undefined : (_toolId: string, path: string) => openFile(path));
 const pictureHint = computed(() =>
-    surface.viewPicture !== undefined ? t(`chat.chatToolCard.viewLarger`) : openFile === undefined ? undefined : t(`chat.chatToolCard.openInWorkspace`),
+    surface.viewPicture !== undefined ? t(`chat.chatToolCard.viewLarger`) : openFile === undefined ? undefined : t(`shared.openInWorkspace2`),
 );
 
 // A delegation's own calls, when the page counted them (`nested`) instead of carrying them. Read on the press that
@@ -184,7 +184,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 v-else-if="location && openFile"
                 type="button"
                 class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
-                v-tooltip.top="t(`chat.chatToolCard.openInWorkspace`)"
+                v-tooltip.top="t(`shared.openInWorkspace2`)"
                 @click="openFile(location.path, location.line)"
             >
                 {{ tool.target ?? location.path }}
@@ -213,8 +213,8 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 type="button"
                 class="shrink-0 transition-opacity hover:text-content"
                 :class="[running && live ? '' : 'opacity-0 group-hover/tool:opacity-100', { 'ml-auto': !unfinished && !view.summary }]"
-                v-tooltip.top="t(`chat.chatToolCard.watchInTerminal`)"
-                :aria-label="t(`chat.chatToolCard.watchInTerminal`)"
+                v-tooltip.top="t(`shared.watchInTerminal`)"
+                :aria-label="t(`shared.watchInTerminal`)"
                 @click="surface.watchTerminal(agentTerminal)"
             >
                 <Icon name="desktop" class="text-2xs" />
@@ -311,7 +311,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                     :type="openFile ? 'button' : undefined"
                     class="flex items-baseline gap-1.5 rounded-md px-1.5 py-0.5 text-left font-mono text-2xs text-muted transition-colors"
                     :class="openFile && 'hover:bg-overlay hover:text-content'"
-                    v-tooltip.top="openFile ? t(`chat.chatToolCard.openInWorkspace`) : undefined"
+                    v-tooltip.top="openFile ? t(`shared.openInWorkspace2`) : undefined"
                     @click="openFile?.(entry.path, entry.line)"
                 >
                     <span class="truncate">{{ entry.path }}</span>

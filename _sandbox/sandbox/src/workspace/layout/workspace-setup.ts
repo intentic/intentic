@@ -1,7 +1,7 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathExists } from "../../path-exists.js";
-import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
+import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { isManifest, managerFromPackageJson, recipeFor, type SetupRecipe } from "@intentic/workspace-setup";
 import { onPath } from "../../platform/boot/on-path.js";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
@@ -13,14 +13,15 @@ import {
     unresolvedSummary,
     type UnresolvedPackage,
 } from "../deps/dependency-drift.js";
+import { walkDirs } from "./dir-walk.js";
 
 // Workspace readiness: whether a project's dependencies are actually installed, and the one-shot install that fixes it.
 // A dropped project arrives without node_modules (wrong platform, slow to upload); present files aren't a working
 // workspace.
 // Read by the import UI, the post-edit type-check, a failed pnpm test's explanation, and the agent's own tools.
 
-// Bounds the scan like repo-discovery, shallower: a manifest this deep belongs to its own workspace member.
-const MAX_DEPTH = 3;
+// Levels below root the scan lists, shallower than repo-discovery: a manifest deeper belongs to its own workspace member.
+const MAX_DEPTH = 2;
 const MAX_DIRS = 5_000;
 
 export interface WorkspaceProject {
@@ -61,37 +62,18 @@ const packageManagerField = async (dir: string, names: readonly string[]): Promi
 };
 
 // Every project under root; the walk stops at the first manifest on a branch, so a monorepo counts as one project.
-// Hidden dirs, junk dirs, and the reference shelf are never descended, same pruning as the tree walk.
+// The reference shelf is never descended either.
 export const discoverProjects = async (root: string): Promise<WorkspaceProject[]> => {
     const projects: WorkspaceProject[] = [];
-    let visited = 0;
-    const walk = async (dir: string, rel: string, depth: number): Promise<void> => {
-        if (depth > MAX_DEPTH || visited >= MAX_DIRS) {
-            return;
-        }
-        visited += 1;
-        const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    await walkDirs(root, { maxDepth: MAX_DEPTH, maxDirs: MAX_DIRS }, async (dir, entries, subdirs) => {
         const names = entries.map((entry) => entry.name);
-        if (names.some(isManifest)) {
-            const recipe = recipeFor(names, await packageManagerField(dir, names));
-            if (recipe !== undefined) {
-                projects.push({ dir: rel, recipe });
-                return;
-            }
+        const recipe = names.some(isManifest) ? recipeFor(names, await packageManagerField(dir.path, names)) : undefined;
+        if (recipe !== undefined) {
+            projects.push({ dir: dir.rel, recipe });
+            return [];
         }
-        await Promise.all(
-            entries
-                .filter(
-                    (entry) =>
-                        entry.isDirectory() &&
-                        !entry.name.startsWith(".") &&
-                        !IGNORED_DIRS.has(entry.name) &&
-                        !(rel === "" && entry.name === REFERENCE_DIR),
-                )
-                .map((entry) => walk(join(dir, entry.name), rel === "" ? entry.name : `${rel}/${entry.name}`, depth + 1)),
-        );
-    };
-    await walk(root, "", 1);
+        return subdirs.filter((subdir) => subdir.rel !== REFERENCE_DIR);
+    });
     return projects.toSorted((left, right) => left.dir.localeCompare(right.dir));
 };
 
@@ -111,7 +93,10 @@ export const setupStateOf = async (
         if (project.recipe.ecosystem !== "node") {
             return { state: "ready" };
         }
-        const [unresolved, outdated] = await Promise.all([unresolvedDependencies(join(root, project.dir)), outdatedDependencies(join(root, project.dir))]);
+        const [unresolved, outdated] = await Promise.all([
+            unresolvedDependencies(join(root, project.dir)),
+            outdatedDependencies(join(root, project.dir)),
+        ]);
         if (unresolved.length === 0 && outdated.length === 0) {
             return { state: "ready" };
         }
@@ -185,10 +170,7 @@ export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string 
             ? `- ${where(status)}: needs \`${status.recipe.manager}\`, which is not installed in this sandbox. Do not attempt the install; say so if it blocks the task.`
             : `- ${where(status)}: has never been set up and needs \`${status.recipe.command}\`. Do not run it inside this turn; ask the owner to install it.`,
     );
-    const staleLines = stale.map(
-        (status) =>
-            `- ${where(status)}: ${behindSummary(status)}.`,
-    );
+    const staleLines = stale.map((status) => `- ${where(status)}: ${behindSummary(status)}.`);
     return [
         ...(lines.length === 0 ? [] : [SETUP_NOTICE_HEADER, "(a dropped project arrives without them on purpose):", ...lines]),
         ...(staleLines.length === 0

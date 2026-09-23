@@ -4,7 +4,6 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, afterEach } from "bun:test";
 import { defaultGit, gitSpawnStats, politeGit } from "./exec.js";
 
 // Pins defaultGit's two additions over execFile against a real repo: a larger output buffer and a retry on index.lock

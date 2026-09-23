@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { createGarageProvider } from "./garage.js";
 import { createGarageBucketProvider } from "./garage-bucket.js";

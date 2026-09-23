@@ -1,5 +1,5 @@
 import type { AdminOverview } from "@intentic/api-contract";
-import { hostedTier, isHostedTierId } from "@intentic/constants";
+import { hostedTier } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { trialEnabled } from "../trial/trial-pool.js";
@@ -43,9 +43,8 @@ export const adminOverview = async (prisma: PrismaClient, config: Config, now: (
             trialing: planCount(`trialing`),
             pastDue: planCount(`past_due`),
             canceled30d,
-            // Display arithmetic, never accounting: Stripe is the money's source of truth, and trialing rows pay
-            // nothing yet. A slot at a rung this ladder no longer has is counted at nothing rather than guessed at.
-            mrrUsd: activeSlots.reduce((sum, row) => sum + (row._sum.quantity ?? 0) * (isHostedTierId(row.tier) ? hostedTier(row.tier).priceUsd : 0), 0),
+            // Display arithmetic, never accounting: Stripe is the money's source of truth, and trialing rows pay nothing yet.
+            mrrUsd: activeSlots.reduce((sum, row) => sum + (row._sum.quantity ?? 0) * hostedTier(row.tier).priceUsd, 0),
         },
         hostedMachines,
         lanes: {

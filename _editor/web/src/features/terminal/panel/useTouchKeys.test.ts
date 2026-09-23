@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { type EffectScope, effectScope, nextTick } from "vue";
 import { controlCode, useTouchKeys } from "./useTouchKeys";
 
@@ -9,7 +8,7 @@ import { controlCode, useTouchKeys } from "./useTouchKeys";
 const scopes: EffectScope[] = [];
 
 const stage = () => {
-    const sendInput = mock((_data: string) => undefined);
+    const sendInput = jest.fn((_data: string) => undefined);
     const scope = effectScope();
     scopes.push(scope);
     const keys = scope.run(() => useTouchKeys(sendInput))!;

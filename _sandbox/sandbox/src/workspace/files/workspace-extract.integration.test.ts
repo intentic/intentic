@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, beforeEach, afterEach } from "bun:test";
 import { extractArchive, UnknownArchiveError } from "./workspace-extract.js";
 
 // Drives the real tar/gzip/unzip the daemon spawns, over real archives. The rules are covered with tar and gzip,

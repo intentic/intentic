@@ -1,4 +1,3 @@
-import { test, expect, afterEach, mock, jest } from "bun:test";
 import { stubGlobal } from "@intentic/testing/bun";
 import { type Breadcrumbs, createBreadcrumbs } from "./breadcrumbs.js";
 
@@ -55,7 +54,7 @@ test("console.warn and console.error are recorded and still reach the original",
 });
 
 test("a failed request records the path and the status, never the body or the query", async () => {
-    const fetchMock = mock(async () => new Response("nope", { status: 500 }));
+    const fetchMock = jest.fn(async () => new Response("nope", { status: 500 }));
     stubGlobal("fetch", fetchMock);
     const crumbs = start();
     await window.fetch("https://api.example.com/v1/login?token=SECRET", { method: "POST", body: JSON.stringify({ password: "hunter2" }) });
@@ -69,7 +68,7 @@ test("a failed request records the path and the status, never the body or the qu
 test("a successful request is not recorded, and its response passes through untouched", async () => {
     stubGlobal(
         "fetch",
-        mock(async () => new Response("ok", { status: 200 })),
+        jest.fn(async () => new Response("ok", { status: 200 })),
     );
     const crumbs = start();
     const response = await window.fetch("https://api.example.com/v1/ping");
@@ -82,7 +81,7 @@ test("a network error is recorded and re-thrown untouched", async () => {
     const offline = new TypeError("Failed to fetch");
     stubGlobal(
         "fetch",
-        mock(async () => {
+        jest.fn(async () => {
             throw offline;
         }),
     );

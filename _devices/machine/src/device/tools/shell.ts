@@ -6,7 +6,7 @@ import { sleep } from "@intentic/base/async";
 import { COMMAND_CLASS_LABELS, type CommandClass, type DeviceScopes, matchCommand } from "@intentic/sandbox-contract";
 import { assertPath, assertScope, rootsOf, ScopeError } from "../policy.js";
 import { crossInterpreter, type Interpreter, POWERSHELL_FLAGS, targetOf } from "../../environments/crossing.js";
-import { wslEnvironment } from "../../wsl.js";
+import { thisSide } from "../../wsl.js";
 
 // Running a command on somebody's device. The shell isn't negotiable per call: Windows gets PowerShell,
 // everything else gets the login shell (so PATH, nvm/asdf/mise shims and aliases work), and `describe` reports
@@ -47,10 +47,6 @@ export const shellFor = (
     const shell = process.env["SHELL"] ?? "/bin/sh";
     return { command: shell, args: (script) => ["-lc", script], label: shell };
 };
-
-// Read once per process: whether this agent runs inside a distro decides which way `in` can cross.
-let insideWsl: Promise<boolean> | undefined;
-const inWsl = (): Promise<boolean> => (insideWsl ??= wslEnvironment().then((environment) => environment !== undefined));
 
 export interface CollectedOutput {
     readonly text: string;
@@ -206,7 +202,7 @@ export const runCommand = async (
     const interpreter =
         target.kind === "native"
             ? await nativeInterpreter(input.command, input.cwd, scopes)
-            : crossInterpreter(target, input.command, input.cwd, { platform: process.platform, inWsl: await inWsl(), exists: existsSync });
+            : crossInterpreter(target, input.command, input.cwd, await thisSide(), existsSync);
     return await execute(interpreter, Math.min(input.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS));
 };
 

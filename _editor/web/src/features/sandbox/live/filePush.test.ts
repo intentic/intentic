@@ -1,12 +1,11 @@
 import "@intentic/testing/dom";
 import { ref } from "vue";
-import { it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
 
 // Needs jsdom: the stream router's import chain reaches the app's environment read at module eval.
 
-mock.module("../../../router", () => ({ router: { push: mock() } }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
-mock.module("../client/useSandbox", () => {
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../client/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
@@ -14,12 +13,12 @@ mock.module("../client/useSandbox", () => {
 });
 // Every name the app's graph imports from the daemon client, since bun links an ESM import against exactly what
 // this factory returns; only the two below are ever called here.
-mock.module("../client/sandboxClient", () => ({
-    sandboxJson: mock(),
-    sandboxRequest: mock(),
-    sandboxBlob: mock(),
-    sandboxUpload: mock(),
-    sandboxError: mock(async () => new Error(`unused`)),
+jest.mock("../client/sandboxClient", () => ({
+    sandboxJson: jest.fn(),
+    sandboxRequest: jest.fn(),
+    sandboxBlob: jest.fn(),
+    sandboxUpload: jest.fn(),
+    sandboxError: jest.fn(async () => new Error(`unused`)),
 }));
 
 import { STATE_DIR } from "@intentic/constants";
@@ -36,13 +35,13 @@ const SANDBOX = `sbx-1`;
 const APPROVALS = `${STATE_DIR}/config/approvals/`;
 
 let invalidated: unknown[][];
-let invalidateSpy: ReturnType<typeof spyOn>;
+let invalidateSpy: ReturnType<typeof jest.spyOn>;
 let disposables: { dispose: () => void }[];
 
 beforeEach(() => {
     invalidated = [];
     disposables = [];
-    invalidateSpy = spyOn(queryClient, `invalidateQueries`).mockImplementation(async (filters) => {
+    invalidateSpy = jest.spyOn(queryClient, `invalidateQueries`).mockImplementation(async (filters) => {
         const resolved = typeof filters === `function` ? filters() : filters;
         invalidated.push([...(resolved?.queryKey ?? [])]);
     });
@@ -55,8 +54,8 @@ afterEach(() => {
     }
 });
 
-const woken = (paths: readonly string[]): ReturnType<typeof mock> => {
-    const listener = mock();
+const woken = (paths: readonly string[]): ReturnType<typeof jest.fn> => {
+    const listener = jest.fn();
     disposables.push(onFilesChanged(paths, listener));
     return listener;
 };

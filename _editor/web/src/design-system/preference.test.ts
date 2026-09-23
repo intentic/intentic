@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach, spyOn, jest } from "bun:test";
 import { definePreference, receivePreferenceChange } from "@intentic/ui/preference";
 
 // Pins the defect this primitive exists for: a popped-out panel is a whole other window with its own modules and
@@ -127,8 +126,8 @@ describe(`storage that is not there at all`, () => {
         const boom = (): never => {
             throw new Error(`site data is off`);
         };
-        spyOn(Storage.prototype, `getItem`).mockImplementation(boom);
-        spyOn(Storage.prototype, `setItem`).mockImplementation(boom);
+        jest.spyOn(Storage.prototype, `getItem`).mockImplementation(boom);
+        jest.spyOn(Storage.prototype, `setItem`).mockImplementation(boom);
 
         const size = definePreference<string>({ key: `ui-size`, read: (raw) => raw ?? `compact`, write: (value) => value });
         size.value = `large`;

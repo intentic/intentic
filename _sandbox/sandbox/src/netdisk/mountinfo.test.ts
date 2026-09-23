@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { isReadOnly, mountAt, parseMountinfo } from "./mountinfo.js";
 
 // Real mountinfo lines, not an assumed shape: the overlay root a container boots on, a cifs mount each way, and a

@@ -4,7 +4,8 @@
 // machine's time. Both read the package's own bunfig.toml (preload, ignore patterns) from the working directory.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { junitFile, SOURCE_CONDITION, SUITE_TIMEOUTS } from "../../scripts/verify/failure-units.mjs";
+import { INTEGRATION_MARKERS, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
+import { junitFile, SOURCE_CONDITION } from "../../scripts/verify/failure-units.mjs";
 import { standaloneWorkers } from "../../scripts/verify/test-workers.mjs";
 
 // Unit: purely a hang detector, since nothing in a unit suite waits on anything. Integration: real work on a shared
@@ -13,8 +14,8 @@ const { unit: UNIT_TIMEOUT_MS, integration: INTEGRATION_TIMEOUT_MS } = SUITE_TIM
 
 // The kind is in the file name; `bun test` matches a positional filter against the path, so these select the second
 // run and the ignore globs exclude it from the first.
-const INTEGRATION_FILTERS = [".integration.test.", ".e2e.test."];
-const INTEGRATION_GLOBS = ["**/*.integration.test.*", "**/*.e2e.test.*"];
+const INTEGRATION_FILTERS = INTEGRATION_MARKERS.map((marker) => `.${marker}.test.`);
+const INTEGRATION_GLOBS = INTEGRATION_MARKERS.map((marker) => `**/*.${marker}.test.*`);
 
 // Worker count per run: `TEST_WORKERS` is how a repo-wide fan-out bounds memory (test-workers.mjs sizes it to the
 // cgroup); a lone run sizes itself to the box, since one worker per core on the web package is 2 GiB a core.
@@ -31,7 +32,7 @@ const report = (kind) =>
         ? []
         : ["--reporter=junit", `--reporter-outfile=${junitFile(junitDir, JSON.parse(readFileSync("package.json", "utf8")).name, kind)}`];
 
-// `--isolate`: a fresh module registry per file, so a `mock.module` one suite installs never reaches the next.
+// `--isolate`: a fresh module registry per file, so a `jest.mock` one suite installs never reaches the next.
 const run = (extra) => {
     const result = spawnSync("bun", ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...extra, ...filters], {
         stdio: "inherit",

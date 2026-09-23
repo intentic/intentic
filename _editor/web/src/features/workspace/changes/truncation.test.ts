@@ -1,5 +1,4 @@
 import type { RepoChanges } from "@intentic/api-contract";
-import { describe, it, expect } from "bun:test";
 import { sideTotal, truncatedOn, truncatedTotal } from "./truncation";
 
 const repo = (truncated?: RepoChanges["truncated"]): RepoChanges => ({

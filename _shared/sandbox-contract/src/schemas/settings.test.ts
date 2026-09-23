@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { RepoChecksFileSchema, RuleSchema, SandboxSettingsSchema } from "./settings.js";
 
 // A rule that saves cleanly and silently does nothing is the failure this schema exists to refuse: an action, and a
@@ -37,13 +36,24 @@ describe(`where a command lives`, () => {
 
     test(`a repository declares edit, turn and land checks, and no push check`, () => {
         const file = (checks: unknown[]) => RepoChecksFileSchema.safeParse({ checks }).success;
-        expect(file([{ when: `edit`, run: `lint {file}` }, { when: `turn`, run: `pnpm verify:turn` }, { when: `land`, run: `pnpm verify` }])).toBe(true);
+        expect(
+            file([
+                { when: `edit`, run: `lint {file}` },
+                { when: `turn`, run: `pnpm verify:turn` },
+                { when: `land`, run: `pnpm verify` },
+            ]),
+        ).toBe(true);
         expect(file([{ when: `push`, run: `pnpm verify:push` }])).toBe(false);
     });
 
     test(`a land check is one per repository and narrows by no path`, () => {
         const file = (checks: unknown[]) => RepoChecksFileSchema.safeParse({ checks }).success;
-        expect(file([{ when: `land`, run: `pnpm verify` }, { when: `land`, run: `pnpm test` }])).toBe(false);
+        expect(
+            file([
+                { when: `land`, run: `pnpm verify` },
+                { when: `land`, run: `pnpm test` },
+            ]),
+        ).toBe(false);
         expect(file([{ when: `land`, run: `pnpm verify`, paths: [`src/**`] }])).toBe(false);
     });
 });

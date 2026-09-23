@@ -1,5 +1,5 @@
 import { readdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import type { Log } from "@intentic/local-agent";
 import { clearableOnDevice, type DeviceConflict } from "@intentic/sandbox-contract";
 
@@ -58,75 +58,37 @@ export const isSafeRelativePath = (path: string): boolean =>
 // out of the sweep rather than mangled into a different path.
 export const isShellSafePath = (path: string): boolean => isSafeRelativePath(path) && /^[A-Za-z0-9._][A-Za-z0-9._/-]*$/.test(path);
 
-// Whether this directory holds nothing but ignored content, all the way down. An entry the session would have carried
-// makes it false; so does an entry that cannot be read, or one that is neither file nor directory — unknown is never
-// read as derived. An EMPTY directory is a husk: there is nothing in it to lose.
-export const isDerivedHusk = async (root: string, path: string, ignored: (path: string) => boolean): Promise<boolean> => {
+// Whether `path` holds only ignored content (empty counts, unreadable or `.git` never does); `found` gets the outermost husks inside it.
+export const isDerivedHusk = async (root: string, path: string, ignored: (path: string) => boolean, found: string[] = []): Promise<boolean> => {
     const entries = await readdir(join(root, path), { withFileTypes: true }).catch(() => undefined);
     if (entries === undefined) {
         return false;
     }
+    let husk = true;
+    const nested: string[] = [];
     for (const entry of entries) {
-        const child = `${path}/${entry.name}`;
-        if (entry.name === REPOSITORY) {
-            return false;
-        }
-        if (ignored(child)) {
+        const child = posix.join(path, entry.name);
+        if (entry.name !== REPOSITORY && ignored(child)) {
             continue;
         }
-        if (!entry.isDirectory()) {
-            return false;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- depth-first by design, and the common case returns on the first real file
-        if (!(await isDerivedHusk(root, child, ignored))) {
-            return false;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- depth-first by design; the walk prunes at every ignore match
+        if (entry.name !== REPOSITORY && entry.isDirectory() && (await isDerivedHusk(root, child, ignored, found))) {
+            nested.push(child);
+        } else {
+            husk = false;
         }
     }
-    return true;
+    if (!husk) {
+        found.push(...nested);
+    }
+    return husk;
 };
 
-// Walks the synced folder once, pruning at every ignore match, and returns the OUTERMOST directories holding nothing
-// but ignored content. Outermost because a husk inside a husk goes with its parent, and because each one is asked about
-// by name afterwards. The sync root itself is never returned even when the whole tree reads as residue: this sweeps
-// inside a folder, it does not empty one.
+// The outermost husks under the sync root, never the root itself: this sweeps inside a folder, it does not empty one.
 export const findDerivedHusks = async (root: string, ignored: (path: string) => boolean): Promise<string[]> => {
-    const husks: string[] = [];
-    const walk = async (path: string): Promise<boolean> => {
-        const entries = await readdir(path === "" ? root : join(root, path), { withFileTypes: true }).catch(() => undefined);
-        if (entries === undefined) {
-            return false;
-        }
-        let husk = true;
-        const nested: string[] = [];
-        for (const entry of entries) {
-            const child = path === "" ? entry.name : `${path}/${entry.name}`;
-            if (entry.name === REPOSITORY) {
-                husk = false;
-                continue;
-            }
-            if (ignored(child)) {
-                continue;
-            }
-            if (!entry.isDirectory()) {
-                husk = false;
-                continue; // a real file here, but residue may still sit deeper: the siblings are still worth walking
-            }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- depth-first by design; the walk prunes at every ignore match
-            if (await walk(child)) {
-                nested.push(child);
-            } else {
-                husk = false;
-            }
-        }
-        // A husk reports itself to its parent and keeps its own quiet; only a directory that is NOT residue has to name
-        // the residue inside it.
-        if (!husk) {
-            husks.push(...nested);
-        }
-        return husk;
-    };
-    await walk("");
-    return husks;
+    const found: string[] = [];
+    await isDerivedHusk(root, "", ignored, found);
+    return found;
 };
 
 export interface ResidueExec {
@@ -242,7 +204,12 @@ export const sweepDerivedResidue = async (args: {
     if (husks.length === 0) {
         return [];
     }
-    const absent = await absentInSandbox(args.exec, args.alias, args.remoteDir, [...husks, ...husks.map(parentOf)].filter((path) => path !== ""));
+    const absent = await absentInSandbox(
+        args.exec,
+        args.alias,
+        args.remoteDir,
+        [...husks, ...husks.map(parentOf)].filter((path) => path !== ""),
+    );
     const sweepable = sweepableHusks(husks, absent);
     const removed: string[] = [];
     for (const path of sweepable) {
@@ -252,7 +219,9 @@ export const sweepDerivedResidue = async (args: {
         }
     }
     if (removed.length > 0) {
-        args.log(`  swept ${removed.length} director${removed.length === 1 ? "y" : "ies"} of build output the sandbox no longer has: ${removed.join(", ")}`);
+        args.log(
+            `  swept ${removed.length} director${removed.length === 1 ? "y" : "ies"} of build output the sandbox no longer has: ${removed.join(", ")}`,
+        );
     }
     return removed;
 };

@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { createGzip } from "node:zlib";
-import { test, expect } from "bun:test";
 import { pack } from "tar-stream";
 import { fakeFiles } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";

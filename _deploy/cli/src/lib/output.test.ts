@@ -1,5 +1,4 @@
 import type { EngineEvent } from "@intentic/engine";
-import { test, expect, afterEach } from "bun:test";
 import { loadConfig } from "../env.config.js";
 import { columns, createOutput, createRedactor } from "./output.js";
 

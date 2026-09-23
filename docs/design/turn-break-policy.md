@@ -74,13 +74,15 @@ second place to arm the same thing is how the surfaces drifted apart in the firs
 is the single helper every surface renders an instant through, near as a countdown and far as a clock time
 *with* its wait. "About 244 min" cannot be said any more.
 
-**The daemon owns every ladder** (`turn-resume.ts`). `runLimitPass` became `runHeldPass`, routing by the hold's
-reason: a limit keeps its one appointment at the published reset, a stopped turn climbs `RETRY_LADDER_MS`
-(5s/15s/45s) and then stands down through `abandonResume` with a sentence naming the count it spent. The
+**The daemon owns every ladder** (`turn-resume.ts`). A conversation holds at most one stranded turn, whatever wall
+put it there, as `classifyFailure` decided it at the failure frame; one pass walks them all and routes each by its
+reason through `RUNGS`: a limit keeps its one appointment at the published reset, a stopped turn climbs
+`RETRY_LADDER_MS` (5s/15s/45s) and then stands down with a sentence naming the count it spent. The
 try count lives in the conversation actor's `resume.stopTries`, apart from the pending hold, because every turn
 start wipes that hold — including the ladder's own fire — so a count held there would reset itself on the very fire
 it bounds. Only a turn that settles with nothing held clears it (the actor's `turn-got-somewhere` event, sent when
-`performSettlement` finds no hold), which is the one honest proof the run is getting somewhere.
+`performSettlement` finds no hold), which is the one honest proof the run is getting somewhere; a hold on a wall of
+the provider's (an outage, a refused credential) clears it too, since it says nothing about whether the run stalls.
 
 **One reader, one writer.** `breakPolicyFor(services, conversationId, ending)` replaced three near-identical
 `*Armed` functions; `agents.breakPolicy` replaced three near-identical routes; `setBreakPolicy` replaced three

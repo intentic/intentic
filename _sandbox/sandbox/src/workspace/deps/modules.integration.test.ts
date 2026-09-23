@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { readModules } from "./modules.js";
 
 const scaffold = async (files: Record<string, string>): Promise<string> => {
@@ -31,7 +30,7 @@ test("readModules finds every named package dir, whatever the layout", async () 
         "_libs/anon/package.json": JSON.stringify({ version: "1.0.0" }),
     });
 
-    expect(readModules(dir).toSorted((a, b) => a.dir.localeCompare(b.dir))).toEqual([
+    expect((await readModules(dir)).toSorted((a, b) => a.dir.localeCompare(b.dir))).toEqual([
         { dir: "_apps/web", name: "@shop/web" },
         { dir: "_apps/web/operator", name: "@shop/web-operator" },
         { dir: "_libs/ui", name: "@shop/ui" },
@@ -42,10 +41,10 @@ test("readModules finds every named package dir, whatever the layout", async () 
 
 test("readModules takes the repo's own manifest only when nothing under it is a module", async () => {
     const single = await scaffold({ "package.json": pkg("@shop/cli"), "src/index.ts": "" });
-    expect(readModules(single)).toEqual([{ dir: "", name: "@shop/cli" }]);
+    expect(await readModules(single)).toEqual([{ dir: "", name: "@shop/cli" }]);
 
     const none = await scaffold({ "src/main.py": "" });
-    expect(readModules(none)).toEqual([]);
+    expect(await readModules(none)).toEqual([]);
 
     await rm(single, { recursive: true, force: true });
     await rm(none, { recursive: true, force: true });
@@ -63,6 +62,6 @@ test("readModules skips ignored dirs and nested repos", async () => {
         "vendor/other/package.json": pkg("@other/app"),
     });
 
-    expect(readModules(dir)).toEqual([{ dir: "_apps/web", name: "@shop/web" }]);
+    expect(await readModules(dir)).toEqual([{ dir: "_apps/web", name: "@shop/web" }]);
     await rm(dir, { recursive: true, force: true });
 });

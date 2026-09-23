@@ -2,7 +2,6 @@
 // than the provider's name. Covers three regressions: a paste field left under a self-finishing flow, a redirect
 // grant not recognized off the clipboard, and a panel still asking for an address while redeeming the one it has.
 import "@intentic/testing/dom";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -19,11 +18,11 @@ interface Flow {
 const nativeConnectFlow = ref<Flow | undefined>(undefined);
 const translatorConnectFlow = ref<Flow | undefined>(undefined);
 const connectSent = ref(false);
-const completeConnect = mock(async () => true);
-const completeTranslator = mock(async () => true);
+const completeConnect = jest.fn(async () => true);
+const completeTranslator = jest.fn(async () => true);
 
 // The chat store is a module singleton the panel reads directly; this is the whole of what it needs from it.
-mock.module(`../../chat/run/useChat`, () => ({
+jest.mock(`../../chat/run/useChat`, () => ({
     useChat: () => ({
         nativeConnectFlow,
         translatorConnectFlow,
@@ -35,7 +34,7 @@ mock.module(`../../chat/run/useChat`, () => ({
     }),
 }));
 // Stubbed, not imported, so assertions test the panel's own markup, not <Button>'s current rendering.
-mock.module(`@intentic/ui`, () => ({
+jest.mock(`@intentic/ui`, () => ({
     ui: { inputSm: (extra: string) => extra, textAction: (extra: string) => extra, linkButton: (extra: string) => extra },
     // `as`/`href` honoured since the panel's first control is a link to the provider, and its target is asserted here.
     Button: defineComponent({
@@ -51,7 +50,7 @@ mock.module(`@intentic/ui`, () => ({
     }),
     CopyButton: defineComponent({ render: () => h(`button`) }),
 }));
-mock.module(`../../chat/accounts/ProviderLogo.vue`, () => ({ default: defineComponent({ render: () => h(`svg`) }) }));
+jest.mock(`../../chat/accounts/ProviderLogo.vue`, () => ({ default: defineComponent({ render: () => h(`svg`) }) }));
 
 let app: App | undefined;
 afterEach(() => {

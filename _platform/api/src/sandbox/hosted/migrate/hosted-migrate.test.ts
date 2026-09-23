@@ -1,7 +1,6 @@
 import { FREE_TIER, hostedTier } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type Config, configSchema } from "../../../config.js";
 import { installFakeFly } from "@intentic/testing/fly-fake";
@@ -17,14 +16,14 @@ import {
     sweepHostedMigrations,
 } from "./hosted-migrate.js";
 
-mock.module(`../hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
+jest.mock(`../hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
 
 /* WHAT THIS SUITE IS FOR. A migration is the one operation that can lose somebody's work, so the cases below are
  * about ordering rather than about arithmetic: the pre-flight snapshot happens before anything else, the old disk is
  * destroyed only after the new machine has announced on the new one, and every failure leaves the machine as it was.
  * The Fly side is a routed fetch stub, because the assertion is which requests were made and in what order. */
 
-const logger = { info: mock(), warn: mock(), error: mock() } as unknown as Logger;
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as unknown as Logger;
 const noSleep = async (): Promise<void> => undefined;
 
 const STANDARD = hostedTier(`standard`);

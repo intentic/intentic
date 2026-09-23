@@ -1,7 +1,5 @@
 import "@intentic/testing/dom";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, reactive, ref, shallowRef } from "vue";
 import {
     type AgentActivity,
@@ -19,41 +17,40 @@ import { changedNothing, type ChatMessage } from "./transcript";
 import { IconStub } from "@intentic/ui/testing";
 import { CLOCK_FROM_MS, formatElapsed } from "../../agents/fleet/agentStatus";
 
-const clock = hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
-const roster = hoisted(() => ({
+const clock = { turnStartedAt: undefined as number | undefined };
+const roster = {
     running: 0,
     watches: undefined as AgentWatch[] | undefined,
     jobs: undefined as AgentJob[] | undefined,
     activity: undefined as AgentActivity | undefined,
-}));
+};
 // Async like the action it stands in for: the row awaits it and swallows a failed disarm, so a sync stub rejects.
-const stopWatching = hoisted(() => mock(async () => undefined));
+const stopWatching = jest.fn(async () => undefined);
 // Pane state the edit pencil reads: mid-turn streaming and this message's own armed edit both hide it. The rows and
 // the held queue are what a notice's send press reads to decide whether it still has anything to send.
-const pane = hoisted(() => ({
+const pane = {
     streaming: true,
     editing: undefined as ChatMessage | undefined,
     messages: [] as ChatMessage[],
     queued: [] as { readonly id: string; readonly text: string }[],
-}));
+};
 // The conversation's own release of a held queue, which is all a notice's send press asks of it.
-const resume = hoisted(() => mock(async () => undefined));
+const resume = jest.fn(async () => undefined);
 // The conversation's ask that the sandbox run a turn it kept, which is what a press on a sandbox-kept refusal is.
-const resendKept = hoisted(() => mock(async () => undefined));
-const beginEdit = hoisted(() => mock());
-// The one path every card's answer takes (CardReplies.reply); hoisted so a card's answer can be read back from the one
-// the pane actually holds.
-const reply = hoisted(() => mock(async () => true));
+const resendKept = jest.fn(async () => undefined);
+const beginEdit = jest.fn();
+// The one path every card's answer takes (CardReplies.reply), read back from the one the pane holds.
+const reply = jest.fn(async () => true);
 // What useMarkdown hands the row under test (prose runs, figures); empty unless the test is about the answer body.
-const markdown = hoisted(() => ({
+const markdown = {
     parts: [] as { readonly kind: string; readonly html?: string; readonly figure?: { readonly kind: string } }[],
-}));
+};
 
 // Every ResizeObserver a mounted row builds, with the boxes it watches. jsdom has no layout to fire one, so the pinned
 // band's suite fires the row's own by hand; the others are left alone and never fire, as before.
-const resizers = hoisted(() => [] as { readonly targets: Element[]; readonly fire: () => void }[]);
+const resizers = [] as { readonly targets: Element[]; readonly fire: () => void }[];
 
-hoisted(() => {
+(() => {
     // Resize/IntersectionObserver stubs since jsdom lacks both; never firing leaves clamp/pin at their default state.
     const idle = class {
         observe(): void {}
@@ -78,11 +75,11 @@ hoisted(() => {
             this.targets.length = 0;
         }
     } as unknown as typeof globalThis.ResizeObserver;
-});
+})();
 
 // Imported as a namespace since this file already binds `h`/`defineComponent`, which a destructured factory would
 // shadow.
-mock.module("@intentic/ui", async () => {
+jest.mock("@intentic/ui", async () => {
     const vue = await import("vue");
     return {
         useDevice: () => ({ mobile: vue.ref(false) }),
@@ -133,28 +130,33 @@ mock.module("@intentic/ui", async () => {
 });
 // Stub renders one prose run naming its source, enough to tell a drawn document from a folded one without a real
 // parser.
-mock.module("@intentic/ui/markdown", () => ({
-    copyCodeFromEvent: mock(),
+jest.mock("@intentic/ui/markdown", () => ({
+    copyCodeFromEvent: jest.fn(),
     renderMarkdownParts: (source: string) => [{ kind: `html`, html: `<p>${source}</p>` }],
 }));
-mock.module("../drafts/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
+jest.mock("../drafts/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
 // formatElapsed stays real, since the loader's readout is exactly that format.
-mock.module("../../agents/fleet/agentStatus", () => ({ CLOCK_FROM_MS, effectiveAutoLand: () => false, effectiveOutageResume: () => false, formatElapsed }));
+jest.mock("../../agents/fleet/agentStatus", () => ({
+    CLOCK_FROM_MS,
+    effectiveAutoLand: () => false,
+    effectiveOutageResume: () => false,
+    formatElapsed,
+}));
 // changedNothing stays real: it decides whether a checklist is drawn at all, which is a card's own reading.
-mock.module("./transcript", () => ({ foldsIntoTurn: (message: ChatMessage) => errandOf(message) !== undefined, changedNothing }));
-mock.module("../../../lib/markdown/useMarkdown", () => {
+jest.mock("./transcript", () => ({ foldsIntoTurn: (message: ChatMessage) => errandOf(message) !== undefined, changedNothing }));
+jest.mock("../../../lib/markdown/useMarkdown", () => {
     return { useMarkdown: () => computed(() => markdown.parts) };
 });
-mock.module("../../workspace/files/openFileRef", () => ({ openFileRefFromEvent: mock(), openWorkspaceRef: mock() }));
-mock.module("../../workspace/changes/history/useHistory", () => ({ restoreSnapshot: mock(), invalidateWorkspace: mock() }));
-mock.module("../tools/toolGrouping", () => ({ groupConsecutiveTools: () => [] }));
-mock.module("../composer/ChatAttachmentStrip.vue", () => ({ default: { render: () => undefined } }));
-mock.module("./ChatTodoList.vue", () => ({ default: { render: () => undefined } }));
-mock.module("../tools/ChatToolCard.vue", () => ({ default: { render: () => undefined } }));
-mock.module("../tools/ChatToolGroup.vue", () => ({ default: { render: () => undefined } }));
+jest.mock("../../workspace/files/openFileRef", () => ({ openFileRefFromEvent: jest.fn(), openWorkspaceRef: jest.fn() }));
+jest.mock("../../workspace/changes/history/useHistory", () => ({ restoreSnapshot: jest.fn(), invalidateWorkspace: jest.fn() }));
+jest.mock("../tools/toolGrouping", () => ({ groupConsecutiveTools: () => [] }));
+jest.mock("../composer/ChatAttachmentStrip.vue", () => ({ default: { render: () => undefined } }));
+jest.mock("./ChatTodoList.vue", () => ({ default: { render: () => undefined } }));
+jest.mock("../tools/ChatToolCard.vue", () => ({ default: { render: () => undefined } }));
+jest.mock("../tools/ChatToolGroup.vue", () => ({ default: { render: () => undefined } }));
 
 // Stubs the pane's own view, not the focused one (useChat's PANE_VIEW), since this row reads its pane's conversation.
-mock.module("../panel/useChat-view", () => {
+jest.mock("../panel/useChat-view", () => {
     const conversation = shallowRef({
         conversationId: `agent-1`,
         turn: {
@@ -185,7 +187,7 @@ mock.module("../panel/useChat-view", () => {
 
 // Roster count of this conversation's live subagents, which the loader reports waiting on, and the outside conditions
 // it is parked on, which a watch's own notice row reads to say whether it is still waiting.
-mock.module("../../agents/fleet/useAgents", () => ({
+jest.mock("../../agents/fleet/useAgents", () => ({
     useAgents: () => ({
         agentById: () => ({
             subagents: { running: roster.running, total: roster.running },
@@ -193,29 +195,29 @@ mock.module("../../agents/fleet/useAgents", () => ({
             jobs: roster.jobs,
             activity: roster.activity,
         }),
-        setAutoLand: mock(),
-        setResumeAfterOutage: mock(),
+        setAutoLand: jest.fn(),
+        setResumeAfterOutage: jest.fn(),
         stopWatching,
     }),
 }));
 
-mock.module("../../sandbox/overview/useSandboxSettings", () => {
+jest.mock("../../sandbox/overview/useSandboxSettings", () => {
     return {
-        useSandboxSettings: () => ({ settings: ref(undefined), save: { mutateAsync: mock() } }),
+        useSandboxSettings: () => ({ settings: ref(undefined), save: { mutateAsync: jest.fn() } }),
     };
 });
 
 // A 16 GiB box a connected device can reshape, on an engine a test may resize; 64 GiB leaves a raise room to offer.
 const ROOMY_ENGINE = { memoryBytes: 64 * 1024 ** 3, cpus: 8 };
 const selfEngine = ref(ROOMY_ENGINE);
-mock.module("../../sandbox/devices/useSelfResources", () => ({
+jest.mock("../../sandbox/devices/useSelfResources", () => ({
     useSelfResources: () => ({
         slug: computed(() => `box`),
         current: computed(() => ({ memoryBytes: 16 * 1024 ** 3 })),
         engine: computed(() => selfEngine.value),
         reshapable: computed(() => true),
         applying: ref(false),
-        apply: mock(async () => undefined),
+        apply: jest.fn(async () => undefined),
     }),
 }));
 
@@ -269,7 +271,7 @@ afterEach(() => {
 it(`releases a removed prompt element and observes its replacement`, async () => {
     const subject = reactive<ChatMessage>({ id: 12, role: `user`, text: `first prompt` });
     const element = mount(subject);
-    const errors = mock();
+    const errors = jest.fn();
     app!.config.errorHandler = errors;
     await nextTick();
     const first = element.querySelector(`.chat-prompt-text`)!;
@@ -1277,7 +1279,9 @@ describe(`a low-memory hold`, () => {
         const element = mount(row);
 
         expect(sendAnyway(element)).toBeUndefined();
-        buttons(element).find((button) => button.textContent?.trim() === `Send again`)!.click();
+        buttons(element)
+            .find((button) => button.textContent?.trim() === `Send again`)!
+            .click();
 
         expect(resendKept).toHaveBeenCalledWith({ text: opener.text, attachments: [{ name: `plan.md`, path: `notes/plan.md` }] });
     });

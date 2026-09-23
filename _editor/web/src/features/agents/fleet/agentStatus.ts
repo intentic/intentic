@@ -89,8 +89,8 @@ const statusMeta = () =>
         // exist; the card is for work that never started.
         failed: { icon: `exclamation-triangle`, label: t(`agents.agentStatus.didntStart`), class: `text-warning` },
         // The turn has gone but the daemon hasn't filed it yet; drawn from what this browser knows, not the registry.
-        starting: { icon: `spinner`, spin: true, label: t(`agents.agentStatus.starting`), class: `text-link` },
-        running: { icon: `spinner`, spin: true, label: t(`agents.agentStatus.running`), class: `text-link` },
+        starting: { icon: `spinner`, spin: true, label: t(`shared.starting`), class: `text-link` },
+        running: { icon: `spinner`, spin: true, label: t(`shared.running`), class: `text-link` },
         // The Stop press landed and the turn is unwinding. Muted rather than a spinner: this is the tail of something
         // ending, not new work.
         stopping: { icon: `stop`, label: t(`agents.agentStatus.stopping`), class: `text-subtle` },
@@ -102,8 +102,8 @@ const statusMeta = () =>
         resuming: { icon: `spinner`, spin: true, label: t(`agents.agentStatus.resuming`), class: `text-link` },
         // The daemon is rebasing the branch and carrying its work into the workspace; nothing has finished yet, nothing has
         // failed, and nothing may act on the branch until it settles, so the running spinner and blue.
-        landing: { icon: `spinner`, spin: true, label: t(`agents.agentStatus.landing`), class: `text-link` },
-        awaiting: { icon: `exclamation-circle`, label: t(`agents.agentStatus.needs`), class: `text-primary-500` },
+        landing: { icon: `spinner`, spin: true, label: t(`shared.landing`), class: `text-link` },
+        awaiting: { icon: `exclamation-circle`, label: t(`shared.needs`), class: `text-primary-500` },
         landed: { icon: `check-circle`, label: t(`agents.agentStatus.landed`), class: `text-success` },
         // Finished with auto-land off: work is safe on the branch, waiting for a deliberate Land. Link-blue, not an
         // attention hue, since the user chose this.
@@ -202,13 +202,13 @@ const attentionWords = () =>
         plan: { chip: t(`agents.agentStatus.approvalNeeded`), verb: t(`agents.agentStatus.reviewPlan`) },
         // Outranks a question: parked on a setup only the user can do. Verb names the work, since this click leads into a
         // flow rather than a one-press approval.
-        capability: { chip: t(`agents.agentStatus.setupNeeded`), verb: t(`agents.agentStatus.setUp`) },
+        capability: { chip: t(`agents.agentStatus.setupNeeded`), verb: t(`shared.setUp`) },
         // Waits for an exact list of addresses the owner named; the daemon refuses everybody else
         // (secrets/credential-gate.ts). Ranked above a question, below setup: it blocks outright like a setup but is a
         // yes/no rather than a decision to read. Verb names the destination, not the action ("Release" would promise
         // something the reader may be unable to do).
         credential: { chip: t(`agents.agentStatus.releaseNeeded`), verb: t(`agents.agentStatus.seeRequest`) },
-        question: { chip: t(`agents.agentStatus.question`), verb: t(`agents.agentStatus.answer`) },
+        question: { chip: t(`agents.agentStatus.question`), verb: t(`shared.answer`) },
         // Ranked last, the most routine and cheapest park to clear: a plan, a spend or a setup wants reading first. Chip
         // reads "Permission" alone, not "Approval needed" (a plan's word) or "Permission needed" (too long at the card's
         // lane width, and the only thing naming the state on mobile where the drill-in verb doesn't render).
@@ -428,7 +428,7 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     }
     return (
         endingActions()[agent.status] ??
-        (agent.diff !== undefined && agent.diff.files > 0 ? t(`agents.agentStatus.reviewChanges`) : t(`agents.agentStatus.review`))
+        (agent.diff !== undefined && agent.diff.files > 0 ? t(`agents.agentStatus.reviewChanges`) : t(`shared.review`))
     );
 };
 
@@ -485,7 +485,7 @@ export const unreadBadge = (agent: { unread: boolean; seenAt?: number }): { labe
     !agent.unread
         ? undefined
         : agent.seenAt === undefined
-          ? { label: t(`agents.agentStatus.new`) }
+          ? { label: t(`shared.new`) }
           : { label: t(`agents.agentStatus.updated`), seenAt: agent.seenAt };
 
 // The unread chip's hover, one sentence wherever that chip is drawn; takes the formatted instant, since this module
@@ -528,7 +528,7 @@ export const currentAction = (activity: AgentSummary["activity"]): string | unde
     activity?.tool !== undefined ? [activity.tool, activity.target].filter(Boolean).join(` `) : activity?.todo;
 
 /* A working child's activity takes precedence over its parent's idle tool. */
-export const activityLine =(agent: Pick<AgentSummary, "activity" | "subagents">): string | undefined => {
+export const activityLine = (agent: Pick<AgentSummary, "activity" | "subagents">): string | undefined => {
     const activity = agent.activity;
     const own = activity === undefined ? undefined : (activity.todo ?? activity.tool);
     const running = agent.subagents?.running ?? 0;
@@ -551,9 +551,8 @@ export const formatElapsed = (startedAt: number, now: number): string => {
     return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 };
 
-// Context-window fill percentage (0–100), clamped; undefined when either side is unknown. Private: `tileRim` is the
-// only reader, and a second caller would be a second opinion about what the rim says.
-const contextPct = (tokens: number | undefined, window: number | undefined): number | undefined =>
+// Context-window fill percentage (0–100), clamped; undefined when either side is unknown.
+export const contextPct = (tokens: number | undefined, window: number | undefined): number | undefined =>
     tokens === undefined || window === undefined || window === 0 ? undefined : Math.min(100, Math.round((tokens / window) * 100));
 
 // Enough of an agent to draw its identity tile's rim; a FleetAgent, a roster AgentSummary and a test literal all fit.

@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { effectScope } from "vue";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { closeOwnWindow, raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
 import { claimFloating, createFloatingSurface, floatingWindowPanel, receiveFloatingNote } from "./floating";
@@ -14,11 +13,11 @@ import * as desktopOriginal from "../../app/environments/desktop";
 
 // What the floating window does to ITSELF goes through one seam (browser: the DOM; desktop app: a link, desktop.test.ts);
 // here only that it is asked, and when.
-mock.module(`../../app/environments/desktop`, () => ({
+jest.mock(`../../app/environments/desktop`, () => ({
     ...desktopOriginal,
-    closeOwnWindow: mock(),
-    raiseOwnWindow: mock(),
-    widenOwnWindow: mock(),
+    closeOwnWindow: jest.fn(),
+    raiseOwnWindow: jest.fn(),
+    widenOwnWindow: jest.fn(),
 }));
 
 const size = () => ({ width: 800, height: 600 });
@@ -61,7 +60,7 @@ afterEach(async () => {
 describe(`a panel nobody floats`, () => {
     it(`is drawn by this window and offers to open one`, () => {
         const surface = createFloatingSurface(`preview`, size);
-        const open = mock((_url: string, _target: string, _features: string) => ({ focus: mock() }) as unknown as Window);
+        const open = jest.fn((_url: string, _target: string, _features: string) => ({ focus: jest.fn() }) as unknown as Window);
         stubGlobal(`open`, open);
 
         expect(surface.floats.value).toBe(false);
@@ -140,7 +139,7 @@ describe(`a panel floating in another window`, () => {
 
     it(`raises that window instead of opening a second one`, () => {
         const surface = createFloatingSurface(`chat`, size);
-        const open = mock((_url: string, _target: string, _features: string) => null);
+        const open = jest.fn((_url: string, _target: string, _features: string) => null);
         stubGlobal(`open`, open);
         receiveFloatingNote(here(`chat`, `w-1`));
 
@@ -183,7 +182,7 @@ describe(`the floating window itself`, () => {
 
     it(`draws the panel, and says so to every other window`, () => {
         const surface = createFloatingSurface(`chat`, size);
-        const release = claim(`chat`, mock());
+        const release = claim(`chat`, jest.fn());
 
         expect(surface.here.value).toBe(true);
         expect(surface.floats.value).toBe(true);
@@ -215,7 +214,7 @@ describe(`the floating window itself`, () => {
             configurable: true,
         });
 
-        const release = claim(`chat`, mock());
+        const release = claim(`chat`, jest.fn());
         await advanceTimersByTimeAsync(1);
 
         // Named after the claim, with id, so two racing windows get a token at once; the oldest-claim rule decides.
@@ -230,7 +229,7 @@ describe(`the floating window itself`, () => {
     });
 
     it(`closes itself when any window asks it to dock`, () => {
-        const onDock = mock();
+        const onDock = jest.fn();
         const release = claim(`chat`, onDock);
 
         receiveFloatingNote({ kind: `dock`, panel: `chat` });
@@ -242,7 +241,7 @@ describe(`the floating window itself`, () => {
     // Its own presses act on its own window, through the seam that knows whether a script may (desktop.ts).
     it(`docks its own Dock press by closing its own window, and raises itself when asked`, () => {
         const surface = createFloatingSurface(`chat`, size);
-        const release = claim(`chat`, mock());
+        const release = claim(`chat`, jest.fn());
 
         surface.dock();
         expect(closeOwnWindow).toHaveBeenCalledTimes(1);
@@ -259,7 +258,7 @@ describe(`the floating window itself`, () => {
         Object.defineProperty(window, `outerWidth`, { value: 900, configurable: true });
         Object.defineProperty(window, `screenX`, { value: 100, configurable: true });
         Object.defineProperty(window.screen, `availWidth`, { value: 2560, configurable: true });
-        const release = claim(`chat`, mock());
+        const release = claim(`chat`, jest.fn());
 
         surface.fit(1400);
         expect(widenOwnWindow).toHaveBeenLastCalledWith(1400);
@@ -275,7 +274,7 @@ describe(`the floating window itself`, () => {
     });
 
     it(`leaves another panel's dock request alone`, () => {
-        const onDock = mock();
+        const onDock = jest.fn();
         const release = claim(`chat`, onDock);
 
         receiveFloatingNote({ kind: `dock`, panel: `terminal` });
@@ -287,7 +286,7 @@ describe(`the floating window itself`, () => {
     // Both windows independently reach the same verdict about the same pair; the younger claim is always the one
     // that stands down.
     it(`stands down for an older claim on the same panel`, () => {
-        const onDock = mock();
+        const onDock = jest.fn();
         const release = claim(`chat`, onDock, 5_000);
 
         receiveFloatingNote(here(`chat`, `older`, 4_000));
@@ -297,7 +296,7 @@ describe(`the floating window itself`, () => {
     });
 
     it(`keeps the panel when the other claim is younger`, () => {
-        const onDock = mock();
+        const onDock = jest.fn();
         const release = claim(`chat`, onDock, 4_000);
 
         receiveFloatingNote(here(`chat`, `younger`, 5_000));
@@ -307,7 +306,7 @@ describe(`the floating window itself`, () => {
     });
 
     it(`breaks a tie on the same millisecond by id, so exactly one of the pair goes`, () => {
-        const onDock = mock();
+        const onDock = jest.fn();
         const release = claim(`chat`, onDock, 4_000);
         // A lower id sorts first and wins; the other half of the pair reaches the mirror verdict and stays.
         receiveFloatingNote(here(`chat`, `00000000-0000-0000-0000-000000000000`, 4_000));
@@ -320,7 +319,7 @@ describe(`the floating window itself`, () => {
 describe(`where the window comes back`, () => {
     it(`reopens on the frame the floating window last reported`, () => {
         const surface = createFloatingSurface(`terminal`, size);
-        const open = mock((_url: string, _target: string, _features: string) => ({ focus: mock() }) as unknown as Window);
+        const open = jest.fn((_url: string, _target: string, _features: string) => ({ focus: jest.fn() }) as unknown as Window);
         stubGlobal(`open`, open);
         // The floating window's own record of where it was, written from its own realm, not measured while closing.
         localStorage.setItem(`intentic.floating.frame.terminal`, `2200,180,900,1100`);
@@ -332,7 +331,7 @@ describe(`where the window comes back`, () => {
 
     it(`ignores a frame stranded on a screen that is no longer attached`, () => {
         const surface = createFloatingSurface(`terminal`, size);
-        const open = mock((_url: string, _target: string, _features: string) => ({ focus: mock() }) as unknown as Window);
+        const open = jest.fn((_url: string, _target: string, _features: string) => ({ focus: jest.fn() }) as unknown as Window);
         stubGlobal(`open`, open);
         // One screen, with a frame far off its right edge: unreachable, so the panel opens centred instead.
         Object.defineProperty(window.screen, `isExtended`, { value: false, configurable: true });
@@ -346,7 +345,7 @@ describe(`where the window comes back`, () => {
 
     it(`refuses a frame no window was ever deliberately left at`, () => {
         const surface = createFloatingSurface(`terminal`, size);
-        const open = mock((_url: string, _target: string, _features: string) => ({ focus: mock() }) as unknown as Window);
+        const open = jest.fn((_url: string, _target: string, _features: string) => ({ focus: jest.fn() }) as unknown as Window);
         stubGlobal(`open`, open);
         localStorage.setItem(`intentic.floating.frame.terminal`, `0,0,12,8`);
 

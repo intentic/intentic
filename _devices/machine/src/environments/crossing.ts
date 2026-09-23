@@ -1,4 +1,5 @@
 import { wslPathOf } from "@intentic/sandbox-contract";
+import type { Side } from "../wsl.js";
 
 // How a command crosses to the other environment of the same PC, as argv built here rather than a string quoted for
 // the first shell: `wsl.exe --exec sh -lc <script>` into a distro, PowerShell through interop out of one.
@@ -43,9 +44,9 @@ export const WINDOWS_POWERSHELL = [
 // A command in one of this PC's distros. `--exec` hands sh its argv verbatim, so the script crosses as one argument
 // and never meets PowerShell's quoting; `--cd ~` starts in the distro's home rather than this process's folder
 // mapped under /mnt. A distro wsl.exe doesn't know is its own error, exit code and all.
-const wslInterpreter = (distro: string | undefined, script: string, cwd: string | undefined, platform: NodeJS.Platform): Interpreter => {
-    if (platform !== "win32") {
-        throw new Error(`Only a Windows PC can run a command in WSL; this device runs ${platform}.`);
+const wslInterpreter = (distro: string | undefined, script: string, cwd: string | undefined, side: Side): Interpreter => {
+    if (side !== "windows") {
+        throw new Error("Only a Windows PC can run a command in WSL; this device is not one.");
     }
     return {
         command: "wsl.exe",
@@ -57,8 +58,8 @@ const wslInterpreter = (distro: string | undefined, script: string, cwd: string 
 
 // A command on the Windows side of this distro. Interop maps a /mnt working directory back to its drive; with none
 // given the script starts in the Windows profile, since this process's own folder has no Windows name.
-const windowsInterpreter = (script: string, cwd: string | undefined, inWsl: boolean, exists: (path: string) => boolean): Interpreter => {
-    if (!inWsl) {
+const windowsInterpreter = (script: string, cwd: string | undefined, side: Side, exists: (path: string) => boolean): Interpreter => {
+    if (side !== "wsl") {
         throw new Error("Only a WSL distro can run a command on Windows; this device is not one.");
     }
     const command = WINDOWS_POWERSHELL.find(exists);
@@ -84,8 +85,9 @@ export const crossInterpreter = (
     target: Exclude<CommandTarget, { kind: "native" }>,
     script: string,
     cwd: string | undefined,
-    { platform, inWsl, exists }: { platform: NodeJS.Platform; inWsl: boolean; exists: (path: string) => boolean },
-): Interpreter => (target.kind === "wsl" ? wslInterpreter(target.distro, script, cwd, platform) : windowsInterpreter(script, cwd, inWsl, exists));
+    side: Side,
+    exists: (path: string) => boolean,
+): Interpreter => (target.kind === "wsl" ? wslInterpreter(target.distro, script, cwd, side) : windowsInterpreter(script, cwd, side, exists));
 
 
 // Names carried across the WSL boundary by WSLENV: `/u` from Windows into a distro, `/w` from a distro out to Windows.

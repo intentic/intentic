@@ -1,4 +1,4 @@
-import { type AgentProvider, FREE_PROVIDERS, type NativeProvider, PROVIDER_SPECS } from "@intentic/sandbox-contract";
+import { type AgentProvider, type NativeProvider, PROVIDER_SPECS } from "@intentic/sandbox-contract";
 
 // Which way in a reader is choosing between, and which providers sit behind each. Pure: the view reads readiness and
 // hardware from elsewhere and hands them in, so the ordering rules here are testable without a sandbox.
@@ -32,11 +32,9 @@ export const connectLane = (key: ConnectLaneKey): ConnectLane => CONNECT_LANES.f
 export const laneOfProvider = (provider: AgentProvider): ConnectLaneKey | undefined =>
     CONNECT_LANES.find((lane) => (lane.providers as readonly string[]).includes(provider))?.key;
 
-// The lane to open on arrival with nothing asked for: the first that has nothing connected yet, so a reader who already
-// signed in to Google is offered the next thing rather than the one they have. Every lane satisfied opens none, since
-// there is nothing left to decide.
-export const firstUnmetLane = (ready: (provider: AgentProvider) => boolean, localReady: boolean): ConnectLaneKey | undefined =>
-    CONNECT_LANES.find((lane) => (lane.key === "local" ? !localReady : !lane.providers.some(ready)))?.key;
+// The lane to open on arrival with nothing asked for: the first holding nothing yet, so a reader already signed in to
+// Google is offered the next thing; every lane held opens none, since there is nothing left to decide.
+export const firstUnmetLane = (held: (key: ConnectLaneKey) => boolean): ConnectLaneKey | undefined => CONNECT_LANES.find((lane) => !held(lane.key))?.key;
 
 // Providers offered inside a lane, connected ones last: a row that is already done is still worth showing (a second
 // account, a reconnect) but must not sit above the thing the reader came here to do.
@@ -44,7 +42,3 @@ export const laneProviders = (key: ConnectLaneKey, ready: (provider: AgentProvid
     const providers = connectLane(key).providers;
     return [...providers.filter((provider) => !ready(provider)), ...providers.filter((provider) => ready(provider))];
 };
-
-// Whether anything at all can run a turn, which is what decides whether this view is an errand or a celebration.
-export const anythingConnected = (ready: (provider: AgentProvider) => boolean, localReady: boolean): boolean =>
-    localReady || FREE_PROVIDERS.some(ready) || SUBSCRIPTION.some(ready);

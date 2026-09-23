@@ -11,26 +11,22 @@ import {
     type TurnFact,
 } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/ui/async";
-import { computed, ref, type Ref, shallowRef } from "vue";
-import type { AgentStanding } from "../../agents/fleet/agentStatus";
+import { computed, ref, shallowRef } from "vue";
 import { uuid } from "../../../lib/uuid";
 import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
-import type { PickUp } from "../run/pickUp";
-import type { TurnFailures } from "../run/turnFailures";
 import { resumes, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
 import { type AttachHead, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor, isNudgeText } from "../transcript/transcript";
-import type { ComposerSelection } from "./composerSelection";
+import type { Conversation } from "./conversation";
 import { accepted, advance, IDLE, type RunEvent, type RunPhase } from "./runPhase";
-import type { TranscriptView } from "./transcriptView";
 
 // One conversation's runs, as this window drives them: a message is sent (opened, then taken at the daemon's ack),
 // followed while it streams or waits on a card, and settled, stopped or abandoned; a turn this window never opened is
 // attached to by its run. Where a run stands is one value (runPhase.ts). What waits for the next turn is the daemon's
-// queue, the same for every window (TurnHost.queue); nothing here holds words of its own.
+// queue, the same for every window (Conversation.queue); nothing here holds words of its own.
 
 // A turn this window has opened and not yet handed to the daemon: its drawn bubble, its abort, the session it resumes.
 interface OpenedTurn {
@@ -80,38 +76,29 @@ const queueRefusal = (refusal: SandboxHttpError): string => {
 };
 
 // What a run reads and writes of the conversation around it.
-export interface TurnHost {
-    readonly conversationId: string;
-    readonly transcript: TranscriptView;
-    readonly selection: ComposerSelection;
-    readonly failures: TurnFailures;
-    // Named after its first message, once, when a turn opens.
-    readonly title: Ref<string | null>;
-    // Where the run happens: a worktree or /work, a paired runner, another box; the body a send carries names each.
-    readonly isolated: Ref<boolean>;
-    readonly runner: Ref<string | undefined>;
-    readonly box: Ref<string | undefined>;
-    // Latched by the ack of a turn in another box, whose roster never reaches this browser.
-    readonly registered: Ref<boolean>;
-    // The card's account of the agent, which a turn running here makes stale.
-    readonly standing: Ref<AgentStanding | undefined>;
-    // Where a fork was cut from, carried by its first turn and spent at the ack.
-    readonly pendingForkOf: Ref<{ conversationId: string; keep: number; files: "then" | "now" } | undefined>;
-    // The red line, and the offer to carry on a turn that stopped short.
-    readonly error: Ref<string | null>;
-    readonly pickUp: Ref<PickUp | undefined>;
-    // The session a matching turn resumes, and the tmux and browser handles minted under it.
-    readonly session: Ref<SessionRef | undefined>;
-    readonly agentTerminal: Ref<string | undefined>;
-    readonly agentBrowser: Ref<string | undefined>;
-    // A send is the reader acting on this chat, which takes it out of the peek slot.
-    readonly peek: Ref<boolean>;
-    // The composer, where words the daemon never answered for go back to.
-    readonly draft: Ref<string>;
-    readonly attachments: Ref<PendingAttachment[]>;
-    // What waits for the conversation's next turn, as the daemon last said: the card's queue, or a change's answer.
-    readonly queue: Ref<ConversationQueue | undefined>;
-}
+type TurnHost = Pick<
+    Conversation,
+    | "conversationId"
+    | "transcript"
+    | "selection"
+    | "failures"
+    | "title"
+    | "isolated"
+    | "runner"
+    | "box"
+    | "registered"
+    | "standing"
+    | "pendingForkOf"
+    | "error"
+    | "pickUp"
+    | "session"
+    | "agentTerminal"
+    | "agentBrowser"
+    | "peek"
+    | "draft"
+    | "attachments"
+    | "queue"
+>;
 
 /** Of two copies of the daemon's queue, the one written last: a card read late must not undo a change made here. */
 export const newerQueue = (held: ConversationQueue | undefined, heard: ConversationQueue | undefined): ConversationQueue | undefined =>
@@ -485,7 +472,9 @@ export class TurnClient {
         if (!accepted(this.phase.value)) {
             this.host.transcript.dropLocal(bubble);
             this.giveBack(sent, messageId);
-            this.host.error.value = stopped ? null : `${errorMessage(err, `Chat failed.`)} Your message is back in the composer, send it again to deliver it.`;
+            this.host.error.value = stopped
+                ? null
+                : `${errorMessage(err, `Chat failed.`)} Your message is back in the composer, send it again to deliver it.`;
             return;
         }
         if (!stopped) {
@@ -573,7 +562,10 @@ export class TurnClient {
     async unqueue(message: QueuedMessage): Promise<boolean> {
         const { host } = this;
         const left = await orRefusal(
-            sandboxRpc.agent.queueRemove({ conversationId: host.conversationId, id: message.id, revision: message.revision }, { context: { at: host.box.value } }),
+            sandboxRpc.agent.queueRemove(
+                { conversationId: host.conversationId, id: message.id, revision: message.revision },
+                { context: { at: host.box.value } },
+            ),
         );
         return this.heard(left);
     }
@@ -688,14 +680,16 @@ export class TurnClient {
     // has not made a turn of yet is stopped once its ack names the run.
     private stopRun(target: { readonly run: string } | { readonly messageId: string }): void {
         this.stopOnAck = false;
-        const stopping = sandboxRpc.agent.stop({ conversationId: this.host.conversationId, ...target }, { context: { at: this.host.box.value } }).then(
-            (answer) => {
-                if (!answer.stopped && `messageId` in target) {
-                    this.stopWhenTaken();
-                }
-            },
-            () => this.stopLocally(),
-        );
+        const stopping = sandboxRpc.agent
+            .stop({ conversationId: this.host.conversationId, ...target }, { context: { at: this.host.box.value } })
+            .then(
+                (answer) => {
+                    if (!answer.stopped && `messageId` in target) {
+                        this.stopWhenTaken();
+                    }
+                },
+                () => this.stopLocally(),
+            );
         this.stopping = stopping;
         void stopping.finally(() => {
             if (this.stopping === stopping) {

@@ -1,6 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { FileContribution } from "@intentic/extension-manifest";
-import { describe, it, expect } from "bun:test";
 import {
     BACKED_UP_STATE_PATHS,
     isLockedWorkspacePath,

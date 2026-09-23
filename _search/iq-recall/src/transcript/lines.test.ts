@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { fileTouchesOf, parseLine, typedPromptOf } from "./lines.js";
 
 test("parseLine tolerates malformed and non-object json", () => {

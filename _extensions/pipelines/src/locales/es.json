@@ -1,7 +1,4 @@
 {
-    "extension": {
-        "pipelines": "Pipelines"
-    },
     "pipelineDagGraph": {
         "expand": "Expandir",
         "failingRunsInRow": "Fallando en {name} varias ejecuciones seguidas",
@@ -48,7 +45,6 @@
         "noWorkspaceRepoMaps": "Ningún repo del espacio de trabajo se corresponde con una cuenta de GitHub/GitLab conectada: clona un repo de tu host conectado, o conecta la capacidad correspondiente en la página +.",
         "openPipelines": "Abrir las pipelines de {project}",
         "openProjectOn": "Abrir {project} en {host}",
-        "pipelines": "Pipelines",
         "repository": "Repositorio",
         "runs": "{runs} ejecuciones",
         "thisRepo": "este repo"

@@ -1,4 +1,4 @@
-import { FREE_TIER, type HostedShape, type HostedTierId, hostedTier, isHostedTierId } from "@intentic/constants";
+import { FREE_TIER, type HostedShape, type HostedTier, type HostedTierId, hostedTier } from "@intentic/constants";
 import type { Config } from "../../config.js";
 import type { FlyVolumeOptions } from "./fly/fly.js";
 
@@ -6,48 +6,33 @@ import type { FlyVolumeOptions } from "./fly/fly.js";
 // because both the provisioner and the migration engine ask these questions and neither should have to import the
 // other to do it.
 
-/**
- * The shape a machine on this rung gets. The free rung's is the operator's to override (`config.hosted`), since a
- * self-hosted platform runs its own hardware; every paid rung's is the ladder's and not a deployment's to change.
- */
-export const hostedShapeFor = (config: Config, tier: HostedTierId): HostedShape => {
-    if (tier === FREE_TIER.id) {
-        return { cpuKind: FREE_TIER.cpuKind, cpus: config.hosted.cpus, memoryMb: config.hosted.memoryMb, volumeGb: config.hosted.volumeGb };
+/** The rung as this deployment runs it: the free rung's shape and hours are the operator's (`config.hosted`, 0 hours unmetered). */
+export const hostedTierIn = (config: Config, id: string): HostedTier => {
+    const rung = hostedTier(id);
+    if (rung.id !== FREE_TIER.id) {
+        return rung;
     }
-    // The four fields and no more: a shape is spread into machine rows, where a rung's name, price and hours are not
-    // columns. Handing the rung back whole type-checks and then fails at the write.
-    const rung = hostedTier(tier);
-    return { cpuKind: rung.cpuKind, cpus: rung.cpus, memoryMb: rung.memoryMb, volumeGb: rung.volumeGb };
+    const { cpus, memoryMb, volumeGb, monthlyHours } = config.hosted;
+    return { ...rung, cpus, memoryMb, volumeGb, monthlyHours };
 };
 
-/**
- * The rung a stored name means. A row written before a rung was retired, or by a deployment on a different ladder,
- * reads as free rather than throwing: the machine is still somebody's, and refusing to describe it helps nobody.
- */
-export const tierOfRow = (tier: string): HostedTierId => (isHostedTierId(tier) ? tier : FREE_TIER.id);
-
-/** A shape as a row holds it: every column nullable, because a row may predate the columns or name no machine. */
 export interface StoredShape {
-    readonly cpuKind: string | null;
-    readonly cpus: number | null;
-    readonly memoryMb: number | null;
-    readonly volumeGb: number | null;
+    readonly cpuKind: string;
+    readonly cpus: number;
+    readonly memoryMb: number;
+    readonly volumeGb: number;
 }
 
-/**
- * What a row says its machine is, falling back to its rung's shape column by column. The stored numbers win where
- * they exist, because they describe a guest and a volume that are actually out there; the rung is only the answer
- * for a row written before anything wrote them down.
- */
-export const shapeOfRow = (config: Config, tier: HostedTierId, row: StoredShape): HostedShape => {
-    const rung = hostedShapeFor(config, tier);
-    return {
-        cpuKind: row.cpuKind === `performance` || row.cpuKind === `shared` ? row.cpuKind : rung.cpuKind,
-        cpus: row.cpus ?? rung.cpus,
-        memoryMb: row.memoryMb ?? rung.memoryMb,
-        volumeGb: row.volumeGb ?? rung.volumeGb,
-    };
+/** A row's own machine, the four shape fields and no more since a shape is spread into rows; any other CPU kind is corruption. */
+export const shapeOfRow = ({ cpuKind, cpus, memoryMb, volumeGb }: StoredShape): HostedShape => {
+    if (cpuKind !== `shared` && cpuKind !== `performance`) {
+        throw new Error(`no cpu kind named ${cpuKind}; the provider has shared and performance`);
+    }
+    return { cpuKind, cpus, memoryMb, volumeGb };
 };
+
+/** The shape a machine on this rung gets. */
+export const hostedShapeFor = (config: Config, tier: HostedTierId): HostedShape => shapeOfRow(hostedTierIn(config, tier));
 
 /**
  * How every hosted volume is created: on a host with room for the guest that will mount it, and with a snapshot

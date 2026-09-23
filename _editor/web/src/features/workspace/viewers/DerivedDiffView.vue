@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { DerivedDiff, DerivedSide, DiffSourceQuery } from "@intentic/sandbox-contract";
 import { Button } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { errorMessage, useLatest } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { formatElapsed } from "../../agents/fleet/agentStatus";
-import { isSpreadsheetPath } from "../explorer/fileType";
+import { formatOf } from "@intentic/ui/file-format";
 import ConversionNotes, { type ConversionNote } from "./ConversionNotes.vue";
 import { readDerivedDiff } from "./derivedDiff";
 import ProseDiffView from "./ProseDiffView.vue";
@@ -46,16 +46,16 @@ const waited = computed(() => (busySince.value === 0 ? `` : formatElapsed(busySi
 // Past this, the wait is long enough that a reader wants to know they are allowed to walk away from it.
 const longWait = computed(() => now.value - busySince.value >= 20_000);
 
-let seq = 0;
+const latest = useLatest();
 const load = (): void => {
-    const id = ++seq;
+    const isLatest = latest();
     loading.value = true;
     error.value = undefined;
     result.value = undefined;
     startClock();
     readDerivedDiff(source, at).then(
         (answer) => {
-            if (id !== seq) {
+            if (!isLatest()) {
                 return;
             }
             result.value = answer;
@@ -63,7 +63,7 @@ const load = (): void => {
             stopClock();
         },
         (err: unknown) => {
-            if (id !== seq) {
+            if (!isLatest()) {
                 return;
             }
             loading.value = false;
@@ -90,14 +90,16 @@ const unreadable = computed(() =>
 );
 const readable = computed(() => result.value !== undefined && unreadable.value.length === 0);
 // The side's name inside the sentence that says it could not be read; two calls, so each key is one the catalog check can see.
-const sideName = (label: "before" | "after"): string => (label === `before` ? t(`workspace.derivedDiffView.sideBefore`) : t(`workspace.derivedDiffView.sideAfter`));
+const sideName = (label: "before" | "after"): string =>
+    label === `before` ? t(`workspace.derivedDiffView.sideBefore`) : t(`workspace.derivedDiffView.sideAfter`);
 
 // Whether both versions exist and their text is one and the same: the case the whole pane must call out, since a
 // reviewer looking at no marks would otherwise read "nothing changed" over a file that did.
 const identical = computed(() => result.value?.before?.present === true && result.value.after?.present === true && before.value === after.value);
 
 const deriver = computed(() => {
-    const side = result.value?.after?.present === true ? result.value.after : result.value?.before?.present === true ? result.value.before : undefined;
+    const side =
+        result.value?.after?.present === true ? result.value.after : result.value?.before?.present === true ? result.value.before : undefined;
     return side?.deriver;
 });
 // Every cap and degradation either conversion hit, once each; with two versions rendered, a note only one of them
@@ -109,12 +111,16 @@ const notes = computed((): ConversionNote[] => {
     const tagged = result.value?.before?.present === true && result.value.after?.present === true;
     const only = (own: readonly string[], other: readonly string[], side: "before" | "after"): ConversionNote[] =>
         own.filter((note) => !other.includes(note)).map((note) => (tagged ? { text: note, side } : { text: note }));
-    return [...fromBefore.filter((note) => fromAfter.includes(note)).map((note): ConversionNote => ({ text: note })), ...only(fromBefore, fromAfter, `before`), ...only(fromAfter, fromBefore, `after`)];
+    return [
+        ...fromBefore.filter((note) => fromAfter.includes(note)).map((note): ConversionNote => ({ text: note })),
+        ...only(fromBefore, fromAfter, `before`),
+        ...only(fromAfter, fromBefore, `after`),
+    ];
 });
 const truncated = computed(() => [result.value?.before, result.value?.after].some((side) => side?.present === true && side.truncated));
 
 // A spreadsheet's rendering is one table per sheet, compared as a grid of cells rather than as paragraphs.
-const grid = computed(() => isSpreadsheetPath(path));
+const grid = computed(() => formatOf(path).sheet === true);
 const beforeSheets = computed(() => sheetsOfMarkdown(before.value));
 const afterSheets = computed(() => sheetsOfMarkdown(after.value));
 
@@ -125,7 +131,7 @@ const changedLabel = computed(() => {
         return ``;
     }
     const count = changed.value;
-    return grid.value ? t(`workspace.derivedDiffView.rowsChanged`, { count }, count) : t(`workspace.derivedDiffView.paragraphsChanged`, { count }, count);
+    return grid.value ? t(`shared.rowsChanged`, { count }, count) : t(`workspace.derivedDiffView.paragraphsChanged`, { count }, count);
 });
 
 const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
@@ -134,7 +140,7 @@ const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <template v-if="result !== undefined">
-<!-- Provenance first: this is not the file, it is the text made from it, and what that text cannot carry. -->
+            <!-- Provenance first: this is not the file, it is the text made from it, and what that text cannot carry. -->
             <div class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1.5 text-2xs text-muted">
                 <Icon name="robot" class="shrink-0 text-[0.7rem]" />
                 <span class="shrink-0" v-tooltip.bottom="t(`workspace.derivedDiffView.notFileItselfBothVersions`)">
@@ -144,7 +150,14 @@ const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
                 <span class="shrink-0 text-subtle">{{ t(`workspace.derivedDiffView.formattingNotShown`) }}</span>
                 <span v-if="changedLabel" class="shrink-0 tabular-nums text-content">{{ changedLabel }}</span>
                 <span class="flex-1"></span>
-                <Button size="small" severity="secondary" :text="true" class="shrink-0" @click="emit(`sides`)" v-tooltip.bottom="t(`workspace.diffToolbar.bothVersionsDrawnWhole`)">
+                <Button
+                    size="small"
+                    severity="secondary"
+                    :text="true"
+                    class="shrink-0"
+                    @click="emit(`sides`)"
+                    v-tooltip.bottom="t(`workspace.diffToolbar.bothVersionsDrawnWhole`)"
+                >
                     <Icon name="split-columns" class="text-[0.7rem]" /> {{ t(`workspace.diffToolbar.beforeAfter`) }}
                 </Button>
             </div>
@@ -164,16 +177,20 @@ const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
             <div v-if="unreadable.length > 0" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="box" class="text-3xl text-subtle" />
                 <p v-for="side of unreadable" :key="side.label" class="max-w-md text-sm text-muted">
-                    {{
-                        t(`workspace.derivedDiffView.versionCouldNotBeRead`, { side: sideName(side.label), filename, reason: side.reason })
-                    }}
+                    {{ t(`workspace.derivedDiffView.versionCouldNotBeRead`, { side: sideName(side.label), filename, reason: side.reason }) }}
                 </p>
                 <Button severity="secondary" @click="emit(`sides`)">
                     <Icon name="split-columns" class="text-xs" />
                     {{ t(`workspace.derivedDiffView.showBothVersionsInstead`) }}
                 </Button>
             </div>
-            <TableDiffView v-else-if="readable && grid" class="min-h-0 flex-1" :before="beforeSheets" :after="afterSheets" @changed="(count) => (changed = count)" />
+            <TableDiffView
+                v-else-if="readable && grid"
+                class="min-h-0 flex-1"
+                :before="beforeSheets"
+                :after="afterSheets"
+                @changed="(count) => (changed = count)"
+            />
             <ProseDiffView
                 v-else-if="readable"
                 class="min-h-0 flex-1"

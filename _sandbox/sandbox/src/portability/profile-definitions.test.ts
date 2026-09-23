@@ -1,7 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { describe, it, expect } from "bun:test";
 import { parseDefinitionToml } from "./definition.js";
 
 // The platform ships one sandbox.toml per profile and hands it to a new machine as base64 in SANDBOX_DEFINITION_SEED;
@@ -17,16 +16,14 @@ const files = readdirSync(PROFILES_DIR).filter((name) => name.endsWith(`.sandbox
 // seeded rule whose id has since been renamed there arrives as a stranger, so the promise reads as kept while the
 // switch the reader would look at stands off. Read as source because a daemon package cannot import the app's screens.
 const appRules = readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/features/sandbox/environment/rules.ts`), `utf8`);
-// The NAME each row is called by is not a literal beside its id: rules.ts labels through `t()`, so the words a profile
-// writes into a TOML are the app's English catalogue's — matching them against the source read above could only ever
-// fail — and `sandbox.rules` holds exactly what the toggles label, in the language the seeds are written in.
-const appRuleLabels: readonly string[] = Object.values(
-    (
-        JSON.parse(readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/app/i18n/locales/en.json`), `utf8`)) as {
-            sandbox?: { rules?: Record<string, string> };
-        }
-    ).sandbox?.rules ?? {},
-);
+// rules.ts labels each row through `t()`, so the name a profile writes is the English catalogue's text at the keys it asks.
+const catalogue = JSON.parse(readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/app/i18n/locales/en.json`), `utf8`)) as Record<
+    string,
+    unknown
+>;
+const textAt = (key: string): unknown =>
+    key.split(`.`).reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], catalogue);
+const appRuleLabels: readonly unknown[] = [...appRules.matchAll(/label: t\(`([^`]+)`\)/g)].map((match) => textAt(match[1] ?? ``));
 
 describe(`the profile definitions the platform seeds`, () => {
     it(`ships at least one, or the seed path is dead code`, () => {

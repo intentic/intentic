@@ -6,7 +6,6 @@
 // which is what this pane replaced.
 import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";

@@ -1,5 +1,4 @@
 import { eventIterator, oc } from "@orpc/contract";
-import { describe, it, expect } from "bun:test";
 import { z } from "zod";
 import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES, SANDBOX_ROUTES, sandboxRouteName } from "../index.js";
 import { procedure } from "./route-meta.js";
@@ -34,8 +33,12 @@ describe(`contractRoutes`, () => {
 
     it(`carries the policy a procedure declared, merged over its builder's`, () => {
         const operated = procedure.meta({ agent: true, control: `never` });
-        const routes = contractRoutes({ vpn: { connect: operated.route({ method: "POST", path: "/vpn/{id}/connect" }).meta({ floor: `collaborator` }) } });
-        expect(routes).toEqual([{ name: `vpn.connect`, method: `POST`, path: `/vpn/{id}/connect`, meta: { agent: true, control: `never`, floor: `collaborator` } }]);
+        const routes = contractRoutes({
+            vpn: { connect: operated.route({ method: "POST", path: "/vpn/{id}/connect" }).meta({ floor: `collaborator` }) },
+        });
+        expect(routes).toEqual([
+            { name: `vpn.connect`, method: `POST`, path: `/vpn/{id}/connect`, meta: { agent: true, control: `never`, floor: `collaborator` } },
+        ]);
     });
 
     it(`ignores non-procedure members rather than inventing routes for them`, () => {

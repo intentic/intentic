@@ -127,7 +127,7 @@ const choose = (entry: PickerEntry): void => {
                             <template #icon><Icon name="play" /></template>
                         </Button>
                         <Button
-                            :label="t(`chat.hostPickerBody.startOver`)"
+                            :label="t(`shared.startOver`)"
                             class="flex-1"
                             :severity="request.attempt.continuable ? `secondary` : undefined"
                             :disabled="!chosen"

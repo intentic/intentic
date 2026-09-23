@@ -1,7 +1,6 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, afterEach } from "bun:test";
 import { rename } from "./rename.js";
 
 // Real conversations with the native compiler's language server, against throwaway projects: rename's value

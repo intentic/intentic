@@ -3,7 +3,6 @@ import { rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import { embedPending } from "../engines/semantic.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import { openIndex } from "../store/db.js";

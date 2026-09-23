@@ -1,6 +1,5 @@
 import { connect, createServer, type Socket } from "node:net";
 import { SETTLES } from "@intentic/testing/bun";
-import { test, expect, afterEach } from "bun:test";
 import { startSocks, socksConnect, type SocksHandle } from "./exit-socks.js";
 
 // Exercises the proxy as a real SOCKS5 server over loopback: bugs like a fragmented greeting only show on a socket.

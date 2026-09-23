@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
-import { describe, it, expect, mock, jest } from "bun:test";
 import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import { configSchema, type Config } from "../config.js";
@@ -10,7 +9,7 @@ import { createTrialPool } from "./trial-pool.js";
 // The trial spends intentic's own money, so what's pinned here is what costs something when it breaks: the allowance
 // actually stopping a caller, a refused key failing over silently, and an unserved turn not being billed.
 
-const logger = { child: () => logger, info: mock(), warn: mock(), error: mock(), debug: mock() } as unknown as Logger;
+const logger = { child: () => logger, info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } as unknown as Logger;
 
 const baseConfig = configSchema.parse({
     database: { url: `postgres://x`, poolMax: 10 },
@@ -39,14 +38,14 @@ const fakePrisma = ({ used }: Counters = {}) => {
     let messages = used ?? 0;
     let lastModel: string | null = null;
     const trialUsage = {
-        findUnique: mock(async () => (messages === 0 && lastModel === null ? null : { messages, lastModel })),
-        upsert: mock(async () => {
+        findUnique: jest.fn(async () => (messages === 0 && lastModel === null ? null : { messages, lastModel })),
+        upsert: jest.fn(async () => {
             messages += 1;
             return { messages, lastModel };
         }),
         // One `update` mock serves both the refund (decrement) and the served-model write (sets a name); branches on
         // the payload so a test can't pass by triggering the wrong one.
-        update: mock(async ({ data }: { data: { lastModel?: string } }) => {
+        update: jest.fn(async ({ data }: { data: { lastModel?: string } }) => {
             if (typeof data.lastModel === `string`) {
                 lastModel = data.lastModel;
                 return { messages, lastModel };
@@ -54,11 +53,11 @@ const fakePrisma = ({ used }: Counters = {}) => {
             messages -= 1;
             return { messages, lastModel };
         }),
-        updateMany: mock(async () => ({ count: 0 })),
+        updateMany: jest.fn(async () => ({ count: 0 })),
     };
     const prisma = {
         sandbox: {
-            findUnique: mock(async ({ where }: { where: { tokenDigest: string } }) =>
+            findUnique: jest.fn(async ({ where }: { where: { tokenDigest: string } }) =>
                 where.tokenDigest === digestOf(`tok`) ? { ownerId: `user-1` } : null,
             ),
         },
@@ -101,7 +100,7 @@ describe("the free trial", () => {
 
     it("spends one message per turn and passes the upstream answer straight through", async () => {
         const { prisma, spent } = fakePrisma();
-        const fetchFn = mock(async () => new Response(`{"choices":[]}`, { status: 200, headers: { "content-type": `application/json` } }));
+        const fetchFn = jest.fn(async () => new Response(`{"choices":[]}`, { status: 200, headers: { "content-type": `application/json` } }));
         stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
@@ -115,7 +114,7 @@ describe("the free trial", () => {
     it("refuses once the day's allowance is gone, and names the way forward", async () => {
         // Fixture starts at the allowance ceiling; this call is the one that should be refused.
         const { prisma } = fakePrisma({ used: 2 });
-        const fetchFn = mock(async () => new Response(`{}`, { status: 200 }));
+        const fetchFn = jest.fn(async () => new Response(`{}`, { status: 200 }));
         stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
@@ -132,13 +131,13 @@ describe("the free trial", () => {
 
     // Filters to just the chat POSTs: the ladder's own capability GET rides the same pool, and call-order would
     // describe that read instead.
-    const chatPosts = (fetchFn: ReturnType<typeof mock>) =>
+    const chatPosts = (fetchFn: ReturnType<typeof jest.fn>) =>
         fetchFn.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === `POST`);
 
     it("moves to the next key when one is rate-limited, rather than surfacing the refusal", async () => {
         const { prisma } = fakePrisma();
         let posts = 0;
-        const fetchFn = mock(async (_url: string, init?: RequestInit) => {
+        const fetchFn = jest.fn(async (_url: string, init?: RequestInit) => {
             if (init?.method !== `POST`) {
                 return new Response(`{}`, { status: 503 });
             }
@@ -161,7 +160,7 @@ describe("the free trial", () => {
 
     it("gives the message back when no key could serve it on any model", async () => {
         const { prisma, spent } = fakePrisma();
-        const fetchFn = mock(async () => new Response(`{}`, { status: 503 }));
+        const fetchFn = jest.fn(async () => new Response(`{}`, { status: 503 }));
         stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
@@ -175,7 +174,7 @@ describe("the free trial", () => {
 
     it("gives the message back when upstream rejects the model or request", async () => {
         const { prisma, spent } = fakePrisma();
-        const fetchFn = mock(async () => new Response(`{"error":{"message":"model not supported"}}`, { status: 404 }));
+        const fetchFn = jest.fn(async () => new Response(`{"error":{"message":"model not supported"}}`, { status: 404 }));
         stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
@@ -191,7 +190,7 @@ describe("the free trial", () => {
         const { prisma } = fakePrisma();
         stubGlobal(
             `fetch`,
-            mock(async () => new Response(`{}`, { status: 503 })),
+            jest.fn(async () => new Response(`{}`, { status: 503 })),
         );
         const app = createApp(baseConfig, prisma, logger).app;
         const headers = { authorization: `Bearer tok`, "content-type": `application/json` };
@@ -206,7 +205,7 @@ describe("the free trial", () => {
 
     it("refunds, and does not repeat Google's billing advice, when the whole pool is rate-limited", async () => {
         const { prisma, spent } = fakePrisma();
-        const fetchFn = mock(async () => new Response(`{"error":{"message":"check your plan and billing details"}}`, { status: 429 }));
+        const fetchFn = jest.fn(async () => new Response(`{"error":{"message":"check your plan and billing details"}}`, { status: 429 }));
         stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
@@ -223,7 +222,7 @@ describe("the free trial", () => {
     // Stubs the two listing surfaces the ladder reads (the compat shim's ids-only list, and Google's own capability
     // list); chat POSTs fall through to a plain success.
     const upstream = (generateContent: readonly string[]) =>
-        mock(async (url: string, init?: RequestInit) => {
+        jest.fn(async (url: string, init?: RequestInit) => {
             if (init?.method === `POST`) {
                 return new Response(`{"choices":[]}`, { status: 200, headers: { "content-type": `application/json` } });
             }
@@ -258,7 +257,7 @@ describe("the free trial", () => {
         const { prisma } = fakePrisma();
         stubGlobal(
             `fetch`,
-            mock(async () => new Response(`{}`, { status: 503 })),
+            jest.fn(async () => new Response(`{}`, { status: 503 })),
         );
 
         const response = await call(configWith({ models: `` }), prisma, `/trial/v1/models`);
@@ -323,7 +322,7 @@ describe("the free trial", () => {
     it("falls to the next model when the first is out of quota on every key", async () => {
         const { prisma, spent } = fakePrisma();
         const asked: string[] = [];
-        const fetchFn = mock(async (_url: string, init?: RequestInit) => {
+        const fetchFn = jest.fn(async (_url: string, init?: RequestInit) => {
             if (init?.method !== `POST`) {
                 return new Response(
                     JSON.stringify({
@@ -434,7 +433,7 @@ describe("the free trial", () => {
     // One key only, so the result can't depend on where the pool's rotation happened to start.
     it("keeps a key a pasted note was glued to", async () => {
         const { prisma } = fakePrisma();
-        const fetchFn = mock(async (_url: string, init: RequestInit) =>
+        const fetchFn = jest.fn(async (_url: string, init: RequestInit) =>
             (init.headers as Record<string, string>)[`authorization`] === `Bearer k1`
                 ? new Response(`{}`, { status: 200, headers: { "content-type": `application/json` } })
                 : new Response(`{"error":"invalid api key"}`, { status: 401, headers: { "content-type": `application/json` } }),
@@ -451,7 +450,7 @@ describe("the free trial", () => {
 
 describe("the free-trial key pool", () => {
     it("reports healthy when the first selected key answers", async () => {
-        const pool = createTrialPool(baseConfig, mock(async () => new Response(`{}`, { status: 200 })) as unknown as typeof fetch);
+        const pool = createTrialPool(baseConfig, jest.fn(async () => new Response(`{}`, { status: 200 })) as unknown as typeof fetch);
 
         await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true });
 
@@ -461,7 +460,7 @@ describe("the free-trial key pool", () => {
     it("times out a stuck key and advances to the next one", async () => {
         jest.useFakeTimers();
         try {
-            const fetchFn = mock((_url: string | URL | Request, init?: RequestInit) => {
+            const fetchFn = jest.fn((_url: string | URL | Request, init?: RequestInit) => {
                 const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
                 return auth === `Bearer k1` ? new Promise<Response>(() => {}) : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
             });
@@ -480,7 +479,7 @@ describe("the free-trial key pool", () => {
 
     it("fails over on a rejected key and quarantines it for later calls", async () => {
         const auths: (string | undefined)[] = [];
-        const fetchFn = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+        const fetchFn = jest.fn(async (_url: string | URL | Request, init?: RequestInit) => {
             const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
             auths.push(auth);
             return new Response(`{}`, { status: auth === `Bearer k1` ? 401 : 200 });
@@ -498,7 +497,7 @@ describe("the free-trial key pool", () => {
 
     it("stops reporting degraded once the windows it was degraded for have closed", async () => {
         let clock = 1_000;
-        const fetchFn = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+        const fetchFn = jest.fn(async (_url: string | URL | Request, init?: RequestInit) => {
             const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
             // k1 is refused only while the clock is early; it works again once time has moved past the quarantine.
             return new Response(`{}`, { status: auth === `Bearer k1` && clock < 60_000 ? 401 : 200 });
@@ -518,7 +517,7 @@ describe("the free-trial key pool", () => {
     });
 
     it("does not read a refused capability listing as the chat path being unwell", async () => {
-        const fetchFn = mock(async (_url: string | URL | Request, init?: RequestInit) =>
+        const fetchFn = jest.fn(async (_url: string | URL | Request, init?: RequestInit) =>
             init?.method === `GET` ? new Response(`{}`, { status: 429 }) : new Response(`{"choices":[1]}`, { status: 200 }),
         );
         const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
@@ -532,7 +531,7 @@ describe("the free-trial key pool", () => {
 
     it("keeps a key usable for another model after one model's quota refuses it", async () => {
         const attempts: { key: string; model: string }[] = [];
-        const fetchFn = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+        const fetchFn = jest.fn(async (_url: string | URL | Request, init?: RequestInit) => {
             const key = ((init?.headers ?? {}) as Record<string, string>)[`authorization`] ?? ``;
             const model = (JSON.parse(String(init?.body)) as { model: string }).model;
             attempts.push({ key, model });
@@ -560,7 +559,7 @@ describe("the free-trial key pool", () => {
         jest.useFakeTimers();
         try {
             const attempts: string[] = [];
-            const fetchFn = mock((_url: string | URL | Request, init?: RequestInit) => {
+            const fetchFn = jest.fn((_url: string | URL | Request, init?: RequestInit) => {
                 const model = (JSON.parse(String(init?.body)) as { model: string }).model;
                 attempts.push(model);
                 // Silence, not a refusal — the case a per-key walk alone can't tell apart from a slow answer.
@@ -587,7 +586,7 @@ describe("the free-trial key pool", () => {
         jest.useFakeTimers();
         try {
             const attempts: string[] = [];
-            const fetchFn = mock((_url: string | URL | Request, init?: RequestInit) => {
+            const fetchFn = jest.fn((_url: string | URL | Request, init?: RequestInit) => {
                 const model = (JSON.parse(String(init?.body)) as { model: string }).model;
                 attempts.push(model);
                 return model === `flash` ? new Promise<Response>(() => {}) : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
@@ -615,7 +614,7 @@ describe("the free-trial key pool", () => {
         try {
             let silent = true;
             const attempts: string[] = [];
-            const fetchFn = mock((_url: string | URL | Request, init?: RequestInit) => {
+            const fetchFn = jest.fn((_url: string | URL | Request, init?: RequestInit) => {
                 attempts.push((JSON.parse(String(init?.body)) as { model: string }).model);
                 return silent ? new Promise<Response>(() => {}) : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
             });
@@ -640,7 +639,7 @@ describe("the free-trial key pool", () => {
     it("honours Retry-After when quarantining a rate-limited key", async () => {
         let at = Date.parse(`2026-08-16T00:00:00.000Z`);
         const auths: (string | undefined)[] = [];
-        const fetchFn = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+        const fetchFn = jest.fn(async (_url: string | URL | Request, init?: RequestInit) => {
             const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
             auths.push(auth);
             return new Response(`{}`, auth === `Bearer k1` ? { status: 429, headers: { "retry-after": `120` } } : { status: 200 });

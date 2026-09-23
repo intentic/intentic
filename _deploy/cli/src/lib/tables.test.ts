@@ -1,5 +1,4 @@
 import type { Step } from "@intentic/engine";
-import { test, expect } from "bun:test";
 import { planSummary, planTable, resourceTable, teardownTable } from "./tables.js";
 
 const steps: Step[] = [

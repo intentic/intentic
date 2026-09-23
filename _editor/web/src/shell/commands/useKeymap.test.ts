@@ -1,4 +1,3 @@
-import { describe, it, expect, afterEach } from "bun:test";
 import { effectiveKeybinding, keymapOverrides, useKeymap } from "./useKeymap";
 
 /* The keymap resolves a command's ACTIVE chord from three states: remapped (override wins), unbound (null override = no shortcut). */

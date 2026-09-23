@@ -5,7 +5,6 @@
 import "@intentic/testing/dom";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { receivePreferenceChange } from "@intentic/ui/preference";
-import { it, expect, beforeEach } from "bun:test";
 import { rememberedProviderFor, turnDefaults } from "./turnDefaults";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, perProvider, trialStatus } from "../accounts/providerCatalog";

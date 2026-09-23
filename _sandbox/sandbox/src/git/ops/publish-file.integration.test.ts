@@ -3,7 +3,6 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, afterEach } from "bun:test";
 import { defaultBranchOf, publishFile } from "./publish-file.js";
 
 // Against real git: what's pinned is what a creator would experience as the button lying (a swept-up staged file, an

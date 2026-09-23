@@ -1,6 +1,5 @@
 import { createServer, request as h1Request, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { HOP_HEADER } from "./cluster.js";
 import { forwardRequest, forwardUpgrade, PeerUnreachable } from "./forward.js";
 import type { Peer } from "./peers.js";

@@ -234,7 +234,7 @@ const configure = (pin: ModelPin): void => {
                             v-model="filter"
                             variant="field"
                             clearable
-                            :aria-label="t(`sandbox.personaForm.filterAccounts`)"
+                            :aria-label="t(`shared.filterAccounts2`)"
                             :placeholder="t(`sandbox.personaForm.filterByNameSite`)"
                         />
                         <!-- Account toggles support multiple picks and show connection state. -->
@@ -320,7 +320,7 @@ const configure = (pin: ModelPin): void => {
                                 v-model="draft.folders"
                                 multiple
                                 :label="t(`sandbox.personaForm.onlyFolders`)"
-                                :placeholder="t(`sandbox.personaForm.anywhereInWorkspace`)"
+                                :placeholder="t(`shared.anywhereInWorkspace`)"
                             />
                             <!-- Folder scope rejects file tools outside the selected folders. -->
                             <span class="text-xs text-subtle">
@@ -338,7 +338,7 @@ const configure = (pin: ModelPin): void => {
             </p>
 
             <div class="ui-field">
-                <span class="ui-field-label">{{ t(`sandbox.personaForm.models`) }}</span>
+                <span class="ui-field-label">{{ t(`shared.models`) }}</span>
                 <div class="flex flex-col gap-2">
                     <ModelPinList
                         v-if="models.entries.value.length > 0"

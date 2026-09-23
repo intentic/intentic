@@ -11,14 +11,13 @@ import { type FakeStripe, startFakeStripe } from "@intentic/testing/stripe-fake"
 import { PrismaPg } from "@prisma/adapter-pg";
 import type { Logger } from "pino";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
-import { describe, it, expect, beforeAll, afterAll, mock } from "bun:test";
 import { waitFor, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import type { Auth } from "../auth.js";
 import { configSchema, type Config } from "../config.js";
 import { testIngressConfig } from "../testing.js";
 import { sandboxHostname } from "../sandbox/reachability.js";
-import { hostedSlotsOf, onHostedPlan, slotsAtTier } from "../sandbox/hosted/hosted-plan.js";
+import { hostedSlotsOf, onHostedPlan } from "../sandbox/hosted/hosted-plan.js";
 import { hostedBudgetOf } from "../sandbox/hosted/hosted-usage.js";
 import { DAY_MS } from "../durations.js";
 
@@ -42,7 +41,7 @@ const STRIPE = { secretKey: `sk_test_e2e_hosted_plan`, webhookSecret: `whsec_e2e
 const ENTRY = PAID_TIERS[0] as HostedTier;
 const MONTHLY_HOURS = FREE_TIER.monthlyHours;
 
-const logger = { child: () => logger, info: mock(), warn: mock(), error: mock(), debug: mock() } as unknown as Logger;
+const logger = { child: () => logger, info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } as unknown as Logger;
 
 const configFor = (databaseUrl: string, stripeApiUrl: string): Config =>
     configSchema.parse({
@@ -322,9 +321,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         /* BUYING A SLOT DOES NOT CHANGE THE MACHINE. The account now holds a Standard slot beside its free one, and
          * the sandbox is still the free machine it was until it is moved onto that slot (changeTier below). */
         expect((await offer()).body).toMatchObject({ enabled: true, plan: true });
-        const slots = await hostedSlotsOf(prisma, config, alice.id);
-        expect(slotsAtTier(slots, ENTRY.id)).toBe(1);
-        expect(slots.total).toBe(2);
+        expect(Object.fromEntries(await hostedSlotsOf(prisma, config, alice.id))).toEqual({ [FREE_TIER.id]: 1, [ENTRY.id]: 1 });
         expect(await hostedBudgetOf(prisma, config, { sandboxId, tier: FREE_TIER.id, ownerId: alice.id })).toMatchObject({
             metered: true,
             allowanceMinutes: MONTHLY_HOURS * 60,
@@ -376,7 +373,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             "items[0][quantity]": `2`,
             proration_behavior: `create_prorations`,
         });
-        expect(slotsAtTier(await hostedSlotsOf(prisma, config, alice.id), ENTRY.id)).toBe(2);
+        expect((await hostedSlotsOf(prisma, config, alice.id)).get(ENTRY.id)).toBe(2);
 
         // Stripe's own event for the change followed the api's write and was accepted; the guard did not roll it back.
         expect(await prisma.hostedPlanItem.findFirst({ where: { tier: ENTRY.id } })).toMatchObject({ quantity: 2 });
@@ -419,7 +416,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(body.cancelAtPeriodEnd).toBeUndefined();
         expect(body.hosted?.usage.allowanceMinutes).toBe(MONTHLY_HOURS * 60);
         // An unpaid charge takes the slot away; the machine standing on that rung stays where it is until it is moved.
-        expect(slotsAtTier(await hostedSlotsOf(prisma, config, alice.id), ENTRY.id)).toBe(0);
+        expect((await hostedSlotsOf(prisma, config, alice.id)).get(ENTRY.id)).toBeUndefined();
         expect(await hostedBudgetOf(prisma, config, { sandboxId, tier: ENTRY.id, ownerId: alice.id })).toMatchObject({ metered: true });
         // The free slot is empty and offered again: this account's one machine stands on the Standard rung it moved to
         // earlier, and the card offers a free machine.

@@ -1,7 +1,6 @@
 // Pins what a reload restores from persisted tab state, and what happens to focus when the tab that held it
 // (a diff) isn't stored.
 import "@intentic/testing/dom";
-import { it, expect } from "bun:test";
 import { nextTick } from "vue";
 
 // Read at module load: the active sandbox id keys the strip's storage key.

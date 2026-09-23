@@ -22,7 +22,7 @@ import { claimContainer } from "./platform/boot/container-owner.js";
 import { finishPrewarm } from "./platform/boot/prewarm.js";
 import { listenHost, profileTraits, requireLocalContract } from "./platform/boot/profile.js";
 import { checks as containerChecks, owner as containerOwner } from "./platform/invariant.js";
-import { readCpuThrottle } from "./platform/resources/cpu-throttle.js";
+import { readCgroup } from "./platform/resources/cgroup.js";
 import { startLoopWatchdog } from "./platform/resources/loop-watchdog.js";
 import { startWorkloadPriorityGovernor } from "./platform/resources/workload-priority.js";
 import { answers } from "./ports/port-probe.js";
@@ -110,7 +110,7 @@ const main = async (): Promise<void> => {
     await startWorkspaceApps(phase, prewarm);
     // Logs CPU throttle alongside boot time, since on a shared-CPU host a slow chain is usually the quota, not the
     // steps.
-    logger.info({ ms: Date.now() - services.boot.progress().startedAt, cpu: readCpuThrottle() }, "boot: chain converged");
+    logger.info({ ms: Date.now() - services.boot.progress().startedAt, cpu: (await readCgroup()).cpuThrottle }, "boot: chain converged");
 
     // Parent link, for a runner (or one that ever was: an identity on /history outlives an env-stripping rebuild).
     // After the gate, since a parent's first act dispatches a turn. Never fatal: a failed enrollment just logs once.

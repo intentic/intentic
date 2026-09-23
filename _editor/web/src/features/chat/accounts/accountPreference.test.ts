@@ -1,4 +1,3 @@
-import { it, expect, mock } from "bun:test";
 import { ref } from "vue";
 import { TrialStatusSchema } from "@intentic/sandbox-contract";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
@@ -10,7 +9,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // The reads a reachable daemon answers: the two accounts behind the seeded tabs, and every other connection empty. A
 // catalog is refused, as for a provider the daemon cannot list.
-mock.module("../../sandbox/client/sandboxRpc", () => ({
+jest.mock("../../sandbox/client/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         accounts: {
             accounts: async ({ provider }) => ({
@@ -35,9 +34,9 @@ mock.module("../../sandbox/client/sandboxRpc", () => ({
         endpoints: { trial: async () => TrialStatusSchema.parse({ available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` }) },
     }),
 }));
-mock.module("../../../router", () => ({ router: { push: mock() } }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
-mock.module("../../sandbox/client/useSandbox", () => {
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../sandbox/client/useSandbox", () => {
     // Already bound when the module graph loads, the ordinary case for a refresh of an open sandbox.
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);

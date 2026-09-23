@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { responseDetail } from "./response-detail.js";
 
 // A trimmed-down real Cloudflare tunnel error page: the "Cloudflare" title plus the feedback beacon that

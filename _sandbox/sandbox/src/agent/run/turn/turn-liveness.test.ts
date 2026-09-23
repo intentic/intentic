@@ -1,4 +1,3 @@
-import { expect, test } from "bun:test";
 import { memoryFleet } from "../../../testing.js";
 import { conversationBusy } from "./turn-liveness.js";
 

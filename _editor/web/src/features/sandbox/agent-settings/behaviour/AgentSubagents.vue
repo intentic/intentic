@@ -29,7 +29,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentSubagents.subagents`)">
+    <RowGroup :label="t(`shared.subagents`)">
         <!-- Leads the group: narrows from "may it delegate" to "how far", the natural reading order. -->
         <Row icon="robot" :title="t(`sandbox.agentSubagents.startAgentsOwn`)" :description="t(`sandbox.agentSubagents.childAgentSpendsSame`)">
             <template #control>

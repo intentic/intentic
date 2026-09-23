@@ -1,7 +1,6 @@
 // Tests the usage ring and its card: the breakdown renders as a per-pool line and meter with its own reset, not
 // one run-on label, and the card opens beside the ring rather than over the column of rows being compared.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 import { formatReset, type PlanHeadroom } from "../features/chat/session/usageStatus";
 import UsageRing from "./UsageRing.vue";

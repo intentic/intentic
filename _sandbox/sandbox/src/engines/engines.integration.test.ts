@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { subscribeRuntimeChanges } from "../system/runtime-watch.js";
 import { forgetUpstream } from "./engine-channel.js";
@@ -28,7 +27,7 @@ const writeStoreCopy = (version: string): void => {
 
 const installer = (): EngineInstaller & { calls: string[] } => {
     const calls: string[] = [];
-    const install = mock(async (_id: "claude" | "codex" | "cursor" | "opencode" | "translator", version: string) => {
+    const install = jest.fn(async (_id: "claude" | "codex" | "cursor" | "opencode" | "translator", version: string) => {
         calls.push(version);
         writeStoreCopy(version);
         await activateVersion("opencode", version);
@@ -59,7 +58,7 @@ afterEach(() => {
 // reinstall it on every box.
 test("a blessed version the image already bakes installs nothing", async () => {
     const baked = await engineDescriptor("opencode").baked();
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: baked } } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: baked } } })));
 
     const install = installer();
     expect(await updateEngine(host(workspace), "opencode", undefined, install)).toBeUndefined();
@@ -67,7 +66,7 @@ test("a blessed version the image already bakes installs nothing", async () => {
 });
 
 test("a blessed version the image does not have is taken", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
 
     const install = installer();
     expect(await updateEngine(host(workspace), "opencode", undefined, install)).toEqual({
@@ -82,7 +81,7 @@ test("a blessed version the image does not have is taken", async () => {
 
 // Must report the same fact the resolver serves to a turn, not just what's convenient for the row.
 test("the view reports what is running and where it came from", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
     const install = installer();
     await updateEngine(host(workspace), "opencode", undefined, install);
     forgetEngineResolution();
@@ -97,7 +96,7 @@ test("the view reports what is running and where it came from", async () => {
 
 // Immediate because the image's copy is already on the machine; no check has to run first.
 test("switching an engine to the image drops the store's version at once", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
     await updateEngine(host(workspace), "opencode", undefined, installer());
 
     await setChannel(host(workspace), "opencode", { kind: "image" });
@@ -109,7 +108,7 @@ test("switching an engine to the image drops the store's version at once", async
 });
 
 test("a revert returns to the version kept behind the current one", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.8" } } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.8" } } })));
     const install = installer();
     await updateEngine(host(workspace), "opencode", { version: "9.9.8" }, install);
     await updateEngine(host(workspace), "opencode", { version: "9.9.9" }, install);
@@ -122,7 +121,7 @@ test("a revert returns to the version kept behind the current one", async () => 
 test("a floor is resolved to the lowest published version that clears it", async () => {
     stubGlobal(
         "fetch",
-        mock(async (url: string) =>
+        jest.fn(async (url: string) =>
             url.includes("registry.npmjs.org")
                 ? jsonResponse({ versions: { "1.0.0": {}, "1.2.0": {}, "1.5.0": {} } })
                 : jsonResponse({ engines: { opencode: { blessed: "1.0.0" } } }),
@@ -135,19 +134,19 @@ test("a floor is resolved to the lowest published version that clears it", async
 });
 
 test("a floor nothing published satisfies is refused rather than approximated", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ versions: { "1.0.0": {} } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ versions: { "1.0.0": {} } })));
     const install = installer();
     await expect(updateEngine(host(workspace), "opencode", { floor: "2.0.0" }, install)).rejects.toThrow("at or above 2.0.0");
     expect(install.calls).toEqual([]);
 });
 
 test("the view reports when an install is in flight", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
     let finishInstall: () => void = () => undefined;
     const pending = new Promise<void>((resolve) => {
         finishInstall = resolve;
     });
-    const install: EngineInstaller = mock(async (_id, version) => {
+    const install: EngineInstaller = jest.fn(async (_id, version) => {
         await pending;
         writeStoreCopy(version);
         await activateVersion("opencode", version);
@@ -170,14 +169,14 @@ test("the view reports when an install is in flight", async () => {
 
 // The card holds no clock: an install's start and end are its only feed, whoever started it.
 test("an install announces its start and its end on the runtime feed", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
     const frames: string[][] = [];
     const unsubscribe = subscribeRuntimeChanges((domains) => frames.push(domains));
     let finishInstall: () => void = () => undefined;
     const pending = new Promise<void>((resolve) => {
         finishInstall = resolve;
     });
-    const install: EngineInstaller = mock(async (_id, version) => {
+    const install: EngineInstaller = jest.fn(async (_id, version) => {
         await pending;
         writeStoreCopy(version);
         await activateVersion("opencode", version);

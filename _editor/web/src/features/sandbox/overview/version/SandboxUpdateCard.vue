@@ -129,7 +129,7 @@ const updateHeading = computed(() => {
                     dot
                 />
                 <StatusBadge v-if="updateAvailable" :variant="versionBadge" :label="`${installed ?? '?'} → ${latest}`" dot />
-                <StatusBadge v-else-if="channel === `stable`" variant="success" :label="t(`sandbox.sandboxUpdateCard.upToDate`)" dot />
+                <StatusBadge v-else-if="channel === `stable`" variant="success" :label="t(`shared.upToDate`)" dot />
                 <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
             </div>
         </template>
@@ -244,9 +244,7 @@ const updateHeading = computed(() => {
                     <!-- Offered alongside an available update too, since a rollback is as likely the reason someone opened this card. -->
                     <p v-if="rollbackTo && !hosted" class="flex flex-wrap items-baseline gap-x-1 text-2xs text-subtle">
                         <span>{{
-                            updateAvailable
-                                ? t(`sandbox.sandboxUpdateCard.ratherGoBack`)
-                                : t(`sandbox.sandboxUpdateCard.somethingWrongSinceLast`)
+                            updateAvailable ? t(`sandbox.sandboxUpdateCard.ratherGoBack`) : t(`sandbox.sandboxUpdateCard.somethingWrongSinceLast`)
                         }}</span>
                         <button type="button" class="underline hover:text-content" @click="toggleRollback">
                             {{ t(`sandbox.sandboxUpdateCard.rollBackToPrevious`) }}

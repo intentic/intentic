@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { addAppsToMonorepo, scaffoldMonorepo, templateArchiveUrl } from "./inject-template.js";
 
 const exec = promisify(execFile);

@@ -1,9 +1,8 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { computed, nextTick, type Ref, ref, watch } from "vue";
+import { computed, type Ref, ref, watch } from "vue";
 import type { useNotifications } from "../../../../shell/notifications/notifications";
 import type { BarrenChain } from "../emptyDirs";
 import { deletedReceipt, deleteHeader, joinPath } from "../entryNames";
-import { ancestorDirs } from "../revealPath";
 import type { useEmptyDirs } from "../useEmptyDirs";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
 import type { useTreeRules } from "./useTreeRules";
@@ -48,11 +47,9 @@ export interface TreeDeleteHost {
     readonly targetDir: (path: string | null) => string;
     readonly rules: Pick<ReturnType<typeof useTreeRules>, "refuseIn" | "unlockedOnly">;
     readonly emptyDirs: ReturnType<typeof useEmptyDirs>;
-    readonly selecting: Pick<ReturnType<typeof useTreeSelection>, "selection" | "lead" | "selectSingle" | "clear">;
+    readonly selecting: Pick<ReturnType<typeof useTreeSelection>, "selection" | "lead" | "clear">;
     readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "run" | "removeEntries" | "createDir" | "createFile" | "refuseWrite">;
     readonly say: ReturnType<typeof useNotifications>["say"];
-    readonly openAll: (dirs: readonly string[]) => void;
-    readonly showRow: (path: string) => Promise<HTMLElement | undefined>;
 }
 
 export const useTreeDelete = (host: TreeDeleteHost) => {
@@ -138,21 +135,6 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
     });
     // The line's Clean up: every branch it names.
     const sweepAll = (): void => sweep(emptyDirs.roots.value);
-    // Opens the path down to the folder, scrolls it into view and selects it, as revealing the open file does. Selection
-    // rather than focus, so the keyboard stays with the list the user is working through.
-    const revealBarren = async (path: string): Promise<void> => {
-        host.openAll(ancestorDirs(path));
-        selecting.selectSingle(path);
-        await nextTick();
-        await host.showRow(path);
-    };
-    // Reads `soleBarren` here, not in the template, since a template closure would read it outside the `v-if` proving it.
-    const revealSoleBarren = async (): Promise<void> => {
-        const sole = soleBarren.value;
-        if (sole !== undefined) {
-            await revealBarren(sole.path);
-        }
-    };
 
     return {
         confirmPaths,
@@ -165,7 +147,5 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
         barrenBranches,
         soleBarren,
         sweepAll,
-        revealBarren,
-        revealSoleBarren,
     };
 };

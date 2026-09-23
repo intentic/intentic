@@ -32,7 +32,7 @@ const scopeLabel = (kind: JumpKind): string => {
         case `agent`:
             return t(`shell.quickOpen.agents`);
         case `file`:
-            return t(`shell.quickOpen.files`);
+            return t(`shared.files`);
         case `terminal`:
             return t(`shell.quickOpen.terminals`);
         default:
@@ -93,10 +93,12 @@ const best = (group: JumpGroup<ScoredRow>): number => Math.max(...group.rows.map
 export const groupJumpRows = <Row extends ScoredRow>(rows: readonly Row[], cap: number): readonly JumpGroup<Row>[] => {
     // Zero in the spread keeps an empty list (and the unqueried palette, where every score is 0) at a floor of 0.
     const floor = Math.max(0, ...rows.map((row) => row.score)) * RELEVANCE;
-    return JUMP_KINDS.flatMap((kind) => {
-        const mine = rows.filter((row) => row.kind === kind && row.score >= floor).slice(0, cap);
-        return mine.length === 0 ? [] : [{ kind, rows: mine }];
-    })
-        // Stable, so kinds whose best row scores the same keep the precedence above.
-        .toSorted((left, right) => best(right) - best(left));
+    return (
+        JUMP_KINDS.flatMap((kind) => {
+            const mine = rows.filter((row) => row.kind === kind && row.score >= floor).slice(0, cap);
+            return mine.length === 0 ? [] : [{ kind, rows: mine }];
+        })
+            // Stable, so kinds whose best row scores the same keep the precedence above.
+            .toSorted((left, right) => best(right) - best(left))
+    );
 };

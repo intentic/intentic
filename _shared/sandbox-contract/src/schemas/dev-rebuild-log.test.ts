@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath, readDevRebuildLog } from "./devices.js";
 
 // The one account a detached rebuild gives of itself. The daemon builds the shell that writes this text and the browser

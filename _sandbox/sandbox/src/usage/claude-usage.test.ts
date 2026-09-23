@@ -1,5 +1,4 @@
 import { pino } from "pino";
-import { test, expect } from "bun:test";
 import { type ClaudeStore, displayLabel, type StoredAccount } from "../runtimes/claude/claude-credentials.js";
 import { claudeHeadroomSource, claudeUsageWindows, RATE_LIMIT_PARK_MS, readClaudeUsage } from "./claude-usage.js";
 

@@ -5,8 +5,6 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { useChat } from "../../chat/run/useChat";
 import { openAgentConversation } from "../../chat/panel/useChat-reveal";
@@ -18,7 +16,7 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals as startAgent.test.ts; scrollIntoView is jsdom's biggest gap and this file's subject,
 // recorded here for the assertions.
-const { reveals } = hoisted(() => {
+const { reveals } = (() => {
     const recorded: { card: string | undefined; block: string | undefined }[] = [];
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: boolean | ScrollIntoViewOptions): void {
         recorded.push({
@@ -27,7 +25,7 @@ const { reveals } = hoisted(() => {
         });
     };
     return { reveals: recorded };
-});
+})();
 
 let app: App | undefined;
 // Mounted per test with main.ts's app-level registrations; unmounted between tests since the board claims global

@@ -1,6 +1,5 @@
 import type { Browser, PageState } from "@intentic/browser";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { ScopeError } from "../policy.js";
 import { clickElement, fillElement, listTabs, openPage, readPage, snapshotPage } from "./browser.js";
 

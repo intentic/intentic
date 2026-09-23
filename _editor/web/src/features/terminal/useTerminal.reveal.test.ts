@@ -2,7 +2,6 @@
 // no real terminal or canvas, which jsdom lacks.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { test, expect, beforeEach, mock } from "bun:test";
 import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { ref } from "vue";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
@@ -13,23 +12,23 @@ stubGlobal(`localStorage`, {
     setItem: (key: string, value: string) => store.set(key, value),
     removeItem: (key: string) => store.delete(key),
 });
-mock.module("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 // Every remembered key is filed under the sandbox it belongs to; the ids below are this test's sandbox.
-mock.module("../sandbox/overview/activeSandbox", () => ({
+jest.mock("../sandbox/overview/activeSandbox", () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId: ref(`sbx-1`),
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
 }));
-mock.module("../sandbox/client/useSandbox", () => ({
+jest.mock("../sandbox/client/useSandbox", () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId: ref(`sbx-1`) }),
 }));
-mock.module("./terminalSession", () => ({
+jest.mock("./terminalSession", () => ({
     createTerminalSession: (name: string) => ({ kind: `terminal`, name }),
-    mountTerminalSession: mock(),
-    parkTerminalSession: mock(),
-    disposeTerminalSession: mock(),
-    retypeTerminalSession: mock(),
-    retintTerminalSession: mock(),
+    mountTerminalSession: jest.fn(),
+    parkTerminalSession: jest.fn(),
+    disposeTerminalSession: jest.fn(),
+    retypeTerminalSession: jest.fn(),
+    retintTerminalSession: jest.fn(),
 }));
 
 const { createTerminalTabs } = await import("./useTerminal");

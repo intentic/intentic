@@ -1,5 +1,4 @@
 import type { Provider } from "@intentic/engine";
-import { test, expect } from "bun:test";
 import { envArg } from "../core/host-files.js";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { createInfisicalProvider } from "./infisical.js";

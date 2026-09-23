@@ -1,6 +1,5 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { WorkspaceTree } from "@intentic/sandbox-contract";
-import { test, expect, jest } from "bun:test";
 import { coalescingWorkspaceTree } from "./workspace-tree-coalesce.js";
 
 // A tree distinguishable by which walk produced it; the shape itself is the walker's business, not this module's.

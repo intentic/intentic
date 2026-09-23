@@ -7,7 +7,6 @@
             "nothingLanded": "Nothing to land: this conversation's branch holds no work your workspace doesn't already have."
         },
         "agentCard": {
-            "agentTitle": "Agent title",
             "agentsStarted": "Agents it started",
             "archiveAgent": "Archive agent",
             "archiveBranchDiffConversation": "Archive, the branch, diff and conversation are kept",
@@ -19,27 +18,19 @@
             "completed": "Completed",
             "focusAgent": "Focus agent: {displayTitle}",
             "inNotInSandbox": "In {name}, not in the sandbox you're in",
-            "keepChatOpen": "Keep this chat open",
-            "keepOpenOtherwiseChat": "Keep open, otherwise this chat closes when you open another",
             "providerRefusedTurnUsage": "The provider refused this turn: its usage limit is spent.",
             "putAgentBackOn": "Put this agent back on the board",
             "renameAgent": "Rename agent",
             "restoreAgent": "Restore agent",
             "runsOn": "Runs on {runner}",
-            "sendAgain": "Send again",
             "sendTurnAgainSame": "Send this turn again. It is the same request as before, not a new message.",
-            "sending": "Sending…",
             "stillWorking": "{running} of {total} still working",
-            "stopWatching": "Stop watching",
             "stopWatchingConversationStays": "Stop watching, this conversation stays put",
-            "temporary": ", temporary",
-            "waitingMaintainer": "{landAsk}: waiting for a maintainer",
-            "working": "Working…"
+            "waitingMaintainer": "{landAsk}: waiting for a maintainer"
         },
         "agentConflictReport": {
             "and": ", and",
             "askingAgentToRebase": "Asking the agent to rebase needs its conversation",
-            "commitStashYours": "Commit or stash yours",
             "conflictStaysExactly": "The conflict stays exactly as it is.",
             "couldntReachWorkspacesCopy": "Couldn't reach your workspace's copy of this repo",
             "filesCouldntApply": "{count} file couldn't be applied | {count} files couldn't be applied",
@@ -49,11 +40,9 @@
             "landingConflictMarkersStill": "Landing with conflict markers still works from here.",
             "landsOnOwnTurn": "It lands on its own when the turn ends.",
             "nothingAppliedNothingLost": "Nothing was applied and nothing was lost: the agent's work is still on its branch.",
-            "openIn": "Open in",
             "opensChangesPanelLand": "Opens the Changes panel. Then land again: git cannot merge through unstaged work.",
             "resolvingAgentBringingBranch": "Resolving: the agent is bringing its branch up to date",
             "showFileInReview": "Show this file in the review",
-            "waitAgentTurnTo": "Wait for the agent turn to finish",
             "waitUntilAgentStops": "Wait until the agent stops writing",
             "watch": "Watch",
             "yourEditsAreThere": "the file with your own edits is in that workspace | the {count} files with your own edits are in that workspace",
@@ -61,10 +50,7 @@
         },
         "agentDetail": {
             "agentInNotIn": "This agent is in {remoteName}, not in the sandbox you're in",
-            "agentTitle": "Agent title",
             "backToAgents": "Back to agents",
-            "changes": "Changes",
-            "chat": "Chat",
             "discardBody": "{lead} Its {count} changed file {tail} | {lead} Its {count} changed files {tail}",
             "handOverAddress": "Or by address",
             "handOverBody": "Its new owner answers its questions and is who a reviewer asks about its work. Nothing about the work itself changes.",
@@ -73,11 +59,9 @@
             "handOverFailed": "Could not hand it over.",
             "handOverHeader": "Hand over this session",
             "nothingFinalArrivesUncommitted": "Nothing is final: this arrives as uncommitted changes for you to review, and the rest of the turn lands on top of it when the agent finishes.",
-            "openIn": "Open in",
             "openingAgentsReview": "Opening this agent's review…",
             "session": "Session",
             "sessionActions": "Session actions",
-            "sessionName": "Session name",
             "switchChat": ", switch chat",
             "switchesWindowToWhere": "Switches this window to {remoteName}, where its conversation lives",
             "workAlreadyLandedStays": "Work that already landed stays in your workspace: only what is still on the branch is lost."
@@ -87,8 +71,7 @@
             "couldNotReact": "Couldn't leave that reaction.",
             "markWith": "React with {emoji}",
             "markedBy": "{emoji} from {who}",
-            "pickAMark": "Pick a reaction",
-            "you": "you"
+            "pickAMark": "Pick a reaction"
         },
         "agentReviewPanel": {
             "agentHasntChangedAny": "This agent hasn't changed any files. Its conversation is in {remoteName}: open it there to ask for something, and whatever it writes shows up here.",
@@ -104,7 +87,6 @@
             "committedFileIn": "You committed this file in {short}",
             "committedWorkNotDifference": "You committed this work, so it is not a difference against main any more and the review above cannot list it. It is still readable here, file by file, exactly as the agent wrote it.",
             "couldntReadAgentsChanges": "Couldn't read this agent's changes",
-            "dragToResizeDouble": "Drag to resize · double-click to reset",
             "everythingElseAppliedCarry": "Everything else applied. These carry conflict markers in your workspace: resolve them there, as you would any merge.",
             "file": "file",
             "history": "history",
@@ -123,7 +105,6 @@
             "notLanded2": "Not landed {count}",
             "notYetLandedIn": "Not yet landed in your workspace",
             "openDiffInWorkspace": "Open this diff in the workspace editor",
-            "openIn": "Open in",
             "openRepositorysGitHistory": "Open this repository's git history",
             "pickFileToSee": "Pick a file to see what the agent did to it.",
             "previousFile": "Previous file",
@@ -157,25 +138,18 @@
             "branchDiffConversationKept": "The branch, diff and conversation are kept",
             "claim": "Claim this session",
             "claimHint": "Nobody answers for it yet; its questions and its review become yours",
-            "discard": "Discard",
             "dropsAgentsBranchWorktree": "Drops this agent's branch and worktree",
             "finishedTurnsLandInto": "Finished turns land into your workspace by themselves. Hold keeps this agent's future work on its branch until you press Land now.",
             "handOver": "Hand over…",
             "handOverHint": "Make another member answerable for it",
             "holdWorkOnBranch": "Hold work on the branch",
             "holdingFinishedWorkWaits": "Holding: finished work waits on this agent's branch. Switch back to landing at turn completion.",
-            "landAgain": "Land again",
             "landAutomatically": "Land automatically",
-            "landNow": "Land now",
             "putsBackOnBoard": "Puts it back on the board",
-            "restore": "Restore",
-            "sessionName": "Session name",
             "takeOver": "Take over this session",
-            "takeOverHint": "Owned by {name}; a maintainer may make it theirs",
-            "waitAgentTurnTo": "Wait for the agent turn to finish"
+            "takeOverHint": "Owned by {name}; a maintainer may make it theirs"
         },
         "agentStatus": {
-            "answer": "Answer",
             "approvalNeeded": "Approval needed",
             "conflict": "Conflict",
             "didntStart": "Didn't start",
@@ -191,10 +165,7 @@
             "interrupted": "Interrupted",
             "landConflict": "Land conflict",
             "landed": "Landed",
-            "landing": "Landing…",
             "movingTo": "Moving to {account}",
-            "needs": "Needs you",
-            "new": "New",
             "newAgent": "New agent",
             "onBranch": "on branch",
             "openChat": "Open chat",
@@ -206,18 +177,14 @@
             "removed": "Removed",
             "removedWorkspaceStillOn": "Removed from your workspace (still on its branch)",
             "resuming": "Resuming…",
-            "review": "Review",
             "reviewChanges": "Review changes",
             "reviewLand": "Review & land",
             "reviewPlan": "Review plan",
-            "running": "Running",
             "seeRequest": "See the request",
             "seeWhatBlocked": "See what blocked it",
             "seeWhereStopped": "See where it stopped",
             "sendsItselfAgain": "Sends itself again",
-            "setUp": "Set up",
             "setupNeeded": "Setup needed",
-            "starting": "Starting…",
             "stillWorking": "Still working",
             "stopped": "Stopped",
             "stopping": "Stopping…",
@@ -233,7 +200,6 @@
             "webhook": "Webhook"
         },
         "agentsView": {
-            "active": "Active",
             "agentResolveConflict": "Have the agent resolve the conflict?",
             "agentsWorkOnOwn": "Agents work on their own branch while you carry on: you review what they did before anything lands in your workspace.",
             "allSandboxes": "All sandboxes",
@@ -241,11 +207,9 @@
             "archiveAllUndo": "Archive all {clearable}: you can undo it",
             "archiveEmptiedFinishedAgents": "Archive emptied. Finished agents will collect here again on their own after a few quiet days.",
             "archiveEveryFinishedAgent": "Archive every finished agent",
-            "archived": "Archived",
             "archivedAgent": "archived agent",
             "archivedWillBeDeleted": "{count} archived agent will be deleted for good, its branch, its conversation and its history. This cannot be undone. | {count} archived agents will be deleted for good, each one's branch, its conversation and its history. This cannot be undone.",
             "askAgent": "Ask the agent",
-            "attention": "Attention",
             "backToFinished": "Back to finished",
             "backToFinishedAgents": "Back to finished agents",
             "copySessionName": "Copy session name",
@@ -254,27 +218,20 @@
             "deleteAllArchivedAgents": "Delete all {count} archived agents permanently",
             "deleteAllPermanentlyBranches": "Delete all {count} permanently: branches and all. This can't be undone.",
             "deleteEveryArchivedAgent": "Delete every archived agent?",
-            "discard": "Discard",
-            "earlier": "{hiddenFinished} earlier",
             "everyone": "Everyone",
             "explainCodebase": "Explain this codebase",
             "explainCodebaseWhatDoes": "Explain this codebase, what it does, where the entry points are, and which files I should read first.",
-            "filter": "Filter…",
             "filterAgentsByMessages": "Filter agents by your messages",
-            "filterByMessages": "Filter by your messages…",
             "findSomethingToImprove": "Find something to improve",
-            "finished": "Finished",
             "finishedAgentsLandWork": "Finished agents land their work in your workspace.",
             "hide": "Hide",
             "ignoreCase": "Ignore case",
             "inArchive": "In the archive",
             "inEarlierChats": "In earlier chats",
-            "keepOpen": "Keep Open",
             "mine": "Mine",
             "mineOff": "Everyone’s sessions",
             "mineOnly": "Only the sessions you own, in every lane",
             "more": "more",
-            "newAgent": "New agent",
             "noAgentMentions": "No agent mentions \"",
             "noAgentYoursMentions": "No agent of yours mentions \"{trim}\". This searches the titles and what either side said in the chat.",
             "noAgentsWorkingStart": "No agents working. Start one and delegate.",
@@ -285,12 +242,9 @@
             "nothingWrittenToWorkspace": "Nothing is written to your workspace unless it succeeds. You can stop the turn at any point.",
             "onlyOwnedBy": "Only the sessions {name} owns, in every lane",
             "openArchive": "Open the archive ({archiveSize})",
-            "restore": "Restore",
             "reviewMyChanges": "Review my changes",
             "reviewMyUncommittedChanges": "Review my uncommitted changes and flag anything risky before I commit them.",
-            "sandbox": "This sandbox",
             "show": "Show",
-            "showFewer": "Show fewer",
             "startFirstAgent": "Start your first agent",
             "suggestThreeSmallSafe": "Suggest three small, safe improvements to this codebase. Wait for me to choose one before you change anything.",
             "synthesize": "Synthesize",
@@ -359,8 +313,7 @@
             "held": "held",
             "reject": "Reject",
             "rejectHeldWake": "Reject this held wake",
-            "runNowExactlyWhat": "Run it now, with exactly what fired: the session lands on this board",
-            "waiting": "waiting for you"
+            "runNowExactlyWhat": "Run it now, with exactly what fired: the session lands on this board"
         },
         "ownerMark": {
             "ownedBy": "Owned by {name}",
@@ -385,13 +338,11 @@
             "copyBranchName": "Copy the branch name",
             "copyLinkToAgent": "Copy a link to this agent",
             "copySessionId": "Copy the session id",
-            "link": "Link",
             "pasteIdIntoQuick": "Paste the id into Quick Open to come back to this agent from anywhere.",
             "sessionId": "Session id"
         },
         "suggestedSessionBox": {
             "ctrlEnter": "Ctrl+Enter",
-            "model": "Model",
             "whatShouldAgentDo": "What should the agent do?"
         },
         "workflowRunCard": {
@@ -435,10 +386,8 @@
             "pageToRunIn": "This page has to run in your browser: Google won't sign you in inside an app window.",
             "pickAccountForSandbox": "Pick the Google account your sandbox belongs to.",
             "sandboxOpensForGoogle": "A sandbox opens for the Google account, so these have to be the same one.",
-            "sendAgain": "Send it again",
             "signedIn": "Signed in",
             "signingIn": "Signing in as",
-            "troubleSigningInUse": "Trouble signing in? Use Google's own page.",
             "twoAccountsHere": "This browser is signed in to Google and to Intentic as two different people.",
             "useDifferentGoogle": "Use a different Google account",
             "useGooglesOwnPage": "Use Google's own page."
@@ -449,15 +398,10 @@
         },
         "login": {
             "acceptableUsePolicy": "Acceptable Use Policy",
-            "and": "and",
             "buildAgents": "Build with agents",
-            "continueGoogle": "Continue with Google",
-            "continueGoogleInBrowser": "Continue with Google in your browser",
             "privacyPolicy": "Privacy Policy",
-            "signIn": "Sign in",
             "terms": "Terms",
             "threeStepsToFirst": "Three steps to your first agent",
-            "troubleSigningInUse": "Trouble signing in? Use Google's own page.",
             "weKeepEmailAddress": "We keep your email address and your workspace's address, and nothing else. By continuing you agree to our",
             "welcomeToIntentic": "Welcome to intentic",
             "workspaceCodingAgents": "A workspace for coding agents."
@@ -466,28 +410,22 @@
     "browsers": {
         "browsers": {
             "addressPlaceholder": "Search or enter an address",
-            "agentNeedsHelp": "The agent needs your help:",
             "agentOpensPageBrowser": "When an agent opens a page with its browser tools, it appears here: live, with every page it has open as a tab.",
             "agentsNextBrowserTool": "The agent's next browser tool call will fail",
-            "answer": "Answer",
             "back": "Back",
             "browserClosed": "This browser has closed",
             "browserSignedInAccount": "This browser is signed in as the {current} account",
-            "cancel": "Cancel",
-            "cantHelpNow": "Can't help now",
             "closeBrowser": "Close this browser",
             "closeTab": "Close tab",
             "closed": "Closed",
             "closedWhen": "Closed {when}",
             "control": "Control",
             "copyAddress": "Copy this address",
-            "doneHandBack": "Done: hand back",
             "driving": "Driving",
             "everyPageOpenedStill": "Every page it opened is still in the strip above, with the one it ended on selected: the record of where the agent went.",
             "foldOutWay": "Fold this out of the way",
             "forward": "Forward",
             "help": "Help →",
-            "leave": "Leave",
             "leavePage": "Leave this page?",
             "more": "More",
             "newTab": "New tab",
@@ -495,17 +433,14 @@
             "noPagesOpen": "No pages open",
             "ok": "OK",
             "openAddressYourself": "Open this address yourself",
-            "optionalNoteBackTo": "Optional note back to the agent",
             "other": "other",
             "pageSays": "This page says",
-            "reload": "Reload",
             "sendClicksKeystrokesTo": "Send your clicks and keystrokes to the agent's browser",
             "stay": "Stay",
             "stopSendingClicksKeystrokes": "Stop sending your clicks and keystrokes to the agent's browser",
             "switchBrowserOpen": "Switch browser: {count} open",
             "takeControl": "Take control",
             "takeControlFixStep": "Take control, fix that step, then hand back.",
-            "waiting": "waiting for you",
             "youreDrivingHandBack": "You're driving · hand back"
         }
     },
@@ -521,7 +456,6 @@
             "startingBrowser": "Starting the browser…"
         },
         "capabilities": {
-            "access": "Access",
             "addAnother": "Add another",
             "agentReadFirstWhat": "Have an agent read it first, what the code does, route by route",
             "agentReadWhatChanged": "Have an agent read what changed first: the manifest delta leads",
@@ -529,12 +463,10 @@
             "backgroundProcess": "Background process",
             "browsePublishedExtensions": "Browse published extensions",
             "cancelAddAnotherInstead": "Cancel: add another instead",
-            "capabilities": "Capabilities",
             "capabilitiesSearchedByName": "Capabilities are searched by name, by what they do, and by kind: \"mcp\", \"ssh\", \"sql\".",
             "connected": "{connected} connected",
             "connected2": "Connected",
             "connectingAgainMeansRunning": "Connecting it again means running a fresh command on that machine.",
-            "connections": "Your connections",
             "connectionsSearchedByName": "Connections are searched by the name you gave them, by what they connect to, and by kind.",
             "couldntListCapabilities": "Couldn't list your capabilities.",
             "disconnectHeader": "Disconnect {machine}?",
@@ -547,8 +479,6 @@
             "left": "{count} left",
             "logs": "Logs",
             "losesAccessToSandbox": "loses access to this sandbox: its file sync stops and its mirrored ports drop off its localhost within a minute. Nothing on that machine is deleted, and its agent stays installed.",
-            "name": "Name",
-            "needsSandboxRebuild": "Needs a sandbox rebuild",
             "notNeeded": "Not needed",
             "nothingInMatches": "Nothing in {label} matches \"{trim}\".",
             "published": "published",
@@ -557,15 +487,11 @@
             "recommendedSetup": "Recommended setup",
             "relaysEventsToAgent": "Relays events to your agent: restart it if this connection stops responding.",
             "removeCapability": "Remove capability",
-            "restart": "Restart",
             "sandboxTearsDownConfiguration": "from your sandbox? This tears down its configuration and can't be undone.",
             "saved": "Saved as",
             "setUp": "Set them up",
-            "settings": "Settings",
-            "skip": "Skip",
             "sourceReadByHuman": ", {verifiedCount} with the source read by a human",
             "test": "Test",
-            "thisMachine": "this machine",
             "whatAgentCallConnection": "What your agent will call this connection.",
             "workspaceAsksFor": "{count} capability your workspace asks for | {count} capabilities your workspace asks for"
         },
@@ -596,23 +522,15 @@
         "capabilityInstanceRow": {
             "finishSetup": "{detail}: Finish setup →",
             "logIn": "Log in",
-            "moreActions": "More actions",
-            "needsSandboxRebuild": "Needs a sandbox rebuild",
             "openBrowser": "Open browser",
-            "reLogIn": "Re-log in",
-            "rename": "Rename…",
-            "revokeAccess": "Revoke access",
-            "settings": "Settings…",
-            "signIn": "Sign in"
+            "reLogIn": "Re-log in"
         },
         "capabilityRail": {
             "capabilityCategories": "Capability categories",
             "capabilityCategory": "Capability category",
-            "categories": "Categories",
-            "category": "Category"
+            "categories": "Categories"
         },
         "capabilityRenameDialog": {
-            "name": "Name",
             "nameAgentKnowsConnection": "This is the name your agent knows the connection by, so its skill and tools are renamed with it. Everything else is kept: a signed-in browser stays signed in, a connected device stays paired, and anything pointing at this connection is updated to follow it.",
             "renameConnection": "Rename connection",
             "renamedTo": "Renamed to"
@@ -627,7 +545,6 @@
             "couldntReadCloudflareZones": "Couldn't read your Cloudflare zones.",
             "createToken": "Create a token",
             "doesntLookLikeCloudflare": "That doesn't look like a Cloudflare API token. Double-check for copy/paste slips.",
-            "pasteCloudflareApiToken": "Paste your Cloudflare API token",
             "pickDomainToUse": "Pick the domain to use",
             "scopesZoneReadDns": "Scopes: Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit",
             "tokenReachSeveralDomains": "This token can reach several domains. Choose which one to use."
@@ -650,7 +567,6 @@
             "importForticlientOptional": "Import from FortiClient (optional)",
             "noVpnConnectionsFound": "No VPN connections found in {fileName}.",
             "pickConnectionToFill": "From {fileName}: pick the connection to fill the form with.",
-            "reading": "Reading…",
             "youllNeedToEnter": "You'll need to enter: {needs}"
         },
         "gitRefField": {
@@ -664,7 +580,6 @@
         "hostConnectDialog": {
             "callsItself": "This machine calls itself",
             "codeInCommandWorks": "The code in this command works once and expires in about ten minutes. This window updates by itself when the device connects.",
-            "connect": "Connect {id}",
             "connectedAgentWorkOn": "is connected. The agent can work on it from its next turn.",
             "couldNotRename": "Could not take that name.",
             "in": ": in",
@@ -673,10 +588,8 @@
             "nameItThatToo": ". Name it that here too? The agent's tools take the new name; the machine reconnects under it by itself.",
             "named": "Named",
             "nothingElseThoseSwitches": ", and nothing else. Those switches live in this dialog, the device enforces them itself, and Revoke here cuts it off immediately.",
-            "onceConnectedAgentMay": "Once connected, the agent may:",
             "orKeep": "or keep {id}",
             "powershell": "PowerShell",
-            "preparingOneTimeConnection": "Preparing a one-time connection code…",
             "reconnectsUnderThatName": ". It reconnects under that name by itself; the agent's tools follow from its next turn.",
             "run": "Run it from",
             "runInside": "Run it inside {name}",
@@ -732,11 +645,9 @@
             "sMailServer993": "{domain}'s mail server is {host}:993, filled in for you."
         },
         "pluginRegistryBrowse": {
-            "browse": "Browse",
             "loadsReCheckedAt": "Loads: re-checked at the pinned commit by the registry's nightly scan",
             "registryListsNoPlugins": "That registry lists no plugins.",
             "registryOptional": "From a registry (optional)",
-            "token": "Token",
             "verified": "Verified"
         },
         "previews": {
@@ -768,7 +679,6 @@
             "gateExplained": "Only {approvers} can release this, and {scope}. Only the owner can change this.",
             "generated": "generated for you ·",
             "hide": "Hide",
-            "hideValue": "Hide value",
             "howLongOneRelease": "How long one release lasts",
             "letAgentUseWithout": "Let the agent use this without asking anybody",
             "livesIn": "lives in",
@@ -800,35 +710,26 @@
         },
         "secretField": {
             "as": "as",
-            "hideValue": "Hide value",
-            "neverOnPlatform": ": never on the platform.",
             "pasteValue": "Paste the value for {secretKey}",
             "showValue": "Show value",
             "storedInSandboxs": "Stored in your sandbox's"
         },
         "webExtConnectDialog": {
-            "connect": "Connect {id}",
             "connectedAllowOnSite": "is connected. Allow it on a site in the extension, and the agent can work there from its next turn.",
             "extensionCodeOpenToolbar": "Your extension has the code. Open it (the toolbar icon is showing",
             "installExtension": "Install the extension →",
             "installIntenticExtensionIn": "Install the Intentic extension in the browser you want to connect, then give it the code below. The extension keeps one outbound connection open to this sandbox while that browser is running. Nothing is opened on your network, and nothing is copied out of your browser.",
-            "onceConnectedAgentMay": "Once connected, the agent may:",
             "onlyOnSitesAllow": ", and only on the sites you allow one at a time in the extension — your browser enforces that part, not this sandbox. Pause it from the extension, or Revoke here, and it stops immediately.",
             "pasteIntoExtensionsPopup": "Paste it into the extension's popup. The code works once and expires in about ten minutes. This window updates by itself when the browser connects.",
-            "preparingOneTimeConnection": "Preparing a one-time connection code…",
             "press": ") and press"
         }
     },
     "chat": {
-        "accountsPickerAccounts": {
-            "claudeCode": "Claude Code"
-        },
         "cardStatus": {
             "allowed": "Allowed",
             "alwaysAllowed": "Always allowed",
             "answered": "Answered",
             "approved": "Approved",
-            "connected": "Connected",
             "couldntHelp": "Couldn't help",
             "denied": "Denied",
             "dismissed": "Dismissed",
@@ -838,9 +739,6 @@
             "setupDidntFinish": "Setup didn't finish",
             "skipped": "Skipped",
             "stopped": "Stopped"
-        },
-        "cardView": {
-            "working": "Working…"
         },
         "catalog": {
             "askBeforeEachEdit": "Ask before each edit and command.",
@@ -853,7 +751,6 @@
             "runEverythingWithoutAsking": "Run everything without asking."
         },
         "chatAccountPanel": {
-            "connectAModel": "Connect a model",
             "finishSignIn": "Finish sign-in",
             "introOffer": "Running on the free trial. An account you already pay for, or a model on this machine, runs without a daily cap.",
             "isntConnectedInSandbox": "{providerName} isn't connected in this sandbox.",
@@ -867,10 +764,8 @@
         },
         "chatAudioChip": {
             "of": "{displayTime} of {duration}",
-            "openInWorkspace": "Open {name} in the workspace",
             "pause": "Pause {name}",
             "play": "Play {name}",
-            "removeAttachment": "Remove attachment",
             "seek": "Seek {name}"
         },
         "chatCapacityRail": {
@@ -878,7 +773,6 @@
             "moreRoom": "+{hidden} more with room",
             "nothingRoomRightNow": "Nothing has room right now.",
             "planHeadroom": "Plan headroom",
-            "readingConnections": "Reading your connections…",
             "reconnectOnAgentTab": "reconnect on the Agent tab",
             "unavailable": "Unavailable"
         },
@@ -888,8 +782,7 @@
         "chatCommandBlock": {
             "shortenedCard": "Shortened for this block.",
             "shortenedCardKeptAround": "Shortened for this block, kept around the flagged part.",
-            "showAllLines": "Show all {count} lines",
-            "showLess": "Show less"
+            "showAllLines": "Show all {count} lines"
         },
         "chatCommandPopover": {
             "agentCommands": "Agent commands"
@@ -918,12 +811,10 @@
         },
         "chatFileChip": {
             "notShown": "not shown",
-            "openInWorkspace": "Open {name} in the workspace",
             "openInWorkspace2": "Open in the workspace",
             "removeAttachment": "Remove attachment"
         },
         "chatForkCut": {
-            "editMessage": "Edit this message",
             "fork": "Fork",
             "forkChatOnly": "Fork chat only",
             "forkWholeConversation": "Fork the whole conversation",
@@ -942,14 +833,12 @@
             "hideCommand": "Hide command",
             "running": "Running in the background · {elapsed}",
             "showCommand": "Show command",
-            "untracked": "Background job · started {clock}",
-            "watchInTerminal": "Watch in terminal"
+            "untracked": "Background job · started {clock}"
         },
         "chatJobsReadout": {
             "explain": "These keep going after the turn ends. Each one wakes this chat when it exits.",
             "running": "{count} job running | {count} jobs running",
-            "title": "Running in the background",
-            "watchInTerminal": "Watch in terminal"
+            "title": "Running in the background"
         },
         "chatMentionPopover": {
             "changeSetting": "Change a setting",
@@ -966,16 +855,12 @@
             "agentsCase": "The agent's case: {why}",
             "agentsTerminalNeeds": "The agent's terminal needs you",
             "allowOnce": "Allow once",
-            "alsoStopsTurn": "Also stops the turn",
             "approvers": "Approvers: {approvers}",
             "as": "as \"{id}\"",
             "by": "by {approvedBy}",
-            "cantHelpNow": "Can't help now",
             "chatStaysPutInstead": "(this chat stays put instead of picking itself back up)",
             "collapseMessage": "Collapse message",
             "connect": "Connect {name}",
-            "connected": "Connected",
-            "editMessage": "Edit this message",
             "editMessageReplacesEverything": "Edit this message: replaces it and everything after",
             "expandMessage": "Expand message",
             "hideCheck": "Hide the check",
@@ -983,7 +868,6 @@
             "hideCommand": "Hide the command",
             "isntConnectedYet": "{name} isn't connected yet",
             "keepFutureWorkOn": "Keep future work on the branch",
-            "no": "No",
             "noKeepPlanning": "No, keep planning",
             "notNow": "Not now",
             "onlyCanAnswer": "Only {approvers} can answer this",
@@ -1005,16 +889,13 @@
             "releasingCoversRestConversation": "Releasing it covers the rest of this conversation.",
             "requestedBecause": "Requested because: {reason}",
             "sandboxRestartsMessageWaits": "(the sandbox restarts, and your message waits here)",
-            "sendAgain": "Send again",
             "sendAnyway": "Send anyway",
             "setupDidntFinishWhile": "The setup didn't finish while the agent waited: it continued without it.",
             "showCheck": "Show the check",
             "showMessage": "Show the message",
             "showCommand": "Show the command",
-            "skip": "Skip",
             "skipFree": "Skip: free",
             "spentToday": "${amountUsd} · ${spentTodayUsd} of ${dailyCapUsd} spent today",
-            "stopWatching": "Stop watching",
             "to": "To {payTo}",
             "waitingToFinishSetup": "Waiting for you to finish setup…",
             "waitsReadyToLand": "(it waits as \"Ready to land\" until you land it)",
@@ -1024,19 +905,14 @@
         "chatModelPicker": {
             "autoArmed": "Your first message picks what this chat runs on; change it anytime.",
             "autoDescription": "Let a model read your first message and pick what this chat runs on",
-            "autoLabel": "Auto",
-            "chooseWhichModelReads": "Choose which model does the reading",
-            "notAvailableHere": "Not available here",
-            "whatIsntAvailableHere": "What isn't available here"
+            "chooseWhichModelReads": "Choose which model does the reading"
         },
         "chatNotes": {
             "sentMessage": "Sent with your message"
         },
         "chatPane": {
             "acts": "Acts as: {personaName}",
-            "acts2": "Acts as",
             "agent": "As agent",
-            "agentMode": "Agent mode",
             "askAnythingChatFree": "Ask anything, this chat is free and needs nothing connected.",
             "atForFilesAndSettings": "{'@'} for files and settings",
             "attachEditorContext": "Attach editor context",
@@ -1058,7 +934,6 @@
             "loadingEarlierTurns": "Loading earlier turns…",
             "message": "This message",
             "messageWhatEveryStep": "\": this message is what every step is asked to do. Model, effort, mode and looping are each step's own.",
-            "model": "Model",
             "moreComposerSettings": "More composer settings",
             "openNewChatHere": "Open a new chat from here with what you have typed: this one keeps its answer",
             "providerModel": "Provider and model: {providerName} · {modelLabelText}",
@@ -1072,7 +947,6 @@
             "startConversationAny": "Start a conversation.",
             "talkHandsFree": "Talk hands-free",
             "upForPreviousMessage": "↑ for previous message",
-            "whereRuns": "Where this runs",
             "writingAgent": "Writing as the agent",
             "writingAgentSendPlaces": "Writing as the agent: Send places the words into the transcript, no reply. Press to write as yourself again"
         },
@@ -1081,11 +955,8 @@
             "archivedOffBoardSending": "Archived: off the board. Sending a message restores it.",
             "askPlatformAgainPick": "Ask the platform again, and pick this chat back up if the trial answers",
             "billing": "Billing",
-            "connectAModel": "Connect a model",
             "connectTooltip": "A Google sign-in, a model on this machine, or a subscription you already pay for",
-            "putAgentBackOn": "Put this agent back on the board now",
-            "reconnect": "Reconnect",
-            "restore": "Restore"
+            "putAgentBackOn": "Put this agent back on the board now"
         },
         "chatPaneStatus": {
             "context": "Context · {tokens} / {contextWindow} ({pct}%)",
@@ -1094,39 +965,30 @@
         "chatPanel": {
             "backToDiagramEvery": "Back to the diagram: every step of this run",
             "backToRunsDiagram": "Back to the run's diagram",
-            "dragToResizeDouble": "Drag to resize · double-click to reset",
             "leaveRun": "Leave the run",
             "leaveRunChatsStay": "Leave the run: the chats stay open"
         },
         "chatPersonaMenu": {
-            "anyone": "Anyone",
             "everyAccountYouveConnected": "Every account you've connected is in reach, and the full toolbox.",
-            "managePersonas": "Manage personas",
             "noGuestYet": "No assistant has been assigned to you yet. Ask the sandbox owner for one.",
             "noPersonasYetChat": "No personas yet, so this chat speaks through every account you've connected. Set one up to send a message as one person: with only that person's accounts in reach.",
-            "notSignedInYet": ", not signed in yet",
-            "setUpPersona": "Set up a persona"
+            "notSignedInYet": ", not signed in yet"
         },
         "chatPersonaRail": {
             "chat": "chat",
-            "managePersonas": "Manage personas",
             "newChat": "New chat as",
             "open": "Open {conversation}",
-            "setUpPersona": "Set up a persona",
-            "showSChats": "Show {label}'s chats",
-            "working": "Working…"
+            "showSChats": "Show {label}'s chats"
         },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "This conversation already runs {placedAt}. Start a new agent to work somewhere else.",
             "noRunnersYetAdd": "No runners yet. Add one on a connected computer under Sandbox ▸ Devices to run agents there.",
             "otherSandboxes": "Other sandboxes",
             "runsOnMachineWorkspace": "Runs on the machine this workspace lives on.",
-            "sandbox": "This sandbox",
             "turnRunsStreamsBack": "The turn runs there and streams back into this tab. It uses that sandbox's files and accounts, so this box's open file, {'@'}-mentions and personas stay behind."
         },
         "chatQuestionCard": {
             "addAnswerInOwn": "Add an answer in your own words.",
-            "alsoStopsTurn": "Also stops the turn",
             "answerInOwnWords": "Answer in your own words.",
             "chosen": "Chosen:",
             "other": "Other",
@@ -1137,7 +999,6 @@
             "writeAnswerToSubmit": "Write your answer to submit."
         },
         "chatQueue": {
-            "cancel": "Cancel",
             "fromAgent": "From another agent",
             "fromSandbox": "From the sandbox",
             "goesAfterAnswer": "Goes in once you answer the request above",
@@ -1156,12 +1017,10 @@
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Your agent is waiting for you",
-            "askAnything": "Ask anything…",
             "conversationSoFar": "The conversation so far",
             "openChatAgentWaiting": "Open the chat: your agent is waiting for an answer",
             "titleWaitingForYou": "{title} · waiting for you",
             "whatWasSaidHover": "What was said: hover to read, press to keep it open",
-            "working": "Working…",
             "writeToAgentHere": "Write to your agent from here"
         },
         "chatRailChecklist": {
@@ -1190,11 +1049,9 @@
             "addsWorkAgentDid": "Adds the work the agent did, the files it read and changed, what it ran, and its thinking. This publishes the code and command output that appear in those blocks.",
             "anyoneLinkReadConversation": "Anyone with this link can read the conversation. It shows what was said up to now, and nothing after.",
             "anyoneLinkReadNo": "Anyone with the link can read it: no sign-in. Secrets are stripped, but nothing else is.",
-            "copyLink": "Copy link",
             "everything": "Everything",
             "messagesOnly": "Messages only",
             "noPublicAddress": "No public address",
-            "openInNewTab": "Open in new tab",
             "openSharedConversationIn": "Open the shared conversation in a new tab",
             "promptsAgentsWrittenAnswers": "Your prompts and the agent's written answers.",
             "share": "Share",
@@ -1210,9 +1067,7 @@
             "download": "Download",
             "filmstrip": "Every picture in this conversation",
             "fitToWindow": "Fit to window",
-            "gone": "No longer available",
             "next": "Next picture",
-            "openInWorkspace": "Open in workspace",
             "position": "{index} of {total}",
             "previous": "Previous picture",
             "show": "Show {name}"
@@ -1221,13 +1076,7 @@
             "chatWhatRun": "This chat and what you can run"
         },
         "chatSwitcherSheet": {
-            "chats": "Chats",
-            "closeChat": "Close chat",
-            "inChat": "in this chat",
-            "newAgent": "New agent",
-            "newChat": "New chat",
-            "searchChats": "Search chats",
-            "searchChats2": "Search chats…"
+            "chats": "Chats"
         },
         "chatSystemPrompt": {
             "baseClaude": "Claude Code's own prompt",
@@ -1253,81 +1102,37 @@
             "whencePersona": "Sent because this chat acts as someone in particular."
         },
         "chatTabList": {
-            "active": "Active",
-            "agents": "Agents",
             "anotherSandbox": "another sandbox",
-            "archived": "Archived",
-            "attention": "Attention",
-            "chatTitle": "Chat title",
             "closeAll": "Close all {size}: {keeps}",
-            "closeAll2": "Close All",
-            "closeChat": "Close chat",
-            "closeFinished": "Close Finished",
-            "closeOthers": "Close Others",
-            "closePane": "Close Pane",
-            "closeToRight": "Close to the Right",
-            "earlier": "{hiddenFinished} earlier",
             "everyConversationWindowHolds": "Every conversation this window holds, by what needs you",
-            "filterByMessages": "Filter by your messages…",
             "filterChatsByMessages": "Filter chats by your messages",
-            "finished": "Finished",
-            "inChat": "in this chat",
-            "keepChatOpen": "Keep this chat open",
-            "keepOpen": "Keep Open",
-            "keepOpenOtherwiseChat": "Keep open, otherwise this chat closes when you open another",
-            "latest": "Latest",
-            "newAgent": "New agent",
-            "newChat": "New chat",
             "noMatches": "No matches",
             "notOpen": "Not open",
             "openBeside": "Open Beside",
             "openWorkflowRun": "Open the workflow run {name}",
             "peopleSandboxPickOne": "The people this sandbox can be, pick one and talk to them",
-            "personas": "Personas",
             "runsIn": "Runs in {sandbox}",
             "runsInQuoted": "Runs in “{sandbox}”",
             "share": "Share…",
-            "showFewer": "Show fewer",
             "steps": "steps"
         },
         "chatTabs": {
-            "archived": "Archived",
             "chatHistory": "Chat history",
-            "chatTitle": "Chat title",
-            "closeAll": "Close All",
-            "closeFinished": "Close Finished",
-            "closeOthers": "Close Others",
-            "closePane": "Close Pane",
-            "closeToRight": "Close to the Right",
             "history": "History",
-            "inChat": "in this chat",
-            "keepChatOpen": "Keep this chat open",
-            "keepOpenOtherwiseChat": "Keep open, otherwise this chat closes when you open another",
             "need": "{attentionCount} need you",
-            "newAgent": "New agent",
-            "newChat": "New chat",
             "openNextBeside": "Open Next Beside",
             "pastChats": "Past chats",
             "previous": "Previous",
-            "rename": "Rename…",
             "running": "{runningCount} running",
-            "searchChats": "Search chats",
-            "searchChats2": "Search chats…",
             "switch": "Switch…",
             "switchChatOpen": "Switch chat: {count} open",
             "waiting": "{attentionCount} waiting for you"
-        },
-        "chatTabsMobile": {
-            "inChat": "in this chat",
-            "newAgent": "New agent",
-            "newChat": "New chat"
         },
         "chatTodoList": {
             "stillOpen": "{content} still open"
         },
         "chatToolCallsToggle": {
-            "hideToolCalls": "Hide tool calls",
-            "showToolCalls": "Show tool calls"
+            "hideToolCalls": "Hide tool calls"
         },
         "chatToolCard": {
             "background": "background",
@@ -1335,18 +1140,12 @@
             "more": "… {hidden} more",
             "needsInput": "needs input",
             "openAgentsTranscript": "Open this agent's transcript",
-            "openInWorkspace": "Open in workspace",
             "viewLarger": "View larger",
             "watchAgent": "Watch this agent",
-            "watchBrowser": "Watch the browser",
-            "watchInTerminal": "Watch in terminal"
+            "watchBrowser": "Watch the browser"
         },
         "chatToolDiff": {
-            "openInWorkspace": "Open in workspace",
             "truncated": "truncated"
-        },
-        "chatToolGroup": {
-            "openInWorkspace": "Open in workspace"
         },
         "chatTranscriptSkeleton": {
             "loadingConversation": "Loading conversation…",
@@ -1356,7 +1155,6 @@
             "thinking": "Thinking"
         },
         "chatTurnShots": {
-            "gone": "No longer available",
             "more": "+{count}",
             "open": "Open {name}",
             "openAll": "Open all {count} pictures",
@@ -1385,7 +1183,6 @@
             "hintSteer": "Send to the running turn",
             "placeholderEdit": "Ask this turn again, differently…",
             "placeholderIdle": "Ask {provider}…",
-            "placeholderIdleTrial": "Ask anything…",
             "placeholderParked": "Answer above, or add a message for after…",
             "placeholderPlace": "Write as {provider}, placed into the transcript, no reply…",
             "placeholderPlan": "Reply to revise the plan…",
@@ -1402,13 +1199,10 @@
             "viewerPlaceholder": "You’re viewing: ask the owner for a collaborator role to drive agents"
         },
         "composerModelPill": {
-            "auto": "Auto",
             "chooseModel": "Choose a model",
             "model": "Model: {modelLabelText}"
         },
         "composerMore": {
-            "acts": "Acts as",
-            "agentMode": "Agent mode",
             "howMuchMayDo": "How much it may do before asking.",
             "landsInTranscriptNo": "Lands in the transcript, no reply.",
             "loopRunWorkflow": "Loop it, or run a workflow.",
@@ -1417,19 +1211,13 @@
             "writeAgent": "Write as agent"
         },
         "composerQuickPick": {
-            "acts": "Acts as",
             "anotherSandbox": "Another sandbox",
-            "anyone": "Anyone",
             "effort": "Effort",
             "everyConnectedAccount": "Every connected account",
             "here": "Here",
-            "model": "Model",
-            "runnerOnComputer": "Runner on your computer",
-            "sandbox": "This sandbox",
-            "whereRuns": "Where this runs"
+            "runnerOnComputer": "Runner on your computer"
         },
         "effortMeter": {
-            "reasoningEffort": "Reasoning effort",
             "reasoningEffort2": "Reasoning effort: {effortLabel}"
         },
         "errands": {
@@ -1440,35 +1228,27 @@
             "sentBySandboxLand": "Sent by the sandbox, its land turned the main tree's check red",
             "sentBySandboxTurn": "Sent by the sandbox, that turn ended unverified"
         },
-        "hostModelPicker": {
-            "model": "Model"
-        },
         "hostPickerBody": {
             "carriesOnInSame": "Carries on in the same conversation, on the model above — ⌘/Ctrl + Enter",
             "ctrlEnter": "{action} — ⌘/Ctrl + Enter",
             "filesAttemptAwayOpens": "Files that attempt away and opens a fresh conversation on a clean worktree; nothing is carried over",
-            "startOver": "Start over",
             "stopsFilesAttemptAway": "Stops and files that attempt away, then opens a fresh conversation on a clean worktree — ⌘/Ctrl + Enter"
         },
         "limitReset": {
             "sandboxDidntAnswer": "Your sandbox didn't answer."
         },
         "modelPicker": {
-            "accountNeedsToReconnected": "This account needs to be reconnected",
             "allAiAccounts": "Connect a model, or manage accounts",
-            "allProviders": "All providers",
             "backAt": "Back at {at}",
             "couldntLoadModels": "Couldn't load models.",
             "filterByProvider": "Filter by provider",
             "loadingModels": "Loading models…",
             "modelPicker": "Model picker",
-            "models": "Models",
             "models2": "{count} models",
             "noModelsDiscovered": "No models discovered.",
             "noModelsMatch": "No models match.",
             "searchAllProviders": "Search all providers",
             "searchModels": "Search models…",
-            "showFewer": "Show fewer",
             "showFewerModels": "Show fewer {label} models",
             "showOlder": "Show {hidden} older",
             "showOlderModels": "Show {hidden} older {label} models"
@@ -1477,35 +1257,26 @@
             "useCustomModelId": "use as custom model id"
         },
         "pastChatList": {
-            "inChat": "in this chat",
             "noMatchingChats": "No matching chats.",
             "noPreviousChats": "No previous chats."
         },
         "pickerAccounts": {
-            "account": "Account",
-            "accountNeedsToReconnected": "This account needs to be reconnected",
             "allAccounts": "All {count} accounts",
-            "filterAccounts": "Filter accounts…",
-            "filterAccounts2": "Filter accounts",
             "filterSubscriptionAccounts": "Filter subscription accounts",
-            "harness": "Harness",
             "headroom": "Headroom",
             "noAccountsMatch": "No accounts match.",
             "reMeasureEveryAccounts": "Re-measure every account's plan limits now",
             "session": "{provider} session",
-            "showFewer": "Show fewer",
             "subscription": "Subscription",
             "turnsSpreadAcrossAutomatically": "Turns are spread across these automatically"
         },
         "pickerRunSettings": {
             "extendedThinking": "Extended thinking",
-            "fastSpeed": "Fast speed",
-            "reasoningEffort": "Reasoning effort"
+            "fastSpeed": "Fast speed"
         },
         "subagents": {
             "agentDelegatesAgentTool": "When an agent delegates: with its Agent tool, or by driving Codex or Grok from its shell, the agent it started appears here, with its own transcript.",
             "agentsStartedFinishedAged": "The agents {focusTitle} started have finished and aged out of this list. Its own transcript is the record of what they reported back.",
-            "finished": "Finished",
             "noAgentsStarted": "No agents started",
             "noTranscriptRecordedAgent": "No transcript was recorded for this agent.",
             "nothingRunningAgent": "Nothing running for this agent",
@@ -1513,14 +1284,11 @@
             "parent": "Parent",
             "parentsModelNothingNamed": "Its parent's model: nothing named one for this agent",
             "report": "Report",
-            "running": "Running",
             "showAll": "Show all",
             "showEveryAgent": "Show every agent",
             "showFullReport": "Show the full report",
-            "showLess": "Show less",
             "watchingLiveWhatAgent": "Watching live: what this agent writes lands here as it works.",
-            "work": "Work",
-            "working": "Working…"
+            "work": "Work"
         },
         "turnBreak": {
             "anotherAccount": "another account",
@@ -1562,7 +1330,6 @@
             "dontWriteCodeAssistants": "If you don't write code: the assistant's changes apply on their own and every change is saved as a version. You can always go back.",
             "howWorkHere": "How will you work here?",
             "iDontWriteCode": "I don't write code",
-            "iWriteCode": "I write code",
             "picksWordsAppUses": "Picks the words the app uses and what its home page is. Nothing about your files or your agents changes, and you can switch in Settings any time."
         },
         "matchLine": {
@@ -1574,23 +1341,12 @@
             "agentCanWriteCaption": "a disk mounted read-write takes the agent's writes straight onto your server",
             "couldntReadWhatDisks": "Couldn't read what your disks are doing.",
             "disks": "Your disks",
-            "finishSetup": "finish setup →",
-            "moreActions": "More actions",
             "mount": "Mount",
             "mountedWritableThoughReadOnly": "Mounted read-write, but its settings here say read-only: unmount and mount it again.",
             "mountsAutomaticallyAfterSandbox": "Mounts automatically after a sandbox restart, once its VPN is back.",
-            "needsSandboxRebuildTo": "Needs a sandbox rebuild to install its client:",
             "readOnly": "read-only",
             "readWrite": "read-write",
-            "rename": "Rename…",
-            "settings": "Settings…",
             "unmount": "Unmount"
-        },
-        "railCard": {
-            "temporary": ", temporary"
-        },
-        "railColumn": {
-            "dragToResizeDouble": "Drag to resize · double-click to reset"
         },
         "reviewStat": {
             "comments": "comments"
@@ -1604,22 +1360,15 @@
         "usageRing": {
             "everyPoolResetFull": "Every pool has reset: the full allowance is available.",
             "floorsEveryDeviceOn": "≥ these are floors: every device on the account spends the same pools.",
-            "measured": "measured {measuredAt}",
-            "planLimits": "Plan limits",
-            "resets": "resets {resetsAt}",
-            "sandbox": "This sandbox"
+            "measured": "measured {measuredAt}"
         },
         "vpnConnections": {
             "connectCode": "Connect with code",
-            "connections": "Your connections",
             "connectsAutomaticallyAfterSandbox": "Connects automatically after a sandbox restart.",
             "couldntReadWhatTunnels": "Couldn't read what your tunnels are doing.",
             "enterOneTimeCode": "Enter a one-time code",
             "finishSetup": "finish setup →",
-            "moreActions": "More actions",
-            "needsSandboxRebuildTo": "Needs a sandbox rebuild to install its client:",
-            "rename": "Rename…",
-            "settings": "Settings…"
+            "needsSandboxRebuildTo": "Needs a sandbox rebuild to install its client:"
         },
         "workflowMark": {
             "step": "· step {index}/{total}"
@@ -1668,7 +1417,6 @@
             "ready": "Ready",
             "runIt": "Run it",
             "startNow": "Start now",
-            "starting": "Starting…",
             "stop": "Stop",
             "windowUnderFloor": "This window is under what one agent turn costs, so it is a quick-jobs rung too. More memory would raise it."
         },
@@ -1688,10 +1436,8 @@
         "extensionCategories": {
             "connections": "Connections",
             "knowledge": "Knowledge",
-            "other": "Other",
             "sandbox": "The sandbox",
-            "workDelivery": "Work & delivery",
-            "workspace": "Workspace"
+            "workDelivery": "Work & delivery"
         },
         "extensionFacets": {
             "agentCli": "agent CLI",
@@ -1715,11 +1461,7 @@
             "versionDrift": "version drift"
         },
         "reconcileStatus": {
-            "changesPending": "changes pending",
-            "upToDate": "up to date"
-        },
-        "useExtensionList": {
-            "blocked": "blocked"
+            "changesPending": "changes pending"
         }
     },
     "preview": {
@@ -1743,7 +1485,6 @@
             "publicSite": "Public site"
         },
         "previewPanel": {
-            "address": "Address",
             "addressAnswersElsewhere": "{url} answers from somewhere that isn't this sandbox's preview proxy: its name may still be propagating, or this sandbox publishes no preview hostnames at all.",
             "addressToPreview": "Address to preview",
             "appToPreview": "Which app to preview",
@@ -1760,58 +1501,36 @@
             "nothingToPreviewYet": "Nothing to preview yet.",
             "openDevServersTerminal": "Open this dev server's terminal",
             "openInNewTab": "Open {label} in a new tab",
-            "openInNewTab2": "Open in new tab",
             "openPorts": "Open Ports",
             "openTerminal": "Open its terminal",
             "opening": "Opening…",
             "phone": "Phone",
             "phoneToFramePreview": "Which phone to frame the preview in",
             "preparingPreview": "Preparing the preview…",
-            "preview": "Preview",
             "preview2": "{label} preview",
             "previewAddress": "Preview an address",
             "previewAddressDoesntReach": "This preview address doesn't reach your sandbox.",
             "previewAnotherAddress": "Preview another address",
             "previewingOneForwardsPort": "Previewing one forwards its port, which publishes it at an address anyone with the link can open. The Ports view lists every forward and takes them back.",
             "readingWhatPreviewed": "Reading what can be previewed…",
-            "reload": "Reload",
             "reloadPreview": "Reload the preview",
-            "restart": "Restart",
             "serversOnOwnPorts": "{label} is running {count} dev server on a port of its own, so one preview address can't stand for it. Pick the one you mean: | {label} is running {count} dev servers on ports of their own, so one preview address can't stand for it. Pick the one you mean:",
             "startDevServerIn": "Start a dev server in a repository, or ask the agent to build an app: its live preview appears here the moment it answers.",
-            "takingTooLong": "This is taking too long.",
-            "terminal": "Terminal",
-            "workspace": "Workspace"
+            "takingTooLong": "This is taking too long."
         }
     },
     "router": {
         "index": {
             "acceptInvite": "Accept invite",
-            "agent": "Agent",
-            "agents": "Agents",
-            "browsers": "Browsers",
             "cantReachIntentic": "Can't reach Intentic",
-            "capabilities": "Capabilities",
-            "chat": "Chat",
-            "connect": "Connect a model",
             "designKit": "Design kit",
             "login": "Login",
-            "menu": "Menu",
-            "preview": "Preview",
-            "sandbox": "Sandbox",
-            "settings": "Settings",
             "setup": "Setup",
             "signInToIntentic": "Sign in to Intentic",
-            "signingIn": "Signing in…",
-            "subagents": "Subagents",
-            "terminal": "Terminal",
-            "workspace": "Workspace"
+            "signingIn": "Signing in…"
         }
     },
     "sandbox": {
-        "addDeviceDialog": {
-            "addDevice": "Add a device"
-        },
         "addModelButton": {
             "addModel": "Add a model…"
         },
@@ -1820,12 +1539,12 @@
             "includeReleaseNoteEach": "Include a release note with each commit."
         },
         "agentChecks": {
-            "lastAsked": "Last asked {ago}",
             "lookAtWhatChanged": "Look at what it changed",
-            "neverAsked": "Never asked",
             "promptAssistantToOpen": "Prompt the assistant to open the view after changes to the interface.",
             "repairAfterLanding": "Repair what breaks after landing",
             "repairAfterLandingNote": "When a land turns the main tree's check red, send it back to the conversation that landed it. When main's CI stays red on one failure, start a fix agent once pushes go quiet, and re-run a failure on the CI fleet itself.",
+            "lastAsked": "Last asked {ago}",
+            "neverAsked": "Never asked",
             "reviews": "Reviews"
         },
         "agentClock": {
@@ -1874,12 +1593,9 @@
             "archiveQuietAgentsReclaim": "Archive quiet agents and reclaim worktrees (diffs and history are kept).",
             "commitWhatEachLanded": "Commit what each landed agent changed, under a subject written for it, and your own edits before the next agent starts.",
             "finishedWork": "Finished work",
-            "landFinishedWorkAutomatically": "Land finished work automatically",
             "n1Day": "1 day",
             "n1Week": "1 week",
-            "n3Days": "3 days",
-            "never": "Never",
-            "saveVersionAcceptedWork": "Save a version of accepted work"
+            "n3Days": "3 days"
         },
         "agentInstructions": {
             "builtInPromptTo": "Which built-in prompt to read",
@@ -1891,7 +1607,6 @@
             "editCopy": "Edit a copy",
             "eitherWayAppsOwn": "Either way, this app's own guidance about its questions, checklist panel and browser tools is added on top; only a custom prompt drops that.",
             "includingWhatAppTells": ": including what this app tells the assistant about its own questions, checklist panel and browser tools.",
-            "instructions": "Instructions",
             "intenticsOwnPromptDefault": "Intentic's own prompt: the default, and the one we tune for this app. Choose Intentic and it keeps updating with the app; fork it and you own it from here.",
             "intenticsOwnPromptTuned": "Intentic's own prompt, tuned for this app.",
             "leanGuidance": "Short guidance",
@@ -1903,7 +1618,6 @@
             "readingSandbox": "Reading it from your sandbox…",
             "startClaudes": "Start from Claude's",
             "startIntentics": "Start from Intentic's",
-            "systemPrompt": "System prompt",
             "textBecomesWholePrompt": "Your text becomes the whole prompt on",
             "viewPrompt": "View prompt",
             "writeAssistantsSystemPrompt": "Write the assistant's system prompt, or start from one of the built-in prompts below."
@@ -1938,8 +1652,7 @@
             "simple": "Simple",
             "turnJudgeOn": "Turn the judge on",
             "underSafety": "under Safety.",
-            "whatYoudTellSomebody": "What you'd tell somebody choosing the model for a new chat: which work can go cheap, which account to leave alone, when to reach for the strongest one.",
-            "worthBetterModelThan": "Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in something from outside, that text may be arguing for its own approval."
+            "whatYoudTellSomebody": "What you'd tell somebody choosing the model for a new chat: which work can go cheap, which account to leave alone, when to reach for the strongest one."
         },
         "agentRecovery": {
             "carrySessionContextUnder": "Carry the session when its context is under",
@@ -1976,15 +1689,13 @@
             "nothingReadsPolicyEvery": ", so nothing reads your policy and every flagged command falls back to the standing rule alone. Set one in Models.",
             "off": "Off",
             "on": "On",
-            "recentDecisions": "Recent decisions",
             "safetyJudge": "Safety judge",
             "then": ", then ",
             "toJudge": "When to judge",
             "toSeeWhatPolicy": "to see what your policy would have stopped before letting it stop anything.",
             "verdictDecidesAllowedSilently": "The verdict decides: allowed silently, held as a request, or refused.",
             "watch": "Watch",
-            "whetherVerdictStopCommand": "Whether a verdict can stop a command.",
-            "worthBetterModelThan": "Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in something from outside, that text may be arguing for its own approval."
+            "whetherVerdictStopCommand": "Whether a verdict can stop a command."
         },
         "agentSafetyLog": {
             "all": "All",
@@ -2002,7 +1713,6 @@
             "programCommand": "Program / Command",
             "ran": "Ran",
             "ranOn": "Ran on {machine}",
-            "recentDecisions": "Recent decisions",
             "refused": "Refused",
             "response": "Your response:",
             "safetyJudgeOffNothing": "The safety judge is off, so nothing is being judged and nothing is recorded here.",
@@ -2012,7 +1722,6 @@
             "triage": "Triage:"
         },
         "agentSafetyPolicy": {
-            "loading": "Loading…",
             "ownTextIn": "Your own text, in",
             "safetyPolicy": "Safety policy",
             "textProductShipsDescribes": "The text this product ships with. It describes what a fresh sandbox already does.",
@@ -2022,20 +1731,17 @@
             "alwaysAsks": "Always asks",
             "judged": "Judged",
             "myDevices": "My devices",
-            "sandbox": "This sandbox",
             "whatGetsStopped": "What gets stopped"
         },
         "agentSkills": {
             "cameWhatInstalledConnected": "{count} came with what you installed and connected",
             "filterSkills": "Filter skills",
             "nameTriggerOrigin": "Name, trigger or origin…",
-            "newSkill": "New skill",
             "noSkillsAddedYet": "No skills added yet.",
             "nothingMatchesFilter": "Nothing matches that filter.",
             "readingSandboxsSkills": "Reading this sandbox's skills…",
             "skills": "Skills",
-            "toDropOneDrop": "to drop one, drop the thing that ships it",
-            "writeSkill": "Write a skill"
+            "toDropOneDrop": "to drop one, drop the thing that ships it"
         },
         "agentSubagents": {
             "childAgentSpendsSame": "A child agent spends the same connected accounts this one does.",
@@ -2044,7 +1750,6 @@
             "maximumDelegationDepth": "Maximum delegation depth.",
             "nestingDepth": "Nesting depth",
             "startAgentsOwn": "Start agents of its own",
-            "subagents": "Subagents",
             "subagentsAtOnce": "Subagents at once",
             "subagentsPerConversation": "Subagents per conversation",
             "totalDelegatedAgentsAllowed": "Total delegated agents allowed per conversation."
@@ -2059,11 +1764,8 @@
             "free": "Free",
             "googleAccount": "Google account",
             "kimiCodeSubscription": "Kimi Code subscription",
-            "notConnected": "not connected",
             "plan": "Which {managedLabel} plan",
-            "reconnect": "Reconnect",
             "sandboxOfflineAccountsCant": "Your sandbox is offline: its accounts can't be read or changed from here.",
-            "showLess": "Show less",
             "showMoreAccounts": "Show {collapsedCount} more accounts",
             "signedOutReconnectTo": "Signed out, reconnect to keep using it.",
             "underClaudeCode": "Under Claude Code"
@@ -2072,14 +1774,12 @@
             "alreadyHere": "already here",
             "arrived": "arrived",
             "bringIn": "Bring in {count} item | Bring in {count} items",
-            "checkAgain": "Check again",
             "checkDeviceAgain": "Check this device again",
             "checkFirst": "check first",
             "chooseDifferentAssistant": "Choose a different assistant",
             "chooseFile": "Or choose a file",
             "chooseFile2": "Choose a file",
             "commandIsntAvailable": "That command isn't available",
-            "devices": "Your devices",
             "didntLand": "Didn't land",
             "finishArrival": "Finish the arrival",
             "foundSetupOn": "Found a {kind} setup on {host}",
@@ -2089,7 +1789,6 @@
             "pack": "Pack from",
             "refused": "{count} refused.",
             "runOn": "Run on {label}:",
-            "secret": "secret",
             "staysBehind": "{count} thing stays behind on purpose | {count} things stay behind on purpose",
             "takeSecretValuesToo": "Take the secret values too",
             "whatWouldLand": "What would land",
@@ -2106,21 +1805,16 @@
         "availability": {
             "busyCatchingUp": "busy, catching up",
             "needsAttention": "needs attention",
-            "notConnected": "not connected",
-            "online": "online",
-            "removed": "removed",
-            "starting": "starting"
+            "online": "online"
         },
         "conflictAsk": {
             "startAgentOnReads": "Start an agent on it: it reads both copies of each stuck file and makes the two ends agree."
         },
         "connectDeviceHint": {
-            "and": "and",
             "connect": "Connect it",
             "syncsSandboxNotConnected": "syncs this sandbox but is not connected as a device."
         },
         "connectFlow": {
-            "accountName": "Account name",
             "again": "again",
             "alreadyPasteHere": "Already have it? Paste it here",
             "finish": "Finish",
@@ -2157,7 +1851,6 @@
             "ownersFreeHostedHours": "The owner's free hosted hours are spent, so the machine stays asleep until the month resets or the owner moves it to the hosted plan. Nothing on your side causes this.",
             "removed": "\"{name}\" was removed",
             "routeStoppedAnswering": "Calls to {path} are running out their own deadline, so that route is what this sandbox is waiting on rather than the machine underneath it. Whatever serves that path has to answer before anything else here will.",
-            "runOnMyComputer": "Run it on my computer",
             "sandboxIsntConnectedYet": "This sandbox isn't connected yet, finish setup to start its daemon, and your workspace opens automatically.",
             "sandboxRefusedGoogleAccount": "This sandbox refused the Google account you're signed in with. Ask its owner to invite you, or switch accounts.",
             "sandboxReportedInOpening": "Your sandbox reported in, opening a live connection to it. Your workspace appears automatically in a moment.",
@@ -2174,9 +1867,6 @@
             "waitingSandboxToAnswer": "Waiting for the sandbox to answer. Your workspace opens automatically when it is ready.",
             "weWontStartMachine": "We won't start this machine: the email we sent says why and where to write if we have it wrong. Your files are still on it, and nothing else about your account changes. The same sandbox runs on your own computer, free and without limits, from its setup screen."
         },
-        "connectionRow": {
-            "accountName": "Account name"
-        },
         "containerHealth": {
             "announcedWhilePlatformOn": "It announced {announced}, while the platform has {expected} on record. Until the two agree, anything sent to the recorded address misses it.",
             "sandboxCheckingInUnder": "This sandbox is checking in under an address the platform does not hold for it",
@@ -2191,11 +1881,9 @@
             "reconnectSandbox": "Reconnect this sandbox",
             "reconnecting": "Reconnecting…",
             "replacesContainer": "Replaces the container on {host}. Its files, its history and its Docker engine are kept.",
-            "sandboxReplacedPageReconnects": "If the sandbox was replaced, this page reconnects on its own once it is back.",
-            "thisMachine": "this machine"
+            "sandboxReplacedPageReconnects": "If the sandbox was replaced, this page reconnects on its own once it is back."
         },
         "controlTokensSection": {
-            "apiTokens": "API tokens",
             "expired": "expired",
             "expires": "Expires",
             "githubActionsTokenGoes": "GitHub Actions: the token goes in a repository secret named INTENTIC_TOKEN",
@@ -2203,10 +1891,6 @@
             "livesUntilRevokedRight": "Lives until revoked. Right for an editor on your own laptop; wrong for a secret in someone else's store.",
             "mintToken": "Mint token",
             "n1Year": "1 year",
-            "n30Days": "30 days",
-            "n90Days": "90 days",
-            "never": "Never",
-            "revoke": "Revoke",
             "scope": "Scope",
             "shellAnywhere": "A shell, anywhere",
             "shownOnceCopyNow": "Shown once: copy it now. The sandbox stores only a hash.",
@@ -2228,10 +1912,8 @@
             "desktopSyncNeedsSsh": "Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet, but one behind your own domain does.",
             "device": "device.",
             "deviceThatGetsPorts": "the device that should get the ports",
-            "devices": "Devices",
             "enableDesktopSync": "Enable desktop sync",
             "enrollsDevicePutsSandboxs": "Enrolls this device and puts the sandbox's dev servers on its localhost. No files are synced.",
-            "linuxMacos": "Linux / macOS",
             "localFolder": "Local folder",
             "mirrorPortsOnlySkip": "Mirror ports only (skip file sync)",
             "mirrorPortsToDevice": "Mirror ports to a device",
@@ -2251,7 +1933,6 @@
             "takesOverFrom": "This takes over from {device}. Its file sync stops when you run the command below.",
             "that": "that",
             "theOtherDevice": "the other device",
-            "unpair": "Unpair",
             "whatStaysOnDevice": "What stays on your device?",
             "windowsPowershell": "Windows (PowerShell)"
         },
@@ -2266,7 +1947,6 @@
             "rebuildCheckout": "Rebuild from checkout",
             "rebuildCheckout2": "Rebuild from checkout?",
             "rebuildCommand": "Rebuild command",
-            "rebuildNow": "Rebuild now",
             "reconnectsOnOwn": "Reconnects on its own",
             "restartsSandbox": "Restarts the sandbox",
             "runs": "Runs",
@@ -2284,13 +1964,10 @@
             "updatingAgentRunsCommand": "Updating its agent runs a command on it, which needs the machine connected as a device, not just syncing folders and ports."
         },
         "deviceAttention": {
-            "handsFreshOneTime": "Hands you a fresh one-time command to run on that machine. It installs or re-enrolls its agent and brings the device back — it can't wake a machine that is asleep.",
-            "reconnect": "Reconnect"
+            "handsFreshOneTime": "Hands you a fresh one-time command to run on that machine. It installs or re-enrolls its agent and brings the device back — it can't wake a machine that is asleep."
         },
         "deviceBoard": {
-            "addDevice": "Add a device",
             "device": "This device",
-            "devices": "Devices",
             "devicesOwnSandboxesAlso": "This device's own sandboxes are also in",
             "filterByDeviceSandbox": "Filter by device, sandbox, folder or port",
             "filterDevices": "Filter devices",
@@ -2302,7 +1979,6 @@
         "deviceBoardCard": {
             "more": "… and {more} more",
             "notRunningHere": "not running here",
-            "oneYoureUsing": "the one you're using",
             "stopped": "stopped"
         },
         "deviceConcern": {
@@ -2331,11 +2007,9 @@
             "leavePortOffLocalhost": "Leave this port off this device's localhost. Every other port this sandbox serves keeps being mirrored.",
             "letGoHint": "Stop this device holding this sandbox. Its files stop syncing and its ports come off localhost; the folder already on the device is left exactly as it is.",
             "mirrorPortAgain": "Mirror it",
-            "notConnected": "not connected",
             "nothingOnDeviceDeleted": "Nothing on that device is deleted and its agent stays installed, but letting it back in means running a fresh pairing command there.",
             "nothingToPick": "This machine holds no container and no synced folder for this sandbox, so there is nothing here to let go of.",
             "on": "on {group}",
-            "oneYoureUsing": "the one you're using",
             "pairingAgainMeansRunning": "Pairing it again means running a fresh command on that device.",
             "pauseSyncing": "Pause syncing",
             "putPortBackOnLocalhost": "Put this port back on this device's localhost, unless something else here is holding it.",
@@ -2343,17 +2017,14 @@
             "removeFromDevice": "Remove from this device",
             "removeFromDeviceHint": "Let this machine go of the sandboxes ticked above: a container it runs is deleted, and a folder it syncs stops syncing. The folders themselves are left where they are.",
             "resumeSyncing": "Resume syncing",
-            "revokeAccess": "Revoke access",
             "revokeDevicesAccess": "Revoke this device's access",
             "revokeSAccess": "Revoke {environment}'s access",
             "revokeSAccess2": "Revoke {label}'s access?",
             "revokingStopsDeviceReaching": "Revoking stops this device reaching the sandbox at all. Nothing on it is deleted, and its agent stays installed.",
-            "runningOnDeviceKeeps": "Running on that device. It keeps going even if you leave this page.",
             "runsOnDeviceKeeps": "Runs on that device, and keeps going if you leave this page or the connection drops.",
             "sandboxes": "Sandboxes",
             "sandboxUsingRightNow": "This is the sandbox you are using right now — this page will lose it.",
             "select": "Select",
-            "selectAll": "All",
             "selected": "{count} selected",
             "startingOnDevice": "Starting on that device…",
             "startMirroring": "Start mirroring",
@@ -2364,7 +2035,6 @@
             "stopsSyncingSandboxsFiles": "stops syncing this sandbox's files and mirroring its ports. Everything already in its local folder stays exactly as it is.",
             "takeSandboxsPortsOff": "Take this sandbox's ports off this device's localhost. Files keep syncing.",
             "thisSandbox": "this sandbox",
-            "unpair": "Unpair",
             "unpairHeader": "Unpair {sandbox}?"
         },
         "deviceRows": {
@@ -2386,14 +2056,12 @@
             "outdated": "outdated",
             "runnerComesOffWork": "The runner comes off {label}. Its work lives in this sandbox's git, so nothing is lost with it — and you can make a new one here any time.",
             "runners": "Runners",
-            "runningOnDeviceKeeps": "Running on that device. It keeps going even if you leave this page.",
             "sandboxKeepsNoRunner": "This sandbox keeps no runner on {label}. Add one to hand it conversations to run there.",
             "startingOnDevice": "Starting on that device…",
             "syncSettings": "Sync settings",
             "syncing": "Syncing…"
         },
         "discoverCard": {
-            "blocked": "blocked",
             "cantInstall": "can't install",
             "deterministicScanAgentAudit": "The deterministic scan and agent audit passed, and someone also read the source at the listed commit",
             "install": "Install →",
@@ -2405,7 +2073,6 @@
             "unaudited": "unaudited",
             "unauditedUpdate": "unaudited update",
             "update": "update",
-            "verified": "Verified",
             "wontLoad": "won't load"
         },
         "discoverDetail": {
@@ -2440,7 +2107,6 @@
             "registryNotBoundBoth": ": this registry has not bound both automated checks to the source.",
             "securityAuditOutOfDate": "Security audit out of date",
             "someoneHereAlsoRead": ": someone here also read the source at this commit.",
-            "source": "Source",
             "staysListedRatherThan": "It stays listed rather than disappearing, because anyone who already installed it is the person this most concerns.",
             "understandNobodyAudited": "I understand this commit hasn't been security-audited, and I trust its source enough to run it here.",
             "updateAnyway": "Update anyway",
@@ -2451,8 +2117,7 @@
         "discoverListing": {
             "everythingPublished": "Everything published",
             "listingNamesNoExact": "The listing names no exact commit, so it can't be installed in one click.",
-            "publishedSomewhereSandboxCant": "Published somewhere this sandbox can't clone from.",
-            "verified": "Verified"
+            "publishedSomewhereSandboxCant": "Published somewhere this sandbox can't clone from."
         },
         "enginesCard": {
             "agentEngines": "Agent engines",
@@ -2460,11 +2125,9 @@
             "backToImagesCopy": "Back to the image's copy",
             "freezeRunningVersion": "Freeze the running version.",
             "image": "from image",
-            "image2": "Image",
             "imageCopyOnly": "Image copy only.",
             "installed": "installed",
             "intenticTestedUpdatesIn": "Intentic-tested. Updates in place.",
-            "latest": "Latest",
             "notInstalledHere": "not installed here",
             "notRecommended": "not recommended",
             "pinned": "Pinned",
@@ -2486,7 +2149,6 @@
             "approvedOverlayPendingRebuild": "Approved overlay (pending rebuild)",
             "awaitingReview": "awaiting review",
             "contents": "Contents",
-            "environment": "Environment",
             "onlySandboxMaintainerDecide": "Only a sandbox maintainer can decide on environment changes.",
             "onlySandboxOwnerApprove": "Only the sandbox owner can approve or reject this change.",
             "onlySandboxOwnerRebuild": "Only the sandbox owner can rebuild it.",
@@ -2503,32 +2165,24 @@
             "checkingInstalledVersions": "Checking installed versions…",
             "nothingAddedOnTop": "Nothing added on top of the stock image yet, and nothing in it answered, which usually means the sandbox is still starting.",
             "plusLibrariesHeadersCommands": "Plus {extras} libraries and headers these commands need, which nobody runs directly.",
-            "showLess": "Show less",
             "showMore": "Show more",
             "waitingApproval": "waiting for your approval",
             "whatInstalls": "What this installs"
         },
         "exportBundleDialog": {
             "doneCloseTabWhile": "when it is done, so you can close this tab while it runs.",
-            "export": "Export",
             "exportEnvironment": "Export environment",
             "exportSecrets": "Export with secrets",
-            "exports": "Exports",
             "includeSecretValues": "Include the secret values",
             "keysTokensStoredLogins": "Keys, tokens and stored logins, written into the file in the clear. Leave it off and the bundle carries secret names only, and whoever brings it in fills the values.",
             "packsSandboxsDefinitionTogether": "Packs this sandbox's definition together with the bytes nothing can reference: transcripts, checkpoints, unpushed branches. It is built on the sandbox and appears under",
             "storeFileLikePassword": "Store the file like a password, and delete it once it has landed on the other side."
-        },
-        "exportCard": {
-            "export": "Export",
-            "ownerOnly": "Owner only."
         },
         "extensionRemoveDialog": {
             "added": "added from “{entry}”",
             "alsoDeleted": "Also deleted",
             "automationsStop": "{count} of your automations stops firing | {count} of your automations stop firing",
             "automationsWakeOn": "{names} wake on a source this extension provides. They are kept, and will do nothing until something else provides it.",
-            "builtIntoSandboxImage": "built into the sandbox image",
             "connectionsRemoved": "{count} configured connection is removed with it | {count} configured connections are removed with it",
             "credentialsGoWithIt": "{count} stored credential goes with it: {names}. | {count} stored credentials go with it: {names}.",
             "credentialsLost": "{count} stored credential is deleted and cannot be recovered from here: you would enter it again to put this back. | {count} stored credentials are deleted and cannot be recovered from here: you would enter them again to put this back.",
@@ -2544,7 +2198,6 @@
             "agentGoThrough": "Have an agent go through them",
             "alwaysOn": "{manifest} is always on",
             "alwaysOnOnlyWindow": "Always on: this is the only window onto work the sandbox does on its own.",
-            "builtIntoSandboxImage": "built into the sandbox image",
             "calledTimes": "Called {toLocaleString} times",
             "daemonRoutesMayCall": "Daemon routes it may call",
             "dashedRoutesNeverCalled": "Dashed routes have never been called. That is worth raising with whoever maintains it, not acting on alone: a route used only by a screen you have not opened looks identical.",
@@ -2558,7 +2211,6 @@
             "publishAgentPushesFiles": "Publish it: an agent pushes these files and reports the commit",
             "remove": "Remove…",
             "securityUpdate": "security update",
-            "settings": "Settings",
             "switchingOff": "Switching it off"
         },
         "extensionSettingsForm": {
@@ -2594,18 +2246,14 @@
         "extensionsBrowse": {
             "anyGitRepositoryHolding": "Any git repository holding a",
             "backToOfficialOne": "back to the official one",
-            "browse": "Browse",
             "builtOnePut": "Built one? Put the",
             "change": "change",
-            "clearFilter": "Clear filter",
             "couldntReadRegistry": "Couldn't read that registry.",
             "howPublishingWorks": "How publishing works ↗",
             "officialRegistry": "Official registry",
             "readingRegistry": "Reading the registry…",
             "registry": "The registry ↗",
             "registryPointAtOwn": "is a registry: point this at your own and nothing here reads ours.",
-            "source": "Source",
-            "token": "Token",
             "tokenOnlyNeededPrivate": "A token is only needed for a private registry. It's kept for this session and never put in a link.",
             "topicOnRepositoryNightly": "topic on its repository and a nightly job opens the listing for you. No account, no upload, no queue."
         },
@@ -2613,13 +2261,10 @@
             "approve": "Approve",
             "approvedNow": "Approved {manifest}.",
             "asksForNothing": "It asks for no powers.",
-            "clearFilter": "Clear filter",
             "couldntApprove": "Could not approve {manifest}.",
             "couldntListSandboxsExtensions": "Couldn't list this sandbox's extensions.",
             "discoverWhatPeoplePublished": "Discover what people have published →",
-            "installed": "Installed",
             "invalid": "invalid",
-            "needsAttention": "Needs attention",
             "newPowersSinceApproved": "New powers since you approved it:",
             "notLoadable": "Not loadable",
             "pendingBadge": "pending",
@@ -2645,13 +2290,11 @@
             "buildMinutesCountAgainst": "Build minutes count against this sandbox's awake hours. Your files in /work are kept.",
             "buildingEnvironmentOnMachine": "Building your environment on a machine we run. This takes a few minutes; your sandbox keeps working meanwhile and restarts onto the result when it is ready.",
             "builtSandboxRestartingOnto": "Built. Your sandbox is restarting onto the new image; this panel updates when it is back.",
-            "rebuildNow": "Rebuild now",
             "toFinishBuildOn": "To finish, build it on the machine we host for you:",
             "tryBuildAgain": "Try the build again"
         },
         "importCard": {
-            "import": "Import",
-            "ownerOnly": "Owner only."
+            "import": "Import"
         },
         "manifestNotice": {
             "remove": "Remove it",
@@ -2663,7 +2306,6 @@
         },
         "modelGroupRow": {
             "addModelEveryJob": "Add a model for every {toLowerCase} job",
-            "chatDefault": "chat default",
             "jobsDiffer": "jobs differ",
             "jobsDoNotAll": "These jobs do not all hold the same models. Listed here is what every one of them has; a change made here gives them all exactly this list. Switch to Advanced to see them apart.",
             "notSetNoneJobs": "Not set: none of these jobs runs, and no model is chosen for you. Add a model to switch them on.",
@@ -2681,19 +2323,13 @@
             "tryOneEarlier": "Try this one earlier"
         },
         "modelPinPicker": {
-            "addModel": "Add a model",
-            "model": "Model"
+            "addModel": "Add a model"
         },
         "modelPinPickerBody": {
-            "claudeCode": "Claude Code",
-            "harness": "Harness",
-            "notAvailableHere": "Not available here",
-            "run": "{provider} run",
-            "whatIsntAvailableHere": "What isn't available here"
+            "run": "{provider} run"
         },
         "modelRoleRow": {
             "addModel": "Add a model for {toLowerCase}",
-            "chatDefault": "chat default",
             "notSetJobDoes": "Not set: this job does not run, and no model is chosen for you. Add a model to switch it on.",
             "nothingPinnedRunsOn": "Nothing is pinned, so this runs on whatever your chat is set to and keeps following it as you change it. Add a model to pin this job to a tier of its own.",
             "off": "off",
@@ -2713,7 +2349,6 @@
             "exportEnvironment": "Export environment…",
             "exportFailed": "The export failed.",
             "exportRunning": "Export running…",
-            "exports": "Exports",
             "failed": "failed",
             "filesStayBehind": "files stay behind.",
             "inAgreement": "in agreement",
@@ -2723,7 +2358,6 @@
             "openWorkspaceRepository": "Open the workspace repository",
             "packing": "packing",
             "packingFar": "Packing… {bytes} so far",
-            "publish": "Publish",
             "pushes": "and pushes",
             "secrets": "secrets"
         },
@@ -2731,8 +2365,6 @@
             "createStart": "Create and start",
             "listed": "It will be listed as",
             "lowerCaseDigitsHyphens": "Lower case, digits and hyphens.",
-            "name": "Name",
-            "newExtension": "New extension",
             "optionalSayInOwn": "Optional. Say it in your own words: an agent starts on it in a chat you can watch and argue with. Leave it empty for a working stub to edit yourself.",
             "publisher": "Publisher",
             "showWhatShippedWeek": "show what shipped this week, read from the git log",
@@ -2740,9 +2372,7 @@
             "writesWorkingExtensionInto": "Writes a working extension into this workspace and switches it on. Nothing is installed and nothing is built: the files are what runs, so an edit shows up on the next reload."
         },
         "passkeysSection": {
-            "addPasskey": "Add a passkey",
             "browserCantCreatePasskeys": "This browser can't create passkeys; add one from a browser that can.",
-            "nameEGWork": "Name it, e.g. work laptop",
             "newCodes": "New codes",
             "passkeys": "Passkeys",
             "recoveryCodes": "Recovery codes",
@@ -2762,7 +2392,6 @@
         "personaForm": {
             "addAnother": "Add another",
             "addModelPersona": "Add a model for this persona",
-            "anywhereInWorkspace": "Anywhere in the workspace",
             "backendWorkOnApi": "Backend work on the api and billing services",
             "carries": "Carries",
             "chooseAccounts": "Choose accounts",
@@ -2771,9 +2400,7 @@
             "everySessionWorksIn": "Every session works in its own copy of the workspace, so several can run at once without touching each other's files.",
             "everythingOnUnlessTurn": "Everything is on unless you turn it off. A session on this persona gets exactly what is left.",
             "fileToolsPointedOutside": "File tools pointed outside are refused: this stops mistakes and misread instructions, not a shell.",
-            "filterAccounts": "Filter accounts",
             "filterByNameSite": "Filter by name or site",
-            "models": "Models",
             "noAccountMatches": "No account matches \"{trim}\".",
             "noAccountsConnectedIn": "No accounts connected in this sandbox yet.",
             "oneLineNewChat": "One line. A new chat is matched to a persona by this sentence, so say what its work looks like.",
@@ -2800,7 +2427,6 @@
         "personaKitFields": {
             "builtInPromptPersona": "A built-in prompt, for this persona only.",
             "instructionsSessionOnPersona": "The instructions a session on this persona carries, and the skills only its turns can reach. Every other chat in this sandbox is unaffected.",
-            "newSkill": "New skill",
             "noneYetSkillHere": "None yet. A skill here is instructions the agent reads only while acting as this persona: a house style, a review checklist, the steps for one job.",
             "own": "Its own",
             "ownSkills": "Its own skills",
@@ -2808,9 +2434,7 @@
             "personasSystemPrompt": "This persona's system prompt",
             "replacesWholePromptOn": "Replaces the whole prompt on this persona's turns, including what this app tells the assistant about its questions, checklist panel and browser tools. Leave it empty to fall back to the sandbox's.",
             "sandboxs": "Sandbox's",
-            "systemPrompt": "System prompt",
             "whateverSandboxSetTo": "Whatever the sandbox is set to: change it in Agent ▸ Instructions.",
-            "writeSkill": "Write a skill",
             "writeWhatPersonaWho": "Write what this persona is, who it is, what it does, how it answers."
         },
         "personaPowersFields": {
@@ -2819,10 +2443,8 @@
             "changeSandbox": "Change the sandbox",
             "connectors": "Connectors",
             "delegate": "Delegate",
-            "devices": "Your devices",
             "driveBrowser": "Drive a browser",
             "fetchPageRunSearch": "Fetch a page, run a search.",
-            "files": "Files",
             "inWorkspace": "In your workspace",
             "javascriptRunsFencedBy": "JavaScript runs fenced by the runtime: files follow the Files answer, no programs without Run commands.",
             "mcpConnections": "MCP connections",
@@ -2857,52 +2479,40 @@
             "thisComputerLabel": "This computer"
         },
         "planLimitsPanel": {
-            "account": "Account",
             "accountsWithRoom": "{count} of {total} accounts has room | {count} of {total} accounts have room",
             "allAccounts": "All accounts",
             "bindingPool": "Binding pool",
             "cantServeTurn": "Can't serve a turn · {attentionTotal}",
-            "filterAccounts": "Filter accounts",
-            "filterAccounts2": "Filter accounts…",
             "more": "+{hidden} more",
             "nextPoolReopens": "next pool reopens {nextResetAt}",
             "noAccountMatchesFilter": "No account matches that filter.",
             "noAiAccountConnected": "No AI account is connected yet: connect one on the Agent tab and its plan limits appear here.",
             "noPublishedLimits": "no published limits",
             "noReadingYet": "No reading yet.",
-            "planLimits": "Plan limits",
             "planPublishesNoLimits": "This plan publishes no limits, spend is all this sandbox can tell you.",
-            "provider": "Provider",
             "read": "read {measuredAt}",
             "read2": "Read",
-            "readingConnections": "Reading your connections…",
             "reconnectOnAgentTab": "reconnect it on the Agent tab | reconnect them on the Agent tab",
             "reopens": "Reopens",
-            "resets": "resets {resetsAt}",
             "showingMostConstrained": "showing the {max_bars} most constrained of {count}",
             "used": "Used",
             "viewAccounts": "View accounts"
         },
         "repoCheckRow": {
-            "afterEachEdit": "after each edit",
-            "afterItLands": "after it lands",
-            "beforeTurnEnds": "before a turn ends",
             "changedSinceSwitchedOn": "This changed since you switched it on, so it is not running. Read it above and switch it on again to accept it.",
             "checksFileCouldNot": "Its checks file could not be read: {error}",
             "declaredNotRunningNothing": "Declared, not running. Nothing a repository asks for runs until you say so.",
+            "runChecksDeclares": "Run the checks {name} declares",
+            "afterEachEdit": "after each edit",
+            "afterItLands": "after it lands",
+            "beforeTurnEnds": "before a turn ends",
             "lastFlagged": "last flagged {ago}",
             "neverFlagged": "never flagged",
-            "onlyTouching": "only when touching",
-            "packageScript": "(package script)",
-            "runChecksDeclares": "Run the checks {name} declares"
+            "packageScript": "(package script)"
         },
         "restartWatch": {
             "seeLog": "See the log",
             "youreRunningNewImage": "You're running the new image."
-        },
-        "rules": {
-            "landFinishedWorkAutomatically": "Land finished work automatically",
-            "saveVersionAcceptedWork": "Save a version of accepted work"
         },
         "runtimeInstalls": {
             "addToImage": "Add to the image",
@@ -2912,16 +2522,13 @@
             "installedAtRuntime": "Installed at runtime",
             "notInImageEvery": "Not in the image, so every rebuild loses them.",
             "showWhatDismissed": "Show what you have dismissed",
-            "undo": "Undo",
             "whatAddsToProposal": "What it adds to the proposal",
             "whatWouldAdd": "What this would add"
         },
         "sandboxAccess": {
-            "access": "Access",
             "browser": "This browser",
             "ciNotifications": "CI notifications",
             "collaborator": "Collaborator",
-            "copyLink": "Copy link",
             "guest": "Guest",
             "guestNeedsArea": "Pick at least one area. A guest talks to the assistants that work there, so it is not granted until it holds one.",
             "guestTalksToAssistants": "Talks to the assistants that work in the areas you name, and only through them. Reads those folders, no other conversations, nothing else of the box.",
@@ -2934,7 +2541,6 @@
             "eachHoldsOwnEnrollment": "Each holds its own enrollment key, revoked per device on Devices.",
             "enterValidEmailAddress": "Enter a valid email address.",
             "everyBrowserSignedOut": "Every browser has been signed out. Any device still holding a pass is locked out now.",
-            "hereNow": "Here now",
             "idle": "idle",
             "invite": "Invite as",
             "invite2": "Invite",
@@ -2950,7 +2556,6 @@
             "readingWhoAccess": "Reading who has access…",
             "releaseGates": "Release gates",
             "resend": "Resend",
-            "revokeAccess": "Revoke access",
             "revokesEveryPassStay": "Revokes every pass. You stay signed in here; everyone else must sign in again.",
             "role": "Role for {email}",
             "sandboxDoesntTrackDevices": "The sandbox doesn't track devices — each browser holds its own pass. Sign out everywhere still covers all of them.",
@@ -2962,12 +2567,10 @@
             "viewer": "Viewer",
             "watchEverythingAgentsChats": "Can watch everything, agents, chats, files. Can't change anything.",
             "webhooks": "Webhooks",
-            "you": "you",
             "areaPick": "Which areas of the workspace they see",
             "noAreasToGrant": "This sandbox has no named areas yet, so everyone sees the whole workspace.",
             "nameOne": "Name one",
             "noAreaMeansWhole": "No area picked: they see the whole workspace, and can talk to every assistant in it.",
-            "areas": "Areas",
             "writer": "Writer",
             "changeFilesInTheirFolders": "Can change files in the folders you name, and drive agents. Landing and publishing are still requests; secrets and settings stay out of reach.",
             "writerNeedsArea": "Pick at least one area. A writer is not granted until it holds one."
@@ -2976,8 +2579,6 @@
             "agentSettingsCategory": "Agent settings category",
             "couldntReadSandboxsSettings": "Couldn't read this sandbox's settings.",
             "finishing": "Finishing",
-            "instructions": "Instructions",
-            "models": "Models",
             "safety": "Safety",
             "sandboxOfflineSettingsCant": "Your sandbox is offline, its settings can't be read or changed from here.",
             "tools": "Tools"
@@ -3013,9 +2614,6 @@
             "stillHereRun": "Still here? Run",
             "updateSandboxImage": "Update your sandbox to a newer version."
         },
-        "sandboxConnecting": {
-            "runOnMyComputer": "Run it on my computer"
-        },
         "sandboxDeleted": {
             "comesBackAsName": "Comes back with a new address, so the machine it ran on has to be connected again",
             "comesBackWithMachine": "Comes back with its machine and files",
@@ -3024,9 +2622,7 @@
             "daysLeftToRestore": "{count} day left | {count} days left",
             "keptForDays": "A deleted sandbox can be restored for {count} day, then it is gone for good. | A deleted sandbox can be restored for {count} days, then it is gone for good.",
             "nothingToRestore": "Nothing to restore",
-            "reading": "Reading deleted sandboxes",
-            "recentlyDeleted": "Recently deleted",
-            "restore": "Restore"
+            "reading": "Reading deleted sandboxes"
         },
         "sandboxDevices": {
             "couldntListDevices": "Couldn't list your devices."
@@ -3036,14 +2632,11 @@
             "readingSandboxsEnvironment": "Reading this sandbox's environment…"
         },
         "sandboxExtensions": {
-            "browse": "Browse",
             "checkNow": "Check now",
             "checking": "Checking…",
             "filterInstalledExtensions": "Filter installed extensions",
-            "installed": "Installed",
             "nameContribution": "Name or contribution…",
             "namePublisherWhatDoes": "Name, publisher, what it does…",
-            "newExtension": "New extension",
             "reReadRegistry": "Re-read the registry",
             "reloadExtensions": "Reload extensions",
             "reloadNow": "Reload now",
@@ -3054,27 +2647,19 @@
             "updatesToInstall": "{count} update to install | {count} updates to install"
         },
         "sandboxHub": {
-            "addedByExtensions": "Added by extensions",
-            "sandbox": "Sandbox"
+            "addedByExtensions": "Added by extensions"
         },
         "sandboxManifestCard": {
             "someSettingsArentBeing": "Some settings aren't being applied"
         },
         "sandboxNav": {
-            "access": "Access",
-            "agent": "Agent",
             "box": "This box",
             "configuration": "Configuration",
-            "devices": "Devices",
-            "environment": "Environment",
             "extensions": "Extensions",
             "overview": "Overview",
-            "personas": "Personas",
             "reach": "Reach",
             "secrets": "Secrets",
             "usage": "Usage",
-            "areas": "Areas",
-            "deleted": "Recently deleted",
             "yourSandboxes": "Your sandboxes"
         },
         "sandboxOverview": {
@@ -3084,7 +2669,6 @@
             "change": "Change…",
             "changeLogo": "Change logo…",
             "changeRemoveLogo": "Change or remove the logo",
-            "image": "Image",
             "installedVersion": "installed version",
             "installedVersion2": "Installed version",
             "needMorePower": "Need more power?",
@@ -3124,10 +2708,8 @@
         "sandboxSecrets": {
             "activate": "Activate",
             "addSecret": "Add a secret",
-            "all": "All",
             "capabilityCredentials": "Capability credentials",
             "ciInSync": "CI in sync",
-            "clearFilter": "Clear filter",
             "generatedByIntentic": "Generated by intentic",
             "intentDeclaresNoUser": "Your intent declares no user-supplied secrets yet.",
             "keepingOwnSecretsHere": "Keeping your own secrets here needs DevOps active.",
@@ -3135,26 +2717,20 @@
             "keyName": "KEY_NAME",
             "manageCapabilities": "Manage capabilities",
             "missing": "Missing",
-            "needsAttention": "Needs attention",
             "nothingGeneratedYetAppear": "Nothing generated yet: these appear after your first deploy.",
             "pushToCi": "Push to CI",
             "readingSandboxsSecrets": "Reading your sandbox's secrets…",
             "requiredByIntent": "Required by your intent",
             "secrets": "Your secrets",
-            "showLess": "Show less",
             "showMoreAccounts": "Show {collapsedCredentialCount} more accounts"
         },
         "sandboxSwitcher": {
-            "addSandbox": "Add sandbox",
             "alsoDelete": "Also delete it from",
             "cleanupCommand": "Cleanup command",
             "containerFilesHistoryGone": "— its container there stops, and its files and history are kept for a week before they are deleted.",
-            "finishSettingUp": "Finish setting up {name}",
             "isntAnsweringWhatsWaiting": "{name} isn't answering, so what's waiting there isn't known",
-            "leave": "Leave",
             "leaveLoseAccessSandbox": "Leave \"{name}\"? You lose access; the sandbox keeps running.",
             "leaveSandbox": "Leave sandbox?",
-            "needs": "Needs you",
             "notAnswering": "Not answering",
             "removeAccount": "Remove from account",
             "removeAccount2": "Remove from account?",
@@ -3164,13 +2740,9 @@
             "restorableOwnDays": "You can restore it for {count} day, though it comes back with a new address, so the box out there has to be connected again. | You can restore it for {count} days, though it comes back with a new address, so the box out there has to be connected again.",
             "restoreWhere": "Restore it from Sandbox settings ▸ Recently deleted.",
             "sandboxSettings": "Sandbox settings",
-            "sandboxes": "Sandboxes",
-            "shared": "Shared",
             "switchSandbox": "Switch sandbox: {switcherLabel}",
             "toAlsoRemoveMachine": "To also remove it from the machine hosting it: including its files, run there:",
-            "unfinishedSetup": "Unfinished setup",
-            "waitingIn": "{option} waiting for you in {name}",
-            "worthKnowing": "Worth knowing"
+            "waitingIn": "{option} waiting for you in {name}"
         },
         "sandboxSyncToggles": {
             "mirrorPortsOnly": "Mirror ports only",
@@ -3210,7 +2782,6 @@
             "sandboxUpdatesOnNext": "This sandbox updates on the next",
             "somethingWrongSinceLast": "Something wrong since the last update?",
             "takePublishedImageInstead": "Take the published image instead",
-            "upToDate": "up to date",
             "updateAppliedReplacesSandboxs": "The update you applied replaces this sandbox's container — about half a minute, then this page reconnects on its own. Your files in /work are kept.",
             "updateRemovesChangesThings": "This update removes or changes things you may rely on: read what changes below before taking it. Your files (in /work) are kept either way, and you can roll back afterwards:",
             "waitFleetToSettle": "Wait for the fleet to settle, or continue if that is acceptable.",
@@ -3218,9 +2789,6 @@
             "whatUpdatesNeverBreak": "what updates never break"
         },
         "sandboxUsage": {
-            "agent": "Agent",
-            "allProviders": "All providers",
-            "allTime": "All time",
             "apiPricingBasis": "Token usage valued at providers’ API rates.",
             "cacheHitRate": "Cache hit rate",
             "cached": "Cached",
@@ -3239,7 +2807,6 @@
             "lastCommand": "· last command {updatedAt}",
             "mainTree": "Main tree",
             "measuredAgainst": ": measured against",
-            "model": "Model",
             "noIntenticCharge": "Intentic won’t charge you these amounts.",
             "noShellOutputCleaned": "No shell output was cleaned in this range.",
             "noSpendInPrevious": "No cost recorded in the previous period",
@@ -3248,7 +2815,6 @@
             "of": "of",
             "out": "Out",
             "promptInputCached": "{cacheReadTokens} prompt input cached",
-            "provider": "Provider",
             "readingLedger": "Reading the ledger…",
             "rowsTurns": "{count} rows · {turns} turns",
             "showTable": "Show table",
@@ -3264,7 +2830,6 @@
         },
         "sandboxWarming": {
             "sandboxUpGettingWorkspace": "Your sandbox is up and getting its workspace ready. It opens by itself the moment it can serve: nothing to click.",
-            "starting": "starting",
             "stepsDone": "{done} of {total}"
         },
         "savingsCard": {
@@ -3275,10 +2840,8 @@
             "dedupeRepeats": "dedupe repeats",
             "directoryListings": "directory listings",
             "fileLists": "file lists",
-            "more": "{count} more",
             "needsPerArmMore": "needs {minTurns} {sampleUnit} per arm, {shortfall} more on the shorter one",
             "pp95": "±{marginPct}pp (95%) · {wait}",
-            "reachedAssistant": "reached the assistant",
             "redactSecrets": "redact secrets",
             "searchHits": "search hits",
             "testRunners": "test runners"
@@ -3286,20 +2849,15 @@
         "savingsStackBar": {
             "includesTokensRetrievalFooters": "Includes ~{footerTokens} tokens of retrieval footers added back.",
             "raw": "~{rawTokens} raw",
-            "rawShellOutputBy": "Raw shell output by what removed it, and what was left for the assistant.",
-            "reachedAssistant": "reached the assistant"
+            "rawShellOutputBy": "Raw shell output by what removed it, and what was left for the assistant."
         },
         "signInWall": {
-            "addPasskey": "Add a passkey",
             "addPasskeyToContinue": "Add a passkey to continue",
             "backToSetup": "Back to setup",
             "confirm": "Confirm it's you",
-            "continueGoogleInBrowser": "Continue with Google in your browser",
             "continueGoogleToSecurely": "Continue with Google to securely connect the browser directly to your sandbox.",
             "intenticSignsInThrough": "Intentic signs you in through your browser, then brings you straight back here.",
             "lostPasskeysUseOne": "Lost your passkeys? Use one of your recovery codes.",
-            "nameEGWork": "Name it, e.g. work laptop",
-            "or": "or",
             "ownerSandboxRequiresPasskey": "The owner of this sandbox requires a passkey. Add one now: your device's own lock (fingerprint, face or PIN) is what opens this sandbox from here on.",
             "sandboxOnlyOpensPasskey": "This sandbox only opens with a passkey. Use the one you registered with it.",
             "signInToReach": "Sign in to reach your sandbox",
@@ -3315,7 +2873,6 @@
             "called": "Called",
             "lowercaseLettersNumbersDashes": "Lowercase letters, numbers and dashes: it's how the agent invokes it.",
             "markdownStepsCommandsFormat": "Markdown. Steps, commands, the format to follow, what to avoid.",
-            "saveChanges": "Save changes",
             "skillName": "Skill name",
             "skillsNameHowAgent": "A skill's name is how the agent invokes it, so it can't change. Add a new one and delete this if you want it called something else.",
             "toUse": "When to use it",
@@ -3331,22 +2888,16 @@
             "fileExactlyAuthorWrote": "The file exactly as its author wrote it",
             "instructions": "{name} instructions",
             "keep": "Keep it",
-            "noDescriptionAgentRarely": "No description, the agent rarely picks a skill without one.",
-            "reading": "Reading…"
+            "noDescriptionAgentRarely": "No description, the agent rarely picks a skill without one."
         },
         "spawnPosture": {
             "alwaysAllow": "Always allow",
             "askMe": "Ask me",
             "default": "Default",
-            "never": "Never",
             "runsAsksAfterOutside": "runs, asks after outside content"
         },
         "usageChart": {
-            "allTime": "All time",
-            "more": "{count} more",
-            "n30Days": "30 days",
-            "n7Days": "7 days",
-            "n90Days": "90 days"
+            "n7Days": "7 days"
         },
         "useDevRebuild": {
             "rebuildSwapsSandboxOnto": "Your rebuild swaps this sandbox onto its new image when it's done: about half a minute of quiet, then this page reconnects on its own. Your files in /work are kept.",
@@ -3383,7 +2934,6 @@
             "areaName": "Area name",
             "renameArea": "Rename area",
             "couldntRename": "Couldn’t rename this area.",
-            "folders": "Folders",
             "folderCount": "{count} folder | {count} folders",
             "pickFolders": "Pick the folders it holds",
             "needsFolder": "Pick at least one folder: an area holding none would be a grant with no reader.",
@@ -3539,15 +3089,12 @@
                 "diffOpenImportsHint": "The first change that isn't an import: nothing above it but the import list",
                 "diffOpenTop": "Top",
                 "diffOpenTopHint": "The first change in the file, imports and all",
-                "group": "Changes",
                 "groupByModule": "Group by module",
                 "groupByModuleHint": "Group files by package in review lists.",
                 "largestFirst": "Most added first",
                 "largestFirstHint": "Order review lists by how much each file added, instead of by path, within each package."
             },
             "chat": {
-                "group": "Chat",
-                "showToolCalls": "Show tool calls",
                 "showToolCallsHint": "Display individual tool calls in transcript."
             },
             "agents": {
@@ -3574,20 +3121,12 @@
                 "colour": "Colour",
                 "group": "Look",
                 "iconRail": "Icon rail",
-                "iconRailComfortable": "Comfortable",
-                "iconRailCompact": "Compact",
                 "language": "Language",
                 "languageHint": "The language this interface is written in. Your files, your chats and your agents are untouched.",
                 "textSize": "Text size",
-                "textSizeComfortable": "Comfortable",
                 "textSizeComfortableHint": "110% — the size the interface was drawn at",
-                "textSizeCompact": "Compact",
                 "textSizeLarge": "Large",
                 "theme": "Theme"
-            },
-            "terminal": {
-                "group": "Terminal",
-                "workTerminals": "Work terminals"
             },
             "theme": {
                 "dark": "Dark",
@@ -3598,13 +3137,10 @@
                 "systemHint": "Follows your operating system: Sanctum when it is dark, the light look when it is not."
             },
             "work": {
-                "developer": "I write code",
                 "developerHint": "Git's own words, the file tree as the home, every panel.",
-                "group": "How you work",
                 "hint": "Changes the words the app uses and which page is home. Nothing about your files or your agents.",
                 "maker": "I don't",
-                "makerHint": "Plain words, a project page as the home, tooling files out of the way.",
-                "title": "How you work"
+                "makerHint": "Plain words, a project page as the home, tooling files out of the way."
             }
         },
         "hostedHours": {
@@ -3751,21 +3287,17 @@
             "renameDisplayName": "Rename display name"
         },
         "settingsTokens": {
-            "apiTokens": "API tokens",
             "labelEGStorefrontSandbox": "Label (e.g. storefront sandbox)",
             "mintToken": "Mint token",
-            "revoke": "Revoke",
             "shownOnceCopyNow": "Shown once. Copy it now: only its digest is stored.",
             "whatProvisioningTokensAre": "A provisioning token lets one of your sandboxes create sandboxes on this account. Paste it into that sandbox's Sandbox fleet capability; every sandbox its agent creates still asks you in chat first.",
             "whereItGoes": "Where it goes"
-        },
-        "title": "Settings"
+        }
     },
     "setup": {
         "acceptInvite": {
             "acceptInvitation": "Accept invitation",
             "alreadyHaveAccessTo": "You already have access to {sandbox}.",
-            "continueGoogle": "Continue with Google",
             "inviteExpired": "Invite expired",
             "inviteIsForButSignedIn": "This invite is for {invited}, but you’re signed in as {current}. Switch accounts to accept it.",
             "inviteLinkExpiredAsk": "This invite link has expired. Ask whoever invited you to send a new one.",
@@ -3775,7 +3307,6 @@
             "invitedToSandboxTo": "You’ve been invited to the {sandbox} sandbox, to {grant}.",
             "loadingInvite": "Loading your invite…",
             "openSandbox": "Open sandbox",
-            "switchAccount": "Switch account",
             "wrongAccount": "Wrong account",
             "youreAllSet": "You're all set",
             "youreInvited": "You're invited"
@@ -3807,7 +3338,6 @@
             "signInNotChanged": "Your sign-in has not been changed. Check your connection and try again."
         },
         "setup": {
-            "address": "Address",
             "alreadyFreeMachineAccount": "You already have the free machine your account comes with. Pick another rung above, or delete the sandbox that's using it.",
             "alreadyRunningSandboxContainer": "Already running the sandbox container behind a domain of your own? Give us the address it answers on. We'll check it, then open your workspace. Nothing to install, nothing to provision.",
             "alreadyRunningSandboxSomewhere": "Already running a sandbox somewhere? Connect it by domain →",
@@ -3818,7 +3348,6 @@
             "assignedMachineStarts": "Assigned as your machine starts…",
             "assignedMachineStarts2": "Assigned when your machine starts",
             "backToWorkspace": "Back to workspace",
-            "checkAgain": "Check again",
             "checkSandboxRunningDomain": "Check the sandbox is running, and that the domain points at it.",
             "checkedBothStillNothing": "Checked both, still nothing?",
             "checkoutRunsEveryRun": "from your checkout and runs that. Every run rebuilds, so sandbox edits are always picked up (cached when unchanged; the first build takes a few minutes). For a live edit loop, keep",
@@ -3833,7 +3362,6 @@
             "copyPasteIntoTerminal": "Copy it, then paste it into a terminal on the machine that will host your sandbox.",
             "createTunnel": "create the tunnel",
             "daemonsWebOrigin": "The daemon's",
-            "domain": "Domain",
             "domainAlreadyAnswersOn": "a domain it already answers on",
             "download": "Download for {label}",
             "failedOnYourMachine": "Setup failed on your machine. Here is what it found:",
@@ -3857,7 +3385,6 @@
             "intenticReachesSandboxOver": "intentic reaches your sandbox over a private Cloudflare tunnel, with no open inbound ports.",
             "keepAddress": "Keep this address",
             "letsInstallCommand": "Lets the install command",
-            "linuxMacos": "Linux / macOS",
             "localDevBuildsCheckout": "Local dev: builds from your checkout",
             "machinePickedUp": "Your machine picked it up.",
             "myOwnComputer": "My own computer",
@@ -3916,7 +3443,6 @@
             "use": "Use",
             "useDifferentAddress": "Use a different address",
             "useIntenticsDomain": "← Use intentic's domain",
-            "useLettersNumbersHyphens": "Use letters, numbers and hyphens only.",
             "useMachineWeHost": "Use a machine we host",
             "useNewSandboxInstead": "Use a new sandbox instead",
             "usedOnceToClaim": "Used once to claim the sandbox. The daemon stops asking once you're bound, so intentic never stores it.",
@@ -3926,9 +3452,7 @@
             "waitingToStart": "Waiting for you to start it.",
             "wellConnectTo": "We'll connect to",
             "wellNoticeMomentSandbox": "We'll notice the moment your sandbox starts.",
-            "whereSandboxRuns": "Where the sandbox runs",
-            "whyCloudflareApiToken": "Why the Cloudflare API token is required",
-            "whyToken": "Why this token?"
+            "whereSandboxRuns": "Where the sandbox runs"
         },
         "setupCompose": {
             "card": "card.",
@@ -3950,8 +3474,6 @@
             "emailMeLink": "Email me the link",
             "notOnPhoneNeeds": "Not on your phone: this needs a terminal and Docker.",
             "openOnDeviceHost": "Open it on the device that will host your sandbox. Your workspace opens the moment it connects.",
-            "sendAgain": "Send it again",
-            "sending": "Sending…",
             "sentTo": "Sent to"
         },
         "setupNudge": {
@@ -3981,38 +3503,272 @@
             "alsoSyncLocalFolder": "Also sync a local folder"
         }
     },
+    "shared": {
+        "access": "Access",
+        "account": "Account",
+        "accountName": "Account name",
+        "accountNeedsToReconnected": "This account needs to be reconnected",
+        "active": "Active",
+        "acts": "Acts as",
+        "addCapability": "Add a capability",
+        "addDevice": "Add a device",
+        "addPasskey": "Add a passkey",
+        "address": "Address",
+        "addSandbox": "Add sandbox",
+        "agent": "Agent",
+        "agentMode": "Agent mode",
+        "agentNeedsHelp": "The agent needs your help:",
+        "agents": "Agents",
+        "agentTitle": "Agent title",
+        "allProviders": "All providers",
+        "allTime": "All time",
+        "alsoStopsTurn": "Also stops the turn",
+        "and": "and",
+        "answer": "Answer",
+        "anyone": "Anyone",
+        "anywhereInWorkspace": "Anywhere in the workspace",
+        "apiTokens": "API tokens",
+        "archived": "Archived",
+        "areas": "Areas",
+        "askAnything": "Ask anything…",
+        "atLeast": "At least",
+        "attention": "Attention",
+        "autoLabel": "Auto",
+        "blocked": "blocked",
+        "browse": "Browse",
+        "browsers": "Browsers",
+        "builtIntoSandboxImage": "built into the sandbox image",
+        "cancel": "Cancel",
+        "cantHelpNow": "Can't help now",
+        "cantUndone": "This can't be undone.",
+        "capabilities": "Capabilities",
+        "category": "Category",
+        "changes": "Changes",
+        "chat": "Chat",
+        "chatDefault": "chat default",
+        "chatTitle": "Chat title",
+        "checkAgain": "Check again",
+        "claudeCode": "Claude Code",
+        "clearFilter": "Clear filter",
+        "closeAll2": "Close All",
+        "closeChat": "Close chat",
+        "closeFinished": "Close Finished",
+        "closeOthers": "Close Others",
+        "closePane": "Close Pane",
+        "closeToRight": "Close to the Right",
+        "code": "Code",
+        "comments": "Comments",
+        "commitStashYours": "Commit or stash yours",
+        "connect": "Connect {id}",
+        "connectAModel": "Connect a model",
+        "connectCloudflare": "Connect Cloudflare",
+        "connected": "Connected",
+        "connections": "Your connections",
+        "continueGoogle": "Continue with Google",
+        "continueGoogleInBrowser": "Continue with Google in your browser",
+        "copyLink": "Copy link",
+        "devices": "Your devices",
+        "devices2": "Devices",
+        "discard": "Discard",
+        "domain": "Domain",
+        "doneHandBack": "Done: hand back",
+        "dragToResizeDouble": "Drag to resize · double-click to reset",
+        "earlier": "{hiddenFinished} earlier",
+        "editMessage": "Edit this message",
+        "environment": "Environment",
+        "export": "Export",
+        "exports": "Exports",
+        "files": "Files",
+        "filesToInclude": "Files to include",
+        "filesToIncludeE": "Files to include, e.g. package.json",
+        "filter": "Filter…",
+        "filter2": "Filter",
+        "filterAccounts": "Filter accounts…",
+        "filterAccounts2": "Filter accounts",
+        "filterByMessages": "Filter by your messages…",
+        "filterWhatExplorerLists": "Filter what the explorer lists",
+        "finished": "Finished",
+        "finishSettingUp": "Finish setting up {name}",
+        "folders": "Folders",
+        "gone": "No longer available",
+        "group": "How you work",
+        "harness": "Harness",
+        "hereNow": "Here now",
+        "hideValue": "Hide value",
+        "iconRailComfortable": "Comfortable",
+        "iconRailCompact": "Compact",
+        "image2": "Image",
+        "inChat": "in this chat",
+        "infrastructure": "Infrastructure",
+        "insideArchiveExtractTo": "Inside an archive: extract it to change anything",
+        "installed": "Installed",
+        "instructions": "Instructions",
+        "iWriteCode": "I write code",
+        "keepChatOpen": "Keep this chat open",
+        "keepOpen": "Keep Open",
+        "keepOpenOtherwiseChat": "Keep open, otherwise this chat closes when you open another",
+        "keptPrivateBySandbox": "Kept private by the sandbox",
+        "komodo": "Komodo",
+        "landAgain": "Land again",
+        "landFinishedWorkAutomatically": "Land finished work automatically",
+        "landing": "Landing…",
+        "landNow": "Land now",
+        "latest": "Latest",
+        "leave": "Leave",
+        "link": "Link",
+        "linuxMacos": "Linux / macOS",
+        "live": "Live",
+        "liveStatus": "Live status",
+        "loading": "Loading…",
+        "loadingChanges": "Loading changes…",
+        "managePersonas": "Manage personas",
+        "menu": "Menu",
+        "model": "Model",
+        "models": "Models",
+        "more": "{count} more",
+        "moreActions": "More actions",
+        "n30Days": "30 days",
+        "n90Days": "90 days",
+        "name": "Name",
+        "nameEGWork": "Name it, e.g. work laptop",
+        "needs": "Needs you",
+        "needsAttention": "Needs attention",
+        "needsSandboxRebuild": "Needs a sandbox rebuild",
+        "never": "Never",
+        "neverOnPlatform": ": never on the platform.",
+        "new": "New",
+        "newAgent": "New agent",
+        "newChat": "New chat",
+        "newExtension": "New extension",
+        "newFileName": "New file name",
+        "newFolderName": "New folder name",
+        "newSkill": "New skill",
+        "no": "No",
+        "notAvailableHere": "Not available here",
+        "notConnected": "not connected",
+        "onceConnectedAgentMay": "Once connected, the agent may:",
+        "oneYoureUsing": "the one you're using",
+        "onlyTouching": "only when touching",
+        "openIn": "Open in",
+        "openInNewTab": "Open in new tab",
+        "openInWorkspace": "Open {name} in the workspace",
+        "openInWorkspace2": "Open in workspace",
+        "optionalNoteBackTo": "Optional note back to the agent",
+        "or": "or",
+        "other": "Other",
+        "outline": "Outline",
+        "ownerOnly": "Owner only.",
+        "paste": "Paste",
+        "pasteCloudflareApiToken": "Paste your Cloudflare API token",
+        "personas": "Personas",
+        "planLimits": "Plan limits",
+        "planned": "Planned",
+        "preparingOneTimeConnection": "Preparing a one-time connection code…",
+        "preview": "Preview",
+        "provider": "Provider",
+        "publish": "Publish",
+        "reachedAssistant": "reached the assistant",
+        "reading": "Reading…",
+        "readingConnections": "Reading your connections…",
+        "readOnly": "Read-only",
+        "readOnlyChangingFiles": "Read-only: changing files needs writer access",
+        "reasoningEffort": "Reasoning effort",
+        "rebuildNow": "Rebuild now",
+        "recentDecisions": "Recent decisions",
+        "recentlyDeleted": "Recently deleted",
+        "reconnect": "Reconnect",
+        "reload": "Reload",
+        "removed": "removed",
+        "rename": "Rename…",
+        "resets": "resets {resetsAt}",
+        "restart": "Restart",
+        "restore": "Restore",
+        "review": "Review",
+        "revoke": "Revoke",
+        "revokeAccess": "Revoke access",
+        "rowsChanged": "{count} row changed | {count} rows changed",
+        "running": "Running",
+        "runningNow": "Running now",
+        "runningOnDeviceKeeps": "Running on that device. It keeps going even if you leave this page.",
+        "runOnMyComputer": "Run it on my computer",
+        "sandbox": "This sandbox",
+        "sandbox2": "Sandbox",
+        "sandboxes": "Sandboxes",
+        "saveChanges": "Save changes",
+        "saveVersionAcceptedWork": "Save a version of accepted work",
+        "searchChats": "Search chats",
+        "searchChats2": "Search chats…",
+        "searchInFiles": "Search in files…",
+        "secret": "secret",
+        "seeChanges": "See its changes",
+        "selectAll": "All",
+        "selfHostedServices": "Self-hosted services",
+        "sendAgain": "Send again",
+        "sending": "Sending…",
+        "sendItAgain": "Send it again",
+        "sessionName": "Session name",
+        "settings": "Settings",
+        "settings2": "Settings…",
+        "setUp": "Set up",
+        "setUpPersona": "Set up a persona",
+        "shared": "Shared",
+        "showFewer": "Show fewer",
+        "showLess": "Show less",
+        "showToolCalls": "Show tool calls",
+        "signIn": "Sign in",
+        "signOut": "Sign out",
+        "skip": "Skip",
+        "source": "Source",
+        "starting": "Starting…",
+        "starting2": "starting",
+        "startOver": "Start over",
+        "stopWatching": "Stop watching",
+        "subagents": "Subagents",
+        "switchAccount": "Switch account",
+        "systemPrompt": "System prompt",
+        "temporary": ", temporary",
+        "terminal": "Terminal",
+        "text": "Text",
+        "thisMachine": "this machine",
+        "token": "Token",
+        "troubleSigningInUse": "Trouble signing in? Use Google's own page.",
+        "undo": "Undo",
+        "unfinishedSetup": "Unfinished setup",
+        "unpair": "Unpair",
+        "upToDate": "up to date",
+        "useLettersNumbersHyphens": "Use letters, numbers and hyphens only.",
+        "verified": "Verified",
+        "viewLogs": "View logs",
+        "waitAgentTurnTo": "Wait for the agent turn to finish",
+        "waiting": "waiting for you",
+        "watchInTerminal": "Watch in terminal",
+        "whatIsntAvailableHere": "What isn't available here",
+        "whatWantNeedsServer": "What you want needs a server to run on.",
+        "whereRuns": "Where this runs",
+        "whyCloudflareApiToken": "Why the Cloudflare API token is required",
+        "whyToken": "Why this token?",
+        "working": "Working…",
+        "working2": "Working",
+        "workspace": "Workspace",
+        "workspaceRoot": "the workspace root",
+        "workTerminals": "Work terminals",
+        "worthBetterModelThan": "Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in something from outside, that text may be arguing for its own approval.",
+        "worthKnowing": "Worth knowing",
+        "writeSkill": "Write a skill",
+        "you": "you"
+    },
     "shell": {
         "accountPanel": {
-            "settings": "Settings",
-            "signOut": "Sign out",
             "signOut2": "Sign Out"
         },
         "hubLayout": {
             "sections": "Sections"
         },
         "mobileMenu": {
-            "account": "Account",
-            "addCapability": "Add a capability",
-            "addSandbox": "Add sandbox",
             "away": " · away",
-            "finishSettingUp": "Finish setting up {name}",
-            "hereNow": "Here now",
-            "needs": "Needs you",
-            "phone": "This phone",
-            "sandbox": "Sandbox",
-            "sandboxes": "Sandboxes",
-            "settings": "Settings",
-            "shared": "Shared",
-            "signOut": "Sign out",
-            "terminal": "Terminal",
-            "unfinishedSetup": "Unfinished setup",
-            "worthKnowing": "Worth knowing"
+            "phone": "This phone"
         },
         "mobileTabBar": {
-            "agents": "Agents",
-            "chat": "Chat",
-            "menu": "Menu",
-            "review": "Review",
             "toReview": "{count} to review",
             "waitingAnswer": "Waiting for your answer"
         },
@@ -4027,7 +3783,6 @@
             "limitedConnectionToSandbox": "Limited connection to this sandbox",
             "liveAgentOutputMay": "Live agent output may lag. It clears when you are back online.",
             "newVersionIntenticOut": "A new version of Intentic is out",
-            "no": "No",
             "nothingToUpload": "Nothing to upload",
             "partIntenticDidNot": "Part of Intentic did not load",
             "reloadToPickUp": "Reload to pick it up.",
@@ -4038,13 +3793,9 @@
             "signInAgain": "Sign in again",
             "signedIntoGoogle": "Signed into Google as {presented}",
             "somethingFetchesGoesNever": "Something it fetches as it goes never arrived, so a file may show without its colours or a viewer may stay blank. Reload to get it.",
-            "switchAccount": "Switch account",
             "uploadedFailed": "Uploaded {done} of {count} · {failed} failed",
             "uploading": "Uploading {done} of {count}",
             "workspaceStillHere": "Your workspace is still here."
-        },
-        "notifications": {
-            "undo": "Undo"
         },
         "pushMenuRow": {
             "addToHomeScreen": "Add to your Home Screen to get notified",
@@ -4057,16 +3808,13 @@
         "pushQuestionBody": {
             "fixAgentOpenConversation": "Fix agent: {toLowerCase} — open the conversation",
             "setAttemptAsideStart": "Set this attempt aside and start a fresh one — opens the picker first",
-            "showTerminal": "Show terminal",
-            "startOver": "Start over"
+            "showTerminal": "Show terminal"
         },
         "quickOpen": {
-            "agent": "Agent",
             "agents": "Agents",
             "allCommands": "All commands",
             "commands": "Commands",
             "everything": "Everything",
-            "files": "Files",
             "jumpTo": "Jump to anything",
             "jumpToPaste": "Jump to an agent, a file, a terminal or a command… (or paste a session id)",
             "narrowTo": "Narrow to one kind",
@@ -4081,11 +3829,7 @@
             "typeToSearch": "Type to search, or pick a kind above."
         },
         "shellDesktop": {
-            "addCapability": "Add a capability",
             "agentNeedsHelp": "the agent needs your help",
-            "agents": "Agents",
-            "browsers": "Browsers",
-            "chat": "Chat",
             "dockChatBackTo": "Dock chat back to the side",
             "everySectionOnRail": "Every section is on the rail",
             "keepOnRail": "Keep {label} on the rail",
@@ -4096,39 +3840,27 @@
             "open": "{live} open",
             "previousRailSection": "Previous section",
             "running": "{healthy} running",
-            "stillWorking": "{live} still working",
-            "subagents": "Subagents"
+            "stillWorking": "{live} still working"
         },
         "useNavigationCommands": {
-            "add": "Add…",
-            "agents": "Agents",
-            "browsers": "Browsers",
-            "capabilities": "Capabilities",
-            "chat": "Chat",
-            "subagents": "Subagents"
+            "add": "Add…"
         },
         "useShellCommands": {
             "anything": "Anything…",
             "commandPalette": "Command Palette…",
-            "new": "New",
             "togglePanel": "Toggle Panel"
         },
         "windowControls": {
             "maximise": "Maximise",
-            "minimise": "Minimise",
-            "restore": "Restore"
+            "minimise": "Minimise"
         }
     },
     "terminal": {
         "backgroundProcesses": {
             "backgroundProcesses": "Background processes",
-            "restart": "Restart",
-            "viewLogs": "View logs",
             "viewLogsReadOnly": "View logs (read-only)"
         },
         "terminalPanel": {
-            "agentNeedsHelp": "The agent needs your help:",
-            "cantHelpNow": "Can't help now",
             "changeColor": "Change color…",
             "changeColor2": "Change Color…",
             "changeIcon": "Change icon…",
@@ -4142,8 +3874,6 @@
             "default": "Default",
             "defaultColor": "Default color",
             "defaultIcon": "Default icon",
-            "doneHandBack": "Done: hand back",
-            "dragToResizeDouble": "Drag to resize · double-click to reset",
             "esc": "Esc",
             "find": "Find",
             "findInTerminal": "Find in terminal",
@@ -4167,12 +3897,9 @@
             "noTerminalsOpen": "No terminals open.",
             "olderLinesBeyondStill": "· older lines beyond this are still in tmux",
             "opening": "Opening",
-            "optionalNoteBackTo": "Optional note back to the agent",
-            "paste": "Paste",
             "previous": "Previous",
             "previousMatch": "Previous match",
             "previousMatchShiftEnter": "Previous match (Shift+Enter)",
-            "reading": "Reading…",
             "refreshSessions": "Refresh sessions",
             "restartShell": "Restart shell",
             "scrollback": "Scrollback, {scrollbackName}",
@@ -4189,9 +3916,11 @@
         "workTerminals": {
             "alwaysShowTabs": "Always show as tabs",
             "finished": "Finished",
-            "giveEveryAgentShell": "Give every agent shell and job its own tab in this panel.",
-            "running": "Running",
-            "workTerminals": "Work terminals"
+            "giveEveryAgentShell": "Give every agent shell and job its own tab in this panel."
+        },
+        "terminalStrip": {
+            "terminalColor": "Terminal color",
+            "terminalIcon": "Terminal icon"
         }
     },
     "views": {
@@ -4200,16 +3929,11 @@
             "apps": "Your apps",
             "couldntListAppsIn": "Couldn't list the apps in this workspace.",
             "deployedOnNextApply": ") and deployed on the next apply: the platform stores nothing.",
-            "domain": "Domain",
-            "name": "Name",
             "pickServer": "Pick a server",
             "pickWhatWantTo": "Pick what you want to run on your own server. It's declared in your intent (",
             "reachableAt": "✓ Reachable at",
-            "selfHostedServices": "Self-hosted services",
             "server": "Server",
-            "use": "Use {name}",
-            "useLettersNumbersHyphens": "Use letters, numbers and hyphens only.",
-            "whatWantNeedsServer": "What you want needs a server to run on."
+            "use": "Use {name}"
         },
         "applyProgress": {
             "applied": "Applied",
@@ -4219,8 +3943,7 @@
             "didntFullyConvergeRe": "Didn't fully converge, a re-apply may be needed.",
             "finishingUp": "Finishing up…",
             "notInYourIntent": "Not in your intent: {ids}",
-            "progressStreamDroppedReconnecting": "Progress stream dropped: reconnecting… (the apply itself keeps running)",
-            "viewLogs": "View logs"
+            "progressStreamDroppedReconnecting": "Progress stream dropped: reconnecting… (the apply itself keeps running)"
         },
         "changePreview": {
             "couldntWorkOutWhat": "Couldn't work out what would change.",
@@ -4239,7 +3962,6 @@
             "workingOutWhatChange": "Working out what will change…"
         },
         "cloudflareConnect": {
-            "connectCloudflare": "Connect Cloudflare",
             "createsTunnelDnsRoute": "Creates the tunnel and DNS route for your service",
             "enableCloudflare": "Enable Cloudflare",
             "replaceTokenInSandbox": "Replace the token in Sandbox Secrets",
@@ -4247,9 +3969,7 @@
             "servicePutOnDomain": "Your service is put on your domain through a Cloudflare tunnel: no open inbound ports.",
             "storedOnlyInSandbox": "Stored only in your sandbox",
             "usedOnceHereTo": ": used once here to list zones, never on the platform",
-            "using": "✓ Using",
-            "whyCloudflareApiToken": "Why the Cloudflare API token is required",
-            "whyToken": "Why this token?"
+            "using": "✓ Using"
         },
         "connectHost": {
             "alreadyMachineInIntent": "is already a machine in your intent. Connecting replaces it.",
@@ -4261,7 +3981,6 @@
             "hostNameOptional": "Host name (optional)",
             "howConnectingMachineWorks": "How connecting a machine works",
             "oneCommandRunOn": "One command, run on the target host as root. Cloudflare is set up as part of it.",
-            "pasteCloudflareApiToken": "Paste your Cloudflare API token",
             "runCommandOnAny": "Run the command on any host (the machine this sandbox runs on, or another). It creates a service user + SSH key + a Cloudflare tunnel and registers the host with your sandbox. Run it on more machines to spread services across them.",
             "runInPowershellOn": "Run in PowerShell on the machine you want to deploy onto (needs Docker Desktop)",
             "runOnMachineWant": "Run on the machine you want to deploy onto (needs root)",
@@ -4273,8 +3992,6 @@
         },
         "coreViews": {
             "health": "Health",
-            "infrastructure": "Infrastructure",
-            "liveStatus": "Live status",
             "ui": "UI"
         },
         "dependencyGraph": {
@@ -4283,8 +4000,7 @@
         "extensionDocument": {
             "extensionExplains": "The extension that explains",
             "notAvailable": "{title} is not available.",
-            "notRunningSwitchBack": "is not running. Switch it back on in Sandbox → Extensions, and this tab will render again.",
-            "workspaceRoot": "the workspace root"
+            "notRunningSwitchBack": "is not running. Switch it back on in Sandbox → Extensions, and this tab will render again."
         },
         "extensionErrorBoundary": {
             "extensionCrashedRenderingView": "The \"{extensionId}\" extension crashed rendering this view."
@@ -4300,12 +4016,10 @@
             "appsInMonoreposIn": ": the apps in your monorepos are in the catalog.",
             "belowRepairs": "below repairs it.",
             "buildsWhatConfiguredOn": "Builds what you configured on your server.",
-            "connectCloudflare": "Connect Cloudflare",
             "connectCloudflareServicesReached": "Connect Cloudflare so your services can be reached on a domain.",
             "connectServerAboveApply": "Connect a server above: then apply builds what you want on it.",
             "connectStripe": "Connect Stripe",
             "connectStripeAccountApps": "Connect your Stripe account so your apps can take payments.",
-            "connected": "Connected",
             "couldntReadInventory": "Couldn't read your machines.",
             "declared": "Declared",
             "defaultSelfHosted": "Default is self-hosted",
@@ -4330,17 +4044,13 @@
             "likeOutlineSignozPick": "like Outline or SigNoz. Pick either from the catalog with",
             "linkGithub": "Link GitHub",
             "linkGitlab": "Link GitLab",
-            "live": "Live",
             "liveStatus": "Live status →",
             "monorepos": "(from your monorepos) and",
-            "neverOnPlatform": ": never on the platform.",
             "noAppYet": "No app yet.",
             "noServerYetOne": "No server yet. One is asked for when something you want needs it.",
             "noServicesYet": "No services yet.",
             "optionalSelfHosted": "(optional: self-hosted)",
-            "or": "or",
             "outlinePaperlessNgxOpenproject": ": Outline, Paperless-ngx, OpenProject, SigNoz and more.",
-            "planned": "Planned",
             "previewChangesAboveApply": "Preview your changes above, then apply.",
             "provisionedLink": "(provisioned for you). Link",
             "removeApp": "Remove app",
@@ -4349,7 +4059,6 @@
             "runOnServerRoot": "Run on the server (as root) to wipe everything intentic put there",
             "scriptListsExactlyWhat": "The script lists exactly what it found and asks before removing anything: the deployed containers and their volumes (databases included), the deployment state under /opt/intentic:",
             "selfHostedServices": "self-hosted services",
-            "selfHostedServices2": "Self-hosted services",
             "servicesPutOnDomain": "Your services can be put on a domain, reachable through a Cloudflare tunnel.",
             "setUpDeploy": "Set up & deploy",
             "sk": "sk_…",
@@ -4363,42 +4072,29 @@
             "what": "What you have",
             "whatRunsOnServer": "What runs on your server: your",
             "whatWant": "What you want",
-            "whatWantNeedsDomain": "What you want needs a domain: Cloudflare puts it on one, reachable through a tunnel.",
-            "whatWantNeedsServer": "What you want needs a server to run on."
+            "whatWantNeedsDomain": "What you want needs a domain: Cloudflare puts it on one, reachable through a tunnel."
         },
         "infrastructureApplyProgress": {
             "applyingChangesFailed": "Applying your changes failed."
         },
-        "infrastructureView": {
-            "infrastructure": "Infrastructure"
-        },
         "liveStatusView": {
-            "access": "Access",
-            "category": "Category",
             "couldntListWhatsRunning": "Couldn't list what's running.",
             "couldntReadWorkspacesState": "Couldn't read this workspace's state.",
             "deploymentEngineKomodoUnreachable": "Your deployment engine (Komodo) is unreachable on your server: live states below reflect desired config only.",
             "graphLegend": "Graph legend",
             "hidePassword": "Hide password",
-            "komodo": "Komodo",
-            "live": "Live",
             "liveCheck": "Live check",
-            "liveStatus": "Live status",
             "noLiveDeploymentsYet": "No live deployments yet. Wire an app in your intent and provision to see it here.",
             "noResourcesRead": "No resources read.",
             "notDeployed": "Not deployed",
             "orphans": "Orphans (live but not in intent): {ids}",
             "password": "password:",
             "password2": "password: your",
-            "planned": "Planned",
             "reReadLiveCluster": "Re-read the live cluster state",
             "readingLiveInfrastructure": "Reading live infrastructure…",
             "refreshToReadLive": "Refresh to read the live state of your infrastructure.",
             "revealPassword": "Reveal password",
-            "runningNow": "Running now",
-            "secret": "secret",
             "status": "Status",
-            "upToDate": "up to date",
             "user": "user:",
             "whatConfigurationResolvesTo": "is what your configuration resolves to.",
             "whatsReallyOnServer": "is what's really on your server. When they match, you're"
@@ -4406,18 +4102,15 @@
         "registry": {
             "judge": "Judge",
             "know": "Know",
-            "setUp": "Set up",
             "work": "Work"
         },
         "resourceDetails": {
             "closeDetails": "Close details",
             "config": "Config",
             "dependsOn": "Depends on",
-            "komodo": "Komodo",
             "notDeployed": "not deployed",
             "reason": "Reason:",
-            "requiredBy": "Required by",
-            "runningNow": "Running now"
+            "requiredBy": "Required by"
         },
         "vocabulary": {
             "accept": "Accept",
@@ -4426,7 +4119,6 @@
             "acceptWhileAssistantStill": "Accept while the assistant is still working?",
             "accepting": "Accepting…",
             "acceptingNeedsMaintainerPuts": "Accepting needs a maintainer: this puts the ask on their board",
-            "agent": "Agent",
             "agent2": "agent",
             "agentResolve": "Have the agent resolve it",
             "agentStillWritingLanding": "The agent is still writing. Landing now takes its work exactly as it stands, which can mean half-finished changes: one side of a rename, a call to a function that does not exist yet.",
@@ -4441,27 +4133,20 @@
             "assistantsChanges": "Assistant's changes",
             "backUp": "Back up",
             "branch": "branch",
-            "changes": "Changes",
             "changesOwnOnFiles": "You have changes of your own on the files it needs: only you can move those, and it can go ahead as soon as they are gone.",
-            "commitStashYours": "Commit or stash yours",
             "conversationsIsolatedHistoryGo": "and the conversation's isolated history go with them.",
             "deleteAgentsBranchWorktree": "Delete the agent's branch and worktree?",
             "diff": "Diff",
-            "discard": "Discard",
             "discardAgentsWork": "Discard this agent's work",
             "draft": "draft",
-            "files": "Files",
             "filesOnlySecretsBranches": "Files only: secrets and branches untouched. A safety restore point is saved first, and open chats are told.",
             "filesOnlyVersionHow": "Files only. A version of how things are now is saved first, and open chats are told.",
             "go": "go with it.",
             "goBackTo": "Go back to this",
             "instructions": "instructions",
-            "landAgain": "Land again",
             "landAnyway": "Land anyway",
-            "landNow": "Land now",
             "landRequested": "Land requested",
             "landWhileAgentWorking": "Land while the agent is working?",
-            "landing": "Landing…",
             "landingNeedsMaintainerPuts": "Landing needs a maintainer: this puts the ask on their board",
             "look": "Look",
             "memory": "memory",
@@ -4469,12 +4154,10 @@
             "noRestorePointsYet": "No restore points yet: file history is saved automatically as you and your agents work.",
             "noVersionsYetOne": "No versions yet: one is saved automatically every time you or your assistant change something.",
             "ownUncommittedEditsOn": "Your own uncommitted edits are on the files it needs: only you can clear those, and it is ready to land as soon as they are gone.",
-            "preview": "Preview",
             "project": "project",
             "projects": "Projects",
             "projects2": "projects",
             "public": "public",
-            "publish": "Publish",
             "push": "Push",
             "putEveryFileBack": "Put every file back the way it was at this version? Anything made after it goes away; nothing else changes. Open chats working here are told the files moved.",
             "reference": "reference",
@@ -4482,10 +4165,8 @@
             "repositories": "repositories",
             "repository": "repository",
             "requestLand": "Request land",
-            "restore": "Restore",
             "restorePoints": "Restore points",
             "restorePointsAutomaticFile": "Restore points: automatic file history",
-            "review": "Review",
             "rewriteAllFilesTo": "Rewrite all files to this restore point? Files created after it are removed; git branches and secrets are untouched. Open chats working here are told the files moved.",
             "see": "See it",
             "servedOnOpenInternet": "Served on the open internet, to anyone with the link, with no sign-in.",
@@ -4504,8 +4185,7 @@
             "unsavedChanges": "unsaved changes",
             "versions": "Versions",
             "versionsEveryChangeWay": "Versions: every change, and a way back",
-            "whatChanged": "What changed",
-            "workspace": "Workspace"
+            "whatChanged": "What changed"
         }
     },
     "workspace": {
@@ -4542,7 +4222,6 @@
             "commits2": "commits",
             "commitsBranchPointsNeither": "Commits × branch points. Neither alone is a warning: a churning config file is trivial, and a tangled file nobody touches costs nobody anything. Open a row to read the file, or",
             "exports": "{exports} exports",
-            "files": "Files",
             "filesBothChurnBranching": "files with both churn and branching",
             "functionsTypesClasses": "functions, types, classes",
             "hotspots": "Hotspots",
@@ -4580,7 +4259,6 @@
             "notFileItselfBothVersions": "Not the file itself: the text this sandbox rendered from each version, the same reading an agent works from. Formatting, pictures and layout are not in it.",
             "paragraphsChanged": "{count} paragraph changed | {count} paragraphs changed",
             "renderingBothVersions": "Rendering both versions as text…",
-            "rowsChanged": "{count} row changed | {count} rows changed",
             "showBothVersionsInstead": "Show both versions instead",
             "sideAfter": "after",
             "sideBefore": "before",
@@ -4613,13 +4291,10 @@
         },
         "homeOrder": {
             "archives": "Archives",
-            "code": "Code",
             "config": "Config",
             "data": "Data",
             "documents": "Documents",
-            "folders": "Folders",
             "media": "Media",
-            "other": "Other",
             "pictures": "Pictures",
             "styles": "Styles"
         },
@@ -4629,22 +4304,16 @@
             "nothingInside": "Nothing inside."
         },
         "homeTile": {
-            "link": "Link",
             "newName": "New name"
         },
         "homeView": {
-            "cantUndone": "This can't be undone.",
-            "clearFilter": "Clear filter",
             "contents": "Contents of {here}",
             "dropToAddTo": "Drop to add to {here}",
             "folderPath": "Folder path",
             "moreEntries": "{count} more entry in this folder, search to reach them | {count} more entries in this folder, search to reach them",
             "moveInto": "Move into {here}",
-            "newFileName": "New file name",
-            "newFolderName": "New folder name",
             "nothingHere": "Nothing here.",
             "nothingMatchesIn": "Nothing matches \"{trim}\" in {here}.",
-            "readOnly": "Read-only",
             "toolingHidden": "{count} tooling file hidden | {count} tooling files hidden"
         },
         "diffSkeleton": {
@@ -4654,8 +4323,6 @@
             "beforeAfter": "Before / After",
             "bothVersionsDrawnWhole": "Both versions drawn whole, side by side",
             "changes": "Changes",
-            "code": "Code",
-            "comments": "Comments",
             "commentsHidden": "Comments hidden",
             "commentsShown": "Comments shown",
             "documentDrawnWordsMarked": "The document as drawn, the words that moved marked in place",
@@ -4670,7 +4337,6 @@
             "shown": "Shown",
             "split": "Split",
             "table": "Table",
-            "text": "Text",
             "textOfBothVersionsAgentReads": "The text of both versions, as an agent reads it, folded to the changes",
             "textWhatAddedUnderlined": "The text with what was added underlined and what was removed struck through",
             "unified": "Unified"
@@ -4699,7 +4365,6 @@
             "findPersona2": "Find a persona",
             "fullEditor": "Full editor",
             "moves": "This moves it:",
-            "name": "Name",
             "namePersonaDocsBot": "Name this persona: {folderName}, Docs bot, Refactor crew…",
             "noPersonaGoesBy": "No persona goes by that.",
             "noStartingFolder": "no starting folder",
@@ -4724,13 +4389,9 @@
         },
         "entryMenu": {
             "extract": "Extract",
-            "insideArchiveExtractTo": "Inside an archive: extract it to change anything",
             "keepFolder": "Keep folder",
-            "keptPrivateBySandbox": "Kept private by the sandbox",
             "newFile": "New File",
-            "newFolder": "New Folder",
-            "paste": "Paste",
-            "readOnlyChangingFiles": "Read-only: changing files needs writer access"
+            "newFolder": "New Folder"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "also viewing this file"
@@ -4742,19 +4403,15 @@
         "fileViewer": {
             "agentNoCopyFile": "This agent has no copy of this file, so you are seeing the shared workspace version.",
             "backToFileItself": "Back to the file itself",
-            "comments": "Comments",
             "commentsHiddenClickTo": "Comments hidden, click to show them",
             "copyFileContent": "Copy file content",
             "fileChangedOnDisk": "This file changed on disk. Your unsaved edits are preserved.",
             "hideCommentsReadCode": "Hide comments, read the code alone",
             "readFileTextWay": "Read this file as text, the way an agent does",
-            "readOnly": "Read-only",
             "reloadDisk": "Reload from disk",
             "saveChangesCtrlS": "Save changes (Ctrl+S)",
             "saveFile": "Save file",
-            "savedCtrlS": "Saved (Ctrl+S)",
-            "shared": "Shared",
-            "text": "Text"
+            "savedCtrlS": "Saved (Ctrl+S)"
         },
         "healthCodebaseHealth": {
             "all": "All",
@@ -4768,10 +4425,8 @@
             "beforeGoingBack": "Before going back",
             "changes": "Your changes",
             "filesRestored": "Files restored",
-            "loadingChanges": "Loading changes…",
             "noFileChangesRecorded": "No file changes recorded.",
-            "refresh": "Refresh {toLowerCase}",
-            "working": "Working"
+            "refresh": "Refresh {toLowerCase}"
         },
         "imageCompareView": {
             "fadeBetweenPictures": "Fade between the before and after pictures",
@@ -4780,24 +4435,18 @@
             "swipeCaption": "before · {percent}% · after"
         },
         "lockedFile": {
-            "access": "Access",
-            "agentSettings": "Agent settings",
-            "agents": "Agents",
-            "browsers": "Browsers",
-            "capabilities": "Capabilities"
+            "agentSettings": "Agent settings"
         },
         "markdownOutline": {
             "documentOutline": "Document outline",
             "filterHeadings": "Filter headings…",
             "filterHeadings2": "Filter headings",
-            "noHeadingMatches": "No heading matches.",
-            "outline": "Outline"
+            "noHeadingMatches": "No heading matches."
         },
         "markdownViewer": {
             "backToDocument": "Back to the document",
             "emptyFile": "Empty file.",
             "hideOutline": "Hide outline",
-            "outline": "Outline",
             "showOutline": "Show outline",
             "startTyping": "Start typing.",
             "viewMarkdownSource": "View markdown source"
@@ -4805,7 +4454,6 @@
         "otherSandboxChanges": {
             "inOtherSandboxes": "In other sandboxes",
             "open": "Open {sandboxName}",
-            "sending": "Sending…",
             "straightHereOwnPre": "{row} straight from here. Its own pre-push checks run in that sandbox, not this one",
             "switchWindowTo": "Switch this window to {sandboxName}"
         },
@@ -4829,7 +4477,6 @@
         "reviewPanel": {
             "abort": "Abort",
             "agentEditing": "An agent is editing {paths} right now. “{action}” records it mid-write. | An agent is editing {paths} right now. “{action}” records them mid-write.",
-            "atLeast": "At least",
             "commit": "Commit",
             "commitsRepos": "Commits {repos}",
             "committing": "Committing…",
@@ -4837,7 +4484,6 @@
             "conflicts": "Conflicts",
             "couldntReadChanges": "Couldn't read changes",
             "couldntReadRepo": "Couldn't read this repo",
-            "discard": "Discard",
             "discard2": "Discard {path}",
             "discard3": "Discard {what}?",
             "discardAllChangesIn": "Discard all changes in this repo",
@@ -4854,7 +4500,6 @@
             "in2": "{side} in {repo}",
             "inProgress": "A {operation} is in progress",
             "landedBy": "Landed by",
-            "loadingChanges": "Loading changes…",
             "moreFilesPendingHere": "More files are pending here than the panel is listing, and this covers all of them. The figures below count only the listed ones.",
             "moreShowingFirstStage": "…and {group} more: showing the first {group2}. Stage all, commit and discard cover every file here, listed or not.",
             "noUncommittedChanges": "No uncommitted changes.",
@@ -4882,8 +4527,7 @@
             "unfinishedOrigins": "{origins} hasn't finished, this commit records the {files} landed so far. | {origins} haven't finished, this commit records the {files} landed so far.",
             "unstaged": "Unstaged",
             "untrackedLeave": "{count} untracked file leaves the disk: it was never committed, so git has no copy: | {count} untracked files leave the disk: they were never committed, so git has no copy:",
-            "watchRun": "Watch it run",
-            "you": "you"
+            "watchRun": "Watch it run"
         },
         "rowActions": {
             "openManagementPanel": "Open management panel"
@@ -4892,7 +4536,6 @@
             "all": "all",
             "allChanges": "all {count} change | all {count} changes",
             "andMoreFiles": "…and {count} more file, too many to list. Saving takes them too. | …and {count} more files, too many to list. Saving takes them too.",
-            "atLeast": "At least",
             "backingUp": "Backing up…",
             "changes": "{discard} changes",
             "changesToFile": "{discard} the changes to this file",
@@ -4915,7 +4558,6 @@
             "statusChanged": "changed",
             "statusClashes": "clashes",
             "statusNew": "new",
-            "statusRemoved": "removed",
             "statusRenamed": "renamed",
             "thisRepo": "this {repo}",
             "twoEditsToSame": "Two edits to the same file clash. Ask your {agent} to sort it out, or undo the changes below.",
@@ -4933,7 +4575,6 @@
             "longTableOnlyFirstRows": "Long table: only the first {rows} rows of each side are compared.",
             "neitherVersionHoldsTable": "Neither version holds a table.",
             "newSheet": "new sheet",
-            "rowsChanged": "{count} row changed | {count} rows changed",
             "sheetRemoved": "sheet removed",
             "unchanged": "unchanged",
             "unchangedRows": "{count} unchanged row | {count} unchanged rows"
@@ -4964,7 +4605,6 @@
         },
         "workspaceDesktop": {
             "clearEsc": "Clear (Esc)",
-            "clearFilter": "Clear filter",
             "closeAll": "Close All",
             "closeAllTabs": "Close All Tabs",
             "closeAnyway": "Close anyway",
@@ -4973,24 +4613,16 @@
             "closeSplit": "Close Split",
             "closeTab": "Close Tab",
             "closeTabsToRight": "Close Tabs to the Right",
-            "closeToRight": "Close to the Right",
             "closingTabsDiscardsUnsaved": "Closing these tabs discards their unsaved edits. This can't be undone.",
             "collapseAllFolders": "Collapse all folders",
             "copyPath": "Copy Path",
             "discardUnsavedChanges": "Discard unsaved changes?",
             "discardUnsavedChangesIn": "Discard unsaved changes in {count} files?",
-            "dragToResizeDouble": "Drag to resize · double-click to reset",
             "dropFilesToAdd": "Drop files to add to workspace root",
-            "files": "Files",
-            "filesToInclude": "Files to include",
             "filesToIncludeComma": "Files to include, comma-separated: a name (package.json, src) matches anywhere, ./ anchors it to the workspace root, and ! excludes",
-            "filesToIncludeE": "Files to include, e.g. package.json",
-            "filter": "Filter",
             "filterFiles": "Filter files…",
-            "filterWhatExplorerLists": "Filter what the explorer lists",
             "hideTechnicalFiles": "Hide technical files",
             "hideTests": "Hide tests",
-            "keepOpen": "Keep Open",
             "nextTab": "Next Tab",
             "nobody": "Nobody",
             "openCodebaseHealthWorkspace": "Open codebase health of the workspace root",
@@ -5001,7 +4633,6 @@
             "reopenClosedTab": "Reopen Closed Tab",
             "search": "Search…",
             "searchIgnoredFiles": "Search ignored files",
-            "searchInFiles": "Search in files…",
             "searchInFiles2": "Search in Files…",
             "show": "Show {restorePoints}",
             "showChanges": "Show Changes",
@@ -5015,8 +4646,7 @@
             "toggleIgnoredFiles": "Toggle Ignored Files",
             "toggleTestFiles": "Toggle Test Files",
             "treeBeingWritten": "{landing}: the tree is being written",
-            "viewing": "Viewing as",
-            "working": "Working"
+            "viewing": "Viewing as"
         },
         "workspaceEmptyState": {
             "askAgentToFetch": "Ask an agent to fetch it",
@@ -5041,49 +4671,34 @@
             "delete": "Delete?",
             "directoryEmpty": "This directory is empty.",
             "everythingInside": " and everything inside it",
-            "files": "Files",
-            "filesToInclude": "Files to include",
-            "filesToIncludeE": "Files to include, e.g. package.json",
-            "filter": "Filter…",
-            "filter2": "Filter",
-            "filterWhatExplorerLists": "Filter what the explorer lists",
             "hideTechnicalFiles": "Hide technical files",
             "hideTests": "Hide tests",
             "ignored": "Ignored",
-            "insideArchiveExtractTo": "Inside an archive: extract it to change anything",
-            "keptPrivateBySandbox": "Kept private by the sandbox",
             "linkTo": "Link to",
-            "loading": "Loading…",
             "moreEntries": "{count} more entry in this folder, search to reach them. | {count} more entries in this folder, search to reach them.",
             "noMatchingEntries": "No matching entries.",
             "nothing": ": there is nothing there",
             "outsideWorkspaceSandboxWont": ": outside the workspace, so the sandbox won't open it",
-            "readOnlyChangingFiles": "Read-only: changing files needs writer access",
             "restorePoints": "Restore points",
-            "searchInFiles": "Search in files…",
             "showIgnoredFiles": "Show ignored files",
             "technicalHidden": "{count} technical file hidden. Tap to show them. | {count} technical files hidden. Tap to show them.",
             "upOneDirectory": "Up one directory",
             "uploadFilesHere": "Upload files here"
         },
         "workspaceScopeChip": {
-            "seeChanges": "See its changes",
             "sharedWorkspace": "Shared workspace"
         },
         "workspaceScopeGone": {
             "backToSharedWorkspace": "Back to the shared workspace",
-            "noWorkingCopyTo": "{title} has no working copy to browse",
-            "seeChanges": "See its changes"
+            "noWorkingCopyTo": "{title} has no working copy to browse"
         },
         "workspaceSearchResults": {
-            "loading": "Loading…",
             "noMatchesInFile": "No matches in file contents.",
             "searchResults": "Search results",
             "showMoreMatches": "Show more matches",
             "typeAtLeast2": "Type at least 2 characters to search file contents."
         },
         "workspaceTree": {
-            "cantUndone": "This can't be undone.",
             "cleanUp": "Clean up",
             "collapseFolders": "Collapse Folders",
             "empty": "{label} is empty",
@@ -5091,11 +4706,8 @@
             "emptyWorkspace": "Empty workspace.",
             "keep": "Keep",
             "keepFolderStopsCounting": "Keep this folder: it stops counting as empty",
-            "keptPrivateBySandbox": "Kept private by the sandbox",
             "lockfilesConfigurationDotFiles": "Lockfiles, configuration, dot files and build output. Press to show them.",
             "moreItems": "{count} more item, search to reach them | {count} more items, search to reach them",
-            "newFileName": "New file name",
-            "newFolderName": "New folder name",
             "noMatchingFiles": "No matching files.",
             "searchCtrlP": "Search with Ctrl+P",
             "technicalHidden": "{count} technical file hidden | {count} technical files hidden",

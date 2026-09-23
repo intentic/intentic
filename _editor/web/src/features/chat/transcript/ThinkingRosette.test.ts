@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect, afterEach, spyOn, jest } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import ThinkingRosette from "./ThinkingRosette.vue";
@@ -79,7 +78,7 @@ it(`animates inside the SVG rather than with a CSS animation`, async () => {
 // Slowed, not stopped. A still mark beside "Musing…" reads as a hung turn, which is the one thing this must never say.
 it(`stretches the breath for reduced motion instead of holding still`, async () => {
     const query = window.matchMedia(`(prefers-reduced-motion: reduce)`);
-    const remove = spyOn(query, `removeEventListener`);
+    const remove = jest.spyOn(query, `removeEventListener`);
     Object.defineProperty(query, `matches`, { value: true });
     // stubGlobal, not spyOn: the jsdom install defines every window member as an accessor, which spyOn refuses.
     stubGlobal(`matchMedia`, () => query);

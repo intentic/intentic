@@ -3,7 +3,6 @@
 // a pattern whose total misses the circumference repeats onto the unlit rim as ghost ticks nobody can read as wrong.
 import "@intentic/testing/dom";
 import { SegmentRing } from "@intentic/ui";
-import { it, expect } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 
 const SIZE = 28;

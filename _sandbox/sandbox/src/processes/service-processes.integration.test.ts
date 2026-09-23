@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
-import { test, expect, afterEach } from "bun:test";
 import { createServiceProcesses, type ServiceProcesses, serviceSession } from "./service-processes.js";
 
 // Runs against real processes: exit detection, group kills, and respawn are exactly what a mocked child proves nothing

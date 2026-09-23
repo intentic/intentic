@@ -13,8 +13,7 @@
         "postWhatPipelineKnows": "Wyślij POST-em to, co wie pipeline — commit, gałąź, adres podglądu — a odpowiedź poczeka na przebieg: jedno z",
         "rotate": "Wymień",
         "rotateToken": "Wymień token",
-        "sureEveryPipelineWired": "Na pewno? Każdemu pipeline'owi podpiętemu pod ten adres trzeba będzie podać nowy.",
-        "webhook": "Webhook"
+        "sureEveryPipelineWired": "Na pewno? Każdemu pipeline'owi podpiętemu pod ten adres trzeba będzie podać nowy."
     },
     "gatePanel": {
         "addGate": "Dodaj bramkę",
@@ -24,7 +23,6 @@
         "fieldGateReads": "Pole, które czyta bramka",
         "gateGivesWorkflowWebhook": "Bramka daje temu workflow webhooka, który może wywołać pipeline CI: pipeline wysyła POST-em to, co wie, wykonuje się cały układ, a odpowiedź to „pass”, „fail” albo „blocked” — odczytana z zadeklarowanego pola, nigdy wyskrobana z prozy.",
         "gateReadsDeclaredOutput": "Bramka czyta zadeklarowane pole wyjściowe, a żaden krok jeszcze go nie deklaruje. Najpierw daj krokowi decydującemu pole danych: zaznacz go na płótnie i dodaj jedno w sekcji Zaawansowane.",
-        "pass": "pass",
         "removeGateUrlStops": "Usuń bramkę: jej adres przestanie działać, a przyszła bramka dostanie nowy",
         "runsPerDay": "Przebiegów dziennie",
         "savingMintsWebhookUrl": "Zapis wybija adres webhooka: pojawia się tutaj i pod odznaką bramki na karcie workflow.",
@@ -52,7 +50,6 @@
         "newLoop": "Nowa pętla",
         "optionalLeaveEmptyAgent": "Opcjonalne. Zostaw puste, a agent będzie pracował ku temu, co wpiszesz w polu wiadomości, tak jak uzna za stosowne.",
         "optionalOneLineUnder": "Opcjonalne. Jedna linia pod nazwą w wyborze.",
-        "pnpmTest": "pnpm test",
         "reviewerAgrees": "Recenzent się zgadza",
         "rounds": "rund",
         "runTestsPickTop": "uruchom testy, weź pierwsze niepowodzenie, napraw je",
@@ -89,7 +86,6 @@
         "onlyDone": "I gotowe dopiero, gdy",
         "personaStep": "Persona tego kroku",
         "pinOneWhereModel": "Przypnij jeden tam, gdzie model jest częścią układu: dwa kroki na dwóch dostawcach to sposób, żeby ich porównać. Bez ruszania ten krok idzie na tym, czego zwykle używasz.",
-        "pnpmTest": "pnpm test",
         "removeField": "Usuń pole",
         "repeatsUntilTrue": "Powtarza się, dopóki to nie będzie prawdą.",
         "required": "wymagane",

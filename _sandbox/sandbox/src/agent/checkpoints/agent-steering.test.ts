@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { type AgentEvent, peerMessagePrompt, watchWakePrompt } from "@intentic/sandbox-contract";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
 import { startTurnRun, type TurnRun } from "../run/turn/turn-runs.js";

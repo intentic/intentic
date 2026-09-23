@@ -1,5 +1,5 @@
 // Whose work a process the daemon spawned is, stamped into its environment by every spawner (a turn's runtime, a
-// browser, a helper call) and read back by the leftover sweep and the live metrics (platform/boot/leftovers.ts), so
+// browser, a helper call) and read back by the process scan (platform/resources/process-scan.ts), so
 // neither side imports the other.
 
 // The stamp naming whose work a process is; identity itself is the process group, not this env var.

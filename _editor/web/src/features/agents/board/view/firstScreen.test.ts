@@ -1,5 +1,4 @@
 import { t } from "@intentic/ui/i18n";
-import { describe, expect, it } from "bun:test";
 import { buildIdeas, buildPrompt } from "../buildIdeas";
 import { boardScreen, boardStarters } from "./firstScreen";
 

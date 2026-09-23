@@ -295,7 +295,7 @@ const submit = async (): Promise<void> => {
                             v-model="label"
                             :class="ui.input('w-full font-medium')"
                             :placeholder="t(`workspace.directoryPersonas.namePersonaDocsBot`, { folderName })"
-                            :aria-label="t(`workspace.directoryPersonas.name`)"
+                            :aria-label="t(`shared.name`)"
                             autofocus
                             @keyup.enter="submit()"
                         />

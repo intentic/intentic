@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { afterEach, expect, test } from "bun:test";
 import { sqliteTurnCheckpoints } from "../../agent/checkpoints/turn-checkpoints.js";
 import { filePromptRecord } from "../../agent/prompt/prompt-record.js";
 import { sqliteTurnJournal } from "../../agent/run/turn/turn-journal.js";
@@ -33,16 +32,20 @@ afterEach(async () => {
 
 // Every path under the volume that names the conversation, relative to the volume.
 const pathsNaming = async (historyRoot: string, id: string): Promise<string[]> =>
-    (await readdir(historyRoot, { recursive: true })).map((path) => relative(historyRoot, join(historyRoot, path))).filter((path) => path.includes(id));
+    (await readdir(historyRoot, { recursive: true }))
+        .map((path) => relative(historyRoot, join(historyRoot, path)))
+        .filter((path) => path.includes(id));
 
 // Every row of every table holding the id in any column.
 const rowsNaming = (db: ConversationsDb, id: string): string[] =>
-    (db.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[]).flatMap(({ name }) => {
-        const columns = (db.db.prepare("SELECT name FROM pragma_table_info(?)").all(name) as { name: string }[]).map((column) => column.name);
-        const where = columns.map((column) => `"${column}" = ?`).join(" OR ");
-        const found = db.db.prepare(`SELECT count(*) AS n FROM "${name}" WHERE ${where}`).get(...columns.map(() => id)) as { n: number };
-        return found.n === 0 ? [] : [`${name}: ${found.n}`];
-    });
+    (db.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[]).flatMap(
+        ({ name }) => {
+            const columns = (db.db.prepare("SELECT name FROM pragma_table_info(?)").all(name) as { name: string }[]).map((column) => column.name);
+            const where = columns.map((column) => `"${column}" = ?`).join(" OR ");
+            const found = db.db.prepare(`SELECT count(*) AS n FROM "${name}" WHERE ${where}`).get(...columns.map(() => id)) as { n: number };
+            return found.n === 0 ? [] : [`${name}: ${found.n}`];
+        },
+    );
 
 // A daemon on a temp history volume, with every store a conversation writes to over the real files and database.
 const daemonOn = async () => {
@@ -118,7 +121,9 @@ test("a discarded conversation leaves nothing on the history volume and no row n
         "conversations/kept-1/system-prompt.json",
         "conversations/kept-1/transcript.jsonl",
     ]);
-    expect((await sqliteTurnJournal(daemon.db).list()).map((row) => (row.kind === "turn" ? row.turn.conversationId : row.automationId))).toEqual(["kept-1"]);
+    expect((await sqliteTurnJournal(daemon.db).list()).map((row) => (row.kind === "turn" ? row.turn.conversationId : row.automationId))).toEqual([
+        "kept-1",
+    ]);
 });
 
 test("emptying the archive purges each archived conversation the same way, and only those", async () => {

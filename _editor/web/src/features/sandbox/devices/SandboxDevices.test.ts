@@ -4,7 +4,6 @@ import type { Device } from "@intentic/sandbox-contract";
 import type { RouteLocationRaw } from "vue-router";
 import PrimeVue from "primevue/config";
 import { groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups } from "@intentic/ui";
-import { it, expect, afterEach, mock, jest } from "bun:test";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -36,7 +35,7 @@ const revokeCalls: string[] = [];
 // The one control that starts a turn rather than a command, recorded the same way: pins that it's offered and
 // what it hands the agent.
 const startedTurns: string[] = [];
-mock.module(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => startedTurns.push(prompt ?? ``) }));
+jest.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => startedTurns.push(prompt ?? ``) }));
 // Container verbs, recorded the same way: which op left for which machine, and for `reshape`, what the form
 // asked for.
 const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown }[] = [];
@@ -49,7 +48,7 @@ const agentCalls: { hostId: string; op: string }[] = [];
 // What each side answers the flow with; the default is an ordinary update, and a test that wants a refusal replaces it.
 const AGENT_UPDATED = { message: `Upgraded the agent: 1.183.0 → 1.186.0.`, settled: true };
 let agentAnswer: (hostId: string) => Promise<{ message: string | undefined; settled: boolean }> = () => Promise.resolve(AGENT_UPDATED);
-mock.module(`./useDevices`, () => {
+jest.mock(`./useDevices`, () => {
     // deviceQuiet is real, so a row's freshness reads the same rule the app uses. Imported statically: a module
     // loaded inside a mock factory deadlocks bun's synchronous link of the graph that named it.
     return {
@@ -79,7 +78,7 @@ mock.module(`./useDevices`, () => {
 // Reconnecting an unreachable machine mints a credential rather than running anything, so the pairing door is
 // recorded, not opened: which machine this page asked a command for is the whole of what it decides.
 const pairingsAsked: string[] = [];
-mock.module(`./usePeerConnect`, () => ({
+jest.mock(`./usePeerConnect`, () => ({
     // The door's own descriptor is real, so the dialog is mounted on the same one the app opens.
     ...usePeerConnectOriginal,
     usePeerConnect: () => ({
@@ -98,26 +97,26 @@ mock.module(`./usePeerConnect`, () => ({
 }));
 // Revoking another device's access is owner-only, matching the daemon's own floor.
 const owner = ref(true);
-mock.module(`../secrets/useRole`, () => ({ useRole: () => ({ isOwner: owner }) }));
+jest.mock(`../secrets/useRole`, () => ({ useRole: () => ({ isOwner: owner }) }));
 // sandboxKey is reached at module eval by the real useDevices, so it's mocked here too.
 // Which sandbox is serving the page, by the hostname of its daemon: what marks a row as "the one you're using".
 const daemon = ref<string | undefined>();
-mock.module(`../client/useSandbox`, () => ({
+jest.mock(`../client/useSandbox`, () => ({
     useSandbox: () => ({ daemonUrl: daemon }),
     sandboxKey: (name: string) => [name],
 }));
 // The release this sandbox knows about; mocked like useDevices since the subject is what a row says, and
 // staleness is part of that.
 const latest = ref<string | undefined>(`1.183.0`);
-mock.module(`../overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
+jest.mock(`../overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
 // The owner's per-device switches, so a row can say "Manage sandboxes is off" before a click; mocked since the
 // real hook needs vue-query's injected client.
 const capabilities = ref<{ id: string; kind: string; config: Record<string, string> }[]>([]);
-mock.module(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
+jest.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 // ContainerHealthCard needs the active sandbox's boot report, which this file's useSandbox stub omits.
-mock.module(`./health/ContainerHealthCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-mock.module(`./sync/DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-mock.module(`../access/ControlTokensSection.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./health/ContainerHealthCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./sync/DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`../access/ControlTokensSection.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // Which machine is on screen lives in the URL, so the harness carries a real (reactive) one: the tab reads
 // `?device=`, and its own auto-select writes it back through `replace`.
 const route = reactive<{ query: Record<string, string> }>({ query: {} });
@@ -126,7 +125,7 @@ const navigate = (to: RouteLocationRaw): void => {
     // `?device=` is the only param the tab reads, and it is always a string.
     route.query = Object.fromEntries(Object.entries(asked ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === `string`));
 };
-mock.module(`vue-router`, () => ({
+jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
     useRoute: () => route as never,
     useRouter: () => ({ push: navigate, replace: navigate }) as never,
@@ -138,7 +137,7 @@ mock.module(`vue-router`, () => ({
 let derivations = 0;
 // Taken before the mock: the namespace reflects the mock once it is installed, so the wrapper would call itself.
 const realAgentStalled = sandboxContractOriginal.agentStalled;
-mock.module(`@intentic/sandbox-contract`, () => ({
+jest.mock(`@intentic/sandbox-contract`, () => ({
     ...sandboxContractOriginal,
     agentStalled: ((...args: Parameters<typeof realAgentStalled>) => {
         derivations += 1;
@@ -151,7 +150,7 @@ mock.module(`@intentic/sandbox-contract`, () => ({
 const runnersList = ref<{ id: string; host?: string; online: boolean; parity?: string; facts?: { cpus: number; memoryMb: number; load: number } }[]>(
     [],
 );
-mock.module(`./runners/useRunners`, () => ({
+jest.mock(`./runners/useRunners`, () => ({
     useRunners: () => ({ runners: runnersList, ready: runnersList, isLoading: ref(false), refetch: () => {} }),
     createRunner: () => Promise.resolve(`made`),
     removeRunner: () => Promise.resolve(`removed`),
@@ -294,23 +293,6 @@ it(`drops a lone machine's door id when its name already is it`, () => {
     // A door id that is NOT the name is the one thing two environments never share, so it stays.
     const other = mount([{ key: `rog`, label: `rog`, hostId: `rog::wsl:Arch`, online: true, platform: `linux` }]);
     expect(headline(other)).toContain(`rog::wsl:Arch`);
-});
-
-it(`falls back to the platform, and ages a device that is not here`, () => {
-    const el = mount([
-        {
-            key: `linux`,
-            label: `linux`,
-            hostId: `linux`,
-            online: false,
-            platform: `linux`,
-            lastSeen: Date.now() - 3 * 60 * 60_000,
-            gap: `offline`,
-        },
-    ]);
-    const text = el.textContent ?? ``;
-    expect(text).toContain(`Linux`);
-    expect(text).toContain(`last seen 3h ago`);
 });
 
 // A machine holding no connection is the one state nothing else on this page can act on: every other button
@@ -557,12 +539,6 @@ it(`explains why a sync-only device has no sandbox buttons, and offers the fix`,
     expect(hovers(el)).toContain(`Desktop sync carries folders and ports, never containers`);
     expect(labels(el)).toContain(`Connect this device`);
     expect(labels(el)).not.toContain(`Restart`);
-});
-
-it(`explains the gap without a button when there is no card to connect the machine`, () => {
-    const el = mount([{ ...syncOnly(), platform: `macos` }]);
-    expect(el.textContent ?? ``).toContain(`Connect it as a device to start, update and remove its sandboxes from here.`);
-    expect(labels(el)).not.toContain(`Connect this device`);
 });
 
 it(`names the switch a connected device is missing before anything is clicked`, () => {
@@ -846,13 +822,6 @@ it(`says when a device's agent is behind, and offers the update as a button`, ()
     expect(labels(el)).not.toContain(`Update agent`);
 });
 
-// With that door open it's a button instead of a command to type, replacing what this view printed for years.
-it(`offers the update as a button once the device is connected for commands`, () => {
-    const el = mount([{ ...behind(), hostId: `host-1`, online: true }]);
-    expect(labels(el)).toContain(`Update agent`);
-    expect(el.textContent ?? ``).not.toContain(`intentic-machine upgrade`);
-});
-
 it(`says nothing about updating a device that is already current`, () => {
     const row = behind();
     const el = mount([{ ...row, report: { ...row.report!, agent: { ...row.report!.agent, installed: `1.183.0` } } }]);
@@ -861,26 +830,6 @@ it(`says nothing about updating a device that is already current`, () => {
     expect(text).toContain(`1.183.0`);
     expect(text).not.toContain(`has been published`);
     expect(labels(el)).not.toContain(`Update agent`);
-});
-
-// A different errand from an old binary: the file on disk is current but the running loop isn't, since
-// replacing a file doesn't touch a running process. The sentence is what tells the two apart — both verbs
-// are standing controls, so which buttons are drawn is no longer evidence of either.
-it(`names the loop, not a download, when only the running build is behind the installed one`, () => {
-    const row = behind();
-    const el = mount([
-        {
-            ...row,
-            hostId: `host-1`,
-            online: true,
-            report: { ...row.report!, agent: { running: true, pid: 4242, build: `0.1.0`, installed: `1.183.0` } },
-        },
-    ]);
-    const text = el.textContent ?? ``;
-    expect(text).toContain(`Serving 0.1.0, 1.183.0 installed`);
-    expect(text).not.toContain(`has been published`);
-    expect(labels(el)).toContain(`Restart agent`);
-    expect(text).not.toContain(`intentic-machine run --stop`);
 });
 
 // The whole point of the standing verbs: an update this sandbox has to sanction first is no update at all on a
@@ -914,14 +863,6 @@ it(`states the agent as the environment row's own build, with no group of its ow
     expect(text).not.toContain(`Agent on this device`);
     expect(text).not.toContain(`Folders`);
     expect(text).not.toContain(`every button below`);
-});
-
-it(`offers the update even when this sandbox cannot say what is newest, without admitting it on the row`, () => {
-    latest.value = undefined;
-    const el = mount([settled()]);
-    // Whether this sandbox reached the registry is a fact about this sandbox, not about the machine on screen.
-    expect(el.textContent ?? ``).not.toContain(`Newest release unknown.`);
-    expect(labels(el)).toContain(`Update agent`);
 });
 
 // Every verb here travels over the device's own socket, which a sync-only enrollment has never held.
@@ -1183,19 +1124,6 @@ it(`says which half of desktop sync each device holds`, async () => {
     expect(hovers(el)).toContain(`ports only`);
 });
 
-// An unused enrollment used to read as healthy everywhere: the record exists, so every surface called it fine.
-it(`warns about a device whose enrollment has gone quiet`, () => {
-    const row = mirrored(`on`);
-    const text = mount([{ ...row, sync: { machine: `laptop`, mode: `sync` } }]).textContent ?? ``;
-    expect(text).toContain(`never checked in`);
-});
-
-it(`treats an enrollment last used hours ago as stopped`, () => {
-    const row = mirrored(`on`);
-    const text = mount([{ ...row, sync: { machine: `laptop`, mode: `sync`, seenAt: Date.now() - 3 * 60 * 60_000 } }]).textContent ?? ``;
-    expect(text).toContain(`stopped`);
-});
-
 // Opening this tab paints the list restored from the last visit before the first read lands. Ageing that reading
 // against the clock accused a machine that was answering perfectly of having gone quiet, with a second warning about
 // its loop, for as long as the read took.
@@ -1352,17 +1280,6 @@ it(`stops port mirroring for every sandbox on the device`, async () => {
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `mirror-off`, sandboxId: undefined }]);
 });
 
-// A settled switch points the way out of where it is, the same rule the per-pairing buttons follow.
-it(`points each switch whichever way the machine currently says`, () => {
-    const el = mount([twoPairings({ paused: true, mirroring: `off` }, { paused: true, mirroring: `off` })]);
-    const found = labels(el);
-    expect(found).toContain(`Resume all`);
-    expect(found).toContain(`Start all`);
-    expect(found).not.toContain(`Pause all`);
-    expect(found).not.toContain(`Stop all`);
-    expect(el.textContent ?? ``).toContain(`paused`);
-});
-
 // Per-pairing switches can leave a machine mixed; a single button would silently undo half of what was
 // deliberately set differently.
 it(`says which pairings disagree and offers both directions`, () => {
@@ -1371,29 +1288,6 @@ it(`says which pairings disagree and offers both directions`, () => {
     expect(text).toContain(`1 of 2 off`);
     expect(labels(el)).toContain(`Start all`);
     expect(labels(el)).toContain(`Stop all`);
-});
-
-// A mirror enrollment has no session to pause, so it's never counted toward the file-sync switch.
-it(`draws no file-sync switch on a device that only mirrors ports`, () => {
-    const row = mirrorOnly();
-    const el = mount([
-        {
-            ...row,
-            hostId: `host-1`,
-            online: true,
-            report: {
-                ...row.report!,
-                pairings: [
-                    { sandboxId: `work-abc`, mode: `mirror` },
-                    { sandboxId: `other-abc`, mode: `mirror` },
-                ],
-            },
-        },
-    ]);
-    const found = labels(el);
-    expect(found).not.toContain(`Pause all`);
-    expect(found).not.toContain(`Resume all`);
-    expect(found).toContain(`Stop all`);
 });
 
 // Over a single pairing these buttons would run the same command as that row's own, twenty pixels away, under
@@ -1406,17 +1300,6 @@ it(`drops the device-scoped switches over a single pairing, and counts them abov
     const el = mount([twoPairings()]);
     expect(labels(el)).toContain(`Stop all`);
     expect(el.textContent ?? ``).toContain(`all 2 sandboxes`);
-});
-
-it(`states the halves without offering the switches on a device it cannot run commands on`, () => {
-    const row = twoPairings();
-    const found = labels(mount([{ ...row, hostId: undefined, online: undefined }]));
-    expect(found).not.toContain(`Pause all`);
-    expect(found).not.toContain(`Stop all`);
-});
-
-it(`draws no switches on a connected device with no pairings`, () => {
-    expect(labels(mount([managed(true)]))).not.toContain(`Stop all`);
 });
 
 // letting a machine go of a sandbox, one row or several

@@ -1,5 +1,4 @@
 import type { ActivityStatus } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { resolveConnections } from "./activity.routes.js";
 
 type Conn = ActivityStatus["connections"][number];

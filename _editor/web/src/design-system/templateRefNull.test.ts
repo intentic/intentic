@@ -3,7 +3,6 @@
 // null through into `.offsetHeight`, `.style` and `observe()`. Pinned here because nothing else in the app states
 // it, and every guard on a template ref is written against it.
 import "@intentic/testing/dom";
-import { it, expect } from "bun:test";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 
 it("Vue clears a template ref to null, not undefined, when its element unmounts", async () => {

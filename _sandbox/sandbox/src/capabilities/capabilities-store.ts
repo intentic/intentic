@@ -61,8 +61,7 @@ export const withSecretVault = (
     };
 };
 
-// Sweeps every boot for entries still holding a raw credential (pre-split, pasted back, restored), moved via the vault.
-// No-op when a manifest is already correct (every field reads as the marker), avoiding churn on every restart.
+// Moves any raw credential an entry holds (pasted back, restored) into the vault; writes nothing when every field is the marker.
 export const vaultManifestSecrets = async (
     inner: CapabilitiesStore,
     vault: SecretVault,

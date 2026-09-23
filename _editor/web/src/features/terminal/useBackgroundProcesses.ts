@@ -1,6 +1,7 @@
 import { computed, type ComputedRef, ref, type Ref } from "vue";
 import { useExtensions } from "../extensions/useExtensions";
 import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { KINDS } from "./terminalMeta";
 import { useTerminalsQuery } from "./terminalsQuery";
 import { useTerminalPanel } from "./useTerminalPanel";
 
@@ -45,7 +46,7 @@ export function useBackgroundProcesses(): {
     const busy = ref<string | undefined>(undefined);
 
     const rows = computed<BackgroundProcessRow[]>(() => {
-        const live = sessions.value.filter((session) => session.kind === `process`);
+        const live = sessions.value.filter((session) => KINDS[session.kind].logs);
         const merged: BackgroundProcessRow[] = [];
         for (const extension of extensions.value) {
             for (const declared of extension.manifest.contributes?.processes ?? []) {

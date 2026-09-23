@@ -1,12 +1,9 @@
-import { test, expect } from "bun:test";
 import { WORKLOAD_ENV, workloadStamp } from "../../seams/workload-stamp.js";
-import { leftoverProcesses, ownerOf, type ScannedProcess } from "./leftovers.js";
+import { leftoverProcesses, type SweptProcess } from "./leftovers.js";
 import { parseProcStat } from "../resources/proc-stat.js";
 
-const environ = (...pairs: string[]): string => `${pairs.join("\0")}\0`;
-
 // A process tree: the CLI, an MCP server under it, and a browser under that, sharing one process group and owner.
-const tree = (owner: string, pgrp = 7): ScannedProcess[] => [
+const tree = (owner: string, pgrp = 7): SweptProcess[] => [
     { pid: 100, ppid: 1, pgrp, owner },
     { pid: 101, ppid: 100, pgrp, owner },
     { pid: 102, ppid: 101, pgrp, owner },
@@ -24,11 +21,6 @@ const policy = (overrides: Partial<Parameters<typeof leftoverProcesses>[1]> = {}
 test("the stamp says whose work it is and nothing else: no daemon identity to misread", () => {
     expect(workloadStamp("conv:with:colons")).toEqual({ [WORKLOAD_ENV]: "conv:with:colons" });
     expect(WORKLOAD_ENV).not.toBe("INTENTIC_WORKLOAD");
-});
-
-test("the owner is read out of a NUL-separated environ and ignores every other variable", () => {
-    expect(ownerOf(environ("PATH=/usr/bin", `${WORKLOAD_ENV}=conv-1`, "HOME=/root"))).toBe("conv-1");
-    expect(ownerOf(environ("PATH=/usr/bin"))).toBeUndefined();
 });
 
 test("ppid and pgrp are read from after the last paren, so an executable named with spaces and parens cannot shift them", () => {
@@ -63,20 +55,20 @@ test("another daemon's processes are not this daemon's business, however they ar
 // A pane's processes are forked by the tmux server and carry the pane's group, not the daemon's; only the registry can
 // identify them.
 test("an out-of-group survivor whose owner this registry knows is reclaimed once its pane is gone", () => {
-    const survivor: ScannedProcess[] = [{ pid: 600, ppid: 1, pgrp: 601, owner: "conv-1" }];
+    const survivor: SweptProcess[] = [{ pid: 600, ppid: 1, pgrp: 601, owner: "conv-1" }];
     expect(leftoverProcesses(survivor, policy({ ownerKnown: (owner) => owner === "conv-1" })).map((entry) => entry.pid)).toEqual([600]);
     expect(leftoverProcesses(survivor, policy({ ownerKnown: () => true, ownerLive: () => true }))).toEqual([]);
     expect(leftoverProcesses(survivor, policy())).toEqual([]);
 });
 
 test("the reserved owners never pass the registry licence: the pools stay group-ruled", () => {
-    const pooled: ScannedProcess[] = [{ pid: 700, ppid: 1, pgrp: 701, owner: "daemon" }];
+    const pooled: SweptProcess[] = [{ pid: 700, ppid: 1, pgrp: 701, owner: "daemon" }];
     // ownerKnown here treats every owner except "daemon" as known, since "daemon" is not a conversation.
     expect(leftoverProcesses(pooled, policy({ ownerKnown: (owner) => owner !== "daemon" }))).toEqual([]);
 });
 
 test("unstamped processes are never touched: a sandbox is somebody's machine too", () => {
-    const theirs: ScannedProcess[] = [
+    const theirs: SweptProcess[] = [
         { pid: 200, ppid: 1, pgrp: 7, owner: undefined },
         { pid: 201, ppid: 200, pgrp: 7, owner: undefined },
     ];
@@ -84,7 +76,7 @@ test("unstamped processes are never touched: a sandbox is somebody's machine too
 });
 
 test("a delegation under a live tmux pane is somebody's visible work, however deep below the shell it sits", () => {
-    const delegated: ScannedProcess[] = [
+    const delegated: SweptProcess[] = [
         { pid: 300, ppid: 1, pgrp: 7, owner: undefined },
         { pid: 301, ppid: 300, pgrp: 7, owner: "conv-1" },
         { pid: 302, ppid: 301, pgrp: 7, owner: "conv-1" },
@@ -93,7 +85,7 @@ test("a delegation under a live tmux pane is somebody's visible work, however de
 });
 
 test("the pane exemption is ancestry, not a pid match: a sibling tree of the same turn still goes", () => {
-    const mixed: ScannedProcess[] = [
+    const mixed: SweptProcess[] = [
         { pid: 300, ppid: 1, pgrp: 7, owner: undefined },
         { pid: 301, ppid: 300, pgrp: 7, owner: "conv-1" },
         { pid: 400, ppid: 1, pgrp: 7, owner: "conv-1" },
@@ -102,7 +94,7 @@ test("the pane exemption is ancestry, not a pid match: a sibling tree of the sam
 });
 
 test("an ancestry cycle procfs should not be able to show us still terminates", () => {
-    const cyclic: ScannedProcess[] = [
+    const cyclic: SweptProcess[] = [
         { pid: 500, ppid: 501, pgrp: 7, owner: "conv-1" },
         { pid: 501, ppid: 500, pgrp: 7, owner: undefined },
     ];

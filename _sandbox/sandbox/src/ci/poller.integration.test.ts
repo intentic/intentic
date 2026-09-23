@@ -6,8 +6,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
 import { unstubbed } from "@intentic/testing";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { test, expect, mock } from "bun:test";
-import { SETTLES, hoisted, waitFor } from "@intentic/testing/bun";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
@@ -26,8 +25,8 @@ import { drivenBy } from "../testing.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact these tests state in one line.
-const { published } = hoisted(() => ({ published: [] as string[] }));
-mock.module("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
+const { published } = { published: [] as string[] };
+jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
 
 const run = (id: number, conclusion: string, branch = "main") => ({
     id,

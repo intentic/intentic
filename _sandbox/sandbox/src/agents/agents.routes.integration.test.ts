@@ -4,7 +4,6 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { test, expect, spyOn } from "bun:test";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
@@ -472,7 +471,7 @@ test("a forced land leaves the running turn's bookkeeping to the turn", async ()
 
 test("archiving a named agent asks nothing of the rest of the fleet; clearing the lane still does", async () => {
     const daemon = services();
-    const probe = spyOn(daemon.agents, "refreshStandings");
+    const probe = jest.spyOn(daemon.agents, "refreshStandings");
     const client = clientFor(createApp(daemon));
     await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
     await runAgentTurn(client, { prompt: "and this", conversationId: "conv2", isolated: true });

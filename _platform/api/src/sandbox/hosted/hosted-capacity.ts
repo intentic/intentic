@@ -102,7 +102,7 @@ export const hostedCapacity = async (
         prisma.hostedBuild.count({ where: { state: BUILD_RUNNING } }),
 /* NOT FILTERED BY IMAGE, and deliberately so now that a row's image is a DIGEST rather than the configured tag (hosted-image.ts). */
         prisma.hostedPoolMachine.count({
-            where: { state: `ready`, NOT: { token: `` }, ...(region === undefined ? {} : { region }) },
+            where: { state: `ready`, ...(region === undefined ? {} : { region }) },
         }),
     ]);
     const used = machines + pooled + building;

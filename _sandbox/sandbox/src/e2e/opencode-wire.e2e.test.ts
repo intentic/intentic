@@ -5,7 +5,6 @@ import { startFakeModel, type FakeModel, type ScriptedStep } from "@intentic/fak
 import { type ResponsesRequest, userMessages } from "@intentic/fake-model/responses";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import type { TurnSpec } from "../agent/providers/agent-request.js";
 import { onPath } from "../platform/boot/on-path.js";
 import { createGrokAgent, createGrokRunner } from "../runtimes/grok/grok-agent.js";

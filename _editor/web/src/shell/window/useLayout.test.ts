@@ -1,7 +1,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { nextTick, ref } from "vue";
-import { describe, it, expect, beforeEach, mock } from "bun:test";
 
 const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {
     const entries = new Map<string, string>();
@@ -21,7 +20,7 @@ const session = store(`sessionStorage`);
 
 const activeSandboxId = ref<string | undefined>(`sb1`);
 
-mock.module("../../features/sandbox/overview/activeSandbox", () => ({ activeSandboxId }));
+jest.mock("../../features/sandbox/overview/activeSandbox", () => ({ activeSandboxId }));
 
 const { useLayout } = await import("./useLayout");
 

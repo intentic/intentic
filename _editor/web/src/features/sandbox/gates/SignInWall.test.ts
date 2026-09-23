@@ -3,43 +3,42 @@
 // Step-up: the passkey the sandbox requires, or the walk through adding a first one, with the owner's recovery code.
 import "@intentic/testing/dom";
 import type { DaemonSession } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 
 // Needs jsdom: ui reads matchMedia at module scope, and environment.ts reads window.env and throws without it.
 
-mock.module(`vue-router`, () => ({
+jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
-    useRouter: () => ({ push: mock(), replace: mock() }) as never,
+    useRouter: () => ({ push: jest.fn(), replace: jest.fn() }) as never,
 }));
 
 // Google's gate is open unless a test closes it: that is the state the overlay exists in.
 const needsSignIn = ref(true);
-const renderButton = mock<() => Promise<boolean>>().mockResolvedValue(true);
-const cancelSignIn = mock();
-mock.module(`../../auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ needsSignIn, renderButton, cancelSignIn }) }));
-mock.module(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+const renderButton = jest.fn<() => Promise<boolean>>().mockResolvedValue(true);
+const cancelSignIn = jest.fn();
+jest.mock(`../../auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ needsSignIn, renderButton, cancelSignIn }) }));
+jest.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 const activeSandbox = ref<{ role: string } | undefined>({ role: `owner` });
-mock.module(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: activeSandbox }) }));
+jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: activeSandbox }) }));
 
-const signInThroughBrowser = mock();
-const desktopVersion = mock<() => string | undefined>();
-mock.module(`../../../app/environments/desktop`, () => ({
+const signInThroughBrowser = jest.fn();
+const desktopVersion = jest.fn<() => string | undefined>();
+jest.mock(`../../../app/environments/desktop`, () => ({
     DESKTOP_SIGN_IN_LINK: `intentic://signin`,
     desktopVersion: () => desktopVersion(),
-    openDesktopLink: mock(),
+    openDesktopLink: jest.fn(),
     signInThroughBrowser: () => signInThroughBrowser(),
 }));
 
 // The ceremonies are the browser's WebAuthn calls plus the daemon; here they answer whatever the test says.
 const SESSION: DaemonSession = { token: `sess-passkey`, expiresAt: 4_102_444_800_000, email: `owner@example.com` };
-const supportsPasskeys = mock(() => true);
-const signInWithPasskey = mock<() => Promise<DaemonSession>>();
-const registerPasskey = mock<() => Promise<{ passkey: unknown; session?: DaemonSession }>>();
-const recoverWithCode = mock<() => Promise<DaemonSession & { remaining: number }>>();
-mock.module(`../session/passkeySignIn`, () => ({
+const supportsPasskeys = jest.fn(() => true);
+const signInWithPasskey = jest.fn<() => Promise<DaemonSession>>();
+const registerPasskey = jest.fn<() => Promise<{ passkey: unknown; session?: DaemonSession }>>();
+const recoverWithCode = jest.fn<() => Promise<DaemonSession & { remaining: number }>>();
+jest.mock(`../session/passkeySignIn`, () => ({
     browserSupportsPasskeys: () => supportsPasskeys(),
     signInWithPasskey: (...args: unknown[]) => signInWithPasskey(...(args as [])),
     registerPasskey: (...args: unknown[]) => registerPasskey(...(args as [])),

@@ -3,16 +3,15 @@
 // device list either way.
 import "@intentic/testing/dom";
 import type { NoticeModel } from "@intentic/ui";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { effectScope, type EffectScope, ref } from "vue";
 import * as actualUseDevices from "../sandbox/devices/useDevices";
 import type { DeviceConnection } from "./model/deviceConnections";
 
 // The one call a disconnect makes, answered per case.
-const revokeSyncDevice = mock<(machine: string) => Promise<void>>(async () => {});
+const revokeSyncDevice = jest.fn<(machine: string) => Promise<void>>(async () => {});
 // Snapshotted before the mock replaces the module: a namespace is a live binding.
 const realUseDevices = { ...actualUseDevices };
-mock.module(`../sandbox/devices/useDevices`, () => ({ ...realUseDevices, revokeSyncDevice }));
+jest.mock(`../sandbox/devices/useDevices`, () => ({ ...realUseDevices, revokeSyncDevice }));
 
 const { useConnectionActions } = await import("./connectionActions");
 
@@ -38,9 +37,9 @@ afterEach(() => {
 
 const actionsOn = () => {
     const state = {
-        remove: { mutateAsync: mock<(id: string) => Promise<unknown>>(async () => undefined) },
-        rename: { mutateAsync: mock<(input: { id: string; to: string }) => Promise<unknown>>(async () => undefined) },
-        refetchFleet: mock(),
+        remove: { mutateAsync: jest.fn<(id: string) => Promise<unknown>>(async () => undefined) },
+        rename: { mutateAsync: jest.fn<(input: { id: string; to: string }) => Promise<unknown>>(async () => undefined) },
+        refetchFleet: jest.fn(),
         error: ref<NoticeModel | null>({ tone: `danger`, title: `an older failure` }),
     };
     const scope = effectScope();

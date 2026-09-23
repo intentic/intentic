@@ -4,7 +4,6 @@ import { serveIngressSession, webSocketDuplex, type IngressSessionServer } from 
 import { generateKeyPairSync } from "node:crypto";
 import { createServer, request as h1Request, type Server } from "node:http";
 import { type AddressInfo, connect as netConnect } from "node:net";
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { WebSocket } from "ws";
 import type { Reachability } from "./revocation.js";
 import { createIngressServer, REPLAY_CACHE_TTL_SECS, type IngressServer } from "./server.js";

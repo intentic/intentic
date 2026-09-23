@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { toggleTaskCheckbox } from "./markdownTasks";
 
 describe(`toggleTaskCheckbox`, () => {

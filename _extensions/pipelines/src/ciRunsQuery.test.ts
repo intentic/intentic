@@ -1,5 +1,4 @@
 import type { ExtensionContext, HostQuery, IntenticApi, ViewRegistration } from "@intentic/extension-api";
-import { describe, it, expect, afterEach, jest } from "bun:test";
 import { ciRunsQuery, CI_RUNS_STALE_MS } from "./ciRunsQuery";
 import { activate } from "./extension";
 import { bindHost } from "./host";

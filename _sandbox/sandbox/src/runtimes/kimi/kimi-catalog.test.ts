@@ -1,9 +1,8 @@
 import type { Model } from "@intentic/sandbox-contract";
-import { test, expect, mock } from "bun:test";
 import { createKimiCatalog } from "./kimi-catalog.js";
 
 test("uses CLIProxyAPI's provider-scoped Kimi definitions and ranks the frontier first", async () => {
-    const models = mock(async (): Promise<Model[]> => [
+    const models = jest.fn(async (): Promise<Model[]> => [
         { id: "kimi-k2.6", label: "Kimi K2.6" },
         { id: "kimi-k3", label: "Kimi K3", description: "Flagship", efforts: ["low", "high", "max"] },
         { id: "kimi-k2.7-code-highspeed", label: "Kimi K2.7 Code HighSpeed" },
@@ -19,7 +18,8 @@ test("uses CLIProxyAPI's provider-scoped Kimi definitions and ranks the frontier
 });
 
 test("serves a K3 floor while CLIProxyAPI is still booting and retries instead of caching it", async () => {
-    const models = mock<() => Promise<Model[]>>()
+    const models = jest
+        .fn<() => Promise<Model[]>>()
         .mockRejectedValueOnce(new Error("offline"))
         .mockResolvedValueOnce([{ id: "kimi-k4", label: "Kimi K4" }]);
     const catalog = createKimiCatalog({ models });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, ui } from "@intentic/extension-ui";
+import { Icon, ui, useLatest } from "@intentic/extension-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { anchorsOf, compareDocx } from "./docxCompare.js";
 import { fitPages, keepFitted } from "./docxFit.js";
@@ -26,8 +26,7 @@ const ticks = ref<readonly { readonly id: number; readonly kind: RedlineEvent["k
 // Which event is lit; -1 before the reader steps.
 const current = ref(-1);
 
-// Drops a stale render when the pair changes mid-parse.
-let seq = 0;
+const latest = useLatest();
 
 const CURRENT_CLASS = `${MARK_CLASS}-current`;
 
@@ -52,7 +51,7 @@ const render = async (): Promise<void> => {
     if (surface === undefined) {
         return;
     }
-    const id = ++seq;
+    const isLatest = latest();
     loading.value = true;
     current.value = -1;
     events.value = [];
@@ -60,7 +59,7 @@ const render = async (): Promise<void> => {
     surface.replaceChildren();
     try {
         const compared = await compareDocx(before, after, surface, { removedPicture: t(`docxCompare.removedPicture`) });
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         events.value = compared.events;
@@ -69,11 +68,11 @@ const render = async (): Promise<void> => {
         fitPages(surface);
         place();
     } catch (error) {
-        if (id === seq) {
+        if (isLatest()) {
             emit(`failed`, error instanceof Error ? error.message : t(`docxCompare.couldNotCompare`));
         }
     } finally {
-        if (id === seq) {
+        if (isLatest()) {
             loading.value = false;
         }
     }
@@ -144,15 +143,31 @@ const TICK_CLASS: Record<RedlineEvent["kind"], string> = { changed: `bg-warning`
             <span v-else-if="whole" class="text-subtle">{{ t(`docxCompare.tooDifferent`) }}</span>
             <span class="flex-1"></span>
             <span class="flex items-center gap-2 text-subtle">
-                <ins class="rounded-sm bg-success/15 px-1 text-content underline decoration-success underline-offset-2">{{ t(`docxCompare.legendAdded`) }}</ins>
+                <ins class="rounded-sm bg-success/15 px-1 text-content underline decoration-success underline-offset-2">{{
+                    t(`docxCompare.legendAdded`)
+                }}</ins>
                 <del class="rounded-sm bg-danger/10 px-1 text-muted line-through decoration-danger">{{ t(`docxCompare.legendRemoved`) }}</del>
             </span>
             <template v-if="events.length > 0">
-                <span class="tabular-nums text-subtle">{{ t(`docxCompare.position`, { current: current < 0 ? `–` : current + 1, count: events.length }) }}</span>
-                <button type="button" :class="ui.iconButton()" :aria-label="t(`docxCompare.previousChange`)" v-tooltip.bottom="t(`docxCompare.previousChange`)" @click="go(current - 1)">
+                <span class="tabular-nums text-subtle">{{
+                    t(`docxCompare.position`, { current: current < 0 ? `–` : current + 1, count: events.length })
+                }}</span>
+                <button
+                    type="button"
+                    :class="ui.iconButton()"
+                    :aria-label="t(`docxCompare.previousChange`)"
+                    v-tooltip.bottom="t(`docxCompare.previousChange`)"
+                    @click="go(current - 1)"
+                >
                     <Icon name="chevron-up" class="text-xs" />
                 </button>
-                <button type="button" :class="ui.iconButton()" :aria-label="t(`docxCompare.nextChange`)" v-tooltip.bottom="t(`docxCompare.nextChange`)" @click="go(current + 1)">
+                <button
+                    type="button"
+                    :class="ui.iconButton()"
+                    :aria-label="t(`docxCompare.nextChange`)"
+                    v-tooltip.bottom="t(`docxCompare.nextChange`)"
+                    @click="go(current + 1)"
+                >
                     <Icon name="chevron-down" class="text-xs" />
                 </button>
             </template>

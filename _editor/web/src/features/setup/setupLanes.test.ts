@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { isNotFound, lanesFor, type OfferRead, readOffer } from "./setupLanes";
 
 const yes: OfferRead<boolean> = { kind: `answered`, value: true };

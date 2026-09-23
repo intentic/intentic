@@ -1,7 +1,6 @@
 import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, beforeEach, afterEach, jest } from "bun:test";
 import { createLogger } from "../../logger.js";
 import { displayLabel, fileCursorStore, liveCursorAccounts, toAccount } from "./cursor-credentials.js";
 

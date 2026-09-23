@@ -1,7 +1,7 @@
 /* This browser bundle emits no declarations or composite metadata; Vite emits its artifact. */
 {
     "compilerOptions": {
-        "types": ["node", "bun"],
+        "types": ["node", "bun", "@intentic/testing/globals"],
         "composite": false,
         "declaration": false,
         "declarationMap": false,

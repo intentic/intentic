@@ -1,17 +1,15 @@
 // Middle-click closes the tab it lands on, asserted on the real rendered strip: the press has to reach the pill
 // from wherever inside it the pointer was, and must not select on the way out.
 import "@intentic/testing/dom";
-import { it, expect, afterEach } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import FileTabs from "./FileTabs.vue";
 import type { WorkspaceTab } from "./workspaceTabs";
 import { IconStub } from "@intentic/ui/testing";
 
 // scrollIntoView: FileTabs reads it at import; jsdom doesn't implement it.
-hoisted(() => {
+(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-});
+})();
 
 const TABS: WorkspaceTab[] = [
     { kind: `file`, id: `src/kept.ts`, path: `src/kept.ts` },

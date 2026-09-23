@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, readdir } from "node:fs/promises";
+import { appendFile, mkdir, readdir } from "node:fs/promises";
 import { loadavg } from "node:os";
 import { join } from "node:path";
 import { monitorEventLoopDelay, performance, PerformanceObserver } from "node:perf_hooks";
@@ -7,8 +7,8 @@ import { PROCESS_ROLES, type ProcessRole } from "@intentic/sandbox-contract";
 import { gitSpawnStats } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { logsRoot } from "../../logs/log-files.js";
-import { parsePressure, type PressureSnapshot } from "./loop-watchdog.js";
-import { parseProcStat } from "./proc-stat.js";
+import { flatKeyed, readCgroup, readText } from "./cgroup.js";
+import { createProcessScanner, type ScannedProcess } from "./process-scan.js";
 import { queueSnapshot } from "./queue-slots.js";
 
 // Durable, one-line-per-minute account of the sandbox's resources: what was growing before an event-loop stall,
@@ -31,8 +31,6 @@ export interface ProcessRow {
 }
 
 export interface ParsedProcStatus {
-    readonly name: string;
-    readonly ppid: number;
     readonly rssBytes: number;
     readonly rssHighWaterBytes: number;
     readonly rssAnonymousBytes: number;
@@ -47,8 +45,6 @@ const statusNumber = (text: string, key: string): number => Number(statusText(te
 const statusBytes = (text: string, key: string): number => statusNumber(text, key) * 1024;
 
 export const parseProcStatus = (text: string): ParsedProcStatus => ({
-    name: statusText(text, "Name") ?? "",
-    ppid: statusNumber(text, "PPid"),
     rssBytes: statusBytes(text, "VmRSS"),
     rssHighWaterBytes: statusBytes(text, "VmHWM"),
     rssAnonymousBytes: statusBytes(text, "RssAnon"),
@@ -58,157 +54,14 @@ export const parseProcStatus = (text: string): ParsedProcStatus => ({
     threads: statusNumber(text, "Threads"),
 });
 
-// Program names a row may be labelled with, longer spellings first so `vue-tsc` is not read as `tsc`. A label is one of
-// these words or nothing, never argv, which can carry a provider prompt or a path.
-const PROGRAMS = [
-    "vue-tsc",
-    "vitest",
-    "tsc",
-    "tsgo",
-    "turbo",
-    "vite",
-    "esbuild",
-    "tsdown",
-    "oxlint",
-    "prettier",
-    "knip",
-    "pnpm",
-    "npm",
-    "npx",
-    "yarn",
-    "bun",
-    "claude",
-    "codex",
-    "opencode",
-    "gemini",
-    "kimi",
-    "chrome",
-    "chromium",
-    "firefox",
-    "webkit",
-    "playwright",
-    "llama-server",
-    "ollama",
-    "tsserver",
-    "iq-engine",
-    "iq",
-    "git",
-    "tmux",
-    "postgres",
-    "nginx",
-    "dockerd",
-    "containerd",
-    "node",
-] as const;
-
-// A program name as a whole word or path component; `-` counts as a boundary so `google-chrome` and `containerd-shim`
-// name their programs, and `.` and `@` close one so `vite.js` and pnpm's `vitest@4.0.0` do too.
-const programPattern = (name: string): RegExp => new RegExp(`(^|[ /-])${name}([ /.@-]|$)`, "u");
-
-const PROGRAM_PATTERNS = PROGRAMS.map((name) => [name, programPattern(name)] as const);
-
-export const programOf = (command: string): string | undefined => {
-    const value = command.toLowerCase();
-    return PROGRAM_PATTERNS.find(([, pattern]) => pattern.test(value))?.[0];
-};
-
-// The toolchain: what a turn's build, test or typecheck runs, and the package manager that drives it. `tsgo` counts
-// only as a one-shot check; serving `--lsp` it is a language server below.
-const TOOLCHAIN = [
-    "vue-tsc",
-    "vitest",
-    "tsc",
-    "turbo",
-    "vite",
-    "esbuild",
-    "tsdown",
-    "oxlint",
-    "prettier",
-    "knip",
-    "pnpm",
-    "npm",
-    "npx",
-    "yarn",
-    "bun",
-].map(programPattern);
-const TSGO = /(^|[ /])tsgo([ .]|$)/u;
-const isToolchain = (value: string): boolean => TOOLCHAIN.some((pattern) => pattern.test(value)) || (TSGO.test(value) && !/--lsp\b/u.test(value));
-
-// A nested container's process, by the cgroup it sits in, or the engine that runs it, by name.
-const CONTAINER_CGROUP = /[/]docker[/]/u;
-const CONTAINER = /(^|[ /])(dockerd|containerd|docker-proxy|docker-init|runc)([ /-]|$)/u;
-
-const LOCAL_MODEL = /(^|[ /-])(llama-server|llama-cli|llamafile|ollama)([ /.-]|$)/u;
-
-const BROWSER = /chrom(e|ium)|firefox|webkit|playwright|browser-mcp|browser_server/u;
-const LANGUAGE_SERVER =
-    /typescript-language-server|tsserver|rust-analyzer|pyright|pylsp|gopls|clangd|jdtls|solargraph|intelephense|language-server|lsp-daemon/u;
-const OWN_LANGUAGE_SERVER = /@intentic[/]lsp|_search[/]lsp|[/]lsp[/]dist[/]cli|(^|[ /])lsp([ /]|$)|(^|[ /])tsgo([ .]|$)/u;
-// The search engine is its own role because it is neither an LSP nor noise: it is a long-lived index host with a heap
-// cap of its own, and folding it into `other` is what hid 1.64 GB of growth behind a bucket nobody reads.
-const SEARCH_ENGINE = /iq-engine|(^|[ /])iq([ /]|$)/u;
-const TRANSLATOR = /cli-proxy-api|endpoint-translator|translator-proxy/u;
-const EXTENSION = /extension-backend|extension-host|backend-host-main|backend-supervisor/u;
-const GIT = /git.*fork.*broker|(^|[ /])git([ /]|$)/u;
-const AGENT_RUNTIME = /(^|[ /])(claude|codex|opencode|gemini|kimi)([ /]|$)|agent-runtime/u;
-const TERMINAL = /(^|[ /])(tmux|bash|zsh|fish|sshd)([ :/]|$)|node-pty/u;
-
-// In match order: the engine before whatever it runs, Playwright's node MCP before its browser, a one-shot tsgo before
-// the language server the same binary can be, the shell that drives a fan-out with the fan-out, the git fork broker
-// before git.
-const ROLE_RULES: readonly (readonly [ProcessRole, (value: string) => boolean])[] = [
-    ["container", (value) => CONTAINER.test(value)],
-    ["browser", (value) => BROWSER.test(value)],
-    ["localModel", (value) => LOCAL_MODEL.test(value)],
-    ["toolchain", isToolchain],
-    ["languageServer", (value) => LANGUAGE_SERVER.test(value) || OWN_LANGUAGE_SERVER.test(value)],
-    ["searchEngine", (value) => SEARCH_ENGINE.test(value)],
-    ["translator", (value) => TRANSLATOR.test(value)],
-    ["extension", (value) => EXTENSION.test(value)],
-    ["git", (value) => GIT.test(value)],
-    ["agentRuntime", (value) => AGENT_RUNTIME.test(value)],
-    ["terminal", (value) => TERMINAL.test(value)],
-];
-
-// Roles are aggregates; the process rows beside them carry comm and a PROGRAMS word, never argv, which can carry a
-// provider prompt or a path. A nested container's process is the container's whatever it runs, by the cgroup it sits in.
-export const classifyProcess = (command: string, cgroup = ""): ProcessRole => {
-    if (CONTAINER_CGROUP.test(cgroup)) {
-        return "container";
-    }
-    const value = command.toLowerCase();
-    return ROLE_RULES.find(([, matches]) => matches(value))?.[0] ?? "other";
-};
-
-const readProcess = async (pidText: string): Promise<ProcessRow | undefined> => {
-    try {
-        const [statusRaw, commandRaw, stat, cgroup] = await Promise.all([
-            readFile(`/proc/${pidText}/status`, "utf8"),
-            readFile(`/proc/${pidText}/cmdline`, "utf8").catch(() => ""),
-            readFile(`/proc/${pidText}/stat`, "utf8"),
-            readFile(`/proc/${pidText}/cgroup`, "utf8").catch(() => ""),
-        ]);
-        const status = parseProcStatus(statusRaw);
-        const proc = parseProcStat(stat);
-        if (proc?.cpuTicks === undefined) {
-            return undefined;
-        }
-        const command = `${status.name} ${commandRaw.replaceAll("\0", " ")}`;
-        return {
-            pid: Number(pidText),
-            ppid: proc.ppid,
-            name: status.name,
-            program: programOf(command),
-            role: classifyProcess(command, cgroup),
-            rssBytes: status.rssBytes,
-            swapBytes: status.swapBytes,
-            threads: status.threads,
-            cpuTicks: proc.cpuTicks,
-        };
-    } catch {
-        // A process exiting between readdir and read is the ordinary case during a sample.
+// Swap is only in status, so each scanned process is read once more; one gone since the scan is not a row.
+const rowOf = async ({ pid, ppid, comm, program, role, cpuTicks }: ScannedProcess): Promise<ProcessRow | undefined> => {
+    const status = await readText(`/proc/${pid}/status`);
+    if (status === undefined || cpuTicks === undefined) {
         return undefined;
     }
+    const { rssBytes, swapBytes, threads } = parseProcStatus(status);
+    return { pid, ppid, name: comm, program, role, rssBytes, swapBytes, threads, cpuTicks };
 };
 
 interface ProcessSummary {
@@ -269,6 +122,7 @@ const descendantsOf = (rows: readonly ProcessRow[], parentPid: number): Readonly
 };
 
 const processSnapshot = async (
+    scanned: readonly ScannedProcess[],
     previousCpu: ReadonlyMap<number, number>,
 ): Promise<{
     readonly total: ProcessSummary;
@@ -277,10 +131,7 @@ const processSnapshot = async (
     readonly top: TopProcess[];
     readonly cpuByPid: ReadonlyMap<number, number>;
 }> => {
-    const entries = await readdir("/proc").catch(() => []);
-    const rows = (
-        await Promise.all(entries.filter((entry) => /^[1-9]\d*$/u.test(entry) && Number(entry) !== process.pid).map((entry) => readProcess(entry)))
-    ).filter((row) => row !== undefined);
+    const rows = (await Promise.all(scanned.map(rowOf))).filter((row) => row !== undefined);
     const descendantPids = descendantsOf(rows, process.pid);
     const total = emptyProcessSummary();
     const descendants = emptyProcessSummary();
@@ -303,45 +154,11 @@ const activeResources = (): Record<string, number> => {
     return Object.fromEntries(Object.entries(counts).toSorted(([left], [right]) => left.localeCompare(right)));
 };
 
-const numericFile = async (path: string): Promise<number | undefined> => {
-    const value = await readFile(path, "utf8").catch(() => undefined);
-    if (value === undefined || value.trim() === "max") {
-        return undefined;
-    }
-    const parsed = Number(value.trim());
-    return Number.isFinite(parsed) ? parsed : undefined;
-};
-
-const keyValueNumbers = (text: string): Record<string, number> =>
-    Object.fromEntries(
-        text
-            .trim()
-            .split("\n")
-            .map((line) => line.trim().split(/\s+/u))
-            .filter((parts): parts is [string, string] => parts.length === 2 && Number.isFinite(Number(parts[1])))
-            .map(([key, value]) => [key.replace(/:$/u, ""), Number(value)]),
-    );
-
-const systemSnapshot = async (): Promise<{
-    readonly memory: Record<string, number>;
-    readonly cgroup: Record<string, number | undefined>;
-    readonly pressure: Record<"memory" | "cpu" | "io", PressureSnapshot | undefined>;
-    readonly loadAverage: readonly number[];
-}> => {
-    const [meminfo, memoryCurrentBytes, memoryLimitBytes, swapCurrentBytes, swapLimitBytes, memoryEvents, memoryPressure, cpuPressure, ioPressure] =
-        await Promise.all([
-            readFile("/proc/meminfo", "utf8").catch(() => ""),
-            numericFile("/sys/fs/cgroup/memory.current"),
-            numericFile("/sys/fs/cgroup/memory.max"),
-            numericFile("/sys/fs/cgroup/memory.swap.current"),
-            numericFile("/sys/fs/cgroup/memory.swap.max"),
-            readFile("/sys/fs/cgroup/memory.events", "utf8").catch(() => ""),
-            readFile("/proc/pressure/memory", "utf8").catch(() => ""),
-            readFile("/proc/pressure/cpu", "utf8").catch(() => ""),
-            readFile("/proc/pressure/io", "utf8").catch(() => ""),
-        ]);
-    const memoryFields = keyValueNumbers(meminfo.replaceAll(/\s+kB$/gmu, ""));
+const systemSnapshot = async (): Promise<Readonly<Record<"memory" | "cgroup" | "pressure" | "loadAverage", unknown>>> => {
+    const [meminfo, cgroup] = await Promise.all([readText("/proc/meminfo"), readCgroup()]);
+    const memoryFields = flatKeyed(meminfo?.replaceAll(/\s+kB$/gmu, ""));
     return {
+        // The host's, which the cgroup's own figures sit inside.
         memory: {
             totalBytes: (memoryFields["MemTotal"] ?? 0) * 1024,
             availableBytes: (memoryFields["MemAvailable"] ?? 0) * 1024,
@@ -349,17 +166,14 @@ const systemSnapshot = async (): Promise<{
             swapFreeBytes: (memoryFields["SwapFree"] ?? 0) * 1024,
         },
         cgroup: {
-            memoryCurrentBytes,
-            memoryLimitBytes,
-            swapCurrentBytes,
-            swapLimitBytes,
-            ...Object.fromEntries(Object.entries(keyValueNumbers(memoryEvents)).map(([key, value]) => [`event_${key}`, value])),
+            memoryCurrentBytes: cgroup.memoryBytes,
+            workingSetBytes: cgroup.workingSetBytes,
+            memoryLimitBytes: cgroup.memoryLimitBytes,
+            swapCurrentBytes: cgroup.swapBytes,
+            swapLimitBytes: cgroup.swapLimitBytes,
+            ...Object.fromEntries(Object.entries(cgroup.memoryEvents).map(([key, value]) => [`event_${key}`, value])),
         },
-        pressure: {
-            memory: parsePressure(memoryPressure),
-            cpu: parsePressure(cpuPressure),
-            io: parsePressure(ioPressure),
-        },
+        pressure: cgroup.pressure,
         loadAverage: loadavg(),
     };
 };
@@ -405,6 +219,7 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
     let lastElu = performance.eventLoopUtilization();
     let lastAt = performance.now();
     let previousProcessCpu: ReadonlyMap<number, number> = new Map();
+    const scanProcesses = createProcessScanner();
 
     const sample = async (): Promise<ResourceSnapshot> => {
         const now = performance.now();
@@ -441,13 +256,11 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
         gcCount = 0;
         gcTotalMs = 0;
         gcMaxMs = 0;
-        const selfStatusPromise = readFile("/proc/self/status", "utf8")
-            .then(parseProcStatus)
-            .catch(() => undefined);
+        const selfStatusPromise = readText("/proc/self/status").then((text) => (text === undefined ? undefined : parseProcStatus(text)));
         const openFdsPromise = readdir("/proc/self/fd")
             .then((entries) => entries.length)
             .catch(() => undefined);
-        const processesPromise = processSnapshot(previousProcessCpu);
+        const processesPromise = scanProcesses(process.pid).then((scanned) => processSnapshot(scanned, previousProcessCpu));
         const [selfStatus, openFds, processes, system, queue] = await Promise.all([
             selfStatusPromise,
             openFdsPromise,

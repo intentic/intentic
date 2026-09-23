@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { HostedBuildState, HostedBuildStatus } from "@intentic/api-contract";
+import { hostedTier } from "@intentic/constants";
 import type { HostedBuild, PrismaClient } from "@intentic/prisma";
 import { isOfficialSandboxImage, lintOverlay, overlayBase, rewriteOverlayBase } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -23,7 +24,6 @@ import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "../fly/
 import { hostedCapacity, noteProviderAtCapacity, providerWords } from "../hosted-capacity.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES } from "./hosted-build-script.js";
 import { hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "../hosted.js";
-import { tierOfRow } from "../hosted-shape.js";
 import { chargeMinutes, hostedBudgetOf, usageMonth } from "../hosted-usage.js";
 
 // Executes `ic sandbox rebuild` for hosted sandboxes: builds the approved overlay in a builder machine inside the
@@ -164,7 +164,7 @@ const provisionArgsOf = (config: Config, row: BuildRow[`machine`]): HostedProvis
     connectToken: decryptSecret(config, row.sandbox.token),
     ownerEmail: row.sandbox.owner.email,
     region: row.region,
-    tier: tierOfRow(row.tier),
+    tier: hostedTier(row.tier).id,
 });
 
 // The config replacement a restart is: a running machine takes it up in place, a stopped one boots it on next wake

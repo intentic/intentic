@@ -9,16 +9,15 @@ import {
 } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { ORPCError } from "@orpc/server";
-import { test, expect, afterEach, mock, jest } from "bun:test";
-import { waitFor, hoisted } from "@intentic/testing/bun";
+import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
 import { enrolledFleet, type SyncEnrollmentRow } from "../platform/sync.js";
 import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow, sandboxesFromTool } from "./device-reports.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact this file states in one line.
-const { published } = hoisted(() => ({ published: [] as string[] }));
-mock.module("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
+const { published } = { published: [] as string[] };
+jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
 
 const report = (hostname: string, overrides: Partial<DeviceReport> = {}): DeviceReport => ({
     hostname,

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { withImagesInUserMessages } from "./trial-images.js";
 
 // What's pinned here is the shape the upstream refuses: an image part outside a `user` message, which is exactly what

@@ -102,7 +102,7 @@ const onEnter = (event: KeyboardEvent): void => {
             <Button
                 severity="secondary"
                 :text="true"
-                :aria-label="show ? t(`capabilities.secretField.hideValue`) : t(`capabilities.secretField.showValue`)"
+                :aria-label="show ? t(`shared.hideValue`) : t(`capabilities.secretField.showValue`)"
                 @click="show = !show"
             >
                 <template #icon><Icon :name="show ? 'eye-slash' : 'eye'" /></template>
@@ -118,7 +118,7 @@ const onEnter = (event: KeyboardEvent): void => {
         <p v-else-if="!noHint" class="text-xs text-muted">
             {{ t(`capabilities.secretField.storedInSandboxs`) }} <span class="font-mono">.env</span> {{ t(`capabilities.secretField.as`) }}
             <span class="font-mono">{{ secretKey }}</span
-            >{{ t(`capabilities.secretField.neverOnPlatform`) }}
+            >{{ t(`shared.neverOnPlatform`) }}
         </p>
     </div>
 </template>

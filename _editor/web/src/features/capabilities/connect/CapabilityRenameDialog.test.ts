@@ -2,7 +2,6 @@
 // actually differs, and typed spaces/punctuation are repaired the same way the add form does, shown before submit.
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
-import { it, expect } from "bun:test";
 import { createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

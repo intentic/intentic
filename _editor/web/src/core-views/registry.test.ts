@@ -2,14 +2,12 @@ import type { CapabilityFacts, Disposable, IntenticApi, ViewBadge, ViewRegistrat
 import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic/api-contract";
-import { describe, it, expect, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { ref } from "vue";
 import { useAudience } from "../app/useAudience";
 
 // The reader's tier, switched by the guest tests below; everyone else is read as the owner the app defaults to.
-const guestReader = hoisted(() => ({ isGuest: false }));
-mock.module(`../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest: ref(guestReader.isGuest) }) }));
+const guestReader = { isGuest: false };
+jest.mock(`../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest: ref(guestReader.isGuest) }) }));
 import {
     activationBadge,
     sectionReachable,

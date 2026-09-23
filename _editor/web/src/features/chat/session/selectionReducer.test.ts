@@ -1,7 +1,6 @@
-import { describe, expect, it } from "bun:test";
 import { AUTO_PROVIDER } from "../models/modelPickerState";
 import type { SessionRef } from "../run/turnRequest";
-import { type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
+import { type PickAction, type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
 
 // Pins every pick as a value in and a value out: what each one does to the selection, what it asks of the world, and
 // which it refuses, against a world that is only the facts a pick reads.
@@ -48,9 +47,16 @@ describe(`seeding`, () => {
 });
 
 describe(`the provider`, () => {
-    it(`switches on the reader's pick, re-scoping to the new provider and cutting the segment`, () => {
-        expect(reduceSelection(SENT, { kind: `selectProvider`, provider: `codex` }, WORLD)).toEqual({
-            selection: { ...SENT, provider: `codex`, account: `codex-account`, model: `codex-model`, sentModel: undefined },
+    it(`switches on the reader's pick, re-scoping to the new provider, forgetting the old one's debt, and cutting the segment`, () => {
+        expect(reduceSelection({ ...SENT, displacedModel: `sonnet` }, { kind: `selectProvider`, provider: `codex` }, WORLD)).toEqual({
+            selection: {
+                ...SENT,
+                provider: `codex`,
+                account: `codex-account`,
+                model: `codex-model`,
+                displacedModel: undefined,
+                sentModel: undefined,
+            },
             effects: { kept: true, remember: { provider: `codex`, value: `codex-model` }, segmentCut: true, divider: `refresh` },
         });
     });
@@ -62,8 +68,7 @@ describe(`the provider`, () => {
         expect(reduceSelection(away, { kind: `selectProvider`, provider: `claude` }, world).selection.account).toBe(`the-session-account`);
     });
 
-    it(`refuses a switch mid-turn and a switch to where it already is, changing nothing`, () => {
-        expect(reduceSelection(SEEDED, { kind: `selectProvider`, provider: `codex` }, LIVE)).toEqual({ selection: SEEDED, effects: {} });
+    it(`refuses a switch to where it already is, changing nothing`, () => {
         expect(reduceSelection(SEEDED, { kind: `selectProvider`, provider: `claude` }, WORLD)).toEqual({ selection: SEEDED, effects: {} });
     });
 
@@ -85,7 +90,7 @@ describe(`the provider`, () => {
         expect(again.movedFrom).toEqual({ provider: `claude`, value: `claude-model` });
     });
 
-    it(`gives the moved pick back, model and all, but not mid-turn and not when nothing is owed`, () => {
+    it(`gives the moved pick back, model and all, but not when nothing is owed`, () => {
         const moved = {
             ...SEEDED,
             provider: `codex` as const,
@@ -98,7 +103,6 @@ describe(`the provider`, () => {
             selection: { ...moved, provider: `claude`, account: `claude-account`, model: `opus`, movedFrom: undefined, sentModel: undefined },
             effects: { segmentCut: true, divider: `refresh` },
         });
-        expect(reduceSelection(moved, { kind: `restoreProvider` }, LIVE).selection).toBe(moved);
         expect(reduceSelection(SEEDED, { kind: `restoreProvider` }, WORLD).selection).toBe(SEEDED);
     });
 });
@@ -113,7 +117,7 @@ describe(`the model`, () => {
         });
     });
 
-    it(`takes another provider's model as that provider's switch, and refuses it mid-turn where its own is fine`, () => {
+    it(`takes another provider's model as that provider's switch, and its own provider's even mid-turn`, () => {
         expect(reduceSelection(SENT, { kind: `selectModel`, pick: { provider: `codex`, value: `gpt-5` } }, WORLD).selection).toEqual({
             ...SENT,
             provider: `codex`,
@@ -121,7 +125,6 @@ describe(`the model`, () => {
             model: `gpt-5`,
             sentModel: undefined,
         });
-        expect(reduceSelection(SENT, { kind: `selectModel`, pick: { provider: `codex`, value: `gpt-5` } }, LIVE).selection).toBe(SENT);
         expect(reduceSelection(SENT, { kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } }, LIVE).selection.model).toBe(`haiku`);
     });
 
@@ -147,7 +150,6 @@ describe(`the model`, () => {
             },
             effects: { kept: true, divider: `refresh` },
         });
-        expect(reduceSelection(SEEDED, { kind: `wearModel`, pin }, LIVE).selection).toBe(SEEDED);
     });
 
     it(`owes back the first model a thin catalog moved it off, and nothing for an empty one`, () => {
@@ -174,23 +176,37 @@ describe(`the settings`, () => {
             selection: { ...SEEDED, fast: true },
             effects: { fastStale: true },
         });
-        expect(reduceSelection(SEEDED, { kind: `setAuto`, auto: true }, LIVE).selection).toBe(SEEDED);
     });
 
-    it(`takes an account while a card waits, owing the divider to the settle, and refuses one while the model writes`, () => {
+    it(`takes an account while a card waits, owing the divider to the settle`, () => {
         expect(reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, PARKED)).toEqual({
             selection: { ...SEEDED, account: `second`, switchedMidTurn: true },
             effects: { kept: true, accountPick: { provider: `claude`, account: `second` }, divider: `refresh` },
         });
-        expect(reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, LIVE).selection).toBe(SEEDED);
     });
 
-    it(`switches the harness as a segment cut, remembered, and not mid-turn`, () => {
+    it(`switches the harness as a segment cut, remembered`, () => {
         expect(reduceSelection(SENT, { kind: `selectHarness`, harness: `claude-code` }, WORLD)).toEqual({
             selection: { ...SENT, harness: `claude-code`, sentModel: undefined },
             effects: { kept: true, defaults: { harness: `claude-code` }, segmentCut: true, divider: `refresh` },
         });
-        expect(reduceSelection(SENT, { kind: `selectHarness`, harness: `claude-code` }, LIVE).selection).toBe(SENT);
+    });
+});
+
+// A turn keeps the settings it runs on: every pick that would change them under it waits for it to settle.
+describe(`a live turn`, () => {
+    const OWED: Selection = { ...SENT, movedFrom: { provider: `codex`, value: `codex-model` } };
+
+    it.each<[string, PickAction]>([
+        [`a provider`, { kind: `selectProvider`, provider: `codex` }],
+        [`another provider's model`, { kind: `selectModel`, pick: { provider: `codex`, value: `gpt-5` } }],
+        [`a card's model`, { kind: `wearModel`, pin: { provider: `claude`, model: `haiku` } }],
+        [`Auto`, { kind: `setAuto`, auto: true }],
+        [`a harness`, { kind: `selectHarness`, harness: `claude-code` }],
+        [`an account, while the model writes`, { kind: `selectAccount`, account: `second` }],
+        [`the moved pick back`, { kind: `restoreProvider` }],
+    ])(`refuses %s, changing nothing`, (_name, action) => {
+        expect(reduceSelection(OWED, action, LIVE).selection).toBe(OWED);
     });
 });
 

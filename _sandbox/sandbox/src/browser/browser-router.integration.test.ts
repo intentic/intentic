@@ -5,7 +5,6 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { test, expect, afterEach } from "bun:test";
 
 // The router's contract, driven over real stdio against real child processes:
 // 1. handshake and tools/list are answered with no backend and no daemon round trip; every listed tool gains an

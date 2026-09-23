@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { PlannedItem } from "./adapter-shared.js";
 import { detectHermes, planHermes } from "./hermes.js";
 

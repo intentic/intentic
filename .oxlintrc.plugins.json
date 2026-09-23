@@ -1,16 +1,19 @@
 {
-    // THE STANDARD PLUS anti-slop AND COGNITIVE COMPLEXITY. What keeps these out of the root config is their
-    // unmeasured backlog, not how they load: the root config already carries a JS plugin of its own, so
-    // `@oxlint/plugins` is a dependency `pnpm lint` itself needs.
+    // THE STANDARD PLUS anti-slop, COGNITIVE COMPLEXITY AND THE ONE-LINE COMMENT RULE, kept out of the root config
+    // by their backlog.
     //
     // Run by `pnpm lint:plugins` only; _tools/oxlint/lint-edit.mjs reads .oxlintrc.json, not this file.
     // `@oxlint/plugins` must equal the `oxlint` version exactly: the JS plugin ABI is not semver-stable.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
     "extends": ["./.oxlintrc.json"],
-    // `extends` merges `jsPlugins`, so the plugin the root config registers is loaded here too and only the
-    // two this file adds are listed.
-    "jsPlugins": [{ "name": "anti-slop", "specifier": "./_tools/oxlint/anti-slop/index.ts" }, "oxlint-plugin-complexity"],
+    "jsPlugins": [
+        { "name": "anti-slop", "specifier": "./_tools/oxlint/anti-slop/index.ts" },
+        "oxlint-plugin-complexity",
+        { "name": "comments", "specifier": "./_tools/oxlint/comments/index.ts" }
+    ],
     "rules": {
+        // AGENTS.md's comment rule.
+        "comments/one-line": "error",
         // COGNITIVE complexity, which is the metric that actually matches how hard a function is to read.
         // Cyclomatic counts every branch equally, so a flat 30-case dispatch scores the same as five levels of
         // nested ifs; cognitive charges nothing for flat structure and compounds for depth. It also names the

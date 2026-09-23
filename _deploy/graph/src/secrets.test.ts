@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { collectSecretUsage } from "./secrets.js";
 import type { DesiredStateGraph, ResourceNode } from "./types.js";
 

@@ -1,7 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { computed, effectScope, ref, shallowRef } from "vue";
 import type { OpenMode } from "../../tabs/workspaceTabs";
 import { beginEntryDrag } from "../transfer/useEntryDrag";
@@ -41,19 +40,19 @@ const gesturesOver = () => {
         byPath: shallowRef(new Map([SRC, MAIN, PKG, ZIP, AUTH, NOTES, README].map((item) => [item.path, item]))),
         manageableDirs: () => new Set([`src`]),
         pending: (path: string) => path === `notes.md`,
-        toggleExpand: mock((path: string) => done.push(`toggle ${path}`)),
+        toggleExpand: jest.fn((path: string) => done.push(`toggle ${path}`)),
         editing: ref(false),
-        beginRename: mock((path: string) => done.push(`rename ${path}`)),
-        requestDelete: mock(() => done.push(`delete`)),
-        focusRow: mock((path: string) => done.push(`focus ${path}`)),
-        focusLead: mock(() => {
+        beginRename: jest.fn((path: string) => done.push(`rename ${path}`)),
+        requestDelete: jest.fn(() => done.push(`delete`)),
+        focusRow: jest.fn((path: string) => done.push(`focus ${path}`)),
+        focusLead: jest.fn(() => {
             done.push(`focus lead`);
             return Promise.resolve();
         }),
-        openFile: mock((path: string, mode: OpenMode) => done.push(`open ${path} ${mode}`)),
-        openDirectory: mock((path: string) => done.push(`manage ${path}`)),
-        pick: mock((picked: WorkspaceTreeEntry) => done.push(`pick ${picked.path}`)),
-        cleared: mock(() => done.push(`cleared`)),
+        openFile: jest.fn((path: string, mode: OpenMode) => done.push(`open ${path} ${mode}`)),
+        openDirectory: jest.fn((path: string) => done.push(`manage ${path}`)),
+        pick: jest.fn((picked: WorkspaceTreeEntry) => done.push(`pick ${picked.path}`)),
+        cleared: jest.fn(() => done.push(`cleared`)),
     };
     const { selecting, gestures } = effectScope().run(() => {
         const selection = useTreeSelection({ selectedPath: () => undefined, order });

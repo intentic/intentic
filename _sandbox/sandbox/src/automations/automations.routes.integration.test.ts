@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { type Automation, type Capability, SandboxSettingsSchema, ZoneSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
-import { test, expect } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

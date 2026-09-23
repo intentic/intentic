@@ -328,7 +328,7 @@ const confirmRemove = async (): Promise<void> => {
         <div class="flex w-60 flex-col gap-0.5 p-1">
             <!-- The badge's detail: one row per pending item, routing to the hub tab that resolves it. -->
             <template v-if="attention.length > 0">
-                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.sandboxSwitcher.needs`) }}</div>
+                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.needs`) }}</div>
                 <RouterLink
                     v-for="item in attention"
                     :key="item.message"
@@ -348,7 +348,7 @@ const confirmRemove = async (): Promise<void> => {
             <!-- Things simply true (a contended port, a newer image): found on arrival, not advertised by the badge. -->
             <template v-if="attentionNotes.length > 0">
                 <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">
-                    {{ t(`sandbox.sandboxSwitcher.worthKnowing`) }}
+                    {{ t(`shared.worthKnowing`) }}
                 </div>
                 <RouterLink
                     v-for="item in attentionNotes"
@@ -366,7 +366,7 @@ const confirmRemove = async (): Promise<void> => {
                 <div class="my-1 border-t border-line"></div>
             </template>
 
-            <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.sandboxSwitcher.sandboxes`) }}</div>
+            <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxes`) }}</div>
 
             <button
                 v-for="(option, at) in switchable"
@@ -411,7 +411,7 @@ const confirmRemove = async (): Promise<void> => {
                     >&ndash;</span
                 >
                 <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">{{
-                    t(`sandbox.sandboxSwitcher.shared`)
+                    t(`shared.shared`)
                 }}</span>
                 <!-- Which digit this row is, the only place the chord can be learned; fades under the trash icon's hover. -->
                 <kbd
@@ -422,7 +422,7 @@ const confirmRemove = async (): Promise<void> => {
                 <Icon
                     name="trash"
                     @click.stop="askRemove(option)"
-                    v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`sandbox.sandboxSwitcher.leave`)"
+                    v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`shared.leave`)"
                     class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
                 />
             </button>
@@ -435,14 +435,14 @@ const confirmRemove = async (): Promise<void> => {
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
                     <Icon name="plus" class="text-base text-muted" />
                 </span>
-                {{ t(`sandbox.sandboxSwitcher.addSandbox`) }}
+                {{ t(`shared.addSandbox`) }}
             </RouterLink>
 
             <!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->
             <template v-if="unfinished.length > 0">
                 <div class="my-1 border-t border-line"></div>
                 <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">
-                    {{ t(`sandbox.sandboxSwitcher.unfinishedSetup`) }}
+                    {{ t(`shared.unfinishedSetup`) }}
                 </div>
                 <RouterLink
                     v-for="option in unfinished"
@@ -454,13 +454,13 @@ const confirmRemove = async (): Promise<void> => {
                     <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
                         <Icon name="wrench" class="text-xs" />
                     </span>
-                    <span class="min-w-0 flex-1 truncate text-muted">{{ t(`sandbox.sandboxSwitcher.finishSettingUp`, { name: option.name }) }}</span>
+                    <span class="min-w-0 flex-1 truncate text-muted">{{ t(`shared.finishSettingUp`, { name: option.name }) }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle transition-opacity group-hover:opacity-0" />
                     <!-- In flow, not overlaid, so hovering never shifts the text; `.prevent` stops the anchor firing too. -->
                     <Icon
                         name="trash"
                         @click.prevent.stop="askRemove(option)"
-                        v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`sandbox.sandboxSwitcher.leave`)"
+                        v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`shared.leave`)"
                         class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
                     />
                 </RouterLink>
@@ -485,7 +485,7 @@ const confirmRemove = async (): Promise<void> => {
     <ConfirmDialog
         :open="pending !== undefined"
         :header="pending?.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount2`) : t(`sandbox.sandboxSwitcher.leaveSandbox`)"
-        :confirm-label="pending?.role === 'owner' ? t(`ui.action.remove`) : t(`sandbox.sandboxSwitcher.leave`)"
+        :confirm-label="pending?.role === 'owner' ? t(`ui.action.remove`) : t(`shared.leave`)"
         confirm-icon="trash"
         :loading="deletingThere"
         @cancel="pending = undefined"

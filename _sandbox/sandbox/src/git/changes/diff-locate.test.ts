@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { DiffLocateError, parseDiffSourceQuery } from "./diff-locate.js";
 
 /* The query string every side route accepts, read into the one typed source the locator resolves. */

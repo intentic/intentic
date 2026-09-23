@@ -1,14 +1,13 @@
 import type { User } from "@intentic/api-contract";
-import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
 import { freshImport, stubGlobal, mocked } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 
 // Plain ref stands in for useAuth's module singleton; the mock closure keeps re-imported analytics modules
 // (one evaluation per test) watching the same instance.
 const user = ref<User | null>(null);
-mock.module("../features/auth/useAuth", () => ({ useAuth: () => ({ user }) }));
-mock.module("posthog-js", () => ({
-    default: { init: mock(), identify: mock(), reset: mock(), capture: mock(), register: mock() },
+jest.mock("../features/auth/useAuth", () => ({ useAuth: () => ({ user }) }));
+jest.mock("posthog-js", () => ({
+    default: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), register: jest.fn() },
 }));
 
 // environment.ts reads `window.env` once, at import; this is the same object under the same name, mutated per case,
@@ -20,7 +19,7 @@ const environment = {
     analytics: { posthogKey: ``, posthogHost: `https://app.intentic.dev/wire` },
     afterSignOut: ``,
 };
-mock.module("./environments/environment", () => ({ environment }));
+jest.mock("./environments/environment", () => ({ environment }));
 
 // `desktop` stands in for the app's init script (windows.rs), the only signal that tells this SPA it's running in
 // the desktop app rather than a browser tab.

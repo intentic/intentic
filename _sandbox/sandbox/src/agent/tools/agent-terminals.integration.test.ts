@@ -3,7 +3,6 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, afterEach } from "bun:test";
 import { agentShellBusy } from "./agent-terminals.js";
 
 // Runs against a real tmux server: the dead-vs-running window distinction (remain-on-exit) needs a real process, not a

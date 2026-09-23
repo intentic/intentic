@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { afterEach, describe, expect, it } from "bun:test";
 import { DEFAULT_HEIGHT, MIN_HEIGHT, usePanelHeight } from "./usePanelHeight";
 
 // Pins the panel's height: the default until one is remembered, a remembered one clamped to the floor and to 80% of

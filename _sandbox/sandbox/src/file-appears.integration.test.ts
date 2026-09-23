@@ -1,7 +1,6 @@
 import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { whenFileAppears } from "./file-appears.js";
 

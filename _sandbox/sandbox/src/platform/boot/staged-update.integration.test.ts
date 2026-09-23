@@ -1,7 +1,6 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { stagedUpdate } from "./staged-update.js";
 
 // The staged-update marker: every failure to read it (missing, malformed, unversioned) falls back to "nothing is known

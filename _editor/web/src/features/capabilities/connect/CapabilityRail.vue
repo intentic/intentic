@@ -60,7 +60,7 @@ const options = computed<PickerOptions<string>>(() => [
         v-model="selected"
         :options="options"
         :aria-label="t(`capabilities.capabilityRail.capabilityCategory`)"
-        :header="t(`capabilities.capabilityRail.category`)"
+        :header="t(`shared.category`)"
         class="w-full text-xs"
     />
 

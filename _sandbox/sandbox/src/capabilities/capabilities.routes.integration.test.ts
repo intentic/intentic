@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { RESERVED_MCP_SERVER_NAMES, VAULTED } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 
 import { createApp } from "../app.js";
 import { hasSession, markConnected, sessionDir } from "../browser/sessions/session-store.js";

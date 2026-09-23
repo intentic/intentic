@@ -43,8 +43,8 @@ export function useNavigationCommands(): void {
     // The rail's own tiles, which are shell routes rather than registered views, so no detect() reports them. Named as
     // the rail names them, including the two the maker's vocabulary renames.
     const shellSections = computed<readonly NavCommand[]>(() => [
-        { command: `view.chat`, title: t(`shell.useNavigationCommands.chat`), category: GO_TO, icon: `comments`, to: `/chat` },
-        { command: `view.agents`, title: t(`shell.useNavigationCommands.agents`), category: GO_TO, icon: `robot`, to: `/agents` },
+        { command: `view.chat`, title: t(`shared.chat`), category: GO_TO, icon: `comments`, to: `/chat` },
+        { command: `view.agents`, title: t(`shared.agents`), category: GO_TO, icon: `robot`, to: `/agents` },
         ...(isGuest.value ? [] : guestless.value),
     ]);
     const guestless = computed<readonly NavCommand[]>(() => [
@@ -52,9 +52,9 @@ export function useNavigationCommands(): void {
         // Marks the preview as opened on the way, which a bare push would not.
         { command: `view.preview`, title: words.value.preview, category: GO_TO, icon: `eye`, to: `/preview`, run: () => openPreview(router) },
         // Both tiles leave the rail when nothing is running; the palette is how you get back to a finished session.
-        { command: `view.browsers`, title: t(`shell.useNavigationCommands.browsers`), category: GO_TO, icon: `desktop`, to: `/browsers` },
-        { command: `view.subagents`, title: t(`shell.useNavigationCommands.subagents`), category: GO_TO, icon: `users`, to: `/subagents` },
-        { command: `view.capabilities`, title: t(`shell.useNavigationCommands.capabilities`), category: GO_TO, icon: `plus`, to: `/capabilities` },
+        { command: `view.browsers`, title: t(`shared.browsers`), category: GO_TO, icon: `desktop`, to: `/browsers` },
+        { command: `view.subagents`, title: t(`shared.subagents`), category: GO_TO, icon: `users`, to: `/subagents` },
+        { command: `view.capabilities`, title: t(`shared.capabilities`), category: GO_TO, icon: `plus`, to: `/capabilities` },
     ]);
 
     // One command per rail-surface activation (not per view); the id carries the activation key unless it is a

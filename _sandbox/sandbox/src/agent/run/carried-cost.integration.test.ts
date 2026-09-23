@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { describe, expect, mock, test } from "bun:test";
 import { type HarnessRequest, runAgent } from "./agent.js";
 import { CHUNK_BYTES, carriedCostOf, TAIL_LIMIT_BYTES } from "./carried-cost.js";
 import type { QueryFn } from "./sdk-stream.js";
@@ -12,18 +11,22 @@ import { parkedCards } from "../../agents/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
-mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }) }));
+jest.mock("../prompt/preset-prompt.js", () => ({
+    presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }),
+}));
 
 // A resumed Claude session's first result already counts the spend its transcript saved; the baseline read here is what
 // keeps a usage frame to that result's own spend. Integration suite: reads real transcripts on disk.
 
 const SESSION = "6e296ad0-8660-428e-aa79-b014a3c61004";
 
-const costState = (totalCostUSD: number, sessionId: string = SESSION): string => JSON.stringify({ type: "cost-state", sessionId, totalCostUSD, modelUsage: {} });
+const costState = (totalCostUSD: number, sessionId: string = SESSION): string =>
+    JSON.stringify({ type: "cost-state", sessionId, totalCostUSD, modelUsage: {} });
 const message = (text: string): string => JSON.stringify({ type: "user", sessionId: SESSION, message: { role: "user", content: text } });
 
 // Kilobyte lines, at least `bytes` of them in all, standing for whatever a session wrote after its last saved total.
-const filler = (bytes: number): string[] => Array.from({ length: Math.ceil(bytes / 1_024) }, (_, index) => message(String(index).padStart(1_024, "x")));
+const filler = (bytes: number): string[] =>
+    Array.from({ length: Math.ceil(bytes / 1_024) }, (_, index) => message(String(index).padStart(1_024, "x")));
 
 // A session store holding one transcript, filed where the CLI files it: under the sanitized cwd it ran in.
 const storeWith = (lines: readonly string[], project = "-work"): string => {
@@ -102,6 +105,9 @@ const resumedTurn = async (sessionStore: string, queryFn: QueryFn): Promise<Agen
 
 test("a resumed turn's usage frame is its own spend, not the total the session carried in", async () => {
     const store = storeWith([message("earlier"), costState(1.5)]);
-    const events = await resumedTurn(store, fakeQuery({ type: "result", subtype: "success", session_id: SESSION, total_cost_usd: 1.75, modelUsage: {} }));
+    const events = await resumedTurn(
+        store,
+        fakeQuery({ type: "result", subtype: "success", session_id: SESSION, total_cost_usd: 1.75, modelUsage: {} }),
+    );
     expect(events.filter((event) => event.kind === "usage")).toEqual([{ kind: "usage", costUsd: 0.25 }]);
 });

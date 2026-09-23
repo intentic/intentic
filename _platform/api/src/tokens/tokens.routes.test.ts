@@ -1,6 +1,5 @@
 import type { PrismaClient } from "@intentic/prisma";
 import { call } from "@orpc/server";
-import { it, expect, mock } from "bun:test";
 import type { OrpcContext } from "../context.js";
 import { API_TOKEN_PREFIX, apiTokenDigest, verifyApiToken } from "./api-tokens.js";
 import { tokenRoutes } from "./tokens.routes.js";
@@ -10,31 +9,31 @@ import { tokenRoutes } from "./tokens.routes.js";
 const user = { id: `user-1`, email: `Owner@Example.test`, name: `Owner`, image: null };
 
 const fakePrisma = (rows: Record<string, unknown>[] = []) => {
-    const create = mock(async ({ data }: { data: Record<string, string> }) => ({
+    const create = jest.fn(async ({ data }: { data: Record<string, string> }) => ({
         id: `tok-new`,
         label: data[`label`],
         scope: data[`scope`],
         createdAt: new Date(`2026-09-21T10:00:00.000Z`),
     }));
-    const updateMany = mock(async (_args: { where: Record<string, unknown>; data: Record<string, unknown> }) => ({ count: 1 }));
+    const updateMany = jest.fn(async (_args: { where: Record<string, unknown>; data: Record<string, unknown> }) => ({ count: 1 }));
     return {
         create,
         updateMany,
         prisma: {
             apiToken: {
-                findMany: mock(async () => rows),
-                findUnique: mock(async () => rows[0] ?? null),
-                count: mock(async () => rows.length),
+                findMany: jest.fn(async () => rows),
+                findUnique: jest.fn(async () => rows[0] ?? null),
+                count: jest.fn(async () => rows.length),
                 create,
                 updateMany,
-                update: mock(async () => ({})),
+                update: jest.fn(async () => ({})),
             },
         } as unknown as PrismaClient,
     };
 };
 
 const context = (prisma: PrismaClient, over: Partial<OrpcContext> = {}): OrpcContext =>
-    ({ prisma, user, logger: { info: mock(), warn: mock(), error: mock() }, ...over }) as unknown as OrpcContext;
+    ({ prisma, user, logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() }, ...over }) as unknown as OrpcContext;
 
 it(`refuses to mint without a session, so a token can never mint its successor`, async () => {
     const { prisma, create } = fakePrisma();

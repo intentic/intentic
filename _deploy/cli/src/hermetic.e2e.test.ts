@@ -10,7 +10,6 @@ import { adminUsername, deploymentId, forgejoId, komodoId, runnerId, tunnelId } 
 import { e2eTier } from "@intentic/testing/e2e";
 import { utils } from "ssh2";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { APPLY_WORKFLOW_PATH, forgejoSecretName, GIT_TOKEN_SECRET, GIT_USER_SECRET, INTENT_WORKFLOW_PATH } from "./pipelines/adopt-pipelines.js";
 import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
 

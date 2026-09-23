@@ -1,5 +1,4 @@
 import { type Workflow, workflowFaults, WorkflowSchema, type WorkflowStep } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { addStep, connectSteps, disconnectSteps, removeStep, toggleHandoff, updateStep } from "./workflowEdit";
 
 // No edit below may leave the workflow faulty; `workflowFaults` is the same check the save route and designer use.

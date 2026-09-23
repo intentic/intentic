@@ -1,4 +1,5 @@
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
+import { formatOf } from "@intentic/extension-ui";
 import { host } from "./host";
 
 // Thumbnails for a post's workspace attachment, minted from /workspace/raw on first render and cached by path.
@@ -15,8 +16,6 @@ const previews = sandboxRef<Record<string, string>>(
 );
 const loading = sandboxRef(() => new Set<string>());
 const refused = sandboxRef(() => new Set<string>());
-
-const IMAGE_EXTS = new Set([`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `avif`]);
 
 const load = (path: string): void => {
     // Taken before the fetch, checked after, or a stale sandbox's bytes could land under the new one's same path.
@@ -45,7 +44,7 @@ const load = (path: string): void => {
 // refused path; the caller shows a name chip until it flips to a thumbnail.
 export const attachmentPreview = (path: string): string | undefined => {
     const cached = previews.value[path];
-    if (cached !== undefined || !IMAGE_EXTS.has(path.split(`.`).at(-1)?.toLowerCase() ?? ``)) {
+    if (cached !== undefined || formatOf(path).category !== `image`) {
         return cached;
     }
     if (!loading.value.has(path) && !refused.value.has(path)) {

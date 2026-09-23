@@ -41,7 +41,7 @@ watch(
 <template>
     <nav :aria-label="t(`workspace.markdownOutline.documentOutline`)" class="flex min-h-0 w-full flex-col gap-2">
         <div class="flex shrink-0 items-baseline justify-between gap-2 pl-3">
-            <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`workspace.markdownOutline.outline`) }}</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`shared.outline`) }}</span>
             <span class="text-2xs tabular-nums text-subtle">{{ headings.length }}</span>
         </div>
 

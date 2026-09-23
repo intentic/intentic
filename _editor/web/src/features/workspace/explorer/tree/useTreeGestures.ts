@@ -1,6 +1,7 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import type { Ref } from "vue";
+import { clickIntent } from "../../../../lib/multiSelect";
 import { opensAsFolder } from "../../files/archiveEntries";
 import type { OpenMode } from "../../tabs/workspaceTabs";
 import { consumeSuppressedClick } from "../transfer/useEntryDrag";
@@ -68,12 +69,9 @@ export const useTreeGestures = (host: TreeGesturesHost) => {
         }
         const path = row.entry.path;
         host.focusRow(path);
-        if (event.shiftKey && anchor.value !== null) {
-            extendTo(path);
-            return;
-        }
-        if (event.ctrlKey || event.metaKey) {
-            toggleAt(path);
+        const intent = clickIntent(event, anchor.value !== null);
+        if (intent !== `single`) {
+            (intent === `range` ? extendTo : toggleAt)(path);
             return;
         }
         selectSingle(path);

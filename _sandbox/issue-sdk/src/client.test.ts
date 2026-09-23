@@ -1,5 +1,4 @@
 import type { IssuePublicConfig } from "@intentic/sandbox-contract";
-import { test, expect, afterEach, mock, jest } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createClient, type IssueClient } from "./client.js";
 
@@ -27,7 +26,7 @@ const fakeDaemon = (over: Partial<IssuePublicConfig> = {}, reportStatus = 200): 
     const sent: Sent[] = [];
     stubGlobal(
         "fetch",
-        mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+        jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = String(input);
             if (url.endsWith("/config")) {
                 return new Response(JSON.stringify({ ...CONFIG, ...over }), { status: 200 });
@@ -127,7 +126,7 @@ test("a refused or failed send resolves quietly", async () => {
 
     stubGlobal(
         "fetch",
-        mock(async () => {
+        jest.fn(async () => {
             throw new TypeError("Failed to fetch");
         }),
     );
@@ -156,7 +155,7 @@ test("an ingest key rides every report when the host set one", async () => {
 test("a sandbox that refuses the config fails the start, with the daemon's own sentence", async () => {
     stubGlobal(
         "fetch",
-        mock(async () => new Response(JSON.stringify({ error: "origin not allowed" }), { status: 403 })),
+        jest.fn(async () => new Response(JSON.stringify({ error: "origin not allowed" }), { status: 403 })),
     );
     await expect(createClient({ automationId: "bugs", base: "https://sandbox.example" })).rejects.toThrow("origin not allowed");
 });

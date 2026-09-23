@@ -2,7 +2,6 @@
 // the sandbox, replacing two separate Google prompts. These tests check that the token handed to the platform is
 // the one the browser itself minted, and that every failure path falls back to the redirect rather than a dead page.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
@@ -10,12 +9,12 @@ import * as actualDesktop from "../../app/environments/desktop";
 
 // Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
-const push = mock();
+const push = jest.fn();
 // Where the guard that turned somebody away wrote the page they were headed to (router/signIn.ts).
 const query = ref<Record<string, string>>({});
-mock.module(`vue-router`, () => ({
+jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
-    useRouter: () => ({ push, replace: mock() }) as never,
+    useRouter: () => ({ push, replace: jest.fn() }) as never,
     useRoute: () =>
         ({
             get query() {
@@ -24,26 +23,26 @@ mock.module(`vue-router`, () => ({
         }) as never,
 }));
 
-const signInWithGoogle = mock().mockResolvedValue(undefined);
-const signInWithGoogleCredential = mock().mockResolvedValue(undefined);
-mock.module(`./useAuth`, () => ({
+const signInWithGoogle = jest.fn().mockResolvedValue(undefined);
+const signInWithGoogleCredential = jest.fn().mockResolvedValue(undefined);
+jest.mock(`./useAuth`, () => ({
     useAuth: () => ({ user: ref(null), signInWithGoogle, signInWithGoogleCredential }),
 }));
 
-const getIdToken = mock<(options?: { gate?: boolean }) => Promise<string | undefined>>();
-const renderButton = mock<() => Promise<boolean>>();
-mock.module(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
+const getIdToken = jest.fn<(options?: { gate?: boolean }) => Promise<string | undefined>>();
+const renderButton = jest.fn<() => Promise<boolean>>();
+jest.mock(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
 // Available desktop build for this visitor; undefined is the default, overridden only where a test needs one.
-const desktopInstaller = mock<() => { platform: string; label: string; href: string } | undefined>(() => undefined);
+const desktopInstaller = jest.fn<() => { platform: string; label: string; href: string } | undefined>(() => undefined);
 // Partial, over the real module: the page reaches for whatever the desktop lane grows next, and a mock listing its
 // exports by hand fails the link the day one is added.
-mock.module(`../../app/environments/desktop`, () => ({
+jest.mock(`../../app/environments/desktop`, () => ({
     ...actualDesktop,
     DESKTOP_SIGN_IN_LINK: ``,
     desktopVersion: () => undefined,
-    openDesktopLink: mock(),
+    openDesktopLink: jest.fn(),
 }));
-mock.module(`../../app/environments/desktopDownloads`, () => ({ desktopInstaller: () => desktopInstaller() }));
+jest.mock(`../../app/environments/desktopDownloads`, () => ({ desktopInstaller: () => desktopInstaller() }));
 
 const { default: Login } = await import("./Login.vue");
 

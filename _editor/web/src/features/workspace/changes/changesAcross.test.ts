@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { ref } from "vue";
 import type { RepoChanges } from "@intentic/api-contract";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
@@ -8,10 +7,10 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
-mock.module("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
-mock.module("../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch: mock() }));
-mock.module("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: mock() } }));
+jest.mock("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch: jest.fn() }));
+jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: jest.fn() } }));
 
 const { hasOtherSandboxes, rowsOf, worthShowing } = await import("./changesAcross");
 const { outgoingWork } = await import("../push/outgoingWork");

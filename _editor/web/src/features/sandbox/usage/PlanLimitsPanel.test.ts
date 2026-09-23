@@ -2,7 +2,6 @@
 // heading sits visually above the pool meters it groups, not styled like one of them.
 import "@intentic/testing/dom";
 import type { AccountUsage, OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
-import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

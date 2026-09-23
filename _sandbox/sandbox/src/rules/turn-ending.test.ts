@@ -1,7 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { Rule } from "@intentic/sandbox-contract";
-import { describe, test, expect } from "bun:test";
 import { syncHookOutput } from "../testing.js";
 import type { RuleCommandRun } from "./rule-command.js";
 import { commandRuleFindings, type TurnEndingDeps, turnEndingHooks } from "./turn-ending.js";

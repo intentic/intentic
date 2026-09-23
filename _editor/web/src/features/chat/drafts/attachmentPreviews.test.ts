@@ -1,21 +1,20 @@
 // Attachment thumbnail re-fetch, focused on the case where the first ask fails before the sandbox's address is
 // known. Pins which failures are worth retrying and which are final: the difference between a screenshot that
 // comes back and a permanent `image.png` chip.
-import { it, expect, beforeEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 
-const blob = mock<(path: string) => Promise<Blob>>();
+const blob = jest.fn<(path: string) => Promise<Blob>>();
 // The resolved daemon address, exactly as useEndpoint hands it out: undefined until sandbox.list lands.
 const daemonBase = ref<string | undefined>(undefined);
 
 // A daemon refusal, as the raw client throws it.
 const refusal = (status: number): SandboxHttpError => new SandboxHttpError(status, `Request failed (${status}).`);
 
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxBlob: (path: string) => blob(path) }));
-mock.module("../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
+jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxBlob: (path: string) => blob(path) }));
+jest.mock("../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
 
 const { attachmentAudio, attachmentPreview, forgetMedia, rememberMedia } = await import("./attachmentPreviews");
 
@@ -35,7 +34,7 @@ beforeEach(() => {
     blob.mockReset();
     daemonBase.value = undefined;
     jest.useFakeTimers();
-    globalThis.URL.createObjectURL = mock(() => `blob:thumb`);
+    globalThis.URL.createObjectURL = jest.fn(() => `blob:thumb`);
 });
 
 it("re-mints a thumbnail from the workspace bytes on first ask", async () => {

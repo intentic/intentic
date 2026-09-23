@@ -1,5 +1,4 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { describe, expect, it } from "bun:test";
 import { type KeyIntent, type KeyPress, keyIntent, type KeyView } from "./treeKeys";
 import type { MoreRow, Row } from "./treeRows";
 

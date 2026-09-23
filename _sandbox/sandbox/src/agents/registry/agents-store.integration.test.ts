@@ -1,7 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "bun:test";
 import { conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
 import { conversationEntry, isolatedAgent } from "../../testing.js";
 import { sqliteAgentsStore } from "./agents-store.js";
@@ -36,6 +35,10 @@ describe("sqliteAgentsStore on disk", () => {
         const first = sqliteAgentsStore(openConversationsDb(conversationsDbPath(root)));
         first.save([conversationEntry({ id: "gone" }), conversationEntry({ id: "kept" })]);
         first.remove(["gone"]);
-        expect(sqliteAgentsStore(openConversationsDb(conversationsDbPath(root))).load().map((entry) => entry.id)).toEqual(["kept"]);
+        expect(
+            sqliteAgentsStore(openConversationsDb(conversationsDbPath(root)))
+                .load()
+                .map((entry) => entry.id),
+        ).toEqual(["kept"]);
     });
 });

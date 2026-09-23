@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { TemplateManifest } from "@intentic/scaffold";
-import { describe, test, expect } from "bun:test";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 
 // Exercises both port conventions: web reads daemon-injected PORT, api reads API_PORT via the {port} marker.

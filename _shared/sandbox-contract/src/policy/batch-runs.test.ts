@@ -1,5 +1,4 @@
 import { STATE_DIR } from "@intentic/constants";
-import { describe, it, expect } from "bun:test";
 
 // Stands in for any role: what's tested is that the role reaches the turn, not which one it is.
 const ROLE = `maintenance-chore` as const;

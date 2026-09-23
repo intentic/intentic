@@ -9,6 +9,7 @@ import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import HoverCard from "../../../components/HoverCard.vue";
 import ReviewStat from "../../../components/ReviewStat.vue";
+import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
 import { rendersAsBytes } from "../explorer/fileType";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useChat } from "../../chat/run/useChat";
@@ -398,15 +399,12 @@ const isSelected = (row: Row): boolean => selected.value.has(rowKey(row));
 const clickRow = (row: Row, change: GitChange, event: MouseEvent): void => {
     const key = rowKey(row);
     const keys = visibleRows.value.map(rowKey);
-    if (event.shiftKey && anchor.value !== undefined) {
-        const from = keys.indexOf(anchor.value);
-        const to = keys.indexOf(key);
-        if (from !== -1 && to !== -1) {
-            selected.value = new Set(keys.slice(Math.min(from, to), Math.max(from, to) + 1));
-            return;
-        }
+    const intent = clickIntent(event, anchor.value !== undefined && keys.includes(anchor.value));
+    if (intent === `range`) {
+        selected.value = new Set(rangeSelect(keys, anchor.value, key) ?? [key]);
+        return;
     }
-    if (event.ctrlKey || event.metaKey) {
+    if (intent === `toggle`) {
         const next = new Set(selected.value);
         if (!next.delete(key)) {
             next.add(key);
@@ -1217,7 +1215,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 @click="toggleOrigin(YOURS)"
                 v-tooltip.right="t(`workspace.reviewPanel.ownEditsTerminalMain`)"
             >
-                {{ t(`workspace.reviewPanel.you`) }} <span class="opacity-70">{{ legend.yours }}</span>
+                {{ t(`shared.you`) }} <span class="opacity-70">{{ legend.yours }}</span>
                 <Icon v-if="originFilter === YOURS" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
             </button>
         </div>
@@ -1234,7 +1232,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <span class="min-w-0 truncate" v-tooltip.right.overflow="`${changes.landing.value}…`">{{ changes.landing.value }}…</span>
             </p>
             <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">
-                {{ t(`workspace.reviewPanel.loadingChanges`) }}
+                {{ t(`shared.loadingChanges`) }}
             </p>
             <!-- An explicitly clean tree distinguishes empty results from missing data — but only once it is a claim
                  anyone can make: mid-land the tree is being written, and the line above already says so. -->
@@ -1493,7 +1491,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                         "
                                         :disabled="changes.actionBusy.value"
                                         @click="askDiscardRow({ repo: group.repo, side: section.side, path: change.path }, change)"
-                                        v-tooltip.top="t(`workspace.reviewPanel.discard`)"
+                                        v-tooltip.top="t(`shared.discard`)"
                                         :aria-label="t(`workspace.reviewPanel.discard2`, { path: change.path })"
                                     >
                                         <Icon name="trash" class="text-2xs" />
@@ -1533,12 +1531,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </p>
                 <!-- The verb agrees with the count (`plural`), since a lone file misreading as plural is the one line here that must be read carefully. -->
                 <p v-if="pendingDiscard.restores > 0" class="mt-2 text-xs text-muted">
-                    {{ pendingDiscard.partial ? t(`workspace.reviewPanel.atLeast`) : `` }}
+                    {{ pendingDiscard.partial ? t(`shared.atLeast`) : `` }}
                     {{ t(`workspace.reviewPanel.filesReturn`, { count: pendingDiscard.restores }, pendingDiscard.restores) }}
                 </p>
                 <div v-if="pendingDiscard.deletes.length > 0" class="mt-2">
                     <p class="text-xs text-danger">
-                        {{ pendingDiscard.partial ? t(`workspace.reviewPanel.atLeast`) : `` }}
+                        {{ pendingDiscard.partial ? t(`shared.atLeast`) : `` }}
                         {{ t(`workspace.reviewPanel.untrackedLeave`, { count: pendingDiscard.deletes.length }, pendingDiscard.deletes.length) }}
                     </p>
                     <ul class="mt-1 max-h-24 overflow-auto">
@@ -1553,13 +1551,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </template>
             <template #footer>
                 <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingDiscard = undefined" />
-                <Button
-                    size="small"
-                    severity="danger"
-                    :label="t(`workspace.reviewPanel.discard`)"
-                    :disabled="changes.actionBusy.value"
-                    @click="confirmDiscard"
-                />
+                <Button size="small" severity="danger" :label="t(`shared.discard`)" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
             </template>
         </Modal>
 

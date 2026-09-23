@@ -1,12 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { HISTORY_STATE_FILES, STORAGE_CATEGORIES, STORAGE_CLEANABILITY, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
-import {
-    categoryFolders,
-    classifyStoragePath,
-    isProtectedStoragePath,
-    locateStoragePath,
-    type StorageRootKind,
-} from "./storage-catalog.js";
+import { HISTORY_STATE_FILES, STORAGE_CLEANABILITY, StorageCategoryIdSchema, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
+import { categoryFolders, classifyStoragePath, isProtectedStoragePath, locateStoragePath, type StorageRootKind } from "./storage-catalog.js";
 
 // The table every scan sizes by and every clean asks right before it removes a path. What matters most is the
 // boundary between what may go and what may not, so these pin exact answers at that boundary.
@@ -30,8 +23,14 @@ describe("classifyStoragePath", () => {
     });
 
     test("a nested rule carves its folder out of the one around it", () => {
-        expect(classifyStoragePath("history", "gits/.turbo/cache/0000effc265ff7b7.tar.zst")).toMatchObject({ category: "buildCaches", item: "gits/.turbo" });
-        expect(classifyStoragePath("history", "gits/intentic/objects/pack/b.pack")).toMatchObject({ category: "repositories", item: "gits/intentic" });
+        expect(classifyStoragePath("history", "gits/.turbo/cache/0000effc265ff7b7.tar.zst")).toMatchObject({
+            category: "buildCaches",
+            item: "gits/.turbo",
+        });
+        expect(classifyStoragePath("history", "gits/intentic/objects/pack/b.pack")).toMatchObject({
+            category: "repositories",
+            item: "gits/intentic",
+        });
         // Not settled: the folder holds both a repository and the build cache.
         expect(classifyStoragePath("history", "gits")).toEqual({ category: "repositories", item: "gits", unit: false, settled: false });
 
@@ -44,18 +43,35 @@ describe("classifyStoragePath", () => {
         });
         expect(classifyStoragePath("workspace", `${artifacts}/attachments/49480a06/photo.png`).category).toBe("conversations");
         expect(classifyStoragePath("workspace", `${artifacts}/loops/fair-sage-ey2r/progress.md`).category).toBe("conversations");
-        expect(classifyStoragePath("workspace", `${artifacts}/acceptance/report.md`)).toMatchObject({ category: "artifacts", item: `${artifacts}/acceptance` });
+        expect(classifyStoragePath("workspace", `${artifacts}/acceptance/report.md`)).toMatchObject({
+            category: "artifacts",
+            item: `${artifacts}/acceptance`,
+        });
         // A folder of generated images is not one artifact: each image is.
         expect(classifyStoragePath("workspace", `${artifacts}/imagegen`)).toMatchObject({ category: "artifacts", unit: false });
         expect(classifyStoragePath("workspace", `${artifacts}/imagegen/ig_1.png`)).toMatchObject({ category: "artifacts", unit: true });
 
-        expect(classifyStoragePath("workspace", ".intentic/local/cache/models/Qwen3.5-2B-Q4_K_M.gguf")).toMatchObject({ category: "modelWeights", unit: true });
-        expect(classifyStoragePath("workspace", ".intentic/local/cache/iq/segments/0001")).toMatchObject({ category: "indexes", item: ".intentic/local/cache/iq" });
+        expect(classifyStoragePath("workspace", ".intentic/local/cache/models/Qwen3.5-2B-Q4_K_M.gguf")).toMatchObject({
+            category: "modelWeights",
+            unit: true,
+        });
+        expect(classifyStoragePath("workspace", ".intentic/local/cache/iq/segments/0001")).toMatchObject({
+            category: "indexes",
+            item: ".intentic/local/cache/iq",
+        });
     });
 
     test("what no rule names falls to the workspace, the history's declared state, or nobody", () => {
-        expect(classifyStoragePath("workspace", "refs/ZCode/package.json")).toEqual({ category: "workspace", item: "refs", unit: false, settled: true });
-        expect(classifyStoragePath("workspace", ".intentic/secrets/auth/claude/.credentials.json")).toMatchObject({ category: "state", item: ".intentic/secrets" });
+        expect(classifyStoragePath("workspace", "refs/ZCode/package.json")).toEqual({
+            category: "workspace",
+            item: "refs",
+            unit: false,
+            settled: true,
+        });
+        expect(classifyStoragePath("workspace", ".intentic/secrets/auth/claude/.credentials.json")).toMatchObject({
+            category: "state",
+            item: ".intentic/secrets",
+        });
         expect(classifyStoragePath("history", "activity.jsonl").category).toBe("state");
         // A store's own backup of a file it could not parse rides that file's declaration.
         expect(classifyStoragePath("history", "account-usage.json.corrupt").category).toBe("state");
@@ -82,7 +98,8 @@ describe("the state tables", () => {
     test("no credential or identity is cleanable, and nothing that travels is cleaned without asking", () => {
         const misfiled = declared.flatMap(({ root, file }) => {
             const cleanability = STORAGE_CLEANABILITY[classifyStoragePath(root, file.path).category];
-            const allowed = file.portability === "secret" || file.portability === "identity" ? ["none"] : file.portability === "carry" ? ["none", "confirm"] : [];
+            const allowed =
+                file.portability === "secret" || file.portability === "identity" ? ["none"] : file.portability === "carry" ? ["none", "confirm"] : [];
             return allowed.length === 0 || allowed.includes(cleanability) ? [] : [`${file.path}: ${file.portability} is ${cleanability}`];
         });
         expect(misfiled).toEqual([]);
@@ -91,11 +108,13 @@ describe("the state tables", () => {
 
 describe("protection", () => {
     test("a cleanable category's items are never protected, so the table and the fence agree", () => {
-        const fenced = STORAGE_CATEGORIES.filter((category) => STORAGE_CLEANABILITY[category] !== "none").flatMap((category) =>
-            categoryFolders(category)
-                .filter((rule) => isProtectedStoragePath(rule.root, `${rule.prefix}item`))
-                .map((rule) => `${category}: ${rule.prefix}`),
-        );
+        const fenced = StorageCategoryIdSchema.options
+            .filter((category) => STORAGE_CLEANABILITY[category] !== "none")
+            .flatMap((category) =>
+                categoryFolders(category)
+                    .filter((rule) => isProtectedStoragePath(rule.root, `${rule.prefix}item`))
+                    .map((rule) => `${category}: ${rule.prefix}`),
+            );
         expect(fenced).toEqual([]);
     });
 
@@ -103,6 +122,7 @@ describe("protection", () => {
         expect(isProtectedStoragePath("history", "worktrees/fair-sage-ey2r/intentic/src/app.ts")).toBe(true);
         expect(isProtectedStoragePath("history", "overlays/fair-sage-ey2r")).toBe(true);
         expect(isProtectedStoragePath("history", "conversations.db-wal")).toBe(true);
+        expect(isProtectedStoragePath("history", "ssh-hosts/github.com")).toBe(true);
         expect(isProtectedStoragePath("workspace", ".intentic/secrets/auth/claude/.credentials.json")).toBe(true);
         // Account state kept beside the profile folders, which a browser-profile clean would otherwise reach.
         expect(isProtectedStoragePath("workspace", ".intentic/local/browser/radarsuspam2.passkeys.json")).toBe(true);

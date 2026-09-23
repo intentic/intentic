@@ -4,7 +4,6 @@
 import "@intentic/testing/dom";
 import { anchorsOf, compareDocx } from "@intentic/ext-viewers/docx-compare";
 import { docxBytes } from "@intentic/ext-viewers/testing";
-import { describe, it, expect, afterEach } from "bun:test";
 
 let host: HTMLElement | undefined;
 const mount = (): HTMLElement => {

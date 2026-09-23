@@ -1,4 +1,3 @@
-import { test, expect, afterEach, jest } from "bun:test";
 import { BATCH_MS, createRepoBatcher } from "./ref-watch.js";
 
 // The batching rule on owned fake timers; .integration.test.ts covers real git/inotify timing, which is too flaky to

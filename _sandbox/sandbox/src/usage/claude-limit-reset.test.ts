@@ -1,6 +1,5 @@
 import type { UsageWindow } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect } from "bun:test";
 import type { ClaudeStore, StoredAccount } from "../runtimes/claude/claude-credentials.js";
 import { claimLimitReset, type LimitResetDeps, readLimitReset } from "./claude-limit-reset.js";
 import { claudeUsageWindows, RATE_LIMIT_PARK_MS } from "./claude-usage.js";

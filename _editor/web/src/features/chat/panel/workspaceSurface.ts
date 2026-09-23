@@ -1,5 +1,5 @@
 import { agentToolChildren } from "../transcript/agentTranscript";
-import { viewOf } from "../transcript/shots/shotPictures";
+import { picture } from "../../workspace/home/thumbnails";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { openWorkTerminal } from "../../terminal/useWorkTerminals";
 import { openWorkspaceRef } from "../../workspace/files/openFileRef";
@@ -23,7 +23,7 @@ export interface WorkspaceSurfaceOptions {
 
 export const workspaceSurface = (options: WorkspaceSurfaceOptions): ChatSurface => ({
     // The daemon's re-encoded view rather than the file, in the conversation's own scope like `openFile`.
-    imageUrl: (path) => viewOf(options.agent(), path)?.url,
+    imageUrl: (path) => picture(options.agent(), path, `view`)?.url,
     openFile: (path, line) => openWorkspaceRef(path, line, { agent: options.agent() }),
     // Same file-link decoration as the assistant's own prose, rebuilt per fragment since `agent` can change under it.
     decorate: (fragment) => fileLinkDecorator({ agent: options.agent() })(fragment),

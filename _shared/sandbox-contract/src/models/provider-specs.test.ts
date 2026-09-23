@@ -1,5 +1,4 @@
 import { PROVIDER_BRAND_PATHS } from "@intentic/constants";
-import { describe, test, expect } from "bun:test";
 import { accessFor, capabilitiesOf, harnessChoosable, PROVIDER_ACCESS, PROVIDER_VENDOR, PROVIDERS, providerLabel } from "./agent-catalog.js";
 import {
     ACCESS_COST,

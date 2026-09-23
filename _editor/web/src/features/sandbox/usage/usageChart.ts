@@ -28,9 +28,9 @@ export type RangePreset = "7d" | "30d" | "90d" | "all";
 // Mutable by design: <SegmentedControl> takes its options array as-is.
 export const rangePresets = (): { label: string; value: RangePreset }[] => [
     { label: t(`sandbox.usageChart.n7Days`), value: `7d` },
-    { label: t(`sandbox.usageChart.n30Days`), value: `30d` },
-    { label: t(`sandbox.usageChart.n90Days`), value: `90d` },
-    { label: t(`sandbox.usageChart.allTime`), value: `all` },
+    { label: t(`shared.n30Days`), value: `30d` },
+    { label: t(`shared.n90Days`), value: `90d` },
+    { label: t(`shared.allTime`), value: `all` },
 ];
 
 // Inclusive UTC range. Absent `from` means unbounded (All time), not a sentinel date: the two read differently
@@ -271,7 +271,7 @@ export const rankByCost = (
         {
             key: undefined,
             kind: `other`,
-            label: t(`sandbox.usageChart.more`, { count: tail.length }),
+            label: t(`shared.more`, { count: tail.length }),
             value: tail.reduce((sum, entry) => sum + entry.value, 0),
             // The fold mixes providers by construction, so it takes the achromatic slot.
             providers: [],

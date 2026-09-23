@@ -1,4 +1,12 @@
-import type { AgentCommand, AgentHarness, AgentProvider, EditorContext, OauthAccount, PermissionMode, QueuedMessage } from "@intentic/sandbox-contract";
+import type {
+    AgentCommand,
+    AgentHarness,
+    AgentProvider,
+    EditorContext,
+    OauthAccount,
+    PermissionMode,
+    QueuedMessage,
+} from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { Conversation } from "../session/conversation";
@@ -6,6 +14,7 @@ import { seedFork } from "../session/forkSeed";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import { providerCommands } from "../accounts/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
+import type { ForkLink } from "../run/turnRequest";
 import { providerReadyOn } from "../session/access";
 import { type ChatAttachment, type ChatMessage, continuationFor } from "../transcript/transcript";
 import { conversations, setConversations } from "../tabs/useChat-tabs";
@@ -150,7 +159,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     resumeQueue: (): Promise<void> => conversation.value.turn.resume(),
     // Forks the conversation at `cut` (the index of the first message below the line) into a fresh tab, leaving the
     // source untouched. A cut above a user message reopens that prompt in the new composer instead of sending it.
-    forkAt: (cut: number, files: "then" | "now"): Conversation | undefined => {
+    forkAt: (cut: number, files: ForkLink["files"]): Conversation | undefined => {
         const source = conversation.value;
         if (cut < 0 || cut > source.transcript.messages.value.length) {
             return undefined;
@@ -168,8 +177,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         }
         setConversations([...conversations.value, fork], fork.conversationId, `fork`);
         track(`conversation_forked`, { agent: fork.selection.provider.value, files, whole: cut === source.transcript.messages.value.length });
-        // Returned directly rather than looked up by position, since a caller (ChatPane's forkInsteadOfEdit) needs to
-        // act on the fork it just made.
+        // Returned directly rather than looked up by position: a caller (ChatEditNotice) acts on the fork it just made.
         return fork;
     },
 });

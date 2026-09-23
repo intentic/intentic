@@ -1,10 +1,14 @@
-import { expect, test } from "bun:test";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import { packageOf, pathOfUnit, suspectsOf } from "./land-breakage.js";
 
 // Which land a breakage is charged to, read off the units the land verify reports (failure-units.mjs, land-tiers.mjs).
 
-const land = (agentId: string): DependencyLandOrigin => ({ kind: "land", agentId, branch: `agent/${agentId}`, repos: [{ repo: "intentic", from: "abc", dir: "" }] });
+const land = (agentId: string): DependencyLandOrigin => ({
+    kind: "land",
+    agentId,
+    branch: `agent/${agentId}`,
+    repos: [{ repo: "intentic", from: "abc", dir: "" }],
+});
 
 test("every unit shape names the path it failed on", () => {
     expect(pathOfUnit("@intentic/web#test _editor/web/src/a.test.ts › outer > it")).toBe("_editor/web/src/a.test.ts");

@@ -1,5 +1,4 @@
 import type { AccountUsage, OauthAccount } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { conversationEntry } from "../../testing.js";
@@ -19,7 +18,8 @@ const fakeServices = (params: {
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...params.accounts] }),
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage }),
     agents: unstubbed<Services["agents"]>("agents", {
-        entry: () => (params.override === undefined ? undefined : conversationEntry({ id: "c", postures: { limit: params.override ? "move" : "wait" } })),
+        entry: () =>
+            params.override === undefined ? undefined : conversationEntry({ id: "c", postures: { limit: params.override ? "move" : "wait" } }),
     }),
     sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
         get: async () =>

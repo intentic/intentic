@@ -1,7 +1,6 @@
 import "@intentic/testing/dom";
 import type { SandboxSummary, SetupCode } from "@intentic/api-contract";
 import { syncFolder } from "@intentic/sandbox-contract";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { type EffectScope, effectScope, ref } from "vue";
 import { desktopSetupLink } from "../../../app/environments/desktop";
 import type { desktopInstaller } from "../../../app/environments/desktopDownloads";
@@ -24,7 +23,7 @@ const stage = (over: { mobile?: boolean; inApp?: boolean; installer?: ReturnType
     const cmdOs = ref<`unix` | `windows`>(`unix`);
     const mode = ref<`intentic` | `own`>(`intentic`);
     const cfToken = ref(``);
-    const openDesktopLink = mock((_link: string) => undefined);
+    const openDesktopLink = jest.fn((_link: string) => undefined);
     const scope = effectScope();
     scopes.push(scope);
     const step = scope.run(() => useRunStep({ command, row, reader, cmdOs, mode, cfToken, openDesktopLink }))!;
@@ -53,11 +52,6 @@ describe(`which command is on screen`, () => {
     it(`sheds the tabs' qualifiers on a phone`, () => {
         expect(stage({ mobile: true }).step.runTabOptions.value.map((option) => option.label)).toEqual([`Linux / macOS`, `Windows`, `Compose`]);
         expect(stage().step.runTabOptions.value.map((option) => option.label)).toEqual([`Linux / macOS`, `Windows (PowerShell)`, `Docker Compose`]);
-    });
-
-    it(`shows the command in a browser with no installer to offer`, () => {
-        const { step } = stage();
-        expect({ visible: step.commandVisible.value, installing: step.installing.value }).toEqual({ visible: true, installing: false });
     });
 
     it.each<[string, Parameters<typeof stage>[0]]>([

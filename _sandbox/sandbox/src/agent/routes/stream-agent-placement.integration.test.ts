@@ -1,8 +1,6 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type AgentEvent, type Rule, SandboxSettingsSchema, type WorkspaceEvent } from "@intentic/sandbox-contract";
-import { afterEach, expect, mock, test } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { unstubbed } from "@intentic/testing";
 import * as verifyLanded from "../../agents/land/verify-landed.js";
 import * as versionLanded from "../../agents/land/version-landed.js";
@@ -24,19 +22,17 @@ import { streamAgent } from "./agent.routes.js";
 // recorded at the door instead: the chore's announcement off the bus (placedServices), the other two by their modules.
 const landed = { ...verifyLanded };
 const versioned = { ...versionLanded };
-const { emitted, verified, drafted } = hoisted(() => ({
-    emitted: [] as WorkspaceEvent[],
-    verified: [] as DependencyLandOrigin[],
-    drafted: [] as string[],
-}));
-mock.module("../../agents/land/verify-landed.js", () => ({
+const emitted = [] as WorkspaceEvent[];
+const verified = [] as DependencyLandOrigin[];
+const drafted = [] as string[];
+jest.mock("../../agents/land/verify-landed.js", () => ({
     ...landed,
     verifyLandedTree: async (_services: unknown, origin: DependencyLandOrigin) => {
         verified.push(origin);
         return { missing: 1, started: ["root"], deferred: false };
     },
 }));
-mock.module("../../agents/land/version-landed.js", () => ({
+jest.mock("../../agents/land/version-landed.js", () => ({
     ...versioned,
     settleLandingInBackground: (_services: unknown, id: string) => void drafted.push(id),
 }));
@@ -72,8 +68,7 @@ const placedServices = (
     return { services: placed, writes: recorded.writes, lines };
 };
 
-const scripted =
-    (frames: readonly AgentEvent[]) =>
+const scripted = (frames: readonly AgentEvent[]) =>
     async function* (): AsyncGenerator<AgentEvent> {
         yield* frames;
     };
@@ -97,9 +92,13 @@ test("a runner turn without a conversation is refused before anything starts", a
 });
 
 test("a runner nobody paired is refused before the conversation exists", async () => {
-    const { services: s } = placedServices(scripted([{ kind: "done" }]), { runners: unstubbed<Services["runners"]>("runners", { enrolled: async () => false }) });
+    const { services: s } = placedServices(scripted([{ kind: "done" }]), {
+        runners: unstubbed<Services["runners"]>("runners", { enrolled: async () => false }),
+    });
 
-    const frames = await collect(streamAgent(s, { prompt: "go", conversationId: "placed-unpaired", placement: { kind: "runner", id: "r-1" } }, undefined));
+    const frames = await collect(
+        streamAgent(s, { prompt: "go", conversationId: "placed-unpaired", placement: { kind: "runner", id: "r-1" } }, undefined),
+    );
 
     expect(frames).toStrictEqual([
         { kind: "error", message: 'No runner named "r-1" is paired with this sandbox — pair one first, or leave placement out to run here.' },
@@ -110,7 +109,13 @@ test("a runner nobody paired is refused before the conversation exists", async (
 
 test("a conversation already running a turn refuses a second one as busy", async () => {
     const { services: s } = placedServices(scripted([{ kind: "done" }]));
-    expect(await beginTurn(s.conversations, { conversationId: "placed-busy", isolated: false, prompt: "first", profile: { agent: "claude", harness: "native" } }, Date.now())).toBe(true);
+    expect(
+        await beginTurn(
+            s.conversations,
+            { conversationId: "placed-busy", isolated: false, prompt: "first", profile: { agent: "claude", harness: "native" } },
+            Date.now(),
+        ),
+    ).toBe(true);
 
     expect(await collect(streamAgent(s, { prompt: "second", conversationId: "placed-busy" }, undefined))).toStrictEqual([
         { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish." },
@@ -129,7 +134,9 @@ test("a runner turn mirrors the branch, runs remotely, and settles its books eve
         runnerHub: unstubbed<Services["runnerHub"]>("runnerHub", { client: () => undefined }),
     });
 
-    const frames = await collect(streamAgent(s, { prompt: "go", conversationId: "placed-runner", placement: { kind: "runner", id: "r-1" } }, undefined));
+    const frames = await collect(
+        streamAgent(s, { prompt: "go", conversationId: "placed-runner", placement: { kind: "runner", id: "r-1" } }, undefined),
+    );
 
     expect(frames).toStrictEqual([
         { kind: "worktree", branch: "agent/placed-runner", base: base.slice(0, 7), remote: "r-1" },
@@ -147,7 +154,8 @@ test("a runner turn mirrors the branch, runs remotely, and settles its books eve
         placement: { kind: "worktree", branch: "agent/placed-runner", runner: "r-1" },
         ending: {
             kind: "failed",
-            failure: 'The runner "r-1" is offline — its machine is asleep, or the runner container is down. This conversation runs there; wake it, or start a new conversation to work here.',
+            failure:
+                'The runner "r-1" is offline — its machine is asleep, or the runner container is down. This conversation runs there; wake it, or start a new conversation to work here.',
         },
     });
     expect(await gitOut(work, "status", "--porcelain")).toBe("");
@@ -234,7 +242,9 @@ test("a clean isolated turn rebases onto the main line, lands into the main tree
 test("a clean isolated turn with auto-land off is measured and held on its branch", async () => {
     const { work, worktree, worktrees } = await checkout("placed-held");
     const base = await gitOut(work, "rev-parse", "HEAD");
-    const { services: s, writes } = placedServices(editing(worktree, [{ kind: "delta", text: "shipped" }, { kind: "done" }]), { agentWorktrees: worktrees });
+    const { services: s, writes } = placedServices(editing(worktree, [{ kind: "delta", text: "shipped" }, { kind: "done" }]), {
+        agentWorktrees: worktrees,
+    });
 
     const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-held", isolated: true, autoLand: false }, undefined));
 
@@ -257,7 +267,14 @@ test("a clean isolated turn with auto-land off is measured and held on its branc
 
 test("a rule that holds work narrowed by path is read against the turn's own changes, stamped, and reported", async () => {
     const { worktree, worktrees } = await checkout("placed-rule");
-    const hold: Rule = { id: "hold-app", label: "Hold the app", moment: "agent.finished", when: { paths: ["app.ts"] }, action: { kind: "verdict", verdict: "hold" }, enabled: true };
+    const hold: Rule = {
+        id: "hold-app",
+        label: "Hold the app",
+        moment: "agent.finished",
+        when: { paths: ["app.ts"] },
+        action: { kind: "verdict", verdict: "hold" },
+        enabled: true,
+    };
     const { services: s, writes } = placedServices(editing(worktree, [{ kind: "delta", text: "shipped" }, { kind: "done" }]), {
         agentWorktrees: worktrees,
         sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ rules: [hold] }) },
@@ -268,19 +285,33 @@ test("a rule that holds work narrowed by path is read against the turn's own cha
     expect(frames.at(-1)).toStrictEqual({ kind: "landed", landed: false, held: true });
     expect(writes.ruleFirings).toStrictEqual([{ rule: "hold-app", at: expect.any(Number) }]);
     expect(writes.activity.filter(({ type }) => type === "rule.held_work")).toStrictEqual([
-        { direction: "system", type: "rule.held_work", content: '"Hold the app" held this work on its branch instead of landing it.', conversationId: "placed-rule" },
+        {
+            direction: "system",
+            type: "rule.held_work",
+            content: '"Hold the app" held this work on its branch instead of landing it.',
+            conversationId: "placed-rule",
+        },
     ]);
     expect(emitted.map(({ event, outcome }) => ({ event, outcome }))).toStrictEqual([{ event: "turn.settled", outcome: "ready" }]);
 });
 
 test("a turn whose own check failed waits on its branch, and says which check held it", async () => {
     const { worktree, worktrees } = await checkout("placed-checks");
-    const suite: Rule = { id: "suite", label: "Run the suite", moment: "turn.ending", action: { kind: "command", command: "pnpm test", timeoutMs: 900_000 }, enabled: true };
+    const suite: Rule = {
+        id: "suite",
+        label: "Run the suite",
+        moment: "turn.ending",
+        action: { kind: "command", command: "pnpm test", timeoutMs: 900_000 },
+        enabled: true,
+    };
     const { services: s, writes } = placedServices(
         async function* () {
             await writeFile(join(worktree, "app.ts"), "line one\nthe agent's work\n");
             // What the Stop hook records when the turn-ending command goes red.
-            s.conversations.send("placed-checks", { kind: "check-ran", check: checkRunOf(suite, { status: "failed", exitCode: 1, output: "1 failed" }) });
+            s.conversations.send("placed-checks", {
+                kind: "check-ran",
+                check: checkRunOf(suite, { status: "failed", exitCode: 1, output: "1 failed" }),
+            });
             yield { kind: "delta", text: "shipped" };
             yield { kind: "done" };
         },
@@ -310,7 +341,10 @@ test("a failed isolated turn lands nothing, leaves its books alone, and settles 
 
     const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-fails", isolated: true, autoLand: true }, undefined));
 
-    expect(frames.slice(2)).toStrictEqual([{ kind: "error", code: "context-window-too-small", message: "this model cannot hold the turn" }, { kind: "done" }]);
+    expect(frames.slice(2)).toStrictEqual([
+        { kind: "error", code: "context-window-too-small", message: "this model cannot hold the turn" },
+        { kind: "done" },
+    ]);
     expect(lands(writes)).toStrictEqual([]);
     expect(await gitOut(work, "status", "--porcelain")).toBe("");
     expect(await gitOut(worktree, "status", "--porcelain")).toBe("M app.ts");
@@ -332,7 +366,9 @@ test("a stopped isolated turn lands nothing but settles its books on the branch"
         { agentWorktrees: worktrees },
     );
 
-    const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-stopped", isolated: true, autoLand: true }, controller.signal));
+    const frames = await collect(
+        streamAgent(s, { prompt: "ship it", conversationId: "placed-stopped", isolated: true, autoLand: true }, controller.signal),
+    );
 
     expect(frames.slice(2)).toStrictEqual([{ kind: "delta", text: "working" }, { kind: "done" }]);
     expect(lands(writes)).toStrictEqual([{ name: "agent.land", attrs: { id: "placed-stopped", mode: "measure", span: "outstanding" } }]);

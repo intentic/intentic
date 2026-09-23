@@ -1,5 +1,4 @@
 import type { ViewRegistration } from "@intentic/extension-api";
-import { describe, it, expect } from "bun:test";
 import type { ActiveExtension } from "../../../core-views/registry";
 import { directoryTabs } from "./directoryTabs";
 

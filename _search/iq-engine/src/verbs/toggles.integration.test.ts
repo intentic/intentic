@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import { createEngine, type Engine, parseFeatures } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";

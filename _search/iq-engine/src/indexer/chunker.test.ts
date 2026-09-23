@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { extractSymbols } from "./symbols.js";
 import { chunkFile } from "./chunker.js";
 

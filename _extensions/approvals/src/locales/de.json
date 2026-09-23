@@ -41,7 +41,6 @@
         "goingAhead": "Geht los",
         "hookLedgerUnreadable": "Die Aufzeichnung, welche Hooks Sie genehmigt haben, ließ sich nicht lesen. Bis Sie wieder welche genehmigen, läuft kein Workspace-Hook.",
         "hookSetTitle": "Claude-Code-Hook | {count} Claude-Code-Hooks",
-        "hooks": "Hooks",
         "hooksFound": "Von einem Turn gefunden",
         "hooksWaiting": "Hooks, die auf Ihr Ja warten",
         "inProgress": "läuft",
@@ -77,8 +76,7 @@
     },
     "hookSetBody": {
         "filesPinned": "Die Genehmigung gilt auch für diese Dateien, Byte für Byte:",
-        "fromProjectSettings": "Workspace .claude/settings.json",
-        "fromUserSettings": "~/.claude/settings.json"
+        "fromProjectSettings": "Workspace .claude/settings.json"
     },
     "postBody": {
         "showLess": "Weniger anzeigen",

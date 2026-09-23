@@ -1,6 +1,13 @@
 import { dirname, relative, sep } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { ATTACHMENTS_DIR, HISTORY_STATE_FILES, LOOP_DIR, STORAGE_CLEANABILITY, stateFileFor, type StorageCategoryId } from "@intentic/sandbox-contract";
+import {
+    ATTACHMENTS_DIR,
+    HISTORY_STATE_FILES,
+    LOOP_DIR,
+    STORAGE_CLEANABILITY,
+    stateFileFor,
+    type StorageCategoryId,
+} from "@intentic/sandbox-contract";
 import { FLY_VOLUME_LAYOUT, FLY_VOLUME_PATH } from "@intentic/sandbox-run/fly";
 import { stateRelPath } from "../../../state-paths.js";
 
@@ -58,6 +65,8 @@ export interface StoragePathRule {
     readonly category: StorageCategoryId;
     // Segments below the prefix that name one item: what sizes are listed by, and what an entry clean removes whole.
     readonly depth: number;
+    // Nothing at or below the prefix is ever removed, whichever rule classifies it: credentials, conversation records, live checkouts.
+    readonly protected?: true;
 }
 
 // A folder as a rule spells one: root-relative, with the trailing slash that keeps it off a sibling file's name.
@@ -77,30 +86,36 @@ const PATH_RULES: readonly StoragePathRule[] = [
     { root: "history", prefix: "gits/", category: "repositories", depth: 1 },
     // Turborepo drops its cache beside the git dirs it resolves a worktree's root through.
     { root: "history", prefix: "gits/.turbo/", category: "buildCaches", depth: 0 },
-    { root: "history", prefix: "scopes/", category: "restorePoints", depth: 1 },
-    { root: "history", prefix: "worktrees/", category: "checkouts", depth: 1 },
-    { root: "history", prefix: "overlays/", category: "checkouts", depth: 1 },
-    { root: "history", prefix: "conversations.db", category: "conversations", depth: 0 },
-    { root: "history", prefix: "conversations/", category: "conversations", depth: 0 },
-    // The layout before conversation units; nothing reads it any more, but it is still someone's transcripts.
-    { root: "history", prefix: "transcripts/", category: "conversations", depth: 0 },
-    { root: "history", prefix: "sessions/", category: "conversations", depth: 0 },
+    { root: "history", prefix: "scopes/", category: "restorePoints", depth: 1, protected: true },
+    { root: "history", prefix: "worktrees/", category: "checkouts", depth: 1, protected: true },
+    { root: "history", prefix: "overlays/", category: "checkouts", depth: 1, protected: true },
+    { root: "history", prefix: "conversations.db", category: "conversations", depth: 0, protected: true },
+    { root: "history", prefix: "conversations/", category: "conversations", depth: 0, protected: true },
     { root: "history", prefix: "said-index/", category: "indexes", depth: 0 },
     { root: "history", prefix: "engines/", category: "engines", depth: 1 },
     // pnpm keeps a store at the top of whichever mount an install runs on; worktree installs land here.
     { root: "history", prefix: ".pnpm-store/", category: "packageStores", depth: 0 },
     // Written by the image rather than the daemon, so the history table does not declare them.
-    { root: "history", prefix: "ssh-host-keys/", category: "state", depth: 0 },
+    { root: "history", prefix: "ssh-host-keys/", category: "state", depth: 0, protected: true },
     { root: "history", prefix: "shell/", category: "state", depth: 0 },
+    // Declared state the fallback already names; a rule of their own only to fence them.
+    { root: "history", prefix: "session-secret", category: "state", depth: 0, protected: true },
+    { root: "history", prefix: "ssh-hosts/", category: "state", depth: 0, protected: true },
+    { root: "history", prefix: "local-cert/", category: "state", depth: 0, protected: true },
+    { root: "history", prefix: "translator/", category: "state", depth: 0, protected: true },
     { root: "workspace", prefix: ".pnpm-store/", category: "packageStores", depth: 0 },
     { root: "workspace", prefix: folder(STATE_DIR), category: "state", depth: 1 },
-    { root: "workspace", prefix: SESSIONS, category: "conversations", depth: 1 },
+    // Named by what the state table declares inside them, so a renamed folder is a type error here rather than a silent miss.
+    { root: "workspace", prefix: folder(dirname(stateRelPath(".intentic/secrets/auth/"))), category: "state", depth: 0, protected: true },
+    { root: "workspace", prefix: folder(dirname(stateRelPath(".intentic/identity/members.json"))), category: "state", depth: 0, protected: true },
+    { root: "workspace", prefix: folder(dirname(stateRelPath(".intentic/config/settings.json"))), category: "state", depth: 0, protected: true },
+    { root: "workspace", prefix: SESSIONS, category: "conversations", depth: 1, protected: true },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/records/artifacts/")), category: "artifacts", depth: 1 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/records/artifacts/", "imagegen")), category: "artifacts", depth: 1 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/records/artifacts/", "workflow-runs")), category: "artifacts", depth: 1 },
-    { root: "workspace", prefix: folder(ATTACHMENTS_DIR), category: "conversations", depth: 0 },
+    { root: "workspace", prefix: folder(ATTACHMENTS_DIR), category: "conversations", depth: 0, protected: true },
     // A loop's memory between rounds, which a running loop reads back.
-    { root: "workspace", prefix: folder(LOOP_DIR), category: "conversations", depth: 0 },
+    { root: "workspace", prefix: folder(LOOP_DIR), category: "conversations", depth: 0, protected: true },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/records/artifacts/browser/")), category: "browserCaptures", depth: 1 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/browser/")), category: "browserProfiles", depth: 1 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/cache/")), category: "indexes", depth: 1 },
@@ -112,27 +127,6 @@ const PATH_RULES: readonly StoragePathRule[] = [
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/runtime/")), category: "extensions", depth: 1 },
     { root: "volume", prefix: ".pnpm-store/", category: "packageStores", depth: 0 },
     { root: "volume", prefix: VOLUME_DOCKER, category: "docker", depth: 0 },
-];
-
-// Paths no category may remove whatever the table says: credentials, sign-ins, conversation records, live checkouts.
-const PROTECTED: readonly { readonly root: StorageRootKind; readonly prefix: string }[] = [
-    { root: "history", prefix: "conversations.db" },
-    { root: "history", prefix: "conversations/" },
-    { root: "history", prefix: "worktrees/" },
-    { root: "history", prefix: "overlays/" },
-    { root: "history", prefix: "scopes/" },
-    { root: "history", prefix: "session-secret" },
-    { root: "history", prefix: "ssh-hosts/" },
-    { root: "history", prefix: "ssh-host-keys/" },
-    { root: "history", prefix: "local-cert/" },
-    { root: "history", prefix: "translator/" },
-    // Named by what the table declares inside them, so a renamed folder is a type error here rather than a silent miss.
-    { root: "workspace", prefix: folder(dirname(stateRelPath(".intentic/secrets/auth/"))) },
-    { root: "workspace", prefix: folder(dirname(stateRelPath(".intentic/identity/members.json"))) },
-    { root: "workspace", prefix: folder(dirname(stateRelPath(".intentic/config/settings.json"))) },
-    { root: "workspace", prefix: SESSIONS },
-    { root: "workspace", prefix: folder(ATTACHMENTS_DIR) },
-    { root: "workspace", prefix: folder(LOOP_DIR) },
 ];
 
 // A browser connection's marker, passkeys, fingerprint seed and stealth script, kept beside the profile folders.
@@ -181,7 +175,7 @@ export const classifyStoragePath = (root: StorageRootKind, rel: string): Storage
 
 export const isProtectedStoragePath = (root: StorageRootKind, rel: string): boolean =>
     rel === "" ||
-    PROTECTED.some((entry) => entry.root === root && under(rel, entry.prefix)) ||
+    PATH_RULES.some((rule) => rule.protected === true && rule.root === root && under(rel, rule.prefix)) ||
     PROTECTED_NAMES.some((pattern) => pattern.test(segments(rel).at(-1) ?? ""));
 
 // Every folder a category's rules name, root-relative: where a clean looks for what to remove.

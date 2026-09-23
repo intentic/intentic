@@ -7,19 +7,18 @@ import {
     SandboxSettingsSchema,
     type SystemEvent,
 } from "@intentic/sandbox-contract";
-import { it, expect, afterEach, mock, spyOn } from "bun:test";
-import { stubGlobal, unstubAllGlobals, hoisted } from "@intentic/testing/bun";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { readFailure, setDaemonRoutes } from "../overview/useDaemonRoutes";
 import { SandboxHttpError } from "./sandboxHttpError";
 import { ref } from "vue";
 
-const authState = hoisted(() => ({
+const authState = {
     token: `session-token` as string | undefined,
     rejected: [] as string[],
     // What each ask for a credential said about who is waiting, and which box it was for.
     asked: [] as { base: string; background: boolean | undefined }[],
-}));
-mock.module("../session/sandboxSession", () => ({
+};
+jest.mock("../session/sandboxSession", () => ({
     useSandboxSession: () => ({
         // A bearer names which credential it is, so a 401 can be attributed without re-reading storage.
         getSessionToken: async (target: { base: string }, options?: { background?: boolean }) => {
@@ -34,15 +33,15 @@ mock.module("../session/sandboxSession", () => ({
 }));
 // The real useEndpoint runs on this mock: with no loopback resolved, daemonBase falls through to daemonUrl.
 // Refs, not plain holders, because `daemonBase` is a computed built once at useEndpoint's load: the last case
-// unaddresses the sandbox in place, a mock.module being file-wide and permanent. `s2` is another box this browser
+// unaddresses the sandbox in place, a jest.mock being file-wide and permanent. `s2` is another box this browser
 // knows, reached through its own address and connect token.
-const sandbox = hoisted(() => ({
+const sandbox = {
     active: ref<{ token: string } | undefined>({ token: `connect` }),
     activeSandboxId: ref<string | undefined>(`s1`),
     daemonUrl: ref<string | undefined>(`https://daemon.test`),
     sandboxes: ref([{ id: `s2`, daemonUrl: `https://other.test`, token: `other-connect`, role: `member`, hosted: null }]),
-}));
-mock.module("./useSandbox", () => ({ useSandbox: () => sandbox }));
+};
+jest.mock("./useSandbox", () => ({ useSandbox: () => sandbox }));
 
 const { sandboxRpc, gatedSandboxRpc, daemonErrorMessage, daemonErrorStatus } = await import("./sandboxRpc");
 const { SandboxUnaddressedError } = await import("./sandboxAuthFetch");
@@ -60,7 +59,7 @@ afterEach(() => unstubAllGlobals());
 it(`decodes the daemon's event stream into typed contract frames`, async () => {
     stubGlobal(
         `fetch`,
-        mock(async () =>
+        jest.fn(async () =>
             eventStream([
                 { kind: `hello`, workspaceId: `ws-1`, routes: [`system.info`] },
                 { kind: `heartbeat` },
@@ -81,7 +80,7 @@ it(`decodes the daemon's event stream into typed contract frames`, async () => {
 it(`sends the session bearer and the TOFU connect token on the stream request`, async () => {
     authState.token = `session-token`;
     authState.rejected = [];
-    const fetchMock = mock(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
+    const fetchMock = jest.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
     stubGlobal(`fetch`, fetchMock);
     // One pull is all it takes: what this asserts on is the request that goes out, not the frames that come back.
     await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
@@ -96,7 +95,8 @@ it(`sends the session bearer and the TOFU connect token on the stream request`, 
 it(`invalidates and retries exactly once when daemon middleware rejects a session`, async () => {
     authState.token = `session-token`;
     authState.rejected = [];
-    const fetchMock = mock<(request: Request) => Promise<Response>>()
+    const fetchMock = jest
+        .fn<(request: Request) => Promise<Response>>()
         .mockResolvedValueOnce(
             new Response(JSON.stringify({ error: `unauthorized` }), { status: 401, headers: { "content-type": `application/json` } }),
         )
@@ -114,7 +114,9 @@ it(`surfaces the daemon's status so a refusal can be told from a failure to conn
     // Hand-written routes answer `{ error }` with a bare status, not oRPC's envelope, and it must still survive.
     stubGlobal(
         `fetch`,
-        mock(async () => new Response(JSON.stringify({ error: `not a member` }), { status: 403, headers: { "content-type": `application/json` } })),
+        jest.fn(
+            async () => new Response(JSON.stringify({ error: `not a member` }), { status: 403, headers: { "content-type": `application/json` } }),
+        ),
     );
     const failure = await sandboxRpc.system.events({ clientId: `c1` }).catch((error: unknown) => error);
     expect(daemonErrorStatus(failure)).toBe(403);
@@ -125,7 +127,7 @@ it(`surfaces the daemon's status so a refusal can be told from a failure to conn
 // fails the whole request, not just the header, so it's only sent once advertised.
 it(`withholds the correlation header from a daemon that has not advertised it`, async () => {
     resetSandboxScope();
-    const fetchMock = mock(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
+    const fetchMock = jest.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
     stubGlobal(`fetch`, fetchMock);
     await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
     expect(fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER)).toBeNull();
@@ -139,7 +141,7 @@ it(`withholds the correlation header from a daemon that has not advertised it`, 
 
 it(`sends the correlation header once the daemon advertises the route that ships with it`, async () => {
     setDaemonRoutes([`system.events`, REQUEST_ID_EVIDENCE_ROUTE]);
-    const fetchMock = mock(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
+    const fetchMock = jest.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
     stubGlobal(`fetch`, fetchMock);
     await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
     const sent = fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER);
@@ -156,7 +158,7 @@ const json = (status: number, body: unknown): Response =>
 it(`hands an answer back as its output schema reads it, defaults filled in`, async () => {
     stubGlobal(
         `fetch`,
-        mock(async () => json(200, {})),
+        jest.fn(async () => json(200, {})),
     );
     expect(await sandboxRpc.settings.get()).toEqual(SandboxSettingsSchema.parse({}));
 });
@@ -164,7 +166,7 @@ it(`hands an answer back as its output schema reads it, defaults filled in`, asy
 it(`refuses an answer its output schema cannot read, as the version drift it is`, async () => {
     stubGlobal(
         `fetch`,
-        mock(async () => json(200, { skills: `not a list` })),
+        jest.fn(async () => json(200, { skills: `not a list` })),
     );
     const failure = await sandboxRpc.settings.get().catch((error: unknown) => error);
     expect(readFailure(failure)).toStartWith(`This sandbox answered in a shape this app doesn't expect.`);
@@ -173,7 +175,7 @@ it(`refuses an answer its output schema cannot read, as the version drift it is`
 it(`reads a refusal in the daemon's own words, carrying its status`, async () => {
     stubGlobal(
         `fetch`,
-        mock(async () => json(409, { message: `This agent is running a turn.` })),
+        jest.fn(async () => json(409, { message: `This agent is running a turn.` })),
     );
     const failure = await sandboxRpc.settings.get().catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(SandboxHttpError);
@@ -184,7 +186,8 @@ it(`reads a refusal in the daemon's own words, carrying its status`, async () =>
 it(`gives an extension's gated client the app's reading of an answer and a refusal`, async () => {
     stubGlobal(
         `fetch`,
-        mock<(request: Request) => Promise<Response>>()
+        jest
+            .fn<(request: Request) => Promise<Response>>()
             .mockResolvedValueOnce(json(200, {}))
             .mockResolvedValueOnce(json(409, { message: `This agent is running a turn.` })),
     );
@@ -196,7 +199,7 @@ it(`gives an extension's gated client the app's reading of an answer and a refus
 });
 
 it(`refuses an extension's undeclared call at its gate, before anything is sent`, async () => {
-    const fetchMock = mock(async () => json(200, {}));
+    const fetchMock = jest.fn(async () => json(200, {}));
     stubGlobal(`fetch`, fetchMock);
     const gated = gatedSandboxRpc((procedure) => {
         throw new Error(`${procedure.join(`.`)} is not declared`);
@@ -208,7 +211,8 @@ it(`refuses an extension's undeclared call at its gate, before anything is sent`
 it(`reads a hand-written route's { error } the same way, and a wordless refusal by its status`, async () => {
     stubGlobal(
         `fetch`,
-        mock<(request: Request) => Promise<Response>>()
+        jest
+            .fn<(request: Request) => Promise<Response>>()
             .mockResolvedValueOnce(json(403, { error: `not a member` }))
             .mockResolvedValueOnce(new Response(`<html>bad gateway</html>`, { status: 502, headers: { "content-type": `text/html` } })),
     );
@@ -220,7 +224,7 @@ it(`blames the sandbox's image for a 404 on a route its daemon never advertised`
     setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `vpn.list`));
     stubGlobal(
         `fetch`,
-        mock(async () => json(404, { message: `Not Found` })),
+        jest.fn(async () => json(404, { message: `Not Found` })),
     );
     const failure = await sandboxRpc.vpn.list().catch((error: unknown) => error);
     expect(failure).toMatchObject({ status: 404 });
@@ -232,16 +236,18 @@ it(`blames the drift for a 400 on a route whose shape the daemon disagrees about
     setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...SANDBOX_ROUTE_SHAPES, "settings.set": `different` });
     stubGlobal(
         `fetch`,
-        mock(async () => json(400, { message: `Input validation failed` })),
+        jest.fn(async () => json(400, { message: `Input validation failed` })),
     );
     const failure = await sandboxRpc.settings.set({}).catch((error: unknown) => error);
     expect(failure).toMatchObject({ status: 400 });
-    expect((failure as Error).message).toStartWith(`This sandbox's daemon has 'settings.set' but exchanges different fields for it than this app expects.`);
+    expect((failure as Error).message).toStartWith(
+        `This sandbox's daemon has 'settings.set' but exchanges different fields for it than this app expects.`,
+    );
     resetSandboxScope();
 });
 
 it(`aims a call at another sandbox by id, through that box's address and connect token`, async () => {
-    const fetchMock = mock(async (_request: Request) => json(200, {}));
+    const fetchMock = jest.fn(async (_request: Request) => json(200, {}));
     stubGlobal(`fetch`, fetchMock);
     await sandboxRpc.settings.get(undefined, { context: { at: `s2` } });
     const request = fetchMock.mock.calls[0]![0];
@@ -253,7 +259,7 @@ it(`keeps another box's refusal in its own words, since this daemon's routes say
     setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `vpn.list`));
     stubGlobal(
         `fetch`,
-        mock(async () => json(404, { message: `Not Found` })),
+        jest.fn(async () => json(404, { message: `Not Found` })),
     );
     expect(await sandboxRpc.vpn.list(undefined, { context: { at: `s2` } }).catch((error: unknown) => error)).toMatchObject({
         status: 404,
@@ -264,7 +270,7 @@ it(`keeps another box's refusal in its own words, since this daemon's routes say
 
 it(`never sends the correlation header to another box, whose support this daemon cannot vouch for`, async () => {
     setDaemonRoutes([`settings.get`, REQUEST_ID_EVIDENCE_ROUTE]);
-    const fetchMock = mock(async (_request: Request) => json(200, {}));
+    const fetchMock = jest.fn(async (_request: Request) => json(200, {}));
     stubGlobal(`fetch`, fetchMock);
     await sandboxRpc.settings.get(undefined, { context: { at: `s2` } });
     expect(fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER)).toBeNull();
@@ -276,7 +282,7 @@ it(`asks for a credential quietly on a background call, and fails like an unreac
     authState.asked = [];
     stubGlobal(
         `fetch`,
-        mock(async () => json(200, {})),
+        jest.fn(async () => json(200, {})),
     );
     await sandboxRpc.settings.get(undefined, { context: { at: `s2`, background: true } });
     await sandboxRpc.settings.get();
@@ -294,9 +300,9 @@ it(`asks for a credential quietly on a background call, and fails like an unreac
 it(`lifts the headers deadline only for a call that says its answer takes as long as its work`, async () => {
     stubGlobal(
         `fetch`,
-        mock(async () => json(200, {})),
+        jest.fn(async () => json(200, {})),
     );
-    const timeout = spyOn(AbortSignal, `timeout`);
+    const timeout = jest.spyOn(AbortSignal, `timeout`);
     await sandboxRpc.settings.get(undefined, { context: { deadline: false } });
     expect(timeout).not.toHaveBeenCalled();
     await sandboxRpc.settings.get();
@@ -306,7 +312,7 @@ it(`lifts the headers deadline only for a call that says its answer takes as lon
 
 // A path parameter is one segment whatever it holds, so a crafted id cannot reach another route.
 it(`encodes a path parameter into its own segment`, async () => {
-    const fetchMock = mock(async (_request: Request) => json(200, { ok: true }));
+    const fetchMock = jest.fn(async (_request: Request) => json(200, { ok: true }));
     stubGlobal(`fetch`, fetchMock);
     await sandboxRpc.panels.start({ repo: `../../etc` });
     expect(new URL(fetchMock.mock.calls[0]![0].url).pathname).toBe(`/panels/..%2F..%2Fetc/start`);
@@ -316,7 +322,7 @@ it(`encodes a path parameter into its own segment`, async () => {
 it(`hands a streamed frame on unparsed, including a kind this build does not know`, async () => {
     stubGlobal(
         `fetch`,
-        mock(async () => eventStream([{ kind: `somethingLater`, detail: 1 }, { kind: `heartbeat` }])),
+        jest.fn(async () => eventStream([{ kind: `somethingLater`, detail: 1 }, { kind: `heartbeat` }])),
     );
     const received: unknown[] = [];
     for await (const frame of await sandboxRpc.system.events({ clientId: `c1` })) {
@@ -330,7 +336,7 @@ it(`names an unaddressed sandbox as its own condition, before any request goes o
     sandbox.active.value = undefined;
     sandbox.activeSandboxId.value = undefined;
     sandbox.daemonUrl.value = undefined;
-    const fetchMock = mock();
+    const fetchMock = jest.fn();
     stubGlobal(`fetch`, fetchMock);
     await expect(sandboxRpc.system.info()).rejects.toBeInstanceOf(SandboxUnaddressedError);
     expect(fetchMock).not.toHaveBeenCalled();

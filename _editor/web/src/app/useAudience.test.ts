@@ -1,7 +1,6 @@
 // Pins the audience preference's reading of storage: unset and unknown both read as developer, and only an answer
 // marks the question as asked. jsdom: definePreference writes to localStorage.
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
 
 // Re-imported fresh per test, since the subject is a module-scope singleton.

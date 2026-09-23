@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { errorMessage, useLatest } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { type Component, ref, shallowRef, watch } from "vue";
 import { sandboxBlob } from "../../sandbox/client/sandboxClient";
@@ -11,7 +11,13 @@ import { sandboxBlob } from "../../sandbox/client/sandboxClient";
 
 // `before`/`after`: where the two sides' bytes live (daemon /diff/raw); `at`: another sandbox's daemon, absent for
 // the active one; `compare`: the viewer's compare component, imported here so it and the bytes land together.
-const { path, before, after, at, compare } = defineProps<{ path: string; before: string; after: string; at?: string; compare: () => Promise<Component> }>();
+const { path, before, after, at, compare } = defineProps<{
+    path: string;
+    before: string;
+    after: string;
+    at?: string;
+    compare: () => Promise<Component>;
+}>();
 // The reader wants the text reading, or both versions drawn whole; the host switches the reading.
 const emit = defineEmits<{ text: []; sides: [] }>();
 
@@ -22,17 +28,16 @@ const blobs = ref<{ before: Blob; after: Blob }>();
 const loading = ref(false);
 const error = ref<string>();
 
-// Drops a stale answer for a pair already left.
-let seq = 0;
+const latest = useLatest();
 const load = (): void => {
-    const id = ++seq;
+    const isLatest = latest();
     loading.value = true;
     error.value = undefined;
     blobs.value = undefined;
     component.value = undefined;
     Promise.all([compare(), sandboxBlob(before, undefined, at), sandboxBlob(after, undefined, at)]).then(
         ([loaded, beforeBlob, afterBlob]) => {
-            if (id !== seq) {
+            if (!isLatest()) {
                 return;
             }
             component.value = loaded;
@@ -40,7 +45,7 @@ const load = (): void => {
             loading.value = false;
         },
         (err: unknown) => {
-            if (id !== seq) {
+            if (!isLatest()) {
                 return;
             }
             loading.value = false;
@@ -71,6 +76,14 @@ watch(() => [before, after, at, compare] as const, load, { immediate: true });
         <div v-else-if="loading || component === undefined || blobs === undefined" class="flex h-full items-center justify-center text-muted">
             <Icon name="spinner" class="text-xl" spin />
         </div>
-        <component :is="component" v-else class="min-h-0 flex-1" :path="path" :before="blobs.before" :after="blobs.after" @failed="(message: string) => (error = message)" />
+        <component
+            :is="component"
+            v-else
+            class="min-h-0 flex-1"
+            :path="path"
+            :before="blobs.before"
+            :after="blobs.after"
+            @failed="(message: string) => (error = message)"
+        />
     </div>
 </template>

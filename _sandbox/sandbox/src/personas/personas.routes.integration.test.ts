@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Persona } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { createApp } from "../app.js";
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { tempWorkspace } from "../harness/route-fakes.testing.js";

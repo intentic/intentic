@@ -7,7 +7,6 @@ import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, contributionEntry } fr
 import type { CapabilityField } from "@intentic/extension-manifest";
 import { type ForticlientConnection, VAULTED } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { effectScope, type EffectScope, nextTick, ref } from "vue";
 import { swallowFileDrag, useCapabilityForm } from "./capabilityForm";
 import { seedValues } from "./model/form";
@@ -230,7 +229,7 @@ describe(`what a box can do for the reader`, () => {
         const { form } = formOn(SSH);
         const host = field(SSH, `host`);
         const paste = (text: string) => {
-            const preventDefault = mock();
+            const preventDefault = jest.fn();
             return { event: { clipboardData: { getData: () => text }, preventDefault } as unknown as ClipboardEvent, preventDefault };
         };
 
@@ -386,7 +385,7 @@ describe(`a fresh form`, () => {
 describe(`a file dragged over the page`, () => {
     it(`is swallowed, so a drop outside the import zone cannot navigate away from a half-filled form`, () => {
         const drag = (types: string[]) => {
-            const preventDefault = mock();
+            const preventDefault = jest.fn();
             swallowFileDrag({ dataTransfer: { types }, preventDefault } as unknown as DragEvent);
             return preventDefault;
         };

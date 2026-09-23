@@ -1,5 +1,4 @@
 import type { CommitResult, GitChangesResponse, RepoChanges } from "@intentic/api-contract";
-import { describe, it, expect } from "bun:test";
 import { spliceRepoChanges } from "./spliceRepoChanges";
 
 // Pins that a commit's one-repo answer can stand in for a full rescan: it replaces only its own repo, drops it

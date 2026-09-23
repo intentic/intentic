@@ -1,5 +1,4 @@
 import type { BrowserPage } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { activePageOf } from "./activePage";
 
 // The rule the Browsers view's tab strip runs on: watch the agent by default, obey the user once they choose,

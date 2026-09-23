@@ -5,9 +5,8 @@ import {
     mintedVariants,
     type NativeProvider,
     providerSpec,
-    TRANSLATOR_PROVIDERS,
 } from "@intentic/sandbox-contract";
-import { Button, Icon, Page, PageHeader, SegmentedControl, ui } from "@intentic/ui";
+import { Button, Icon, Page, PageHeader, ui } from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { defaultModelFor, endpointProviders } from "../chat/accounts/providerCatalog";
@@ -16,8 +15,9 @@ import { accessKnown, accessStateFor, providerReady } from "../chat/session/acce
 import { rememberPick } from "../chat/run/turnDefaults";
 import { useChat } from "../chat/run/useChat";
 import ConnectFlow from "../sandbox/secrets/ConnectFlow.vue";
+import EstatePicker from "../sandbox/secrets/EstatePicker.vue";
 import { localPrefetchStopped } from "./connectIntro";
-import { type ConnectLaneKey, firstUnmetLane, laneOfProvider, laneProviders } from "./connectLanes";
+import { connectLane, type ConnectLaneKey, firstUnmetLane, laneOfProvider, laneProviders } from "./connectLanes";
 import ConnectLane from "./ConnectLane.vue";
 import LocalModelLane from "./LocalModelLane.vue";
 import ProviderTile from "./ProviderTile.vue";
@@ -49,9 +49,8 @@ const {
 
 const { fit, startPrefetch, stopPrefetch } = useLocalModelFit();
 
-// A local model is a capability, not an account, so readiness is "is one installed", which the provider list already
-// answers.
-const localReady = computed(() => endpointProviders.value.some((endpoint) => endpoint.kind === `localmodel`));
+// A local model is a capability, not an account: the local lane holds whichever one is installed.
+const localModel = computed(() => endpointProviders.value.find((endpoint) => endpoint.kind === `localmodel`));
 
 // The weights that make the local lane instant, fetched while the reader is still reading the page — but only where
 // they could be used at all, and only if nobody has already declined them. A gigabyte started on a machine that cannot
@@ -69,7 +68,7 @@ watch(
             measured.instant !== undefined &&
             measured.prefetch.state === `idle` &&
             !localPrefetchStopped.value &&
-            !localReady.value
+            localModel.value === undefined
         ) {
             prefetchAsked = true;
             void startPrefetch();
@@ -109,7 +108,7 @@ const settleLane = (): void => {
         }
         return;
     }
-    openLane.value = firstUnmetLane(providerReady, localReady.value);
+    openLane.value = firstUnmetLane((key) => laneHolds(key) !== undefined);
 };
 
 // The live handshake, wherever it was started: read from the store so a sign-in begun here and finished after a reload
@@ -129,24 +128,15 @@ const finishing = computed(
     () => live.value !== undefined && accountBusy.value === (live.value.kind === `native` ? live.value.provider : translatorKey(live.value.provider)),
 );
 
-// WHICH ESTATE, the only provider fact asked before a sign-in starts (a vendor can sell one product through separate
-// estates whose keys are not interchangeable). Reset whenever the chosen provider changes.
+// Which estate to sign in to (a vendor can sell one product through estates whose keys are not interchangeable).
 const estate = ref<string | undefined>(undefined);
 const chosen = ref<NativeProvider | undefined>(undefined);
-const estates = computed(() => (chosen.value === undefined ? [] : (mintedVariants(chosen.value) ?? [])));
-const chosenEstate = computed<string>({
-    get: () => estate.value ?? estates.value[0]?.id ?? ``,
-    set: (value) => {
-        estate.value = value;
-    },
-});
+const offersEstates = computed(() => (mintedVariants(chosen.value ?? ``)?.length ?? 0) > 1);
 
-// Which mechanism runs mirrors the daemon's own split: the translator holds a subscription OAuth for ChatGPT/Kimi/
-// Google, a stored account serves everything else. Read off the provider table's own `auth.kind`, never a name list.
-const routed = (provider: NativeProvider): provider is KeyedProvider => (TRANSLATOR_PROVIDERS as readonly string[]).includes(provider);
+// The translator holds the subscription OAuth, a stored account serves everything else, as the daemon splits them.
+const routed = (provider: NativeProvider): provider is KeyedProvider => providerSpec(provider)?.auth.kind === `translator`;
 
-// `estate` is blank where no choice is offered, and the daemon reads blank as "take the default".
-const startNative = (): Promise<void> => startConnect(chosenEstate.value === `` ? undefined : chosenEstate.value);
+const startNative = (): Promise<void> => startConnect(estate.value);
 
 const connect = async (provider: NativeProvider): Promise<void> => {
     chosen.value = provider;
@@ -209,15 +199,11 @@ const LANES = computed(() => [
 // for" says something is connected and not which, which is the one thing a reader of a closed lane wants.
 const laneHolds = (key: ConnectLaneKey): string | undefined => {
     if (key === `local`) {
-        const model = endpointProviders.value.find((endpoint) => endpoint.kind === `localmodel`);
-        return model?.label;
+        return localModel.value?.label;
     }
-    const ready = laneProviders(key, providerReady).filter((provider) => providerReady(provider));
+    const ready = connectLane(key).providers.filter((provider) => providerReady(provider));
     return ready.length === 0 ? undefined : ready.map((provider) => providerSpec(provider)?.accountLabel ?? provider).join(`, `);
 };
-
-const laneDone = (key: ConnectLaneKey): boolean =>
-    key === `local` ? localReady.value : laneProviders(key, providerReady).some((provider) => providerReady(provider));
 
 onMounted(() => {
     // Fetched on open rather than waiting for the reachable seam, which lags a probe plus a tunnel round-trip.
@@ -246,7 +232,7 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
                 :title="lane.title"
                 :subtitle="lane.subtitle"
                 :open="openLane === lane.key"
-                :done="laneDone(lane.key)"
+                :done="laneHolds(lane.key) !== undefined"
                 @toggle="toggleLane(lane.key)"
             >
                 <template #badge>
@@ -289,15 +275,9 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
                             @click="connect(provider)"
                         />
                         <!-- Estate is the sign-in's own first step, so it stands where the sign-in will unfold, not in a settings page. -->
-                        <div v-if="estates.length > 1" class="flex flex-col gap-2 rounded-xl border border-line bg-canvas p-3">
+                        <div v-if="chosen && offersEstates" class="flex flex-col gap-2 rounded-xl border border-line bg-canvas p-3">
                             <span class="text-xs text-muted">{{ t(`connect.connect.whichPlan`) }}</span>
-                            <SegmentedControl
-                                v-model="chosenEstate"
-                                size="xs"
-                                wrap
-                                :options="estates.map((variant) => ({ label: variant.label, value: variant.id }))"
-                                :aria-label="t(`connect.connect.whichPlan`)"
-                            />
+                            <EstatePicker v-model="estate" :provider="chosen" :label="t(`connect.connect.whichPlan`)" />
                             <Button class="self-start" size="small" :label="t(`ui.action.connect`)" @click="connectChosen" />
                         </div>
                     </template>

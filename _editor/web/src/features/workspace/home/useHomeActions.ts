@@ -1,29 +1,21 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { clipboardOf } from "@intentic/ui";
-import { noticeOf } from "@intentic/ui/async";
-import { basename, parentDir } from "@intentic/ui/path";
-import type { MenuItem } from "primevue/menuitem";
-import { computed, onScopeDispose, type Ref, ref, watch } from "vue";
-import { useNotifications } from "../../../shell/notifications/notifications";
-import { entryMenuItems } from "../explorer/entryMenu";
-import { deletedReceipt, deleteHeader, joinPath, newNameError } from "../explorer/entryNames";
-import type { RowAction } from "../explorer/rowActions";
-import { filesOffered } from "../explorer/transfer/dragSource";
-import { useEntryDrag } from "../explorer/transfer/useEntryDrag";
-import { filesToEntries } from "../explorer/transfer/dropEntries";
-import { movableInto, pastePairs } from "../explorer/transfer/explorerPaste";
-import { selectRange } from "../explorer/treeSelect";
-import { noteUserCreatedDir, useEmptyDirs } from "../explorer/useEmptyDirs";
-import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
-import { archiveAbove, isArchiveContent } from "../files/archiveEntries";
-import { isLeaving, provisionalAt } from "../files/provisionalEntries";
-import { useUploadQueue } from "../files/upload/useUploadQueue";
 import { t } from "@intentic/ui/i18n";
+import { parentDir } from "@intentic/ui/path";
+import { computed, type Ref, ref, watch } from "vue";
+import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
+import { useNotifications } from "../../../shell/notifications/notifications";
+import type { RowAction } from "../explorer/rowActions";
+import { useTreeDelete } from "../explorer/tree/useTreeDelete";
+import { useInlineEdit, useTreeEdits } from "../explorer/tree/useTreeEdits";
+import { useTreeMenu } from "../explorer/tree/useTreeMenu";
+import { useTreeRules } from "../explorer/tree/useTreeRules";
+import { useTreeTransfer } from "../explorer/tree/useTreeTransfer";
+import { useEmptyDirs } from "../explorer/useEmptyDirs";
+import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
+import { provisionalAt } from "../files/provisionalEntries";
+import { useUploadQueue } from "../files/upload/useUploadQueue";
 
-// What can be done to the home's tiles: the tree's file management (select several, rename, create, delete, cut, copy,
-// paste, drag) over the same daemon calls (useWorkspaceTree) and the same clipboard, so a cut in the tree pastes on the
-// home and the other way round. The view keeps navigation, the peek and arrow travel; this owns the verbs.
+// The tree's own verbs (explorer/tree) over the home's tiles, every one aimed at the open folder; the clipboard is shared.
 
 export interface HomeActionsContext {
     // The open folder: where a create, a keyboard paste and a drop on the background land.
@@ -44,503 +36,144 @@ export interface HomeActionsContext {
 export type SelectModifiers = Pick<MouseEvent, "shiftKey" | "ctrlKey" | "metaKey">;
 
 export function useHomeActions(ctx: HomeActionsContext) {
-    const {
-        tree,
-        entriesByPath,
-        lazyChildren,
-        loadChildren,
-        barren,
-        clipboard,
-        run,
-        actionError,
-        refuseWrite,
-        canEditFiles,
-        moveEntry,
-        removeEntries,
-        copyEntries,
-        moveIntoMany,
-        createFile,
-        createDir,
-        extractEntry,
-    } = useWorkspaceTree();
-    const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
+    const store = useWorkspaceTree();
+    const { entriesByPath: byPath } = store;
+    const uploads = useUploadQueue();
     const { say } = useNotifications();
-    const { isBarren, chainOf } = useEmptyDirs(() => barren.value);
+    const emptyDirs = useEmptyDirs(() => store.barren.value);
+    const rules = useTreeRules({ byPath, store });
+    const here = (): string => ctx.dir.value;
 
-    // Walked, or listed by its parent's lazy load.
-    const entryAt = (path: string): WorkspaceTreeEntry | undefined =>
-        entriesByPath.value.get(path) ?? lazyChildren.value.get(parentDir(path))?.find((entry) => entry.path === path);
-    const locked = (path: string): boolean => isLockedWorkspacePath(path);
-    // Inside an archive nothing can be written: what the home lists there is a copy the daemon keeps out of sight, and
-    // nothing repacks a zip. The archive FILE is ordinary workspace content; only what it holds is read-only.
-    const archived = (path: string): boolean => isArchiveContent(path, entryAt);
-    const archiveHere = computed(() => archiveAbove(ctx.dir.value, entryAt) !== undefined);
-    // A folder that takes no drop: the sandbox keeps it private, or it is an archive's contents.
-    const noDrops = (dir: string): boolean => locked(dir) || archiveAbove(dir, entryAt) !== undefined;
-    // `refuseWrite` for the member tier, plus the archive rule; says which it was, since neither is the other's fault.
-    const refuseHere = (): boolean => {
-        if (archiveHere.value) {
-            actionError.value = noticeOf(`An archive's contents are read-only. Extract it to change them.`);
-            return true;
-        }
-        return refuseWrite();
+    // ---- selection: unlike the tree's, its lead is the shared current entry, so every gesture here moves it ----
+    const tiles = computed(() => ctx.order.value.map((tile) => tile.path));
+    const start = ctx.lead.value;
+    const selection = ref(new Set<string>(start !== undefined && tiles.value.includes(start) ? [start] : []));
+    // The Shift pivot, which also stands in for the tree's lead: the tile a verb falls back to when nothing is marked.
+    const anchor = ref<string | null>([...selection.value][0] ?? null);
+    const selectSingle = (path: string): void => {
+        selection.value = new Set([path]);
+        anchor.value = path;
+        ctx.lead.value = path;
     };
-    // Still arriving: nothing at that path to act on yet.
-    const pending = (path: string): boolean => !entriesByPath.value.has(path) && provisionalAt(path) !== undefined;
-    // What the verbs may touch: not the sandbox's private paths, nor rows still on their way in or out.
-    const unlockedOnly = (paths: readonly string[]): string[] => paths.filter((path) => !locked(path) && !pending(path) && !isLeaving(path));
-    const exists = (path: string): boolean => entryAt(path) !== undefined || provisionalAt(path) !== undefined;
-    // A folder's entries, fetched first if the walk skipped it, so a name check isn't made against nothing.
-    const listing = async (dir: string): Promise<readonly WorkspaceTreeEntry[]> => {
-        const listed = dir === `` ? tree.value : (entriesByPath.value.get(dir)?.children ?? lazyChildren.value.get(dir));
-        if (listed !== undefined) {
-            return listed;
-        }
-        await loadChildren(dir);
-        return lazyChildren.value.get(dir) ?? [];
-    };
-
-    // ---- selection: a set, with the shared lead as its cursor and an anchor for Shift ranges ----
-    const paths = computed(() => ctx.order.value.map((entry) => entry.path));
-    // Starts on the current entry when it is a tile here: the home mounts afresh each time it shows, and the tree
-    // already marks that one.
-    const lead = ctx.lead.value;
-    const marked = ref<ReadonlySet<string>>(new Set(lead !== undefined && paths.value.includes(lead) ? [lead] : []));
-    const anchor = ref<string | undefined>(lead);
-
     const select = (path: string, modifiers?: SelectModifiers): void => {
-        if (modifiers?.shiftKey === true && anchor.value !== undefined) {
-            marked.value = new Set(selectRange(paths.value, anchor.value, path));
+        const intent = modifiers === undefined ? `single` : clickIntent(modifiers, anchor.value !== null);
+        if (intent === `single`) {
+            selectSingle(path);
+            return;
+        }
+        if (intent === `range`) {
+            selection.value = new Set(rangeSelect(tiles.value, anchor.value ?? undefined, path) ?? [path]);
             ctx.lead.value = path;
             return;
         }
-        if (modifiers?.ctrlKey === true || modifiers?.metaKey === true) {
-            const next = new Set(marked.value);
-            if (next.has(path)) {
-                next.delete(path);
-            } else {
-                next.add(path);
-            }
-            marked.value = next;
-        } else {
-            marked.value = new Set([path]);
+        const next = new Set(selection.value);
+        if (!next.delete(path)) {
+            next.add(path);
         }
+        selection.value = next;
         anchor.value = path;
         ctx.lead.value = path;
     };
     const selectAll = (): void => {
-        marked.value = new Set(paths.value);
+        selection.value = new Set(tiles.value);
     };
     const clear = (): void => {
-        marked.value = new Set();
-        anchor.value = undefined;
+        selection.value = new Set();
+        anchor.value = null;
         ctx.lead.value = undefined;
     };
-    // A lead set elsewhere (the tree, a folder change) collapses the set to it, or to nothing when the lead is not a
-    // tile here (the open folder itself, an entry of another folder): the verbs act on what can be seen, and only that.
-    // One toggled out of the set stays the lead.
+    // Only what landed in the open folder is on screen to mark.
+    const selectLanded = (paths: readonly string[]): void => {
+        const last = paths.at(-1);
+        if (last !== undefined && parentDir(last) === ctx.dir.value) {
+            selection.value = new Set(paths);
+            anchor.value = last;
+            ctx.lead.value = last;
+        }
+    };
+    // A lead set elsewhere collapses the set to it, or empties it off the tiles; a tile toggled out here is the anchor.
     watch(ctx.lead, (path) => {
-        if (path === undefined || !paths.value.includes(path)) {
-            marked.value = new Set();
-        } else if (!marked.value.has(path)) {
-            marked.value = new Set([path]);
-            anchor.value = path;
+        if (path === undefined || !tiles.value.includes(path)) {
+            selection.value = new Set();
+            anchor.value = null;
+        } else if (!selection.value.has(path) && path !== anchor.value) {
+            selectSingle(path);
         }
     });
-    // Rows that left the listing (deleted, moved, filtered) leave the selection too.
-    watch(paths, (list) => {
+    // Tiles that left the listing (deleted, moved, filtered) leave the selection too.
+    watch(tiles, (list) => {
         const present = new Set(list);
-        if ([...marked.value].some((path) => !present.has(path))) {
-            marked.value = new Set([...marked.value].filter((path) => present.has(path)));
+        if ([...selection.value].some((path) => !present.has(path))) {
+            selection.value = new Set([...selection.value].filter((path) => present.has(path)));
         }
     });
-    const acting = (): string[] => unlockedOnly([...marked.value]);
+    const selecting = { selection, lead: anchor, selectSingle, selectLanded, clear };
 
-    // ---- rename (inline, on the tile) ----
-    const renaming = ref<string | undefined>(undefined);
-    const renameDraft = ref(``);
-    const creating = ref<"file" | "dir" | undefined>(undefined);
-    const createDraft = ref(``);
-    const editing = computed(() => renaming.value !== undefined || creating.value !== undefined);
-
-    const beginRename = (path: string): void => {
-        if (locked(path) || pending(path) || refuseHere()) {
-            return;
-        }
-        creating.value = undefined;
-        renaming.value = path;
-        renameDraft.value = basename(path);
-    };
-    const commitRename = (): void => {
-        const path = renaming.value;
-        renaming.value = undefined;
-        if (path === undefined) {
-            return;
-        }
-        const name = renameDraft.value.trim();
-        if (name === `` || name === basename(path)) {
-            return;
-        }
-        const to = joinPath(parentDir(path), name);
-        // `moveEntry` swaps the rows before its first await, so the selection can follow the new name in the same frame.
-        void run(() => moveEntry(path, to), `Couldn't rename that.`);
-        select(to);
-    };
-    const cancelRename = (): void => {
-        renaming.value = undefined;
-    };
-
-    // ---- create (a phantom tile in the open folder) ----
-    const beginCreate = (type: "file" | "dir"): void => {
-        if (refuseHere()) {
-            return;
-        }
-        renaming.value = undefined;
-        creating.value = type;
-        createDraft.value = ``;
-    };
-    const createError = computed<string | undefined>(() =>
-        creating.value === undefined ? undefined : newNameError(createDraft.value, ctx.dir.value, exists),
-    );
-    const commitCreate = async (): Promise<void> => {
-        const type = creating.value;
-        if (type === undefined) {
-            return; // blur fires after Enter already committed
-        }
-        const name = createDraft.value.trim();
-        if (name === ``) {
-            creating.value = undefined;
-            return;
-        }
-        if (createError.value !== undefined) {
-            return; // the field stays open with the error under it
-        }
-        creating.value = undefined;
-        const path = joinPath(ctx.dir.value, name);
-        if (type === `dir`) {
-            // A freshly created folder is exempt from barren marking until it gains content.
-            noteUserCreatedDir(path);
-            const write = run(() => createDir(path), `Couldn't create that folder.`);
-            select(path);
-            await write;
-            return;
-        }
-        const write = run(() => createFile(path), `Couldn't create that file.`);
-        select(path);
-        await write;
-        // Refused, and taken back off the listing: there is nothing to open.
-        if (pending(path) || exists(path)) {
-            ctx.openCreated(path);
-        }
-    };
-    const cancelCreate = (): void => {
-        creating.value = undefined;
-    };
-
-    // ---- delete (confirmed; there is no trash to restore from) ----
-    const confirmPaths = ref<readonly string[] | undefined>(undefined);
-    const requestDelete = (): void => {
-        if (refuseHere()) {
-            return;
-        }
-        const targets = acting();
-        if (targets.length > 0) {
-            confirmPaths.value = targets;
-        }
-    };
-    const deleteTitle = computed(() => (confirmPaths.value === undefined ? `` : deleteHeader(confirmPaths.value, (path) => entryAt(path)?.type)));
-    const confirmDelete = (): void => {
-        const targets = confirmPaths.value;
-        confirmPaths.value = undefined;
-        if (targets === undefined) {
-            return;
-        }
-        // Named while the listing still knows them, said only once the delete lands.
-        const named = deletedReceipt(targets);
-        void run(async () => {
-            await removeEntries(targets);
-            say(named);
-        }, `Couldn't delete that.`);
-        clear();
-    };
-    const cancelDelete = (): void => {
-        confirmPaths.value = undefined;
-    };
-    // Drops a placeholder into the chain's deepest folder, making it non-empty for git and off the barren list for good.
-    const keepFolder = async (path: string): Promise<void> => {
-        if (refuseHere()) {
-            return;
-        }
-        const tail = chainOf(path).tail;
-        await run(async () => {
-            await createFile(joinPath(tail, `.gitkeep`));
-            say(`Folder kept`);
-        }, `Couldn't keep that folder.`);
-    };
-
-    // Unpacks an archive into the open folder. Selected only once the daemon answers: what it landed as is its answer,
-    // and a name guessed here would mark the wrong tile whenever the archive turned out to hold its own folder.
-    const extract = async (path: string): Promise<void> => {
-        if (refuseHere()) {
-            return;
-        }
-        await run(async () => {
-            const landed = await extractEntry(path);
-            if (parentDir(landed) === ctx.dir.value) {
-                select(landed);
-            }
-            say(`Extracted to ${basename(landed)}`);
-        }, `Couldn't extract that.`);
-    };
-
-    // ---- cut, copy, paste: the clipboard is useWorkspaceTree's, shared with the tree ----
-    // `async` also writes the paths as text to the OS clipboard, for the menu path, which has no clipboard event to
-    // hook; routed via the home element so a popped-out window targets its own clipboard.
-    const stage = (mode: "copy" | "cut", system: "async" | "event"): readonly string[] => {
-        const targets = acting();
-        if (targets.length === 0) {
-            return targets;
-        }
-        clipboard.value = { mode, paths: targets };
-        if (system === `async`) {
-            void clipboardOf(ctx.host.value)
-                .writeText(targets.join(`\n`))
-                .catch(() => undefined);
-        }
-        return targets;
-    };
-    // Landed entries in the open folder become the selection, so a paste is visible as more than new tiles.
-    const landed = (dir: string, list: readonly string[]): void => {
-        if (dir !== ctx.dir.value) {
-            return;
-        }
-        marked.value = new Set(list);
-        anchor.value = list.at(-1);
-        ctx.lead.value = anchor.value;
-    };
-    // Copies each source into `dir` without ever overwriting: a name already taken lands as "<name> copy".
-    const copyInto = async (sources: readonly string[], dir: string, whenRefused: string): Promise<void> => {
-        const taken = new Set((await listing(dir)).map((entry) => entry.name));
-        const pairs = pastePairs(sources, dir, taken);
-        if (pairs.length === 0) {
-            return;
-        }
-        const write = run(() => copyEntries(pairs), whenRefused);
-        landed(
-            dir,
-            pairs.map((pair) => pair.to),
-        );
-        await write;
-    };
-    // A copy never overwrites, landing under a free name ("<name> copy"); a cut moves and consumes the clipboard.
-    const paste = async (dir: string = ctx.dir.value): Promise<void> => {
-        const clip = clipboard.value;
-        if (clip === undefined || refuseHere()) {
-            return;
-        }
-        if (clip.mode === `copy`) {
-            await copyInto(clip.paths, dir, `Couldn't paste those items.`);
-            return;
-        }
-        const sources = movableInto(clip.paths, dir);
-        clipboard.value = undefined;
-        if (sources.length === 0) {
-            return;
-        }
-        const write = run(() => moveIntoMany(sources, dir), `Couldn't move those items.`);
-        landed(
-            dir,
-            sources.map((source) => joinPath(dir, basename(source))),
-        );
-        await write;
-    };
-    // The home owns the clipboard events only while it holds focus; an inline field owns its own.
-    const onCopyEvent = (event: ClipboardEvent, mode: "copy" | "cut"): void => {
-        if (editing.value) {
-            return;
-        }
-        const targets = stage(mode, `event`);
-        if (targets.length === 0) {
-            return;
-        }
-        event.clipboardData?.setData(`text/plain`, targets.join(`\n`));
-        event.preventDefault();
-    };
-    const onPasteEvent = (event: ClipboardEvent): void => {
-        if (editing.value) {
-            return;
-        }
-        // OS files win over the internal clipboard: a copy made here always overwrites the clipboard's text.
-        const files = event.clipboardData?.files;
-        if (files !== undefined && files.length > 0) {
-            event.preventDefault();
-            if (!refuseHere()) {
-                void enqueue(ctx.dir.value, filesToEntries(files));
-            }
-            return;
-        }
-        if (clipboard.value === undefined) {
-            return;
-        }
-        event.preventDefault();
-        void paste();
-    };
-
-    // ---- drag: tiles move by pointer (useEntryDrag) into a folder tile, a crumb, or the open folder itself; OS files
-    // arrive by the platform's own drag, the one drag read natively, since one the page starts freezes the tab in Brave.
-    const { dragging, paths: dragPaths, over, begin: beginEntryDrag, consumeSuppressedClick } = useEntryDrag();
-    const onPointerDown = (event: PointerEvent, entry: WorkspaceTreeEntry): void => {
-        // A modified press is a selection gesture, and a press on the name field is the field's; a locked tile never
-        // travels. Each carries nothing, rather than returning: every press has to reach beginEntryDrag, which is what
-        // ends the previous drag's claim on the pending click.
-        const targets =
-            event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || renaming.value === entry.path
-                ? []
-                : // Dragging a selected tile moves the whole selection; otherwise just that tile.
-                  unlockedOnly(marked.value.has(entry.path) ? [...marked.value] : [entry.path]);
-        beginEntryDrag(event, { paths: targets, onDrop: (dir) => void dragOnto(targets, dir) });
-    };
-    // Where a dragged tile lands. Out of an archive it is a copy: the member stays in the archive, since nothing here
-    // rewrites one, and a drag that silently deleted from a zip would be the wrong surprise either way.
-    const dragOnto = async (targets: readonly string[], dir: string): Promise<void> => {
-        if (targets.some((path) => archived(path))) {
-            await copyInto(targets, dir, `Couldn't copy those items out.`);
-            return;
-        }
-        await run(() => moveIntoMany(targets, dir), `Couldn't move those items.`);
-    };
-
-    // The folder an OS file drag is over; undefined over nothing, or over a folder the sandbox keeps private.
-    const dropDir = ref<string | undefined>(undefined);
-    const onDragOver = (event: DragEvent, dir: string): void => {
-        // Not OS files: left alone so the browser declines it.
-        if (!filesOffered(event)) {
-            return;
-        }
-        // Stopped here: the page's own drop zone sits behind the home and must not also claim this drag.
-        event.preventDefault();
-        event.stopPropagation();
-        const invalid = noDrops(dir);
-        if (event.dataTransfer !== null) {
-            event.dataTransfer.dropEffect = invalid ? `none` : `copy`;
-        }
-        dropDir.value = invalid ? undefined : dir;
-    };
-    // `dragleave` also fires when the pointer crosses into a child; only a real exit clears the target.
-    const onDragLeave = (event: DragEvent, dir: string): void => {
-        const to = event.relatedTarget;
-        if (to instanceof Node && event.currentTarget instanceof Node && event.currentTarget.contains(to)) {
-            return;
-        }
-        if (dropDir.value === dir) {
-            dropDir.value = undefined;
-        }
-    };
-    const onDrop = (event: DragEvent, dir: string): void => {
-        if (event.dataTransfer === null || !filesOffered(event)) {
-            return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        dropDir.value = undefined;
-        if (noDrops(dir) || refuseHere()) {
-            return;
-        }
-        // Synchronous: webkitGetAsEntry must fire while the drag's items are still alive.
-        enqueueFromDataTransfer(dir, event.dataTransfer);
-    };
-    // A file drag that ends anywhere (dropped elsewhere, cancelled) clears the hint; capture, so a stopped drop still counts.
-    const clearDropDir = (): void => {
-        dropDir.value = undefined;
-    };
-    window.addEventListener(`dragend`, clearDropDir, true);
-    window.addEventListener(`drop`, clearDropDir, true);
-    onScopeDispose(() => {
-        window.removeEventListener(`dragend`, clearDropDir, true);
-        window.removeEventListener(`drop`, clearDropDir, true);
+    // The home shows one folder: nothing opens around a verb, and focus parks on the home once the name field closes.
+    const inline = useInlineEdit((path) => store.entry(path) !== undefined || provisionalAt(path) !== undefined);
+    const { beginRename, beginCreate, endEdit } = useTreeEdits({
+        inline,
+        byPath,
+        rules,
+        targetDir: here,
+        openFolder: () => undefined,
+        selectSingle,
+        focusLead: async () => ctx.host.value?.focus({ preventScroll: true }),
+        store,
+        openCreated: ctx.openCreated,
+    });
+    const { confirmPaths, deleteTitle, requestDelete, confirmDelete, keepFolder } = useTreeDelete({
+        byPath,
+        targetDir: here,
+        rules,
+        emptyDirs,
+        selecting,
+        store,
+        say,
+    });
+    const transfer = useTreeTransfer({
+        tree: () => store.tree.value,
+        rootDir: () => ``,
+        byPath,
+        childrenOf: (folder) => store.listingOf(folder.path) ?? [],
+        targetDir: here,
+        openFolder: () => undefined,
+        rules,
+        selecting,
+        inline,
+        el: ctx.host,
+        store,
+        uploads,
+        say,
+    });
+    const { menu, menuItems, openMenu } = useTreeMenu({
+        rootDir: here,
+        rowActions: ctx.dirActions,
+        isBarren: emptyDirs.isBarren,
+        rules,
+        selecting,
+        store,
+        // A folder tile takes a paste itself, but a create lands in the open folder, where its tile can be seen.
+        beginCreate: (_dir, type) => beginCreate(ctx.dir.value, type),
+        beginRename,
+        extract: transfer.extract,
+        keepFolder,
+        requestDelete,
+        stage: transfer.stage,
+        paste: transfer.paste,
+        // What a double-click does, for the keyboard and touch.
+        frame: (target, multi) => ({
+            head:
+                target === undefined || multi
+                    ? []
+                    : [{ label: t(`ui.action.open`), icon: target.type === `dir` ? `folder-open` : `file`, command: () => ctx.open(target) }],
+        }),
     });
 
-    // ---- the menu (entryMenu.ts), acting on the whole selection when the right-clicked tile is part of it ----
-    const menu = ref<{ show: (event: Event) => void } | undefined>(undefined);
-    const menuEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
-    const dirActionItems = (target: WorkspaceTreeEntry | undefined, multi: boolean): MenuItem[] =>
-        target?.type === `dir` && !multi
-            ? ctx.dirActions(target.path).map((action) => ({
-                  label: action.tooltip,
-                  icon: action.icon,
-                  command: () => {
-                      select(target.path);
-                      action.run();
-                  },
-              }))
-            : [];
-    // The home's own first row: what a double-click does, for the keyboard and touch.
-    const openItem = (target: WorkspaceTreeEntry | undefined, multi: boolean): MenuItem[] =>
-        target === undefined || multi
-            ? []
-            : [{ label: t(`ui.action.open`), icon: target.type === `dir` ? `folder-open` : `file`, command: () => ctx.open(target) }];
-    // A folder tile takes a paste itself; creates always land in the open folder, where the new tile can be seen.
-    const menuVerbs = (target: WorkspaceTreeEntry | undefined) => ({
-        newFile: () => beginCreate(`file`),
-        newFolder: () => beginCreate(`dir`),
-        rename: () => {
-            if (target !== undefined) {
-                beginRename(target.path);
-            }
-        },
-        extract: () => {
-            if (target !== undefined) {
-                void extract(target.path);
-            }
-        },
-        keepFolder: () => {
-            if (target !== undefined) {
-                void keepFolder(target.path);
-            }
-        },
-        remove: requestDelete,
-        cut: () => {
-            stage(`cut`, `async`);
-        },
-        copy: () => {
-            stage(`copy`, `async`);
-        },
-        paste: () => void paste(target?.type === `dir` ? target.path : ctx.dir.value),
-    });
-    const menuItems = computed<MenuItem[]>(() => {
-        const target = menuEntry.value;
-        const multi = target !== undefined && marked.value.size > 1 && marked.value.has(target.path);
-        return entryMenuItems({
-            target,
-            locked: target !== undefined && locked(target.path),
-            canEdit: canEditFiles.value,
-            // The background of an archive's listing is archive contents too, which is why the open folder decides it
-            // rather than the right-clicked tile.
-            archived: archiveHere.value,
-            multi,
-            count: acting().length,
-            barren: target?.type === `dir` && isBarren(target.path),
-            clipboardFull: clipboard.value !== undefined,
-            head: openItem(target, multi),
-            lead: dirActionItems(target, multi),
-            verbs: menuVerbs(target),
-        });
-    });
-    // Right-clicking outside the selection collapses it to that one tile; inside a multi-selection keeps it.
-    const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): void => {
-        event.preventDefault();
-        menuEntry.value = entry;
-        if (entry !== undefined && !marked.value.has(entry.path)) {
-            select(entry.path);
-        }
-        menu.value?.show(event);
-    };
-
-    // ---- keys the verbs answer; the view keeps travel, Enter, Backspace and Escape ----
-    // F2 renames the lead, and only when it stands alone: a rename over a selection would name one of several.
+    // F2 renames the lead only when it stands alone: a rename over a selection would name one of several.
     const renameLead = (): void => {
         const path = ctx.lead.value;
-        if (path !== undefined && marked.value.has(path) && marked.value.size === 1) {
+        if (path !== undefined && selection.value.has(path) && selection.value.size === 1) {
             beginRename(path);
         }
     };
@@ -548,12 +181,12 @@ export function useHomeActions(ctx: HomeActionsContext) {
         [`Delete`, requestDelete],
         [`F2`, renameLead],
     ]);
-    const isSelectAll = (event: KeyboardEvent): boolean => (event.ctrlKey || event.metaKey) && (event.key === `a` || event.key === `A`);
+    // The keys the verbs answer (Delete, F2, select all); while a name is being typed, every key is the field's.
     const handleKey = (event: KeyboardEvent): boolean => {
-        if (editing.value) {
-            return true; // the inline field owns its keys
+        if (inline.editing.value) {
+            return true;
         }
-        const verb = isSelectAll(event) ? selectAll : KEY_VERBS.get(event.key);
+        const verb = (event.ctrlKey || event.metaKey) && (event.key === `a` || event.key === `A`) ? selectAll : KEY_VERBS.get(event.key);
         if (verb === undefined) {
             return false;
         }
@@ -563,45 +196,19 @@ export function useHomeActions(ctx: HomeActionsContext) {
     };
 
     return {
-        marked,
+        selection,
         select,
-        selectAll,
         clear,
-        editing,
-        renaming,
-        renameDraft,
-        beginRename,
-        commitRename,
-        cancelRename,
-        creating,
-        createDraft,
-        createError,
-        beginCreate,
-        commitCreate,
-        cancelCreate,
+        rules,
+        inline,
+        endEdit,
         confirmPaths,
         deleteTitle,
-        requestDelete,
         confirmDelete,
-        cancelDelete,
-        onCopyEvent,
-        onPasteEvent,
-        dragging,
-        dragPaths,
-        over,
-        dropDir,
-        onPointerDown,
-        consumeSuppressedClick,
-        onDragOver,
-        onDragLeave,
-        onDrop,
+        transfer,
         menu,
         menuItems,
         openMenu,
         handleKey,
-        locked,
-        noDrops,
-        archiveHere,
-        pending,
     };
 }

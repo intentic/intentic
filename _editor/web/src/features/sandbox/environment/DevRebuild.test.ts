@@ -5,8 +5,7 @@
 import "@intentic/testing/dom";
 import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
-import { advanceTimersByTimeAsync, hoisted } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { forgetHubWork, hubWorkKey, hubWorkRunning } from "../../../shell/hub/hubWork";
@@ -15,8 +14,8 @@ const hostId = ref<string | undefined>(`host-1`);
 // What the card asks the door rule about: its own checkout, since one PC answers for this container through several
 // doors and only the checkout's path picks between them.
 const askedAbout: (string | undefined)[] = [];
-const runDeviceCommand = hoisted(() => mock());
-mock.module(`../devices/useDevices`, () => ({
+const runDeviceCommand = jest.fn();
+jest.mock(`../devices/useDevices`, () => ({
     useHostHolding: (_slug: () => string | undefined, path: () => string | undefined) => {
         askedAbout.push(path());
         return hostId;
@@ -24,13 +23,13 @@ mock.module(`../devices/useDevices`, () => ({
     useDevices: () => ({ devices: ref([]) }),
     runDeviceCommand,
 }));
-mock.module(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sbx-1`) }) }));
+jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sbx-1`) }) }));
 // What the restart will interrupt, and whether it hands it back: both are read at the moment of asking, so both are
 // driven from here. `turnInFlight` stays real — what counts as mid-turn is not this card's opinion.
 const fleet = ref<{ status: string }[]>([]);
-mock.module(`../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet }) }));
+jest.mock(`../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet }) }));
 const settings = ref<{ autoResumeOnRestart: boolean } | undefined>(undefined);
-mock.module(`../overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
+jest.mock(`../overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
 
 const { default: DevRebuild } = await import("./DevRebuild.vue");
 // The same module instance the card uses, so a test can put a run in flight without driving the confirm dialog first.
@@ -76,7 +75,7 @@ beforeEach(() => {
     // Nothing has rebuilt anything yet: the card's own probe on mount finds no log.
     runDeviceCommand.mockResolvedValue(log(`-`));
     localStorage.clear();
-    spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue({
+    jest.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue({
         top: 100,
         left: 100,
         width: 120,

@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { DEV_VERSION, isBehind, isNewer } from "./versions.js";
 
 test("isNewer compares dotted numeric versions", () => {

@@ -1,4 +1,3 @@
-import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { createPortForwards } from "./port-forwards.js";
 
 // The table is indifferent to what its slots are CALLED: production salts them with the connect token
@@ -18,7 +17,7 @@ const tick = (): void => {
     jest.setSystemTime(Date.now() + 1000);
 };
 
-const httpProbe = mock(async () => "http" as const);
+const httpProbe = jest.fn(async () => "http" as const);
 
 test("forwarding maps ports onto slots in order and is idempotent per port", async () => {
     const forwards = createPortForwards(SLOTS, httpProbe);

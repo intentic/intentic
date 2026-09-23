@@ -3,7 +3,6 @@
 import "@intentic/testing/dom";
 import { COMMAND_RULE_CATALOG } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { test, expect, afterEach } from "bun:test";
 import { type App, createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

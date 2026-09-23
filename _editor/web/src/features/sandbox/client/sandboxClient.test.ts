@@ -1,12 +1,11 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { it, expect, afterEach, mock, spyOn } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 
-mock.module("../session/sandboxSession", () => ({
+jest.mock("../session/sandboxSession", () => ({
     useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }),
 }));
 // The real useEndpoint runs on this mock: with no loopback resolved, daemonBase falls through to daemonUrl.
-mock.module("./useSandbox", () => ({
+jest.mock("./useSandbox", () => ({
     useSandbox: () => ({ active: { value: { token: `connect` } }, activeSandboxId: { value: `s1` }, daemonUrl: { value: `https://daemon.test` } }),
 }));
 
@@ -16,7 +15,7 @@ const { setDaemonRoutes } = await import("../overview/useDaemonRoutes");
 const { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } = await import("@intentic/sandbox-contract");
 
 // A daemon that accepts but never answers; settles only when the caller's signal aborts, like real fetch.
-const fetchMock = mock(
+const fetchMock = jest.fn(
     (request: Request) =>
         new Promise<Response>((_resolve, reject) => {
             request.signal.addEventListener(`abort`, () => reject(request.signal.reason as Error));
@@ -35,10 +34,10 @@ it("a caller-passed timeout signal reaches fetch and rejects the hung request", 
 // Spies on AbortSignal.timeout to shorten the real deadline at its source, exercising the production constant
 // rather than a reconstructed one.
 // Restubs fetch since afterEach clears global stubs; shortens the timeout at its source for each test.
-const hungDaemon = (): ReturnType<typeof spyOn> => {
+const hungDaemon = (): ReturnType<typeof jest.spyOn> => {
     stubGlobal(`fetch`, fetchMock);
     const real = AbortSignal.timeout.bind(AbortSignal);
-    return spyOn(AbortSignal, `timeout`).mockImplementation(() => real(5));
+    return jest.spyOn(AbortSignal, `timeout`).mockImplementation(() => real(5));
 };
 
 it("bounds a daemon call that never answers, with no signal from the caller at all", async () => {
@@ -63,10 +62,10 @@ it("exempts a call that streams a body up: its headers cannot arrive until the u
 
 // A daemon that answers its headers at once and its body well after the shortened deadline; like real fetch, an abort
 // of the request's signal errors a body still being read.
-const streamingDaemon = (): ReturnType<typeof spyOn> => {
+const streamingDaemon = (): ReturnType<typeof jest.spyOn> => {
     stubGlobal(
         `fetch`,
-        mock((request: Request) => {
+        jest.fn((request: Request) => {
             const body = new ReadableStream<Uint8Array>({
                 start(controller) {
                     request.signal.addEventListener(`abort`, () => controller.error(new DOMException(`BodyStreamBuffer was aborted`, `AbortError`)));
@@ -80,7 +79,7 @@ const streamingDaemon = (): ReturnType<typeof spyOn> => {
         }),
     );
     const real = AbortSignal.timeout.bind(AbortSignal);
-    return spyOn(AbortSignal, `timeout`).mockImplementation(() => real(5));
+    return jest.spyOn(AbortSignal, `timeout`).mockImplementation(() => real(5));
 };
 
 it("lets a stream run past the deadline once its headers are in: a device flow takes minutes", async () => {
@@ -116,7 +115,10 @@ it("passes an ordinary 400 through with the daemon's own words", async () => {
 
 // A path the contract does not declare has no route name, so no drift reading: its refusal is the daemon's own.
 it("stays silent about drift for a path outside the contract, like /health", async () => {
-    setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => !name.startsWith(`vpn.`)), { ...SANDBOX_ROUTE_SHAPES, "settings.get": `different` });
+    setDaemonRoutes(
+        SANDBOX_ROUTE_NAMES.filter((name) => !name.startsWith(`vpn.`)),
+        { ...SANDBOX_ROUTE_SHAPES, "settings.get": `different` },
+    );
     expect((await sandboxError(json(404, { message: `Not Found` }), { method: `GET`, path: `/health` })).message).toBe(`Not Found`);
     expect((await sandboxError(json(400, { error: `bad path` }), { method: `GET`, path: `/health` })).message).toBe(`bad path`);
 });

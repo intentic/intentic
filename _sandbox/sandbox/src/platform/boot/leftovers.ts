@@ -1,19 +1,13 @@
 import { readFileSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
-import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
+import type { ScannedProcess } from "../resources/process-scan.js";
 import { parseProcStat } from "../resources/proc-stat.js";
 
 // A leftover is a finished turn's process nobody still holds. Group membership (kernel-assigned, inherited,
 // unspoofable) decides which processes are this daemon's; an env stamp then says whose conversation they belong to.
 // Anything under a live tmux pane is exempt: its session retires it, not this sweep.
 
-// One process as the sweep sees it; `pgrp` decides ownership, `ppid` is only used to walk upward looking for a pane.
-export interface ScannedProcess {
-    readonly pid: number;
-    readonly ppid: number;
-    readonly pgrp: number;
-    readonly owner: string | undefined;
-}
+// `pgrp` decides ownership; `ppid` only walks upward looking for a pane.
+export type SweptProcess = Pick<ScannedProcess, "pid" | "ppid" | "pgrp" | "owner">;
 
 export interface Leftover {
     readonly pid: number;
@@ -51,7 +45,7 @@ const underPane = (pid: number, parents: ReadonlyMap<number, number>, panePids: 
 
 // Which of this daemon's processes nobody owns any more. Conditions are ordered so a process that is neither in-group
 // nor registry-known is skipped before its stamp is read.
-export const leftoverProcesses = (scanned: readonly ScannedProcess[], { group, ownerLive, ownerKnown, panePids }: LeftoverPolicy): Leftover[] => {
+export const leftoverProcesses = (scanned: readonly SweptProcess[], { group, ownerLive, ownerKnown, panePids }: LeftoverPolicy): Leftover[] => {
     const parents = new Map(scanned.map((entry) => [entry.pid, entry.ppid]));
     const leftovers: Leftover[] = [];
     for (const { pid, pgrp, owner } of scanned) {
@@ -63,37 +57,6 @@ export const leftoverProcesses = (scanned: readonly ScannedProcess[], { group, o
         }
     }
     return leftovers;
-};
-
-// Two procfs reads per process, so this runs on a minute-scale timer, not workload-priority's faster one. A pid
-// vanishing between readdir and either read is normal, not an error.
-const NUMERIC = /^\d+$/u;
-
-// Reads procfs's NUL-separated environ, fixed at exec, so a process cannot rewrite the stamp it was born with.
-export const ownerOf = (environ: string): string | undefined => {
-    for (const entry of environ.split("\0")) {
-        if (entry.startsWith(`${WORKLOAD_ENV}=`)) {
-            return entry.slice(WORKLOAD_ENV.length + 1);
-        }
-    }
-    return undefined;
-};
-
-const scanProcess = async (pid: number): Promise<ScannedProcess | undefined> => {
-    try {
-        const [stat, environ] = await Promise.all([readFile(`/proc/${pid}/stat`, "utf8"), readFile(`/proc/${pid}/environ`, "utf8")]);
-        const ids = parseProcStat(stat);
-        return ids === undefined ? undefined : { pid, ...ids, owner: ownerOf(environ) };
-    } catch {
-        return undefined;
-    }
-};
-
-export const scanProcesses = async (): Promise<ScannedProcess[]> => {
-    const entries = await readdir("/proc").catch(() => [] as string[]);
-    const pids = entries.filter((entry) => NUMERIC.test(entry)).map(Number);
-    const scanned = await Promise.all(pids.map((pid) => scanProcess(pid)));
-    return scanned.filter((entry): entry is ScannedProcess => entry !== undefined);
 };
 
 // SIGTERM first and SIGKILL only once already asked; `asked` remembers which pids already got the first signal.

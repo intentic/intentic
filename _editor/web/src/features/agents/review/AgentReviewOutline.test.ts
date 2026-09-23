@@ -2,7 +2,6 @@
 // columns on a desktop, the list alone on a phone (whose diff is a full-screen takeover only a pick can open), and one
 // announcement for the wait rather than one per bar.
 import "@intentic/testing/dom";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { uiLength } from "../../../shell/window/uiScale";
@@ -11,7 +10,7 @@ import * as actualUi from "@intentic/ui";
 // The only stand-in: the form factor, which the kit reads off matchMedia (desktop under jsdom) and this suite needs
 // both ways.
 const mobile = ref(false);
-mock.module("@intentic/ui", () => ({
+jest.mock("@intentic/ui", () => ({
     ...actualUi,
     useDevice: () => ({ mobile }),
 }));

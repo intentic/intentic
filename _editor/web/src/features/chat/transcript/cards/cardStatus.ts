@@ -1,5 +1,6 @@
 import type { CardStatus } from "./ChatCard.vue";
 import type {
+    RequestDocument,
     TranscriptBrowserHelp,
     TranscriptCapabilityOffer,
     TranscriptCredentialOffer,
@@ -10,6 +11,8 @@ import type {
     TranscriptTerminalHelp,
 } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
+import { present } from "../../tools/toolPresentation";
+import type { ChatMessage } from "../transcript";
 
 // How each decision card signals it is over, replacing per-card v-if chains in ChatMessageView. `undefined` means still
 // live. `done` means the thing happened, `gone` means it didn't: a denied permission and any cancelled card are `gone`,
@@ -109,7 +112,7 @@ export const credentialLane = (offer: TranscriptCredentialOffer["offer"]): strin
 export const capabilityStatus = (offer: TranscriptCapabilityOffer): CardStatus | undefined => {
     if (offer.outcome) {
         return offer.outcome.outcome === "connected"
-            ? { label: t(`chat.cardStatus.connected`), tone: "done" }
+            ? { label: t(`shared.connected`), tone: "done" }
             : { label: t(`chat.cardStatus.setupDidntFinish`), tone: "gone" };
     }
     switch (offer.status) {
@@ -121,3 +124,10 @@ export const capabilityStatus = (offer: TranscriptCapabilityOffer): CardStatus |
             return undefined;
     }
 };
+
+// Whether the row's own Write already draws a card's document, so the card opens it folded; a failed write never folds it.
+export const documentDrawn = (message: ChatMessage, document: RequestDocument | undefined): boolean =>
+    document !== undefined && (message.tools ?? []).some((tool) => present(tool).document?.path === document.path);
+
+// Whether a carried document's title differs enough from its card's to need its own name row.
+export const documentTitled = (cardTitle: string, carried: RequestDocument): boolean => carried.title.trim() !== cardTitle.trim();

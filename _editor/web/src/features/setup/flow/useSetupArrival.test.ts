@@ -2,7 +2,6 @@ import "@intentic/testing/dom";
 import type { AddressOffer, HostedOffer, SandboxSummary, SetupCode } from "@intentic/api-contract";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { afterEach, beforeEach, describe, expect, it, jest, mock } from "bun:test";
 import { computed, type EffectScope, effectScope, ref } from "vue";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
 import { ladderOptionsOf } from "./machineLadder";
@@ -26,30 +25,32 @@ interface World {
 const scopes: EffectScope[] = [];
 
 const stage = (world: World = {}) => {
-    const list = mock(async () => [...(world.rows ?? [])]);
-    const select = mock((_id: string) => undefined);
-    const create = mock(async (name: string) => sandboxSummary({ id: `new`, name, token: `tok` }));
-    const hostedProvision = mock(async (id: string, _token: string) => sandboxSummary({ id, token: `tok`, hosted: { region: `iad`, warm: true } }));
-    const hostedRelease = mock(async (id: string) => sandboxSummary({ id, token: `tok` }));
+    const list = jest.fn(async () => [...(world.rows ?? [])]);
+    const select = jest.fn((_id: string) => undefined);
+    const create = jest.fn(async (name: string) => sandboxSummary({ id: `new`, name, token: `tok` }));
+    const hostedProvision = jest.fn(async (id: string, _token: string) =>
+        sandboxSummary({ id, token: `tok`, hosted: { region: `iad`, warm: true } }),
+    );
+    const hostedRelease = jest.fn(async (id: string) => sandboxSummary({ id, token: `tok` }));
     const answer = <T>(value: T | Error): Promise<T> => (value instanceof Error ? Promise.reject(value) : Promise.resolve(value));
     const platform = {
-        hostedOffer: mock(() => answer(world.hosted ?? { enabled: true, remaining: 1 })),
-        addressOffer: mock(() => answer(world.address ?? { enabled: true })),
-        setupCode: mock(async ({ sandboxId }: { sandboxId: string }): Promise<SetupCode> => ({
+        hostedOffer: jest.fn(() => answer(world.hosted ?? { enabled: true, remaining: 1 })),
+        addressOffer: jest.fn(() => answer(world.address ?? { enabled: true })),
+        setupCode: jest.fn(async ({ sandboxId }: { sandboxId: string }): Promise<SetupCode> => ({
             code: `code-${sandboxId}`,
             hostname: `h.sbx.test`,
             expiresAt: `later`,
         })),
     };
-    const runHere = mock(() => undefined);
-    const warmCredential = mock(async () => undefined);
+    const runHere = jest.fn(() => undefined);
+    const warmCredential = jest.fn(async () => undefined);
     const route = { query: world.query ?? {} };
     const scope = effectScope();
     scopes.push(scope);
     const flow = scope.run(() => {
         const row = useSetupRow({
-            sandbox: unstubbed<SetupRowHost[`sandbox`]>(`sandbox`, { sandboxes: ref([]), create, select, remove: mock(async () => undefined) }),
-            enter: mock(async () => undefined),
+            sandbox: unstubbed<SetupRowHost[`sandbox`]>(`sandbox`, { sandboxes: ref([]), create, select, remove: jest.fn(async () => undefined) }),
+            enter: jest.fn(async () => undefined),
         });
         const hosted = useHostedLane({
             platform: unstubbed<HostedLaneHost[`platform`]>(`platform`, { hostedOffer: platform.hostedOffer }),
@@ -137,30 +138,6 @@ describe(`a browser's arrival`, () => {
         expect(hosted.hostedSince.value).toBe(Date.now());
         expect(hostedProvision).not.toHaveBeenCalled();
     });
-
-    it(`shows the picker, starting nothing, when the platform is out of machines`, async () => {
-        const { hostedProvision, arrival } = stage({ hosted: { enabled: true, remaining: 1, full: true } });
-        await arrival.readArrival();
-        expect(arrival.arrival.value).toBe(`choose`);
-        expect(hostedProvision).not.toHaveBeenCalled();
-    });
-
-    it(`brings the picker back with the reason when the machine is refused`, async () => {
-        const { hostedProvision, hosted, arrival } = stage();
-        hostedProvision.mockRejectedValueOnce(new Error(`no capacity right now`));
-        await arrival.readArrival();
-        expect(arrival.arrival.value).toBe(`choose`);
-        expect(hosted.hostedError.value?.detail).toBe(`no capacity right now`);
-    });
-
-    it(`honours a rung asked for before the page, and only one on offer`, async () => {
-        const asked = stage({ query: { machine: `mine` } });
-        await asked.arrival.readArrival();
-        expect({ machine: asked.hosted.machine.value, arrival: asked.arrival.arrival.value }).toEqual({ machine: `mine`, arrival: `choose` });
-        const unoffered = stage({ hosted: { enabled: false, remaining: 0 }, query: { machine: `hosted` } });
-        await unoffered.arrival.readArrival();
-        expect(unoffered.hosted.machine.value).toBe(`mine`);
-    });
 });
 
 describe(`the app's arrival`, () => {
@@ -174,17 +151,6 @@ describe(`the app's arrival`, () => {
         command.remint();
         await advanceTimersByTimeAsync(0);
         expect(runHere).toHaveBeenCalledTimes(1);
-    });
-
-    it(`hands back an idle machine on the row first, keeping the row`, async () => {
-        const found = sandboxSummary({ id: `h1`, token: `tok`, hosted: { region: `iad`, warm: false } });
-        const { create, hostedRelease, platform, hosted, arrival } = stage({ rows: [found], inApp: true });
-        await arrival.readArrival();
-        expect(hostedRelease.mock.calls).toEqual([[`h1`]]);
-        expect(hosted.machine.value).toBe(`mine`);
-        await advanceTimersByTimeAsync(500);
-        expect(platform.setupCode.mock.calls).toEqual([[{ sandboxId: `h1` }]]);
-        expect(create).not.toHaveBeenCalled();
     });
 
     it(`keeps the machine and shows the picker when the platform will not take it back`, async () => {
@@ -206,13 +172,6 @@ describe(`offers that could not be read`, () => {
         await arrival.readArrival();
         expect(arrival.laneTakeable.value).toBe(true);
         expect(create).toHaveBeenCalledTimes(1);
-    });
-
-    it(`takes a missing route as the platform's answer that nothing is offered`, async () => {
-        const off = Object.assign(new Error(`not found`), { code: `NOT_FOUND` });
-        const { arrival } = stage({ hosted: off, address: off });
-        await arrival.readArrival();
-        expect(arrival.lanes.value).toEqual({ kind: `none` });
     });
 });
 

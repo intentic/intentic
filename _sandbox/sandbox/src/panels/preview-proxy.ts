@@ -2,6 +2,7 @@ import http from "node:http";
 import https from "node:https";
 import { panelFromHost, portSlotFromHost, publicSlotFromHost, sandboxSubdomain } from "@intentic/sandbox-contract";
 import { escapeHtml } from "@intentic/base/format";
+import { relayUpgrade } from "@intentic/sandbox-contract/upgrade-relay";
 import type { PortTarget } from "../ports/port-forwards.js";
 import type { PublicHandler } from "../public/public-serve.js";
 import { interstitial, type Refusal } from "./interstitial.js";
@@ -116,7 +117,14 @@ const panelUpstream = async (req: http.IncomingMessage, deps: PreviewProxyDeps, 
     }
     if (upstream.state === "serving") {
         return upstream.assigned
-            ? { kind: "proxy", dial: "127.0.0.1", port: upstream.port, scheme: "http", headers: { ...req.headers, ...forwardedFrom(req) }, frameable: true }
+            ? {
+                  kind: "proxy",
+                  dial: "127.0.0.1",
+                  port: upstream.port,
+                  scheme: "http",
+                  headers: { ...req.headers, ...forwardedFrom(req) },
+                  frameable: true,
+              }
             : {
                   kind: "proxy",
                   dial: "127.0.0.1",
@@ -282,8 +290,7 @@ export const createPreviewProxy = (deps: PreviewProxyDeps): http.Server => {
         })().catch(() => res.destroy());
     });
 
-    // WebSocket upgrades: replay the handshake upstream, echo the 101, then pipe raw bytes; the outbox has nothing to
-    // upgrade to.
+    // The outbox and the probe have nothing to upgrade to.
     server.on("upgrade", (req, socket, head) => {
         socket.on("error", () => socket.destroy());
         void (async () => {
@@ -296,26 +303,7 @@ export const createPreviewProxy = (deps: PreviewProxyDeps): http.Server => {
                 socket.end(`HTTP/1.1 404 Not Found\r\n\r\n`);
                 return;
             }
-            const proxyReq = dialUpstream(resolved, req);
-            proxyReq.on("error", () => socket.destroy());
-            proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
-                const headerLines: string[] = [];
-                for (let i = 0; i < proxyRes.rawHeaders.length; i += 2) {
-                    headerLines.push(`${proxyRes.rawHeaders[i]}: ${proxyRes.rawHeaders[i + 1]}`);
-                }
-                socket.write(`HTTP/1.1 101 Switching Protocols\r\n${headerLines.join("\r\n")}\r\n\r\n`);
-                if (proxyHead.length > 0) {
-                    socket.write(proxyHead);
-                }
-                if (head.length > 0) {
-                    proxySocket.write(head);
-                }
-                proxySocket.on("error", () => socket.destroy());
-                socket.on("error", () => proxySocket.destroy());
-                proxySocket.pipe(socket);
-                socket.pipe(proxySocket);
-            });
-            proxyReq.end();
+            relayUpgrade(dialUpstream(resolved, req), socket, head);
         })().catch(() => socket.destroy());
     });
 

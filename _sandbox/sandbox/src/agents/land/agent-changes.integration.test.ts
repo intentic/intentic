@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, afterEach } from "bun:test";
 import { discardPaths } from "../../git/changes/changes-index.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { createLogger } from "../../logger.js";
@@ -171,7 +170,12 @@ test("a branch git cannot read hides nothing: every row stays, and none of them 
     const entry = isolatedAgent(landed.repos);
 
     // An unreadable branch must answer as though it never looked: nothing landed, nothing absorbed.
-    const present = await presentInMain(worktrees, { ...entry, placement: { ...entry.placement, branch: "agent/does-not-exist" } }, entry.placement.repos[0]!, ["app.ts"]);
+    const present = await presentInMain(
+        worktrees,
+        { ...entry, placement: { ...entry.placement, branch: "agent/does-not-exist" } },
+        entry.placement.repos[0]!,
+        ["app.ts"],
+    );
     expect([...present.absorbed]).toEqual([]);
     expect([...present.inWorkspace]).toEqual([]);
 });

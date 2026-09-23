@@ -1,7 +1,6 @@
 // Pins what a reviewer of a changed table reads: one grid per sheet, the changed cell drawn as both values, a dropped
 // row struck through, and the count of rows that moved handed to the host.
 import "@intentic/testing/dom";
-import { describe, it, expect, afterEach } from "bun:test";
 import { type App, createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import type { Sheet } from "./tableDiff";

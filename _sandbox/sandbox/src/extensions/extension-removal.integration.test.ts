@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
-import { test, expect } from "bun:test";
 
 import { createApp } from "../app.js";
 import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";

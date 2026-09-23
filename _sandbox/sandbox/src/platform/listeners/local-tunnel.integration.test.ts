@@ -5,7 +5,6 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Logger } from "pino";
-import { it, expect, afterAll } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { startPlatformTunnel } from "./local-tunnel.js";
 

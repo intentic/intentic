@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { type RoleAnswer, readRoleAnswer, sentenceAnswer, sentenceReason, UnusableAnswerError } from "./role-answer.js";
 
 // Pins what counts as an answer across every role-answer helper. UnusableAnswerError means step over this reply; an

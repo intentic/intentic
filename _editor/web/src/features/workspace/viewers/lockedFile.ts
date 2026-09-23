@@ -20,33 +20,33 @@ const locked = (): Record<string, LockedFile> => ({
     "config/capabilities.json": {
         subject: `capabilities.json`,
         holds: `the list of accounts, computers and services this sandbox may reach, which the agent acts through`,
-        manage: { label: t(`workspace.lockedFile.capabilities`), to: `/capabilities` },
+        manage: { label: t(`shared.capabilities`), to: `/capabilities` },
     },
     "identity/owner.json": {
         subject: `owner.json`,
         holds: `who this sandbox belongs to`,
-        manage: { label: t(`workspace.lockedFile.access`), to: `/sandbox/access` },
+        manage: { label: t(`shared.access`), to: `/sandbox/access` },
     },
     "identity/members.json": {
         subject: `members.json`,
         holds: `who you've invited to this sandbox`,
-        manage: { label: t(`workspace.lockedFile.access`), to: `/sandbox/access` },
+        manage: { label: t(`shared.access`), to: `/sandbox/access` },
     },
     "identity/control-tokens.json": {
         subject: `control-tokens.json`,
         holds: `the tokens that let this sandbox be driven from outside it`,
-        manage: { label: t(`workspace.lockedFile.access`), to: `/sandbox/access` },
+        manage: { label: t(`shared.access`), to: `/sandbox/access` },
     },
     "identity/passkeys.json": {
         subject: `passkeys.json`,
         holds: `the passkeys that open this sandbox, whether one is required, and the fingerprints of your recovery codes`,
-        manage: { label: t(`workspace.lockedFile.access`), to: `/sandbox/access` },
+        manage: { label: t(`shared.access`), to: `/sandbox/access` },
     },
     "secrets/ci.json": { subject: `ci.json`, holds: `the secret your builds use to reach this sandbox` },
     "secrets/doors.json": {
         subject: `doors.json`,
         holds: `the tokens behind your webhooks, release gates and bug intakes`,
-        manage: { label: t(`workspace.lockedFile.access`), to: `/sandbox/access` },
+        manage: { label: t(`shared.access`), to: `/sandbox/access` },
     },
     // Provider CLI's own home, at the state dir's root: written by the agent's runtime, not a daemon store.
     "claude.json": {
@@ -62,12 +62,12 @@ const locked = (): Record<string, LockedFile> => ({
     "records/sessions": {
         subject: `${STATE_DIR}/records/sessions`,
         holds: `your agents' conversations, in the form their provider keeps them`,
-        manage: { label: t(`workspace.lockedFile.agents`), to: `/agents` },
+        manage: { label: t(`shared.agents`), to: `/agents` },
     },
     "local/browser": {
         subject: `${STATE_DIR}/local/browser`,
         holds: `the browser profiles your agent is signed in on`,
-        manage: { label: t(`workspace.lockedFile.browsers`), to: `/browsers` },
+        manage: { label: t(`shared.browsers`), to: `/browsers` },
     },
     ".git": { subject: `.git`, holds: `this workspace's own history, kept where nothing running here can rewrite it` },
 });

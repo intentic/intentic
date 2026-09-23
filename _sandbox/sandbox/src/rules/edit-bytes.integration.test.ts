@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, test } from "bun:test";
 import { editBytesReviewer } from "./edit-bytes.js";
 
 // A real file and a real repository: the scan reads bytes off disk and asks git whether the file is ignored.

@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { readinessDiagnostics } from "./ssh-diagnostics.js";
 import type { SshExecutor, SshResult, SshSession, SshTarget } from "./ssh.js";
 

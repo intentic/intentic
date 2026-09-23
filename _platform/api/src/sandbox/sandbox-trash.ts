@@ -1,10 +1,11 @@
-import type { PrismaClient } from "@intentic/prisma";
+import { hostedTier } from "@intentic/constants";
+import type { HostedMachine, PrismaClient, SandboxTrash } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
 import { RECOVERY_WINDOW_MS } from "../durations.js";
 import { isFlyGone, stopMachine, updateMachine } from "./hosted/fly/fly.js";
 import { hostedMachineConfig, withHostedSlot, type HostedProvisionArgs } from "./hosted/hosted.js";
-import { shapeOfRow, tierOfRow } from "./hosted/hosted-shape.js";
+import { shapeOfRow } from "./hosted/hosted-shape.js";
 import { dropHostedMachine } from "./hosted/hosted-usage.js";
 import { lockHostedSandbox } from "./hosted/hosted-cleanup.js";
 import { mintSandbox } from "./mint-sandbox.js";
@@ -12,57 +13,40 @@ import { mintSandbox } from "./mint-sandbox.js";
 /* THE OWNER HAS NO SANDBOX IN THE TRASH BY THAT ID. */
 export class TrashedSandboxGone extends Error {}
 
-/* What has to be written down for a restore to land on the same disk, as the same machine. */
-interface TrashedMachine {
-    readonly appName: string;
-    readonly machineId: string;
-    readonly volumeId: string;
-    readonly region: string;
-    readonly tier: string;
-    readonly cpuKind: string;
-    readonly cpus: number;
-    readonly memoryMb: number;
-    readonly volumeGb: number;
-    readonly image: string | null;
-    readonly baseImage: string | null;
-    readonly environmentHash: string | null;
-}
+// Everything a restore needs to land on the same disk as the same machine; `flyImage` since the sandbox's `image` is its logo.
+const machineSnapshot = (machine: HostedMachine) => ({
+    appName: machine.appName,
+    machineId: machine.machineId,
+    volumeId: machine.volumeId,
+    region: machine.region,
+    flyImage: machine.image,
+    baseImage: machine.baseImage,
+    environmentHash: machine.environmentHash,
+    tier: machine.tier,
+    cpuKind: machine.cpuKind,
+    cpus: machine.cpus,
+    memoryMb: machine.memoryMb,
+    volumeGb: machine.volumeGb,
+});
 
-/* An own-machine sandbox names no provider resources; the columns exist for the hosted lane alone. */
-const NO_MACHINE = {
-    appName: null,
-    machineId: null,
-    volumeId: null,
-    region: null,
-    flyImage: null,
-    baseImage: null,
-    environmentHash: null,
-    tier: null,
-    cpuKind: null,
-    cpus: null,
-    memoryMb: null,
-    volumeGb: null,
+// The trash writes every provider column together, so a hosted row missing one is corruption, not an own-machine sandbox.
+const trashedMachine = (row: SandboxTrash) => {
+    const { appName, machineId, volumeId, region, tier, cpuKind, cpus, memoryMb, volumeGb } = row;
+    if (
+        appName === null ||
+        machineId === null ||
+        volumeId === null ||
+        region === null ||
+        tier === null ||
+        cpuKind === null ||
+        cpus === null ||
+        memoryMb === null ||
+        volumeGb === null
+    ) {
+        throw new Error(`trash row ${row.id} names a machine it did not record whole`);
+    }
+    return { appName, machineId, volumeId, region, tier: hostedTier(tier).id, shape: shapeOfRow({ cpuKind, cpus, memoryMb, volumeGb }) };
 };
-
-const providerSnapshot = (hosted: TrashedMachine | null) =>
-    hosted === null
-        ? NO_MACHINE
-        : {
-              appName: hosted.appName,
-              machineId: hosted.machineId,
-              volumeId: hosted.volumeId,
-              region: hosted.region,
-              // `flyImage`, not `image`: the sandbox's own `image` column is the switcher's logo.
-              flyImage: hosted.image,
-              baseImage: hosted.baseImage,
-              environmentHash: hosted.environmentHash,
-              // The machine as it stood, so a restore rebuilds that rather than whatever a new one would be.
-              tier: hosted.tier,
-              cpuKind: hosted.cpuKind,
-              cpus: hosted.cpus,
-              memoryMb: hosted.memoryMb,
-              volumeGb: hosted.volumeGb,
-          };
 
 // Stopping is best-effort by design: a machine Fly no longer has is not an error, since the disk is what this
 // protects and a machine that is already gone has nothing left to bill.
@@ -90,7 +74,7 @@ export const trashSandbox = async (prisma: PrismaClient, config: Config, logger:
                 ownerId: sandbox.ownerId,
                 name: sandbox.name,
                 image: sandbox.image,
-                ...providerSnapshot(hosted),
+                ...(hosted === null ? {} : machineSnapshot(hosted)),
                 purgeAfter: new Date(Date.now() + RECOVERY_WINDOW_MS),
             },
         });
@@ -140,39 +124,47 @@ export const restoreSandbox = async (prisma: PrismaClient, config: Config, owner
     if (row.image !== null) {
         await prisma.sandbox.update({ where: { id: sandbox.id }, data: { image: row.image } });
     }
-    if (row.appName === null || row.machineId === null || row.volumeId === null || row.region === null) {
+    if (row.appName === null) {
         await prisma.sandboxTrash.delete({ where: { id: trashId } });
         return { sandbox: { ...sandbox, image: row.image } };
     }
 
     const owner = await prisma.user.findUniqueOrThrow({ where: { id: ownerId }, select: { email: true } });
-    const tier = tierOfRow(row.tier ?? ``);
-    // The machine as it was: the volume being reattached has a size of its own, and putting a new machine's shape
-    // on it would lie about the disk.
-    const shape = shapeOfRow(config, tier, row);
-    const args: HostedProvisionArgs = { sandboxId: sandbox.id, connectToken: token, ownerEmail: owner.email, region: row.region, tier };
+    // The machine as it was: the volume being reattached has a size of its own, and a new machine's shape would lie about it.
+    const { shape, ...machine } = trashedMachine(row);
+    const args: HostedProvisionArgs = {
+        sandboxId: sandbox.id,
+        connectToken: token,
+        ownerEmail: owner.email,
+        region: machine.region,
+        tier: machine.tier,
+    };
     // Under the owner's slot count like any other machine row: a week in the trash is not a way past the plan.
-    const hosted = await withHostedSlot(prisma, config, args, row.appName, (tx) =>
+    const hosted = await withHostedSlot(prisma, config, args, machine.appName, (tx) =>
         tx.hostedMachine.create({
             data: {
                 sandboxId: sandbox.id,
-                appName: row.appName as string,
-                machineId: row.machineId as string,
-                volumeId: row.volumeId as string,
-                region: row.region as string,
+                ...machine,
                 image: row.flyImage,
                 baseImage: row.baseImage,
                 environmentHash: row.environmentHash,
-                tier,
                 ...shape,
             },
         }),
     );
     await updateMachine(
         config.hosted.flyApiToken,
-        row.appName,
-        row.machineId,
-        hostedMachineConfig(config, args, row.appName, row.volumeId, { image: row.flyImage, environmentHash: row.environmentHash }, undefined, shape),
+        machine.appName,
+        machine.machineId,
+        hostedMachineConfig(
+            config,
+            args,
+            machine.appName,
+            machine.volumeId,
+            { image: row.flyImage, environmentHash: row.environmentHash },
+            undefined,
+            shape,
+        ),
     );
     await prisma.sandboxTrash.delete({ where: { id: trashId } });
     return { sandbox: { ...sandbox, hosted, image: row.image } };

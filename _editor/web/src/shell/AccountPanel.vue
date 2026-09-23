@@ -140,7 +140,7 @@ onUnmounted(() => {
                 @click="dismiss"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="cog" class="text-base text-muted" /></span>
-                {{ t(`shell.accountPanel.settings`) }}
+                {{ t(`shared.settings`) }}
             </RouterLink>
             <button
                 type="button"
@@ -148,7 +148,7 @@ onUnmounted(() => {
                 v-action="logout"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-base text-muted" /></span>
-                {{ t(`shell.accountPanel.signOut`) }}
+                {{ t(`shared.signOut`) }}
             </button>
         </div>
     </AnchoredOverlay>

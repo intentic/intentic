@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { restampBacking } from "./backing-ssh.js";
 import type { SshResult, SshSession } from "./ssh.js";
 

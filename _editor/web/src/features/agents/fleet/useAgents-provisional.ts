@@ -1,13 +1,14 @@
 import { sandboxShallowRef } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { otherBoxes } from "../../sandbox/live/fleetAcross";
+import type { PendingAction } from "../board/laneDrop";
 import { awaitingUser, NO_ATTENTION, turnInFlight } from "./agentStatus";
 import type { FleetAgent } from "./useAgents-fleet";
 import { registry } from "./useAgents-registry";
 
-// What a press in this browser says a card is, drawn from the press until the daemon's own word on the card moves past
-// what it said then (the web README's "A board press lands in the frame it was made in"). Between the registry, which a
-// claim is measured against, and the fleet merge, which draws it; nothing here writes the roster.
+// What this browser's presses draw over a card before the daemon says so, one store keyed per card: a standing a press
+// claims, fields a write sends, and the board action still out. Drawn by `overlaid` where the fleet is merged; nothing
+// here writes the roster except an answered write, which carries the daemon's own entry.
 
 // What the board can have a card doing before the daemon says so.
 export type ClaimKind = `turn` | `stop` | `land` | `discard`;
@@ -18,13 +19,12 @@ interface Baseline {
     readonly updatedAt: number;
 }
 
-interface Claim {
-    readonly kind: ClaimKind;
-    // The press, on this browser's clock; a turn's elapsed readout counts from it until the roster's own start lands.
-    readonly at: number;
-    readonly baseline: Baseline;
-    // Identity of the press, so a settle or timer only ever retires its own claim and never a later press's.
-    readonly token: object;
+// One press's layer; its identity is the press, so a settle or timer only ever lifts its own.
+interface Layer {
+    // Drawn while the daemon's entry still reads `baseline`; `at` is the press on this browser's clock.
+    readonly claim?: { readonly kind: ClaimKind; readonly at: number; readonly baseline: Baseline };
+    readonly patch?: Partial<AgentSummary>;
+    readonly action?: PendingAction;
 }
 
 // After a press the daemon took: past a frame's usual delay many times over, short enough that a lost one is short.
@@ -32,12 +32,49 @@ export const GRACE_MS = 15_000;
 // No claim outlives this: every press but a land answers inside the 45s request deadline, and a land yields at once.
 export const CEILING_MS = 120_000;
 
-// Keyed by (sandbox, id) as JSON, like the board's in-flight map: agent ids are minted per daemon, so the same id can
-// be two cards from two boxes.
+// (sandbox, id) as JSON: agent ids are minted per daemon, so the same id can be two cards from two boxes.
 const keyOf = (id: string, at: string | undefined): string => JSON.stringify([at ?? null, id]);
 
 // Sandbox-scoped: a switch re-points the unqualified ids they are keyed by at another daemon's agents.
-const claims = sandboxShallowRef<ReadonlyMap<string, Claim>>(() => new Map());
+const layers = sandboxShallowRef<ReadonlyMap<string, readonly Layer[]>>(() => new Map());
+
+const claimOn = (key: string): Layer | undefined => layers.value.get(key)?.find((layer) => layer.claim !== undefined);
+
+// Lays `layer` over the card, a claim replacing any earlier one; the returned lift takes off exactly this layer.
+export const hold = (id: string, at: string | undefined, layer: Layer): (() => void) => {
+    const key = keyOf(id, at);
+    const kept = (layers.value.get(key) ?? []).filter((held) => layer.claim === undefined || held.claim === undefined);
+    layers.value = new Map(layers.value).set(key, [...kept, layer]);
+    return () => {
+        const held = layers.value.get(key);
+        if (held?.includes(layer) !== true) {
+            return;
+        }
+        const rest = held.filter((other) => other !== layer);
+        const next = new Map(layers.value);
+        if (rest.length === 0) {
+            next.delete(key);
+        } else {
+            next.set(key, rest);
+        }
+        layers.value = next;
+    };
+};
+
+// The board action out on this card, which withholds a second press until it answers.
+export const pendingOn = (id: string, at?: string): PendingAction | undefined =>
+    layers.value.get(keyOf(id, at))?.find((layer) => layer.action !== undefined)?.action;
+
+// Draws `patch` over the card until the write answers; the answer is the daemon's entry and replaces the roster's.
+export const optimistic = async (id: string, patch: Partial<AgentSummary>, write: () => Promise<AgentSummary>): Promise<void> => {
+    const lift = hold(id, undefined, { patch });
+    try {
+        const summary = await write();
+        registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
+    } finally {
+        lift();
+    }
+};
 
 // The daemon's own entry for a card, never the drawn one: a claim is measured against what the daemon said.
 const rosterEntry = (id: string, at: string | undefined): AgentSummary | undefined =>
@@ -47,15 +84,6 @@ const rosterEntry = (id: string, at: string | undefined): AgentSummary | undefin
 
 const moved = (entry: AgentSummary | undefined, baseline: Baseline): boolean =>
     entry === undefined || entry.status !== baseline.status || entry.updatedAt !== baseline.updatedAt;
-
-const release = (key: string, token: object): void => {
-    if (claims.value.get(key)?.token !== token) {
-        return;
-    }
-    const next = new Map(claims.value);
-    next.delete(key);
-    claims.value = next;
-};
 
 // One press's hold on its card.
 export interface Press {
@@ -74,30 +102,29 @@ export const claim = (id: string, at: string | undefined, kind: ClaimKind): Pres
     if (entry === undefined) {
         return UNCLAIMED;
     }
-    const key = keyOf(id, at);
-    const token = {};
-    claims.value = new Map(claims.value).set(key, { kind, at: Date.now(), baseline: { status: entry.status, updatedAt: entry.updatedAt }, token });
-    const ceiling = setTimeout(() => release(key, token), CEILING_MS);
+    const layer: Layer = { claim: { kind, at: Date.now(), baseline: { status: entry.status, updatedAt: entry.updatedAt } } };
+    const lift = hold(id, at, layer);
+    const ceiling = setTimeout(lift, CEILING_MS);
     let settled = false;
     const settle = (taken: boolean): void => {
         if (settled) {
             return;
         }
         settled = true;
-        if (!taken) {
+        const release = (): void => {
             clearTimeout(ceiling);
-            release(key, token);
-            return;
+            lift();
+        };
+        if (taken) {
+            setTimeout(release, GRACE_MS);
+        } else {
+            release();
         }
-        setTimeout(() => {
-            clearTimeout(ceiling);
-            release(key, token);
-        }, GRACE_MS);
     };
-    // Released by its own timers is still standing; only another press's token in its place means it was replaced.
+    // Lifted by its own timers is still standing; only another press's claim in its place means it was replaced.
     const stands = (): boolean => {
-        const current = claims.value.get(key);
-        return current === undefined || current.token === token;
+        const current = claimOn(keyOf(id, at));
+        return current === undefined || current === layer;
     };
     return { settle, stands };
 };
@@ -144,8 +171,8 @@ export const asStarted = <T extends FleetAgent>(card: T, startedAt: number): T =
 // A Stop the daemon hasn't reported yet: `stopping`, which a chosen ending outranks every park with (liveStatus).
 const asStopping = <T extends FleetAgent>(card: T): T => ({ ...card, status: `stopping`, unread: false });
 
-// A land between turns: the lease reads `landing`, and the conflict and failure a settled status carried go with the
-// status they were derived from; `unfinished` survives, since only a running turn hides it.
+// A land between turns: the conflict and failure a settled status carried go with it; only a running turn hides
+// `unfinished`, so it stays.
 const asLanding = <T extends FleetAgent>(card: T): T => ({
     ...card,
     status: `landing`,
@@ -165,23 +192,24 @@ const STOPPABLE: ReadonlySet<FleetAgent[`status`]> = new Set([`running`, `awaiti
 
 // Each claim only over a standing its press is made from, so it never draws a state the daemon could not reach: no
 // `landing` over a live turn (a turn's own land reads `running`), no `stopping` over a turn that already ended.
-const drawn = <T extends FleetAgent>(card: T, held: Claim): T | undefined => {
-    if (held.kind === `stop`) {
+const drawn = <T extends FleetAgent>(card: T, kind: ClaimKind, at: number): T | undefined => {
+    if (kind === `stop`) {
         return STOPPABLE.has(card.status) ? asStopping(card) : card;
     }
     if (turnInFlight(card) || awaitingUser(card)) {
         return card;
     }
-    return held.kind === `turn` ? asStarted(card, held.at) : held.kind === `land` ? asLanding(card) : undefined;
+    return kind === `turn` ? asStarted(card, at) : kind === `land` ? asLanding(card) : undefined;
 };
 
-// The card as its standing claim draws it, or as built once the daemon's `entry` for it has moved past the claim;
+// The card under its layers: every write's fields, then the standing claim until the daemon's `entry` moves past it;
 // undefined is a card a discard has taken off the board ahead of the roster.
-export const claimedCard = <T extends FleetAgent>(card: T, entry: AgentSummary, at: string | undefined): T | undefined => {
-    const held = claims.value.get(keyOf(entry.id, at));
-    if (held === undefined || moved(entry, held.baseline)) {
+export const overlaid = <T extends FleetAgent>(card: T, entry: AgentSummary, at: string | undefined): T | undefined => {
+    const held = layers.value.get(keyOf(entry.id, at));
+    if (held === undefined) {
         return card;
     }
-    return drawn(card, held);
+    const patched: T = Object.assign({}, card, ...held.map((layer) => layer.patch));
+    const standing = held.find((layer) => layer.claim !== undefined)?.claim;
+    return standing === undefined || moved(entry, standing.baseline) ? patched : drawn(patched, standing.kind, standing.at);
 };
-

@@ -1,4 +1,3 @@
-import { test, expect, mock, jest } from "bun:test";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { dialPeer, LONG_OUTAGE_ATTEMPTS, LONG_OUTAGE_MS, PEER_TRY_AGAIN, type SocketLike } from "./peer-dial.js";
 
@@ -64,7 +63,7 @@ const dialling = (delay?: number) => {
     const sockets: FakeSocket[] = [];
     const attached: FakeSocket[] = [];
     const said: string[] = [];
-    const revoked = mock();
+    const revoked = jest.fn();
     const link = dialPeer<FakeSocket>({
         open: async () => {
             const socket = new FakeSocket();

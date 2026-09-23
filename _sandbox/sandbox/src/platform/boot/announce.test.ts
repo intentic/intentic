@@ -1,11 +1,10 @@
 import { EventEmitter } from "node:events";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 // Each register attempt's outcome comes off a queue: `{ status }` acks with that code, `{ err: true }` simulates a
 // transport failure.
 const outcomes: Array<{ status?: number; err?: boolean }> = [];
-const requestMock = mock((_url: URL, _opts: unknown, cb: (res: { statusCode: number; resume: () => void }) => void) => {
+const requestMock = jest.fn((_url: URL, _opts: unknown, cb: (res: { statusCode: number; resume: () => void }) => void) => {
     const req = new EventEmitter() as EventEmitter & { end: () => void };
     req.end = () => {
         const outcome = outcomes.shift() ?? { status: 200 };
@@ -17,7 +16,7 @@ const requestMock = mock((_url: URL, _opts: unknown, cb: (res: { statusCode: num
     };
     return req;
 });
-mock.module("node:https", () => ({ request: (...args: unknown[]) => requestMock(...(args as Parameters<typeof requestMock>)) }));
+jest.mock("node:https", () => ({ request: (...args: unknown[]) => requestMock(...(args as Parameters<typeof requestMock>)) }));
 
 const { createAnnouncer } = await import("./announce.js");
 
@@ -26,7 +25,7 @@ const config = {
     sandbox: { publicUrl: "https://sandbox-x.intentic.dev" },
     connectToken: "tok",
 } as unknown as Parameters<typeof createAnnouncer>[0];
-const logger = { info: mock(), warn: mock() } as unknown as Parameters<typeof createAnnouncer>[1];
+const logger = { info: jest.fn(), warn: jest.fn() } as unknown as Parameters<typeof createAnnouncer>[1];
 
 beforeEach(() => {
     jest.useFakeTimers();

@@ -1,7 +1,6 @@
 import type { RawNode } from "@intentic/graph";
 
 import { compile, env, httpOk, linearize, subgraph } from "@intentic/graph";
-import { test, expect } from "bun:test";
 import { defineStack, type Stack } from "./index.js";
 
 // The authored inventory the stack tests wire their apps to (on: host, expose: cf).

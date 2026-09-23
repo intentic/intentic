@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { createIgnoreScope, IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath, scannerPruneGlobs } from "./index.js";
 
 test("the browser-login profile subtree (auth cookies) is treated as ignored, but the rest of .intentic isn't", () => {

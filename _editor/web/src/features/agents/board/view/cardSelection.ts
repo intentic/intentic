@@ -1,6 +1,7 @@
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, onScopeDispose, ref, type Ref, watch } from "vue";
 import type { LocationQuery, Router } from "vue-router";
+import { clickIntent, rangeSelect } from "../../../../lib/multiSelect";
 import { uuid } from "../../../../lib/uuid";
 import { agentTabOf } from "../../../chat/panel/useChat-reveal";
 import { showingRunGraph } from "../../../chat/run/chatRun";
@@ -22,21 +23,24 @@ export type PaneKeys = Pick<MouseEvent, `shiftKey` | `altKey` | `ctrlKey` | `met
 // The chat rail's gestures (ChatTabList.onRowClick): Shift a range, Alt a column beside (only ever adding), Ctrl/Cmd a
 // column toggled among several; Alt rather than bare Ctrl, which is macOS's secondary click on a card that also drags.
 export const paneAsk = (keys: PaneKeys, shown: boolean, several: boolean): `range` | `beside` | `unpane` | undefined => {
-    if (keys.shiftKey) {
+    const intent = clickIntent(keys);
+    if (intent === `range`) {
         return `range`;
     }
-    if (!keys.altKey && !keys.ctrlKey && !keys.metaKey) {
-        return undefined;
+    if (intent === `toggle` && !keys.altKey && shown && several) {
+        return `unpane`;
     }
-    return (keys.ctrlKey || keys.metaKey) && !keys.altKey && shown && several ? `unpane` : `beside`;
+    return intent === `toggle` || keys.altKey ? `beside` : undefined;
 };
 
-// The cards a Shift+click range covers, from the anchor to the card pressed in the order they are drawn; the card alone
-// when the anchor is not among them.
+// The cards a Shift+click range covers in the order they are drawn (rangeSelect), matched by id.
 export const paneRange = (order: readonly FleetAgent[], anchor: string | undefined, agent: FleetAgent): FleetAgent[] => {
-    const from = order.findIndex((card) => card.id === anchor);
-    const to = order.findIndex((card) => card.id === agent.id);
-    return from === -1 ? [agent] : order.slice(Math.min(from, to), Math.max(from, to) + 1);
+    const ids = rangeSelect(
+        order.map((card) => card.id),
+        anchor,
+        agent.id,
+    );
+    return ids === undefined ? [agent] : order.filter((card) => ids.includes(card.id));
 };
 
 export interface RingHost {

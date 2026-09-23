@@ -1,5 +1,4 @@
 import { OpusEncoder } from "mediaplex";
-import { test, expect } from "bun:test";
 import { to16kMonoPcm } from "./audio.js";
 
 // Pins the Opus decoder contract voice.ts assumes: `new OpusEncoder(48000, 2)` and `decode(packet)` returning 48kHz

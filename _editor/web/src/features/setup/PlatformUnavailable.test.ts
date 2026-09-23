@@ -1,22 +1,21 @@
 // The outage screen. A reader who lands here has done nothing wrong and can do nothing useful, so the screen has to
 // let go of them by itself the moment the platform answers — pressing the button is an offer, not the only way out.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
 
-const replace = mock();
-mock.module(`vue-router`, () => ({
+const replace = jest.fn();
+jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRouter: () => ({ replace }) as never,
     useRoute: () => ({ query: { returnTo: `/workspace` } }) as never,
 }));
 
 // The shared rule has its own suite (router/platformRetry.test.ts); here it only stands for "the platform answered".
-const platformRetry = mock<() => Promise<string | undefined>>();
-mock.module(`../../router/platformRetry`, () => ({ platformRetry: () => platformRetry() }));
+const platformRetry = jest.fn<() => Promise<string | undefined>>();
+jest.mock(`../../router/platformRetry`, () => ({ platformRetry: () => platformRetry() }));
 
 const { default: PlatformUnavailable } = await import(`./PlatformUnavailable.vue`);
 

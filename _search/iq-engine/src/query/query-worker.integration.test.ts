@@ -1,4 +1,3 @@
-import { test, expect, afterAll } from "bun:test";
 import { createResidentEngine, type ResidentEngine } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";

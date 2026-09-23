@@ -46,7 +46,7 @@ const rowClass = (row: DiffRow): string => {
             :type="openable ? 'button' : undefined"
             class="chat-inset-rule flex w-full items-center gap-1.5 px-2.5 py-1.5 text-2xs text-muted transition-colors"
             :class="openable && 'hover:bg-overlay hover:text-content'"
-            v-tooltip.top="openable ? t(`chat.chatToolDiff.openInWorkspace`) : undefined"
+            v-tooltip.top="openable ? t(`shared.openInWorkspace2`) : undefined"
             @click="openable && emit('open')"
         >
             <Icon name="file-edit" class="text-2xs text-subtle" />

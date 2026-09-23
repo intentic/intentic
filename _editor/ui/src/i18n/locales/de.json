@@ -47,7 +47,6 @@
         "emerald": "Smaragd",
         "fern": "Farn",
         "graphite": "Graphit",
-        "iris": "Iris",
         "lagoon": "Lagune",
         "moss": "Moos",
         "orchid": "Orchidee",
@@ -64,14 +63,11 @@
         "agentAliveStoppedMaking": "Sein Agent lebt, dreht aber keine Runden mehr — das Bild, das diese Sandbox von seinen Ordnern und Ports hat, ist so alt wie die letzte Runde.",
         "commands": "Befehle",
         "folders": "Ordner",
-        "ports": "Ports",
         "processKeepsBuildStarted": "Eine Schleife behält den Build, mit dem sie gestartet ist, bis sie neu startet — die Datei auf der Platte zu ersetzen ändert für sich genommen nichts.",
         "restartAgent": "Agent neu starten",
         "stopsStartsDevicesAgent": "Stoppt und startet die Agent-Schleife dieses Geräts. Es wird nichts heruntergeladen — es kommt der Build hoch, der dort schon installiert ist."
     },
     "deviceAgentGroup": {
-        "agent": "Agent",
-        "agent2": "Agent {version}",
         "agentOnThisDevice": "Agent auf diesem Gerät"
     },
     "deviceDetail": {
@@ -79,14 +75,11 @@
         "copyPath": "Pfad kopieren",
         "deviceIsntSyncingFolder": "Dieses Gerät synchronisiert keinen Ordner und hält keine Ports für diese Sandbox.",
         "folder": "Ordner",
-        "image": "Image",
-        "localhost": "localhost:",
         "more": "… und {more} weitere",
         "noFolderDeviceOnly": "kein Ordner: dieses Gerät spiegelt nur Ports",
         "noFolderSynced": "kein Ordner synchronisiert",
         "notRunningHere": "läuft hier nicht",
         "offDeviceIsntPutting": "Aus: Dieses Gerät legt die Ports dieser Sandbox nicht auf seinem eigenen localhost ab. Die Dateisynchronisierung bleibt davon unberührt.",
-        "ports": "Ports",
         "share": "Anteil",
         "show": "anzeigen",
         "stopped": "gestoppt",
@@ -148,8 +141,7 @@
         "hidden": "· {hidden} ausgeblendet"
     },
     "repoRail": {
-        "allRepositories": "Alle Repositorys",
-        "repository": "Repository"
+        "allRepositories": "Alle Repositorys"
     },
     "sandboxDeviceDetail": {
         "devicesAgentDoesntReport": "Der Agent dieses Geräts meldet nicht, welche Pfade das sind. Nach einem Update stehen sie hier."
@@ -161,13 +153,10 @@
         "askedComputerNoNvidia": "Angefordert, aber dieser Computer hat keine NVIDIA-Container-Laufzeit — die Sandbox läuft ohne sie.",
         "cores": "Kerne",
         "cpuCapInCores": "CPU-Grenze in Kernen",
-        "cpus": "CPUs",
         "cpusWhole": "Ganze CPUs, {bounds} auf diesem Computer. Leer heißt ohne Grenze: jeder Kern, den er hat.",
         "default": "Standard",
         "defaultIs": "Standard: {value}",
         "fullAccessToComputers": "Voller Zugriff auf die Geräte und den Kernel dieses Computers, so wie eine verschachtelte Docker-Engine ihn braucht. Nur für Werkzeuge, die ohne ihn nicht laufen.",
-        "gib": "GiB",
-        "gpu": "GPU",
         "memory": "Arbeitsspeicher",
         "memoryCapInGib": "Speichergrenze in GiB",
         "memoryWhole": "Ganze GiB, mindestens {min}. Leer ist der Standard: alles, was dieser Computer über das hinaus hat, was er für sich behält.",
@@ -189,7 +178,6 @@
         "moreActions": "Weitere Aktionen"
     },
     "searchBar": {
-        "aa": "Aa",
         "clearEsc": "Leeren (Esc)",
         "clearFilter": "Filter leeren",
         "filter": "Filtern…",
@@ -200,9 +188,5 @@
     },
     "timeWindow": {
         "all": "Alle"
-    },
-    "useOsPreference": {
-        "linuxMacos": "Linux / macOS",
-        "windowsPowershell": "Windows (PowerShell)"
     }
 }

@@ -1,12 +1,11 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, afterEach, mock } from "bun:test";
 
 // Models the deployed tree, where prepare-image-trees.sh prunes this dependency; the packed fixture below is a file-URL
 // import and stays visible. Re-declared per case: a factory that throws is honoured once per registration.
 const prunedFromTheImage = (): void => {
-    mock.module("@cursor/sdk", () => {
+    jest.mock("@cursor/sdk", () => {
         throw new Error("pruned from the published image");
     });
 };
@@ -45,7 +44,7 @@ test("an explicit connect installs the pack's pinned version into the engine sto
     const { activateVersion } = await import("../../engines/engine-store.js");
 
     // Install is faked, activation is real: proves this asks for the pinned version, loads the store's answer.
-    const install = mock(async (id: "cursor", version: string) => {
+    const install = jest.fn(async (id: "cursor", version: string) => {
         expect(id).toBe("cursor");
         expect(version).toMatch(/^\d+\.\d+\.\d+$/);
         writeSdk(store, version);
@@ -73,7 +72,7 @@ test("a failed bootstrap can be retried", async () => {
         }),
     ).rejects.toThrow("registry unavailable");
 
-    const install = mock(async (_id: "cursor", version: string) => {
+    const install = jest.fn(async (_id: "cursor", version: string) => {
         writeSdk(store, version);
         await activateVersion("cursor", version);
         forgetCursorSdk();

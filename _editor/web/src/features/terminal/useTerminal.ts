@@ -3,7 +3,7 @@ import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
 import { activeSandboxId } from "../sandbox/overview/activeSandbox";
 import { showWorkTerminals } from "./useWorkTerminals";
 import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "./terminalsQuery";
-import { pruneTerminalMeta } from "./terminalMeta";
+import { isWork, KINDS, pruneTerminalMeta } from "./terminalMeta";
 import {
     createTerminalSession,
     disposeTerminalSession,
@@ -38,9 +38,6 @@ export interface TerminalTab {
     readonly command?: string;
 }
 
-// Work surfaces (agent/job), as opposed to places the user keeps; drives hiddenFromStrip and retireFinished.
-const isWork = (tab: TerminalTab): boolean => tab.kind === `agent` || tab.kind === `job`;
-
 export interface TerminalTabsSource {
     readonly list: () => Promise<TerminalTab[]>;
     readonly create?: () => string;
@@ -50,7 +47,7 @@ export interface TerminalTabsSource {
 
 // A process tab is a read-only log view: stdin off. The container sizes the PTY at birth, even hidden.
 const createPane = (tab: TerminalTab, onExit: (name: string) => void, spawnWithin: HTMLElement | undefined): TerminalSession =>
-    createTerminalSession(tab.name, onExit, tab.kind === `process`, spawnWithin);
+    createTerminalSession(tab.name, onExit, KINDS[tab.kind].logs, spawnWithin);
 
 // Shared session cache, one xterm+socket per name; disposed only when a session deliberately ends, or with the
 // sandbox: a switch drops every cached socket. Sessions themselves keep running; reattaching replays their history.
@@ -176,7 +173,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // Kinds listed by the daemon that don't tab on their own: unopened processes, and (unless revealed or the
     // preference is on) agent/job sessions.
     const hiddenFromStrip = (tab: TerminalTab): boolean => {
-        if (tab.kind === `process`) {
+        if (KINDS[tab.kind].logs) {
             return !viewedProcesses.has(tab.name);
         }
         return isWork(tab) && !showWorkTerminals.value && !revealed.has(tab.name);
@@ -275,7 +272,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
         answered = ticket;
         pruneTerminalMeta(new Set(listed.map((tab) => tab.name)));
-        processes.value = listed.filter((tab) => tab.kind === `process`);
+        processes.value = listed.filter((tab) => KINDS[tab.kind].logs);
         // Before the filter, so a session that just finished loses its reveal in time for this same list.
         retireFinished(listed);
         const tabs = listed.filter((tab) => !hiddenFromStrip(tab));

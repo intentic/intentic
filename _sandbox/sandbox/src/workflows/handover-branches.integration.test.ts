@@ -3,7 +3,6 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect } from "bun:test";
 import { resolvedBranches } from "./handover-branches.js";
 
 // Same three decisions against real git, not stubs: `for-each-ref` prints nothing (not an error) for no match, and

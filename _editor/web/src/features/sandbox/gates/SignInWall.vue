@@ -156,10 +156,10 @@ const backToSetup = async (): Promise<void> => {
                                 v-model="label"
                                 type="text"
                                 autocomplete="off"
-                                :placeholder="t(`sandbox.signInWall.nameEGWork`)"
+                                :placeholder="t(`shared.nameEGWork`)"
                                 :class="ui.inputSm(`w-full`)"
                             />
-                            <Button type="submit" :label="t(`sandbox.signInWall.addPasskey`)" class="w-full justify-center" :loading="busy">
+                            <Button type="submit" :label="t(`shared.addPasskey`)" class="w-full justify-center" :loading="busy">
                                 <template #icon><Icon name="key" /></template>
                             </Button>
                         </form>
@@ -203,7 +203,7 @@ const backToSetup = async (): Promise<void> => {
                     <!-- Google's own button does nothing when clicked here, so the desktop app hands off to the real browser instead. -->
                     <Button
                         v-if="desktop"
-                        :label="t(`sandbox.signInWall.continueGoogleInBrowser`)"
+                        :label="t(`shared.continueGoogleInBrowser`)"
                         severity="secondary"
                         class="mt-2 w-full justify-center"
                         @click="signInOutside"
@@ -213,7 +213,7 @@ const backToSetup = async (): Promise<void> => {
                     <!-- `color-scheme: light` matches Google's button iframe so the browser paints no opaque canvas behind it. -->
                     <div v-else ref="btn" class="mt-2 flex justify-center" style="color-scheme: light"></div>
                     <template v-if="passkeyOffered">
-                        <span class="text-2xs uppercase tracking-wide text-subtle">{{ t(`sandbox.signInWall.or`) }}</span>
+                        <span class="text-2xs uppercase tracking-wide text-subtle">{{ t(`shared.or`) }}</span>
                         <Button
                             :label="t(`sandbox.signInWall.usePasskey2`)"
                             severity="secondary"

@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { MemberRole } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect } from "bun:test";
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
 import { clientFor, errorCode, proven, rejectForbidden } from "../harness/route-client.testing.js";

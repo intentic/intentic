@@ -1,8 +1,6 @@
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { sandboxRef } from "@intentic/extension-api";
-import { test, expect, beforeEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import type { ProcedureOutput } from "../features/sandbox/client/sandboxRpc";
 import { fakeSandboxRpc } from "../testing/sandboxRpcFake";
 
@@ -13,7 +11,7 @@ import { fakeSandboxRpc } from "../testing/sandboxRpcFake";
 // mid-pass; a pass that carried on would interleave two sandboxes' extensions instead of replacing one with the other.
 // Timing-dependent by nature, hence pinned here.
 
-const state = hoisted(() => ({
+const state = {
     activated: [] as string[],
     deactivatedAll: 0,
     // The compiled-in modules the loader finds. Populated per test, so an extension activates without the blob import a
@@ -23,9 +21,9 @@ const state = hoisted(() => ({
     list: (): Promise<ProcedureOutput<`extensions.list`>> => Promise.resolve({ extensions: [], invalid: [], pending: [] }),
     // What runActivate awaits before it registers: the seam the overtaking test squeezes into.
     settingsLoad: (): Promise<void> => Promise.resolve(),
-}));
+};
 
-mock.module(`./apiImpl`, () => ({
+jest.mock(`./apiImpl`, () => ({
     createExtensionApi: (summary: { id: string }) => {
         state.activated.push(summary.id);
         return { api: {}, context: { extensionId: summary.id, subscriptions: [] } };
@@ -33,12 +31,12 @@ mock.module(`./apiImpl`, () => ({
     deactivateExtension: () => {},
     deactivateAllExtensions: () => void (state.deactivatedAll += 1),
 }));
-mock.module(`./builtins`, () => ({ builtinModules: state.builtins }));
-mock.module(`../features/extensions/useExtensionSettings`, () => ({
+jest.mock(`./builtins`, () => ({ builtinModules: state.builtins }));
+jest.mock(`../features/extensions/useExtensionSettings`, () => ({
     extensionSettingsStore: () => ({ load: () => state.settingsLoad() }),
 }));
-mock.module(`../features/sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ extensions: { list: () => state.list() } }) }));
-mock.module(`../features/sandbox/client/sandboxClient`, () => ({
+jest.mock(`../features/sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ extensions: { list: () => state.list() } }) }));
+jest.mock(`../features/sandbox/client/sandboxClient`, () => ({
     sandboxRequest: () => Promise.resolve(new Response(``)),
     sandboxError: (response: Response) => new Error(String(response.status)),
 }));

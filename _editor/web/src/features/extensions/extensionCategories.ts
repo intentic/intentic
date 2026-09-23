@@ -15,7 +15,7 @@ export interface ExtensionSection {
 
 const categories = (): readonly { readonly id: string; readonly label: string; readonly caption?: string }[] => [
     { id: `work`, label: t(`extensions.extensionCategories.workDelivery`) },
-    { id: `workspace`, label: t(`extensions.extensionCategories.workspace`) },
+    { id: `workspace`, label: t(`shared.workspace`) },
     { id: `connections`, label: t(`extensions.extensionCategories.connections`) },
     { id: `knowledge`, label: t(`extensions.extensionCategories.knowledge`) },
     { id: `sandbox`, label: t(`extensions.extensionCategories.sandbox`) },
@@ -24,7 +24,7 @@ const categories = (): readonly { readonly id: string; readonly label: string; r
 // Declared nothing, or a category this build doesn't know; a real section, not a silent drop.
 const other = (): { readonly id: string; readonly label: string; readonly caption?: string } => ({
     id: `other`,
-    label: t(`extensions.extensionCategories.other`),
+    label: t(`shared.other`),
 });
 
 /** Tab's sections in render order, holding their rows; empty sections are omitted so a filter doesn't leave a bare heading. */

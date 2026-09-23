@@ -1,6 +1,5 @@
 // jsdom: the wish list pulls in query builders that touch browser globals at import.
 import "@intentic/testing/dom";
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { ref } from "vue";
 
 // The workspace review is invalidated wholesale whenever a turn ends (useChanges); reading ahead is
@@ -10,8 +9,8 @@ const route = ref<{ name: string }>({ name: `workspace` });
 const sidebarPanel = ref(`changes`);
 const sidebarCollapsed = ref(false);
 
-mock.module(`../../../router`, () => ({ router: { currentRoute: route } }));
-mock.module(`../../../shell/window/useLayout`, () => ({ useLayout: () => ({ sidebarPanel, sidebarCollapsed }) }));
+jest.mock(`../../../router`, () => ({ router: { currentRoute: route } }));
+jest.mock(`../../../shell/window/useLayout`, () => ({ useLayout: () => ({ sidebarPanel, sidebarCollapsed }) }));
 
 const { queryClient } = await import(`../../../lib/queryPersistence`);
 const { changesKey } = await import(`../../../features/workspace/changes/useChanges`);

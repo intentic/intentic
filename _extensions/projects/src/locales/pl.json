@@ -9,7 +9,6 @@
         "cancel": "Anuluj",
         "create": "Utwórz",
         "everyProjectRepositoryIn": "Każdy projekt to repozytorium w tej przestrzeni roboczej. Otwórz jeden, a pliki, agenty i sprawdzenia zawężą się do niego.",
-        "folder": "Folder: {slug}",
         "freshRepositoryReadyAgent": "Świeże repozytorium, gotowe dla agenta.",
         "name": "Nazwa",
         "newProject": "Nowy projekt",

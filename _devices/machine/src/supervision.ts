@@ -1,5 +1,5 @@
 import { rm } from "node:fs/promises";
-import { setTimeout as sleep } from "node:timers/promises";
+import { pollUntil } from "@intentic/base/async";
 import {
     type AutostartKind,
     autostart,
@@ -37,24 +37,19 @@ const START_REASK_MS = 2_000;
 // The agent exits within this on SIGTERM; one wedged in a fetch is waited out no longer.
 const STOP_TIMEOUT_MS = 5_000;
 
-const waitForResident = async (timeoutMs: number, reask?: () => Promise<unknown>): Promise<PidRecord | undefined> => {
-    const deadline = Date.now() + timeoutMs;
+const waitForResident = async (reask?: () => Promise<unknown>): Promise<PidRecord | undefined> => {
+    let held: PidRecord | undefined;
     let askedAt = Date.now();
-    while (Date.now() < deadline) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded poll, serial by definition
-        const held = await readResident();
-        if (held !== undefined) {
-            return held;
-        }
-        if (reask !== undefined && Date.now() - askedAt >= START_REASK_MS) {
+    const came = async (): Promise<boolean> => {
+        held = await readResident();
+        if (held === undefined && reask !== undefined && Date.now() - askedAt >= START_REASK_MS) {
             askedAt = Date.now();
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
             await reask();
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-        await sleep(START_POLL_MS);
-    }
-    return undefined;
+        return held !== undefined;
+    };
+    await pollUntil(came, { intervalMs: START_POLL_MS, timeoutMs: START_TIMEOUT_MS });
+    return held;
 };
 
 // Signalled AND gone; the stamps go with it only while no replacement has claimed the pidfile in the meantime.
@@ -79,7 +74,7 @@ const startThroughWindows = async (log: Log): Promise<boolean> => {
     if (!(await attachToWindows(log))) {
         return false;
     }
-    const held = await waitForResident(START_TIMEOUT_MS);
+    const held = await waitForResident();
     if (held === undefined) {
         log("note: the Windows side took this distro over but its agent did not come up here in time; starting it directly.");
         return false;
@@ -100,7 +95,7 @@ export const startResident = async (log: Log): Promise<void> => {
     const entry = machineAutostart(log);
     const kind = await entry.register();
     if (await entry.start()) {
-        const held = await waitForResident(START_TIMEOUT_MS, async () => await entry.start());
+        const held = await waitForResident(async () => await entry.start());
         if (held !== undefined) {
             started(log, held, `started by its ${kind} entry`);
             return;

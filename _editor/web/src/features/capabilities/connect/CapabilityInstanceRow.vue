@@ -65,7 +65,7 @@ const primary = computed<{ label: string; icon: IconName; run: () => void } | un
             : { label: t(`capabilities.capabilityInstanceRow.logIn`), icon: `sign-in`, run: () => emit(`login`) };
     }
     if (agentSignIn.value) {
-        return { label: t(`capabilities.capabilityInstanceRow.signIn`), icon: `sign-in`, run: () => emit(`agentLogin`) };
+        return { label: t(`shared.signIn`), icon: `sign-in`, run: () => emit(`agentLogin`) };
     }
     return undefined;
 });
@@ -83,13 +83,13 @@ const items = computed<MenuItem[]>(() => {
     // Revoke cuts the machine off without removing the capability (name and permissions stay, Connect re-pairs);
     // removing does both.
     if (pairs.value && paired.value) {
-        kindActions.push({ label: t(`capabilities.capabilityInstanceRow.revokeAccess`), icon: `sign-out`, command: () => emit(`revoke`) });
+        kindActions.push({ label: t(`shared.revokeAccess`), icon: `sign-out`, command: () => emit(`revoke`) });
     }
     return [
         ...kindActions,
         ...(kindActions.length > 0 ? [{ separator: true }] : []),
-        { label: t(`capabilities.capabilityInstanceRow.settings`), icon: `cog`, command: () => emit(`edit`) },
-        { label: t(`capabilities.capabilityInstanceRow.rename`), icon: `pencil`, command: () => emit(`rename`) },
+        { label: t(`shared.settings2`), icon: `cog`, command: () => emit(`edit`) },
+        { label: t(`shared.rename`), icon: `pencil`, command: () => emit(`rename`) },
         ...(removable.value ? [{ label: t(`ui.action.remove`), icon: `trash`, danger: true, command: () => emit(`remove`) }] : []),
     ];
 });
@@ -115,7 +115,7 @@ const items = computed<MenuItem[]>(() => {
                 <RouterLink v-if="needsRebuild" to="/sandbox/environment" class="block text-warning hover:underline">
                     {{
                         t(`capabilities.capabilityInstanceRow.finishSetup`, {
-                            detail: instance.status.detail ?? t(`capabilities.capabilityInstanceRow.needsSandboxRebuild`),
+                            detail: instance.status.detail ?? t(`shared.needsSandboxRebuild`),
                         })
                     }}
                 </RouterLink>
@@ -125,12 +125,7 @@ const items = computed<MenuItem[]>(() => {
                     <Button v-if="primary" :label="primary.label" size="small" :text="true" @click="primary.run()">
                         <template #icon><Icon :name="primary.icon" /></template>
                     </Button>
-                    <button
-                        type="button"
-                        :class="ui.iconButton()"
-                        :aria-label="t(`capabilities.capabilityInstanceRow.moreActions`)"
-                        @click="menu?.show($event)"
-                    >
+                    <button type="button" :class="ui.iconButton()" :aria-label="t(`shared.moreActions`)" @click="menu?.show($event)">
                         <Icon name="ellipsis" />
                     </button>
                     <ContextMenu ref="menu" :model="items" :min-width="11" />

@@ -4,7 +4,6 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, afterEach, spyOn, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createLogger } from "../logger.js";
 import { workspacePaths } from "../workspace/workspace.js";
@@ -304,7 +303,7 @@ test("integration: heal rewrites an accidentally deleted pointer; deletions reap
 
     // Grace window elapses; only Date.now is mocked, git still runs for real.
     const realNow = Date.now();
-    spyOn(Date, "now").mockReturnValue(realNow + 120_000);
+    jest.spyOn(Date, "now").mockReturnValue(realNow + 120_000);
     try {
         await history.snapshot("interval");
     } finally {

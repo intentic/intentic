@@ -64,6 +64,12 @@ const turnAccess = (facts: AdmittedTurnFacts, base: TurnBase, persona: TurnPerso
     };
 };
 
+// Composed by planning but not read off the facts: the teaching for a shell-only spawn door, and the sandbox's brief.
+export interface PlannedNotes {
+    readonly spawn: string | undefined;
+    readonly fieldNotes: string | undefined;
+}
+
 // What the turn is told about its tree and what the workspace holds, in the order it reads them.
 const workspaceNotes = (
     facts: AdmittedTurnFacts,
@@ -79,8 +85,8 @@ const workspaceNotes = (
             : []),
         ...(send.map && facts.mapNote !== undefined ? [{ title: WORKSPACE_MAP_NOTE_TITLE, text: facts.mapNote }] : []),
         // After the map, which draws the tree, and before the skills: what the tree holds is the next question it raises.
-        ...[context.contextNote].filter((note) => note !== undefined),
-        ...(context.skillCatalogNote === undefined ? [] : [{ title: SKILL_CATALOG_NOTE_TITLE, text: context.skillCatalogNote }]),
+        ...[facts.contextNote].filter((note) => note !== undefined),
+        ...(facts.skillCatalogNote === undefined ? [] : [{ title: SKILL_CATALOG_NOTE_TITLE, text: facts.skillCatalogNote }]),
         // Only where the runtime has no readiness tools and hooks, which would otherwise repeat these facts every turn.
         ...(setupNotice !== undefined && capabilities.mcp !== "full" ? [{ title: setupNoticeTitle(setupNotice), text: setupNotice }] : []),
     ];
@@ -88,21 +94,21 @@ const workspaceNotes = (
 
 // What the turn is taught, what it cannot reach and why, and which checks its end will run.
 const turnNotes = (
-    context: TurnContext,
+    facts: AdmittedTurnFacts,
+    premise: TurnPremise,
     settings: SandboxSettings,
-    persona: TurnPersona,
-    turnEnding: boolean,
+    spawn: string | undefined,
     withheld: readonly CredentialGate[],
-    installed: AdmittedTurnFacts["installed"],
+    turnEnding: boolean,
 ): TurnNote[] => [
-    ...(context.iqSearchNote === undefined ? [] : [{ title: IQ_SEARCH_INSTRUCTION_TITLE, text: context.iqSearchNote }]),
+    ...(premise.send.iqTeaching && facts.iqTeaching !== undefined ? [{ title: IQ_SEARCH_INSTRUCTION_TITLE, text: facts.iqTeaching.note }] : []),
     // Last of the standing notes and nearest the message, since it answers this message rather than the workspace.
-    ...(context.turnContextNote === undefined ? [] : [{ title: TURN_CONTEXT_NOTE_TITLE, text: context.turnContextNote }]),
-    ...(context.spawnNote === undefined ? [] : [{ title: SPAWN_NOTE_TITLE, text: context.spawnNote }]),
+    ...(facts.turnContext !== undefined && "note" in facts.turnContext ? [{ title: TURN_CONTEXT_NOTE_TITLE, text: facts.turnContext.note }] : []),
+    ...(spawn === undefined ? [] : [{ title: SPAWN_NOTE_TITLE, text: spawn }]),
     // On every turn missing something, not once per conversation: the condition changes the moment someone clicks.
     ...[gatedCredentialsNote(withheld)].filter((note) => note !== undefined),
     // The other reason an account can be missing: nobody is at the composer, so the turn acts as no one.
-    ...[unattendedAccountsNote(persona, personaWithheldAccounts(installed, persona))].filter((note) => note !== undefined),
+    ...[unattendedAccountsNote(premise.persona, personaWithheldAccounts(facts.installed, premise.persona))].filter((note) => note !== undefined),
     ...(turnEnding ? [turnEndingNote(settings.rules)].filter((note) => note !== undefined) : []),
 ];
 
@@ -143,6 +149,7 @@ export const honoured = (
     prompt: TurnPrompt,
     // Mounts the gate filter already took from the manifest; the environment's own withholding is built here.
     withheldMounts: readonly CredentialGate[],
+    planned: PlannedNotes,
 ): TurnBase => {
     const { persona, send } = premise;
     const { base } = context;
@@ -159,7 +166,7 @@ export const honoured = (
         stableSystemPrompt: settings.stableSystemPrompt,
         ...opt("personaNote", personaNote(persona)),
         ...opt("memoryNote", facts.memoryNote),
-        ...opt("fieldNotesNote", context.fieldNotesNote),
+        ...opt("fieldNotesNote", planned.fieldNotes),
         // What the window will not pay for: this product's guidance, and on the smallest windows the base prompt too.
         ...opt("trim", promptTrim(context.contextTrim)),
         guidance: premise.guidance,
@@ -176,12 +183,12 @@ export const honoured = (
                 ...workspaceNotes(facts, context, capabilities, send, isolated),
                 // The Claude Code loop runs the checks at its own Stop; the daemon runs them for the rest on an isolated turn only.
                 ...turnNotes(
-                    context,
+                    facts,
+                    premise,
                     settings,
-                    persona,
-                    send.turnEnding && (capabilities.runtime === "claude-code" || isolated),
+                    planned.spawn,
                     access.withheld,
-                    facts.installed,
+                    send.turnEnding && (capabilities.runtime === "claude-code" || isolated),
                 ),
             ]),
             systemPromptMode: prompt.mode,

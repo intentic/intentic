@@ -1,5 +1,4 @@
 import type { Rule } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { memoryFleet } from "../../testing.js";
 import { checkRunOf, landingOutcome } from "./turn-checks.js";
 
@@ -43,7 +42,12 @@ test(`only a command rule records anything`, () => {
 });
 
 test(`a run names its command only when its rule is one`, () => {
-    expect(checkRunOf(CHECK, { status: "error", output: "" })).toStrictEqual({ ruleId: "pre-land", label: "Verify before you finish", command: "pnpm verify", status: "error" });
+    expect(checkRunOf(CHECK, { status: "error", output: "" })).toStrictEqual({
+        ruleId: "pre-land",
+        label: "Verify before you finish",
+        command: "pnpm verify",
+        status: "error",
+    });
     expect(checkRunOf({ ...CHECK, action: { kind: "builtin", name: "verify-ui-edits" } }, { status: "failed", output: "" })).toStrictEqual({
         ruleId: "pre-land",
         label: "Verify before you finish",

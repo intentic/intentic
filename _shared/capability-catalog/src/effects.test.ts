@@ -1,5 +1,4 @@
 import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-manifest";
-import { describe, it, expect } from "bun:test";
 import { capabilityEffects } from "./effects.js";
 import { CapabilityKindSchema } from "@intentic/sandbox-contract";
 

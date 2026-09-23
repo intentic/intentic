@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, afterEach } from "bun:test";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { createLogger } from "../../logger.js";
 import { createPerfTracker } from "../../platform/resources/perf.js";
@@ -56,7 +55,8 @@ const sync = (worktrees: AgentWorktrees, landedTip?: string): ReturnType<typeof 
     syncConversation(worktrees, "c1", [{ repo: "root", landedTip }], "fix the thing");
 
 // The registry row a real land reads, so tests produce `landedTip` the way a turn does, not a hand-picked sha.
-const entryOf = (base: string, landedTip?: string): IsolatedAgent => isolatedAgent([{ repo: "root", base, ...(landedTip === undefined ? {} : { landedTip }) }]);
+const entryOf = (base: string, landedTip?: string): IsolatedAgent =>
+    isolatedAgent([{ repo: "root", base, ...(landedTip === undefined ? {} : { landedTip }) }]);
 
 // One turn's work, committed on the branch the way land's own provenance commit does.
 const turn = async (worktree: string, write: () => Promise<void>): Promise<void> => {

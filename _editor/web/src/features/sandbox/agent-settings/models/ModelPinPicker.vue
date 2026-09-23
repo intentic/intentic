@@ -31,7 +31,7 @@ const { open, anchor, header, pin, knobs, taken } = defineProps<{
     <ResponsiveOverlay
         :model-value="open"
         :anchor="anchor"
-        :header="header ?? (pin === undefined ? t(`sandbox.modelPinPicker.addModel`) : t(`sandbox.modelPinPicker.model`))"
+        :header="header ?? (pin === undefined ? t(`sandbox.modelPinPicker.addModel`) : t(`shared.model`))"
         panel-class="w-[26rem]"
         side="bottom"
         @update:model-value="emit(`update:open`, $event)"

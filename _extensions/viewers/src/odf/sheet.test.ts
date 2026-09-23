@@ -1,5 +1,4 @@
 import { strToU8, zipSync } from "fflate";
-import { describe, it, expect } from "bun:test";
 import { isOdfSpreadsheet, odfMimetype, readOdsBook } from "./sheet";
 import { contentXml, odfBytes, SHEET_MIME, TEXT_MIME } from "./testing";
 import { toRows } from "../sheetCells";

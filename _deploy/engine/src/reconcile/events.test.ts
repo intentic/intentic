@@ -1,5 +1,4 @@
 import { compile, toNodeMap } from "@intentic/graph";
-import { test, expect } from "bun:test";
 import type { Provider, Providers } from "../provider.js";
 import { createFakeProviders, type FakeWorld } from "../providers/fake.js";
 import type { EngineEvent } from "../types.js";

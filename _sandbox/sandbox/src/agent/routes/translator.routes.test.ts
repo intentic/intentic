@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp } from "../../app.js";
 import { clientFor, postJson } from "../../harness/route-client.testing.js";

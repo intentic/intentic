@@ -1,7 +1,6 @@
 // An add that ends pending has not finished; the remaining step (a one-liner, a login, a rebuild) is named on the
 // entry just filled in. These pin what stays on screen for each of the three.
 import "@intentic/testing/dom";
-import { it, expect, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
@@ -13,15 +12,15 @@ import * as actualVueRouter from "vue-router";
 
 // Which entry the page is on, read once at setup since the page is URL-driven and nothing here navigates.
 let entry = `linux`;
-const push = mock();
-mock.module(`vue-router`, () => ({
+const push = jest.fn();
+jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRoute: () => ({ params: { entry }, query: {} }) as never,
-    useRouter: () => ({ push, replace: mock() }) as never,
+    useRouter: () => ({ push, replace: jest.fn() }) as never,
 }));
 
 // Both entrys are contributed, not static; a device's permission switches come from the catalog, not the manifest.
-mock.module(`../extensions/useExtensions`, () => ({
+jest.mock(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
         extensions: ref([]),
@@ -65,49 +64,46 @@ mock.module(`../extensions/useExtensions`, () => ({
 // then reads.
 const capabilities = ref<CapabilitySummary[]>([]);
 let applied: CapabilityStatus = { state: `pending` };
-const add = mock<(input: AddCapabilityInput) => Promise<void>>(async (input) => {
+const add = jest.fn<(input: AddCapabilityInput) => Promise<void>>(async (input) => {
     capabilities.value = [
         ...capabilities.value,
         { id: input.id, kind: entry === `linux` ? `device` : `browser`, status: applied, config: input.config, secrets: [] },
     ];
 });
-mock.module(`./connect/useCapabilities`, () => ({
+jest.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities,
         error: ref(undefined),
         add: (input: AddCapabilityInput) => add(input),
-        remove: { mutateAsync: mock(), isPending: ref(false) },
-        rename: { mutateAsync: mock(), isPending: ref(false) },
-        refetch: mock(),
-        dismissRecommendation: { mutateAsync: mock(), isPending: ref(false) },
+        remove: { mutateAsync: jest.fn(), isPending: ref(false) },
+        rename: { mutateAsync: jest.fn(), isPending: ref(false) },
+        refetch: jest.fn(),
+        dismissRecommendation: { mutateAsync: jest.fn(), isPending: ref(false) },
     }),
-    browseMarketplace: mock(),
+    browseMarketplace: jest.fn(),
     // The connect forms read these at link time though no case here opens one; a mock missing a name anything in
     // the graph imports is refused.
-    readRemoteRefs: mock(async () => ({ refs: [] })),
-    probeCapability: mock(),
+    readRemoteRefs: jest.fn(async () => ({ refs: [] })),
+    probeCapability: jest.fn(),
 }));
 // Extension entry's signpost reads the registry cache; nothing here has browsed it.
-mock.module(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-mock.module(`../terminal/useBackgroundProcesses`, () => ({
-    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: mock(), stop: mock() }),
-    viewProcessLogs: mock(),
+jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
+jest.mock(`../terminal/useBackgroundProcesses`, () => ({
+    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
+    viewProcessLogs: jest.fn(),
 }));
 // No machine has checked in, matching a just-added device.
-mock.module(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: mock(), refresh: mock(), start: mock(), stop: mock() }),
+jest.mock(`../composables/sandbox/useHostConnect`, () => ({
+    useHostConnect: () => ({ hostFor: () => undefined, revoke: jest.fn(), refresh: jest.fn(), start: jest.fn(), stop: jest.fn() }),
 }));
-// VpnConnections dials as well as lists, so `error` must be present or the render throws.
-mock.module(`../sandbox/devices/useVpn`, () => ({
-    importForticlient: mock(),
-    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: mock(), disconnect: mock() }),
-}));
-mock.module(`../sandbox/devices/useNetdisk`, () => ({
-    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: mock(), unmount: mock() }),
+// LiveLinkRows opens as well as lists, so `error` must be present or the render throws.
+jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
+    importForticlient: jest.fn(),
+    useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));
 // The two dialogs mint real credentials against a daemon; the stubs render only what's open and on what.
-mock.module(`./connect/HostConnectDialog.vue`, () => ({
+jest.mock(`./connect/HostConnectDialog.vue`, () => ({
     default: defineComponent({
         props: { visible: Boolean, id: String, platform: String, permissions: String },
         render() {
@@ -115,7 +111,7 @@ mock.module(`./connect/HostConnectDialog.vue`, () => ({
         },
     }),
 }));
-mock.module(`./connect/BrowserProfileDialog.vue`, () => ({
+jest.mock(`./connect/BrowserProfileDialog.vue`, () => ({
     default: defineComponent({
         props: { visible: Boolean, capability: String, label: String, mode: String },
         render() {

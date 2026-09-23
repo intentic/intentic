@@ -3,7 +3,7 @@
     "compilerOptions": {
         "rootDir": "../..",
         "tsBuildInfoFile": "./.cache/tsbuildinfo",
-        "types": ["bun", "vite/client"],
+        "types": ["bun", "@intentic/testing/globals", "vite/client"],
         "paths": {
             "@intentic/web/*": ["../../_editor/web/src/*"],
             "@intentic/ui/src/*": ["../../_editor/ui/src/*"],

@@ -689,8 +689,7 @@ export const SandboxSummarySchema = z.object({
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 
-/* How long a deleted sandbox stays recoverable. Shared so the platform's sweep and the sentence the browser shows
- * before a delete cannot disagree — a promise made in one place and kept in another. */
+// Days a deleted sandbox stays recoverable, platform and machine alike; `ic` (trash.rs) compiles in this integer literal.
 export const SANDBOX_RECOVERY_DAYS = 7;
 
 /* A sandbox the owner deleted, for as long as the delete can still be taken back. Carries no address, token or

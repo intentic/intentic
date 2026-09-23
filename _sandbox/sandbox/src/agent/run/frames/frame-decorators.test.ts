@@ -1,7 +1,15 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "bun:test";
-import { abortSuppresses, completeCacheTtl, decorateFrame, silenceOf, silentEnding, stampAttribution, type TurnSilence, withSilentEnding } from "./frame-decorators.js";
+import {
+    abortSuppresses,
+    completeCacheTtl,
+    decorateFrame,
+    silenceOf,
+    silentEnding,
+    stampAttribution,
+    type TurnSilence,
+    withSilentEnding,
+} from "./frame-decorators.js";
 import { createTurnFrames } from "./frame-reducers.js";
 
 const both = { account: "acct-1", actor: "ada@example.com" };
@@ -23,7 +31,11 @@ describe("attribution", () => {
     });
 
     test("an empty attribution adds nothing, and a named account replaces the runtime's own", () => {
-        expect(stampAttribution({ kind: "session", sessionId: "s", account: "runtime" }, {})).toStrictEqual({ kind: "session", sessionId: "s", account: "runtime" });
+        expect(stampAttribution({ kind: "session", sessionId: "s", account: "runtime" }, {})).toStrictEqual({
+            kind: "session",
+            sessionId: "s",
+            account: "runtime",
+        });
         expect(stampAttribution({ kind: "session", sessionId: "s", account: "runtime" }, { account: "daemon" })).toStrictEqual({
             kind: "session",
             sessionId: "s",
@@ -34,8 +46,18 @@ describe("attribution", () => {
 
 describe("cache TTL", () => {
     const frames: [string, string, boolean, AgentEvent][] = [
-        ["a Claude subscription writes an hour", "claude", true, { kind: "context_usage", tokens: 1, contextWindow: 9, cachedAt: 100, cacheTtlMs: 3_600_000 }],
-        ["a Claude key writes five minutes", "claude", false, { kind: "context_usage", tokens: 1, contextWindow: 9, cachedAt: 100, cacheTtlMs: 300_000 }],
+        [
+            "a Claude subscription writes an hour",
+            "claude",
+            true,
+            { kind: "context_usage", tokens: 1, contextWindow: 9, cachedAt: 100, cacheTtlMs: 3_600_000 },
+        ],
+        [
+            "a Claude key writes five minutes",
+            "claude",
+            false,
+            { kind: "context_usage", tokens: 1, contextWindow: 9, cachedAt: 100, cacheTtlMs: 300_000 },
+        ],
         ["a provider nobody publishes drops the instant", "codex", true, { kind: "context_usage", tokens: 1, contextWindow: 9 }],
     ];
     test.each(frames)("%s", (_case, provider, oauth, out) => {
@@ -50,7 +72,11 @@ describe("cache TTL", () => {
             cachedAt: 100,
             cacheTtlMs: 5,
         });
-        expect(completeCacheTtl({ kind: "context_usage", tokens: 1, contextWindow: 9 }, "claude", true)).toStrictEqual({ kind: "context_usage", tokens: 1, contextWindow: 9 });
+        expect(completeCacheTtl({ kind: "context_usage", tokens: 1, contextWindow: 9 }, "claude", true)).toStrictEqual({
+            kind: "context_usage",
+            tokens: 1,
+            contextWindow: 9,
+        });
     });
 
     test("any other frame passes as it is", () => {
@@ -96,7 +122,11 @@ describe("a silent ending", () => {
     const endings: [string, Partial<TurnSilence>, string | undefined][] = [
         ["counts the calls it made", {}, `The turn ended with nothing to show for it: 3 tool calls and then a stop, ${tail}`],
         ["says one call in the singular", { toolCalls: 1 }, `The turn ended with nothing to show for it: 1 tool call and then a stop, ${tail}`],
-        ["says when it never got past a thought", { toolCalls: 0 }, `The turn ended with nothing to show for it: the model started and then stopped, ${tail}`],
+        [
+            "says when it never got past a thought",
+            { toolCalls: 0 },
+            `The turn ended with nothing to show for it: the model started and then stopped, ${tail}`,
+        ],
         ["is none without a conversation", { conversationId: undefined }, undefined],
         ["is none for a stopped turn", { aborted: true }, undefined],
         ["is none for one that already failed", { failed: true }, undefined],

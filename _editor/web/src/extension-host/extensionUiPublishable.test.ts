@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { describe, test, expect } from "bun:test";
 
 // The kit is published, a different set of obligations from every other package in `_editor`. An outside author
 // installs `@intentic/extension-ui` to compile a screen against, getting declarations plus a bridge to the host's

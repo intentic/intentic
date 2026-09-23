@@ -1,14 +1,13 @@
 // jsdom: the router half of stale-chunk recovery — a failed dynamic import after redeploy gets the reload
 // the user would do by hand. The asyncView half (same staleChunk module) is covered in asyncView.test.ts.
 import "@intentic/testing/dom";
-import { it, expect, beforeAll, beforeEach, afterEach, mock, spyOn } from "bun:test";
 import { router } from "./index";
 import { importOrReload } from "./staleChunk";
 
 // bun.setup.ts installs the browser globals before this file loads, so the static import above is safe.
 
 // location is replaced globally; jsdom's real location is unforgeable, and the handler reads it at call time.
-const assign = mock();
+const assign = jest.fn();
 
 beforeAll(() => {
     Object.defineProperty(globalThis, `location`, {
@@ -55,7 +54,7 @@ const settle = async (): Promise<void> => {
     await Promise.resolve();
 };
 
-const reported = spyOn(console, `error`).mockImplementation(() => undefined);
+const reported = jest.spyOn(console, `error`).mockImplementation(() => undefined);
 
 afterEach(() => {
     reported.mockClear();

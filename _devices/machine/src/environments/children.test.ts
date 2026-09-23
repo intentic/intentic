@@ -1,7 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { afterEach, describe, expect, it, jest } from "bun:test";
 import { childArgv, childVerdict, type ChildSpawner, superviseChildren } from "./children.js";
 import { NO_AGENT_EXIT } from "./crossing.js";
 

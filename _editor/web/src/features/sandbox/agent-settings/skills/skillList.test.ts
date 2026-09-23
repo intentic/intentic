@@ -4,7 +4,6 @@
 // somewhere in the middle of it. What is pinned here is the line the fold is drawn on and the order either side
 // of it: plus the reason the filter reads more than the name.
 import type { SkillSummary } from "@intentic/api-contract";
-import { it, expect } from "bun:test";
 import { bySection, isTunable, matchesSkill } from "./skillList";
 
 const skill = (over: Partial<SkillSummary> & Pick<SkillSummary, `name`>): SkillSummary => ({

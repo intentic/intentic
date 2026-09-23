@@ -3,7 +3,6 @@
 import "@intentic/testing/dom";
 import type { CapabilitySummary } from "@intentic/api-contract";
 import type { ExtensionSummary, SecretInventoryEntry } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
@@ -13,14 +12,14 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // Import chain touches window.matchMedia (@intentic/ui useDevice) and window.env (environment.ts) at import time.
 
 const inventory = ref<SecretInventoryEntry[]>([]);
-mock.module(`../../capabilities/connect/useSecrets`, () => ({
+jest.mock(`../../capabilities/connect/useSecrets`, () => ({
     useSecretInventory: () => ({
         inventory,
         missingRequiredCount: ref(0),
         inventoryPending: ref(false),
         refreshInventory: () => {},
     }),
-    useSecrets: () => ({ set: { mutateAsync: mock() }, remove: { mutateAsync: mock() } }),
+    useSecrets: () => ({ set: { mutateAsync: jest.fn() }, remove: { mutateAsync: jest.fn() } }),
     // Nothing gated, not the owner: keeps these cases about which rows show and how they're named. Gate behavior
     // itself is asserted in secretRows.test.ts.
     useCredentialGates: () => ({
@@ -28,28 +27,28 @@ mock.module(`../../capabilities/connect/useSecrets`, () => ({
         gateFor: () => undefined,
         approverChoices: ref([]),
         isOwner: ref(false),
-        setGate: { mutateAsync: mock() },
-        removeGate: { mutateAsync: mock() },
+        setGate: { mutateAsync: jest.fn() },
+        removeGate: { mutateAsync: jest.fn() },
     }),
-    reveal: mock(),
+    reveal: jest.fn(),
 }));
 
 const capabilities = ref<CapabilitySummary[]>([]);
-mock.module(`../../capabilities/connect/useCapabilities`, () => ({
+jest.mock(`../../capabilities/connect/useCapabilities`, () => ({
     useCapabilities: () => ({ capabilities }),
-    useCapabilitySecret: () => ({ mutateAsync: mock() }),
+    useCapabilitySecret: () => ({ mutateAsync: jest.fn() }),
 }));
 
 const extensions = ref<ExtensionSummary[]>([]);
-mock.module(`../../extensions/useExtensions`, () => ({ useExtensions: () => ({ enabled: extensions }) }));
+jest.mock(`../../extensions/useExtensions`, () => ({ useExtensions: () => ({ enabled: extensions }) }));
 
 // Reached only by the CI push, which nothing here presses: faked because the client has no environment here.
-mock.module(`../client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock(`../client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
 
 // The two "Manage..." controls are links now, so the mock carries a stand-in for them.
-mock.module(`vue-router`, () => ({
+jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
-    useRouter: () => ({ push: mock() }) as never,
+    useRouter: () => ({ push: jest.fn() }) as never,
     RouterLink: RouterLinkStub as never,
 }));
 

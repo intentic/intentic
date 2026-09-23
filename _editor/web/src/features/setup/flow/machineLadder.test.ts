@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import { type LadderInput, ladderOptionsOf, requestedRung } from "./machineLadder";
 
 // Pins the picker's cards as values: which rungs exist for which offers, what each badge says about cost (or why the

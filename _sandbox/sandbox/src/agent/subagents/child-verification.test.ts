@@ -1,5 +1,4 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { describe, test, expect, beforeEach } from "bun:test";
 import { childVerification, childVerificationNote, forgetChild, noteChildWork, resetChildVerification } from "./child-verification.js";
 import { memoryFleet } from "../../testing.js";
 

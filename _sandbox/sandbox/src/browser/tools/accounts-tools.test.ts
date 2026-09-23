@@ -1,5 +1,4 @@
 import type { BrowserConfig } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { generatePassword, siteLabel } from "./accounts-tools.js";
 
 // Every character class present, since a generated password must never fail a site's complexity check without the agent

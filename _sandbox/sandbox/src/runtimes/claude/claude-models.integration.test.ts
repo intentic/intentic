@@ -2,7 +2,6 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CLAUDE_SEED_MODELS, type Model } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { Config } from "../../env.config.js";
 import type { ClaudeStore } from "./claude-credentials.js";
 import { createClaudeCatalog } from "./claude-models.js";

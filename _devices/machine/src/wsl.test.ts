@@ -1,5 +1,4 @@
-import { describe, it, expect } from "bun:test";
-import { wslFrom } from "./wsl.js";
+import { distrosFrom, wslFrom } from "./wsl.js";
 
 // The one fact that keeps a Windows install and the distros it hosts from collapsing into a single row: they all
 // answer `hostname` with the same string, so a wrong answer here merges two machines or splits one.
@@ -61,5 +60,28 @@ describe("wslFrom", () => {
     // An empty or whitespace-only variable is not a name, and must not be read as "this is WSL".
     it("ignores an empty distro variable", () => {
         expect(wslFrom(BARE, "   ", ARCH)).toBeUndefined();
+    });
+});
+
+// `wsl -l -q` names distros the way `in: "wsl:<name>"` spells them, and its output has varied by build.
+describe("distrosFrom", () => {
+    it("reads one distro per line", () => {
+        expect(distrosFrom("Arch\r\nUbuntu-22.04\r\n")).toEqual(["Arch", "Ubuntu-22.04"]);
+    });
+
+    // Older wsl.exe prints UTF-16 regardless of the console, which a UTF-8 decode turns into NUL-interleaved text.
+    it("cleans the UTF-16 noise an older wsl.exe prints", () => {
+        expect(distrosFrom("A\0r\0c\0h\0\r\0\n\0")).toEqual(["Arch"]);
+    });
+
+    it("reads nothing from a machine with no distros", () => {
+        expect(distrosFrom("")).toEqual([]);
+        expect(distrosFrom("\r\n\r\n")).toEqual([]);
+    });
+
+    // The facts a Windows side reports and the distros it supervises come from this one listing, so neither names Docker Desktop's.
+    it("leaves out Docker Desktop's own distros", () => {
+        expect(distrosFrom("Ubuntu\r\ndocker-desktop\r\ndocker-desktop-data\r\n")).toEqual(["Ubuntu"]);
+        expect(distrosFrom("d\0o\0c\0k\0e\0r\0-\0d\0e\0s\0k\0t\0o\0p\0\r\0\n\0")).toEqual([]);
     });
 });

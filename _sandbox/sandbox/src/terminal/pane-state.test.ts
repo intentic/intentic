@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { foreground, paneStates } from "./pane-state.js";
 
 // One PANE_FORMAT line per pane, so a multi-window session reports many; session_activity repeats per line,

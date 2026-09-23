@@ -5,8 +5,6 @@ import "@intentic/testing/dom";
 import type { AgentChangesResponse, AgentHistoryResponse } from "@intentic/api-contract";
 import type { WorkspaceModule } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, afterEach, mock, jest } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref, type Ref } from "vue";
 import { reasonCopy } from "./conflictResolution";
 import { useAgentChanges } from "./useAgentChanges";
@@ -20,15 +18,15 @@ import { REVEAL_DELAY_MS } from "@intentic/ui/loading-reveal";
 
 // The import chain pulls in app-wide singletons reading browser globals at import time; matches:false keeps the
 // device desktop, where list and diff share the screen.
-hoisted(() => {
+(() => {
     // jsdom implements no scrolling; selecting a row calls scrollIntoView, so this is stubbed to a no-op.
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-});
+})();
 
 // The only stand-ins: FileDiffPane's two inner viewers. Monaco is real but decides nothing this suite cares
 // about; the list is the subject.
-mock.module("../../workspace/viewers/DiffView.vue", () => ({ default: { render: () => null } }));
-mock.module("../../workspace/viewers/BinaryDiffView.vue", () => ({ default: { render: () => null } }));
+jest.mock("../../workspace/viewers/DiffView.vue", () => ({ default: { render: () => null } }));
+jest.mock("../../workspace/viewers/BinaryDiffView.vue", () => ({ default: { render: () => null } }));
 
 const { default: AgentReviewPanel } = await import("./AgentReviewPanel.vue");
 // The comment toggle that decides which reading every badge prints, imported once globals are in place.
@@ -456,18 +454,18 @@ const reading = (state: { fetching: boolean; loaded: boolean }): ReturnType<type
         fetching: ref(state.fetching),
         loaded: ref(state.loaded),
         error: ref(undefined),
-        refresh: mock(),
-        fileDiff: mock(),
+        refresh: jest.fn(),
+        fileDiff: jest.fn(),
         viewed: ref(new Set<string>()),
         viewedCount: ref(0),
-        setViewed: mock(),
-        land: mock(),
-        setAutoLand: mock(),
-        askResolve: mock(),
-        discard: mock(),
-        includeScratch: mock(),
-        deleteScratch: mock(),
-        archive: mock(),
+        setViewed: jest.fn(),
+        land: jest.fn(),
+        setAutoLand: jest.fn(),
+        askResolve: jest.fn(),
+        discard: jest.fn(),
+        includeScratch: jest.fn(),
+        deleteScratch: jest.fn(),
+        archive: jest.fn(),
         conflicts: ref(undefined),
         resolving: ref(undefined),
         // Every checkout on its own branch, the state these readings are about.

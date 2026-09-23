@@ -1,7 +1,6 @@
 // Pins the tab-surface focus gate: one chord per verb, registered by all three strips, resolved by which surface
 // the keystroke came from.
 import "@intentic/testing/dom";
-import { it, expect, afterEach } from "bun:test";
 import { type TabSurface, tabSurfaceOf } from "./tabSurface";
 import { boundCommand, registerCommand } from "./useCommands";
 import type { Disposable } from "@intentic/extension-api";

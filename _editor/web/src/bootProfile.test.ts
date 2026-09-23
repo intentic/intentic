@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { PROFILE_COOKIE, PROFILE_KEYS, PROFILE_PARAM, PROFILE_STORAGE_KEY, PROFILES, type Profile, type ProfileLook } from "@intentic/constants";
-import { describe, it, expect } from "bun:test";
 
 // index.html's pre-paint script adopts an arriving profile before any module loads, so it cannot import the table it
 // applies — it spells the values out. This reads them back and fails if they have parted from @intentic/constants.

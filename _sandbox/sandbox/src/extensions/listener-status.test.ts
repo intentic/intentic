@@ -1,5 +1,4 @@
 import type { ListenerStatus } from "@intentic/sandbox-contract";
-import { afterEach, expect, jest, test } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { listenerStatus, onListenerStatusMoved, setListenerStatus } from "./listener-status.js";
 

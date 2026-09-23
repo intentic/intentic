@@ -41,6 +41,12 @@ export const reachOf = (persona: Persona): PersonaReach => {
     };
 };
 
+// Whether the persona the explorer reads as would be refused `path`; nothing is while nobody is read as.
+export const lensRefuses = (personas: readonly Persona[], path: string): boolean => {
+    const persona = personas.find((candidate) => candidate.id === lensPersonaId.value);
+    return persona !== undefined && reachOf(persona).refuses(path);
+};
+
 // One sentence rather than a field dump; opens with "Viewing as <name>", the fact a reader forgetting why the
 // tree looks odd needs first.
 export const reachSentence = (name: string, reach: PersonaReach): string => {

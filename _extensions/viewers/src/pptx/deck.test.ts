@@ -3,7 +3,6 @@
 // convenient shape of it. Fixtures are built part by part, because "what a .pptx actually contains" is the thing
 // under test.
 import { strToU8, zipSync } from "fflate";
-import { describe, it, expect } from "bun:test";
 import { readDeck } from "./deck";
 import type { ImageBox, TableBox, TextBox, UnsupportedBox } from "./deck-model";
 

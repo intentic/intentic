@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
 import { BASE_LOCALE, type Catalog, type MessageTree } from "@intentic/ui/i18n";
 import { setFormatLocale } from "@intentic/ui/format";

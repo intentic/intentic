@@ -1,7 +1,6 @@
 // The composer row's one rule, asserted as a table: a control rides the row when it affects the next
 // send, otherwise it's in the overflow. Pinned here, not against a mounted pane, since the two halves
 // must never both be true.
-import { it, expect } from "bun:test";
 import { type ComposerControlSituation, CONTROL_ORDER, DESCRIPTION_LIMIT, overflowRows, ridesRow } from "./composerMore";
 
 // An ordinary isolated chat that has run a turn: nothing set, everything offered.

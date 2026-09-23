@@ -1,4 +1,3 @@
-import { test, expect, beforeEach } from "bun:test";
 import { forgetRemoteRequest, forgetRemoteRequestsOf, noteRemoteRequest, remoteRequestOf, resetRemoteRequests } from "./runner-requests.js";
 
 /* The table that lets a parent answer a card it did not raise. */

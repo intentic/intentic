@@ -1,8 +1,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentCommand, AgentProvider, Persona, RunnerSummary } from "@intentic/sandbox-contract";
-import { hoisted } from "@intentic/testing/bun";
-import { afterEach, describe, expect, it, jest, mock } from "bun:test";
 import { computed, createApp, h, nextTick, ref } from "vue";
 import * as catalogOriginal from "../../models/useChat-catalog";
 import { runningTurn } from "../../../../testing/runningTurn";
@@ -11,8 +9,8 @@ import { runningTurn } from "../../../../testing/runningTurn";
 // draft and where the caret lands, and what a leading `/` lists and runs.
 
 // Asked for the provider's commands; a test reads whether the composer asked.
-const { ensureProviderCommands } = hoisted(() => ({ ensureProviderCommands: mock<(target: AgentProvider) => Promise<void>>(async () => undefined) }));
-mock.module("../../models/useChat-catalog", () => ({ ...catalogOriginal, ensureProviderCommands }));
+const { ensureProviderCommands } = { ensureProviderCommands: jest.fn<(target: AgentProvider) => Promise<void>>(async () => undefined) };
+jest.mock("../../models/useChat-catalog", () => ({ ...catalogOriginal, ensureProviderCommands }));
 
 const { useComposerPopovers } = await import("./composerPopovers");
 const { Conversation } = await import("../../session/conversation");
@@ -32,9 +30,9 @@ const composerOf = () => {
     const host = {
         view,
         input,
-        grow: mock(),
+        grow: jest.fn(),
         personas: ref(PERSONAS),
-        pickPersona: mock(),
+        pickPersona: jest.fn(),
         placement: { remote: ref(false), shown: ref(true), runners: ref<RunnerSummary[]>([]) },
         steered: ref(false),
         isGuest: ref(false),

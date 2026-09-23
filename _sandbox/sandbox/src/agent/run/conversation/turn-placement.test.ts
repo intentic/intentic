@@ -1,5 +1,4 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "bun:test";
 import type { ConversationActors } from "../../../agents/actor/conversation-actors.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import { conversationIdentity, mainTreePlacement, type Placement, placedTurn } from "./turn-placement.js";
@@ -26,12 +25,12 @@ const stream = (frames: readonly AgentEvent[], thrown?: unknown) =>
 
 // A placement announcing itself with one frame and landing with another, each step noted where it runs.
 const placement = (steps: unknown[][], body: () => AsyncIterable<AgentEvent>): Placement => ({
-    async *open () {
+    async *open() {
         steps.push(["open"]);
         yield { kind: "worktree", branch: "agent/c", base: "abc1234" };
         return body();
     },
-    async *land (failed) {
+    async *land(failed) {
         steps.push(["land", failed]);
         yield { kind: "landed", landed: true };
     },
@@ -53,7 +52,12 @@ describe("a placed turn", () => {
         const { steps, conversations } = recorded();
         const frames = await drain(placedTurn(conversations, "c", placement(steps, stream([{ kind: "delta", text: "hi" }, { kind: "done" }]))));
 
-        expect(frames).toStrictEqual([{ kind: "worktree", branch: "agent/c", base: "abc1234" }, { kind: "delta", text: "hi" }, { kind: "done" }, { kind: "landed", landed: true }]);
+        expect(frames).toStrictEqual([
+            { kind: "worktree", branch: "agent/c", base: "abc1234" },
+            { kind: "delta", text: "hi" },
+            { kind: "done" },
+            { kind: "landed", landed: true },
+        ]);
         expect(steps).toStrictEqual([
             ["open"],
             ["frame", "c", { kind: "delta", text: "hi" }],
@@ -68,12 +72,20 @@ describe("a placed turn", () => {
     test("whose body emitted an error frame is failed, which the land and the books are told", async () => {
         const { steps, conversations } = recorded();
         await drain(placedTurn(conversations, "c", placement(steps, stream([{ kind: "error", message: "died" }, { kind: "done" }]))));
-        expect(steps.filter(([step]) => step !== "frame")).toStrictEqual([["open"], ["land", true], ["close", true], ["settle", "c"], ["settled", true]]);
+        expect(steps.filter(([step]) => step !== "frame")).toStrictEqual([
+            ["open"],
+            ["land", true],
+            ["close", true],
+            ["settle", "c"],
+            ["settled", true],
+        ]);
     });
 
     test("that throws is observed as failed with the error's own words, rethrown, and still finished", async () => {
         const { steps, conversations } = recorded();
-        const run = drain(placedTurn(conversations, "c", placement(steps, stream([{ kind: "delta", text: "hi" }], new Error("the harness crashed")))));
+        const run = drain(
+            placedTurn(conversations, "c", placement(steps, stream([{ kind: "delta", text: "hi" }], new Error("the harness crashed")))),
+        );
 
         await expect(run).rejects.toThrow("the harness crashed");
         expect(steps).toStrictEqual([
@@ -104,12 +116,17 @@ describe("a placed turn", () => {
         const broken: Placement = {
             ...placement(steps, stream([])),
             // oxlint-disable-next-line require-yield -- An opening that fails before it announces anything.
-            async *open () {
+            async *open() {
                 throw new Error("no worktree");
             },
         };
         await expect(drain(placedTurn(conversations, "c", broken))).rejects.toThrow("no worktree");
-        expect(steps).toStrictEqual([["frame", "c", { kind: "error", message: "no worktree" }], ["close", true], ["settle", "c"], ["settled", true]]);
+        expect(steps).toStrictEqual([
+            ["frame", "c", { kind: "error", message: "no worktree" }],
+            ["close", true],
+            ["settle", "c"],
+            ["settled", true],
+        ]);
     });
 });
 
@@ -163,7 +180,16 @@ describe("what a conversation's turn begins as", () => {
             isolated: true,
             runner: "r-1",
             prompt: "ship it",
-            profile: { agent: "codex", harness: "claude-code", model: "gpt-5.1", effort: "high", thinking: true, fast: false, account: "acct", actsAs: "reviewer" },
+            profile: {
+                agent: "codex",
+                harness: "claude-code",
+                model: "gpt-5.1",
+                effort: "high",
+                thinking: true,
+                fast: false,
+                account: "acct",
+                actsAs: "reviewer",
+            },
             title: "Parser",
             origin: { automationId: "nightly", provider: "schedule" },
             startedBy: "ada@example.com",

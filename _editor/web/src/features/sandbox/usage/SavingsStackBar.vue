@@ -38,10 +38,7 @@ const tooltipFor = (label: string, tokens: number): string => `${label} · ~${fo
         <!-- Only the ends are labelled, the two numbers the bar claims. -->
         <div class="flex items-baseline justify-between gap-2 text-2xs tabular-nums text-subtle">
             <span>{{ t(`sandbox.savingsStackBar.raw`, { rawTokens: formatCompact(composition.rawTokens) }) }}</span>
-            <span
-                ><span aria-hidden="true">→ </span>~{{ formatCompact(reached?.tokens ?? 0) }}
-                {{ t(`sandbox.savingsStackBar.reachedAssistant`) }}</span
-            >
+            <span><span aria-hidden="true">→ </span>~{{ formatCompact(reached?.tokens ?? 0) }} {{ t(`shared.reachedAssistant`) }}</span>
         </div>
 
         <figcaption class="sr-only">{{ t(`sandbox.savingsStackBar.rawShellOutputBy`) }}</figcaption>

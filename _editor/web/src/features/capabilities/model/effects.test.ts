@@ -3,7 +3,6 @@
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, contributionEntry } from "@intentic/capability-catalog";
 import type { CapabilityContribution } from "@intentic/extension-manifest";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
-import { describe, expect, it, mock } from "bun:test";
 import { contributionFor, formEffects, tileBadges } from "./effects";
 
 // A connector with a credential and a client binary to bake in: the two facts only its contribution knows.
@@ -27,7 +26,7 @@ const contributionOf = (kind: CapabilityKind, id: string): CapabilityContributio
 
 describe(`the contribution behind a config`, () => {
     it(`is named by the kind's discriminator, and a core kind has none to name`, () => {
-        const asked = mock(contributionOf);
+        const asked = jest.fn(contributionOf);
 
         expect(contributionFor(asked, `cli`, { provider: `postgres` })).toBe(POSTGRES);
         expect(contributionFor(asked, `cli`, {})).toBeUndefined();

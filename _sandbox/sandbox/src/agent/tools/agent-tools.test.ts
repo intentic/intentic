@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { internalTools, mcpServersOf } from "./agent-tools.js";
 
 const encode = (tools: unknown): string => Buffer.from(JSON.stringify(tools)).toString("base64");

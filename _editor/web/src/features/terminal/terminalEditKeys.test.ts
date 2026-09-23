@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { editKeyBytes } from "./terminalEditKeys";
 
 // Pins which chords are retyped and which stay xterm's, on the modifier flags a keydown carries.

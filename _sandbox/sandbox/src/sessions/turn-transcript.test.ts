@@ -9,7 +9,6 @@ import {
     withResumeNote,
 } from "@intentic/sandbox-contract";
 import { foldTurn, TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
-import { describe, it, expect } from "bun:test";
 import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { restoredSessionMessages } from "./sessions.js";
 import { openingRows } from "./turn-transcript.js";
@@ -29,7 +28,9 @@ describe("openingRows", () => {
 
     // A rewind names the message it goes back to by id, so a message whose sender named none is named here.
     it("names a message its sender left unnamed", () => {
-        expect(openingRows({ prompt: "go" }, "/work", SENT_AT)).toEqual([{ role: "user", text: "go", sentAt: SENT_AT, messageId: expect.any(String) }]);
+        expect(openingRows({ prompt: "go" }, "/work", SENT_AT)).toEqual([
+            { role: "user", text: "go", sentAt: SENT_AT, messageId: expect.any(String) },
+        ]);
     });
 
     // Nothing in the frame log timestamps an individual assistant block, so only the user row can be.
@@ -45,7 +46,9 @@ describe("openingRows", () => {
             { role: "user", text: "first" },
             { role: "assistant", text: "sure" },
         ]);
-        expect(openingRows({ prompt, messageId: "m-2" }, "/work", SENT_AT)).toEqual([{ role: "user", text: "second", sentAt: SENT_AT, messageId: "m-2" }]);
+        expect(openingRows({ prompt, messageId: "m-2" }, "/work", SENT_AT)).toEqual([
+            { role: "user", text: "second", sentAt: SENT_AT, messageId: "m-2" },
+        ]);
     });
 
     // A re-run's prompt carries a resume note behind the user's original words; recording it verbatim would file

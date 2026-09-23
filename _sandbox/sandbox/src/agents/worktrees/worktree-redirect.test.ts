@@ -1,6 +1,5 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookCallbackMatcher, HookEvent, HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { test, expect } from "bun:test";
 import { inWorktree, type IsolationPlan } from "./isolation.js";
 import { redirectCommand, worktreeRedirectHooks } from "./worktree-redirect.js";
 

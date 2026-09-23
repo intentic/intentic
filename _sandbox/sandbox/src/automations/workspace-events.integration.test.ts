@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentEvent, type Automation, SandboxSettingsSchema, type WorkspaceEvent } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { freshImport, SETTLES, waitFor } from "@intentic/testing/bun";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";

@@ -1,5 +1,4 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { afterEach, describe, expect, it, jest, mock } from "bun:test";
 import { type EffectScope, effectScope, nextTick, ref, shallowRef } from "vue";
 import { ARCHIVE_PAGE, type BoardView, stepView, VIEW_START, type ViewEvent } from "./boardView";
 import { useArchiveDoor } from "./archiveDoor";
@@ -25,8 +24,8 @@ const doorOf = () => {
     const deletes: { settle: () => void; refuse: (error: Error) => void }[] = [];
     const agents = {
         archived,
-        loadArchived: mock(async () => undefined),
-        purgeArchived: mock(
+        loadArchived: jest.fn(async () => undefined),
+        purgeArchived: jest.fn(
             () =>
                 new Promise<void>((resolve, reject) => {
                     deletes.push({ settle: resolve, refuse: reject });

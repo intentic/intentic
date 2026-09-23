@@ -1,6 +1,5 @@
 import { MEMORY_FILE } from "@intentic/constants";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
-import { test, expect } from "bun:test";
 import { vocabularyFor } from "../../../core-views/vocabulary";
 import { specialChip } from "./specialPaths";
 

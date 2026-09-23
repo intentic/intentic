@@ -1,16 +1,13 @@
-import { describe, expect, test } from "bun:test";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { DAEMON_OWNER, ONE_SHOT_OWNER, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
+import { readCgroup } from "./cgroup.js";
 import {
     createLiveMetrics,
     type DaemonReading,
     daemonUsageOf,
-    keyedValue,
     type LiveMetricsSource,
     type MachineReading,
-    parseAuxv,
     type ProcessSample,
-    quotaCores,
     sandboxUsageOf,
     sessionsOf,
     totalsOf,
@@ -111,40 +108,13 @@ const change = (host: FakeHost, pid: number, counters: Partial<Pick<FakeProcess,
     host.processes.set(pid, { ...process, ...counters });
 };
 
-describe("units and cgroup files", () => {
-    test("page size and clock rate come from the auxiliary vector, in either byte order", () => {
-        const auxv = (littleEndian: boolean, pairs: readonly (readonly [number, number])[]): Buffer => {
-            const buffer = Buffer.alloc(pairs.length * 16);
-            const write = (value: number, offset: number): number =>
-                littleEndian ? buffer.writeBigUInt64LE(BigInt(value), offset) : buffer.writeBigUInt64BE(BigInt(value), offset);
-            pairs.forEach(([key, value], index) => {
-                write(key, index * 16);
-                write(value, index * 16 + 8);
-            });
-            return buffer;
-        };
-        expect(parseAuxv(auxv(true, [[33, 5], [6, 16_384], [17, 250], [0, 0]]), true)).toEqual({ pageBytes: 16_384, ticksPerSecond: 250 });
-        expect(parseAuxv(auxv(false, [[6, 65_536], [17, 100], [0, 0]]), false)).toEqual({ pageBytes: 65_536, ticksPerSecond: 100 });
-        // A vector that names neither falls back to what every shipped platform uses, rather than to a zero divisor.
-        expect(parseAuxv(Buffer.alloc(0), true)).toEqual({ pageBytes: 4096, ticksPerSecond: 100 });
-    });
-
-    test("a CPU quota is cores; `max` is none", () => {
-        expect(quotaCores("150000 100000\n")).toBe(1.5);
-        expect(quotaCores("max 100000\n")).toBeUndefined();
-        expect(quotaCores(undefined)).toBeUndefined();
-    });
-
-    test("a flat-keyed cgroup file is read by whole key, not by prefix", () => {
-        const stat = "usage_usec 14857435323\nuser_usec 11580537798\nsystem_usec 3276897525\n";
-        expect(keyedValue(stat, "usage_usec")).toBe(14_857_435_323);
-        expect(keyedValue("active_file 5\ninactive_file 7\n", "inactive_file")).toBe(7);
-        expect(keyedValue("active_file 5\n", "file")).toBeUndefined();
-    });
-});
-
 describe("attributing processes", () => {
-    const sample = (owner: string | undefined, role: ProcessSample["role"], rssBytes: number, ticks: number): ProcessSample => ({ owner, role, rssBytes, ticks });
+    const sample = (owner: string | undefined, role: ProcessSample["role"], rssBytes: number, ticks: number): ProcessSample => ({
+        owner,
+        role,
+        rssBytes,
+        ticks,
+    });
 
     test("a conversation's figures are its stamped processes; pools and unstamped work count only by kind", () => {
         const totals = totalsOf([
@@ -169,7 +139,11 @@ describe("attributing processes", () => {
     });
 
     test("CPU is the growth of a conversation's ticks over the window, as a percentage of one core", () => {
-        const totals = totalsOf([sample("steady", "agentRuntime", 1, 450), sample("shrunk", "agentRuntime", 1, 10), sample("new", "toolchain", 1, 60)]);
+        const totals = totalsOf([
+            sample("steady", "agentRuntime", 1, 450),
+            sample("shrunk", "agentRuntime", 1, 10),
+            sample("new", "toolchain", 1, 60),
+        ]);
         const baseline = new Map([
             ["steady", 150],
             ["shrunk", 200],
@@ -191,21 +165,21 @@ describe("attributing processes", () => {
 });
 
 describe("the sandbox and the daemon", () => {
-    const cgroup = {
-        cpuStat: "usage_usec 100\n",
-        cpuMax: "200000 100000\n",
-        memoryCurrent: `${10 * 2 ** 30}\n`,
-        memoryMax: `${16 * 2 ** 30}\n`,
-        memoryStat: `anon 1\nfile 2\ninactive_file ${3 * 2 ** 30}\n`,
-        swapCurrent: `${2 ** 30}\n`,
-        pressure: {
-            cpu: "some avg10=1.50 avg60=0.00 avg300=0.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
-            memory: "some avg10=12.25 avg60=0.00 avg300=0.00 total=1\nfull avg10=3.00 avg60=0.00 avg300=0.00 total=0\n",
-            io: "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
-        },
+    const files: Record<string, string> = {
+        "/sys/fs/cgroup/cpu.stat": "usage_usec 100\n",
+        "/sys/fs/cgroup/cpu.max": "200000 100000\n",
+        "/sys/fs/cgroup/memory.current": `${10 * 2 ** 30}\n`,
+        "/sys/fs/cgroup/memory.max": `${16 * 2 ** 30}\n`,
+        "/sys/fs/cgroup/memory.stat": `anon 1\nfile 2\ninactive_file ${3 * 2 ** 30}\n`,
+        "/sys/fs/cgroup/memory.swap.current": `${2 ** 30}\n`,
+        "/sys/fs/cgroup/cpu.pressure": "some avg10=1.50 avg60=0.00 avg300=0.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
+        "/sys/fs/cgroup/memory.pressure": "some avg10=12.25 avg60=0.00 avg300=0.00 total=1\nfull avg10=3.00 avg60=0.00 avg300=0.00 total=0\n",
+        "/sys/fs/cgroup/io.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
     };
+    const cgroupOf = (texts: Record<string, string>) => readCgroup(async (path) => texts[path]);
 
-    test("memory is the working set against the container's limit, and CPU is against its quota", () => {
+    test("memory is the working set against the container's limit, and CPU is against its quota", async () => {
+        const cgroup = await cgroupOf(files);
         expect(sandboxUsageOf({ cgroup, machine, disk: { usedBytes: 5, totalBytes: 9 }, processes: 42, coresUsed: 0.5 })).toEqual({
             cpuPercent: 25,
             cores: 2,
@@ -220,16 +194,8 @@ describe("the sandbox and the daemon", () => {
         });
     });
 
-    test("without a cgroup it reads the machine, and says nothing it cannot see", () => {
-        const none = {
-            cpuStat: undefined,
-            cpuMax: undefined,
-            memoryCurrent: undefined,
-            memoryMax: "max\n",
-            memoryStat: undefined,
-            swapCurrent: undefined,
-            pressure: { cpu: undefined, memory: undefined, io: undefined },
-        };
+    test("without a cgroup it reads the machine, and says nothing it cannot see", async () => {
+        const none = await cgroupOf({ "/sys/fs/cgroup/memory.max": "max\n" });
         expect(sandboxUsageOf({ cgroup: none, machine, disk: undefined, processes: 3, coresUsed: undefined })).toEqual({
             cores: 8,
             memoryBytes: 12 * 2 ** 30,
@@ -239,8 +205,8 @@ describe("the sandbox and the daemon", () => {
         });
     });
 
-    test("a limit above the machine's memory is the machine's memory", () => {
-        const loose = { ...cgroup, memoryMax: `${64 * 2 ** 30}\n` };
+    test("a limit above the machine's memory is the machine's memory", async () => {
+        const loose = await cgroupOf({ ...files, "/sys/fs/cgroup/memory.max": `${64 * 2 ** 30}\n` });
         expect(sandboxUsageOf({ cgroup: loose, machine, disk: undefined, processes: 1, coresUsed: undefined }).memoryLimitBytes).toBe(32 * 2 ** 30);
     });
 

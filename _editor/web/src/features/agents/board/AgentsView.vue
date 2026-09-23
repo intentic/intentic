@@ -15,6 +15,7 @@ import { useAuth } from "../../auth/useAuth";
 import { useSandboxSharedAccess } from "../../sandbox/access/useSandboxSharedAccess";
 import { useAgents } from "../fleet/useAgents";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
+import { pendingOn } from "../fleet/useAgents-provisional";
 import { fleetScope, scopeOffered } from "../fleet/fleetScope";
 import { useWorkflowRuns } from "../fleet/useWorkflowRuns";
 import { relativeTime } from "../../chat/models/catalog";
@@ -57,7 +58,7 @@ const { resolveNow, landNow, relandNow, unwatchNow } = drag;
 // Resolved live, so a rename or a status change stays visible while the dialog asks.
 const resolveTarget = computed(() => (pendingResolve.value === undefined ? undefined : agents.agentById(pendingResolve.value)));
 const hint = computed(() => dropHint(action.value, dragged.value, over.value));
-const pendingFor = (agent: FleetAgent) => pendingOf(agent, drag.pendingOn(agent.id, agent.sandboxId), agents.busyIds.value);
+const pendingFor = (agent: FleetAgent) => pendingOf(agent, pendingOn(agent.id, agent.sandboxId), agents.busyIds.value);
 // Its field is always on the header, not behind a glyph, so nobody has to learn the board is searchable.
 const filter = useAgentFilter();
 const { query, needle, matchCase, active: filtering, snippetOf, sessionMatches, searching, partial: searchPartial } = filter;
@@ -136,7 +137,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                 clearable
                 :busy="searching"
                 :aria-label="t(`agents.agentsView.filterAgentsByMessages`)"
-                :placeholder="t(`agents.agentsView.filterByMessages`)"
+                :placeholder="t(`shared.filterByMessages`)"
                 class="mx-auto max-w-full shrink-0"
                 :class="narrow ? 'order-last basis-full' : 'w-72'"
             />
@@ -155,9 +156,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                     <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />{{ t(`agents.agentsView.synthesize`) }}
                     {{ chatStrip.panes.length }}
                 </Button>
-                <Button size="small" class="ui-button-thumb shrink-0" @click="startAgent()">
-                    <Icon name="plus" />{{ t(`agents.agentsView.newAgent`) }}
-                </Button>
+                <Button size="small" class="ui-button-thumb shrink-0" @click="startAgent()"> <Icon name="plus" />{{ t(`shared.newAgent`) }} </Button>
             </div>
         </div>
         <!-- Opt-in (Settings ▸ Appearance): absent, nothing was measured, not merely hidden. -->
@@ -234,7 +233,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                             >
                                 <Icon name="arrow-left" class="text-2xs" />
                             </button>
-                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ t(`agents.agentsView.archived`) }}</span>
+                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ t(`shared.archived`) }}</span>
                             <Icon v-if="archiveLoading" name="spinner" spin class="text-2xs text-muted" />
                         </template>
                         <template v-else>
@@ -380,7 +379,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                         @click="move({ kind: 'expand' })"
                     >
                         <Icon :name="view.all ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                        {{ view.all ? t(`agents.agentsView.showFewer`) : t(`agents.agentsView.earlier`, { hiddenFinished }) }}
+                        {{ view.all ? t(`shared.showFewer`) : t(`shared.earlier`, { hiddenFinished }) }}
                     </button>
                     <!-- One-way, unlike the lane's toggle: this pile has no "fewer" worth offering, since collapsing it back would lose the reader's place mid-search. -->
                     <button
@@ -485,7 +484,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                       : 'border-line bg-card text-subtle opacity-40'
             "
         >
-            <Icon name="trash" class="text-2xs" />{{ t(`agents.agentsView.discard`) }}
+            <Icon name="trash" class="text-2xs" />{{ t(`shared.discard`) }}
         </div>
         <!-- A drag is the easiest gesture here to trigger by accident, and dropping a conflicted card on Finished spends a turn. -->
         <Modal :open="pendingResolve !== undefined" size="sm" :header="t(`agents.agentsView.agentResolveConflict`)" @update:open="cancelResolve">

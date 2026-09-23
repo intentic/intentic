@@ -1,7 +1,8 @@
-import { access, readdir } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { REPO_ROLES } from "@intentic/scaffold";
-import { IGNORED_DIRS, isPublicPath, isReferencePath, PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore";
+import { isPublicPath, isReferencePath, PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore";
+import { walkDirs } from "./dir-walk.js";
 
 // A repo is any dir under /work with a `.git` entry (dir or pointer file, for worktrees/submodules); ids are
 // root-relative POSIX paths, doubling as the {repo} wire name.
@@ -42,32 +43,13 @@ export const hasGitEntry = async (dir: string): Promise<boolean> => {
 };
 
 // Every repo under root, as sorted root-relative ids.
-// Hidden and junk dirs are never descended into, matching the tree walk and watcher's pruning.
 export const discoverRepos = async (root: string): Promise<string[]> => {
     const repos: string[] = [];
-    let visited = 0;
-    const walk = async (dir: string, rel: string, depth: number): Promise<void> => {
-        if (depth > MAX_DEPTH || visited >= MAX_DIRS) {
-            return;
-        }
-        visited += 1;
-        const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-        for (const entry of entries) {
-            if (!entry.isDirectory() || entry.name.startsWith(".") || IGNORED_DIRS.has(entry.name)) {
-                continue;
-            }
-            const id = rel === "" ? entry.name : `${rel}/${entry.name}`;
-            if (id === "root" || id === REFERENCE_DIR || id === PUBLIC_DIR || !SEGMENT.test(entry.name)) {
-                continue;
-            }
-            const child = join(dir, entry.name);
-            if (await hasGitEntry(child)) {
-                repos.push(id);
-                continue;
-            }
-            await walk(child, id, depth + 1);
-        }
-    };
-    await walk(root, "", 1);
+    await walkDirs(root, { maxDepth: MAX_DEPTH - 1, maxDirs: MAX_DIRS }, async (_dir, _entries, subdirs) => {
+        const named = subdirs.filter((subdir) => SEGMENT.test(subdir.name) && !["root", REFERENCE_DIR, PUBLIC_DIR].includes(subdir.rel));
+        const isRepo = await Promise.all(named.map((subdir) => hasGitEntry(subdir.path)));
+        repos.push(...named.filter((_, index) => isRepo[index]).map((subdir) => subdir.rel));
+        return named.filter((_, index) => !isRepo[index]);
+    });
     return repos.toSorted();
 };

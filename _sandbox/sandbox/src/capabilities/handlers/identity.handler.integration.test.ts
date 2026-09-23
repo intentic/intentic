@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Capability, IdentityConfig } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { hasSession, markConnected } from "../../browser/sessions/session-store.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";

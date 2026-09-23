@@ -259,7 +259,7 @@ const seamWidth = computed<number>({
             :min="toScreenPx(MIN_CHAT_WIDTH)"
             :max="toScreenPx(maxChatWidth())"
             :reset="toScreenPx(defaultChatWidth())"
-            :title="t(`chat.chatPanel.dragToResizeDouble`)"
+            :title="t(`shared.dragToResizeDouble`)"
         />
 
         <template v-if="tabs && !bar">

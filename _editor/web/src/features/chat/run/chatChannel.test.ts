@@ -1,12 +1,11 @@
 import "@intentic/testing/dom";
 import { reactive, ref } from "vue";
-import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { stubGlobal } from "@intentic/testing/bun";
 import type { ChatEnvelope, ChatNote } from "./chatChannel";
 import type { StoredTab } from "../tabs/tabSnapshot";
 
 // The sandbox id scopes every note here; useSandbox reaches window.env through useApi, which no test has.
-mock.module("../../sandbox/client/useSandbox", () => {
+jest.mock("../../sandbox/client/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     return { useSandbox: () => ({ activeSandboxId, reachable: ref(false) }) };
 });

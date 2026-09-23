@@ -1,5 +1,3 @@
-import { test, expect } from "bun:test";
-
 import { parseDuration, ReadinessTimeoutError, waitReady } from "./readiness.js";
 
 test("parseDuration parses second durations", () => {

@@ -1,6 +1,5 @@
 import type { Automation, AutomationTemplate } from "@intentic/sandbox-contract";
 import { ZoneSchema } from "@intentic/sandbox-contract/time";
-import { describe, it, expect } from "bun:test";
 import { computed, nextTick } from "vue";
 import type { AvailableSource } from "./catalog";
 import { useAutomationForm } from "./useAutomationForm";

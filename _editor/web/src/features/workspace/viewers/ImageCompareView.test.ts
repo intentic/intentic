@@ -1,6 +1,5 @@
 // Pins the two overlays: swipe clips the after picture at the handle, onion skin fades it, and the keyboard moves both.
 import "@intentic/testing/dom";
-import { describe, it, expect, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import ImageCompareView from "./ImageCompareView.vue";
 

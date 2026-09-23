@@ -1,4 +1,3 @@
-import { describe, it, expect, mock } from "bun:test";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from "./lifecycle.js";
 
 describe(`DisposableStore`, () => {
@@ -44,7 +43,7 @@ describe(`DisposableStore`, () => {
     it(`disposes a late arrival immediately instead of holding it`, () => {
         const store = new DisposableStore();
         store.dispose();
-        const stop = mock();
+        const stop = jest.fn();
 
         store.add(toDisposable(stop));
 
@@ -54,8 +53,8 @@ describe(`DisposableStore`, () => {
 
     it(`releases one member early without touching the rest`, () => {
         const store = new DisposableStore();
-        const one = toDisposable(mock());
-        const other = mock();
+        const one = toDisposable(jest.fn());
+        const other = jest.fn();
         store.add(one);
         store.push(other);
 
@@ -84,7 +83,7 @@ describe(`DisposableStore`, () => {
 
 describe(`Disposable`, () => {
     it(`releases what a subclass registered`, () => {
-        const stop = mock();
+        const stop = jest.fn();
         class Subsystem extends Disposable {
             constructor() {
                 super();
@@ -101,9 +100,9 @@ describe(`Disposable`, () => {
 describe(`MutableDisposable`, () => {
     it(`releases the previous value when a new one is assigned`, () => {
         const slot = new MutableDisposable();
-        const first = mock();
+        const first = jest.fn();
         slot.value = toDisposable(first);
-        const second = mock();
+        const second = jest.fn();
 
         slot.value = toDisposable(second);
 
@@ -113,7 +112,7 @@ describe(`MutableDisposable`, () => {
 
     it(`leaves the value alone when the same one is assigned again`, () => {
         const slot = new MutableDisposable();
-        const stop = mock();
+        const stop = jest.fn();
         const only = toDisposable(stop);
         slot.value = only;
 
@@ -126,7 +125,7 @@ describe(`MutableDisposable`, () => {
     it(`disposes a value assigned after the slot itself was disposed`, () => {
         const slot = new MutableDisposable();
         slot.dispose();
-        const stop = mock();
+        const stop = jest.fn();
 
         slot.value = toDisposable(stop);
 

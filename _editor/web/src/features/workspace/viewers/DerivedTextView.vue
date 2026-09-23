@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, CopyButton, formatTokens, Markdown, timeAgo } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { errorMessage, useLatest } from "@intentic/ui/async";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { changeEpochOf, derivedEpochOf, sidecarQueue } from "../changes/live/useWorkspaceLive";
@@ -58,10 +58,10 @@ const slowRead = computed(() => waitedMs.value >= 400);
 // Past this, the wait is long enough that a reader wants to know they are allowed to walk away from it.
 const longDerive = computed(() => waitedMs.value >= 20_000);
 
-// Reads are cheap and idempotent; a stale one landing after a newer one is the only hazard, so the sequence wins.
-let seq = 0;
-const settle = (id: number, result: WorkspaceDerived): void => {
-    if (id !== seq) {
+// Reads are cheap and idempotent; a stale one landing after a newer one is the only hazard, so the latest wins.
+const latest = useLatest();
+const settle = (isLatest: () => boolean, result: WorkspaceDerived): void => {
+    if (!isLatest()) {
         return;
     }
     shadow.value = result;
@@ -69,17 +69,17 @@ const settle = (id: number, result: WorkspaceDerived): void => {
 };
 
 const derive = (target: string): void => {
-    const id = ++seq;
+    const isLatest = latest();
     deriving.value = true;
     startClock();
     deriveText(target).then(
         (result) => {
-            settle(id, result);
+            settle(isLatest, result);
             deriving.value = false;
             stopClock();
         },
         (err: unknown) => {
-            if (id !== seq) {
+            if (!isLatest()) {
                 return;
             }
             deriving.value = false;
@@ -108,7 +108,7 @@ const deriveIfNothingElseWill = (target: string, result: WorkspaceDerived): void
 };
 
 const load = (target: string): void => {
-    const id = ++seq;
+    const isLatest = latest();
     // What this path answered last, painted before the read that confirms it. A file whose text exists is not being
     // read again — the daemon keys shadows by content hash — and a spinner over it says otherwise.
     shadow.value = rememberedDerivedText(target);
@@ -116,13 +116,13 @@ const load = (target: string): void => {
     startClock();
     readDerivedText(target).then(
         (result) => {
-            settle(id, result);
+            settle(isLatest, result);
             loading.value = false;
             stopClock();
             deriveIfNothingElseWill(target, result);
         },
         (err: unknown) => {
-            if (id !== seq) {
+            if (!isLatest()) {
                 return;
             }
             loading.value = false;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ConfirmDialog, ContextMenu, Icon, Modal, ResizeSeam, ui, useDevice, vMiddleclick } from "@intentic/ui";
+import { Button, ContextMenu, Icon, Modal, ResizeSeam, ui, useDevice } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -8,27 +8,24 @@ import { registerCommand, withShortcut } from "../../shell/commands/useCommands"
 import { postTurnControl } from "../chat/run/turnStream";
 import { useSandbox } from "../sandbox/client/useSandbox";
 import BackgroundProcesses from "./BackgroundProcesses.vue";
+import TerminalStrip from "./panel/TerminalStrip.vue";
 import WorkTerminals from "./WorkTerminals.vue";
-import { TERMINAL_ICONS, terminalMeta } from "./terminalMeta";
 import { useTerminalFloating } from "./terminalFloating";
 import { fetchScrollback } from "./terminalScrollback";
 import { useTerminalsQuery } from "./terminalsQuery";
 import { createTerminalTabs, type TerminalTabsSource, terminalSessionOf } from "./useTerminal";
 import { clearTerminalRequest, consumeSpawnRequest, registerTerminalSpawn, type TerminalRequest } from "./useTerminalPanel";
-import { panelCommands } from "./panel/panelCommands";
-import { segmentColor } from "./panel/stripSegments";
-import { groupKey } from "./panel/stripSelection";
+import { labelFor, stripIndex } from "./panel/stripSegments";
 import { DEFAULT_HEIGHT, MIN_HEIGHT, usePanelHeight } from "./panel/usePanelHeight";
 import { usePanelWait } from "./panel/usePanelWait";
 import { useScrollbackView } from "./panel/useScrollbackView";
 import { useTerminalFind } from "./panel/useTerminalFind";
 import { useTerminalHelp } from "./panel/useTerminalHelp";
-import { useTerminalStrip } from "./panel/useTerminalStrip";
 import { useTouchKeys } from "./panel/useTouchKeys";
 
 // Terminal panel, mounted once below every view: each tab is a tmux session in the shared cache, so scrollback survives
-// unmount, navigation and reload. Template and wiring over ./panel: the strip and its selection, find, the scrollback
-// view, the touch keys, the handover ask and the empty panel's wait; poppable into its own window, bar on the left edge.
+// unmount, navigation and reload. The bar is TerminalStrip; find, the scrollback view, the touch keys, the handover ask
+// and the empty panel's wait are wired here over ./panel; poppable into its own window, bar on the left edge.
 
 const t = useT();
 
@@ -49,12 +46,7 @@ const {
 const emit = defineEmits<{ close: [] }>();
 
 const tabs = createTerminalTabs(source, storageKey, () => emit(`close`));
-const { order, groups, answer, activeName, pending, unsplit, newTab, splitTab, killTabs, restart } = tabs;
-
-// Skeleton of the strip's last-known shape while its list is in flight: unlabelled and inert, since which terminals
-// return is the daemon's to say. Capped so a heavily split sandbox does not spend rows on decoration.
-const PLACEHOLDER_LIMIT = 6;
-const placeholders = computed(() => (answer.value === `waiting` && groups.value.length === 0 ? tabs.remembered.value.slice(0, PLACEHOLDER_LIMIT) : []));
+const { order, groups, answer, activeName, pending, newTab, splitTab, restart } = tabs;
 // Whether Restart applies: a fresh shell replaces a killed one, which means nothing for a dev-server tab.
 const activeShell = computed(() => order.value.find((tab) => tab.name === activeName.value)?.kind === `shell`);
 const floating = useTerminalFloating();
@@ -63,7 +55,10 @@ const vertical = computed(() => floating.here.value);
 const floatHint = computed(() => withShortcut(floating.floats.value ? `Dock panel back` : `Move panel into new window`, `terminal.toggleFloating`));
 // Dismissal, not a kill: sessions outlive every view; docked it hides the panel, floating it closes the window.
 const closeHint = computed(() =>
-    withShortcut(floating.here.value ? `Close the window, the terminals keep running` : `Hide the panel, the terminals keep running`, `terminal.toggle`),
+    withShortcut(
+        floating.here.value ? `Close the window, the terminals keep running` : `Hide the panel, the terminals keep running`,
+        `terminal.toggle`,
+    ),
 );
 
 // Sessions can finish with no client action; watching the shared list catches what imperative relists miss. A dropped
@@ -86,40 +81,27 @@ const { help, helpNote, resolveHelp } = useTerminalHelp({
     activeName,
     reply: (body) => postTurnControl(undefined, `reply`, body),
 });
-const strip = useTerminalStrip({ tabs, floating });
 const {
-    tabByName,
-    segmentIcon,
-    segmentLabel,
-    segmentTooltip,
-    defaultLabel,
-    isBusy,
-    isSelected,
-    activeGroupIndex,
-    onSegmentClick,
-    pendingKill,
-    killPrompt,
-    requestKill,
-    confirmKill,
-    renamingName,
-    renameDraft,
-    beginRename,
-    commitRename,
-    cancelRename,
-    focusRename,
-    middleKill,
-    customize,
-    applyColor,
-    applyIcon,
-    colorOptions,
-    customizeHeader,
-    menu,
-    menuItems,
-    openTabMenu,
-    onBarContextMenu,
-} = strip;
-const { scrollbackName, scrollback, scrollbackFailed, scrollbackPending, scrollbackText, closeScrollback, copyScrollback, gridMenu, gridItems, onGridContextMenu } =
-    useScrollbackView({ sessionOf: terminalSessionOf, read: fetchScrollback, splitTab });
+    scrollbackName,
+    scrollback,
+    scrollbackFailed,
+    scrollbackPending,
+    scrollbackText,
+    closeScrollback,
+    copyScrollback,
+    gridMenu,
+    gridItems,
+    onGridContextMenu,
+} = useScrollbackView({ sessionOf: terminalSessionOf, read: fetchScrollback, splitTab });
+const scrollbackLabel = computed(() =>
+    scrollbackName.value === undefined
+        ? ``
+        : labelFor(
+              scrollbackName.value,
+              order.value.find((tab) => tab.name === scrollbackName.value),
+              stripIndex(groups.value).get(scrollbackName.value),
+          ),
+);
 const { finding, findQuery, findInput, findLabel, runFind, findNext, findPrevious, openFind, closeFind, unbindFind } = useTerminalFind({
     activeName,
     sessionOf: terminalSessionOf,
@@ -141,9 +123,19 @@ let disposeSpawn: (() => void) | undefined;
 let live = true;
 
 onMounted(async () => {
-    commandDisposables = panelCommands({ activeName, strip, unsplit, splitTab, canKill: killTabs !== undefined, openFind }).map((entry) =>
-        registerCommand({ owner: `builtin`, category: TERMINAL, ...entry }),
-    );
+    // Cmd+F on a Mac, Ctrl+F elsewhere, gated to this panel so the page's own find keeps the chord everywhere else.
+    commandDisposables = [
+        registerCommand({
+            owner: `builtin`,
+            category: TERMINAL,
+            command: `terminal.find`,
+            title: t(`terminal.terminalPanel.find`),
+            icon: `search`,
+            keybinding: `Mod+F`,
+            when: `tabSurface == 'terminal'`,
+            handler: openFind,
+        }),
+    ];
     const pane = container.value;
     if (pane === undefined) {
         // Nothing to attach to: both requests are module state, spent here rather than handed to the next mount.
@@ -212,158 +204,39 @@ watch(
             :min="MIN_HEIGHT"
             :max="maxHeight"
             :reset="DEFAULT_HEIGHT"
-            :title="t(`terminal.terminalPanel.dragToResizeDouble`)"
+            :title="t(`shared.dragToResizeDouble`)"
         />
-        <!-- Bar: across the top when docked, down the left edge floating (`vertical`); same pills, toolbar, and menu either way. -->
-        <div
-            class="flex shrink-0 gap-1 border-line bg-card"
-            :class="vertical ? 'w-40 flex-col items-stretch border-r px-1 py-1.5' : 'items-center border-b px-2 py-0.5'"
-            @contextmenu="onBarContextMenu"
-        >
-            <!-- One pill per split group, one segment per session, styled like FileTabs: glyph, label, and a hover ×. -->
-            <div
-                class="flex min-w-0 flex-1 gap-x-0.5 gap-y-1 overflow-x-hidden overflow-y-auto"
-                :class="vertical ? 'min-h-0 flex-col items-stretch' : 'max-h-13 flex-wrap items-center'"
+        <TerminalStrip :tabs="tabs" :floating="floating" :vertical="vertical">
+            <WorkTerminals />
+            <BackgroundProcesses />
+            <button
+                v-if="restart !== undefined && activeShell"
+                type="button"
+                :class="ui.iconButton()"
+                @click="restart()"
+                v-tooltip.top="t(`terminal.terminalPanel.restartShell`)"
+                :aria-label="t(`terminal.terminalPanel.restartShell`)"
             >
-                <div
-                    v-for="(group, gi) in groups"
-                    :key="groupKey(group)"
-                    data-term-tab
-                    class="group flex h-6 shrink-0 cursor-pointer select-none items-center rounded-md transition-colors"
-                    :class="[
-                        vertical ? 'w-full min-w-0' : '',
-                        isSelected(group)
-                            ? 'bg-primary-500/14 text-content'
-                            : gi === activeGroupIndex
-                              ? 'bg-overlay text-content'
-                              : 'text-muted hover:bg-content/6 hover:text-content',
-                    ]"
-                >
-                    <template v-for="(name, si) in group" :key="name">
-                        <span v-if="si > 0" class="h-3.5 w-px shrink-0 bg-line"></span>
-                        <div
-                            class="flex h-full items-center gap-1.5 pl-2 pr-1.5 text-2xs"
-                            :class="[vertical ? 'min-w-0 flex-1' : '', { 'opacity-60': tabByName.get(name)?.running === false }]"
-                            v-tooltip.top="renamingName === name ? undefined : segmentTooltip(name)"
-                            v-middleclick="() => middleKill(name)"
-                            @click="onSegmentClick($event, gi, name)"
-                            @dblclick.prevent.stop="beginRename(name)"
-                            @contextmenu.prevent.stop="openTabMenu($event, gi, name)"
-                        >
-                            <Icon
-                                :name="segmentIcon(name)"
-                                class="text-2xs"
-                                :class="
-                                    segmentColor(name) === undefined
-                                        ? tabByName.get(name)?.kind === 'agent'
-                                            ? 'text-link'
-                                            : 'text-muted'
-                                        : undefined
-                                "
-                                :style="segmentColor(name) === undefined ? undefined : { color: segmentColor(name) }"
-                            />
-                            <!-- The strip keeps a fixed pill width and owns its clicks. -->
-                            <input
-                                v-if="renamingName === name"
-                                v-model="renameDraft"
-                                type="text"
-                                maxlength="40"
-                                :aria-label="t(`terminal.terminalPanel.terminalName`)"
-                                :placeholder="defaultLabel(name)"
-                                class="ui-field-box ui-field-inline w-24 min-w-0 select-text px-1 text-2xs"
-                                @click.stop
-                                @dblclick.stop
-                                @keydown.enter.stop.prevent="commitRename"
-                                @keydown.esc.stop.prevent="cancelRename"
-                                @blur="commitRename"
-                                @vue:mounted="focusRename"
-                            />
-                            <span v-else :class="vertical ? 'min-w-0 flex-1 truncate text-left' : undefined">{{ segmentLabel(name) }}</span>
-                            <!-- The pill identifies the live terminal target. -->
-                            <span
-                                v-if="isBusy(name) && (vertical || group.length === 1)"
-                                class="min-w-0 max-w-24 shrink truncate font-mono text-[0.6rem] text-muted"
-                                >{{ tabByName.get(name)?.command }}</span
-                            >
-                            <span v-if="isBusy(name)" class="size-1.5 shrink-0 rounded-full bg-link" aria-hidden="true"></span>
-                            <span
-                                v-if="killTabs !== undefined && renamingName !== name"
-                                class="relative flex h-3 w-3 shrink-0 items-center justify-center"
-                                @click.stop="requestKill([name])"
-                                :aria-label="
-                                    isBusy(name)
-                                        ? t(`terminal.terminalPanel.killTerminalRunning`, { command: tabByName.get(name)?.command })
-                                        : t(`terminal.terminalPanel.killTerminal`)
-                                "
-                            >
-                                <Icon
-                                    name="times"
-                                    class="absolute rounded text-[0.6rem] opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
-                                />
-                            </span>
-                        </div>
-                    </template>
-                </div>
-                <!-- Remembered terminals keep their own placeholder blocks until sessions load. -->
-                <div
-                    v-for="(group, gi) in placeholders"
-                    :key="`held-${gi}`"
-                    class="flex h-6 shrink-0 items-center rounded-md bg-overlay/50 opacity-40"
-                    :class="vertical ? 'w-full min-w-0' : ''"
-                    aria-hidden="true"
-                >
-                    <template v-for="(name, si) in group" :key="name">
-                        <span v-if="si > 0" class="h-3.5 w-px shrink-0 bg-line"></span>
-                        <div class="flex h-full items-center px-2" :class="vertical ? 'min-w-0 flex-1' : ''">
-                            <span class="h-2 w-8 rounded-full bg-line"></span>
-                        </div>
-                    </template>
-                </div>
-                <button
-                    v-if="newTab !== undefined"
-                    type="button"
-                    class="flex h-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                    :class="vertical ? 'w-full' : 'w-6'"
-                    @click="newTab()"
-                    v-tooltip.top="withShortcut(t(`terminal.terminalPanel.newTerminal`), 'terminal.new')"
-                    :aria-label="t(`terminal.terminalPanel.newTerminal`)"
-                >
-                    <Icon name="plus" class="text-2xs" />
-                </button>
-            </div>
-            <!-- Toolbar: trailing the pills across the top, wrapped under them in the rail. -->
-            <div class="flex shrink-0 items-center gap-1" :class="vertical ? 'flex-wrap justify-center border-t border-line pt-1.5' : undefined">
-                <WorkTerminals />
-                <BackgroundProcesses />
-                <button
-                    v-if="restart !== undefined && activeShell"
-                    type="button"
-                    :class="ui.iconButton()"
-                    @click="restart()"
-                    v-tooltip.top="t(`terminal.terminalPanel.restartShell`)"
-                    :aria-label="t(`terminal.terminalPanel.restartShell`)"
-                >
-                    <Icon name="refresh" class="text-xs" />
-                </button>
-                <button
-                    v-else
-                    type="button"
-                    :class="ui.iconButton()"
-                    @click="tabs.refresh().catch(() => undefined)"
-                    v-tooltip.top="t(`terminal.terminalPanel.refreshSessions`)"
-                    :aria-label="t(`terminal.terminalPanel.refreshSessions`)"
-                >
-                    <Icon name="refresh" class="text-xs" />
-                </button>
-                <!-- Keep the pop-out action beside close because both change the window. -->
-                <button type="button" :class="ui.iconButton()" @click="floating.toggle()" v-tooltip.top="floatHint" :aria-label="floatHint">
-                    <Icon :name="floating.floats.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
-                </button>
-                <button type="button" :class="ui.iconButton()" @click="emit(`close`)" v-tooltip.top="closeHint" :aria-label="closeHint">
-                    <Icon :name="floating.here.value ? 'times' : 'chevron-down'" class="text-xs" />
-                </button>
-            </div>
-        </div>
+                <Icon name="refresh" class="text-xs" />
+            </button>
+            <button
+                v-else
+                type="button"
+                :class="ui.iconButton()"
+                @click="tabs.refresh().catch(() => undefined)"
+                v-tooltip.top="t(`terminal.terminalPanel.refreshSessions`)"
+                :aria-label="t(`terminal.terminalPanel.refreshSessions`)"
+            >
+                <Icon name="refresh" class="text-xs" />
+            </button>
+            <!-- Keep the pop-out action beside close because both change the window. -->
+            <button type="button" :class="ui.iconButton()" @click="floating.toggle()" v-tooltip.top="floatHint" :aria-label="floatHint">
+                <Icon :name="floating.floats.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
+            </button>
+            <button type="button" :class="ui.iconButton()" @click="emit(`close`)" v-tooltip.top="closeHint" :aria-label="closeHint">
+                <Icon :name="floating.here.value ? 'times' : 'chevron-down'" class="text-xs" />
+            </button>
+        </TerminalStrip>
         <!-- Panes and the touch keys under them: always a column, whichever side the bar is on. -->
         <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
             <!-- Agent requests appear above the prompt they concern. -->
@@ -371,7 +244,7 @@ watch(
                 <div class="flex items-start gap-2">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
                     <div class="min-w-0 flex-1 text-xs text-content">
-                        <span class="font-medium">{{ t(`terminal.terminalPanel.agentNeedsHelp`) }}</span>
+                        <span class="font-medium">{{ t(`shared.agentNeedsHelp`) }}</span>
                         {{ help.message }}
                         <span class="text-muted">{{ t(`terminal.terminalPanel.typeBelowHandBack`) }}</span>
                     </div>
@@ -380,13 +253,13 @@ watch(
                     <input
                         v-model="helpNote"
                         type="text"
-                        :placeholder="t(`terminal.terminalPanel.optionalNoteBackTo`)"
+                        :placeholder="t(`shared.optionalNoteBackTo`)"
                         class="ui-field-box ui-field-sm min-w-40 flex-1"
                         @keydown.enter="resolveHelp(true)"
                     />
-                    <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> {{ t(`terminal.terminalPanel.doneHandBack`) }} </Button>
+                    <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> {{ t(`shared.doneHandBack`) }} </Button>
                     <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)">
-                        {{ t(`terminal.terminalPanel.cantHelpNow`) }}
+                        {{ t(`shared.cantHelpNow`) }}
                     </Button>
                 </div>
             </div>
@@ -510,9 +383,6 @@ watch(
             </div>
         </div>
 
-        <!-- The pill menu owns terminal split, join, kill, color, and icon actions. -->
-        <ContextMenu ref="menu" :model="menuItems" :min-width="14" />
-
         <!-- Right-click inside a terminal: clipboard verbs and the deeper scrollback. -->
         <ContextMenu ref="gridMenu" :model="gridItems" :min-width="12" />
 
@@ -521,7 +391,7 @@ watch(
             :open="scrollbackName !== undefined"
             size="xl"
             :scroll="false"
-            :header="scrollbackName === undefined ? '' : t(`terminal.terminalPanel.scrollback`, { scrollbackName: segmentLabel(scrollbackName) })"
+            :header="scrollbackName === undefined ? '' : t(`terminal.terminalPanel.scrollback`, { scrollbackName: scrollbackLabel })"
             @update:open="closeScrollback"
         >
             <!-- The pre element scrolls; its parent only provides the layout height. -->
@@ -539,7 +409,7 @@ watch(
                         />
                     </template>
                     <span v-else-if="scrollbackFailed">{{ t(`terminal.terminalPanel.couldntReadTerminalsScrollback`) }}</span>
-                    <span v-else-if="scrollbackPending">{{ t(`terminal.terminalPanel.reading`) }}</span>
+                    <span v-else-if="scrollbackPending">{{ t(`shared.reading`) }}</span>
                 </div>
                 <pre
                     v-if="scrollback"
@@ -547,73 +417,6 @@ watch(
                     class="min-h-0 flex-1 overflow-auto rounded-md bg-terminal p-3 font-mono text-xs whitespace-pre text-content select-text"
                     >{{ scrollback.text }}</pre>
             </div>
-        </Modal>
-
-        <!-- Confirm shown only when there's something to lose: a busy session, or a bulk kill the gesture never named. -->
-        <ConfirmDialog
-            :open="pendingKill !== undefined"
-            :header="killPrompt.header"
-            :confirm-label="t(`terminal.terminalPanel.killAnyway`)"
-            confirm-icon="trash"
-            :items="killPrompt.items"
-            @cancel="pendingKill = undefined"
-            @confirm="confirmKill"
-        >
-            <template #item="{ item }">
-                <Icon :name="segmentIcon(item.name)" class="shrink-0 text-2xs text-muted" />
-                <span class="shrink-0 text-content">{{ segmentLabel(item.name) }}</span>
-                <span v-if="item.command" class="truncate font-mono text-xs text-muted">{{ item.command }}</span>
-            </template>
-            <p class="mt-3 text-xs text-muted">{{ killPrompt.body }}</p>
-        </ConfirmDialog>
-
-        <!-- One dialog for both pickers (color, icon); a leading default swatch clears the override. Rename stays inline in the strip. -->
-        <Modal :open="customize !== undefined" size="sm" :header="customizeHeader" @update:open="customize = undefined">
-            <template v-if="customize">
-                <div v-if="customize.mode === 'color'" class="flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        :class="ui.addTile(`h-7 w-7 rounded-full text-subtle`)"
-                        v-tooltip.top="t(`terminal.terminalPanel.default`)"
-                        :aria-label="t(`terminal.terminalPanel.defaultColor`)"
-                        @click="applyColor(undefined)"
-                    >
-                        <Icon name="times" class="text-2xs" />
-                    </button>
-                    <button
-                        v-for="[key, hex] in colorOptions"
-                        :key="key"
-                        type="button"
-                        class="h-7 w-7 rounded-full transition-transform hover:scale-110"
-                        :class="{ 'ring-2 ring-line-strong ring-offset-2 ring-offset-card': terminalMeta(customize.name).color === key }"
-                        :style="{ background: hex }"
-                        v-tooltip.top="key"
-                        :aria-label="key"
-                        @click="applyColor(key)"
-                    ></button>
-                </div>
-                <div v-else class="grid grid-cols-8 gap-1.5">
-                    <button
-                        type="button"
-                        :class="ui.addTile(`h-8 w-8 text-subtle`)"
-                        v-tooltip.top="t(`terminal.terminalPanel.default`)"
-                        :aria-label="t(`terminal.terminalPanel.defaultIcon`)"
-                        @click="applyIcon(undefined)"
-                    >
-                        <Icon name="times" class="text-2xs" />
-                    </button>
-                    <button
-                        v-for="icon in TERMINAL_ICONS"
-                        :key="icon"
-                        type="button"
-                        :class="ui.iconButton(`h-8 w-8`, terminalMeta(customize.name).icon === icon ? `bg-overlay text-content` : ``)"
-                        :aria-label="icon"
-                        @click="applyIcon(icon)"
-                    >
-                        <Icon :name="icon" class="text-sm" />
-                    </button>
-                </div>
-            </template>
         </Modal>
     </div>
 </template>

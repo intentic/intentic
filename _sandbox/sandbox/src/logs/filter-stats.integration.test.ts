@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, afterEach } from "bun:test";
 import { commandSignature, readInputSavings } from "./filter-stats.js";
 
 // Savings report read off the ledger agent-output-filter appends to. Pins: stages summing to the whole saving, the

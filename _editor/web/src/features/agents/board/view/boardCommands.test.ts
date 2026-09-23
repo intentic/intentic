@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { t } from "@intentic/ui/i18n";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { type App, createApp, h, ref, shallowRef } from "vue";
 import { commandContext } from "../../../../shell/commands/contextKeys";
 import { boundCommand, commands } from "../../../../shell/commands/useCommands";
@@ -19,12 +18,12 @@ afterEach(() => {
 
 const boardOf = () => {
     const agents = {
-        refresh: mock(async () => undefined),
-        loadArchived: mock(async () => undefined),
-        undoArchive: mock(async () => undefined),
+        refresh: jest.fn(async () => undefined),
+        loadArchived: jest.fn(async () => undefined),
+        undoArchive: jest.fn(async () => undefined),
         undoable: shallowRef<readonly string[]>([]),
     };
-    const focus = mock((_select?: boolean) => undefined);
+    const focus = jest.fn((_select?: boolean) => undefined);
     const filterField = ref<{ focus: (select?: boolean) => void }>();
     const app = createApp({
         setup: () => {
@@ -55,7 +54,7 @@ describe(`the board on screen`, () => {
                 keybinding: `Mod+Z`,
                 when: `agentsUndoable && !editableTarget`,
             },
-            { command: `agents.filter`, title: t(`agents.agentsView.filter`), keybinding: undefined, when: undefined },
+            { command: `agents.filter`, title: t(`shared.filter`), keybinding: undefined, when: undefined },
         ]);
     });
 

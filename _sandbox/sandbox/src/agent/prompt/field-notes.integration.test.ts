@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FIELD_NOTES_FILE } from "@intentic/constants";
-import { test, expect, afterEach } from "bun:test";
 import { fieldNotes } from "./field-notes.js";
 
 // Pins the four properties that decide whether a truncated brief is safe to read: the index always rides, sections are

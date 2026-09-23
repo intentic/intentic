@@ -202,14 +202,6 @@ export const useComposerSend = (host: SendHost) => {
             }
             return host.mobile.value ? `Stop generating` : `Stop generating (Esc)`;
         }),
-        // What will happen to the waiting messages: a parked turn takes them once answered, a running one ends first, and
-        // with nothing running here they go as soon as the agent is free.
-        queuedHint: computed(() => {
-            if (!streaming.value) {
-                return t(`chat.chatQueue.goesWhenFree`);
-            }
-            return awaitingDecision.value ? t(`chat.chatQueue.goesAfterAnswer`) : t(`chat.chatQueue.goesAfterTurn`);
-        }),
         // Place and edit intercept and always return, since falling through with an empty box would misfire as Continue
         // or an appended send; then the run-through badge, then `canSend` for what's left.
         submit: (): void => {
@@ -240,24 +232,6 @@ export const useComposerSend = (host: SendHost) => {
                 return;
             }
             sendDraft();
-        },
-        // Keep both: forks "now" at the cut the edit aimed at, so the new tab inherits everything above and opens with
-        // the original prompt, while this pane keeps the half-written replacement. An escape hatch, never destructive.
-        forkInsteadOfEdit: (): void => {
-            const target = editing.value;
-            const cut = target === undefined ? -1 : view.messages.value.indexOf(target);
-            if (cut < 0) {
-                return;
-            }
-            const carried = draft.value;
-            const chips = attachments.value;
-            // Ends the edit first, so this pane's composer returns to what the pencil displaced before the fork.
-            view.conversation.value.transcript.cancelEdit();
-            const fork = view.forkAt(cut, `now`);
-            if (fork !== undefined) {
-                fork.draft.value = carried;
-                fork.attachments.value = [...chips];
-            }
         },
     };
 };

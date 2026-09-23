@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { upgradeWebSocket, type WebSocketServerLike } from "@hono/node-server";
 import { Hono } from "hono";
 import { packageRoot } from "@intentic/constants/node";
-import { test, expect, afterAll } from "bun:test";
 import { createLoopbackListener, hostOf } from "./loopback-listener.js";
 
 // bun's built-in `ws` upgrades a Bun.serve socket only, and this listener is a node http2 server; the daemon runs on

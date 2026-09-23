@@ -1,5 +1,4 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { describe, it, expect } from "bun:test";
 import { sandboxSummary } from "../../testing/sandboxSummary";
 import { arrivalFor, type ArrivalInput, hostedIdle, rowToOpen, touched } from "./setupArrival";
 

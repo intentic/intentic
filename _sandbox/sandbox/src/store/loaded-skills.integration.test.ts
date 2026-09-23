@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { lstat, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import {
     loadedSkillCatalogNote,

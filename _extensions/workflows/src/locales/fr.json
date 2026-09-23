@@ -1,7 +1,4 @@
 {
-    "extension": {
-        "workflows": "Workflows"
-    },
     "gateAccess": {
         "anyCi": "N'importe quelle CI",
         "cancel": "Annuler",
@@ -13,8 +10,7 @@
         "postWhatPipelineKnows": "POSTez ce que la pipeline sait — commit, branche, URL d'aperçu — et la réponse attend l'exécution : un",
         "rotate": "Faire tourner",
         "rotateToken": "Faire tourner le jeton",
-        "sureEveryPipelineWired": "Sûr ? Chaque pipeline branchée sur cette URL devra recevoir la nouvelle.",
-        "webhook": "Webhook"
+        "sureEveryPipelineWired": "Sûr ? Chaque pipeline branchée sur cette URL devra recevoir la nouvelle."
     },
     "gatePanel": {
         "addGate": "Ajouter une barrière",
@@ -24,7 +20,6 @@
         "fieldGateReads": "Champ que la barrière lit",
         "gateGivesWorkflowWebhook": "Une barrière donne à ce workflow un webhook qu'une pipeline de CI peut appeler : la pipeline POSTe ce qu'elle sait, tout le design s'exécute, et la réponse est « pass », « fail » ou « blocked » : lue dans un champ déclaré, jamais grattée dans de la prose.",
         "gateReadsDeclaredOutput": "Une barrière lit un champ de sortie déclaré, et aucune étape n'en déclare encore. Donnez d'abord un champ de données à l'étape décisive : sélectionnez-la sur le canevas et ajoutez-en un sous Avancé.",
-        "pass": "pass",
         "removeGateUrlStops": "Retirer la barrière : son URL cesse de fonctionner, et une future barrière en reçoit une nouvelle",
         "runsPerDay": "Exécutions par jour",
         "savingMintsWebhookUrl": "Enregistrer frappe l'URL du webhook : elle apparaît ici et sous le badge de barrière sur la carte du workflow.",
@@ -38,7 +33,6 @@
         "cancel": "Annuler",
         "commandPasses": "Une commande passe",
         "createLoop": "Créer la boucle",
-        "dollars": "dollars",
         "editLoop": "Modifier la boucle",
         "everyPublicFunctionDoc": "Chaque fonction publique a un commentaire de documentation expliquant pourquoi elle existe.",
         "fixesFailuresOneAt": "corrige les échecs un par un jusqu'à ce que la suite soit verte",
@@ -52,7 +46,6 @@
         "newLoop": "Nouvelle boucle",
         "optionalLeaveEmptyAgent": "Facultatif. Laissez vide et l'agent travaillera vers ce que vous tapez dans la zone de message, comme bon lui semble.",
         "optionalOneLineUnder": "Facultatif. Une ligne sous le nom dans le sélecteur.",
-        "pnpmTest": "pnpm test",
         "reviewerAgrees": "Un relecteur est d'accord",
         "rounds": "rondes",
         "runTestsPickTop": "lancer les tests, prendre le premier échec, le corriger",
@@ -89,7 +82,6 @@
         "onlyDone": "Et terminée seulement quand",
         "personaStep": "Persona pour cette étape",
         "pinOneWhereModel": "Épinglez-en un là où le modèle fait partie du design : deux étapes sur deux fournisseurs, c'est ainsi qu'on les compare. Sans rien faire, cette étape tourne sur ce que vous utilisez d'habitude.",
-        "pnpmTest": "pnpm test",
         "removeField": "Retirer le champ",
         "repeatsUntilTrue": "Elle se répète jusqu'à ce que ce soit vrai.",
         "required": "requis",
@@ -204,7 +196,6 @@
         "template": "Modèle",
         "use": "Utiliser",
         "useTemplate": "Utiliser ce modèle",
-        "workflows": "Workflows",
         "workflows2": "Vos workflows"
     }
 }

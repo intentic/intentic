@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { hasOfficialBase, invalidExtensionFragment, isOfficialSandboxImage, lintOverlay, overlayBase, rewriteOverlayBase } from "./overlay-lint.js";
 
 test("accepts a RUN/ENV-only fragment, comments and blank lines included", () => {

@@ -1,4 +1,3 @@
-import { test, expect, mock } from "bun:test";
 import { checkpointWorktree, type CheckpointDeps, forkWorktreeBase } from "./checkpoint-worktree.js";
 import type { TurnCheckpoint } from "./turn-checkpoints.js";
 
@@ -12,7 +11,7 @@ const TITLE = "Agent: before this turn";
 
 const services = {
     agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}`, mainDir: (repo: string) => `/main/${repo}` },
-    logger: { warn: mock() },
+    logger: { warn: jest.fn() },
 } as unknown as CheckpointDeps;
 
 // Finds the git verb the way git does: `-c key=value` pairs come before the subcommand, so the first token isn't it.

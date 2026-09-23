@@ -166,7 +166,7 @@ const expandable = (item: EnvironmentItem): boolean => item.detail !== undefined
                             :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
                             @click="toggleFull(item.id)"
                         >
-                            {{ full.has(item.id) ? t(`sandbox.environmentContents.showLess`) : t(`sandbox.environmentContents.showMore`) }}
+                            {{ full.has(item.id) ? t(`shared.showLess`) : t(`sandbox.environmentContents.showMore`) }}
                             <Icon :name="full.has(item.id) ? `chevron-up` : `chevron-down`" />
                         </button>
                         <!-- The plumbing count lives here, not the row: it's the least useful fact and was crowding the row's own line. -->

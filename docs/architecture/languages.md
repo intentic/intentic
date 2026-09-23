@@ -7,10 +7,9 @@ string, add a language, or understand why the layer is shaped the way it is.
 The whole thing is `_editor/ui/src/i18n/`, reached as `@intentic/ui/i18n`, on top of
 [vue-i18n](https://vue-i18n.intlify.dev) 11.
 
-**Where the translations are:** English is written, the other four are seeded from it and awaiting a translator.
-`node _tools/checks/i18n-catalogs.mjs` prints the count per catalog (`3888 keys × 5 languages, 0/15552
-translated`), so the gap is a number anyone can read rather than a feeling. Nothing renders as a dotted path in the
-meantime: a seeded key holds its English text.
+**Where the translations are:** English is written; each other language holds the keys translated into it and
+nothing else, and a key it lacks renders in English. `node _tools/checks/i18n-catalogs.mjs` prints how many keys
+each catalog leaves untranslated per language (`4331 keys, untranslated (rendered in en): de 303, …`).
 
 ## The two rules the design exists to keep
 
@@ -80,8 +79,9 @@ time no catalog is registered yet, so it holds the dotted keys instead. `agentSt
    is what the picker shows, because a reader hunting for their language reads it in their own.
 2. Add its code to `UI_LOCALES` in `_editor/web/index.html`'s pre-paint script. `src/bootLocale.test.ts` fails if
    you forget, and runs the real script against the real `negotiate` to prove the two agree.
-3. `node _tools/checks/i18n-catalogs.mjs --fix` creates every catalog's file for it, seeded with the English text.
-4. Translate the values. Mind the plural arity: a `|` message written with English's two forms needs Polish's
+3. `node _tools/checks/i18n-catalogs.mjs --fix` creates every catalog's file for it, empty: every key renders in
+   English until it is translated.
+4. Add the translations. Mind the plural arity: a `|` message written with English's two forms needs Polish's
    three.
 
 ## Catalogs
@@ -99,7 +99,9 @@ call. Five kinds exist.
 
 Only the app is at the root; everything else is namespaced, so two packages can never claim the same key. Inside a
 catalog a key reads `<area>.<file>.<what it says>`: the feature directory, the component that draws it, and a name
-made from the English. `src/core-views` is `views.`, `src/shell` is `shell.`, `src/components` is `common.`.
+made from the English. `src/core-views` is `views.`, `src/shell` is `shell.`, `src/components` is `common.`. Words
+that several components show and every language translates alike ("Chat", "Restore", "Working…") are one
+`shared.<what it says>` key each, not a copy per component.
 
 A component test mounts without the app's boot, so `bun.setup.ts` registers `appCatalog` for every suite; an
 extension test that calls `activate` itself registers its own with `registerExtensionMessages`. Without that, a text
@@ -110,10 +112,11 @@ assertion reads a dotted key instead of the words.
 Four gates, none of which is the compiler — **vue-i18n's `t` takes any string**, whatever `DefineLocaleMessage`
 says, so a typo'd key is not a build error:
 
-- `i18n-catalogs.mjs` (gate: code): every language holds exactly the keys English does. The app loads one pack
-  rather than the pack plus English, which is what keeps a fifth language off the initial download; the price is
-  that a key missing from `pl.json` has nothing to fall back to and renders as its own dotted path. `--fix` seeds
-  new keys with their English text, drops keys English no longer has, and sorts.
+- `i18n-catalogs.mjs` (gate: code): a language holds any subset of English's keys, since `registerCatalog` always
+  merges English and vue-i18n falls back to it for a key the language lacks. It refuses a key English does not
+  have, a placeholder English does not use (or one it does that the translation drops), and a message that is
+  plural in one language and not the other. `--fix` drops keys English no longer has; it never copies English in,
+  because a copy renders exactly as the fallback does.
 - `i18n-keys.mjs` (gate: code, needs node_modules): every `t()` key and every `<i18n-t keypath>` resolves in a
   catalog that file can read, no catalog carries a message nobody asks for, and every message compiles — `@` is
   vue-i18n's link syntax, `|` its plural separator and `{` its placeholder, so a message carrying one of them

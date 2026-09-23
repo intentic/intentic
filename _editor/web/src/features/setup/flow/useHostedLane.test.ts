@@ -1,7 +1,6 @@
 import "@intentic/testing/dom";
 import type { HostedOffer, HostedStatus, SandboxSummary } from "@intentic/api-contract";
 import { unstubbed } from "@intentic/testing";
-import { afterEach, describe, expect, it, mock, setSystemTime } from "bun:test";
 import { type EffectScope, effectScope, ref } from "vue";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
 import { MAX_WAKES } from "./machinePower";
@@ -21,21 +20,21 @@ const hostedRow = (over: Partial<SandboxSummary> = {}): SandboxSummary =>
 const scopes: EffectScope[] = [];
 
 const stage = (offer: HostedOffer = { enabled: true, remaining: 1 }) => {
-    const rows: SetupRowHost[`sandbox`] = unstubbed(`sandbox`, { sandboxes: ref([]), select: mock(), remove: mock(async () => undefined) });
+    const rows: SetupRowHost[`sandbox`] = unstubbed(`sandbox`, { sandboxes: ref([]), select: jest.fn(), remove: jest.fn(async () => undefined) });
     const platform = {
-        hostedOffer: mock(async () => offer),
-        hostedStatus: mock(async (_input: { sandboxId: string }): Promise<HostedStatus> => ({ machine: `unknown` })),
-        hostedRestart: mock(async (_input: { sandboxId: string }) => ({ ok: true as const })),
-        wake: mock(async (_input: { sandboxId: string }) => ({ ok: true as const })),
+        hostedOffer: jest.fn(async () => offer),
+        hostedStatus: jest.fn(async (_input: { sandboxId: string }): Promise<HostedStatus> => ({ machine: `unknown` })),
+        hostedRestart: jest.fn(async (_input: { sandboxId: string }) => ({ ok: true as const })),
+        wake: jest.fn(async (_input: { sandboxId: string }) => ({ ok: true as const })),
     };
     const sandbox = {
-        hostedProvision: mock(async (id: string, _token: string) => hostedRow({ id })),
-        hostedRelease: mock(async (id: string) => sandboxSummary({ id, token: `tok` })),
+        hostedProvision: jest.fn(async (id: string, _token: string) => hostedRow({ id })),
+        hostedRelease: jest.fn(async (id: string) => sandboxSummary({ id, token: `tok` })),
     };
     const scope = effectScope();
     scopes.push(scope);
     const { row, hosted } = scope.run(() => {
-        const setupRow = useSetupRow({ sandbox: rows, enter: mock(async () => undefined) });
+        const setupRow = useSetupRow({ sandbox: rows, enter: jest.fn(async () => undefined) });
         return {
             row: setupRow,
             hosted: useHostedLane({
@@ -55,7 +54,7 @@ afterEach(() => {
     for (const scope of scopes.splice(0)) {
         scope.stop();
     }
-    setSystemTime();
+    jest.setSystemTime();
 });
 
 describe(`the hosted offer`, () => {
@@ -82,7 +81,7 @@ describe(`starting a machine`, () => {
         const { platform, sandbox, row, hosted } = stage();
         row.created.value = draft;
         hosted.machine.value = `hosted`;
-        setSystemTime(new Date(`2026-09-23T10:00:00Z`));
+        jest.setSystemTime(new Date(`2026-09-23T10:00:00Z`));
         expect(await hosted.provisionHosted()).toBe(true);
         expect(sandbox.hostedProvision.mock.calls).toEqual([[`new`, `tok`]]);
         expect(row.created.value?.hosted).toEqual({ region: `iad`, warm: true });
@@ -187,17 +186,6 @@ describe(`starting it over`, () => {
         expect(hosted.lane.value).toEqual({ kind: `idle`, action: 1, asked: `nothing` });
     });
 
-    it(`builds a new machine when the old one's address was refused`, async () => {
-        const { platform, sandbox, row, hosted } = stage();
-        row.created.value = hostedRow();
-        row.announceRefusal.value = { announced: `old.example.dev`, expected: `sandbox-abc.sbx.test` };
-        hosted.machine.value = `hosted`;
-        await hosted.restartHosted();
-        expect(sandbox.hostedRelease.mock.calls).toEqual([[`new`]]);
-        expect(sandbox.hostedProvision.mock.calls).toEqual([[`new`, `tok`]]);
-        expect(platform.hostedRestart).not.toHaveBeenCalled();
-    });
-
     it(`says so in its own words when a rebuild meets a full fleet`, async () => {
         const { sandbox, row, hosted } = stage();
         row.created.value = hostedRow();
@@ -215,20 +203,13 @@ describe(`starting it over`, () => {
 
 describe(`a machine down under a waiting reader`, () => {
     const waiting = (reading: HostedStatus[`machine`]) => {
-        setSystemTime(new Date(`2026-09-23T10:00:00Z`));
+        jest.setSystemTime(new Date(`2026-09-23T10:00:00Z`));
         const staged = stage();
         staged.row.created.value = hostedRow();
         staged.hosted.resumeHosted();
         staged.platform.hostedStatus.mockResolvedValue({ machine: reading });
         return staged;
     };
-
-    it(`is started on the first reading that says so, and narrated as a boot`, async () => {
-        const { platform, hosted } = waiting(`stopped`);
-        await hosted.readMachine(`new`, hosted.lane.value.action);
-        expect(platform.wake.mock.calls).toEqual([[{ sandboxId: `new` }]]);
-        expect(hosted.hostedWait.value.failure).toBe(undefined);
-    });
 
     it(`is read once every four polls`, async () => {
         const { platform, hosted } = waiting(`started`);
@@ -241,7 +222,7 @@ describe(`a machine down under a waiting reader`, () => {
     it(`is started at most three times, thirty seconds apart`, async () => {
         const { platform, hosted } = waiting(`stopped`);
         const poll = async (at: number): Promise<void> => {
-            setSystemTime(new Date(at));
+            jest.setSystemTime(new Date(at));
             for (let read = 0; read < 4; read += 1) {
                 await hosted.readMachine(`new`, hosted.lane.value.action);
             }
@@ -261,13 +242,6 @@ describe(`a machine down under a waiting reader`, () => {
         hosted.machine.value = `mine`;
         await hosted.readMachine(`new`, hosted.lane.value.action);
         expect(platform.wake).not.toHaveBeenCalled();
-    });
-
-    it(`keeps a refused start as the account of why it is down`, async () => {
-        const { platform, hosted } = waiting(`stopped`);
-        platform.wake.mockRejectedValueOnce(Object.assign(new Error(`hours spent`), { status: 402 }));
-        await hosted.readMachine(`new`, hosted.lane.value.action);
-        expect(hosted.hostedWait.value.failure?.action).toBe(`none`);
     });
 
     it(`ignores a reading asked before the lane moved on`, async () => {

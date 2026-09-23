@@ -3,7 +3,6 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, afterEach } from "bun:test";
 import { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./stash.js";
 
 // Against real repos: the module reads git's own stash bookkeeping (entry numbering, reflog subject spelling, which

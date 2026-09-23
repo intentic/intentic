@@ -71,8 +71,8 @@ const rowTo = (id: string) => ({ name: `subagents`, params: { id }, query: route
 
 // Running rows first, then finished; dots match the chat rail's own (ChatTabList).
 const lanes = computed<{ readonly label: string; readonly dot: string; readonly rows: SubagentSession[] }[]>(() => [
-    { label: t(`chat.subagents.running`), dot: `bg-success`, rows: visible.value.filter(subagentLive) },
-    { label: t(`chat.subagents.finished`), dot: `bg-line-strong`, rows: visible.value.filter((session) => !subagentLive(session)) },
+    { label: t(`shared.running`), dot: `bg-success`, rows: visible.value.filter(subagentLive) },
+    { label: t(`shared.finished`), dot: `bg-line-strong`, rows: visible.value.filter((session) => !subagentLive(session)) },
 ]);
 
 // The card's title: the description, falling back to the agent type only when none was given.
@@ -162,7 +162,7 @@ const liveOf = (session: SubagentSession): { icon: IconName; text: string; since
     if (session.status === `blocked`) {
         return { icon: `question-circle`, text: session.summary ?? `Needs input`, since: session.startedAt };
     }
-    return { icon: activityIcon(session.lastTool), text: session.lastTool ?? t(`chat.subagents.working`), since: session.startedAt };
+    return { icon: activityIcon(session.lastTool), text: session.lastTool ?? t(`shared.working`), since: session.startedAt };
 };
 
 // Whether the facts line has anything to show, so a `v-if` doesn't draw an empty strip. Now only the
@@ -371,7 +371,7 @@ watch(
                                     :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
                                     @click="reportExpanded = !reportExpanded"
                                 >
-                                    {{ reportExpanded ? t(`chat.subagents.showLess`) : t(`chat.subagents.showFullReport`) }}
+                                    {{ reportExpanded ? t(`shared.showLess`) : t(`chat.subagents.showFullReport`) }}
                                     <Icon :name="reportExpanded ? `chevron-up` : `chevron-down`" />
                                 </button>
                             </section>

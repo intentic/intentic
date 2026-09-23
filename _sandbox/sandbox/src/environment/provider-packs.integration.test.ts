@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import { codexConnected } from "../runtimes/codex/codex-provider.js";
 import type { Services } from "../composition.js";

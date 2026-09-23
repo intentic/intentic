@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import {
     acquireStreamSlot,
@@ -150,7 +149,7 @@ describe(`acquireStreamSlot`, () => {
         jest.useFakeTimers();
         try {
             setStreamCapacity(() => 1);
-            const overflowed = mock();
+            const overflowed = jest.fn();
             setStreamOverflow(overflowed);
             await take();
 
@@ -171,7 +170,7 @@ describe(`acquireStreamSlot`, () => {
         jest.useFakeTimers();
         try {
             setStreamCapacity(() => 1);
-            const overflowed = mock();
+            const overflowed = jest.fn();
             setStreamOverflow(overflowed);
             await take();
             const controller = new AbortController();

@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { test, expect, afterEach } from "bun:test";
 import { changedFiles, changesAgainstBase, changesBetweenRefs, dirtyPathsAcross } from "./changes.js";
 import {
     checkoutRef,

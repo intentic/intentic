@@ -5,7 +5,6 @@ import type { CapabilitySummary, SandboxSettings, SkillSummary } from "@intentic
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { test, expect, afterEach, mock } from "bun:test";
 import { stubGlobal } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -17,28 +16,28 @@ stubGlobal(`fetch`, () => Promise.resolve({ ok: false, text: () => Promise.resol
 
 const skills = ref<SkillSummary[]>([]);
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-const setEnabled = mock();
-const removeMutate = mock();
+const setEnabled = jest.fn();
+const removeMutate = jest.fn();
 
-mock.module(`../../environment/useSkills`, () => ({
+jest.mock(`../../environment/useSkills`, () => ({
     useSkills: () => ({
         skills,
         settings,
         error: ref(undefined),
         isLoading: ref(false),
-        save: { mutate: mock() },
+        save: { mutate: jest.fn() },
         remove: { mutate: removeMutate },
         setEnabled,
         readBody: async () => ({ id: `x`, name: `x`, body: `## Body.` }),
-        forgetBody: mock(),
+        forgetBody: jest.fn(),
     }),
 }));
 
 // Both empty: what each tier draws from them is skillVisual's own test; this file is about controls.
-mock.module(`../../../capabilities/connect/useCapabilities`, () => ({
+jest.mock(`../../../capabilities/connect/useCapabilities`, () => ({
     useCapabilities: () => ({ capabilities: ref<CapabilitySummary[]>([]) }),
 }));
-mock.module(`../../../extensions/useExtensions`, () => ({
+jest.mock(`../../../extensions/useExtensions`, () => ({
     useExtensions: () => ({ enabled: ref<ExtensionSummary[]>([]) }),
 }));
 

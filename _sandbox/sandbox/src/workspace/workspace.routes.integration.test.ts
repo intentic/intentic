@@ -14,8 +14,6 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
 
-import { test, expect } from "bun:test";
-
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
 
@@ -424,7 +422,12 @@ test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s e
 // Real picture and real encoder, since what is being pinned is which bytes come back for which Accept.
 test("GET /workspace/thumb answers the size asked for, in the format the reader decodes, and says it varies by Accept", async () => {
     const root = await mkdtemp(join(tmpdir(), "thumb-route-"));
-    await writeFile(join(root, "shot.png"), await sharp({ create: { width: 1200, height: 800, channels: 3, background: { r: 10, g: 120, b: 200 } } }).png().toBuffer());
+    await writeFile(
+        join(root, "shot.png"),
+        await sharp({ create: { width: 1200, height: 800, channels: 3, background: { r: 10, g: 120, b: 200 } } })
+            .png()
+            .toBuffer(),
+    );
     const app = createApp(services({ workspace: workspacePaths(root) }));
     try {
         // Vary as a list, since the CORS layer adds its own entry beside this route's.

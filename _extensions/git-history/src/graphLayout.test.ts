@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import type { GitCommit } from "@intentic/sandbox-contract";
 import { computeGraphLayout } from "./graphLayout";
 

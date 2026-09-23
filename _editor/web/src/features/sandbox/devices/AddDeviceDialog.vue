@@ -12,7 +12,7 @@ const open = defineModel<boolean>(`open`, { required: true });
 </script>
 
 <template>
-    <Modal v-model:open="open" size="lg" :header="t(`sandbox.addDeviceDialog.addDevice`)">
+    <Modal v-model:open="open" size="lg" :header="t(`shared.addDevice`)">
         <DesktopSyncCard />
     </Modal>
 </template>

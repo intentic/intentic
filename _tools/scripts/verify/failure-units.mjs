@@ -1,6 +1,7 @@
 // A failed turbo run as comparable units: a type diagnostic, a failing test, an unhandled error, else the whole task.
 import { readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join, posix } from "node:path";
+import { SUITE_KINDS } from "../../constants/src/test-suites.mjs";
 
 // Where turbo writes `--summarize` output, relative to the directory it ran in.
 const RUNS_DIR = ".turbo/runs";
@@ -10,13 +11,6 @@ export const UNITS_KEPT = 400;
 
 // The JUnit report one `bun test` run of one package writes (suites.mjs) and this module reads back.
 export const junitFile = (dir, packageName, kind) => join(dir, `${packageName.replace(/[^a-zA-Z0-9_-]+/g, "_")}.${kind}.xml`);
-
-// The two `bun test` runs suites.mjs makes per package, each with its own per-test budget in ms.
-export const SUITE_KINDS = ["unit", "integration"];
-export const SUITE_TIMEOUTS = { unit: 20_000, integration: 120_000 };
-
-// Which of the two runs a test file belongs to, read off its name as suites.mjs selects it.
-export const suiteKindOf = (file) => (/\.(integration|e2e)\.test\./.test(file) ? "integration" : "unit");
 
 // The export condition every suite resolves workspace packages through, so a test reads source rather than a stale dist.
 export const SOURCE_CONDITION = "@intentic/src";

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { guestAllowedPath } from "./guestPaths";
 
 // The prefixes a guest may stand on, and the ones the shell sends it home from: pinned so a new route lands on the

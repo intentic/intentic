@@ -1,5 +1,4 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import { type HeldSlot, oldestPerSlot, slotFromFdTarget, summarisePools } from "./queue-slots.js";
 
 /* The pure half: reading a slot out of a descriptor's target, and folding a pipeline's shared descriptors into one

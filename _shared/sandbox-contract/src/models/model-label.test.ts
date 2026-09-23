@@ -1,4 +1,3 @@
-import { expect, test } from "bun:test";
 import { humanizeModelId } from "./model-label.js";
 
 // One humanizer for every id no catalog names, on both sides of the wire.

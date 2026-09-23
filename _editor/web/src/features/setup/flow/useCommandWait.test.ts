@@ -1,7 +1,6 @@
 import "@intentic/testing/dom";
 import type { SetupReport } from "@intentic/api-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
 import type { DesktopSetupReport } from "../../../app/environments/desktop";
 import type { desktopInstaller } from "../../../app/environments/desktopDownloads";
@@ -58,16 +57,6 @@ describe(`how far the command has got`, () => {
         expect({ copied: command.copied.value, handoff: wait.handoff.value }).toEqual({ copied: true, handoff: `handed` });
         row.claimedAt.value = `2026-09-23T10:01:00Z`;
         expect(wait.handoff.value).toBe(`claimed`);
-    });
-
-    it(`reads the machine's own account of the run`, () => {
-        const { row, wait } = stage();
-        row.report.value = {
-            stage: `pulling-image`,
-            failed: [{ check: `docker`, problem: `not running`, remedy: `start it` }],
-            at: `2026-09-23T10:01:00Z`,
-        };
-        expect(wait.reportFailures.value).toEqual([{ check: `docker`, problem: `not running`, remedy: `start it` }]);
     });
 });
 

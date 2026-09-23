@@ -1,4 +1,3 @@
-import { describe, expect, it, mock } from "bun:test";
 import { frameBacklog } from "./frame-backlog.js";
 
 // What one /events connection may hold for a consumer that is not reading, and what happens past it.
@@ -11,7 +10,7 @@ const clock = () => {
 
 describe("the /events backlog", () => {
     it("holds up to its frame bound, then drops everything and cuts once", () => {
-        const onCut = mock((_unsent: number) => undefined);
+        const onCut = jest.fn((_unsent: number) => undefined);
         const backlog = frameBacklog<number>(onCut, { frames: 3 });
         for (const frame of [1, 2, 3]) {
             backlog.push(frame);
@@ -28,7 +27,7 @@ describe("the /events backlog", () => {
 
     it("cuts a consumer whose oldest frame has waited past the bound, however few frames it holds", () => {
         const time = clock();
-        const onCut = mock((_unsent: number) => undefined);
+        const onCut = jest.fn((_unsent: number) => undefined);
         const backlog = frameBacklog<string>(onCut, { waitMs: 1_000, now: time.now });
         backlog.push("roster");
         time.advanceMs(1_000);
@@ -42,7 +41,7 @@ describe("the /events backlog", () => {
 
     it("never cuts a consumer that keeps taking its frames", () => {
         const time = clock();
-        const onCut = mock((_unsent: number) => undefined);
+        const onCut = jest.fn((_unsent: number) => undefined);
         const backlog = frameBacklog<number>(onCut, { frames: 2, waitMs: 1_000, now: time.now });
         for (let frame = 0; frame < 1_000; frame += 1) {
             backlog.push(frame);

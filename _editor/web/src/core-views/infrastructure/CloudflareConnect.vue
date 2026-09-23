@@ -76,9 +76,9 @@ const connect = async (): Promise<void> => {
         <!-- No token yet: collect token + zone, then write it to the sandbox and declare the backend. -->
         <form v-else class="flex flex-col gap-3" @submit.prevent="connect">
             <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-semibold text-content">{{ t(`views.cloudflareConnect.connectCloudflare`) }}</h3>
-                <InfoHint class="ml-auto" :label="t(`views.cloudflareConnect.whyCloudflareApiToken`)">
-                    <p class="mb-1 text-sm font-semibold text-content">{{ t(`views.cloudflareConnect.whyToken`) }}</p>
+                <h3 class="text-sm font-semibold text-content">{{ t(`shared.connectCloudflare`) }}</h3>
+                <InfoHint class="ml-auto" :label="t(`shared.whyCloudflareApiToken`)">
+                    <p class="mb-1 text-sm font-semibold text-content">{{ t(`shared.whyToken`) }}</p>
                     <p class="mb-3 text-2xs leading-relaxed text-muted">
                         {{ t(`views.cloudflareConnect.servicePutOnDomain`) }}
                     </p>
@@ -108,13 +108,7 @@ const connect = async (): Promise<void> => {
                 </template>
             </CloudflareTokenField>
 
-            <Button
-                type="submit"
-                class="self-end"
-                :label="t(`views.cloudflareConnect.connectCloudflare`)"
-                :disabled="!canConnect || submitting"
-                :loading="submitting"
-            >
+            <Button type="submit" class="self-end" :label="t(`shared.connectCloudflare`)" :disabled="!canConnect || submitting" :loading="submitting">
                 <template #icon><Icon name="check" /></template>
             </Button>
         </form>

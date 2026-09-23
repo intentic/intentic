@@ -8,7 +8,7 @@ import { commandShortcut } from "../../../shell/commands/useCommands";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { type FleetAgent, lanes } from "./useAgents-fleet";
-import { archived, holdPending, putOnBoard, takeOffBoard } from "./useAgents-registry";
+import { archived, holdPending, moveAhead } from "./useAgents-registry";
 
 // The board's exit: archiving takes an agent off the lanes and reclaims its worktree checkout, keeping the branch,
 // transcript and every counter, so it's the routine action (no confirmation, undoable, bulk) while discard stays
@@ -82,7 +82,7 @@ const refusalNotice = (failed: ProcedureOutput<`agents.archive`>[`failed`]): str
 };
 
 // The cards the daemon moved, filed as the archive's newest and made undoable, taking their tabs with them.
-// `restore` is the press's own takeOffBoard rollback: the rest of what it aimed at comes back.
+// `restore` is the press's own moveAhead rollback: the rest of what it aimed at comes back.
 const fileArchived = (moved: ProcedureOutput<`agents.archive`>[`moved`], rev: number, restore: (keep?: ReadonlySet<string>) => void): void => {
     // A delta, not the roster the daemon happens to hold now, since two archives in flight would otherwise race.
     // Held as a pending move until the daemon publishes a roster at `rev`, or a just-archived card can reappear for
@@ -146,8 +146,8 @@ export const archive = async (ids?: readonly string[]): Promise<void> => {
     const release = claimBusy(aimed);
     // A sweep is the archive with no per-card animation to vouch for it, so it's the one that reports.
     const sweep = ids === undefined || ids.length > 1;
-    // The cards leave here, not on the answer; see takeOffBoard for what `restore` puts back.
-    const restore = takeOffBoard(aimed);
+    // The cards leave here, not on the answer; see moveAhead for what `restore` puts back.
+    const restore = moveAhead(aimed.map((id) => ({ id })));
     // An answer landing after a switch is about cards the board no longer holds; the next sandbox's strip is not its.
     const current = sandboxScopeGuard();
     try {
@@ -186,7 +186,7 @@ export const restore = async (ids: readonly string[]): Promise<void> => {
     const release = claimBusy(ids);
     const before = archived.value;
     const leaving = before.filter((agent) => ids.includes(agent.id));
-    const unput = putOnBoard(leaving.map(onBoard));
+    const unput = moveAhead(leaving.map((agent) => ({ id: agent.id, present: onBoard(agent) })));
     archived.value = before.filter((agent) => !ids.includes(agent.id));
     const current = sandboxScopeGuard();
     try {

@@ -2,12 +2,11 @@
 // exists separately since the remote Chromium's clipboard is inside the sandbox, unreachable from the user's
 // machine.
 import "@intentic/testing/dom";
-import { test, expect, mock } from "bun:test";
 import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { effectScope, ref } from "vue";
 
 // The ticket mint is an HTTP round trip; only the socket's URL matters to this suite.
-mock.module(`../sandbox/session/wsTicket`, () => ({ socketUrl: async () => `wss://sandbox.test/system/browser-view` }));
+jest.mock(`../sandbox/session/wsTicket`, () => ({ socketUrl: async () => `wss://sandbox.test/system/browser-view` }));
 
 const { useBrowserView } = await import(`./useBrowserView`);
 
@@ -53,7 +52,7 @@ const mouse = (over: Partial<MouseEvent> = {}): MouseEvent =>
         metaKey: false,
         shiftKey: false,
         altKey: false,
-        preventDefault: mock(),
+        preventDefault: jest.fn(),
         ...over,
     }) as unknown as MouseEvent;
 
@@ -65,7 +64,7 @@ const press = (key: string, held: { ctrl?: boolean; shift?: boolean } = {}): Key
         metaKey: false,
         shiftKey: held.shift === true,
         altKey: false,
-        preventDefault: mock(),
+        preventDefault: jest.fn(),
     }) as unknown as KeyboardEvent;
 
 // A paste as the host browser delivers it: the clipboard answers by MIME type, and only text is asked for.
@@ -108,7 +107,7 @@ test("a paste from the user's own machine arrives as text the remote page can re
 
     // Ctrl/Cmd+V must stay with the host: swallowing it would stop the paste event from ever firing, and the remote
     // clipboard it would reach isn't the user's.
-    const chord = { key: `v`, ctrlKey: true, metaKey: false, altKey: false, preventDefault: mock() } as unknown as KeyboardEvent;
+    const chord = { key: `v`, ctrlKey: true, metaKey: false, altKey: false, preventDefault: jest.fn() } as unknown as KeyboardEvent;
     view.onKeyDown(chord);
     expect(chord.preventDefault).not.toHaveBeenCalled();
 });
@@ -152,7 +151,7 @@ test("nothing is typed into a browser the user is only watching", async () => {
 // is read back before the chord is let through, since the same path also carries Ctrl+X, which would delete the
 // text first.
 test("copying puts the remote page's selection on the user's own clipboard, then lets the chord through", async () => {
-    const writeText = mock(async () => {});
+    const writeText = jest.fn(async () => {});
     Object.defineProperty(navigator, `clipboard`, { value: { writeText }, configurable: true });
     const { view, wire, socket } = await connected();
     view.driving.value = true;
@@ -325,7 +324,7 @@ test("the pointer takes the shape the remote page would give it", async () => {
 // A copy over nothing selected must not leave stale text on the clipboard, and must still let the page have its
 // chord, in case the site binds Ctrl+C itself.
 test("copying an empty selection writes nothing", async () => {
-    const writeText = mock(async () => {});
+    const writeText = jest.fn(async () => {});
     Object.defineProperty(navigator, `clipboard`, { value: { writeText }, configurable: true });
     const { view, wire, socket } = await connected();
     view.driving.value = true;

@@ -1,6 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { test, expect, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest, ContainerCredential, TurnPolicy, TurnSpec } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";

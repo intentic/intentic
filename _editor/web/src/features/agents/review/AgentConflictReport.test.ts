@@ -2,7 +2,6 @@
 // both template decisions across five states.
 import "@intentic/testing/dom";
 import type { LandConflict } from "@intentic/sandbox-contract";
-import { it, expect, afterEach, jest } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

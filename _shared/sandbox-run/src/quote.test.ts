@@ -1,5 +1,4 @@
 import { parseEnv } from "node:util";
-import { test, expect } from "bun:test";
 import { envLine, shellQuote, sqlLiteral, UnquotableValueError } from "./quote.js";
 
 // Each case is a value that broke a real call site, asserted through the parser it broke (parseEnv, a shell), not the

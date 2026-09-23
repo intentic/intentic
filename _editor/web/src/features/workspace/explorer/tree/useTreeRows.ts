@@ -19,7 +19,7 @@ export interface TreeRowsHost {
     readonly rootHidden: () => number;
     readonly filter: () => string;
     // The toolbar's three switches (useLayout's), read by every level's filter and by the chip counting what one hid.
-    readonly switches: { readonly [K in keyof ExplorerFilters]: Readonly<Ref<boolean>> };
+    readonly filters: Readonly<Ref<ExplorerFilters>>;
     readonly nesting: Readonly<Ref<boolean>>;
     readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "expanded" | "lazyChildren" | "lazyHidden">;
     readonly emptyDirs: Pick<ReturnType<typeof useEmptyDirs>, "isBarren" | "chainOf">;
@@ -30,11 +30,7 @@ export const useTreeRows = (host: TreeRowsHost) => {
     // Children come from the eager walk's inline `children`, else the lazily-fetched map keyed by path.
     const childrenOf = (entry: WorkspaceTreeEntry): readonly WorkspaceTreeEntry[] => entry.children ?? lazyChildren.value.get(entry.path) ?? [];
     const byPath = computed(() => indexEntries(host.tree(), childrenOf));
-    const filters = computed<ExplorerFilters>(() => ({
-        showIgnored: host.switches.showIgnored.value,
-        hideTests: host.switches.hideTests.value,
-        hideTechnical: host.switches.hideTechnical.value,
-    }));
+    const { filters } = host;
 
     // Provisional entries join or leave each listing here, so a file gesture shows at the gesture, not a round trip later.
     const visibleRows = computed(() =>

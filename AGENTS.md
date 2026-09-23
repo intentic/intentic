@@ -116,7 +116,7 @@ rules are about what a test stands the code up with, not about how it asserts.
   ambient machine asserts different things on CI and on a developer's sandbox.
 - Keep module loading off the assertion clock – an `await import()` inside a test or hook is charged to that
   test's timeout, and it costs ~10× more on a busy runner than on an idle one. Import statically wherever the
-  file's setup only installs globals. `mock.module` is not hoisted: a module that must see the mock is imported
+  file's setup only installs globals. `jest.mock` is not hoisted: a module that must see the mock is imported
   dynamically after it, at module scope, and a singleton the test resets is re-evaluated with `freshImport`
   (`@intentic/testing/bun`).
 - A suite that reaches for the machine says so in its NAME – `*.integration.test.ts` (temp trees,
@@ -150,7 +150,6 @@ rules are about what a test stands the code up with, not about how it asserts.
   or a `Test-Note:` trailer saying why. The same measure runs in `pnpm verify:turn`, over the turn's changed test
   files. On 2026-08-31 about 180 test files were widened in an afternoon with every suite green; that is
   what this reads for.
-- Mock a workspace package with what the code under test imports, or with the original – the `test-programs`
-  check reads every `mock.module("@intentic/…", () => ({…}))` factory against the names the test and the modules it stands
-  up import from that package, and refuses a missing one. Spread `await importOriginal()` into the factory rather
-  than listing exports: the list is right the day it is written and wrong the day the package grows.
+- Mock a workspace package with every name the code under test imports from it – the `test-programs` check reads
+  every `jest.mock("@intentic/…", () => ({…}))` factory against the names the test and the modules it stands up
+  import from that package, and refuses a missing one.

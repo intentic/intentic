@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { renderPage, toPageState } from "@intentic/browser/page";
-import { test, expect, beforeEach } from "bun:test";
 import { clickRef, collectPage, describeRef, fillRef, readPageText, selectRef } from "./driver.js";
 
 // Tests the page walk against real DOM via jsdom, which is enough for the judgements that matter (what's clickable,

@@ -1,4 +1,3 @@
-import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { stubGlobal, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { PushNotificationsPlugin } from "../shell/window/capacitor";
 import { nativePushDriver } from "./nativePush";
@@ -9,15 +8,15 @@ const listeners = new Map<string, (payload: never) => void>();
 
 const plugin = (overrides?: Partial<PushNotificationsPlugin>): PushNotificationsPlugin =>
     ({
-        checkPermissions: mock(async () => ({ receive: `granted` as const })),
-        requestPermissions: mock(async () => ({ receive: `granted` as const })),
+        checkPermissions: jest.fn(async () => ({ receive: `granted` as const })),
+        requestPermissions: jest.fn(async () => ({ receive: `granted` as const })),
         // The token is delivered through the `registration` listener AFTER register() resolves: the shape
         // that makes the promise-wrapping worth testing.
-        register: mock(async () => {
+        register: jest.fn(async () => {
             const handler = listeners.get(`registration`);
             setTimeout(() => handler?.({ value: `apns-token-1` } as never), 0);
         }),
-        addListener: mock(async (event: string, handler: (payload: never) => void) => {
+        addListener: jest.fn(async (event: string, handler: (payload: never) => void) => {
             listeners.set(event, handler);
             return { remove: async () => undefined };
         }),
@@ -25,14 +24,14 @@ const plugin = (overrides?: Partial<PushNotificationsPlugin>): PushNotifications
     }) as PushNotificationsPlugin;
 
 const shell = { current: undefined as PushNotificationsPlugin | undefined };
-mock.module(`../shell/window/capacitor`, () => ({
+jest.mock(`../shell/window/capacitor`, () => ({
     inNativeShell: () => shell.current !== undefined,
     pushPlugin: () => shell.current,
 }));
 
-const register = mock();
-const unregister = mock();
-mock.module(`../lib/useApi`, () => ({ apiClient: { push: { register, unregister } } }));
+const register = jest.fn();
+const unregister = jest.fn();
+jest.mock(`../lib/useApi`, () => ({ apiClient: { push: { register, unregister } } }));
 
 const storage = new Map<string, string>();
 
@@ -65,7 +64,7 @@ test(`minting registers the APNs token with the relay and hands the daemon the g
 });
 
 test(`a declined native prompt is terminal: iOS only asks once`, async () => {
-    shell.current = plugin({ requestPermissions: mock(async () => ({ receive: `denied` as const })) });
+    shell.current = plugin({ requestPermissions: jest.fn(async () => ({ receive: `denied` as const })) });
 
     await expect(nativePushDriver.mint(async () => ``)).resolves.toEqual({ outcome: `denied` });
     expect(register).not.toHaveBeenCalled();
@@ -74,7 +73,7 @@ test(`a declined native prompt is terminal: iOS only asks once`, async () => {
 test(`a push service that never answers surfaces advice instead of spinning forever`, async () => {
     jest.useFakeTimers();
     try {
-        shell.current = plugin({ register: mock(async () => undefined) }); // no registration event will fire
+        shell.current = plugin({ register: jest.fn(async () => undefined) }); // no registration event will fire
         // The outcome is captured as a value rather than as `expect(...).rejects`: that matcher, attached to a
         // promise still in flight while the clock is frozen, never returns.
         const minting = nativePushDriver

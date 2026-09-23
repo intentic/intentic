@@ -1,6 +1,5 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf } from "@intentic/sandbox-contract";
-import { test, expect, mock } from "bun:test";
 import { GUIDANCE_HEADER, guidanceBlock } from "./guidance.js";
 import { intenticPromptOf } from "./intentic-prompt.js";
 import { sdkSystemPrompt, turnPromptPlacement } from "./system-prompt.js";
@@ -17,7 +16,7 @@ const PRESET = [
 ].join("\n\n");
 const INTENTIC = intenticPromptOf(PRESET);
 const asked: (string | undefined)[] = [];
-mock.module("./preset-prompt.js", () => ({
+jest.mock("./preset-prompt.js", () => ({
     presetSystemPrompt: async (_cwd: string, model?: string) => {
         asked.push(model);
         return { text: PRESET, version: "2.1.0" };
@@ -445,7 +444,12 @@ test("the owner's own browser is named, as the browser they see, and preferred o
     expect(prompt.indexOf("The owner's own computers are connected")).toBeLessThan(prompt.indexOf("The owner's OWN browser is connected"));
 
     // A browser that has never said what it is is still named; only the parenthesis goes.
-    const unread = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [{ id: "chrome" }], unlisted: [] } })) as string;
+    const unread = (await systemPromptOf({
+        ...BASE,
+        mode: "intentic",
+        custom: undefined,
+        ownBrowsers: { browsers: [{ id: "chrome" }], unlisted: [] },
+    })) as string;
     expect(unread).toContain("this turn: `chrome`, behind deferred tools");
 
     // No browser connected, or a card with none granted: no sentence at all rather than one about absent tools.
@@ -458,7 +462,12 @@ test("the owner's own browser is named, as the browser they see, and preferred o
 // A granted browser whose bridge lists no tools (no socket, nothing remembered) was still called connected, and the turn
 // searched for `mcp__chrome__` tools that were never there.
 test("a granted browser that publishes no tools is said to be absent, never connected", async () => {
-    const prompt = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [], unlisted: ["chrome"] } })) as string;
+    const prompt = (await systemPromptOf({
+        ...BASE,
+        mode: "intentic",
+        custom: undefined,
+        ownBrowsers: { browsers: [], unlisted: ["chrome"] },
+    })) as string;
     expect(prompt).not.toContain("The owner's OWN browser is connected");
     expect(prompt).toContain("`chrome` is added to this sandbox but its extension is not connected");
     expect(prompt).toContain("this turn has no `mcp__chrome__` tools");

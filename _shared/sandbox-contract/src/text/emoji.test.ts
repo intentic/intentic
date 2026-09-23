@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { isSingleEmoji } from "./emoji.js";
 
 describe("isSingleEmoji", () => {

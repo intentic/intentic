@@ -2,7 +2,6 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright";
-import { test, expect, afterAll } from "bun:test";
 import { chromiumWindowArgs, DISPLAY_HEIGHT, DISPLAY_WIDTH, ensureDisplay, releaseDisplay } from "./display.js";
 import { startLiveView, type LiveReady, type LiveView } from "./live-view.js";
 import { readRegion } from "./region.js";

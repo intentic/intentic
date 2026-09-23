@@ -1,5 +1,4 @@
 import type { TranscriptRow } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { parseRuntimeHistory, withRuntimeHistory } from "./runtime-history.js";
 
 test("round-trips a cross-runtime transcript and its current prompt", () => {

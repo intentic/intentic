@@ -2,23 +2,22 @@
 // needed to assert on.
 import "@intentic/testing/dom";
 import { vAction } from "@intentic/ui";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const user = ref<{ name: string; image: string | null } | undefined>({ name: `Artur Kurowski`, image: null });
-const updateProfile = mock<(input: { name?: string; image?: string }) => Promise<void>>().mockResolvedValue(undefined);
-mock.module(`../auth/useAuth`, () => ({
+const updateProfile = jest.fn<(input: { name?: string; image?: string }) => Promise<void>>().mockResolvedValue(undefined);
+jest.mock(`../auth/useAuth`, () => ({
     useAuth: () => ({ user, updateProfile }),
 }));
 
-const fileToSquareDataUrl = mock<(file: File, fit: `cover` | `contain`) => Promise<string>>().mockResolvedValue(`data:image/webp;base64,NEW`);
-mock.module(`../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl }));
+const fileToSquareDataUrl = jest.fn<(file: File, fit: `cover` | `contain`) => Promise<string>>().mockResolvedValue(`data:image/webp;base64,NEW`);
+jest.mock(`../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl }));
 
 // Plan chip words are pinned in hostedHours.test.ts; mocked here to avoid needing a query client.
 const planBadge = ref<{ label: string; variant: string; detail: string } | undefined>(undefined);
-mock.module(`./hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge }) }));
+jest.mock(`./hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge }) }));
 
 const { default: SettingsProfile } = await import(`./SettingsProfile.vue`);
 

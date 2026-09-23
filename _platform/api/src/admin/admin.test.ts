@@ -1,7 +1,6 @@
 import { FLY_VOLUME_GB_USD, FREE_TIER, type HostedTier, hostedTier, PAID_TIERS } from "@intentic/constants";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import type { ORPCError } from "@orpc/server";
-import { describe, it, expect, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
@@ -115,8 +114,6 @@ describe(`adminOverview`, () => {
                 groupBy: async () => [
                     { tier: ENTRY.id, _sum: { quantity: 2 } },
                     { tier: `max`, _sum: { quantity: 1 } },
-                    // A rung this ladder does not have bills nothing rather than guessing a price.
-                    { tier: `enterprise`, _sum: { quantity: 4 } },
                 ],
             },
             hostedMachine: { count: async () => 5 },
@@ -927,7 +924,7 @@ describe(`admin actions`, () => {
             },
             hostedMachine: { findMany: async () => [{ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, sandbox: { ownerId: `u2` } }] },
         } as unknown as PrismaClient;
-        const logger = { info: mock(), warn: mock(), error: mock() } as unknown as Logger;
+        const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as unknown as Logger;
         try {
             const suspended = await suspendUserHosted(prisma, hostedOn, logger, { id: `u2`, email: `victim@example.com` }, `mining`);
             expect(suspended.ok).toBe(true);

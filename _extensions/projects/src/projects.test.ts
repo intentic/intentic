@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { accentOf, freeProjectName, monogramOf, previewPath, projectIds, slugOf, summaryOf } from "./projects.js";
 
 describe(`which repositories are projects`, () => {

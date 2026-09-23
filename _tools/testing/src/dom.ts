@@ -1,256 +1,70 @@
 import { afterAll } from "bun:test";
+import vm from "node:vm";
 import { JSDOM } from "./jsdom.js";
 
-// A DOM for the suite that imports this first, or the package that preloads it first: a jsdom window's members become globals with the same override rule
-// the jsdom environment applied, so a suite ported from it sees the same `document`, `Event` and `navigator`.
-// Node keeps every global not named below (fetch, URL, setTimeout, console); jsdom's copy replaces Node's for the
-// DOM interfaces and window members that are.
+// Every jsdom window member that is not an ECMAScript intrinsic becomes a global, over the runtime's own but for KEEP_RUNTIME.
 
-// jsdom's living-standard interfaces: replace Node's own where both exist (Event, EventTarget, Blob, File, ...).
-const LIVING_KEYS = [
-    `DOMException`,
-    `EventTarget`,
-    `NamedNodeMap`,
-    `Node`,
-    `Attr`,
-    `Element`,
-    `DocumentFragment`,
-    `DOMImplementation`,
-    `Document`,
-    `XMLDocument`,
-    `CharacterData`,
-    `Text`,
-    `CDATASection`,
-    `ProcessingInstruction`,
-    `Comment`,
-    `DocumentType`,
-    `NodeList`,
-    `RadioNodeList`,
-    `HTMLCollection`,
-    `HTMLOptionsCollection`,
-    `DOMStringMap`,
-    `DOMTokenList`,
-    `StyleSheetList`,
-    `HTMLElement`,
-    `HTMLHeadElement`,
-    `HTMLTitleElement`,
-    `HTMLBaseElement`,
-    `HTMLLinkElement`,
-    `HTMLMetaElement`,
-    `HTMLStyleElement`,
-    `HTMLBodyElement`,
-    `HTMLHeadingElement`,
-    `HTMLParagraphElement`,
-    `HTMLHRElement`,
-    `HTMLPreElement`,
-    `HTMLUListElement`,
-    `HTMLOListElement`,
-    `HTMLLIElement`,
-    `HTMLMenuElement`,
-    `HTMLDListElement`,
-    `HTMLDivElement`,
-    `HTMLAnchorElement`,
-    `HTMLAreaElement`,
-    `HTMLBRElement`,
-    `HTMLButtonElement`,
-    `HTMLCanvasElement`,
-    `HTMLDataElement`,
-    `HTMLDataListElement`,
-    `HTMLDetailsElement`,
-    `HTMLDialogElement`,
-    `HTMLDirectoryElement`,
-    `HTMLFieldSetElement`,
-    `HTMLFontElement`,
-    `HTMLFormElement`,
-    `HTMLHtmlElement`,
-    `HTMLImageElement`,
-    `HTMLInputElement`,
-    `HTMLLabelElement`,
-    `HTMLLegendElement`,
-    `HTMLMapElement`,
-    `HTMLMarqueeElement`,
-    `HTMLMediaElement`,
-    `HTMLMeterElement`,
-    `HTMLModElement`,
-    `HTMLOptGroupElement`,
-    `HTMLOptionElement`,
-    `HTMLOutputElement`,
-    `HTMLPictureElement`,
-    `HTMLProgressElement`,
-    `HTMLQuoteElement`,
-    `HTMLScriptElement`,
-    `HTMLSelectElement`,
-    `HTMLSlotElement`,
-    `HTMLSourceElement`,
-    `HTMLSpanElement`,
-    `HTMLTableCaptionElement`,
-    `HTMLTableCellElement`,
-    `HTMLTableColElement`,
-    `HTMLTableElement`,
-    `HTMLTimeElement`,
-    `HTMLTableRowElement`,
-    `HTMLTableSectionElement`,
-    `HTMLTemplateElement`,
-    `HTMLTextAreaElement`,
-    `HTMLUnknownElement`,
-    `HTMLFrameElement`,
-    `HTMLFrameSetElement`,
-    `HTMLIFrameElement`,
-    `HTMLEmbedElement`,
-    `HTMLObjectElement`,
-    `HTMLParamElement`,
-    `HTMLVideoElement`,
-    `HTMLAudioElement`,
-    `HTMLTrackElement`,
-    `HTMLFormControlsCollection`,
-    `SVGElement`,
-    `SVGGraphicsElement`,
-    `SVGSVGElement`,
-    `SVGTitleElement`,
-    `SVGAnimatedString`,
-    `SVGNumber`,
-    `SVGStringList`,
-    `Event`,
-    `CloseEvent`,
-    `CustomEvent`,
-    `MessageEvent`,
-    `ErrorEvent`,
-    `HashChangeEvent`,
-    `PopStateEvent`,
-    `StorageEvent`,
-    `ProgressEvent`,
-    `PageTransitionEvent`,
-    `SubmitEvent`,
-    `UIEvent`,
-    `FocusEvent`,
-    `InputEvent`,
-    `MouseEvent`,
-    `KeyboardEvent`,
-    `TouchEvent`,
-    `CompositionEvent`,
-    `WheelEvent`,
-    `BarProp`,
-    `External`,
-    `Location`,
-    `History`,
-    `Screen`,
-    `Crypto`,
-    `Performance`,
-    `Navigator`,
-    `PluginArray`,
-    `MimeTypeArray`,
-    `Plugin`,
-    `MimeType`,
-    `FileReader`,
-    `FormData`,
-    `Blob`,
-    `File`,
-    `FileList`,
-    `ValidityState`,
-    `DOMParser`,
-    `XMLSerializer`,
-    `XMLHttpRequestEventTarget`,
-    `XMLHttpRequestUpload`,
-    `XMLHttpRequest`,
-    `WebSocket`,
-    `NodeFilter`,
-    `NodeIterator`,
-    `TreeWalker`,
-    `AbstractRange`,
-    `Range`,
-    `StaticRange`,
-    `Selection`,
-    `Storage`,
-    `CustomElementRegistry`,
-    `ShadowRoot`,
-    `MutationObserver`,
-    `MutationRecord`,
+// Fake timers, a fetched Response and compared bytes belong to the runtime's realm, so these stay the runtime's.
+const KEEP_RUNTIME = new Set<string>([
+    `URL`,
+    `URLSearchParams`,
+    `Headers`,
+    `AbortController`,
+    `AbortSignal`,
+    `TextEncoder`,
+    `TextDecoder`,
+    `performance`,
+    `crypto`,
+    `setTimeout`,
+    `setInterval`,
+    `clearTimeout`,
+    `clearInterval`,
+    `queueMicrotask`,
+    `atob`,
+    `btoa`,
+    `onmessage`,
+    `onerror`,
+]);
+
+// Intrinsics taken from the window anyway, so a buffer jsdom hands back passes `instanceof` in the code under test.
+const WINDOW_REALM = [
+    `ArrayBuffer`,
     `Uint8Array`,
+    `Uint8ClampedArray`,
     `Uint16Array`,
     `Uint32Array`,
-    `Uint8ClampedArray`,
     `Int8Array`,
     `Int16Array`,
     `Int32Array`,
     `Float32Array`,
     `Float64Array`,
-    `ArrayBuffer`,
-    `DOMRectReadOnly`,
-    `DOMRect`,
-    `Image`,
-    `Audio`,
-    `Option`,
-    `CSS`,
-];
-
-// Window members that are not interfaces.
-const OTHER_KEYS = [
-    `addEventListener`,
-    `alert`,
-    `blur`,
-    `cancelAnimationFrame`,
-    `close`,
-    `confirm`,
-    `createPopup`,
-    `dispatchEvent`,
-    `document`,
-    `focus`,
-    `frames`,
-    `getComputedStyle`,
-    `history`,
-    `innerHeight`,
-    `innerWidth`,
-    `length`,
-    `location`,
-    `matchMedia`,
-    `moveBy`,
-    `moveTo`,
-    `name`,
-    `navigator`,
-    `open`,
-    `outerHeight`,
-    `outerWidth`,
-    `pageXOffset`,
-    `pageYOffset`,
-    `parent`,
-    `postMessage`,
-    `print`,
-    `prompt`,
-    `removeEventListener`,
-    `requestAnimationFrame`,
-    `resizeBy`,
-    `resizeTo`,
-    `screen`,
-    `screenLeft`,
-    `screenTop`,
-    `screenX`,
-    `screenY`,
-    `scroll`,
-    `scrollBy`,
-    `scrollLeft`,
-    `scrollTo`,
-    `scrollTop`,
-    `scrollX`,
-    `scrollY`,
-    `self`,
-    `stop`,
-    `top`,
-    `Window`,
-    `window`,
 ];
 
 // Aliases of the global itself, set by hand below rather than copied.
-const SKIP_KEYS = new Set<string>([`window`, `self`, `top`, `parent`]);
+const SKIP_KEYS = new Set<string>([`window`, `self`, `top`, `parent`, `constructor`]);
 
-const KEYS = new Set<string>([...LIVING_KEYS, ...OTHER_KEYS]);
+const INTRINSICS = new Set<string>(Object.getOwnPropertyNames(vm.runInNewContext(`globalThis`)));
 
 type Global = Record<string, unknown>;
 
 const isClassLikeName = (name: string): boolean => name[0] === name[0]?.toUpperCase();
 
-// Every window key to register: all of jsdom's own, minus those Node already has unless the list above claims them.
-const windowKeys = (global: Global, win: Global): Set<string> =>
-    new Set([...KEYS, ...Object.getOwnPropertyNames(win)].filter((key) => !SKIP_KEYS.has(key) && (!(key in global) || KEYS.has(key))));
+// Every window member, own or inherited: a new one always, one the runtime already has unless it is its own to keep.
+const windowKeys = (global: Global, win: Global): Set<string> => {
+    const keys = new Set<string>(WINDOW_REALM);
+    for (
+        let level: object | null = win;
+        level !== null && level !== (win[`Object`] as ObjectConstructor).prototype;
+        level = Object.getPrototypeOf(level)
+    ) {
+        for (const key of Object.getOwnPropertyNames(level)) {
+            if (!SKIP_KEYS.has(key) && (!(key in global) || (!INTRINSICS.has(key) && !KEEP_RUNTIME.has(key)))) {
+                keys.add(key);
+            }
+        }
+    }
+    return keys;
+};
 
 const populateGlobal = (global: Global, win: Global): void => {
     const overrides = new Map<string, unknown>();
@@ -275,7 +89,7 @@ const populateGlobal = (global: Global, win: Global): void => {
     }
 };
 
-// A DOM error handler that throws fails the file, as it did before, unless the suite listens for `error` itself.
+// A DOM error handler that throws fails the file unless the suite listens for `error` itself.
 const catchWindowErrors = (win: Window): void => {
     let userErrorListeners = 0;
     win.addEventListener(`error`, (event) => {
@@ -335,8 +149,7 @@ const global = globalThis as unknown as Global;
 // Before the runtime's signal classes replace jsdom's on the window: the bridge below keys on jsdom's own.
 patchAddEventListener(win);
 
-// Node's structured-data primitives, where jsdom has none of its own, and Node's fetch family always: a Response a
-// component reads must be the one the runtime's fetch produced.
+// jsdom lacks structuredClone and the encoders; the fetch family is always the runtime's, so a Response is its fetch's own.
 for (const name of [`structuredClone`, `TextEncoder`, `TextDecoder`]) {
     if (global[name] !== undefined && win[name] === undefined) {
         win[name] = global[name];
@@ -351,8 +164,7 @@ for (const name of [`fetch`, `Response`, `Headers`, `AbortController`, `AbortSig
 catchWindowErrors(dom.window as unknown as Window);
 populateGlobal(global, win);
 
-// Closed once the suite is done: a window kept alive by its own timers (pretendToBeVisual's frame clock) would stay
-// resident in the worker for every file that follows.
+// pretendToBeVisual's frame clock keeps an unclosed window resident in the worker for every later file.
 afterAll(() => {
     dom.window.close();
 });

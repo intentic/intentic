@@ -1,5 +1,4 @@
 import type { IpsecVpnConfig } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { ipsecConnConfig, ipsecFailureHint, ipsecSecretsConfig, parseIpsecLoaded, parseIpsecStatus } from "./ipsec.js";
 
 // FortiClient <ipsecvpn> shape: IKEv1 aggressive, a group PSK, a phase-1 local ID, and per-user XAuth.

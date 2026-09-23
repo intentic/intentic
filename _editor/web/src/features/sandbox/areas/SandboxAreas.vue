@@ -336,12 +336,12 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                     <template #below>
                         <div v-if="draft !== undefined" class="flex max-w-2xl flex-col gap-4">
                             <div class="ui-field">
-                                <span class="ui-field-label">{{ t(`sandbox.sandboxAreas.folders`) }}</span>
+                                <span class="ui-field-label">{{ t(`shared.folders`) }}</span>
                                 <FolderPicker
                                     v-model="draft.folders"
                                     multiple
                                     :excludes="isSandboxPath"
-                                    :label="t(`sandbox.sandboxAreas.folders`)"
+                                    :label="t(`shared.folders`)"
                                     :placeholder="t(`sandbox.sandboxAreas.pickFolders`)"
                                 />
                                 <span v-if="draft.folders.length === 0" class="ui-field-error">{{ t(`sandbox.sandboxAreas.needsFolder`) }}</span>
@@ -385,7 +385,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                             v-model="newFolders"
                             multiple
                             :excludes="isSandboxPath"
-                            :label="t(`sandbox.sandboxAreas.folders`)"
+                            :label="t(`shared.folders`)"
                             :placeholder="t(`sandbox.sandboxAreas.pickFolders`)"
                         />
                         <span v-if="newHint !== undefined" class="text-xs text-warning">{{ newHint }}</span>

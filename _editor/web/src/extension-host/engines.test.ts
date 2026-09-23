@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { satisfiesEngines } from "@intentic/extension-api";
 
 describe(`satisfiesEngines`, () => {

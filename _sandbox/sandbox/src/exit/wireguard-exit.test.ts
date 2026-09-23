@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { countryOfConf, neutralisedConf, parseWireguardConfigs } from "./wireguard-exit.js";
 
 // Pins the shapes real providers write into .conf files, and the shapes that must not be read as a country, so a pasted

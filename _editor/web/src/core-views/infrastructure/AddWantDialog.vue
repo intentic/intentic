@@ -214,11 +214,11 @@ const submit = async (): Promise<void> => {
             <!-- A want needs Cloudflare and a server; both are collected inline rather than sending the user elsewhere. -->
             <CloudflareConnect v-if="cloudflareEntries.length === 0" />
             <ConnectHost v-else-if="hostOptions.length === 0">
-                <template #reason>{{ t(`views.addWantDialog.whatWantNeedsServer`) }}</template>
+                <template #reason>{{ t(`shared.whatWantNeedsServer`) }}</template>
             </ConnectHost>
             <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
                 <label class="ui-field">
-                    <span class="ui-field-label">{{ t(`views.addWantDialog.name`) }}</span>
+                    <span class="ui-field-label">{{ t(`shared.name`) }}</span>
                     <input v-model="name" :placeholder="selected.kind === `service` ? selected.service.service : selected.app" :class="ui.input()" />
                     <!-- Names the rule and offers the repair, rather than leaving Add greyed out with nothing said. -->
                     <span v-if="nameError" class="text-xs text-warning">
@@ -230,20 +230,20 @@ const submit = async (): Promise<void> => {
                 </label>
                 <!-- Domain is zone-aware whenever the cloudflare entry recorded its zone: a subdomain under it. -->
                 <label v-if="zone !== undefined" class="ui-field">
-                    <span class="ui-field-label">{{ t(`views.addWantDialog.domain`) }}</span>
+                    <span class="ui-field-label">{{ t(`shared.domain`) }}</span>
                     <div class="flex items-center gap-2">
                         <input v-model="subdomain" :placeholder="name" :class="ui.input('flex-1')" />
                         <span class="whitespace-nowrap font-mono text-sm text-subtle">.{{ zone }}</span>
                     </div>
                     <span v-if="subdomain.trim().length > 0 && !subdomainValid" class="text-xs text-warning">{{
-                        subdomainError ?? t(`views.addWantDialog.useLettersNumbersHyphens`)
+                        subdomainError ?? t(`shared.useLettersNumbersHyphens`)
                     }}</span>
                     <span v-else-if="subdomainValid" class="text-xs text-success"
                         >{{ t(`views.addWantDialog.reachableAt`) }} <span class="font-mono">{{ subdomain.trim() }}.{{ zone }}</span></span
                     >
                 </label>
                 <label v-else class="ui-field">
-                    <span class="ui-field-label">{{ t(`views.addWantDialog.domain`) }}</span>
+                    <span class="ui-field-label">{{ t(`shared.domain`) }}</span>
                     <input v-model="values['domain']" :placeholder="`${name}.example.com`" :class="ui.input()" />
                 </label>
                 <template v-for="field in serviceFields" :key="field.key">
@@ -302,7 +302,7 @@ const submit = async (): Promise<void> => {
                         </div>
                     </button>
                 </div>
-                <span :class="ui.sectionLabel('mb-2 block')">{{ t(`views.addWantDialog.selfHostedServices`) }}</span>
+                <span :class="ui.sectionLabel('mb-2 block')">{{ t(`shared.selfHostedServices`) }}</span>
             </template>
 
             <div class="grid grid-cols-2 gap-3">

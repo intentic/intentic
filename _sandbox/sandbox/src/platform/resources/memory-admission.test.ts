@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import {
     admitTurn,
     createMemoryWarnings,
@@ -23,14 +22,22 @@ const box = (limitGib: number, usedGib: number, stalledPercent = 0): MemoryHeadr
     stalledPercent,
 });
 
-// A cgroup reading in GiB, as the files would answer it; the engine is unread unless given.
-const reading = (limitGib: number | undefined, residentGib: number | undefined, swapGib: number | undefined, engineGib?: number) => ({
-    residentBytes: residentGib === undefined ? undefined : residentGib * GIB,
-    limitBytes: limitGib === undefined ? undefined : limitGib * GIB,
-    engineBytes: engineGib === undefined ? undefined : engineGib * GIB,
-    swapBytes: swapGib === undefined ? undefined : swapGib * GIB,
-    pressureText: "",
-});
+// Headroom off a cgroup reading in GiB, on a machine with as much memory as given, or unbounded.
+const headroom = (
+    limitGib: number | undefined,
+    residentGib: number | undefined,
+    swapGib: number | undefined,
+    machineGib = Number.POSITIVE_INFINITY,
+) =>
+    headroomFrom(
+        {
+            workingSetBytes: residentGib === undefined ? undefined : residentGib * GIB,
+            memoryLimitBytes: limitGib === undefined ? undefined : limitGib * GIB,
+            swapBytes: swapGib === undefined ? undefined : swapGib * GIB,
+            pressure: { cpu: undefined, memory: undefined, io: undefined },
+        },
+        machineGib * GIB,
+    );
 
 test("a box with room admits, a box without it refuses and says what is used", () => {
     expect(admitTurn(box(10, 4))).toEqual({ admit: true });
@@ -72,22 +79,22 @@ test("a stalled box is refused even when the byte count looks survivable", () =>
 // thrash — measured on a 16 GiB cap holding 12.4 resident + 6.8 swapped: 3.6 GiB reported free, every turn admitted,
 // while the machine had 350 MB and was paging at 230 MB/s. Whole GiB here so the sum is exact.
 test("paging out is counted as used, not as relief", () => {
-    const thrashing = headroomFrom(reading(16, 12, 7));
+    const thrashing = headroom(16, 12, 7);
     expect(thrashing.usedBytes).toBe(19 * GIB);
     expect(thrashing.freeBytes).toBe(0);
     expect(admitTurn(thrashing).admit).toBe(false);
     // The same box read as resident-only: what the gate saw before, and it admitted.
-    expect(admitTurn(headroomFrom(reading(16, 12, 0))).admit).toBe(true);
+    expect(admitTurn(headroom(16, 12, 0)).admit).toBe(true);
 });
 
 test("a refusal on a paging box names the swap, since the sum can exceed the cap", () => {
-    expect(refusal(admitTurn(headroomFrom(reading(16, 12, 7))))).toContain("12.0 GiB resident + 7.0 GiB swapped, against 16.0 GiB");
+    expect(refusal(admitTurn(headroom(16, 12, 7)))).toContain("12.0 GiB resident + 7.0 GiB swapped, against 16.0 GiB");
 });
 
 // The reading rides the refusal so the composer's notice can offer a raise sized against this box, rather than
 // re-deriving one from prose. Resident and swapped stay apart, as the message keeps them apart.
 test("a headroom refusal carries the reading it was decided on", () => {
-    const refused = admitTurn(headroomFrom(reading(16, 12, 7)));
+    const refused = admitTurn(headroom(16, 12, 7));
     expect(refused.admit).toBe(false);
     expect(refused.admit === false && refused.memory).toEqual({ limitBytes: 16 * GIB, residentBytes: 12 * GIB, swapBytes: 7 * GIB });
     // An unattended refusal is the same fact about the same box, so it carries the same reading.
@@ -113,7 +120,7 @@ test("an interactive hold states the stakes rather than telling the reader to wa
 // Swap being unaccounted (cgroup v1, swapaccount off) must narrow nothing: it is the pre-existing reading, not a
 // reason to stop measuring the ceiling that IS readable.
 test("an unaccounted swap file reads as none rather than blanking the ceiling", () => {
-    const unaccounted = headroomFrom(reading(10, 4, undefined));
+    const unaccounted = headroom(10, 4, undefined);
     expect(unaccounted.swapBytes).toBe(0);
     expect(unaccounted.freeBytes).toBe(6 * GIB);
     expect(admitTurn(unaccounted).admit).toBe(true);
@@ -121,12 +128,12 @@ test("an unaccounted swap file reads as none rather than blanking the ceiling", 
 
 // An owner may cap the box past its engine, and memory the engine does not have is not headroom.
 test("a cap past the engine is measured against the engine, and an uncapped box stays without an opinion", () => {
-    const beyond = headroomFrom(reading(32, 18.5, 0, 19.5));
+    const beyond = headroom(32, 18.5, 0, 19.5);
     expect(beyond.limitBytes).toBe(19.5 * GIB);
     expect(beyond.freeBytes).toBe(GIB);
     expect(refusal(admitTurn(beyond, true))).toContain("18.5 GiB of 19.5 GiB used");
-    expect(headroomFrom(reading(16, 12, 0, 19.5)).limitBytes).toBe(16 * GIB);
-    expect(headroomFrom(reading(undefined, 12, 0, 19.5)).limitBytes).toBeUndefined();
+    expect(headroom(16, 12, 0, 19.5).limitBytes).toBe(16 * GIB);
+    expect(headroom(undefined, 12, 0, 19.5).limitBytes).toBeUndefined();
 });
 
 // Unknown ceiling (no cgroup, cgroup v1, hosted) admits rather than refuses on ignorance.
@@ -188,9 +195,9 @@ test("background work is refused on every short reading and warns nobody", () =>
 });
 
 test("reading headroom degrades to an admitting verdict instead of throwing", async () => {
-    const headroom = await readMemoryHeadroom();
-    expect(typeof headroom.stalledPercent).toBe("number");
-    expect(admitTurn(headroom)).toHaveProperty("admit");
+    const live = await readMemoryHeadroom();
+    expect(typeof live.stalledPercent).toBe("number");
+    expect(admitTurn(live)).toHaveProperty("admit");
 });
 
 test("a box with room is admitted on the first reading, with no wait", async () => {

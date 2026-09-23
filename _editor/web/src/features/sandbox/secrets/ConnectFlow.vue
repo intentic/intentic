@@ -235,7 +235,15 @@ watch(flow, (live) => {
         <!-- Out-of-band sign-in: the page finishes it, so the button and the wait are the whole panel. -->
         <template v-else-if="deviceFlow">
             <!-- `self-start`: without it the button stretches edge to edge, reading as a banner, not step one of three. -->
-            <Button as="a" class="self-start touch-target" :size="controlSize" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
+            <Button
+                as="a"
+                class="self-start touch-target"
+                :size="controlSize"
+                :href="flow.url"
+                target="_blank"
+                rel="noopener"
+                @click="openedProvider"
+            >
                 <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
             </Button>
             <!-- Placed above what it describes: an instruction read after the fact is read too late. -->
@@ -259,7 +267,15 @@ watch(flow, (live) => {
                     >{{ t(`sandbox.connectFlow.thatsExpected`) }}</template
                 >.
             </p>
-            <Button as="a" class="self-start touch-target" :size="controlSize" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
+            <Button
+                as="a"
+                class="self-start touch-target"
+                :size="controlSize"
+                :href="flow.url"
+                target="_blank"
+                rel="noopener"
+                @click="openedProvider"
+            >
                 <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
             </Button>
             <!-- The way in for someone who already made the trip (a reopened panel, a second tab); without it the only way out of step one was Cancel. -->
@@ -323,13 +339,7 @@ watch(flow, (live) => {
                 <button v-if="!namingAccount" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingAccount = true">
                     {{ t(`sandbox.connectFlow.nameAccount`) }}
                 </button>
-                <input
-                    v-else
-                    v-model="connectLabel"
-                    name="accountLabel"
-                    :placeholder="t(`sandbox.connectFlow.accountName`)"
-                    :class="ui.inputSm(`min-w-0`)"
-                />
+                <input v-else v-model="connectLabel" name="accountLabel" :placeholder="t(`shared.accountName`)" :class="ui.inputSm(`min-w-0`)" />
             </template>
         </template>
     </div>

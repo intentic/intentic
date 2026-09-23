@@ -8,7 +8,6 @@ import { type AgentEvent, type Capability, isTurnFact, PROVIDER_VENDOR, RAW_ROUT
 
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
-import { test, expect, mock } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 
 import { createApp } from "./app.js";
@@ -197,7 +196,7 @@ test("/system/ws-ticket 404s in loopback mode: no identity to bind, and the upgr
 
 test("POST /system/sessions/revoke re-keys sessions, closes live access, drops tickets, and requires the operating tier", async () => {
     let rotations = 0;
-    const close = mock();
+    const close = jest.fn();
     const connections = createAuthConnections();
     connections.register({ email: "owner@x.com", role: "owner" }, close);
     const auth = {
@@ -222,11 +221,11 @@ test("POST /system/sessions/revoke re-keys sessions, closes live access, drops t
 });
 
 test("account deletion can retire owner access permanently, and a member can remove only self", async () => {
-    const ownerClose = mock();
+    const ownerClose = jest.fn();
     const ownerConnections = createAuthConnections();
     ownerConnections.register({ email: "owner@x.com", role: "owner" }, ownerClose);
-    const disable = mock(async () => {});
-    const rotate = mock(async () => {});
+    const disable = jest.fn(async () => {});
+    const rotate = jest.fn(async () => {});
     const ownerServices = services({
         auth: {
             authorize: async () => proven("owner@x.com", "owner"),
@@ -261,7 +260,7 @@ test("account deletion can retire owner access permanently, and a member can rem
     expect(disable).toHaveBeenCalledTimes(2);
 
     const removed: string[] = [];
-    const memberClose = mock();
+    const memberClose = jest.fn();
     const memberConnections = createAuthConnections();
     memberConnections.register({ email: "member@x.com", role: "viewer" }, memberClose);
     const memberServices = services({

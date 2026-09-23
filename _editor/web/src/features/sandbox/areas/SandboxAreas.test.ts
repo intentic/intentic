@@ -6,20 +6,19 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { STATE_DIR, WORKSPACE_ROOT as root } from "@intentic/constants";
 import type { Area } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
-import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 const areas = ref<Area[]>([]);
 // Upserts like the real route: creating an area opens it immediately, so a mock that didn't add the row would leave
 // the creation test asserting against a page that never redrew.
-const save = mock<(area: Area) => Promise<unknown>>().mockImplementation(async (area) => {
+const save = jest.fn<(area: Area) => Promise<unknown>>().mockImplementation(async (area) => {
     areas.value = [...areas.value.filter((entry) => entry.id !== area.id), area];
     return { ok: true };
 });
-const remove = mock<(id: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
+const remove = jest.fn<(id: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
 
-mock.module(`./useAreas`, () => ({
+jest.mock(`./useAreas`, () => ({
     useAreas: () => ({
         areas,
         labelOf: (id: string) => id,
@@ -36,18 +35,18 @@ const personas = ref([
     { id: `support-bot`, label: `Support bot`, capabilities: [], workspace: { startIn: `web/support` } },
     { id: `scribe`, label: `Scribe`, capabilities: [], workspace: { startIn: `docs` } },
 ]);
-mock.module(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
+jest.mock(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
 
 const role = ref<string>(`owner`);
-mock.module(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ role: role.value }) }) }));
-mock.module(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => ref(true) }));
+jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ role: role.value }) }) }));
+jest.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => ref(true) }));
 
 // <FolderPicker>'s own reads; this suite is about the page, so the tree is a fixture and nothing is fetched lazily.
 const tree = ref<WorkspaceTreeEntry[]>([]);
-mock.module(`../client/sandboxRpc`, () => ({
-    sandboxRpc: fakeSandboxRpc({ workspace: { children: mock(async () => ({ entries: [], hidden: 0 })) } }),
+jest.mock(`../client/sandboxRpc`, () => ({
+    sandboxRpc: fakeSandboxRpc({ workspace: { children: jest.fn(async () => ({ entries: [], hidden: 0 })) } }),
 }));
-mock.module(`../client/useSandboxQuery`, () => {
+jest.mock(`../client/useSandboxQuery`, () => {
     // Imported inside the factory so the mock owns its own bindings, not this file's.
     return {
         useSandboxQuery: () => ({

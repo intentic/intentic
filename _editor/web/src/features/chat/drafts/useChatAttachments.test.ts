@@ -1,15 +1,11 @@
-import { hoisted } from "@intentic/testing/bun";
-import { expect, it, mock } from "bun:test";
 import { ref } from "vue";
 import type { PendingAttachment } from "./useChatAttachments";
 
 // Pins the paperclip's road in: every picked file is staged and sent up to its own place under the attachments tree,
 // and the picker is emptied, so picking the same file again is still a pick. The bytes' own upload is stood in for.
 
-const { sandboxUpload } = hoisted(() => ({
-    sandboxUpload: mock<(route: string, body: Blob, options?: unknown) => Promise<void>>(async () => undefined),
-}));
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxUpload, sandboxBlob: mock() }));
+const sandboxUpload = jest.fn<(route: string, body: Blob, options?: unknown) => Promise<void>>(async () => undefined);
+jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxUpload, sandboxBlob: jest.fn() }));
 const { useChatAttachments } = await import("./useChatAttachments");
 
 // A file input's change as the browser dispatches it: the files picked, and the value naming the last of them.

@@ -3,7 +3,6 @@
 // fact as soon as the agent has it, not only when a turn ends.
 import "@intentic/testing/dom";
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { it, expect, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import type { PendingAction } from "../laneDrop";
@@ -15,7 +14,7 @@ import { IconStub } from "@intentic/ui/testing";
 // The words in a composer reach a card through this lookup, never through the card's own fields; stubbed so the
 // naming case below needs no tab store.
 const UNSENT_WORDS = `rename the landing page hero`;
-mock.module("../../../chat/panel/useChat-strip", () => ({
+jest.mock("../../../chat/panel/useChat-strip", () => ({
     chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
     chatPreviews: { value: { a4: `rename the landing page hero` } },
     previewOf: (id: string) => (id === `a4` ? `rename the landing page hero` : undefined),
@@ -184,7 +183,7 @@ const body = (el: HTMLElement): HTMLElement => el.querySelector<HTMLElement>(`.s
 // press did is the card's own standing, drawn from the press itself (useAgents-provisional), so nothing is laid over
 // the card: a dim would say "not yet" over a card already saying "landing", and the click still opens the chat.
 it(`opens the chat on a click while a land holds the card, with nothing laid over it`, () => {
-    const opened = mock();
+    const opened = jest.fn();
     const el = mount(ready(`landing`), `land`, { onOpen: opened });
     // jsdom runs a dispatched click whatever `pointer-events` says, so the class is what witnesses it in a browser.
     expect(body(el).className).not.toContain(`opacity-60`);
@@ -222,7 +221,7 @@ it(`offers a close on a card the daemon has no entry for: the only way it can le
 });
 
 it(`asks the board to close it on the press`, () => {
-    const closed = mock();
+    const closed = jest.fn();
     buttonLabelled(mount(refused(), undefined, { onClose: closed }), `Close agent`)!.click();
     expect(closed).toHaveBeenCalledTimes(1);
 });
@@ -372,7 +371,7 @@ it(`holds the way back pressed out while the card is landing, whoever pressed it
 });
 
 it(`asks the board to re-land on the press`, () => {
-    const relanded = mock();
+    const relanded = jest.fn();
     relandButton(mount(discarded(0, 4), undefined, { onReland: relanded }))!.click();
     expect(relanded).toHaveBeenCalledTimes(1);
 });
@@ -412,7 +411,7 @@ it(`offers the way off a watch beside the readout that announces it`, () => {
 });
 
 it(`asks the board to disarm on the press`, () => {
-    const unwatched = mock();
+    const unwatched = jest.fn();
     stopWatchButton(mount(watching(), undefined, { onUnwatch: unwatched }))!.click();
     expect(unwatched).toHaveBeenCalledTimes(1);
 });

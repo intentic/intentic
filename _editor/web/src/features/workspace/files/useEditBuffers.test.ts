@@ -1,5 +1,4 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { describe, it, expect, afterEach } from "bun:test";
 import { dropEditBuffers, useEditBuffers } from "./useEditBuffers";
 
 // The contract FileViewer's non-destructive re-read relies on: after a save, baseline == on-disk text, so the

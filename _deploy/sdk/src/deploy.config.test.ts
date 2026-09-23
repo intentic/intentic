@@ -1,5 +1,4 @@
 import { linearize } from "@intentic/graph";
-import { test, expect } from "bun:test";
 import { graph } from "./__fixtures__/deploy.config.js";
 import { expectedGraph } from "./__fixtures__/deploy.graph.js";
 

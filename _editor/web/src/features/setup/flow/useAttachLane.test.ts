@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { unstubbed } from "@intentic/testing";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { type EffectScope, effectScope, ref } from "vue";
 import type { AttachOutcome } from "../setupAttach";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
@@ -16,14 +15,14 @@ const scopes: EffectScope[] = [];
 const stage = (over: { minted?: string; idToken?: string | undefined; outcome?: AttachOutcome } = {}) => {
     const rows = unstubbed<SetupRowHost[`sandbox`]>(`sandbox`, {
         sandboxes: ref([]),
-        create: mock(async (name: string) => sandboxSummary({ id: `new`, name, token: `new-token` })),
-        select: mock(),
-        remove: mock(async () => undefined),
+        create: jest.fn(async (name: string) => sandboxSummary({ id: `new`, name, token: `new-token` })),
+        select: jest.fn(),
+        remove: jest.fn(async () => undefined),
     });
-    const enter = mock(async () => undefined);
-    const attach = mock(async (_id: string, _url: string) => undefined);
-    const probe = mock<AttachLaneHost[`probe`]>(async () => over.outcome ?? { kind: `ok` });
-    const getIdToken = mock(async () => (`idToken` in over ? over.idToken : `id-token`));
+    const enter = jest.fn(async () => undefined);
+    const attach = jest.fn(async (_id: string, _url: string) => undefined);
+    const probe = jest.fn<AttachLaneHost[`probe`]>(async () => over.outcome ?? { kind: `ok` });
+    const getIdToken = jest.fn(async () => (`idToken` in over ? over.idToken : `id-token`));
     const scope = effectScope();
     scopes.push(scope);
     const { row, lane } = scope.run(() => {

@@ -1,5 +1,4 @@
 import type { IssueReport } from "@intentic/sandbox-contract";
-import { test, expect, afterEach } from "bun:test";
 import { type Capture, reportFrom, startCapture } from "./capture.js";
 
 let live: Capture | undefined;

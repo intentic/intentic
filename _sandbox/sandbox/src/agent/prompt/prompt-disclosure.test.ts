@@ -1,5 +1,4 @@
 import { capabilitiesOf } from "@intentic/sandbox-contract";
-import { test, expect, mock } from "bun:test";
 import { guidanceBlock } from "./guidance.js";
 import { promptDisclosure, withBaseText } from "./prompt-disclosure.js";
 import { turnPromptPlacement } from "./system-prompt.js";
@@ -16,7 +15,7 @@ const MEMORY = "## Standing instructions for this workspace\n\n### AGENTS.md\n\n
 const AT = 1_700_000_000_000;
 
 // Stands in for the installed CLI, answering with a preset that names the model it was rendered for.
-mock.module("./preset-prompt.js", () => ({
+jest.mock("./preset-prompt.js", () => ({
     presetSystemPrompt: async (_cwd: string, model?: string) => ({
         text: `IMPORTANT: Assist with anything.\n\nRendered for ${model ?? "the default"}.`,
         version: "2.1.0",

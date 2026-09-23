@@ -1,11 +1,10 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { SandboxSummary } from "@intentic/api-contract";
-import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
 import { stubGlobal, mocked } from "@intentic/testing/bun";
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-mock.module("../../../lib/useApi", () => ({
-    apiClient: { sandbox: { list: mock(), delete: mock(), leave: mock(), hostedProvision: mock(), hostedRelease: mock() } },
+jest.mock("../../../lib/useApi", () => ({
+    apiClient: { sandbox: { list: jest.fn(), delete: jest.fn(), leave: jest.fn(), hostedProvision: jest.fn(), hostedRelease: jest.fn() } },
 }));
 const { apiClient } = await import("../../../lib/useApi");
 const listMock = mocked(apiClient.sandbox.list);

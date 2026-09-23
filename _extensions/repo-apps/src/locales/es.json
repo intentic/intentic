@@ -9,7 +9,6 @@
     "appsView": {
         "addApp": "Añadir aplicación",
         "addingAppsFollowProgress": "Añadiendo aplicaciones: sigue el progreso en el terminal.",
-        "api": "API",
         "libraryTests": "Pruebas de biblioteca",
         "noAppsYetUse": "Todavía no hay aplicaciones: usa «Añadir aplicación» para andamiar una y tener una vista previa en vivo.",
         "noVitestProjectsFound": "No se han encontrado proyectos de pruebas: nada de aquí tiene un archivo vitest.config.*, bunfig.toml o *.test.*.",
@@ -25,12 +24,9 @@
         "start": "Iniciar",
         "startAll": "Iniciar todo",
         "stop": "Detener",
-        "stopAll": "Detener todo",
-        "terminal": "Terminal",
-        "web": "Web"
+        "stopAll": "Detener todo"
     },
     "dependenciesView": {
-        "dev": "dev",
         "devDependencies": "Dependencias de desarrollo",
         "noWorkspacePackagesFound": "No se han encontrado paquetes del espacio de trabajo: pnpm-workspace.yaml no nombra directorios de paquetes.",
         "readingWorkspaceGraph": "Leyendo el grafo del espacio de trabajo…",

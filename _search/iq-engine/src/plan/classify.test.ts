@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { classify } from "./classify.js";
 
 test.each([

@@ -3,7 +3,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import { type AutomationsStore, consecutiveFailures, fileAutomationsStore } from "./automations-store.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 

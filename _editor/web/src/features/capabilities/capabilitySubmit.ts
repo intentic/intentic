@@ -8,6 +8,7 @@ import type { CapabilityForm } from "./capabilityForm";
 import { rememberSecrets } from "./model/devSecrets";
 import { buildConfig } from "./model/form";
 import { pushWalletPolicy } from "./model/walletPolicy";
+import type { useSetupWalk } from "./setupWalk";
 
 // The form's submit: adding and editing are one streamed write, because the daemon's is one upsert; the wallet's caps
 // are a second write, to the platform; and a saved form either hands over the step it still waits on or moves on.
@@ -33,11 +34,7 @@ export interface SubmitHost {
     readonly form: Pick<CapabilityForm, `values` | `keptSecrets` | `savedName` | `attempted` | `canSubmit` | `touchAll` | `refuse` | `startOver`>;
     // The streamed apply (useCapabilities.add): each frame as it arrives, throwing on an error frame.
     readonly add: (input: AddCapabilityInput, onLine?: (line: Record<string, unknown>) => void) => Promise<void>;
-    // Where the setup walk goes after a tile, and leaving one (setupWalk.ts).
-    readonly walk: {
-        readonly onwardFrom: (entry: CapabilityCatalogEntry) => string | undefined;
-        readonly leaveTile: (next: string | undefined) => void;
-    };
+    readonly walk: Pick<ReturnType<typeof useSetupWalk>, `onwardFrom` | `leaveTile`>;
     readonly handOff: (entry: CapabilityCatalogEntry, added: CapabilitySummary) => void;
     readonly stopEditing: () => void;
     readonly error: Ref<NoticeModel | null>;

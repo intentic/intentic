@@ -4,7 +4,7 @@ import { computed, nextTick, ref, useId, useTemplateRef, watch } from "vue";
 import { useT } from "@intentic/ui/i18n";
 import { useChatSurface } from "../../tools/chatToolSurface";
 import { type ChatShot, shotName } from "./shots";
-import { downloadOriginal, originalOf, stripOf, viewOf } from "./shotPictures";
+import { downloadOriginal, type Picture, picture } from "../../../workspace/home/thumbnails";
 
 // The conversation's pictures one at a time and large, opened from a strip's tile or a tool card's picture; the arrows
 // walk every turn's strip in order and the filmstrip jumps. Fit draws the daemon's re-encoded view; actual size swaps in
@@ -16,7 +16,7 @@ const props = defineProps<{
     shots: readonly ChatShot[];
     // The shot it opens at, by key; a key the list no longer holds opens at the first.
     start: string | undefined;
-    // Whose checkout the pictures are read in (shotPictures), undefined for the shared tree.
+    // Whose checkout the pictures are read in (thumbnails.ts), undefined for the shared tree.
     agent: string | undefined;
     // What each turn was asked, by turn id, for the caption.
     prompts: ReadonlyMap<number, string>;
@@ -42,13 +42,18 @@ watch(
     { immediate: true },
 );
 
-const index = computed(() => Math.max(0, props.shots.findIndex((shot) => shot.key === at.value)));
+const index = computed(() =>
+    Math.max(
+        0,
+        props.shots.findIndex((shot) => shot.key === at.value),
+    ),
+);
 const shot = computed<ChatShot | undefined>(() => props.shots[index.value]);
-const view = computed(() => (shot.value === undefined ? undefined : viewOf(props.agent, shot.value.path)));
+const view = computed(() => (shot.value === undefined ? undefined : picture(props.agent, shot.value.path, `view`)));
 // Asked for only at actual size, where pixels are what the reader came to look at.
-const original = computed(() => (shot.value === undefined || !actual.value ? undefined : originalOf(props.agent, shot.value.path)));
+const original = computed(() => (shot.value === undefined || !actual.value ? undefined : picture(props.agent, shot.value.path, `original`)));
 // The view is the picture at its own size, so it stands in for the original until the file arrives.
-const picture = computed(() => (original.value?.url === undefined ? view.value : original.value));
+const drawn = computed(() => (original.value?.url === undefined ? view.value : original.value));
 const name = computed(() => (shot.value === undefined ? `` : shotName(shot.value.path)));
 const prompt = computed(() => (shot.value === undefined ? undefined : props.prompts.get(shot.value.turnId)));
 
@@ -58,7 +63,7 @@ watch(
     (position) => {
         for (const neighbour of [props.shots[position - 1], props.shots[position + 1]]) {
             if (neighbour !== undefined) {
-                viewOf(props.agent, neighbour.path);
+                picture(props.agent, neighbour.path, `view`);
             }
         }
     },
@@ -95,9 +100,9 @@ const onKey = (event: KeyboardEvent): void => {
 
 // One group per turn, in order: a divider between groups is where one turn's pictures end and the next one's begin.
 const groups = computed(() => {
-    const out: { turnId: number; items: { shot: ChatShot; index: number; tile: ReturnType<typeof stripOf> }[] }[] = [];
+    const out: { turnId: number; items: { shot: ChatShot; index: number; tile: Picture | undefined }[] }[] = [];
     for (const [position, entry] of props.shots.entries()) {
-        const item = { shot: entry, index: position, tile: stripOf(props.agent, entry.path) };
+        const item = { shot: entry, index: position, tile: picture(props.agent, entry.path, `strip`) };
         const last = out.at(-1);
         if (last?.turnId === entry.turnId) {
             last.items.push(item);
@@ -163,8 +168,8 @@ watch(at, async () => {
                     v-if="surface.openFile"
                     type="button"
                     :class="ui.iconButton()"
-                    :aria-label="t(`chat.chatShotViewer.openInWorkspace`)"
-                    v-tooltip.bottom="t(`chat.chatShotViewer.openInWorkspace`)"
+                    :aria-label="t(`shared.openInWorkspace2`)"
+                    v-tooltip.bottom="t(`shared.openInWorkspace2`)"
                     @click="openInWorkspace"
                 >
                     <Icon name="external-link" class="text-xs" />
@@ -179,14 +184,18 @@ watch(at, async () => {
                 <!-- Fit centres the picture; actual size lets it overflow from the top-left and scroll. -->
                 <div class="flex min-h-0 min-w-0 flex-1" :class="actual ? `overflow-auto` : `items-center justify-center overflow-hidden p-3`">
                     <img
-                        v-if="picture?.url"
-                        :src="picture.url"
+                        v-if="drawn?.url"
+                        :src="drawn.url"
                         :alt="name"
-                        :class="actual ? `max-w-none shrink-0 cursor-zoom-out self-start` : `max-h-full max-w-full cursor-zoom-in rounded-sm object-contain shadow-sm`"
+                        :class="
+                            actual
+                                ? `max-w-none shrink-0 cursor-zoom-out self-start`
+                                : `max-h-full max-w-full cursor-zoom-in rounded-sm object-contain shadow-sm`
+                        "
                         @click="actual = !actual"
                     />
-                    <p v-else-if="picture" class="m-auto flex items-center gap-1.5 text-xs text-subtle">
-                        <Icon name="image" class="text-xs" />{{ t(`chat.chatShotViewer.gone`) }}
+                    <p v-else-if="drawn" class="m-auto flex items-center gap-1.5 text-xs text-subtle">
+                        <Icon name="image" class="text-xs" />{{ t(`shared.gone`) }}
                     </p>
                     <Icon v-else name="spinner" spin class="m-auto text-subtle" />
                 </div>
@@ -212,7 +221,12 @@ watch(at, async () => {
                 </template>
             </div>
 
-            <nav v-if="shots.length > 1" ref="strip" class="flex shrink-0 gap-2 overflow-x-auto border-t border-line px-3 py-2" :aria-label="t(`chat.chatShotViewer.filmstrip`)">
+            <nav
+                v-if="shots.length > 1"
+                ref="strip"
+                class="flex shrink-0 gap-2 overflow-x-auto border-t border-line px-3 py-2"
+                :aria-label="t(`chat.chatShotViewer.filmstrip`)"
+            >
                 <template v-for="(group, position) in groups" :key="group.turnId">
                     <span v-if="position > 0" class="w-px shrink-0 self-stretch bg-line" aria-hidden="true" />
                     <div class="flex shrink-0 gap-1">

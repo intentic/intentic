@@ -1,5 +1,5 @@
 import { sleep as pause } from "@intentic/base/async";
-import { type HostedShape, type HostedTierId, hostedShapeLine } from "@intentic/constants";
+import { type HostedShape, type HostedTierId, hostedShapeLine, hostedTier } from "@intentic/constants";
 import type { HostedMigration, PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../../config.js";
@@ -22,7 +22,7 @@ import {
 import { HostedAtCapacity, AT_CAPACITY_MESSAGE, noteProviderAtCapacity, providerWords } from "../hosted-capacity.js";
 import { withHostedAppLock } from "../hosted-app-lock.js";
 import { hostedEnabled, hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "../hosted.js";
-import { hostedShapeFor, sameShape, shapeOfRow, tierOfRow } from "../hosted-shape.js";
+import { hostedShapeFor, sameShape, shapeOfRow } from "../hosted-shape.js";
 
 /* MOVING A SANDBOX FROM ONE MACHINE TO ANOTHER, and being able to undo it.
  *
@@ -119,8 +119,7 @@ export interface MigratableMachine {
  * it decides the kind; the disk takes the larger of what it has and what the rung asks for, because it cannot shrink.
  */
 export const planMigration = (config: Config, machine: MigratableMachine, target: MigrationTarget): MigrationPlan => {
-    const fromTier = tierOfRow(machine.tier);
-    const from = { tier: fromTier, shape: shapeOfRow(config, fromTier, machine), region: machine.region };
+    const from = { tier: hostedTier(machine.tier).id, shape: shapeOfRow(machine), region: machine.region };
     const rung = hostedShapeFor(config, target.tier);
     const region = target.region ?? machine.region;
     return {

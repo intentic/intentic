@@ -1,4 +1,3 @@
-import { test, expect, jest } from "bun:test";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createBufferedPainter, createStreamingPainter, framePainter, type Painter, type StreamPoster } from "./painter.js";
 

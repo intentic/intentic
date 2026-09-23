@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { gitInit } from "@intentic/scaffold";
-import { test, expect, afterEach } from "bun:test";
 import { conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
 import { beginTurn, fleetStoreOver, noIsolation } from "../../testing.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
@@ -77,7 +76,11 @@ const setup = async (): Promise<{
     const { agents, conversations } = createFleet(store, noStandings, noPresences);
     await agents.init();
     for (const id of ["c1", "c2"]) {
-        await beginTurn(conversations, { conversationId: id, isolated: true, prompt: "work", profile: { agent: "claude", harness: "native" } }, 1_000);
+        await beginTurn(
+            conversations,
+            { conversationId: id, isolated: true, prompt: "work", profile: { agent: "claude", harness: "native" } },
+            1_000,
+        );
         const conversation = await worktrees.ensure(id, []);
         await agents.recordWorktree(id, conversation.repos);
     }

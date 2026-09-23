@@ -3,7 +3,6 @@
 // reads the chat list, so it has to survive the docked sheet being dismissed, the floating window being closed, and a
 // reload: a preference that silently resets is one people stop using.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, spyOn } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
 
 // A reload is the module reading storage again, so every case loads its own copy.
@@ -36,7 +35,7 @@ it("falls back to the lanes on a value it does not recognise", async () => {
 
 // Storage can refuse outright (private mode). The switch still has to work for this session.
 it("still switches when storage refuses to be written", async () => {
-    const setItem = spyOn(Storage.prototype, `setItem`).mockImplementation(() => {
+    const setItem = jest.spyOn(Storage.prototype, `setItem`).mockImplementation(() => {
         throw new Error(`denied`);
     });
     const { useChatGrouping } = await load();

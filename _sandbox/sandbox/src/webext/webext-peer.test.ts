@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { Capability } from "@intentic/sandbox-contract";
 import { createPeerHub } from "../peers/peer-hub.js";
 import { memoryPeerTools } from "../peers/peer-tool-memory.js";
@@ -58,7 +57,11 @@ const hubWith = (remembered: Record<string, unknown>): WebExtHub => {
     for (const [id, tools] of Object.entries(remembered)) {
         memory.set(`webext:${id}`, tools);
     }
-    return createPeerHub({ domain: "webext", heartbeatMs: 20_000, callTimeoutMs: 60_000, offline: (id) => `"${id}" is away` }, { warn: () => undefined }, memory);
+    return createPeerHub(
+        { domain: "webext", heartbeatMs: 20_000, callTimeoutMs: 60_000, offline: (id) => `"${id}" is away` },
+        { warn: () => undefined },
+        memory,
+    );
 };
 
 test("an offline browser that never listed its tools is unlisted, not named as connected", async () => {

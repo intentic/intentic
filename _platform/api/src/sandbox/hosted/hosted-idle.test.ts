@@ -1,12 +1,11 @@
 import { installFakeFly } from "@intentic/testing/fly-fake";
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { reapIdleHosted } from "./hosted-idle.js";
 import { DAY_MS } from "../../durations.js";
 
-const logger = { info: mock(), warn: mock(), error: mock() } as never;
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never;
 
 const config = (over: Record<string, unknown> = {}): Config =>
     ({
@@ -32,20 +31,20 @@ const machine = (over: Record<string, unknown> = {}) => ({
     ...over,
 });
 
-const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Record<string, ReturnType<typeof mock>>> = {}) => {
+const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Record<string, ReturnType<typeof jest.fn>>> = {}) => {
     const prisma = {
         // `findUnique` is the drop's locked read of the row, which still holds what the sweep selected.
         hostedMachine: {
-            findMany: mock().mockResolvedValue(rows),
-            findUnique: mock(async ({ where }: { where: { id: string } }) => rows.find((row) => row.id === where.id) ?? null),
-            update: mock().mockResolvedValue({}),
-            delete: mock().mockResolvedValue({}),
+            findMany: jest.fn().mockResolvedValue(rows),
+            findUnique: jest.fn(async ({ where }: { where: { id: string } }) => rows.find((row) => row.id === where.id) ?? null),
+            update: jest.fn().mockResolvedValue({}),
+            delete: jest.fn().mockResolvedValue({}),
         },
         // Ending a machine writes two rows in one transaction (forgetHostedMachine); the stub runs it in place.
-        sandbox: { update: mock().mockResolvedValue({}) },
-        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
-        $queryRaw: mock().mockResolvedValue([]),
-        hostedPlan: { findUnique: mock().mockResolvedValue(null) },
+        sandbox: { update: jest.fn().mockResolvedValue({}) },
+        $transaction: jest.fn((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
         ...over,
     };
     return prisma as unknown as PrismaClient;
@@ -80,16 +79,16 @@ describe(`collecting the machines nobody came back to`, () => {
     /* THE MINUTES GO WITH THE ROW unless they are charged first. */
     it(`charges a machine's open awake stretch to its owner's month before dropping its row`, async () => {
         stubFly(`stopped`);
-        const upsert = mock().mockResolvedValue({});
+        const upsert = jest.fn().mockResolvedValue({});
         const wokeAt = daysAgo(30);
         const prisma = prismaWith([machine({ wokeAt, idleWarnedAt: daysAgo(8) })], {
-            hostedUsage: { upsert, aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }) },
+            hostedUsage: { upsert, aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: null } }) },
         });
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
         expect(upsert).toHaveBeenCalledWith(
             expect.objectContaining({ where: { sandboxId_month: { sandboxId: `s1`, month: wokeAt.toISOString().slice(0, 7) } } }),
         );
-        const deleteCall = (prisma.hostedMachine.delete as ReturnType<typeof mock>).mock.invocationCallOrder[0]!;
+        const deleteCall = (prisma.hostedMachine.delete as ReturnType<typeof jest.fn>).mock.invocationCallOrder[0]!;
         expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(deleteCall);
     });
 
@@ -139,7 +138,7 @@ describe(`collecting the machines nobody came back to`, () => {
 
     it(`never touches a member's machine`, async () => {
         const fly = stubFly(`stopped`);
-        const prisma = prismaWith([machine()], { hostedPlan: { findUnique: mock().mockResolvedValue({ status: `active`, items: [] }) } });
+        const prisma = prismaWith([machine()], { hostedPlan: { findUnique: jest.fn().mockResolvedValue({ status: `active`, items: [] }) } });
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 0 });
         expect(fly.calls).toHaveLength(0);
     });

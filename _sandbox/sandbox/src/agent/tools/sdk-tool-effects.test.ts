@@ -3,7 +3,6 @@ import { join, relative } from "node:path";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { packageRoot } from "@intentic/constants/node";
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "bun:test";
 import { jsExecutionServer } from "../../execution/js-tool.js";
 import { createDiagnosticsServer } from "../../logs/diagnostics-tools.js";
 import { createDepsServer } from "../../workspace/deps/deps-tools.js";
@@ -183,7 +182,13 @@ const definitionsIn = (file: string, source: string): ToolDefinition[] => {
         const [name, , , , extras] = argumentsOf(code, match.index + match[0].length - 1);
         return {
             at: `${file}:${source.slice(0, match.index).split("\n").length}`,
-            name: name === undefined ? "" : source.slice(name.start, name.end).trim().replace(/^["'`]|["'`]$/g, ""),
+            name:
+                name === undefined
+                    ? ""
+                    : source
+                          .slice(name.start, name.end)
+                          .trim()
+                          .replace(/^["'`]|["'`]$/g, ""),
             declared: extras !== undefined && DECLARES.test(code.slice(extras.start, extras.end)),
         };
     });

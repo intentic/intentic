@@ -33,7 +33,7 @@ export const hostFacts = (instance: CapabilitySummary, sources: ConnectionSource
         .join(` · `);
 
 // A row on the tile's own list, which states what only a live source knows for a machine or a browser. VPN and disk
-// rows are drawn by <VpnConnections> and <NetdiskMounts>, since a link's facts change live.
+// rows are drawn by <LiveLinkRows>, since a link's facts change live.
 export const tileRowFacts = (kind: CapabilityKind | undefined, instance: CapabilitySummary, sources: ConnectionSources): string => {
     if (kind === `device`) {
         return hostFacts(instance, sources);

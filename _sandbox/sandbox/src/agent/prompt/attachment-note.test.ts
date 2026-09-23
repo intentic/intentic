@@ -1,5 +1,4 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import { stripAttachmentNote, withAttachmentNote } from "./attachment-note.js";
 
 const paths = [

@@ -3,7 +3,6 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
-import { test, expect } from "bun:test";
 import { heldSlots, queueSnapshot } from "./queue-slots.js";
 
 /* The half the unit tests cannot reach: a real flock taken by bin/queue-run, found through st_dev and the inode.

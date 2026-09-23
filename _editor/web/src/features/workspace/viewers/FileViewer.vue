@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic/api-contract";
 import { Button, CopyButton, ui, useDevice } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { errorMessage, useLatest } from "@intentic/ui/async";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
 import { sandboxBlob } from "../../sandbox/client/sandboxClient";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
@@ -33,7 +33,7 @@ import { useT } from "@intentic/ui/i18n";
 
 // Dispatches an open file to its surface (editor, an extension's viewer, or a can't-show state) and owns the
 // fetch, since daemon routes are Bearer-authenticated and a browser can't do that itself. The read's true size,
-// not the tree entry's, decides editable vs. windowed text; a seq + AbortController drop stale reads.
+// not the tree entry's, decides editable vs. windowed text; useLatest and an AbortController drop stale reads.
 
 // `line` = jump the viewer to this line (a content-search match); undefined for a plain open.
 const t = useT();
@@ -87,7 +87,7 @@ const viewerContentFor = (
     }
 };
 
-let seq = 0;
+const latest = useLatest();
 // Current text read, aborted whenever superseded, so an appending file can't queue unbounded reads.
 let reading: AbortController | undefined;
 // Window a big-text file opened with, handed to BigTextView so it needn't re-read what's already had.
@@ -114,10 +114,10 @@ const superseded = (err: unknown): boolean => err instanceof DOMException && err
 // A same-path refire is either an external change or the user's own save echo; reconciled by content, not a
 // reset (no flicker), against the last known disk baseline. A save sets baseline = disk, so the echo no-ops.
 const reconcileOpenFile = (currentPath: string): void => {
-    const id = ++seq;
+    const isLatest = latest();
     readText(currentPath).then(
         ({ content }) => {
-            if (id !== seq) {
+            if (!isLatest()) {
                 return;
             }
             // Equal to the last known disk baseline: a save echo or no-op touch, leave the view alone.
@@ -144,7 +144,7 @@ const reconcileOpenFile = (currentPath: string): void => {
             reloadNonce.value++;
         },
         (err) => {
-            if (id !== seq || superseded(err)) {
+            if (!isLatest() || superseded(err)) {
                 return;
             }
             if (gone(err)) {
@@ -182,7 +182,7 @@ watch(
             return;
         }
         const resolution = resolveOpenFile(currentPath, meta?.size);
-        const id = ++seq;
+        const isLatest = latest();
 
         staleOnDisk.value = false;
         textWanted.value = false;
@@ -202,7 +202,7 @@ watch(
         });
 
         const fail = (err: unknown): void => {
-            if (id !== seq || superseded(err)) {
+            if (!isLatest() || superseded(err)) {
                 return;
             }
             loading.value = false;
@@ -221,7 +221,7 @@ watch(
             void ensureMonaco().then((monaco) => ensureLanguage(monaco, resolution.lang));
             readText(currentPath).then((window) => {
                 const content = window.content;
-                if (id !== seq) {
+                if (!isLatest()) {
                     return;
                 }
                 loading.value = false;
@@ -254,7 +254,7 @@ watch(
             loading.value = true;
             const content = viewerContentFor(viewer.fetch, currentPath, workspaceAgent.value);
             Promise.all([viewer.component(), content]).then(([component, loaded]) => {
-                if (id !== seq) {
+                if (!isLatest()) {
                     return;
                 }
                 loading.value = false;
@@ -392,7 +392,7 @@ const onEditorSave = (value: string): void =>
                 v-tooltip.bottom="hideFileComments ? t(`workspace.fileViewer.commentsHiddenClickTo`) : t(`workspace.fileViewer.hideCommentsReadCode`)"
             >
                 <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-2xs" />
-                <span class="max-md:hidden">{{ t(`workspace.fileViewer.comments`) }}</span>
+                <span class="max-md:hidden">{{ t(`shared.comments`) }}</span>
             </button>
             <!-- Second reading of the same file, one click away: what a pdf, a spreadsheet or a picture becomes as text. -->
             <button
@@ -405,7 +405,7 @@ const onEditorSave = (value: string): void =>
                 v-tooltip.bottom="textWanted ? t(`workspace.fileViewer.backToFileItself`) : t(`workspace.fileViewer.readFileTextWay`)"
             >
                 <Icon :name="textWanted ? 'file' : 'align-left'" class="text-2xs" />
-                <span class="max-md:hidden">{{ t(`workspace.fileViewer.text`) }}</span>
+                <span class="max-md:hidden">{{ t(`shared.text`) }}</span>
             </button>
             <!-- Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared workspace. -->
             <span
@@ -413,7 +413,7 @@ const onEditorSave = (value: string): void =>
                 class="inline-flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-2xs text-muted"
                 v-tooltip.bottom="t(`workspace.fileViewer.agentNoCopyFile`)"
             >
-                <Icon name="folder" class="text-[0.65rem]" /> {{ t(`workspace.fileViewer.shared`) }}
+                <Icon name="folder" class="text-[0.65rem]" /> {{ t(`shared.shared`) }}
             </span>
             <!-- Edit status while the scope keeps it read-only. -->
             <span
@@ -422,7 +422,7 @@ const onEditorSave = (value: string): void =>
                 v-tooltip.bottom="readOnlyReason"
             >
                 <Icon name="lock" class="text-xs" />
-                <span class="max-md:hidden">{{ t(`workspace.fileViewer.readOnly`) }}</span>
+                <span class="max-md:hidden">{{ t(`shared.readOnly`) }}</span>
             </span>
             <!-- Save icon with top-right dirty dot badge -->
             <button

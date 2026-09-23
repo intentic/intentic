@@ -1,4 +1,3 @@
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../../config.js";
 import { hostedFleet, renderHostedFleet, stampHostedOwners, type HostedFleetRole } from "./hosted-fleet.js";
@@ -13,8 +12,8 @@ const config = (): Config =>
 
 const fakePrisma = (machines: unknown[], pooled: unknown[]) =>
     ({
-        hostedMachine: { findMany: mock().mockResolvedValue(machines) },
-        hostedPoolMachine: { findMany: mock().mockResolvedValue(pooled) },
+        hostedMachine: { findMany: jest.fn().mockResolvedValue(machines) },
+        hostedPoolMachine: { findMany: jest.fn().mockResolvedValue(pooled) },
     }) as never;
 
 const taken = (over?: Record<string, unknown>) => ({

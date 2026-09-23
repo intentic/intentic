@@ -114,10 +114,14 @@ export const git = (...args) => {
 };
 
 // Every tracked path that still exists on disk; the index can list a file whose deletion is unstaged.
-export const trackedFiles = () =>
-    (git("ls-files", "-z") ?? "")
-        .split("\0")
-        .filter((path) => path !== "" && existsSync(path));
+export const trackedFiles = () => {
+    const listed = git("ls-files", "-z");
+    // An empty list reads every directory as a ghost, and layout.mjs removes ghosts.
+    if (listed === undefined) {
+        throw new Error(`git ls-files failed in ${root}: a check cannot judge a tree it cannot list`);
+    }
+    return listed.split("\0").filter((path) => path !== "" && existsSync(join(root, path)));
+};
 
 /* SCOPE: the files this run is asked to judge, which is not the same question as what it may read. */
 

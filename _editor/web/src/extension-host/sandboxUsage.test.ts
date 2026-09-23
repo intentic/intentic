@@ -1,9 +1,7 @@
-import { test, expect, beforeEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { fakeSandboxRpc } from "../testing/sandboxRpcFake";
 
-const recordUsage = hoisted(() => mock(async (_input: unknown) => ({ ok: true as const })));
-mock.module(`../features/sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ extensions: { recordUsage } }) }));
+const recordUsage = jest.fn(async (_input: unknown) => ({ ok: true as const }));
+jest.mock(`../features/sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ extensions: { recordUsage } }) }));
 
 const { flushSandboxUsage, recordSandboxCall } = await import(`./sandboxUsage`);
 

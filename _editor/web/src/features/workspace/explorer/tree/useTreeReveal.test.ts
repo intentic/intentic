@@ -1,5 +1,4 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { describe, expect, it, mock } from "bun:test";
 import { effectScope, nextTick, ref, shallowRef } from "vue";
 import { indexEntries, type MoreRow, type Row } from "./treeRows";
 import { useTreeReveal } from "./useTreeReveal";
@@ -22,8 +21,8 @@ const rowOf = (path: string): Row => ({ entry: file(path), depth: 0, isExpanded:
 const revealOver = (opened: string | null | undefined, built: readonly string[], nesting = false) => {
     const selectedPath = ref(opened);
     const rows = shallowRef<readonly (Row | MoreRow)[]>(built.map(rowOf));
-    const openAll = mock((dirs: readonly string[]) => dirs.length);
-    const showRow = mock(async (path: string) =>
+    const openAll = jest.fn((dirs: readonly string[]) => dirs.length);
+    const showRow = jest.fn(async (path: string) =>
         rows.value.some((row) => !(`more` in row) && row.entry.path === path) ? document.createElement(`button`) : undefined,
     );
     effectScope().run(() =>

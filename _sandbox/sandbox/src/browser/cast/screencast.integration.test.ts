@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import type { Browser, CDPSession } from "playwright";
-import { test, expect } from "bun:test";
 import {
     applySelect,
     dispatchInput,

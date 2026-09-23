@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import type { Browser, Page } from "playwright";
-import { test, expect } from "bun:test";
 import { ensureDisplay } from "./display.js";
 import { startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type ScreencastFrame } from "./screencast.js";
 

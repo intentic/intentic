@@ -49,27 +49,13 @@ export const publishedVersion = async (): Promise<string | undefined> => {
     }
 };
 
-// Three different situations, not one verdict: a working agent, one older than every build that answers `version`, junk.
-export type Probe = { readonly kind: "version"; readonly version: string } | { readonly kind: "no-version-command" } | { readonly kind: "unusable" };
-
-// A cold ~90 MB binary on a busy laptop still prints one line well inside this; a wedged one is "unusable", never a version.
+// A cold ~90 MB binary on a busy laptop still prints one line well inside this; a wedged one has no version.
 const PROBE_TIMEOUT_MS = 30_000;
 
-export const probeVersion = (binary: string): Probe => {
-    const result = spawnSync(binary, ["version"], { encoding: "utf8", timeout: PROBE_TIMEOUT_MS, windowsHide: true });
-    if (result.error !== undefined) {
-        return { kind: "unusable" };
-    }
-    const version = result.status === 0 ? /^\d+\.\d+\.\d+$/.exec(result.stdout.trim())?.[0] : undefined;
-    if (version !== undefined) {
-        return { kind: "version", version };
-    }
-    return { kind: result.status === 0 ? "unusable" : "no-version-command" };
-};
-
+// The bare release a working agent prints; undefined for a file that won't run, fails, or answers anything else.
 export const versionOf = (binary: string): string | undefined => {
-    const probed = probeVersion(binary);
-    return probed.kind === "version" ? probed.version : undefined;
+    const result = spawnSync(binary, ["version"], { encoding: "utf8", timeout: PROBE_TIMEOUT_MS, windowsHide: true });
+    return result.error === undefined && result.status === 0 ? /^\d+\.\d+\.\d+$/.exec(result.stdout.trim())?.[0] : undefined;
 };
 
 // What a download may do beyond arriving: resume needs a destination name that means one set of bytes.
@@ -147,10 +133,9 @@ export const download = async (url: string, dest: string, options: DownloadOptio
     await drainInto(file, stream.body, stream.appending ? have : 0, stream.total, options.onProgress);
 };
 
-// Windows lets a running executable be renamed but never overwritten or deleted, so every replacement starts here.
-export const setAside = async (path: string, aside: string): Promise<void> => {
-    await rm(aside, { force: true }).catch(() => undefined);
-    await rename(path, aside).catch((error: NodeJS.ErrnoException) => {
+// Every binary replacement is renames, since Windows renames a running executable but never overwrites it; no source moves nothing.
+export const renameIfPresent = async (from: string, to: string): Promise<void> => {
+    await rename(from, to).catch((error: NodeJS.ErrnoException) => {
         if (error.code !== "ENOENT") {
             throw error;
         }

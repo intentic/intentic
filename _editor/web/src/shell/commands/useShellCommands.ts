@@ -64,7 +64,7 @@ export function useShellCommands(): void {
             // Match the physical key globally so terminal.new works while its panel is closed.
             {
                 command: `terminal.new`,
-                title: t(`shell.useShellCommands.new`),
+                title: t(`shared.new`),
                 category: TERMINAL,
                 icon: `code`,
                 keybinding: `Ctrl+Shift+\``,

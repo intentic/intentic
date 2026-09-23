@@ -2,7 +2,6 @@
 // The scorer's own laws are @intentic/base/fuzzy's, tested there; here it is only the oracle ranking is judged by.
 import { array, assert, constantFrom, integer, nat, oneof, option, property, stringMatching, tuple, uniqueArray } from "fast-check";
 import { fuzzyScore } from "@intentic/base/fuzzy";
-import { describe, test, expect } from "bun:test";
 import { rankPaths } from "./fuzzyPaths";
 
 const segmentArb = stringMatching(/^[a-z0-9_-]{1,10}$/);

@@ -1,4 +1,3 @@
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../../../config.js";
 import { forgetHostedImage, parseImageRef, resolveHostedImage } from "./hosted-image.js";
@@ -7,7 +6,7 @@ import { forgetHostedImage, parseImageRef, resolveHostedImage } from "./hosted-i
 // moment it is re-pushed, so these pin the one property the pool depends on: what this returns is a name that
 // cannot change under a machine that is already holding it.
 
-const logger = { info: mock(), warn: mock(), error: mock() } as never;
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never;
 
 const DIGEST = `sha256:a2efc11a3e6b517557ad0b46cbae6f2b6270b632d93e09cb8b816c7ad8487125`;
 

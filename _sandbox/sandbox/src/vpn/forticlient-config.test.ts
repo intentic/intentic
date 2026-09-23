@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { parseForticlientConfig, slugId, splitServer } from "./forticlient-config.js";
 
 // FortiClient 7.4 export shapes: EncX username/PSK, empty <username/>, CDATA, accented name, IKE endpoint.

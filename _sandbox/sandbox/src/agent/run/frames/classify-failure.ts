@@ -1,10 +1,10 @@
 import {
     type AgentEvent,
     type AgentProvider,
+    breakArmed,
     KeyedProviderSchema,
     type ProviderRefusal,
     reportsPlanLimits,
-    RESUME_NOTES,
     RETRY_LADDER_TRIES,
     type TodoItem,
     type TurnBreak,
@@ -20,12 +20,10 @@ import type { StoredModelRefusal } from "../../../usage/model-refusals.js";
 import type { ObservedLimit } from "../../../usage/observed-limits.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
+import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
 import type { Attribution } from "./frame-decorators.js";
-import type { WallChange } from "./frame-reducers.js";
 
-// What one failure frame becomes: the frame the window reads, the records it files, the line it logs and the walls it
-// hit. Asks read-only questions (when a window reopens, the way on, the conversation's own policy) and writes nothing;
-// the turn performs the writes it names.
+// One failure frame, classified read-only: the frame the window reads, the records to file, its log line and its hold.
 
 export type ErrorFrame = Extract<AgentEvent, { kind: "error" }>;
 
@@ -45,18 +43,6 @@ const HANDLED_FAILURE_CODES: ReadonlySet<string> = new Set([
 // Codes filed as a durable refusal against the provider, whose `kind` reads the sentence rather than the code.
 const REFUSING_CODES: ReadonlySet<string> = new Set(["rate_limit", "claude-token-refused", "claude-not-entitled"]);
 
-// An uncoded death is a hung runtime or a crashed harness: nothing to repair first, so the turn is held whole and one
-// press sends it again. A coded failure names its own remedy, and re-firing it would only re-fail. False for a
-// `stopped` resume that never got the provider to answer: the runtime is down rather than flaky, and holding it again
-// would loop.
-export const holdsAsStopped = (prompt: string, providerAnswered: boolean, failure: { readonly code: string | undefined } | undefined): boolean =>
-    failure !== undefined && failure.code === undefined && (providerAnswered || !prompt.startsWith(RESUME_NOTES.stopped));
-
-// A session past the model's window is re-run once, in a fresh session carrying the hand-off; a re-run that overflows
-// as well has no session left to try. Asked by the frame and by the settle, which must agree.
-export const rerunsFresh = (prompt: string, failure: { readonly code?: string | undefined } | undefined): boolean =>
-    failure?.code === "context-overflow" && !prompt.startsWith(RESUME_NOTES.overflow);
-
 // Everything classifying one failure frame reads, as it stood when the frame arrived.
 export interface FailureContext {
     readonly turn: TurnInput;
@@ -70,8 +56,8 @@ export interface FailureContext {
     readonly sessionId: string | undefined;
     // Whether the provider answered before this frame: `ran` on every hold this frame promises.
     readonly answered: boolean;
-    // Whether a refused Claude credential would be re-minted and the turn re-run.
-    readonly resumeArmed: boolean;
+    // The stored Claude credential a refusal of it would re-mint and re-run the turn on; undefined when none would be.
+    readonly remint: HeldTurn["remint"];
     // The reset instant the stream last named, which outranks the frame's own and the account snapshot's.
     readonly limitReset: number | undefined;
     // The breaker's state after recording this outage; undefined unless the frame is one on a conversation.
@@ -87,7 +73,11 @@ export interface FailureQueries {
     // This conversation's own answer for one ending, read the same way the resume pass will read it.
     readonly breakPolicy: (conversationId: string, ending: TurnBreak) => Promise<TurnBreakPolicy>;
     // When a spent allowance reopens by the account's snapshot or the translator's pool.
-    readonly reopensAt: (at: { readonly provider: AgentProvider; readonly model: string | undefined; readonly account: string | undefined }) => Promise<number | undefined>;
+    readonly reopensAt: (at: {
+        readonly provider: AgentProvider;
+        readonly model: string | undefined;
+        readonly account: string | undefined;
+    }) => Promise<number | undefined>;
     readonly limitWay: (params: Parameters<typeof limitWayOf>[1]) => Promise<LimitWay | undefined>;
     // How many rungs the stop ladder has spent, and when its next would fire (undefined once it is spent).
     readonly stopLadder: (conversationId: string) => { readonly made: number; readonly nextAt: number | undefined };
@@ -100,7 +90,13 @@ export type FailureWrite =
     // read budget its own number depends on.
     | { readonly kind: "headroom-refresh"; readonly options: RefreshOptions }
     // A plan with nothing to poll leaves its own refusal as the reading, scoped to the account and model that refused.
-    | { readonly kind: "observed-limit"; readonly provider: AgentProvider; readonly account: string; readonly model: string; readonly limit: ObservedLimit }
+    | {
+          readonly kind: "observed-limit";
+          readonly provider: AgentProvider;
+          readonly account: string;
+          readonly model: string;
+          readonly limit: ObservedLimit;
+      }
     // The plan does not cover this model: filed against the model, since the subscription serves its others fine.
     | { readonly kind: "model-refusal"; readonly provider: string; readonly model: string; readonly refusal: StoredModelRefusal }
     // The seat, not the credential: it signs in fine, but the org switched Claude Code off.
@@ -109,14 +105,12 @@ export type FailureWrite =
     | { readonly kind: "model-cooldown"; readonly provider: AgentProvider; readonly model: string; readonly cooldown: StoredCooldown };
 
 export interface FailurePlan {
-    // Which dressing the frame took: a spent allowance, an outage's retry, a stopped hold, a promised re-mint, a
-    // promised fresh session, or none.
-    readonly ending: "limit" | "outage" | "stopped" | "auto-resume" | "fresh-session" | "bare";
     readonly frame: ErrorFrame;
     readonly writes: readonly FailureWrite[];
     // An unclassified failure logs at `error`; an already-filed refusal at `warn`.
     readonly log: { readonly level: "error" | "warn"; readonly message: "turn failed" | "turn refused"; readonly fields: Record<string, unknown> };
-    readonly walls: WallChange;
+    // What the turn is held as for a press or the resume pass; the frame promises exactly this hold.
+    readonly held: HeldTurn | undefined;
 }
 
 // A named model, or undefined for none and for the wire's `""`, the catalog default.
@@ -158,7 +152,9 @@ const filedWrites = (event: ErrorFrame, context: FailureContext): FailureWrite[]
             ? [{ kind: "model-refusal", provider: context.provider, model, refusal: { at: context.now, message: event.message } }]
             : [];
     const seatRefusal: FailureWrite[] =
-        event.code === "claude-not-entitled" && context.account !== undefined ? [{ kind: "seat-refusal", account: context.account, reason: event.message }] : [];
+        event.code === "claude-not-entitled" && context.account !== undefined
+            ? [{ kind: "seat-refusal", account: context.account, reason: event.message }]
+            : [];
     return [...refusalWrites(event, context), ...modelRefusal, ...seatRefusal];
 };
 
@@ -219,12 +215,18 @@ const heldOf = (ran: boolean, way: LimitWay | undefined, moving: string | undefi
 const limitFrame = async (
     queries: FailureQueries,
     event: ErrorFrame,
-    limit: { readonly conversationId: string | undefined; readonly resetsAt: number | undefined; readonly held: boolean; readonly ran: boolean; readonly way: LimitWay | undefined },
+    limit: {
+        readonly conversationId: string | undefined;
+        readonly resetsAt: number | undefined;
+        readonly held: boolean;
+        readonly ran: boolean;
+        readonly way: LimitWay | undefined;
+    },
 ): Promise<ErrorFrame> => {
     const { conversationId, resetsAt, held, ran, way } = limit;
     const schedulable = held && resetsAt !== undefined && conversationId !== undefined;
     // `move` implies the appointment, so anything but `wait` keeps it.
-    const armed = schedulable ? (await queries.breakPolicy(conversationId, "limit")) !== "wait" : false;
+    const armed = schedulable ? breakArmed(await queries.breakPolicy(conversationId, "limit")) : false;
     const moving = held ? way?.move?.account : undefined;
     return {
         ...event,
@@ -242,7 +244,7 @@ const stoppedFrame = async (
     event: ErrorFrame,
     stopped: { readonly conversationId: string; readonly ran: boolean; readonly contextTokens: number | undefined },
 ): Promise<ErrorFrame> => {
-    const armed = (await queries.breakPolicy(stopped.conversationId, "stopped")) === "retry";
+    const armed = breakArmed(await queries.breakPolicy(stopped.conversationId, "stopped"));
     const ladder = queries.stopLadder(stopped.conversationId);
     const nextAt = armed ? ladder.nextAt : undefined;
     return {
@@ -255,15 +257,32 @@ const stoppedFrame = async (
     };
 };
 
-// The frame's dressing, the walls it hit, and any record only the dressing could decide.
-type Dressed = Pick<FailurePlan, "ending" | "frame" | "walls"> & { readonly writes: readonly FailureWrite[] };
+// The frame's dressing, the turn it holds, and any record only the dressing could decide.
+type Dressed = Pick<FailurePlan, "frame" | "held"> & { readonly writes: readonly FailureWrite[] };
+
+const bare = (frame: ErrorFrame): Dressed => ({ frame, held: undefined, writes: [] });
+
+// The turn held on its conversation, as the frame found it; `rest` names what only its wall knows.
+const holding = (context: FailureContext, conversationId: string, reason: HeldReason, rest: Partial<HeldTurn> = {}): HeldTurn => ({
+    input: { ...context.turn, conversationId },
+    reason,
+    ...opt("sessionId", context.sessionId),
+    ran: context.answered,
+    ...rest,
+});
+
+// What the turn left behind, which a fresh session's hand-off is seeded from.
+const leftBy = (context: FailureContext): Pick<LimitWay, "standing" | "checklist" | "contextTokens"> => ({
+    standing: context.standing,
+    ...opt("checklist", context.checklist),
+    ...opt("contextTokens", context.contextTokens),
+});
 
 // A spent allowance: when it reopens, whether it is held, the way on, and the model a routed provider benches.
 const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<Dressed> => {
     const { turn, provider, account, answered } = context;
     // One precedence for the reset instant: the stream's, the frame's own, else the account or pool snapshot.
     const resetsAt = context.limitReset ?? event.resetsAt ?? (await queries.reopensAt({ provider, model: context.model, account }));
-    const held = turn.conversationId !== undefined;
     const model = named(context.model);
     const writes: FailureWrite[] =
         KeyedProviderSchema.safeParse(provider).success && model !== undefined && resetsAt !== undefined
@@ -280,13 +299,14 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
         contextTokens: context.contextTokens,
         sessionId: context.sessionId,
     });
-    const walls = { limit: { hit: held, reopens: resetsAt, way } };
+    const { conversationId } = turn;
+    const held = conversationId === undefined ? undefined : holding(context, conversationId, "limit", { ...opt("reopensAt", resetsAt), ...way });
     // Worth dressing for a reset or a hold; with neither, it goes out bare.
-    if (resetsAt === undefined && !held) {
-        return { ending: "bare", frame: event, walls, writes };
+    if (resetsAt === undefined && held === undefined) {
+        return { frame: event, held, writes };
     }
-    const frame = await limitFrame(queries, event, { conversationId: turn.conversationId, resetsAt, held, ran: answered, way });
-    return { ending: "limit", frame, walls, writes };
+    const frame = await limitFrame(queries, event, { conversationId, resetsAt, held: held !== undefined, ran: answered, way });
+    return { frame, held, writes };
 };
 
 // What an overflow's frame adds to the provider's words: where the turn goes next, which the reader cannot see.
@@ -301,50 +321,65 @@ const withClause = (message: string, clause: string): string => {
     return `${said}${/[.!?]$/.test(said) ? "" : "."} ${clause}`;
 };
 
-// A session past its window, on a conversation: the first time, held for a fresh session the daemon opens at once and
-// on no policy, since resuming only overflows again; a re-run that overflows too ends, and says to split the task.
-const dressOverflow = (event: ErrorFrame, context: FailureContext): Dressed => {
-    if (context.turn.conversationId === undefined) {
-        return { ending: "bare", frame: event, walls: {}, writes: [] };
-    }
-    if (!rerunsFresh(context.turn.prompt, event)) {
-        return { ending: "bare", frame: { ...event, message: withClause(event.message, TOO_LARGE) }, walls: {}, writes: [] };
+// A first overflow is held for a fresh session at once, on no policy; the fresh re-run overflowing too says to split the task.
+const dressOverflow = (event: ErrorFrame, context: FailureContext, conversationId: string): Dressed => {
+    if (context.turn.resume === "overflow") {
+        return bare({ ...event, message: withClause(event.message, TOO_LARGE) });
     }
     const frame: ErrorFrame = { ...event, message: withClause(event.message, FRESH_RERUN), held: { ran: context.answered }, autoResume: "scheduled" };
-    return { ending: "fresh-session", frame, walls: {}, writes: [] };
+    return { frame, held: holding(context, conversationId, "overflow", leftBy(context)), writes: [] };
+};
+
+// Held whole for a press; a carry refused unanswered moves fresh at once; an unanswered `stopped` resume is not held again.
+const dressDeath = async (event: ErrorFrame, context: FailureContext, conversationId: string, queries: FailureQueries): Promise<Dressed> => {
+    const { turn, answered } = context;
+    if (turn.resume === "carried" && !answered && turn.account !== undefined) {
+        const left = leftBy(context);
+        const held = holding(context, conversationId, "limit", {
+            ran: true,
+            carryRefused: true,
+            move: { account: turn.account, carry: false },
+            ...left,
+        });
+        return { frame: { ...event, held: heldOf(true, left, turn.account), autoResume: "scheduled" }, held, writes: [] };
+    }
+    if (!answered && turn.resume === "stopped") {
+        return bare(event);
+    }
+    const frame = await stoppedFrame(queries, event, { conversationId, ran: answered, contextTokens: context.contextTokens });
+    return { frame, held: holding(context, conversationId, "stopped", leftBy(context)), writes: [] };
 };
 
 const dress = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<Dressed> => {
-    const conversationId = context.turn.conversationId;
-    // The provider failed, not the workspace; past the attempt budget the frame goes out bare.
-    if (context.outage !== undefined && context.outage.attempt < OUTAGE_MAX_ATTEMPTS && conversationId !== undefined) {
-        const armed = (await queries.breakPolicy(conversationId, "outage")) === "retry";
-        return { ending: "outage", frame: outageFrame(event, armed, context.outage), walls: { outageHit: true }, writes: [] };
-    }
-    // Says on the frame whether the daemon will re-mint and re-run this credential.
-    if (event.code === "claude-token-refused") {
-        const walls = { authRefused: true } as const;
-        return context.resumeArmed
-            ? { ending: "auto-resume", frame: { ...event, autoResume: "scheduled" }, walls, writes: [] }
-            : { ending: "bare", frame: event, walls, writes: [] };
-    }
+    const { conversationId } = context.turn;
     if (event.code === "rate_limit") {
         return dressLimit(event, context, queries);
     }
+    // Every other wall holds a turn only on a conversation.
+    if (conversationId === undefined) {
+        return bare(event);
+    }
+    // The provider failed, not the workspace; past the attempt budget the frame goes out bare.
+    if (context.outage !== undefined && context.outage.attempt < OUTAGE_MAX_ATTEMPTS) {
+        const armed = breakArmed(await queries.breakPolicy(conversationId, "outage"));
+        return { frame: outageFrame(event, armed, context.outage), held: holding(context, conversationId, "outage"), writes: [] };
+    }
+    // Says on the frame whether the daemon will re-mint and re-run this credential.
+    if (event.code === "claude-token-refused") {
+        const { remint } = context;
+        return remint === undefined
+            ? bare(event)
+            : { frame: { ...event, autoResume: "scheduled" }, held: holding(context, conversationId, "auth", { remint }), writes: [] };
+    }
     if (event.code === "context-overflow") {
-        return dressOverflow(event, context);
+        return dressOverflow(event, context, conversationId);
     }
-    // The same promise for an uncoded death the exit is about to hold.
-    if (conversationId !== undefined && holdsAsStopped(context.turn.prompt, context.answered, { code: event.code })) {
-        const frame = await stoppedFrame(queries, event, { conversationId, ran: context.answered, contextTokens: context.contextTokens });
-        return { ending: "stopped", frame, walls: {}, writes: [] };
-    }
-    return { ending: "bare", frame: event, walls: {}, writes: [] };
+    return event.code === undefined ? dressDeath(event, context, conversationId, queries) : bare(event);
 };
 
 export const classifyFailure = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<FailurePlan> => {
     const filed = filedWrites(event, context);
     const log = logOf(event, context);
-    const { ending, frame, walls, writes } = await dress(event, context, queries);
-    return { ending, frame, writes: [...filed, ...writes], log, walls };
+    const { frame, held, writes } = await dress(event, context, queries);
+    return { frame, writes: [...filed, ...writes], log, held };
 };

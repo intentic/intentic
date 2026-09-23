@@ -305,9 +305,9 @@ onMounted(progress.recover);
                             :variant="app.status === 'live' ? 'success' : app.status === 'planned' ? 'info' : 'neutral'"
                             :label="
                                 app.status === 'live'
-                                    ? t(`views.infraDeclare.live`)
+                                    ? t(`shared.live`)
                                     : app.status === 'planned'
-                                      ? t(`views.infraDeclare.planned`)
+                                      ? t(`shared.planned`)
                                       : t(`views.infraDeclare.declared`)
                             "
                             size="xs"
@@ -333,7 +333,7 @@ onMounted(progress.recover);
 
             <!-- Self-hosted services = i.want.service entries (removable here). -->
             <div class="flex flex-col gap-2">
-                <span :class="ui.sectionLabel()">{{ t(`views.infraDeclare.selfHostedServices2`) }}</span>
+                <span :class="ui.sectionLabel()">{{ t(`shared.selfHostedServices`) }}</span>
                 <Card v-for="tool in tools" :key="tool.name" class="flex items-center justify-between gap-3">
                     <div class="min-w-0">
                         <div class="flex items-center gap-2">
@@ -364,12 +364,12 @@ onMounted(progress.recover);
     <section v-if="needsHost || needsCloudflare" class="mb-6 flex flex-col gap-3">
         <Card v-if="needsHost" class="flex flex-col gap-3">
             <ConnectHost>
-                <template #reason>{{ t(`views.infraDeclare.whatWantNeedsServer`) }}</template>
+                <template #reason>{{ t(`shared.whatWantNeedsServer`) }}</template>
             </ConnectHost>
         </Card>
         <Card v-if="needsCloudflare" class="flex flex-col gap-3">
             <div class="min-w-0">
-                <span class="font-medium text-content">{{ t(`views.infraDeclare.connectCloudflare`) }}</span>
+                <span class="font-medium text-content">{{ t(`shared.connectCloudflare`) }}</span>
                 <p class="mt-0.5 text-xs text-muted">{{ t(`views.infraDeclare.whatWantNeedsDomain`) }}</p>
             </div>
             <CloudflareConnect />
@@ -404,7 +404,7 @@ onMounted(progress.recover);
                             <template v-else-if="hasGitlab">{{ t(`views.infraDeclare.devopsReposLiveOn2`) }}</template>
                             <template v-else
                                 >{{ t(`views.infraDeclare.defaultSelfHosted`) }} <b>{{ t(`views.infraDeclare.forgejo`) }}</b>
-                                {{ t(`views.infraDeclare.provisionedLink`) }} <b>GitHub</b> {{ t(`views.infraDeclare.or`) }} <b>GitLab</b>
+                                {{ t(`views.infraDeclare.provisionedLink`) }} <b>GitHub</b> {{ t(`shared.or`) }} <b>GitLab</b>
                                 {{ t(`views.infraDeclare.toUseOneInstead`) }}</template
                             >
                         </p>
@@ -445,7 +445,7 @@ onMounted(progress.recover);
                         <SecretField v-model="ghToken" secret-key="GITHUB_TOKEN" collect :placeholder="t(`views.infraDeclare.ghp`)" />
                         <span class="text-2xs text-subtle"
                             >{{ t(`views.infraDeclare.storedInSandboxsEnv`) }} <span class="font-mono">GITHUB_TOKEN</span
-                            >{{ t(`views.infraDeclare.neverOnPlatform`) }}</span
+                            >{{ t(`shared.neverOnPlatform`) }}</span
                         >
                     </label>
                     <div class="flex justify-end gap-2">
@@ -469,7 +469,7 @@ onMounted(progress.recover);
                         <SecretField v-model="glToken" secret-key="GITLAB_TOKEN" collect :placeholder="t(`views.infraDeclare.glpat`)" />
                         <span class="text-2xs text-subtle"
                             >{{ t(`views.infraDeclare.storedInSandboxsEnv`) }} <span class="font-mono">GITLAB_TOKEN</span
-                            >{{ t(`views.infraDeclare.neverOnPlatform`) }}</span
+                            >{{ t(`shared.neverOnPlatform`) }}</span
                         >
                     </label>
                     <label class="ui-field">
@@ -501,7 +501,7 @@ onMounted(progress.recover);
                         <div class="flex items-center gap-2">
                             <span class="font-medium text-content">Stripe</span>
                             <StatusBadge v-if="hasStripe" variant="success" size="xs"
-                                ><Icon name="check" class="text-2xs" /> {{ t(`views.infraDeclare.connected`) }}</StatusBadge
+                                ><Icon name="check" class="text-2xs" /> {{ t(`shared.connected`) }}</StatusBadge
                             >
                         </div>
                         <p class="mt-0.5 text-xs text-muted">
@@ -533,7 +533,7 @@ onMounted(progress.recover);
                         <SecretField v-model="stripeKey" secret-key="STRIPE_API_KEY" collect :placeholder="t(`views.infraDeclare.sk`)" />
                         <span class="text-2xs text-subtle"
                             >{{ t(`views.infraDeclare.storedInSandboxsEnv`) }} <span class="font-mono">STRIPE_API_KEY</span
-                            >{{ t(`views.infraDeclare.neverOnPlatform`) }}</span
+                            >{{ t(`shared.neverOnPlatform`) }}</span
                         >
                     </label>
                     <div class="flex justify-end gap-2">
@@ -557,7 +557,7 @@ onMounted(progress.recover);
                         <div class="flex items-center gap-2">
                             <span class="font-medium text-content">Cloudflare</span>
                             <StatusBadge v-if="hasCloudflare" variant="success" size="xs"
-                                ><Icon name="check" class="text-2xs" /> {{ t(`views.infraDeclare.connected`) }}</StatusBadge
+                                ><Icon name="check" class="text-2xs" /> {{ t(`shared.connected`) }}</StatusBadge
                             >
                         </div>
                         <p class="mt-0.5 text-xs text-muted">
@@ -575,7 +575,7 @@ onMounted(progress.recover);
                     />
                     <Button
                         v-else-if="!showCloudflare"
-                        :label="t(`views.infraDeclare.connectCloudflare`)"
+                        :label="t(`shared.connectCloudflare`)"
                         size="small"
                         severity="secondary"
                         @click="showCloudflare = true"

@@ -1,6 +1,5 @@
 import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect, beforeEach, mock } from "bun:test";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import type { TurnContext } from "../../agent/providers/adapter.js";
 import type { Services } from "../../composition.js";
@@ -14,15 +13,15 @@ const cards = parkedCards(memoryFleet().conversations);
 
 /* What a Cursor turn is handed to reach out of itself: the daemon's http MCP tools, which cursorMcpServers mounts. */
 
-mock.module("./cursor-sdk.js", () => ({ ...cursorSdkOriginal, CURSOR_SDK_MISSING: "missing sdk", cursorSdk: async () => ({ Agent: {} }) }));
+jest.mock("./cursor-sdk.js", () => ({ ...cursorSdkOriginal, CURSOR_SDK_MISSING: "missing sdk", cursorSdk: async () => ({ Agent: {} }) }));
 
-const browserServers = mock();
-mock.module("../../browser/tools/browser-tools.js", () => ({
+const browserServers = jest.fn();
+jest.mock("../../browser/tools/browser-tools.js", () => ({
     ...browserToolsOriginal,
     browserServersOf: (...args: unknown[]) => browserServers(...args),
 }));
 
-// Loaded after the mocks: mock.module binds at this point, and a static import would have already evaluated the graph.
+// Loaded after the mocks: jest.mock binds at this point, and a static import would have already evaluated the graph.
 const { cursorMcpServers } = await import("./cursor-tools.js");
 const { planCursorTurn } = await import("./cursor-provider.js");
 

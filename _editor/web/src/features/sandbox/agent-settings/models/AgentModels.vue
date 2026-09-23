@@ -1,12 +1,5 @@
 <script setup lang="ts">
-import {
-    MODEL_ROLE_BLOCKS,
-    type ModelPin,
-    type ModelRole,
-    type ModelRoleBlockId,
-    type ModelRoleSpec,
-    modelPinKey,
-} from "@intentic/sandbox-contract";
+import { MODEL_ROLE_BLOCKS, type ModelPin, type ModelRole, type ModelRoleBlockId, type ModelRoleSpec, modelPinKey } from "@intentic/sandbox-contract";
 import { Button, MarkdownDocument, Modal, RowGroup, SegmentedControl } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, ref, shallowRef, watch } from "vue";
@@ -410,13 +403,12 @@ const setPickerOpen = (open: boolean): void => {
                         </p>
                         <!-- The judge model evaluates untrusted generated input. -->
                         <p v-else class="text-2xs text-subtle">
-                            {{ t(`sandbox.agentModels.worthBetterModelThan`) }}
+                            {{ t(`shared.worthBetterModelThan`) }}
                         </p>
                     </template>
                 </ModelRoleRow>
             </template>
         </RowGroup>
-
     </div>
 
     <!-- The router's second setting, opened from its own row: a document, so it takes the dialog rather than a field

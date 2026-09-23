@@ -1,5 +1,4 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { expect, test } from "bun:test";
 import { sqliteAgentsStore } from "../../agents/registry/agents-store.js";
 import { openConversationsDb } from "../../store/conversations-db.js";
 import { IN_MEMORY } from "../../store/sqlite.js";
@@ -31,7 +30,10 @@ test("a watch round-trips verbatim, is filed under its own id, and drops indepen
     // The overwhelmingly common boot: nothing was ever armed.
     expect(await journal.list()).toEqual([]);
 
-    const firing = entryOf({ firing: { outcome: "met", check: { exitCode: 0, output: "success" } }, placement: { worktree: "/wt/conv-1", fenced: true } });
+    const firing = entryOf({
+        firing: { outcome: "met", check: { exitCode: 0, output: "success" } },
+        placement: { worktree: "/wt/conv-1", fenced: true },
+    });
     await journal.record(firing);
     const signalled = entryOf({ id: "watch-2", note: "deploy", conversationId: "conv-2", signalPath: "/tmp/intentic-run-job-2/status" });
     await journal.record(signalled);

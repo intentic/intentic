@@ -1,4 +1,3 @@
-import { test, expect, mock } from "bun:test";
 import { createLogger } from "../logger.js";
 import { testConfig } from "../testing.js";
 import { backfillSearchIndex, type BackfillSource } from "./search-backfill.js";
@@ -113,7 +112,7 @@ test("pruning drops unlisted sources for sessions and never for conversations", 
 test("an aborted pass stops where it is", async () => {
     const index = openSearchIndex(IN_MEMORY);
     const controller = new AbortController();
-    const read = mock(async () => {
+    const read = jest.fn(async () => {
         controller.abort();
         return [{ text: "only the first", speaker: "user" as const }];
     });

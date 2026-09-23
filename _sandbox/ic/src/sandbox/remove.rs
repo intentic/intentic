@@ -1,5 +1,6 @@
 use crate::docker;
 use crate::sandbox::trash;
+use crate::sandbox::trash::GRACE_DAYS;
 use crate::sandbox::{container_status, list_slugs, CONTAINER_PREFIX};
 use crate::tty;
 use crate::util::{bail, plural, Result};
@@ -130,9 +131,6 @@ pub fn run(args: Args) -> Result<()> {
     finish(&args);
     Ok(())
 }
-
-/// Whole days of grace, for the sentences that quote it.
-const GRACE_DAYS: u64 = trash::GRACE_SECS / (24 * 60 * 60);
 
 /// What the prompt claims is about to happen. The two readings are not degrees of the same thing — one is
 /// reversible for a week and the other is not — so they share no wording.

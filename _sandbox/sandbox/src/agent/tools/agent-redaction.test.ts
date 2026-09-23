@@ -1,5 +1,4 @@
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import { test, expect } from "bun:test";
 import { type NamedSecret, surfaceForms } from "../../secrets/secret-registry.js";
 import { maskDeep, maskTargets, redactionHooks, unmaskableSecrets } from "./agent-redaction.js";
 

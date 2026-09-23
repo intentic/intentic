@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, beforeEach } from "bun:test";
 import { CLAUDE_SDK_EXPORTS } from "./engine-descriptors.js";
 import { forgetEngineResolution } from "./engine-resolve.js";
 import { activateVersion, engineVersionDir, forgetEngineStates, readEngineState } from "./engine-store.js";

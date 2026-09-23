@@ -255,7 +255,7 @@ onUnmounted(() => {
         <button
             type="button"
             class="window-control"
-            :aria-label="maximized ? t(`shell.windowControls.restore`) : t(`shell.windowControls.maximise`)"
+            :aria-label="maximized ? t(`shared.restore`) : t(`shell.windowControls.maximise`)"
             @click="workDesktopWindow(`maximize`)"
         >
             <Icon :name="maximized ? `restore` : `square`" class="text-sm" />

@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
-import { expect, test } from "bun:test";
 import { sleep } from "@intentic/base/async";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { createLiveMetrics } from "./live-metrics.js";

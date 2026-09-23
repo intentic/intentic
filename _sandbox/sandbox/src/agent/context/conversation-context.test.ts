@@ -1,6 +1,5 @@
 import type { AgentTurn, Persona } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../../agents/registry/agents-store.js";
 import { conversationEntry, isolatedAgent } from "../../testing.js";
@@ -41,7 +40,9 @@ test("the note names the card, what is carried, and what the workspace has that 
     // empty), so everything the composition names is "missing" and nothing is absent: the note still says
     // what the card asked for. The walk over a real tree is worktrees.integration.test.ts's business.
     const root = "/nowhere/intentic-context";
-    const backend = isolatedAgent([], { placement: { kind: "worktree", branch: "agent/c1", repos: [], composition: { persona: "backend", repos: ["api"] } } });
+    const backend = isolatedAgent([], {
+        placement: { kind: "worktree", branch: "agent/c1", repos: [], composition: { persona: "backend", repos: ["api"] } },
+    });
     const note = await contextNoteFor(services(backend, root), "c1");
     expect(note?.title).toBe("Context of this session");
     expect(note?.text).toContain("(wearing the `Backend` persona)");

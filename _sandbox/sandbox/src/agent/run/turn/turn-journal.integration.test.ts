@@ -1,7 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "bun:test";
 import { sqliteAgentsStore } from "../../../agents/registry/agents-store.js";
 import { conversationsDbPath, openConversationsDb } from "../../../store/conversations-db.js";
 import { conversationEntry } from "../../../testing.js";
@@ -12,8 +11,20 @@ test("a turn and a fire in flight are what the next daemon's boot finds", async 
     const root = mkdtempSync(join(tmpdir(), "journal-"));
     const dying = openConversationsDb(conversationsDbPath(root));
     sqliteAgentsStore(dying).save([conversationEntry({ id: "c-1" })]);
-    await sqliteTurnJournal(dying).recordTurn({ kind: "turn", turn: { conversationId: "c-1", prompt: "ship it" }, sessionId: "sess-1", startedAt: 10, attempts: 0 });
-    await sqliteTurnJournal(dying).recordFire({ kind: "automation", automationId: "nightly", conversationId: "a-nightly-1", startedAt: 20, attempts: 0 });
+    await sqliteTurnJournal(dying).recordTurn({
+        kind: "turn",
+        turn: { conversationId: "c-1", prompt: "ship it" },
+        sessionId: "sess-1",
+        startedAt: 10,
+        attempts: 0,
+    });
+    await sqliteTurnJournal(dying).recordFire({
+        kind: "automation",
+        automationId: "nightly",
+        conversationId: "a-nightly-1",
+        startedAt: 20,
+        attempts: 0,
+    });
 
     const booted = sqliteTurnJournal(openConversationsDb(conversationsDbPath(root)));
     expect(await booted.list()).toEqual([

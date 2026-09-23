@@ -53,7 +53,7 @@ const start = (): Promise<void> =>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <div class="shrink-0">
                     <Button
-                        :label="failed ? t(`sandbox.hostedRebuild.tryBuildAgain`) : t(`sandbox.hostedRebuild.rebuildNow`)"
+                        :label="failed ? t(`sandbox.hostedRebuild.tryBuildAgain`) : t(`shared.rebuildNow`)"
                         size="small"
                         :loading="busy"
                         @click="start"

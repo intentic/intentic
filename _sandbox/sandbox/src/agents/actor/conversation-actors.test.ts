@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentEvent, type AgentStatus, RETRY_LADDER_TRIES } from "@intentic/sandbox-contract";
 import { pino } from "pino";
-import { describe, expect, test } from "bun:test";
 import {
     armSupervisor,
     childLedger,
@@ -45,7 +44,6 @@ import { IN_MEMORY } from "../../store/sqlite.js";
 import { createFleet, type Fleet, type FleetStore } from "../registry/agents-registry.js";
 import type { EndingStatus } from "../registry/agents-store.js";
 import { liveTurnConversations, turnRunOf } from "./conversation-holdings.js";
-import type { StrandedKind } from "./conversation-state.js";
 import type { ParkedCards, Settled } from "./parked-cards.js";
 
 // A model-based test of the conversation actors: a seeded generator drives long random sequences of lifecycle events
@@ -608,15 +606,12 @@ const walk = async (seed: number, steps: number): Promise<number> => {
             run: async (id) => {
                 const input = { prompt: "go", conversationId: id };
                 const which = pick(["limit", "stopped", "outage", "auth", "got-somewhere"] as const);
-                if (which === "limit" || which === "stopped") {
-                    await send(id, { kind: "turn-held", held: { input, reason: which, ran: random() < 0.5 } });
-                    modelOf(id).firedThisHold = 0;
-                } else if (which === "outage") {
-                    await send(id, { kind: "outage-stranded", failure: { input, provider: "claude" } });
-                } else if (which === "auth") {
-                    await send(id, { kind: "auth-refused", failure: { input, account: "acct", refusedToken: "tok" } });
-                } else {
+                if (which === "got-somewhere") {
                     await send(id, { kind: "turn-got-somewhere" });
+                } else {
+                    const remint = which === "auth" ? { remint: { account: "acct", refusedToken: "tok" } } : {};
+                    await send(id, { kind: "turn-held", held: { input, reason: which, ran: random() < 0.5, ...remint } });
+                    modelOf(id).firedThisHold = 0;
                 }
             },
         },
@@ -644,7 +639,7 @@ const walk = async (seed: number, steps: number): Promise<number> => {
                 } else if (which === "ladder-spent") {
                     await send(id, { kind: "ladder-spent" });
                 } else {
-                    await send(id, { kind: "resume-dropped", record: pick<StrandedKind>(["auth", "outage", "held"]) });
+                    await send(id, { kind: "resume-dropped" });
                 }
             },
         },
@@ -1052,9 +1047,7 @@ const expectGone = (fleet: Fleet, id: string): void => {
     expect(fleet.agents.ids()).not.toContain(id);
     expect(fleet.conversations.turnActive(id)).toBe(false);
     expect(fleet.conversations.landing(id)).toBe(false);
-    for (const kind of ["auth", "outage", "held"] as const) {
-        expect(fleet.conversations.stranded(kind).map((stranded) => stranded.conversationId)).not.toContain(id);
-    }
+    expect(fleet.conversations.stranded().map((stranded) => stranded.conversationId)).not.toContain(id);
     expect(fleet.conversations.liveSessionIds()).not.toContain(`s-${id}`);
     expect(turnRunOf(fleet.conversations, id)).toBeUndefined();
     expect(supervisorFor(fleet.conversations, id)).toBeUndefined();
@@ -1086,11 +1079,9 @@ describe("disposal", () => {
         await fleet.conversations.send("c1", { kind: "settle" }, 3).settled;
         unregister();
         fleet.conversations.send("c1", { kind: "turn-held", held: { input, reason: "limit", ran: true } }, 4);
-        fleet.conversations.send("c1", { kind: "outage-stranded", failure: { input, provider: "claude" } }, 5);
-        fleet.conversations.send("c1", { kind: "auth-refused", failure: { input, account: "a", refusedToken: "t" } }, 6);
-        fleet.conversations.send("c1", { kind: "grant-restored", tool: "Bash", always: false }, 7);
-        fleet.conversations.send("c1", { kind: "steer-reserved" }, 8);
-        expect(fleet.conversations.stranded("held").map((stranded) => stranded.conversationId)).toEqual(["c1"]);
+        fleet.conversations.send("c1", { kind: "grant-restored", tool: "Bash", always: false }, 5);
+        fleet.conversations.send("c1", { kind: "steer-reserved" }, 6);
+        expect(fleet.conversations.stranded().map((stranded) => stranded.conversationId)).toEqual(["c1"]);
 
         await fleet.conversations.dispose(["c1"]);
 
@@ -1100,15 +1091,15 @@ describe("disposal", () => {
 
     test("forgets only what it names, and keeps the others' order", async () => {
         const fleet = createFleet(memoryStore(), standingsOf(new Map()), PRESENCES);
-        const outage = (id: string) => ({ input: { prompt: "go", conversationId: id }, provider: "claude" });
-        fleet.conversations.send("c1", { kind: "outage-stranded", failure: outage("c1") }, 1);
-        fleet.conversations.send("c2", { kind: "outage-stranded", failure: outage("c2") }, 2);
-        fleet.conversations.send("c3", { kind: "outage-stranded", failure: outage("c3") }, 3);
+        const outage = (id: string) => ({ input: { prompt: "go", conversationId: id }, reason: "outage" as const, ran: false });
+        fleet.conversations.send("c1", { kind: "turn-held", held: outage("c1") }, 1);
+        fleet.conversations.send("c2", { kind: "turn-held", held: outage("c2") }, 2);
+        fleet.conversations.send("c3", { kind: "turn-held", held: outage("c3") }, 3);
         // A re-record keeps its place, the order a pass meets them in.
-        fleet.conversations.send("c1", { kind: "outage-stranded", failure: outage("c1") }, 4);
+        fleet.conversations.send("c1", { kind: "turn-held", held: outage("c1") }, 4);
 
         await fleet.conversations.dispose(["c2"]);
 
-        expect(fleet.conversations.stranded("outage").map((stranded) => stranded.conversationId)).toEqual(["c1", "c3"]);
+        expect(fleet.conversations.stranded().map((stranded) => stranded.conversationId)).toEqual(["c1", "c3"]);
     });
 });

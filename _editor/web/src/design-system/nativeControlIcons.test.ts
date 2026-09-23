@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect, afterEach } from "bun:test";
 import { type App, type Component, createApp, h, nextTick } from "vue";
 import Checkbox from "primevue/checkbox";
 import Dialog from "primevue/dialog";

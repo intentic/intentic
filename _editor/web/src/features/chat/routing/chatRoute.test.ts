@@ -1,7 +1,6 @@
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import type { ChatRoute, Persona } from "@intentic/sandbox-contract";
-import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { effectScope, type EffectScope, type Ref, ref } from "vue";
 import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
@@ -13,7 +12,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // what a send does with the answer. The daemon's own choosing is not what this tests.
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-mock.module(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
+jest.mock(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
 
 // `backend` names its own model, `social` names none: the two cases that decide whether a routed persona answers the
 // model question itself.
@@ -28,28 +27,28 @@ const personas = ref<Persona[]>([
     },
     { id: `social`, capabilities: [] },
 ]);
-mock.module(`../../sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas }) }));
+jest.mock(`../../sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas }) }));
 
 // A guest is never routed onto a persona: its chat wears one of its own from the start.
 const isGuest = ref(false);
-mock.module(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
+jest.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
 
 // The one daemon read under test: the reading itself.
-const routeChat = mock<(input: ProcedureInput<`agent.routeChat`>) => Promise<ChatRoute>>();
-mock.module(`../../sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ agent: { routeChat } }) }));
+const routeChat = jest.fn<(input: ProcedureInput<`agent.routeChat`>) => Promise<ChatRoute>>();
+jest.mock(`../../sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ agent: { routeChat } }) }));
 
 // Claude connected, nothing else: the backend persona's ladder resolves to its one pin.
-mock.module(`../accounts/roleModel`, () => ({ roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
+jest.mock(`../accounts/roleModel`, () => ({ roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
 
 const { SEND_WAIT_MS, chatRouteWait, useChatRoute } = await import("./chatRoute");
 type Chat = Parameters<typeof useChatRoute>[0] extends () => infer C ? C : never;
 
 // Only the fields routing reads and writes; a real Conversation drags a transcript and stream along. `notice` and
 // `rewordNotice` stand in for the transcript rows the chat writes about the reading.
-const wearModel = mock();
-const notice = mock<(text: string, extra?: { noticeWait?: string }) => number>(() => 7);
-const rewordNotice = mock<(id: number, text: string, extra?: { noticeWait?: string }) => void>();
-const setAuto = mock();
+const wearModel = jest.fn();
+const notice = jest.fn<(text: string, extra?: { noticeWait?: string }) => number>(() => 7);
+const rewordNotice = jest.fn<(id: number, text: string, extra?: { noticeWait?: string }) => void>();
+const setAuto = jest.fn();
 // What a test sets apart from a fresh chat of this sandbox's, per part of the conversation it lives on.
 interface ChatOver {
     readonly box?: unknown;

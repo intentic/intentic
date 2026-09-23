@@ -458,7 +458,7 @@ const grab = (event: PointerEvent): void => {
                 v-model="edit.draft"
                 type="text"
                 maxlength="80"
-                :aria-label="t(`agents.agentCard.agentTitle`)"
+                :aria-label="t(`shared.agentTitle`)"
                 class="ui-field-box ui-field-inline min-w-0 flex-1 select-text px-1 font-semibold"
                 :class="live ? 'text-sm' : 'text-xs'"
                 @click.stop
@@ -477,14 +477,14 @@ const grab = (event: PointerEvent): void => {
                         run.text
                     }}</span>
                     <!-- Italic is invisible to a screen reader, so the peek state rides along as text, not an aria-label with no role. -->
-                    <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
+                    <span v-if="peek" class="sr-only">{{ t(`shared.temporary`) }}</span>
                 </span>
                 <!-- Keeps a peeked chat open; leads the affordance row since it's the one press with a deadline (the tab closes on the next click elsewhere). -->
                 <button
                     v-if="peek"
                     type="button"
-                    :aria-label="t(`agents.agentCard.keepChatOpen`)"
-                    v-tooltip.top="t(`agents.agentCard.keepOpenOtherwiseChat`)"
+                    :aria-label="t(`shared.keepChatOpen`)"
+                    v-tooltip.top="t(`shared.keepOpenOtherwiseChat`)"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`keep`)"
                 >
@@ -600,7 +600,14 @@ const grab = (event: PointerEvent): void => {
 
             <!-- WRAPS, which is what lets the unsent mark ride this line instead of taking one of its own. -->
             <div
-                v-if="agent.unsent || box !== undefined || provenance !== undefined || model !== undefined || agent.branch !== undefined || account !== undefined"
+                v-if="
+                    agent.unsent ||
+                    box !== undefined ||
+                    provenance !== undefined ||
+                    model !== undefined ||
+                    agent.branch !== undefined ||
+                    account !== undefined
+                "
                 class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle"
             >
                 <!-- Shape, wording and hover live in UnsentMark, shared with the rail row. -->
@@ -791,7 +798,7 @@ const grab = (event: PointerEvent): void => {
                         v-tooltip.top="t(`agents.agentCard.sendTurnAgainSame`)"
                         @click.stop="sendAgain"
                     >
-                        {{ resending ? t(`agents.agentCard.sending`) : t(`agents.agentCard.sendAgain`) }}<Icon name="arrow-right" class="text-2xs" />
+                        {{ resending ? t(`shared.sending`) : t(`shared.sendAgain`) }}<Icon name="arrow-right" class="text-2xs" />
                     </button>
                     <button
                         v-else-if="review !== undefined && lane === 'attention'"
@@ -845,7 +852,7 @@ const grab = (event: PointerEvent): void => {
                             severity="secondary"
                             :text="true"
                             class="shrink-0"
-                            :aria-label="t(`agents.agentCard.stopWatching`)"
+                            :aria-label="t(`shared.stopWatching`)"
                             v-tooltip.top="t(`agents.agentCard.stopWatchingConversationStays`)"
                             :disabled="busy"
                             :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
@@ -859,7 +866,7 @@ const grab = (event: PointerEvent): void => {
                     <span v-if="working" class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link">
                         <!-- Glyph follows whichever fact leads: running children if any, else the tool the agent itself is using. -->
                         <Icon :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)" class="shrink-0 text-2xs" />
-                        <span class="min-w-0 truncate">{{ activityText ?? t(`agents.agentCard.working`) }}</span>
+                        <span class="min-w-0 truncate">{{ activityText ?? t(`shared.working`) }}</span>
                         <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(agent.startedAt, now) }}</span>
                     </span>
                 </span>

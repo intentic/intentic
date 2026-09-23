@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { effectScope, nextTick, ref } from "vue";
 import { commandShortcut, registerCommand } from "../../../../shell/commands/useCommands";
 import { usePaneFocus } from "./paneFocus";
@@ -19,8 +18,8 @@ const paneOf = (over: { focused?: boolean; connected?: boolean; mobile?: boolean
         connected: ref(over.connected ?? false),
         mobile: ref(over.mobile ?? false),
         input: ref<HTMLTextAreaElement | null>(input),
-        raise: mock(),
-        grow: mock(),
+        raise: jest.fn(),
+        grow: jest.fn(),
     };
     const scope = effectScope();
     const focus = scope.run(() => usePaneFocus({ ...state, focused: () => state.focused.value }))!;

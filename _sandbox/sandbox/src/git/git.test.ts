@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { gitFailureReason, pushRefusal, pushRefusalReason } from "./git.js";
 
 // Stderr fixtures below are copied verbatim from real git failures.

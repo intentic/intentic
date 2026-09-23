@@ -2,18 +2,16 @@
 // strip, a closed row costing one line, attribution said once.
 import "@intentic/testing/dom";
 import type { EnvironmentItem } from "@intentic/api-contract";
-import { it, expect, afterEach, jest } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import { IconStub } from "@intentic/ui/testing";
 
 // The import chain touches browser globals at import time; stubbing fetch to fail mirrors an offline sandbox, so every
 // mark paints its fallback tier.
-hoisted(() => {
+(() => {
     globalThis.fetch = (() => Promise.resolve({ ok: false })) as unknown as typeof globalThis.fetch;
     // jsdom ships no ResizeObserver; nothing in this suite depends on measured width.
-});
+})();
 
 const { default: EnvironmentContents } = await import("./EnvironmentContents.vue");
 

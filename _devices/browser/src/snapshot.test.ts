@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import {
     browserCandidates,
     executableFromCommand,

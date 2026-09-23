@@ -4,7 +4,6 @@ import { STATE_DIR } from "@intentic/constants";
 // diffs, notices, never a summary), the preparation refuses whole synthesis when any source can't be captured
 // completely, and the composed chat opens as a draft with nothing sent until the user decides.
 import type { TranscriptRow } from "@intentic/sandbox-contract";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { ref } from "vue";
 import { mocked } from "@intentic/testing/bun";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
@@ -12,20 +11,20 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { runningTurn } from "../../../testing/runningTurn";
 
 // What agents.transcript answers, per test; the upload stays on the raw client, which carries bytes.
-const transcript = mock();
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { transcript } }) }));
-mock.module("../../sandbox/client/sandboxClient", () => ({
-    sandboxRequest: mock(),
-    sandboxError: mock(),
-    sandboxJson: mock(),
-    sandboxUpload: mock(),
+const transcript = jest.fn();
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { transcript } }) }));
+jest.mock("../../sandbox/client/sandboxClient", () => ({
+    sandboxRequest: jest.fn(),
+    sandboxError: jest.fn(),
+    sandboxJson: jest.fn(),
+    sandboxUpload: jest.fn(),
 }));
 // The real router pulls the auth/environment chain, which needs window.env; nothing here navigates.
-mock.module("../../../router", () => ({ router: { push: mock() } }));
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
 // Same window.env chain via analytics; the action only fires a milestone event through track.
-mock.module("../../../app/analytics", () => ({ track: mock() }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 // Same window.env chain via useSandbox; the tab persistence only reads activeSandboxId and reachable.
-mock.module("../../sandbox/client/useSandbox", () => {
+jest.mock("../../sandbox/client/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }) };
@@ -34,7 +33,7 @@ mock.module("../../sandbox/client/useSandbox", () => {
 // takes from it, and this mock is also the assertion hook that the composed chat is shown.
 // Listed by hand rather than spread over the real module: importing it here would load its graph before the mocks
 // below, which is the one thing this file's seams cannot survive.
-mock.module("./agentActions", () => ({ revealConversation: mock(), openConversation: mock() }));
+jest.mock("./agentActions", () => ({ revealConversation: jest.fn(), openConversation: jest.fn() }));
 
 // The node test environment has neither storage; conversations persist their tab snapshot on every change.
 const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {

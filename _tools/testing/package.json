@@ -46,6 +46,9 @@
         "./bun-vue": {
             "types": "./src/bun-vue.ts",
             "default": "./src/bun-vue.ts"
+        },
+        "./globals": {
+            "types": "./src/globals.d.ts"
         }
     },
     "scripts": {

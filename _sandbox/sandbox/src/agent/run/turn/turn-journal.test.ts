@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import { sqliteAgentsStore } from "../../../agents/registry/agents-store.js";
 import { openConversationsDb } from "../../../store/conversations-db.js";
 import { IN_MEMORY } from "../../../store/sqlite.js";
@@ -36,12 +35,21 @@ describe("sqliteTurnJournal", () => {
         expect(await journal.list()).toEqual([]);
         const parked = turn({
             sessionId: "sess-1",
-            parked: [{ kind: "question", requestId: "q-1", questions: [{ question: "Which?", header: "Pick", multiSelect: false, options: [{ label: "A", description: "the first" }] }] }],
+            parked: [
+                {
+                    kind: "question",
+                    requestId: "q-1",
+                    questions: [{ question: "Which?", header: "Pick", multiSelect: false, options: [{ label: "A", description: "the first" }] }],
+                },
+            ],
         });
         await journal.recordTurn(parked);
         await journal.recordFire(fire({ payload: "ping", origin: { automationId: "nightly", provider: "webhook" }, title: "Nightly" }));
 
-        expect(await journal.list()).toEqual([parked, fire({ payload: "ping", origin: { automationId: "nightly", provider: "webhook" }, title: "Nightly" })]);
+        expect(await journal.list()).toEqual([
+            parked,
+            fire({ payload: "ping", origin: { automationId: "nightly", provider: "webhook" }, title: "Nightly" }),
+        ]);
 
         await journal.clearTurn("c-1");
         expect((await journal.list()).map((entry) => entry.kind)).toEqual(["automation"]);
@@ -74,7 +82,9 @@ describe("sqliteTurnJournal", () => {
         db.db.prepare("INSERT INTO turn_journal(conversation_id, started_at, attempts, turn) VALUES ('c-2', 5, 0, '{}')").run();
         await journal.recordTurn(turn());
         expect(await journal.list()).toEqual([turn()]);
-        expect(db.rowsOf("c-2")["turn_journal"]).toEqual([{ conversation_id: "c-2", started_at: 5, attempts: 0, turn: {}, session_id: null, parked: null }]);
+        expect(db.rowsOf("c-2")["turn_journal"]).toEqual([
+            { conversation_id: "c-2", started_at: 5, attempts: 0, turn: {}, session_id: null, parked: null },
+        ]);
     });
 
     it("goes with its conversation", async () => {

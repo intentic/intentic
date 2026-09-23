@@ -3,7 +3,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { test, expect } from "bun:test";
 import { stubEnv } from "@intentic/testing/bun";
 
 import type { SandboxMetrics } from "@intentic/sandbox-contract";

@@ -1,6 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect, afterEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { createApp, h, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { registerView } from "../../core-views/registry";
@@ -18,18 +16,18 @@ import { useNavigationCommands } from "./useNavigationCommands";
 await startAppI18n();
 
 // Read inside the mock factories, so a test can set the grant and the plan before mounting.
-const state = hoisted(() => ({ canShip: true, planOffered: true }));
+const state = { canShip: true, planOffered: true };
 
-mock.module(`../../features/extensions/usePanels`, () => {
+jest.mock(`../../features/extensions/usePanels`, () => {
     return { usePanels: () => ({ panels: ref([]), allPanels: ref([]), isLoading: ref(false), settled: ref(true) }) };
 });
-mock.module(`../../features/capabilities/connect/useCapabilities`, () => {
+jest.mock(`../../features/capabilities/connect/useCapabilities`, () => {
     return { useCapabilities: () => ({ capabilities: ref([]), settled: ref(true) }) };
 });
-mock.module(`../../features/sandbox/secrets/useRole`, () => {
+jest.mock(`../../features/sandbox/secrets/useRole`, () => {
     return { useRole: () => ({ canShip: ref(state.canShip), isGuest: ref(false) }) };
 });
-mock.module(`../../features/settings/hosted-plan/useHostedPlan`, () => {
+jest.mock(`../../features/settings/hosted-plan/useHostedPlan`, () => {
     return { useHostedPlan: () => ({ offered: ref(state.planOffered) }) };
 });
 

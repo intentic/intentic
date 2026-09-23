@@ -1,6 +1,4 @@
 import { resetSandboxScope, sandboxRef, sandboxValue } from "@intentic/extension-api";
-import { test, expect, beforeEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 
 // The switch point: a switch resets every value declared through the sandbox scope, wherever it was declared (an
 // editor store or an extension), and a new scope re-reads what lives on the daemon once it is reachable. Only the
@@ -9,15 +7,15 @@ import { hoisted } from "@intentic/testing/bun";
 const calls: string[] = [];
 const record = (name: string) => (): void => void calls.push(name);
 
-mock.module(`../../agents/fleet/useAgents-registry`, () => ({ loadArchived: record(`loadArchived`) }));
-mock.module(`../../chat/accounts/useChat-accounts`, () => ({ loadAccountStatus: record(`loadAccountStatus`) }));
+jest.mock(`../../agents/fleet/useAgents-registry`, () => ({ loadArchived: record(`loadArchived`) }));
+jest.mock(`../../chat/accounts/useChat-accounts`, () => ({ loadAccountStatus: record(`loadAccountStatus`) }));
 
 // Stands in for useSandbox so the switch can be exercised without the platform client, sandbox list or a connection.
-const { activeSandboxId, reachable } = await hoisted(async () => {
+const { activeSandboxId, reachable } = await (async () => {
     const { ref } = await import(`vue`);
     return { activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) };
-});
-mock.module(`./useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId, reachable }) }));
+})();
+jest.mock(`./useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId, reachable }) }));
 
 await import("./sandboxScope");
 const { nextTick } = await import("vue");

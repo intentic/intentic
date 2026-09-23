@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { extensionApiVersion } from "@intentic/extension-api/protocol";
-import { test, expect } from "bun:test";
 
 import { createApp } from "../app.js";
 

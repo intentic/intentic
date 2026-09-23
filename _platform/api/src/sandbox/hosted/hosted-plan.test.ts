@@ -1,11 +1,10 @@
 import { createHmac } from "node:crypto";
 import { FREE_TIER, type HostedTier, PAID_TIERS } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
-import { describe, it, expect, mock } from "bun:test";
 import { configSchema, type Config } from "../../config.js";
 import { call } from "@orpc/server";
 import type { OrpcContext } from "../../context.js";
-import { cancelHostedPlan, checkHostedPlanPrices, hostedSlotsOf, onHostedPlan, slotsAtTier } from "./hosted-plan.js";
+import { cancelHostedPlan, checkHostedPlanPrices, hostedSlotsOf, onHostedPlan } from "./hosted-plan.js";
 import { StripeError, type StripeGateway, type StripePrice } from "./hosted-plan-stripe.js";
 import { hostedPlanRoutes } from "./hosted-plan.orpc.js";
 import { hostedPlanHttpRoutes } from "./hosted-plan.routes.js";
@@ -13,7 +12,7 @@ import { hostedPlanHttpRoutes } from "./hosted-plan.routes.js";
 // Pins what a buyer would call betrayal if it drifted: on-plan means a paid row or the comp list, the webhook never
 // rolls the mirror back, a deleted account's subscription ends with it, and slots equal the plan's quantity.
 
-const logger = { info: mock(), warn: mock(), error: mock() } as never;
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never;
 
 const NOW = new Date(`2026-09-06T12:00:00Z`);
 
@@ -69,15 +68,15 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
     const users = seed?.users ?? [];
     const planById = (id: string) => plans.find((plan) => (plan.id ?? `plan-1`) === id);
     const prisma = {
-        user: { findUnique: mock(async ({ where }: { where: { id: string } }) => users.find((user) => user.id === where.id) ?? null) },
+        user: { findUnique: jest.fn(async ({ where }: { where: { id: string } }) => users.find((user) => user.id === where.id) ?? null) },
         hostedPlan: {
-            findUnique: mock(
+            findUnique: jest.fn(
                 async ({ where }: { where: { userId?: string; stripeSubscriptionId?: string } }) =>
                     plans.find((plan) =>
                         where.userId === undefined ? plan.stripeSubscriptionId === where.stripeSubscriptionId : plan.userId === where.userId,
                     ) ?? null,
             ),
-            upsert: mock(async ({ where, create, update }: { where: { userId: string }; create: PlanRow; update: Partial<PlanRow> }) => {
+            upsert: jest.fn(async ({ where, create, update }: { where: { userId: string }; create: PlanRow; update: Partial<PlanRow> }) => {
                 const existing = plans.find((plan) => plan.userId === where.userId);
                 if (existing === undefined) {
                     const made: PlanRow = { id: `plan-1`, ...create, items: create.items ?? [] };
@@ -88,7 +87,7 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
                 return existing;
             }),
             // Honors the ordering guard like Postgres would: a row synced later than the event is not a hit.
-            updateMany: mock(async ({ where, data }: { where: { stripeCustomerId: string; syncedAt?: { lte: Date } }; data: Partial<PlanRow> }) => {
+            updateMany: jest.fn(async ({ where, data }: { where: { stripeCustomerId: string; syncedAt?: { lte: Date } }; data: Partial<PlanRow> }) => {
                 const hits = plans.filter(
                     (plan) =>
                         plan.stripeCustomerId === where.stripeCustomerId &&
@@ -101,7 +100,7 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
             }),
         },
         hostedPlanItem: {
-            upsert: mock(
+            upsert: jest.fn(
                 async ({
                     where,
                     create,
@@ -121,7 +120,7 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
                     return existing;
                 },
             ),
-            deleteMany: mock(async ({ where }: { where: { planId: string; tier: { notIn: string[] } } }) => {
+            deleteMany: jest.fn(async ({ where }: { where: { planId: string; tier: { notIn: string[] } } }) => {
                 const plan = planById(where.planId);
                 if (plan !== undefined) {
                     plan.items = plan.items.filter((item) => where.tier.notIn.includes(item.tier));
@@ -185,7 +184,7 @@ describe(`the hosted plan`, () => {
     it(`refuses an unsigned webhook and honours a signed subscription lapse, read fresh off Stripe`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`active`)] });
         const gateway = {
-            subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })),
+            subscription: jest.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })),
         } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         const payload = JSON.stringify({
@@ -211,7 +210,7 @@ describe(`the hosted plan`, () => {
             { id: `si_9`, priceId: `price_${ENTRY.id}`, quantity: 2 },
             { id: `si_10`, priceId: `price_max`, quantity: 1 },
         ];
-        const gateway = { subscription: mock(async () => subscription({ items: bought })) } as unknown as StripeGateway;
+        const gateway = { subscription: jest.fn(async () => subscription({ items: bought })) } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         const payload = JSON.stringify({
             type: `checkout.session.completed`,
@@ -242,7 +241,7 @@ describe(`the hosted plan`, () => {
     it(`writes no slot for an item whose price belongs to no rung of this ladder`, async () => {
         const { prisma, plans } = fakePrisma();
         const gateway = {
-            subscription: mock(async () => subscription({ items: [{ id: `si_x`, priceId: `price_somebody_elses`, quantity: 4 }] })),
+            subscription: jest.fn(async () => subscription({ items: [{ id: `si_x`, priceId: `price_somebody_elses`, quantity: 4 }] })),
         } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         const payload = JSON.stringify({
@@ -257,7 +256,7 @@ describe(`the hosted plan`, () => {
     it(`mirrors a cancellation that has not ended yet`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`active`, { syncedAt: new Date(NOW.getTime() - 60_000) })] });
         const gateway = {
-            subscription: mock(async () =>
+            subscription: jest.fn(async () =>
                 subscription({
                     id: `sub_1`,
                     customer: `cus_1`,
@@ -278,7 +277,7 @@ describe(`the hosted plan`, () => {
     it(`never rolls the mirror back: the event's copy is not trusted, and a read older than the row is dropped`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`canceled`, { syncedAt: NOW })] });
         const gateway = {
-            subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })),
+            subscription: jest.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })),
         } as unknown as StripeGateway;
         // The late event still says active; what Stripe says now is what gets written.
         const late = JSON.stringify({
@@ -292,7 +291,7 @@ describe(`the hosted plan`, () => {
         // A read two minutes older than the row's last write (a slower, racing handler): stale by construction,
         // dropped.
         const active = {
-            subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `active` })),
+            subscription: jest.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `active` })),
         } as unknown as StripeGateway;
         const slower = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway: active, now: () => new Date(NOW.getTime() - 120_000) });
         expect((await slower.request(`/webhook`, { method: `POST`, body: late, headers: signed(late) })).status).toBe(200);
@@ -306,7 +305,7 @@ describe(`the hosted plan`, () => {
 
     it(`acknowledges an event whose object is not a subscription without asking Stripe anything`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`active`)] });
-        const gateway = { subscription: mock() } as unknown as StripeGateway;
+        const gateway = { subscription: jest.fn() } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         const payload = JSON.stringify({ type: `customer.subscription.updated`, data: { object: { id: `in_1`, object: `invoice` } } });
         expect((await app.request(`/webhook`, { method: `POST`, body: payload, headers: signed(payload) })).status).toBe(200);
@@ -319,19 +318,19 @@ describe(`the hosted plan`, () => {
 // cascade, while the row still names the subscription.
 describe(`cancelling the plan with its account`, () => {
     it(`cancels a live subscription`, async () => {
-        const gateway = { cancelSubscription: mock(async () => subscription({ status: `canceled` })) } as unknown as StripeGateway;
+        const gateway = { cancelSubscription: jest.fn(async () => subscription({ status: `canceled` })) } as unknown as StripeGateway;
         await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, baseConfig, logger, `user-1`, gateway);
         expect(gateway.cancelSubscription).toHaveBeenCalledWith(`sub_1`);
     });
 
     it(`also ends one that is past due: Stripe is still trying to charge it`, async () => {
-        const gateway = { cancelSubscription: mock(async () => subscription({ status: `canceled` })) } as unknown as StripeGateway;
+        const gateway = { cancelSubscription: jest.fn(async () => subscription({ status: `canceled` })) } as unknown as StripeGateway;
         await cancelHostedPlan(fakePrisma({ plans: [row(`past_due`)] }).prisma, baseConfig, logger, `user-1`, gateway);
         expect(gateway.cancelSubscription).toHaveBeenCalledTimes(1);
     });
 
     it(`has nothing to cancel for an account with no plan, an ended one, or a platform selling nothing`, async () => {
-        const gateway = { cancelSubscription: mock() } as unknown as StripeGateway;
+        const gateway = { cancelSubscription: jest.fn() } as unknown as StripeGateway;
         await cancelHostedPlan(fakePrisma().prisma, baseConfig, logger, `user-1`, gateway);
         await cancelHostedPlan(fakePrisma({ plans: [row(`canceled`)] }).prisma, baseConfig, logger, `user-1`, gateway);
         await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, configWith({ stripePrices: `` }), logger, `user-1`, gateway);
@@ -341,15 +340,15 @@ describe(`cancelling the plan with its account`, () => {
     // An erasure must not be held hostage by a payment API; the log line names the manual follow-up.
     it(`lets the deletion proceed when Stripe refuses, and says so at error level`, async () => {
         const gateway = {
-            cancelSubscription: mock(async () => {
+            cancelSubscription: jest.fn(async () => {
                 throw new Error(`Stripe refused: down`);
             }),
         } as unknown as StripeGateway;
-        const errors = mock();
+        const errors = jest.fn();
         await cancelHostedPlan(
             fakePrisma({ plans: [row(`active`)] }).prisma,
             baseConfig,
-            { info: mock(), error: errors } as never,
+            { info: jest.fn(), error: errors } as never,
             `user-1`,
             gateway,
         );
@@ -372,7 +371,7 @@ describe(`the price the plan sells`, () => {
     });
 
     const logs = () => {
-        const spies = { info: mock(), warn: mock(), error: mock() };
+        const spies = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
         return { ...spies, logger: spies as never };
     };
 
@@ -380,7 +379,7 @@ describe(`the price the plan sells`, () => {
     // test means. A price id off the ladder is a mistake in the test, not a case to answer.
     const answering = (over: Partial<StripePrice> | Error = {}): StripeGateway =>
         ({
-            price: mock(async (priceId: string) => {
+            price: jest.fn(async (priceId: string) => {
                 if (over instanceof Error) {
                     throw over;
                 }
@@ -470,7 +469,7 @@ describe(`the doors to Stripe`, () => {
 
     it(`answers a refused checkout with Stripe's reason, not an unhandled error`, async () => {
         const refusing = {
-            checkoutSession: mock(async () => {
+            checkoutSession: jest.fn(async () => {
                 throw new StripeError(`Stripe refused: The price specified is inactive. This field only accepts active prices.`);
             }),
         } as unknown as StripeGateway;
@@ -482,7 +481,7 @@ describe(`the doors to Stripe`, () => {
 
     it(`answers a refused portal the same way`, async () => {
         const refusing = {
-            portalSession: mock(async () => {
+            portalSession: jest.fn(async () => {
                 throw new StripeError(`Stripe refused: No configuration provided`);
             }),
         } as unknown as StripeGateway;
@@ -494,41 +493,21 @@ describe(`the doors to Stripe`, () => {
     });
 });
 
-// How many hosted sandboxes an account may have: the plan's quantity while live, the free plan's otherwise, never fewer
-// than the free plan gives.
-/* SLOTS ARE PER RUNG, AND THE FREE ONE IS NEVER BOUGHT. A plan adds machines beside the free one rather than
- * replacing it, which is what stops paying for a Standard taking away the machine everybody is promised. */
+// Slots are per rung and the free one is never bought, so paying for a Standard never takes away the free machine.
 describe(`hosted slots`, () => {
     const config = { ...baseConfig, hosted: { ...baseConfig.hosted, perUser: 1 } };
     const item = (tier: string, quantity: number) => ({ tier, quantity, stripeItemId: `si_${tier}` });
 
-    it(`adds each rung's bought slots to the free plan's own`, async () => {
-        const slots = await hostedSlotsOf(
-            fakePrisma({ plans: [row(`active`, { items: [item(ENTRY.id, 2), item(`max`, 1)] })] }).prisma,
-            config,
-            `user-1`,
-        );
-        expect(slots.free).toBe(1);
-        expect(slotsAtTier(slots, ENTRY.id)).toBe(2);
-        expect(slotsAtTier(slots, `max`)).toBe(1);
-        expect(slots.total).toBe(4);
-    });
-
-    it(`counts no bought slot for a lapsed plan or no plan, and still gives the free plan's`, async () => {
-        const lapsed = await hostedSlotsOf(fakePrisma({ plans: [row(`past_due`, { items: [item(ENTRY.id, 3)] })] }).prisma, config, `user-1`);
-        expect(lapsed).toMatchObject({ free: 1, total: 1 });
-        expect(slotsAtTier(lapsed, ENTRY.id)).toBe(0);
-        expect(await hostedSlotsOf(fakePrisma().prisma, config, `user-1`)).toMatchObject({ free: 1, total: 1 });
-    });
-
-    // A rung this ladder does not have is not a slot anybody can stand a machine on.
-    it(`ignores an item at a rung off the ladder rather than counting it`, async () => {
-        const slots = await hostedSlotsOf(fakePrisma({ plans: [row(`active`, { items: [item(`enterprise`, 5)] })] }).prisma, config, `user-1`);
-        expect(slots.total).toBe(1);
-    });
-
-    it(`never sells a slot at the free rung, whatever an item says`, async () => {
-        const slots = await hostedSlotsOf(fakePrisma({ plans: [row(`active`, { items: [item(FREE_TIER.id, 9)] })] }).prisma, config, `user-1`);
-        expect(slotsAtTier(slots, FREE_TIER.id)).toBe(config.hosted.perUser);
+    it.each([
+        [
+            `adds each rung's bought slots to the free plan's own`,
+            [row(`active`, { items: [item(ENTRY.id, 2), item(`max`, 1)] })],
+            { free: 1, [ENTRY.id]: 2, max: 1 },
+        ],
+        [`counts no bought slot for a lapsed plan`, [row(`past_due`, { items: [item(ENTRY.id, 3)] })], { free: 1 }],
+        [`gives the free plan's with no plan at all`, [], { free: 1 }],
+        [`never sells a slot at the free rung, whatever an item says`, [row(`active`, { items: [item(FREE_TIER.id, 9)] })], { free: 1 }],
+    ])(`%s`, async (_name, plans, expected) => {
+        expect(Object.fromEntries(await hostedSlotsOf(fakePrisma({ plans }).prisma, config, `user-1`))).toEqual(expected);
     });
 });

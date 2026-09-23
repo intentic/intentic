@@ -3,8 +3,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { useChat } from "../run/useChat";
 import { draftConversation, reveal } from "../panel/useChat-reveal";
@@ -21,7 +19,7 @@ import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // jsdom has no scrollIntoView; installed here as the recorder the assertions read.
-const { reveals } = hoisted(() => {
+const { reveals } = (() => {
     const recorded: { tab: string | undefined; block: string | undefined }[] = [];
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: boolean | ScrollIntoViewOptions): void {
         recorded.push({
@@ -30,7 +28,7 @@ const { reveals } = hoisted(() => {
         });
     };
     return { reveals: recorded };
-});
+})();
 
 // Mounted per test since mounting itself is under test (the docked sheet rebuilds on every open); registers
 // no commands, so remounting is safe.

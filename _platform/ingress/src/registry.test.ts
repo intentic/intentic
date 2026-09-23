@@ -1,15 +1,14 @@
 import type { IngressSession } from "@intentic/sandbox-contract/ingress-protocol";
-import { describe, test, expect, mock } from "bun:test";
 import { createTunnelRegistry, DISPLACED_CODE } from "./registry.js";
 
 // A session is opaque here: the registry only ever holds one and compares it by identity.
-const session = (): IngressSession => ({ forwardRequest: mock(), forwardUpgrade: mock(), close: mock() }) as unknown as IngressSession;
+const session = (): IngressSession => ({ forwardRequest: jest.fn(), forwardUpgrade: jest.fn(), close: jest.fn() }) as unknown as IngressSession;
 
 describe(`createTunnelRegistry`, () => {
     test(`routes a sandbox to the tunnel that registered it`, () => {
         const registry = createTunnelRegistry();
         const first = session();
-        registry.register(`abcdef012345`, { session: first, close: mock() });
+        registry.register(`abcdef012345`, { session: first, close: jest.fn() });
 
         expect(registry.lookup(`abcdef012345`)).toBe(first);
         expect(registry.lookup(`000000000000`)).toBeUndefined();
@@ -19,11 +18,11 @@ describe(`createTunnelRegistry`, () => {
     test(`a second tunnel takes the id and closes the first`, () => {
         const registry = createTunnelRegistry();
         const older = session();
-        const olderClose = mock();
+        const olderClose = jest.fn();
         const newer = session();
         registry.register(`abcdef012345`, { session: older, close: olderClose });
 
-        expect(registry.register(`abcdef012345`, { session: newer, close: mock() })).toBe(true);
+        expect(registry.register(`abcdef012345`, { session: newer, close: jest.fn() })).toBe(true);
         expect(olderClose).toHaveBeenCalledWith(DISPLACED_CODE, expect.stringContaining(`displaced`));
         expect(older.close).toHaveBeenCalledTimes(1);
         expect(registry.lookup(`abcdef012345`)).toBe(newer);
@@ -34,8 +33,8 @@ describe(`createTunnelRegistry`, () => {
         const registry = createTunnelRegistry();
         const older = session();
         const newer = session();
-        registry.register(`abcdef012345`, { session: older, close: mock() });
-        registry.register(`abcdef012345`, { session: newer, close: mock() });
+        registry.register(`abcdef012345`, { session: older, close: jest.fn() });
+        registry.register(`abcdef012345`, { session: newer, close: jest.fn() });
 
         registry.unregister(`abcdef012345`, older);
 
@@ -45,7 +44,7 @@ describe(`createTunnelRegistry`, () => {
     test(`the session that still holds the id gives it up`, () => {
         const registry = createTunnelRegistry();
         const only = session();
-        registry.register(`abcdef012345`, { session: only, close: mock() });
+        registry.register(`abcdef012345`, { session: only, close: jest.fn() });
 
         registry.unregister(`abcdef012345`, only);
 
@@ -55,22 +54,22 @@ describe(`createTunnelRegistry`, () => {
 
     test(`registering the first tunnel for an id displaces nothing`, () => {
         const registry = createTunnelRegistry();
-        expect(registry.register(`abcdef012345`, { session: session(), close: mock() })).toBe(false);
+        expect(registry.register(`abcdef012345`, { session: session(), close: jest.fn() })).toBe(false);
         expect(registry.ids()).toEqual([`abcdef012345`]);
     });
 });
 
 describe(`the registry and the cluster`, () => {
     test(`reports register and unregister, and not a displacement`, () => {
-        const onChange = mock();
+        const onChange = jest.fn();
         const registry = createTunnelRegistry({ onChange });
         const held = session();
-        registry.register(`abcdef012345`, { session: held, close: mock() });
+        registry.register(`abcdef012345`, { session: held, close: jest.fn() });
         registry.unregister(`abcdef012345`, held);
 
         expect(onChange.mock.calls).toEqual([[{ kind: `register`, sandboxId: `abcdef012345` }], [{ kind: `unregister`, sandboxId: `abcdef012345` }]]);
 
-        registry.register(`abcdef012345`, { session: session(), close: mock() });
+        registry.register(`abcdef012345`, { session: session(), close: jest.fn() });
         onChange.mockClear();
         expect(registry.displace(`abcdef012345`, `moved`)).toBe(true);
         expect(onChange).not.toHaveBeenCalled();
@@ -79,7 +78,7 @@ describe(`the registry and the cluster`, () => {
     test(`displace closes and drops the local session, and says whether there was one`, () => {
         const registry = createTunnelRegistry();
         const held = session();
-        const close = mock();
+        const close = jest.fn();
         registry.register(`abcdef012345`, { session: held, close });
 
         expect(registry.displace(`abcdef012345`, `displaced by a newer tunnel on peer-b`)).toBe(true);

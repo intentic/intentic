@@ -1,7 +1,6 @@
 import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "bun:test";
 import { sqliteTurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
 import { sqliteAgentsStore } from "../agents/registry/agents-store.js";
 import { conversationEntry, isolatedAgent } from "../testing.js";
@@ -32,11 +31,25 @@ test("a snapshot carries every row, and adopting it replaces a conversation of t
 
     const target = openConversationsDb(conversationsDbPath(historyRoot()));
     const targetAgents = sqliteAgentsStore(target);
-    targetAgents.save([isolatedAgent([{ repo: "root", base: "old" }, { repo: "stale", base: "x" }], { id: "moved" }), conversationEntry({ id: "only-here" })]);
+    targetAgents.save([
+        isolatedAgent(
+            [
+                { repo: "root", base: "old" },
+                { repo: "stale", base: "x" },
+            ],
+            { id: "moved" },
+        ),
+        conversationEntry({ id: "only-here" }),
+    ]);
     await sqliteTurnCheckpoints(target).record("moved", 9, { kind: "tree", snapshot: "s-9" });
     expect(target.adopt(snapshot)).toEqual(["moved", "only-there"]);
 
-    expect(targetAgents.load().map((entry) => entry.id).toSorted()).toEqual(["moved", "only-here", "only-there"]);
+    expect(
+        targetAgents
+            .load()
+            .map((entry) => entry.id)
+            .toSorted(),
+    ).toEqual(["moved", "only-here", "only-there"]);
     expect(targetAgents.load().find((entry) => entry.id === "moved")).toEqual(moved);
     // The replaced conversation's own rows went with it: only what arrived for it is left.
     expect(await sqliteTurnCheckpoints(target).all("moved")).toEqual(new Map([[2, { kind: "tree", snapshot: "s-2" }]]));

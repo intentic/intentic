@@ -8,7 +8,7 @@
         "noEmit": true,
         "rootDir": "./src",
         "tsBuildInfoFile": "./.cache/tsbuildinfo",
-        "types": ["bun"]
+        "types": ["bun", "@intentic/testing/globals"]
     },
     "include": ["./src/**/*"],
     "extends": "@intentic/tsconfig/tsconfig.base.json"

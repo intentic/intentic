@@ -1,16 +1,15 @@
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { stubGlobal, unstubAllGlobals, hoisted } from "@intentic/testing/bun";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 
 // The retry the authenticated fetch owes a refused bearer: once, with the bearer it actually sent blamed and a fresh
 // one fetched. Both of the daemon's refusals (401: not taken; 428: taken but short of the passkey rule) earn it;
 // nothing else does.
 
-const state = hoisted(() => ({
+const state = {
     bearers: [`first`, `second`] as string[],
     rejected: [] as string[],
-}));
+};
 
-mock.module("../session/sandboxSession", () => ({
+jest.mock("../session/sandboxSession", () => ({
     useSandboxSession: () => ({
         getSessionToken: async () => {
             const token = state.bearers.shift();
@@ -21,13 +20,13 @@ mock.module("../session/sandboxSession", () => ({
         },
     }),
 }));
-mock.module("./useSandbox", () => ({
+jest.mock("./useSandbox", () => ({
     useSandbox: () => ({ active: { value: { token: `connect` } }, activeSandboxId: { value: `s1` }, daemonUrl: { value: `https://daemon.test` } }),
 }));
 
 const { sandboxAuthenticatedFetch } = await import("./sandboxAuthFetch");
 
-const fetchMock = mock<(request: Request) => Promise<Response>>();
+const fetchMock = jest.fn<(request: Request) => Promise<Response>>();
 const bearerOf = (call: number): string | null => {
     const request = fetchMock.mock.calls[call]?.[0];
     return request === undefined ? null : request.headers.get(`authorization`);

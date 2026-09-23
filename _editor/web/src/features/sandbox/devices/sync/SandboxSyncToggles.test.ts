@@ -6,12 +6,11 @@ import type { Device } from "@intentic/sandbox-contract";
 import { sandboxGroups } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import type { DeviceOps } from "../runners/deviceOps";
 import type { DeviceRow, MachineRow } from "../deviceRows";
 
-mock.module(`../../client/useSandbox`, () => ({
+jest.mock(`../../client/useSandbox`, () => ({
     useSandbox: () => ({ active: { value: { name: `work` } }, daemonUrl: { value: `https://sandbox-82789f4106b4.radarsu.com` } }),
 }));
 

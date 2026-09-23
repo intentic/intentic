@@ -1,5 +1,6 @@
 import http from "node:http";
 import type { Readable } from "node:stream";
+import { relayUpgrade } from "@intentic/sandbox-contract/upgrade-relay";
 import { endedPage } from "./host-page.js";
 import { bearerOf, verifyJwt } from "./jwt.js";
 import type { Session, Sessions } from "./sessions.js";
@@ -19,10 +20,6 @@ export interface ListenerDeps {
     readonly sessions: Sessions;
     // The document server's loopback port while it answers; undefined answers 503 to what would be proxied.
     readonly documentServerPort: () => number | undefined;
-    // Where the browser reaches this listener (the forwarded-port origin), once known. The daemon's preview proxy
-    // rewrites Host to localhost and forwards no X-Forwarded-Host, and the document server builds the URLs it hands
-    // the editor (the converted document to download) from exactly those, so it has to be told the public origin.
-    readonly publicOrigin: () => string | undefined;
     readonly pageFor: (session: Session) => string;
     // The document's bytes, or undefined when it is gone.
     readonly readDocument: (document: Document) => Promise<Readable | undefined>;
@@ -53,21 +50,6 @@ const withoutHopByHop = (headers: http.IncomingHttpHeaders): http.IncomingHttpHe
         delete kept[name];
     }
     return kept;
-};
-
-// The request as the document server should see it: X-Forwarded-Host/Proto naming the origin the browser used, so
-// every absolute URL it generates points where the browser can reach. The daemon's preview proxy sets both on each lane
-// it serves (the public hostname, the loopback twin), and what it said wins; the backend's own public origin is the
-// fallback for a hop that named nothing, and nothing is added when neither is known (loopback use).
-export const towardsDocumentServer = (headers: http.IncomingHttpHeaders, publicOrigin: string | undefined): http.IncomingHttpHeaders => {
-    if (typeof headers["x-forwarded-host"] === "string" && headers["x-forwarded-host"] !== "") {
-        return headers;
-    }
-    if (publicOrigin === undefined) {
-        return headers;
-    }
-    const origin = new URL(publicOrigin);
-    return { ...headers, "x-forwarded-host": origin.host, "x-forwarded-proto": origin.protocol.replace(/:$/, "") };
 };
 
 const readBody = (req: http.IncomingMessage, limit: number): Promise<string> =>
@@ -151,7 +133,9 @@ export const createListener = (deps: ListenerDeps): Listener => {
         const found = deps.sessions.document(key);
         const stream = found === undefined ? undefined : await deps.readDocument(found);
         if (stream === undefined) {
-            deps.log(found === undefined ? `document fetch refused: no session holds key ${key}` : `document fetch refused: ${found.path} is not on disk`);
+            deps.log(
+                found === undefined ? `document fetch refused: no session holds key ${key}` : `document fetch refused: ${found.path} is not on disk`,
+            );
             json(res, 404, { error: "no such document" });
             return;
         }
@@ -193,11 +177,14 @@ export const createListener = (deps: ListenerDeps): Listener => {
             json(res, 503, { error: "the document server is not running" });
             return;
         }
-        const headers = towardsDocumentServer(withoutHopByHop(req.headers), deps.publicOrigin());
-        const upstream = http.request({ host: "127.0.0.1", port, method: req.method, path: req.url, headers }, (answer) => {
-            res.writeHead(answer.statusCode ?? 502, withoutHopByHop(answer.headers));
-            answer.pipe(res);
-        });
+        // X-Forwarded-Host/-Proto pass through: the preview proxy in front names the origin the server builds URLs from.
+        const upstream = http.request(
+            { host: "127.0.0.1", port, method: req.method, path: req.url, headers: withoutHopByHop(req.headers) },
+            (answer) => {
+                res.writeHead(answer.statusCode ?? 502, withoutHopByHop(answer.headers));
+                answer.pipe(res);
+            },
+        );
         upstream.on("error", () => {
             if (res.headersSent) {
                 res.destroy();
@@ -234,7 +221,7 @@ export const createListener = (deps: ListenerDeps): Listener => {
         });
     });
 
-    // The editors hold a socket.io connection; the handshake is replayed upstream, the 101 echoed, then raw bytes.
+    // The editors hold a socket.io connection to the document server.
     server.on("upgrade", (req, socket, head) => {
         socket.on("error", () => socket.destroy());
         const port = deps.documentServerPort();
@@ -242,30 +229,7 @@ export const createListener = (deps: ListenerDeps): Listener => {
             socket.end("HTTP/1.1 503 Service Unavailable\r\n\r\n");
             return;
         }
-        const headers = towardsDocumentServer(req.headers, deps.publicOrigin());
-        const upstream = http.request({ host: "127.0.0.1", port, method: req.method, path: req.url, headers });
-        upstream.on("error", () => socket.destroy());
-        upstream.on("response", (answer) => {
-            socket.end(`HTTP/1.1 ${answer.statusCode ?? 502} ${answer.statusMessage ?? ""}\r\n\r\n`);
-        });
-        upstream.on("upgrade", (answer, upstreamSocket, upstreamHead) => {
-            const lines: string[] = [];
-            for (let index = 0; index < answer.rawHeaders.length; index += 2) {
-                lines.push(`${answer.rawHeaders[index]}: ${answer.rawHeaders[index + 1]}`);
-            }
-            socket.write(`HTTP/1.1 101 Switching Protocols\r\n${lines.join("\r\n")}\r\n\r\n`);
-            if (upstreamHead.length > 0) {
-                socket.write(upstreamHead);
-            }
-            if (head.length > 0) {
-                upstreamSocket.write(head);
-            }
-            upstreamSocket.on("error", () => socket.destroy());
-            socket.on("error", () => upstreamSocket.destroy());
-            upstreamSocket.pipe(socket);
-            socket.pipe(upstreamSocket);
-        });
-        upstream.end();
+        relayUpgrade(http.request({ host: "127.0.0.1", port, method: req.method, path: req.url, headers: req.headers }), socket, head);
     });
 
     return {

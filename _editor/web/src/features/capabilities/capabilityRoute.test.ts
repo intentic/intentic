@@ -3,7 +3,6 @@
 // including the bounce off a tile slug nothing answers to.
 import type { CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { type EffectScope, effectScope, nextTick, reactive, ref } from "vue";
 import { type PageMove, type PageRoute, type PageStep, pageStep, SETUP, useCapabilityRoute } from "./capabilityRoute";
 
@@ -83,7 +82,7 @@ afterEach(() => {
 // The page over a live, reactive URL; `settled` is whether /extensions has answered.
 const pageAt = (entry: string, query: Record<string, string> = {}, settled = true) => {
     const route = reactive<PageRoute>({ params: { entry }, query });
-    const router = { push: mock(), replace: mock() };
+    const router = { push: jest.fn(), replace: jest.fn() };
     const state = {
         entries: ref([catalogEntry(`vpn`), catalogEntry(`docker`)]),
         capabilities: ref([

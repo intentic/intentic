@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createCredentialOracle } from "./credential-files.js";
 
 // Oracle answers about real files it writes to disk. `false` is the only answer that removes a permission card;

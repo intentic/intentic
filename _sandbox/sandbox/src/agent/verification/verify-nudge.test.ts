@@ -1,6 +1,5 @@
 import { type AgentTurn, isVerifyNudge, profileOf, type Rule } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { test, expect, afterEach } from "bun:test";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { createFrameLedger, type FrameLedger } from "./agent-verification.js";
@@ -59,7 +58,13 @@ afterEach(() => {
 
 test("a turn whose check went red is sent a follow-up, as its own turn", async () => {
     const { started } = runtimeWith();
-    const message = await nudgeUnverifiedWork({ conversationId: "c1", profile: profileOf(seed), rules: [rule], ledger: edited(PARSER), findings: RED });
+    const message = await nudgeUnverifiedWork({
+        conversationId: "c1",
+        profile: profileOf(seed),
+        rules: [rule],
+        ledger: edited(PARSER),
+        findings: RED,
+    });
 
     expect(message).toContain(RED[0]);
     await waitFor(() => expect(started).toHaveLength(1), SETTLES);
@@ -72,7 +77,13 @@ test("a turn whose check went red is sent a follow-up, as its own turn", async (
 // Sent without one it reaches the reader as their own words, in a bubble the edit pencil offers to rewind to.
 test("a follow-up opens with the words the chat recognises it by", async () => {
     runtimeWith();
-    const message = await nudgeUnverifiedWork({ conversationId: "c1", profile: profileOf(seed), rules: [rule], ledger: edited(PARSER), findings: RED });
+    const message = await nudgeUnverifiedWork({
+        conversationId: "c1",
+        profile: profileOf(seed),
+        rules: [rule],
+        ledger: edited(PARSER),
+        findings: RED,
+    });
 
     expect(isVerifyNudge(message ?? "")).toBe(true);
     // The findings still follow it whole: the opening is a preface, not a replacement.
@@ -122,17 +133,20 @@ test("a nudged turn with no job gives the follow-up no job", async () => {
 
 test("a turn whose checks passed is left alone", async () => {
     const { started } = runtimeWith();
-    expect(await nudgeUnverifiedWork({ conversationId: "c1", profile: profileOf(seed), rules: [rule], ledger: edited(PARSER), findings: [] })).toBeUndefined();
+    expect(
+        await nudgeUnverifiedWork({ conversationId: "c1", profile: profileOf(seed), rules: [rule], ledger: edited(PARSER), findings: [] }),
+    ).toBeUndefined();
     expect(started).toHaveLength(0);
 });
 
 // Nothing here is on by default: with no rule standing, an unproven turn is just a turn that ended.
 test("no rule standing means no follow-up, whatever was found", async () => {
     const { started } = runtimeWith();
-    expect(await nudgeUnverifiedWork({ conversationId: "c1", profile: profileOf(seed), rules: [], ledger: edited(PARSER), findings: RED })).toBeUndefined();
+    expect(
+        await nudgeUnverifiedWork({ conversationId: "c1", profile: profileOf(seed), rules: [], ledger: edited(PARSER), findings: RED }),
+    ).toBeUndefined();
     expect(started).toHaveLength(0);
 });
-
 
 // The loop guard: the follow-up runs as its own watched turn, so a model that answers it without running anything would
 // be nudged again and again.
@@ -142,7 +156,9 @@ test("a nudge never answers a nudge", async () => {
     await waitFor(() => expect(started).toHaveLength(1), SETTLES);
 
     // The follow-up turn ends just as unproven as the one that triggered it, and is left alone.
-    expect(await nudgeUnverifiedWork({ conversationId: "c1", profile: profileOf(seed), rules: [rule], ledger: edited(PARSER), findings: RED })).toBeUndefined();
+    expect(
+        await nudgeUnverifiedWork({ conversationId: "c1", profile: profileOf(seed), rules: [rule], ledger: edited(PARSER), findings: RED }),
+    ).toBeUndefined();
     expect(started).toHaveLength(1);
 
     // The conversation is free again from the turn after that.
@@ -177,10 +193,10 @@ test("a turn that changed a rendered surface and never looked is sent a follow-u
         conversationId: "c1",
         profile: profileOf(seed),
         rules: [viewRule],
-        ledger: edited("/work/src/App.vue"),
-        view: drew("/work/src/App.vue"),
+        ledger: edited(`${WORKSPACE_ROOT}/src/App.vue`),
+        view: drew(`${WORKSPACE_ROOT}/src/App.vue`),
     });
-    expect(message).toContain("/work/src/App.vue");
+    expect(message).toContain(`${WORKSPACE_ROOT}/src/App.vue`);
     expect(message).toMatch(/never looked/i);
     await waitFor(() => expect(started).toHaveLength(1), SETTLES);
 });
@@ -191,8 +207,8 @@ test("a turn that looked after its last surface edit is left alone", async () =>
         conversationId: "c1",
         profile: profileOf(seed),
         rules: [viewRule],
-        ledger: edited("/work/src/App.vue"),
-        view: looked("/work/src/App.vue"),
+        ledger: edited(`${WORKSPACE_ROOT}/src/App.vue`),
+        view: looked(`${WORKSPACE_ROOT}/src/App.vue`),
     });
     expect(nudged).toBeUndefined();
     expect(started).toHaveLength(0);
@@ -219,7 +235,14 @@ test("a look narrowed to paths this turn never touched stays quiet", async () =>
 // record for the wrong reason, on every unwired runtime.
 test("the rule cannot fire without the ledger it reads", async () => {
     const { started } = runtimeWith();
-    expect(await nudgeUnverifiedWork({ conversationId: "c1", profile: profileOf(seed), rules: [viewRule], ledger: edited("/work/src/App.vue") })).toBeUndefined();
+    expect(
+        await nudgeUnverifiedWork({
+            conversationId: "c1",
+            profile: profileOf(seed),
+            rules: [viewRule],
+            ledger: edited(`${WORKSPACE_ROOT}/src/App.vue`),
+        }),
+    ).toBeUndefined();
     expect(started).toHaveLength(0);
 });
 
@@ -230,12 +253,12 @@ test("a red check and a skipped look produce a single follow-up carrying both", 
         conversationId: "c1",
         profile: profileOf(seed),
         rules: [rule, viewRule],
-        ledger: edited("/work/src/App.vue"),
-        view: drew("/work/src/App.vue"),
+        ledger: edited(`${WORKSPACE_ROOT}/src/App.vue`),
+        view: drew(`${WORKSPACE_ROOT}/src/App.vue`),
         findings: RED,
     });
     expect(message).toContain(RED[0]);
-    expect(message).toContain("/work/src/App.vue");
+    expect(message).toContain(`${WORKSPACE_ROOT}/src/App.vue`);
     expect(message).toMatch(/never looked/i);
     await waitFor(() => expect(started).toHaveLength(1), SETTLES);
 });

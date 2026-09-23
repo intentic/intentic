@@ -2,7 +2,6 @@ import { mkdtemp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/prom
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SharePayload } from "@intentic/sandbox-contract";
-import { it, expect } from "bun:test";
 import { publishShare, shareRoot, unpublishShare } from "./share-publish.js";
 
 // Pins the tree a share becomes, against a real directory, since the claims are about files reaching the open internet;

@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
 import type { TerminalSession } from "../terminalsQuery";
 import { useTerminalHelp } from "./useTerminalHelp";
@@ -19,7 +18,7 @@ const listed = (name: string, help?: TerminalSession[`help`]): TerminalSession =
 const stage = () => {
     const sessions = ref<TerminalSession[]>([listed(`a`, { requestId: `r1`, message: `Enter the 2FA code`, requestedAt: 1_000 }), listed(`b`)]);
     const activeName = ref<string | undefined>(`a`);
-    const reply = mock(async (_answer: unknown) => true);
+    const reply = jest.fn(async (_answer: unknown) => true);
     const scope = effectScope();
     scopes.push(scope);
     const help = scope.run(() => useTerminalHelp({ sessions, activeName, reply }))!;

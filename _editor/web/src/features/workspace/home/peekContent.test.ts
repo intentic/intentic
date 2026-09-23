@@ -1,5 +1,4 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { describe, it, expect } from "bun:test";
 import { kindLabel, PEEK_LINES, peekLines, peekPlan } from "./peekContent";
 
 const file = (name: string, size?: number): WorkspaceTreeEntry => ({

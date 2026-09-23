@@ -1,4 +1,3 @@
-import { test, expect, mock } from "bun:test";
 import { capacityCounts, matchAccounts } from "./pickerAccounts";
 import type { PlanHeadroom } from "../session/usageStatus";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
@@ -8,11 +7,11 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // pickerAccounts reaches useChat for live account lists; stub its side-effecting seams so import
 // stays inert.
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
-mock.module("./useChat-accounts", () => ({
-    accountsOf: mock(() => []),
-    refreshConnections: mock(async () => {}),
-    subscriptionOnly: mock(() => false),
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("./useChat-accounts", () => ({
+    accountsOf: jest.fn(() => []),
+    refreshConnections: jest.fn(async () => {}),
+    subscriptionOnly: jest.fn(() => false),
 }));
 
 const headroom = (percent: number): PlanHeadroom => ({

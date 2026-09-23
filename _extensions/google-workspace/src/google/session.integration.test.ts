@@ -1,7 +1,6 @@
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Connection } from "./accounts.js";
 import { runtimeDir } from "./paths.js";
@@ -21,7 +20,7 @@ const connection = (refreshToken: string): Connection => ({
 
 let root: string;
 let env: NodeJS.ProcessEnv;
-const fetchMock = mock();
+const fetchMock = jest.fn();
 
 beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "gw-session-"));

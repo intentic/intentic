@@ -8,7 +8,6 @@ import {
     manifestJsonSchema,
     serializeManifestJsonSchema,
 } from "@intentic/extension-manifest";
-import { test, expect } from "bun:test";
 
 // Generated authoring schema for intentic-extension.json; zod silently strips unknown keys, so without this an editor
 // can't catch a misspelt contribution point.

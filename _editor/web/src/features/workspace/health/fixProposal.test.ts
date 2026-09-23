@@ -1,5 +1,4 @@
 import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { fixSignature, outcomeSummary, pushFixPrompt, refusalSummary } from "./fixProposal";
 
 const check: CommandRun = { status: `failed`, command: `pnpm check`, exitCode: 1, output: `FAIL src/a.test.ts\n  ✗ adds` };
@@ -86,7 +85,8 @@ test(`what a step name carries in parentheses is not part of the signature`, () 
 
 // Four days of unrelated tidy failures once shared one id and were told to carry on from each other's attempts.
 test(`the same gate red on other files is another failure, and the same files at other lines are this one`, () => {
-    const on = (anchor: string): string => fixSignature(`✗ paths (path-literals.mjs)\n${anchor}  spells a root\nverify-push: 1 of 5 steps failed in 3s: tidiness`);
+    const on = (anchor: string): string =>
+        fixSignature(`✗ paths (path-literals.mjs)\n${anchor}  spells a root\nverify-push: 1 of 5 steps failed in 3s: tidiness`);
     expect(on(`_sandbox/sandbox/src/a.ts:32`)).toBe(`tidiness|_sandbox/sandbox/src/a.ts`);
     expect(on(`_sandbox/sandbox/src/a.ts:40`)).toBe(on(`_sandbox/sandbox/src/a.ts:32`));
     expect(on(`_tools/scripts/repair-transcripts.mjs:9`)).not.toBe(on(`_sandbox/sandbox/src/a.ts:32`));

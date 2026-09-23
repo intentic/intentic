@@ -3,8 +3,8 @@ import { promisify } from "node:util";
 import type { Log } from "@intentic/local-agent";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { ensureResident } from "../resident.js";
-import { listDistros } from "../wsl.js";
-import { childrenOf, type MachineConfig, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot, withChild } from "./machine.js";
+import { listDistros, WINDOWS_SIDE } from "../wsl.js";
+import { heldDistros, type MachineConfig, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot, withChild } from "./machine.js";
 
 // The commands that act on the PC as a whole rather than on this one environment of it.
 
@@ -17,7 +17,7 @@ const attach = buildCommand<Record<never, never>, [string]>({
     },
     async func(this: CommandContext, _flags: Record<never, never>, distro: string) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        if (process.platform !== "win32") {
+        if (!WINDOWS_SIDE) {
             throw new Error("only the Windows side of a PC keeps its distros running.");
         }
         const listed = await listDistros();
@@ -27,7 +27,7 @@ const attach = buildCommand<Record<never, never>, [string]>({
         if (!listed.includes(distro)) {
             throw new Error(`WSL has no distro called "${distro}"; it lists ${listed.join(", ") || "none"}.`);
         }
-        const before = childrenOf(await readMachineConfig());
+        const before = await heldDistros();
         await updateMachineConfig((config) => withChild(config, distro));
         await ensureResident(out);
         out(before.includes(distro) ? `${distro} is already kept running from here.` : `${distro}'s agent is kept running from here now.`);
@@ -44,10 +44,10 @@ const HAS_RESIDENT_SH = `[ -x "$HOME/.intentic/machine/bin/intentic-machine" ] &
 
 // Run by a Windows setup: distros whose agents started before this side existed are taken over, not left unsupervised.
 export const adoptRunningDistros = async (log: Log): Promise<void> => {
-    if (process.platform !== "win32") {
+    if (!WINDOWS_SIDE) {
         return;
     }
-    const held = childrenOf(await readMachineConfig());
+    const held = await heldDistros();
     const running = ((await listDistros({ running: true })) ?? []).filter((distro) => !held.includes(distro));
     for (const distro of running) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- one distro at a time; each is a wsl.exe round trip

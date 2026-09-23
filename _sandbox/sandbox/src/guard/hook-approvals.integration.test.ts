@@ -3,7 +3,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sandboxRouteFor } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "bun:test";
 import { approveHookSet, dismissHookSet, gateSettingsHooks, type HookGate, hookRequests } from "./hook-approvals.js";
 import type { HookPlace } from "./settings-hooks.js";
 
@@ -11,10 +10,18 @@ import type { HookPlace } from "./settings-hooks.js";
 
 const setup = async (): Promise<{ historyRoot: string; place: HookPlace; writeHooks: (command: string) => Promise<void> }> => {
     const base = mkdtempSync(join(tmpdir(), "hook-approvals-"));
-    const place: HookPlace = { cwd: join(base, "work"), home: join(base, "home"), configDir: join(base, "home", ".claude"), readable: (path) => path };
+    const place: HookPlace = {
+        cwd: join(base, "work"),
+        home: join(base, "home"),
+        configDir: join(base, "home", ".claude"),
+        readable: (path) => path,
+    };
     const writeHooks = async (command: string): Promise<void> => {
         await mkdir(join(place.cwd, ".claude"), { recursive: true });
-        await writeFile(join(place.cwd, ".claude", "settings.json"), JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command }] }] } }));
+        await writeFile(
+            join(place.cwd, ".claude", "settings.json"),
+            JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command }] }] } }),
+        );
     };
     return { historyRoot: join(base, "history"), place, writeHooks };
 };

@@ -1,6 +1,5 @@
 import { tmpdir } from "node:os";
 import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { turnPersona } from "../personas/personas.js";
 import { jsExecutionPlanOf, nodeArgs } from "./js-runtime.js";
 

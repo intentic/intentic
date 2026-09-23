@@ -1,7 +1,5 @@
-import type { AgentProvider } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { afterEach, beforeEach, describe, expect, it, jest, mock } from "bun:test";
 import { computed, ref } from "vue";
 import type { PickUp } from "./pickUp";
 import type { SessionRef } from "./turnRequest";
@@ -9,14 +7,12 @@ import { type FailureHost, TurnFailures } from "./turnFailures";
 
 // A failure host whose turn records what the failure asked of it; nothing here writes a transcript line, so that seam
 // names itself if a case reaches for it.
-const hostOf = (): FailureHost & { readonly reattach: ReturnType<typeof mock> } => {
-    const reattach = mock(async () => false);
+const hostOf = (): FailureHost & { readonly reattach: ReturnType<typeof jest.fn> } => {
+    const reattach = jest.fn(async () => false);
     return {
         reattach,
         transcript: unstubbed<FailureHost["transcript"]>(`transcript`, {}),
-        provider: ref<AgentProvider>(`claude`),
-        account: ref<string | undefined>(`acct`),
-        model: ref(``),
+        selection: unstubbed<FailureHost["selection"]>(`selection`, {}),
         session: ref<SessionRef | undefined>(),
         error: ref<string | null>(null),
         pickUp: ref<PickUp | undefined>(),
@@ -38,7 +34,13 @@ describe(`a turn that outgrew the model's window`, () => {
         const host = hostOf();
         const failures = new TurnFailures(host);
         host.error.value = `an earlier sentence in the same turn`;
-        failures.apply({ kind: `error`, code: `context-overflow`, message: `Prompt is too long. Resuming…`, autoResume: `scheduled`, held: { ran: true } });
+        failures.apply({
+            kind: `error`,
+            code: `context-overflow`,
+            message: `Prompt is too long. Resuming…`,
+            autoResume: `scheduled`,
+            held: { ran: true },
+        });
 
         expect(host.error.value).toBeNull();
         expect(host.pickUp.value).toBeUndefined();

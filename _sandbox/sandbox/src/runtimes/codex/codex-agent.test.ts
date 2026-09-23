@@ -1,6 +1,5 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { test, expect, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest, CodexCredential, TurnHooks } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
@@ -677,11 +676,17 @@ test("turn failures and thrown runners become error events followed by done", as
 test("a thread past the model's window is coded context-overflow, in Codex's words or the API's", async () => {
     const codex = "Codex ran out of room in the model's context window. Start a new thread or clear earlier history before retrying.";
     const own = fakeCodexRunner([{ type: "turn.failed", error: { message: codex } }]);
-    expect(await collect(createTestAgent(own.runner), request)).toEqual([{ kind: "error", code: "context-overflow", message: codex }, { kind: "done" }]);
+    expect(await collect(createTestAgent(own.runner), request)).toEqual([
+        { kind: "error", code: "context-overflow", message: codex },
+        { kind: "done" },
+    ]);
 
     const api = "Your input exceeds the context window of this model. Please adjust your input and try again.";
     const upstream = fakeCodexRunner([{ type: "error", message: api }]);
-    expect(await collect(createTestAgent(upstream.runner), request)).toEqual([{ kind: "error", code: "context-overflow", message: api }, { kind: "done" }]);
+    expect(await collect(createTestAgent(upstream.runner), request)).toEqual([
+        { kind: "error", code: "context-overflow", message: api },
+        { kind: "done" },
+    ]);
 });
 
 // Verbatim from the daemon log, minus the wrapping: the translator's answer when its Go transport never reached the

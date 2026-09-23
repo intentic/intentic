@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { createTerminalRunner, terminalExec } from "./terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 

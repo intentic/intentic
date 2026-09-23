@@ -1,5 +1,17 @@
-import { describe, expect, it } from "bun:test";
-import { edited, hold, joined, NO_QUEUE, type QueuedItem, queueView, released, removed, rerouted, returned, taken, type TurnQueue } from "./conversation-queue.js";
+import {
+    edited,
+    hold,
+    joined,
+    NO_QUEUE,
+    type QueuedItem,
+    queueView,
+    released,
+    removed,
+    rerouted,
+    returned,
+    taken,
+    type TurnQueue,
+} from "./conversation-queue.js";
 
 // Pins every change a conversation's queue can go through, as values: what joins and leaves, what a hold keeps, and how
 // an edit made against an older copy is refused rather than written over somebody else's.
@@ -73,7 +85,10 @@ describe("a conversation's queue", () => {
     });
 
     it("shows every window the words, their files and whose they are, never the request behind them", () => {
-        const queue = hold(waiting(message("m1", "look", { turn: { conversationId: "c1", prompt: "look", attachments: ["shot.png"], agent: "codex" } })), "refused");
+        const queue = hold(
+            waiting(message("m1", "look", { turn: { conversationId: "c1", prompt: "look", attachments: ["shot.png"], agent: "codex" } })),
+            "refused",
+        );
         expect(queueView(queue)).toEqual({
             items: [{ id: "m1", text: "look", attachments: ["shot.png"], voice: "person", queuedAt: 1_000, revision: 1 }],
             revision: 2,

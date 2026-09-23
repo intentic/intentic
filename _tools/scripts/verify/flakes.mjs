@@ -6,7 +6,8 @@ import { join, posix } from "node:path";
 import { pathToFileURL } from "node:url";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { git } from "../lib/git.mjs";
-import { junitCases, SOURCE_CONDITION, SUITE_TIMEOUTS, suiteKindOf, taskOf, unhandledErrors } from "./failure-units.mjs";
+import { SUITE_TIMEOUTS, suiteKindOf } from "../../constants/src/test-suites.mjs";
+import { junitCases, SOURCE_CONDITION, taskOf, unhandledErrors } from "./failure-units.mjs";
 
 // Entries the ledger keeps, newest first.
 export const FLAKES_KEPT = 300;

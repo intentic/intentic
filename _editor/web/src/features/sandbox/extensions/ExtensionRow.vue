@@ -223,7 +223,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 <ExtensionUpdateCard v-if="entry.extension.source === `installed`" :extension="entry.extension" />
 
                 <div v-if="settings.length > 0">
-                    <p :class="ui.sectionLabel(`mb-2 text-2xs`)">{{ t(`sandbox.extensionRow.settings`) }}</p>
+                    <p :class="ui.sectionLabel(`mb-2 text-2xs`)">{{ t(`shared.settings`) }}</p>
                     <ExtensionSettingsForm :extension-id="entry.extension.id" :settings="settings" />
                 </div>
 
@@ -303,7 +303,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     <span class="text-muted">{{ extensionIdOf(manifest) }}</span> · v{{ manifest.version }} ·
                     {{
                         entry.extension.source === `builtin`
-                            ? t(`sandbox.extensionRow.builtIntoSandboxImage`)
+                            ? t(`shared.builtIntoSandboxImage`)
                             : entry.extension.source === `workspace`
                               ? t(`sandbox.extensionRow.intenticConfigWorkspaceExtensions`)
                               : t(`sandbox.extensionRow.installed`, { slice: entry.extension.commit.slice(0, 12) })

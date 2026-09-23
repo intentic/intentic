@@ -1,4 +1,3 @@
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../../config.js";
@@ -8,7 +7,7 @@ import { ABUSE_SUSPENSION_REASON, sweepHostedAbuse } from "./hosted-abuse.js";
 // struck, the strike after the line suspends, a subscriber's is only reported, a machine already struck this window
 // is left alone, and a builder in the same app never counts against the sandbox.
 
-const logger = { info: mock(), warn: mock(), error: mock() } as never;
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never;
 
 const NOW = new Date(`2026-09-14T12:00:00.000Z`);
 const MINUTE_MS = 60_000;
@@ -60,38 +59,38 @@ interface Strike {
 const prismaWith = (
     rows: ReturnType<typeof machine>[],
     strikes: Strike[] = [],
-    over: Record<string, Record<string, ReturnType<typeof mock>>> = {},
+    over: Record<string, Record<string, ReturnType<typeof jest.fn>>> = {},
 ) => {
     const created: Record<string, unknown>[] = [];
     const prisma = {
         // `findUnique` is the stretch close's locked read of the row, which still holds what the sweep selected.
         hostedMachine: {
-            findMany: mock().mockResolvedValue(rows),
-            findUnique: mock(async ({ where }: { where: { id: string } }) => rows.find((row) => row.id === where.id) ?? null),
-            update: mock().mockResolvedValue({}),
+            findMany: jest.fn().mockResolvedValue(rows),
+            findUnique: jest.fn(async ({ where }: { where: { id: string } }) => rows.find((row) => row.id === where.id) ?? null),
+            update: jest.fn().mockResolvedValue({}),
         },
-        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
-        $queryRaw: mock().mockResolvedValue([]),
+        $transaction: jest.fn((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
+        $queryRaw: jest.fn().mockResolvedValue([]),
         hostedStrike: {
-            findFirst: mock(
+            findFirst: jest.fn(
                 async ({ where }: { where: { appName: string; createdAt: { gte: Date } } }) =>
                     strikes.find((strike) => strike.appName === where.appName && strike.createdAt >= where.createdAt.gte) ?? null,
             ),
-            count: mock(
+            count: jest.fn(
                 async ({ where }: { where: { userId: string; action: { in: string[] }; createdAt: { gte: Date } } }) =>
                     strikes.filter(
                         (strike) =>
                             strike.userId === where.userId && where.action.in.includes(strike.action) && strike.createdAt >= where.createdAt.gte,
                     ).length,
             ),
-            create: mock(async ({ data }: { data: Record<string, unknown> }) => {
+            create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
                 created.push(data);
                 return data;
             }),
         },
-        hostedUsage: { upsert: mock().mockResolvedValue({}), aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }) },
-        hostedPlan: { findUnique: mock().mockResolvedValue(null) },
-        user: { update: mock().mockResolvedValue({}) },
+        hostedUsage: { upsert: jest.fn().mockResolvedValue({}), aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: null } }) },
+        hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
+        user: { update: jest.fn().mockResolvedValue({}) },
         ...over,
     } as unknown as PrismaClient;
     return { prisma, created };
@@ -234,7 +233,7 @@ describe(`the abuse watch`, () => {
 
     it(`reports a subscriber's saturated machine without stopping it`, async () => {
         const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(1) }] });
-        const { prisma, created } = prismaWith([machine()], [], { hostedPlan: { findUnique: mock().mockResolvedValue({ status: `active` }) } });
+        const { prisma, created } = prismaWith([machine()], [], { hostedPlan: { findUnique: jest.fn().mockResolvedValue({ status: `active` }) } });
         expect(await sweepHostedAbuse(prisma, config(), logger, NOW)).toEqual({ stopped: 0, suspended: 0, reported: 1 });
         expect(stops(calls)).toHaveLength(0);
         expect(created).toEqual([expect.objectContaining({ action: `reported` })]);

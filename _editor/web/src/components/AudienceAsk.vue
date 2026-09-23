@@ -39,7 +39,7 @@ const answer = (value: Audience): void => {
             </p>
         </div>
         <div class="flex flex-wrap gap-2">
-            <Button size="small" :label="t(`common.audienceAsk.iWriteCode`)" @click="answer('developer')" />
+            <Button size="small" :label="t(`shared.iWriteCode`)" @click="answer('developer')" />
             <Button size="small" severity="secondary" :label="t(`common.audienceAsk.iDontWriteCode`)" @click="answer('maker')" />
         </div>
         <!-- Only a maintainer can write the rules; a collaborator's answer changes their own screen and nothing else. -->

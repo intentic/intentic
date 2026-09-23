@@ -1,5 +1,4 @@
 import type { SandboxVerb } from "@intentic/ui";
-import { describe, test, expect } from "bun:test";
 import { agentFallback, runnerFallback, sandboxFallback, syncFallback } from "./deviceFallback";
 
 // These lines are typed by a person into their own terminal when the app can't reach the machine, so a verb that

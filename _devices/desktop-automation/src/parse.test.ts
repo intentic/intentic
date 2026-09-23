@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { focusRefusal, looksLikeUrl, parseSessionJson, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";
 
 /* Reading a platform's window list. */

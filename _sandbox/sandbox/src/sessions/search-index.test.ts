@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { openSearchIndex } from "./search-index.js";
 import { IN_MEMORY } from "../store/sqlite.js";
 import type { SpokenLine } from "./transcript-search.js";
@@ -135,8 +134,8 @@ test("versions report what each source was last indexed at", async () => {
     await index.put("c1", "conversation", "512", said(["a", "user"]));
     await index.put("s1", "session", "99", said(["b", "user"]));
 
-    expect((await index.versions("conversation"))).toEqual(new Map([["c1", "512"]]));
-    expect((await index.versions("session"))).toEqual(new Map([["s1", "99"]]));
+    expect(await index.versions("conversation")).toEqual(new Map([["c1", "512"]]));
+    expect(await index.versions("session")).toEqual(new Map([["s1", "99"]]));
 });
 
 test("metrics count sources per kind and lines overall", async () => {

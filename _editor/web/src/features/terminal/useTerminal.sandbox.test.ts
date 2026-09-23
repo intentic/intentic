@@ -2,7 +2,6 @@
 // arrangement returns instantly and the session list arrives late. Pane mocked wholesale; no real terminal needed.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { stubGlobal, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
@@ -16,22 +15,22 @@ stubGlobal(`localStorage`, {
 
 // The switch itself: the one ref the whole app scopes by.
 const activeSandboxId = ref<string | undefined>(`sbx-a`);
-mock.module("../sandbox/overview/activeSandbox", () => ({
+jest.mock("../sandbox/overview/activeSandbox", () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId,
     sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId],
 }));
-mock.module("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
-mock.module("../sandbox/client/useSandbox", () => ({
+jest.mock("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../sandbox/client/useSandbox", () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId }),
 }));
-mock.module("./terminalSession", () => ({
+jest.mock("./terminalSession", () => ({
     createTerminalSession: (name: string) => ({ kind: `terminal`, name }),
-    mountTerminalSession: mock(),
-    parkTerminalSession: mock(),
-    disposeTerminalSession: mock(),
-    retypeTerminalSession: mock(),
-    retintTerminalSession: mock(),
+    mountTerminalSession: jest.fn(),
+    parkTerminalSession: jest.fn(),
+    disposeTerminalSession: jest.fn(),
+    retypeTerminalSession: jest.fn(),
+    retintTerminalSession: jest.fn(),
 }));
 
 const { createTerminalTabs } = await import("./useTerminal");

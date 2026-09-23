@@ -1,18 +1,17 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Rule } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { describe, test, expect, beforeEach, mock } from "bun:test";
 import type { Services } from "../../composition.js";
 import { settleLanding, versionRuleOf } from "./version-landed.js";
 import { isolatedAgent } from "../../testing.js";
 
-const describeLanding = mock<() => Promise<void>>();
-mock.module("./landed-subject.js", () => ({ describeLanding: () => describeLanding() }));
-const commitOnly = mock<(dir: string, paths: readonly string[], subject: string) => Promise<boolean>>(async () => true);
-mock.module("../../git/changes/changes-index.js", () => ({
+const describeLanding = jest.fn<() => Promise<void>>();
+jest.mock("./landed-subject.js", () => ({ describeLanding: () => describeLanding() }));
+const commitOnly = jest.fn<(dir: string, paths: readonly string[], subject: string) => Promise<boolean>>(async () => true);
+jest.mock("../../git/changes/changes-index.js", () => ({
     commitOnly: (dir: string, paths: readonly string[], subject: string) => commitOnly(dir, paths, subject),
 }));
-mock.module("../../git/remote/root-repo.js", () => ({ commitWorktreeRemainder: async () => false }));
+jest.mock("../../git/remote/root-repo.js", () => ({ commitWorktreeRemainder: async () => false }));
 
 const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rule => ({ label: over.id, enabled: true, ...over });
 

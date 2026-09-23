@@ -1,4 +1,3 @@
-import { test, expect, afterEach } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { removeStoredValue, storedKeys, storedValue, storeValue } from "./browserStorage";
 

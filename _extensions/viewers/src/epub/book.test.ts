@@ -1,5 +1,4 @@
 import { strToU8, zipSync } from "fflate";
-import { describe, it, expect } from "bun:test";
 import { openEpub, resolveHref } from "./book";
 
 /* What a book is made of: its order, its titles, and where each file it names actually lives in the zip. */

@@ -1,6 +1,5 @@
 // Where a sign-in goes, and where it comes back to: one decision on behalf of every guarded route.
 // Fails invisibly if wrong — the user ends up signed in, just not on the page they wanted.
-import { it, expect } from "bun:test";
 import { returnPath, signInAt } from "./signIn";
 
 it(`carries the page that asked for the sign-in`, () => {

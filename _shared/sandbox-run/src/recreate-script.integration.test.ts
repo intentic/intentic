@@ -3,7 +3,6 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { test, expect, afterEach } from "bun:test";
 
 // recreate.sh maps old one-liner argument shapes onto ic verbs, tested under a real `sh` with a stand-in ic. Also
 // checks recreate.rs writes the rollback record before destroying the container: a late write leaves rollback dead.

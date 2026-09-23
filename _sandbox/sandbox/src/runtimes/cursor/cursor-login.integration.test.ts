@@ -1,12 +1,11 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, beforeEach, mock } from "bun:test";
-import { waitFor, hoisted } from "@intentic/testing/bun";
+import { waitFor } from "@intentic/testing/bun";
 import { createLogger } from "../../logger.js";
 
-const sdk = hoisted(() => ({ login: mock() }));
-mock.module("./cursor-sdk.js", () => ({ ensureCursorSdk: async () => ({ Cursor: { auth: { login: sdk.login } } }) }));
+const sdk = { login: jest.fn() };
+jest.mock("./cursor-sdk.js", () => ({ ensureCursorSdk: async () => ({ Cursor: { auth: { login: sdk.login } } }) }));
 
 const { fileCursorStore, startCursorLogin } = await import("./cursor-credentials.js");
 
@@ -21,7 +20,7 @@ beforeEach(() => {
 
 test("a completed login stores the account and makes its runtime pack durable", async () => {
     const store = fileCursorStore(mkdtempSync(join(tmpdir(), "cursor-login-")), logger);
-    const connected = mock(async () => {});
+    const connected = jest.fn(async () => {});
 
     const started = await startCursorLogin({ store, keyName: "intentic sandbox (test)", connected });
 

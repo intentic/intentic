@@ -94,7 +94,7 @@ onUnmounted(stop);
                 <!-- States where status went, since this card no longer reports anything itself. -->
                 <p class="text-2xs text-subtle">
                     {{ t(`sandbox.desktopSyncCard.pairAnotherDeviceSandbox`) }}
-                    <b>{{ t(`sandbox.desktopSyncCard.devices`) }}</b> {{ t(`sandbox.desktopSyncCard.boardFolderPortsSwitches`) }}
+                    <b>{{ t(`shared.devices2`) }}</b> {{ t(`sandbox.desktopSyncCard.boardFolderPortsSwitches`) }}
                 </p>
                 <!-- Names the device being taken over, since taking over ends its sync. -->
                 <p v-if="takeover" class="text-2xs text-warning">
@@ -227,7 +227,7 @@ onUnmounted(stop);
                     </p>
                     <!-- Both forms share the switch above them since it rewrites the pair; the device being enrolled need not be this one either. -->
                     <ScriptSourceSwitch />
-                    <Code :code="linuxCommand" lang="bash" :label="t(`sandbox.desktopSyncCard.linuxMacos`)" :wrap="true" />
+                    <Code :code="linuxCommand" lang="bash" :label="t(`shared.linuxMacos`)" :wrap="true" />
                     <Code :code="windowsCommand" lang="powershell" :label="t(`sandbox.desktopSyncCard.windowsPowershell`)" :wrap="true" />
                     <p class="text-2xs text-subtle">
                         {{ t(`sandbox.desktopSyncCard.commandSingleUseExpires`) }}
@@ -247,7 +247,7 @@ onUnmounted(stop);
                         </li>
                         <li>
                             <span class="font-mono text-content">intentic-machine sync uninstall</span>
-                            {{ t(`sandbox.desktopSyncCard.removesAllDevices`) }} <b>{{ t(`sandbox.desktopSyncCard.unpair`) }}</b>
+                            {{ t(`sandbox.desktopSyncCard.removesAllDevices`) }} <b>{{ t(`shared.unpair`) }}</b>
                             {{ t(`sandbox.desktopSyncCard.buttonAsksToDo`) }}
                         </li>
                     </ul>

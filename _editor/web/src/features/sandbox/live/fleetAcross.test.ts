@@ -1,4 +1,3 @@
-import { describe, it, expect, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { ref } from "vue";
 import type { AgentSummary } from "@intentic/sandbox-contract";
@@ -10,11 +9,11 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // Mocks the query client and the daemon client, neither of which the derivation under test touches.
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
-mock.module("../client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
-const list = mock();
-const seen = mock();
-mock.module("../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { list, seen } }) }));
-mock.module("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: mock() } }));
+jest.mock("../client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
+const list = jest.fn();
+const seen = jest.fn();
+jest.mock("../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { list, seen } }) }));
+jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: jest.fn() } }));
 
 const { boxAttention, markSeenAcross, otherBoxes, subscribe } = await import("./fleetAcross");
 type BoxFleet = Parameters<typeof boxAttention>[0];

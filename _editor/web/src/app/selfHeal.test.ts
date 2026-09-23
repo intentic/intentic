@@ -2,7 +2,6 @@
 // origin stored and reloads once. These tests pin the once-ness (a crash surviving the clean slate must surface,
 // not loop) and the split across the reload (this page only marks the database wipe; the next boot performs it).
 import "@intentic/testing/dom";
-import { it, expect, beforeAll, beforeEach, mock, spyOn, jest } from "bun:test";
 import { freshImport, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 // Hoisted to top level (like storageRule.test.ts, staleChunk.test.ts) so compiling the sandbox-contract/vue-query
 // graph it drags in is charged to file load, not a single test's budget. Only the healing half needs a fresh
@@ -11,7 +10,7 @@ import { purgeIfMarked } from "./selfHeal";
 
 // jsdom's `window.location` is unforgeable; the reload is observed through a replaced global, resolved at call
 // time.
-const reload = mock();
+const reload = jest.fn();
 
 beforeAll(() => {
     Object.defineProperty(globalThis, `location`, { configurable: true, value: { reload } });
@@ -51,9 +50,9 @@ it(`does not wipe twice: a crash that survives the clean slate surfaces instead 
 });
 
 it(`leaves an error outside the startup window alone: that is a bug, not poisoned storage`, async () => {
-    spyOn(performance, `now`).mockReturnValue(0);
+    jest.spyOn(performance, `now`).mockReturnValue(0);
     const { reportStartupError } = await load();
-    spyOn(performance, `now`).mockReturnValue(60_000);
+    jest.spyOn(performance, `now`).mockReturnValue(60_000);
     localStorage.setItem(`user-preference`, `kept`);
     reportStartupError(new Error(`boom`));
     expect(localStorage.getItem(`user-preference`)).toBe(`kept`);
@@ -78,7 +77,7 @@ it(`the marked boot deletes every database this origin holds, then retires the m
 });
 
 it(`an unmarked boot touches no database`, async () => {
-    const deleteDatabase = mock();
+    const deleteDatabase = jest.fn();
     stubGlobal(`indexedDB`, { databases: () => Promise.resolve([]), deleteDatabase });
     await purgeIfMarked();
     expect(deleteDatabase).not.toHaveBeenCalled();

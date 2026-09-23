@@ -1,26 +1,24 @@
 // Pins that a binary diff renders an <img> with its fetched bytes in the DOM; needs jsdom since that's exactly
 // what's asserted.
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Import chain reads browser globals at import time (useDevice: matchMedia; environment.ts: window.env), stubbed
 // package-wide by the package preload.
-hoisted(() => {
+(() => {
     // jsdom's object URLs are opaque; naming them by byte length lets a test tell which blob an <img> holds.
     globalThis.URL.createObjectURL = (blob: Blob) => `blob:fake/${blob.size}`;
     globalThis.URL.revokeObjectURL = () => {};
     // No ResizeObserver/decode in jsdom; size stubbed from byte length so each side's dimensions stay distinct.
     globalThis.createImageBitmap = ((blob: Blob) =>
         Promise.resolve({ width: blob.size * 10, height: blob.size, close: () => {} })) as unknown as typeof createImageBitmap;
-});
+})();
 
 // Daemon fetch stubbed at the viewer's seam (bytes only, not auth). `same` returns one identical body for both
 // sides, the case this viewer must call out explicitly.
 const fetched: string[] = [];
-mock.module("../../sandbox/client/sandboxClient", () => ({
+jest.mock("../../sandbox/client/sandboxClient", () => ({
     sandboxBlob: (path: string) => {
         fetched.push(path);
         if (path.includes(`missing`)) {

@@ -1,5 +1,4 @@
 import { unstubbed } from "@intentic/testing";
-import { test, expect } from "bun:test";
 import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
 import { displayLabel, type StoredAccount } from "./claude-credentials.js";
 import type { SeatRefusal } from "./claude-seats.js";

@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { type Capability, VAULTED } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "../capabilities-store.js";
 import { fileSecretVault, type SecretVault } from "./secret-vault.js";
 

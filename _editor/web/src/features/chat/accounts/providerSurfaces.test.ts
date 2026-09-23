@@ -2,7 +2,6 @@
 // the daemon, the browser has no init check that fails loudly when a new provider is missing a tab, a
 // readiness rule, or a connect panel shape; each test below asks one such question of every provider.
 import { accessFor, modelsFor, NATIVE_PROVIDERS, PROVIDER_SPECS, providerLabel, providerSpec, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach } from "bun:test";
 import { accessBadge, connectPitch, hasSignIn, providerReady } from "../session/access";
 import { accountsLoaded, noTranslatorAccounts, providerAccounts, translatorAccounts } from "./providerAccounts";
 import {

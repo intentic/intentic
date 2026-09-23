@@ -74,6 +74,9 @@ const i18n = createI18n({
     globalInjection: false,
     locale: BASE_LOCALE,
     fallbackLocale: BASE_LOCALE,
+    // A translation holds a subset of `en`, so falling back is normal; a key no catalog has is i18n-keys.mjs's to refuse.
+    missingWarn: false,
+    fallbackWarn: false,
     pluralRules,
 });
 

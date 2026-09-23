@@ -1,7 +1,6 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { createGrokAgent, createGrokRunner, type GrokRunner, type GrokTurn } from "./grok-agent.js";
 import type { OpenCodeService } from "./opencode.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";

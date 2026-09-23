@@ -2,7 +2,6 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { test, expect } from "bun:test";
 // @ts-expect-error -- hand-written .mjs with a .d.mts beside it; see node.mjs for why it isn't compiled.
 import { packageRoot, repoRoot } from "./node.mjs";
 

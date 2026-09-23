@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/extension-ui";
+import { Icon, useLatest } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { Deck, ImageBox, Paragraph, TextBox } from "./pptx/deck-model";
 import { t } from "./i18n.js";
@@ -16,8 +16,7 @@ const notesShown = ref(true);
 // One slide is drawn at its true pixel size and scaled as a whole, so every position inside it stays exact.
 const scale = ref(1);
 const surface = ref<HTMLElement>();
-// Drops a stale parse when the open file changes mid-read (a new blob prop supersedes the in-flight one).
-let seq = 0;
+const latest = useLatest();
 // Object URLs live as long as the deck that owns them; a switched file revokes every one of them.
 const pictures = new Map<ImageBox, string>();
 
@@ -56,26 +55,26 @@ const fit = (): void => {
 };
 
 const render = async (source: Blob): Promise<void> => {
-    const id = ++seq;
+    const isLatest = latest();
     loading.value = true;
     error.value = undefined;
     try {
         // Lazy: fflate and the whole OOXML reader stay out of the bundle until someone opens a deck.
         const { readDeck } = await import("./pptx/deck");
         const bytes = new Uint8Array(await source.arrayBuffer());
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         revokePictures();
         deck.value = readDeck(bytes);
         fit();
     } catch (caught) {
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         error.value = caught instanceof Error ? caught.message : `Could not read this presentation.`;
     } finally {
-        if (id === seq) {
+        if (isLatest()) {
             loading.value = false;
         }
     }
@@ -94,7 +93,6 @@ watch(
     (next) => void render(next),
 );
 onBeforeUnmount(() => {
-    seq += 1;
     observer.disconnect();
     revokePictures();
 });

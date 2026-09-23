@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentEvent, type AgentHarness, type AgentProvider, PROVIDERS, HARNESSES, type TranscriptRow } from "@intentic/sandbox-contract";
 import { foldTurn } from "@intentic/sandbox-contract/transcript-fold";
-import { describe, it, expect } from "bun:test";
 import { fileTranscriptRecord, transcriptFile } from "./transcript-record.js";
 import { openingRows } from "./turn-transcript.js";
 

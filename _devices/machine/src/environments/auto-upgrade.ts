@@ -1,12 +1,10 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type Log, spawnDetached } from "@intentic/local-agent";
+import type { Log } from "@intentic/local-agent";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
-import { agentLogPath } from "../config.js";
 import { installedBuild } from "../installed.js";
 import { publishedVersion } from "../release.js";
-import { machineLauncher } from "../supervision.js";
-import { childrenOf, type MachineConfig, readMachineConfig } from "./machine.js";
-import { installedIn, machineTarget } from "./machine-upgrade.js";
+import { heldDistros, type MachineConfig, readMachineConfig } from "./machine.js";
+import { installedIn, launchUpgrade, machineTarget } from "./machine-upgrade.js";
 
 // The root's own update tick: the machine brought level every hour, and onto a new release every few hours.
 
@@ -55,11 +53,6 @@ export interface AutoUpgrade {
     readonly nudge: () => void;
 }
 
-// The upgrade runs detached: when it restarts this environment's agent, it takes this very tick down with it.
-const launch = async (level: boolean): Promise<void> => {
-    await spawnDetached(agentLogPath, machineLauncher(), ["upgrade", ...(level ? ["--level"] : [])], { finishes: true });
-};
-
 export const startAutoUpgrade = (log: Log): AutoUpgrade => {
     let timer: NodeJS.Timeout | undefined;
     let stopped = false;
@@ -76,7 +69,7 @@ export const startAutoUpgrade = (log: Log): AutoUpgrade => {
             const asksRelease = config.agentUpdates !== false && Date.now() >= releaseDueAt;
             const [published, children] = await Promise.all([
                 asksRelease ? publishedVersion() : Promise.resolve(undefined),
-                Promise.all((process.platform === "win32" ? childrenOf(config) : []).map(installedIn)),
+                heldDistros().then(async (held) => await Promise.all(held.map(installedIn))),
             ]);
             if (asksRelease) {
                 releaseDueAt = Date.now() + RELEASE_EVERY_MS + Math.floor(Math.random() * RELEASE_JITTER_MS);
@@ -84,7 +77,7 @@ export const startAutoUpgrade = (log: Log): AutoUpgrade => {
             const decision = autoUpgradeDecision({ own: installedBuild(), children, published, config, now: Date.now() });
             if (decision !== undefined) {
                 log(`auto-upgrade: bringing this machine to ${decision.target}${decision.level ? " (levelling to its newest side)" : ""}.`);
-                await launch(decision.level);
+                await launchUpgrade(decision.level);
             }
         } catch (error) {
             log(`auto-upgrade: skipped this round — ${errorMessage(error)}`);

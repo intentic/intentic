@@ -1,5 +1,4 @@
 import type { Hono } from "hono";
-import { test, expect, mock } from "bun:test";
 import { createApp } from "../../app.js";
 import type { AppEnv } from "../../app-env.js";
 import { softwareAuthenticator } from "../../harness/passkey-authenticator.testing.js";
@@ -252,7 +251,7 @@ test("the stored credential carries what a passkey-only session needs for presen
 
 test("the middleware passes the enrolment allowance to authorize only on the two registration paths", async () => {
     const seen: (boolean | undefined)[] = [];
-    const authorize = mock(async (_bearer: string, _first: string | undefined, options?: { enrolment?: boolean }) => {
+    const authorize = jest.fn(async (_bearer: string, _first: string | undefined, options?: { enrolment?: boolean }) => {
         seen.push(options?.enrolment);
         return proven(OWNER, "owner");
     });

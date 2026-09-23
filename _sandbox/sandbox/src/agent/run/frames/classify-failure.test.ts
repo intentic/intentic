@@ -1,5 +1,4 @@
-import { RESUME_NOTES, RETRY_LADDER_TRIES, type TurnBreakPolicy } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "bun:test";
+import { RETRY_LADDER_TRIES, type TurnBreakPolicy } from "@intentic/sandbox-contract";
 import type { LimitWay } from "../../models/limit-way.js";
 import { OUTAGE_MAX_ATTEMPTS } from "../../providers/provider-health.js";
 import {
@@ -9,9 +8,7 @@ import {
     type FailureContext,
     type FailureQueries,
     type FailureWrite,
-    holdsAsStopped,
     outageFrame,
-    rerunsFresh,
 } from "./classify-failure.js";
 
 const NOW = 1_800_000_000_000;
@@ -29,7 +26,7 @@ const context = (change: Partial<FailureContext> = {}): FailureContext => ({
     attribution,
     sessionId: "s-1",
     answered: true,
-    resumeArmed: false,
+    remint: undefined,
     limitReset: undefined,
     outage: undefined,
     standing,
@@ -41,7 +38,13 @@ const context = (change: Partial<FailureContext> = {}): FailureContext => ({
 
 // Canned answers to every question, recording each one asked.
 const answering = (
-    answers: { readonly policy?: TurnBreakPolicy; readonly reopensAt?: number; readonly way?: LimitWay; readonly made?: number; readonly rung?: number } = {},
+    answers: {
+        readonly policy?: TurnBreakPolicy;
+        readonly reopensAt?: number;
+        readonly way?: LimitWay;
+        readonly made?: number;
+        readonly rung?: number;
+    } = {},
 ): FailureQueries & { readonly asked: unknown[][] } => {
     const asked: unknown[][] = [];
     return {
@@ -68,6 +71,7 @@ const answering = (
 const way: LimitWay = { standing, contextTokens: 9_000, handoffTokens: 1_200 };
 const limit: ErrorFrame = { kind: "error", code: "rate_limit", message: "Claude usage limit reached." };
 const died: ErrorFrame = { kind: "error", message: "the harness crashed" };
+const input = { prompt: "ship it", conversationId: "c-1" };
 
 const refused = (kind: "limit" | "auth" | "entitlement", message: string): FailureWrite[] => [
     { kind: "provider-refusal", provider: "claude", refusal: { at: NOW, kind, message, ...attribution, model: "opus" } },
@@ -80,7 +84,6 @@ describe("a spent allowance", () => {
         const plan = await classifyFailure({ ...limit, resetsAt: 7 }, context({ limitReset: 1_900_000_000 }), queries);
 
         expect(plan).toStrictEqual({
-            ending: "limit",
             frame: {
                 kind: "error",
                 code: "rate_limit",
@@ -106,7 +109,7 @@ describe("a spent allowance", () => {
                     reason: "Claude usage limit reached.",
                 },
             },
-            walls: { limit: { hit: true, reopens: 1_900_000_000, way } },
+            held: { input, reason: "limit", sessionId: "s-1", ran: true, reopensAt: 1_900_000_000, ...way },
         });
         expect(queries.asked).toStrictEqual([
             [
@@ -151,16 +154,15 @@ describe("a spent allowance", () => {
         const queries = answering({ way });
         const plan = await classifyFailure(limit, context({ answered: false }), queries);
         expect(plan.frame).toStrictEqual({ ...limit, held: { ran: false, contextTokens: 9_000, handoffTokens: 1_200 } });
-        expect(plan.walls).toStrictEqual({ limit: { hit: true, reopens: undefined, way } });
+        expect(plan.held).toStrictEqual({ input, reason: "limit", sessionId: "s-1", ran: false, ...way });
         expect(queries.asked.map(([name]) => name)).toStrictEqual(["reopensAt", "limitWay"]);
     });
 
     test("with no reset and no conversation it goes out bare, and says it held nothing", async () => {
         const turn = { prompt: "ship it" };
         const plan = await classifyFailure(limit, context({ turn }), answering({ way }));
-        expect(plan.ending).toBe("bare");
         expect(plan.frame).toBe(limit);
-        expect(plan.walls).toStrictEqual({ limit: { hit: false, reopens: undefined, way: undefined } });
+        expect(plan.held).toBeUndefined();
         expect(plan.log.fields).toStrictEqual({
             turnId: "t-1",
             provider: "claude",
@@ -188,16 +190,34 @@ describe("a spent allowance", () => {
     });
 
     test("on a routed provider with no reset benches nothing", async () => {
-        const plan = await classifyFailure(limit, context({ provider: "codex", model: "gpt-5.1", account: undefined, attribution: {} }), answering({ way }));
+        const plan = await classifyFailure(
+            limit,
+            context({ provider: "codex", model: "gpt-5.1", account: undefined, attribution: {} }),
+            answering({ way }),
+        );
         expect(plan.writes.map(({ kind }) => kind)).toStrictEqual(["provider-refusal", "headroom-refresh"]);
     });
 
     test("on a plan with nothing to poll files the refusal as the account's reading of that model", async () => {
-        const plan = await classifyFailure(limit, context({ provider: "cursor", model: "composer-2.5", attribution: { account: "acct" } }), answering({ way }));
+        const plan = await classifyFailure(
+            limit,
+            context({ provider: "cursor", model: "composer-2.5", attribution: { account: "acct" } }),
+            answering({ way }),
+        );
         expect(plan.writes).toStrictEqual([
-            { kind: "provider-refusal", provider: "cursor", refusal: { at: NOW, kind: "limit", message: "Claude usage limit reached.", account: "acct", model: "composer-2.5" } },
+            {
+                kind: "provider-refusal",
+                provider: "cursor",
+                refusal: { at: NOW, kind: "limit", message: "Claude usage limit reached.", account: "acct", model: "composer-2.5" },
+            },
             { kind: "headroom-refresh", options: { scope: { providers: ["cursor"], account: "acct" }, maxAgeMs: 0 } },
-            { kind: "observed-limit", provider: "cursor", account: "acct", model: "composer-2.5", limit: { at: NOW, message: "Claude usage limit reached." } },
+            {
+                kind: "observed-limit",
+                provider: "cursor",
+                account: "acct",
+                model: "composer-2.5",
+                limit: { at: NOW, message: "Claude usage limit reached." },
+            },
         ]);
     });
 
@@ -218,7 +238,6 @@ describe("an outage", () => {
             context({ outage: { attempt: 0, retryAt: 1_800_000_030_400 } }),
             answering(),
         );
-        expect(plan.ending).toBe("outage");
         expect(plan.frame).toStrictEqual({
             kind: "error",
             code: "provider-outage",
@@ -228,12 +247,14 @@ describe("an outage", () => {
             retries: { made: 0, max: OUTAGE_MAX_ATTEMPTS },
         });
         expect(plan.writes).toStrictEqual([]);
-        expect(plan.walls).toStrictEqual({ outageHit: true });
+        expect(plan.held).toStrictEqual({ input, reason: "outage", sessionId: "s-1", ran: true });
         expect(plan.log.level).toBe("warn");
     });
 
     test("on a conversation armed to retry names the breaker's own clock", () => {
-        expect(outageFrame({ kind: "error", code: "provider-outage", message: "overloaded" }, true, { attempt: 2, retryAt: 1_800_000_030_600 })).toStrictEqual({
+        expect(
+            outageFrame({ kind: "error", code: "provider-outage", message: "overloaded" }, true, { attempt: 2, retryAt: 1_800_000_030_600 }),
+        ).toStrictEqual({
             kind: "error",
             code: "provider-outage",
             message: "overloaded",
@@ -247,26 +268,26 @@ describe("an outage", () => {
     test("past the budget goes out bare and holds nothing", async () => {
         const outage = { kind: "error", code: "provider-outage", message: "overloaded" } as const;
         const plan = await classifyFailure(outage, context({ outage: { attempt: OUTAGE_MAX_ATTEMPTS, retryAt: NOW } }), answering());
-        expect(plan.ending).toBe("bare");
         expect(plan.frame).toBe(outage);
-        expect(plan.walls).toStrictEqual({});
+        expect(plan.held).toBeUndefined();
     });
 });
 
 describe("a refused credential", () => {
     const token: ErrorFrame = { kind: "error", code: "claude-token-refused", message: "401 invalid bearer token" };
 
-    test("is promised a re-mint when the turn can be resumed", async () => {
-        const plan = await classifyFailure(token, context({ resumeArmed: true }), answering());
-        expect(plan).toMatchObject({ ending: "auto-resume", frame: { ...token, autoResume: "scheduled" }, walls: { authRefused: true } });
+    test("is promised a re-mint when the turn can be resumed, and held for it", async () => {
+        const remint = { account: "acct", refusedToken: "tok-1" };
+        const plan = await classifyFailure(token, context({ remint }), answering());
+        expect(plan.frame).toStrictEqual({ ...token, autoResume: "scheduled" });
+        expect(plan.held).toStrictEqual({ input, reason: "auth", sessionId: "s-1", ran: true, remint });
         expect(plan.writes).toStrictEqual(refused("auth", "401 invalid bearer token"));
     });
 
-    test("goes out bare when it cannot be, still marked refused", async () => {
+    test("goes out bare when it cannot be, holding nothing", async () => {
         const plan = await classifyFailure(token, context(), answering());
-        expect(plan.ending).toBe("bare");
         expect(plan.frame).toBe(token);
-        expect(plan.walls).toStrictEqual({ authRefused: true });
+        expect(plan.held).toBeUndefined();
     });
 
     test("that reads as a spent allowance is filed as one", async () => {
@@ -278,7 +299,7 @@ describe("a refused credential", () => {
 test("a switched-off seat is filed against the account, after the provider's refusal", async () => {
     const seat: ErrorFrame = { kind: "error", code: "claude-not-entitled", message: "not enabled" };
     const plan = await classifyFailure(seat, context(), answering());
-    expect(plan.ending).toBe("bare");
+    expect(plan.held).toBeUndefined();
     expect(plan.writes).toStrictEqual([...refused("entitlement", "not enabled"), { kind: "seat-refusal", account: "acct", reason: "not enabled" }]);
     expect((await classifyFailure(seat, context({ account: undefined }), answering())).writes.map(({ kind }) => kind)).toStrictEqual([
         "provider-refusal",
@@ -287,7 +308,11 @@ test("a switched-off seat is filed against the account, after the provider's ref
 });
 
 const unavailable: [string, string | undefined, FailureWrite[]][] = [
-    ["the named model is filed", "opus", [{ kind: "model-refusal", provider: "claude", model: "opus", refusal: { at: NOW, message: "not on your plan" } }]],
+    [
+        "the named model is filed",
+        "opus",
+        [{ kind: "model-refusal", provider: "claude", model: "opus", refusal: { at: NOW, message: "not on your plan" } }],
+    ],
     ["no model files nothing", undefined, []],
     ["the catalog default files nothing", "", []],
 ];
@@ -302,7 +327,6 @@ describe("an uncoded death", () => {
         const queries = answering();
         const plan = await classifyFailure(died, context(), queries);
         expect(plan).toStrictEqual({
-            ending: "stopped",
             frame: { ...died, held: { ran: true, contextTokens: 9_000 }, autoResume: "available" },
             writes: [],
             log: {
@@ -320,7 +344,7 @@ describe("an uncoded death", () => {
                     reason: "the harness crashed",
                 },
             },
-            walls: {},
+            held: { input, reason: "stopped", sessionId: "s-1", ran: true, standing, contextTokens: 9_000 },
         });
         expect(queries.asked).toStrictEqual([
             ["breakPolicy", "c-1", "stopped"],
@@ -329,7 +353,11 @@ describe("an uncoded death", () => {
     });
 
     test("on a conversation that retries names the ladder's next rung, in epoch seconds, and which try it is", async () => {
-        const plan = await classifyFailure(died, context({ contextTokens: undefined }), answering({ policy: "retry", made: 1, rung: 1_800_000_060_500 }));
+        const plan = await classifyFailure(
+            died,
+            context({ contextTokens: undefined }),
+            answering({ policy: "retry", made: 1, rung: 1_800_000_060_500 }),
+        );
         expect(plan.frame).toStrictEqual({
             ...died,
             held: { ran: true },
@@ -361,11 +389,30 @@ describe("an uncoded death", () => {
 
     test.each([
         ["without a conversation", { turn: { prompt: "ship it" } }],
-        ["on a stopped resume the provider never answered", { answered: false, turn: { prompt: `${RESUME_NOTES.stopped}\n\nship it`, conversationId: "c-1" } }],
+        ["on a stopped resume the provider never answered", { answered: false, turn: { ...input, resume: "stopped" } }],
     ] as const)("goes out bare %s", async (_case, change) => {
         const plan = await classifyFailure(died, context(change), answering());
-        expect(plan.ending).toBe("bare");
         expect(plan.frame).toBe(died);
+        expect(plan.held).toBeUndefined();
+    });
+
+    // One decision dresses the frame and fills the hold, so the frame cannot promise the ladder while the hold books a move.
+    test("on a carried re-run the other account refused before it answered is booked there fresh, and the frame says so", async () => {
+        const carried = { ...input, account: "sibling", resume: "carried" } as const;
+        const queries = answering({ policy: "retry", rung: 1_800_000_060_500 });
+        const plan = await classifyFailure(died, context({ answered: false, turn: carried }), queries);
+        expect(plan.frame).toStrictEqual({ ...died, held: { ran: true, contextTokens: 9_000, moving: "sibling" }, autoResume: "scheduled" });
+        expect(plan.held).toStrictEqual({
+            input: carried,
+            reason: "limit",
+            sessionId: "s-1",
+            ran: true,
+            carryRefused: true,
+            move: { account: "sibling", carry: false },
+            standing,
+            contextTokens: 9_000,
+        });
+        expect(queries.asked).toStrictEqual([]);
     });
 
     test("never answered on an ordinary message is still held, as not having run", async () => {
@@ -385,7 +432,6 @@ describe("a session past its window", () => {
         const queries = answering({ policy: "wait" });
         const plan = await classifyFailure(overflow, context(), queries);
         expect(plan).toStrictEqual({
-            ending: "fresh-session",
             frame: {
                 kind: "error",
                 code: "context-overflow",
@@ -411,55 +457,50 @@ describe("a session past its window", () => {
                     reason: "Prompt is too long",
                 },
             },
-            walls: {},
+            held: { input, reason: "overflow", sessionId: "s-1", ran: true, standing, contextTokens: 9_000 },
         });
         expect(queries.asked).toStrictEqual([]);
     });
 
     // At most once per turn: the fresh re-run overflowing as well means no session can hold the turn as asked.
     test("on the fresh re-run itself ends, telling the reader to split the task", async () => {
-        const rerun = context({ turn: { prompt: `${RESUME_NOTES.overflow}\n\nship it`, conversationId: "c-1" } });
+        const rerun = context({ turn: { ...input, resume: "overflow" } });
         const plan = await classifyFailure({ ...overflow, message: "Prompt is too long." }, rerun, answering());
-        expect(plan.ending).toBe("bare");
         expect(plan.frame).toStrictEqual({
             kind: "error",
             code: "context-overflow",
             message:
                 "Prompt is too long. A fresh session could not hold this turn either: the message, an attachment or a tool output it read is larger than the model's context window. Split the task into smaller steps, or read large files and command output in parts.",
         });
-        expect(plan.walls).toStrictEqual({});
+        expect(plan.held).toBeUndefined();
     });
 
     test("without a conversation goes out bare, in the provider's words", async () => {
         const plan = await classifyFailure(overflow, context({ turn: { prompt: "ship it" } }), answering());
-        expect(plan.ending).toBe("bare");
         expect(plan.frame).toBe(overflow);
+        expect(plan.held).toBeUndefined();
     });
-});
-
-test.each([
-    ["a first overflow", "go", { code: "context-overflow" }, true],
-    ["the fresh re-run's own overflow", `${RESUME_NOTES.overflow}\n\ngo`, { code: "context-overflow" }, false],
-    ["an overflow on a stopped resume", `${RESUME_NOTES.stopped}\n\ngo`, { code: "context-overflow" }, true],
-    ["an uncoded death", "go", { code: undefined }, false],
-    ["no failure", "go", undefined, false],
-] as const)("re-runs fresh: %s", (_case, prompt, failure, fresh) => {
-    expect(rerunsFresh(prompt, failure)).toBe(fresh);
 });
 
 test("a coded failure with a remedy of its own is logged as a failure and goes out bare", async () => {
     const coded: ErrorFrame = { kind: "error", code: "context-window-too-small", message: "too small" };
     const plan = await classifyFailure(coded, context({ sessionId: undefined, model: undefined, attribution: {} }), answering());
     expect(plan).toStrictEqual({
-        ending: "bare",
         frame: coded,
         writes: [],
         log: {
             level: "error",
             message: "turn failed",
-            fields: { turnId: "t-1", provider: "claude", harness: "native", code: "context-window-too-small", conversationId: "c-1", reason: "too small" },
+            fields: {
+                turnId: "t-1",
+                provider: "claude",
+                harness: "native",
+                code: "context-window-too-small",
+                conversationId: "c-1",
+                reason: "too small",
+            },
         },
-        walls: {},
+        held: undefined,
     });
 });
 
@@ -468,13 +509,27 @@ test("the log keeps a failure's sentence to its first stretch", async () => {
     expect((await classifyFailure(long, context({ turn: { prompt: "p" } }), answering())).log.fields["reason"]).toBe("x".repeat(ERROR_MESSAGE_CHARS));
 });
 
+// The one decision the frame dresses and the settle records: whether a failure holds the turn, and for which wall.
+const overflowed: ErrorFrame = { kind: "error", code: "context-overflow", message: "Prompt is too long" };
+const refusedToken: ErrorFrame = { kind: "error", code: "claude-token-refused", message: "401" };
+const outage: ErrorFrame = { kind: "error", code: "provider-outage", message: "overloaded" };
 test.each([
-    ["an uncoded death after an answer", "go", true, { code: undefined }, true],
-    ["one before any answer", "go", false, { code: undefined }, true],
-    ["a stopped resume never answered", `${RESUME_NOTES.stopped} go`, false, { code: undefined }, false],
-    ["a stopped resume that answered", `${RESUME_NOTES.stopped} go`, true, { code: undefined }, true],
-    ["a coded failure", "go", true, { code: "rate_limit" }, false],
-    ["no failure", "go", true, undefined, false],
-] as const)("holds as stopped: %s", (_case, prompt, answered, failure, holds) => {
-    expect(holdsAsStopped(prompt, answered, failure)).toBe(holds);
+    ["a spent allowance", "limit", limit, {}],
+    ["an outage within its budget", "outage", outage, { outage: { attempt: 0, retryAt: NOW } }],
+    ["an outage past its budget", undefined, outage, { outage: { attempt: OUTAGE_MAX_ATTEMPTS, retryAt: NOW } }],
+    ["a refused credential that will be re-minted", "auth", refusedToken, { remint: { account: "acct", refusedToken: "tok-1" } }],
+    ["a refused credential that will not", undefined, refusedToken, {}],
+    ["a first overflow", "overflow", overflowed, {}],
+    ["the fresh re-run's own overflow", undefined, overflowed, { turn: { ...input, resume: "overflow" } }],
+    ["an overflow on a stopped resume", "overflow", overflowed, { turn: { ...input, resume: "stopped" } }],
+    ["an uncoded death after an answer", "stopped", died, {}],
+    ["one before any answer", "stopped", died, { answered: false }],
+    ["a stopped resume never answered", undefined, died, { answered: false, turn: { ...input, resume: "stopped" } }],
+    ["a stopped resume that answered", "stopped", died, { turn: { ...input, resume: "stopped" } }],
+    ["a carried re-run refused unanswered", "limit", died, { answered: false, turn: { ...input, account: "sibling", resume: "carried" } }],
+    ["a carried re-run that answered first", "stopped", died, { turn: { ...input, account: "sibling", resume: "carried" } }],
+    ["a coded failure with a remedy of its own", undefined, { kind: "error", code: "context-window-too-small", message: "too small" }, {}],
+    ["an uncoded death with no conversation", undefined, died, { turn: { prompt: "ship it" } }],
+] as const)("%s is held as %s", async (_case, reason, event, change) => {
+    expect((await classifyFailure(event, context(change), answering({ way }))).held?.reason).toBe(reason);
 });

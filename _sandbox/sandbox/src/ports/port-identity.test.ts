@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { identifyPort, type PortAttribution } from "./port-identity.js";
 import type { ListeningPort } from "./port-scan.js";
 

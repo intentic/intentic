@@ -1,7 +1,4 @@
 {
-    "extension": {
-        "workflows": "Workflows"
-    },
     "gateAccess": {
         "anyCi": "Beliebige CI",
         "cancel": "Abbrechen",
@@ -13,8 +10,7 @@
         "postWhatPipelineKnows": "POSTen Sie, was die Pipeline weiß: Commit, Branch, Vorschau-URL — und die Antwort wartet auf den Lauf: ein",
         "rotate": "Rotieren",
         "rotateToken": "Token rotieren",
-        "sureEveryPipelineWired": "Sicher? Jeder Pipeline, die an diese URL verdrahtet ist, muss die neue gegeben werden.",
-        "webhook": "Webhook"
+        "sureEveryPipelineWired": "Sicher? Jeder Pipeline, die an diese URL verdrahtet ist, muss die neue gegeben werden."
     },
     "gatePanel": {
         "addGate": "Ein Gate hinzufügen",
@@ -24,7 +20,6 @@
         "fieldGateReads": "Feld, das das Gate liest",
         "gateGivesWorkflowWebhook": "Ein Gate gibt diesem Workflow einen Webhook, den eine CI-Pipeline aufrufen kann: die Pipeline POSTet, was sie weiß, der ganze Entwurf läuft, und die Antwort ist „pass“, „fail“ oder „blocked“ — abgelesen aus einem deklarierten Feld, nie aus Fließtext gekratzt.",
         "gateReadsDeclaredOutput": "Ein Gate liest ein deklariertes Ausgabefeld, und noch deklariert kein Schritt eines. Geben Sie dem entscheidenden Schritt zuerst ein Datenfeld: wählen Sie ihn auf der Leinwand und fügen Sie unter „Erweitert“ eines hinzu.",
-        "pass": "pass",
         "removeGateUrlStops": "Das Gate entfernen: seine URL hört auf zu funktionieren, und ein künftiges Gate bekommt eine neue",
         "runsPerDay": "Läufe pro Tag",
         "savingMintsWebhookUrl": "Beim Speichern wird die Webhook-URL geprägt: sie erscheint hier und unter dem Gate-Abzeichen auf der Karte des Workflows.",
@@ -52,7 +47,6 @@
         "newLoop": "Neue Schleife",
         "optionalLeaveEmptyAgent": "Optional. Lassen Sie es leer, dann arbeitet der Agent auf das hin, was Sie ins Nachrichtenfeld tippen, wie er es für richtig hält.",
         "optionalOneLineUnder": "Optional. Eine Zeile unter dem Namen in der Auswahl.",
-        "pnpmTest": "pnpm test",
         "reviewerAgrees": "Ein Prüfer stimmt zu",
         "rounds": "Runden",
         "runTestsPickTop": "die Tests laufen lassen, den obersten Fehlschlag nehmen, ihn reparieren",
@@ -89,7 +83,6 @@
         "onlyDone": "Und nur fertig, wenn",
         "personaStep": "Persona für diesen Schritt",
         "pinOneWhereModel": "Heften Sie eines an, wo das Modell Teil des Entwurfs ist: zwei Schritte auf zwei Anbietern sind die Art, sie zu vergleichen. Ohne Zutun läuft dieser Schritt auf dem, was Sie normalerweise benutzen.",
-        "pnpmTest": "pnpm test",
         "removeField": "Feld entfernen",
         "repeatsUntilTrue": "Er wiederholt sich, bis das wahr ist.",
         "required": "erforderlich",
@@ -148,7 +141,6 @@
         "newSessionKnowsOnly": "Eine neue Session weiß nur, was der Schritt davor deklariert hat: die einzig ehrliche Art, Arbeit durchzusehen. Weitermachen behält den Agenten, seinen Faden und seinen Arbeitsbaum.",
         "nothingHereYet": "Noch nichts hier.",
         "onlyStepExactlyOne": "Nur ein Schritt mit genau einem Vorgänger kann eine Session weitertragen.",
-        "optional": "optional",
         "removeDependency": "Diese Abhängigkeit entfernen",
         "runSettings": "Lauf-Einstellungen",
         "sameAgent": "Derselbe Agent",
@@ -204,7 +196,6 @@
         "template": "Vorlage",
         "use": "Verwenden",
         "useTemplate": "Diese Vorlage verwenden",
-        "workflows": "Workflows",
         "workflows2": "Ihre Workflows"
     }
 }

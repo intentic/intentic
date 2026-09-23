@@ -44,7 +44,7 @@ const view = computed(() => {
         <p class="text-sm">{{ t(`views.extensionDocument.notAvailable`, { title }) }}</p>
         <p class="mt-1 text-xs text-muted">
             {{ t(`views.extensionDocument.extensionExplains`) }}
-            <span class="font-mono">{{ path === `` ? t(`views.extensionDocument.workspaceRoot`) : path }}</span>
+            <span class="font-mono">{{ path === `` ? t(`shared.workspaceRoot`) : path }}</span>
             {{ t(`views.extensionDocument.notRunningSwitchBack`) }}
         </p>
     </div>

@@ -7,7 +7,6 @@ import {
     type NativeProvider,
 } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import type { Services } from "../../composition.js";
 import type { PerfFields } from "../../platform/resources/perf.js";
 import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
@@ -16,16 +15,16 @@ import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { sentenceAnswer } from "./role-answer.js";
 
 // Only the readiness sweep is faked; a provider it leaves unnamed is one that cannot run.
-const ready = mock<() => Promise<Partial<Record<NativeProvider, boolean>>>>();
+const ready = jest.fn<() => Promise<Partial<Record<NativeProvider, boolean>>>>();
 const readiness = async (): Promise<Record<NativeProvider, boolean>> => {
     const named = await ready();
     return Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, named[provider] === true])) as Record<NativeProvider, boolean>;
 };
 
 // Faked at the adapter seam, keyed by runtime, so a test can tell which loop a rung took.
-const oneShot = mock<(ask: { model: string }) => Promise<string>>();
-const geminiOneShot = mock<(ask: { model: string }) => Promise<string>>();
-const cursorOneShot = mock<(ask: { model: string }) => Promise<string>>();
+const oneShot = jest.fn<(ask: { model: string }) => Promise<string>>();
+const geminiOneShot = jest.fn<(ask: { model: string }) => Promise<string>>();
+const cursorOneShot = jest.fn<(ask: { model: string }) => Promise<string>>();
 const runners: Record<string, (ask: { model: string }) => Promise<string>> = {
     "claude-code": (ask) => oneShot(ask),
     "opencode-gemini": (ask) => geminiOneShot(ask),

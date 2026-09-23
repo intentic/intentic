@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
 import { parseEnv } from "node:util";
-import { test, expect } from "bun:test";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { createAuthentikProvider } from "./authentik.js";
 import type { AuthentikApi, AuthentikClientSpec } from "./authentik-api.js";

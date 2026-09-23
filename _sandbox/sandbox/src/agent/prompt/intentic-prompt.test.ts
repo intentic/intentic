@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { intenticPromptOf, missedCuts } from "./intentic-prompt.js";
 
 // Shaped like the CLI's own variants: the identity line as its own block, a paragraph whose two IMPORTANT lines are two

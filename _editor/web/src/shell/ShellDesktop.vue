@@ -48,7 +48,7 @@ import { pushBadge } from "../features/workspace/push/pushBadge";
 import { usePushFlow } from "../features/workspace/push/usePushFlow";
 import { usePorts } from "../features/sandbox/environment/usePorts";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
-import { useVpn } from "../features/sandbox/devices/useVpn";
+import { useLiveLinks } from "../features/sandbox/devices/useLiveLinks";
 import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
@@ -111,7 +111,8 @@ const words = useVocabulary();
 const { maker } = useAudience();
 
 // Shown only while a tunnel is connected; an always-present badge would say nothing.
-const { connected: connectedVpns } = useVpn();
+const { links: vpnLinks } = useLiveLinks(`vpn`);
+const connectedVpns = computed(() => vpnLinks.value.filter((link) => link.state === `connected`));
 const vpnLabel = computed(() =>
     connectedVpns.value.length === 1
         ? `VPN connected: ${connectedVpns.value[0]?.id}`
@@ -199,7 +200,7 @@ const fixedTiles = computed<readonly SectionTile[]>(() => [
               {
                   id: `chat`,
                   to: `/chat`,
-                  label: t(`shell.shellDesktop.chat`),
+                  label: t(`shared.chat`),
                   icon: `comments` as IconName,
               },
           ]
@@ -207,7 +208,7 @@ const fixedTiles = computed<readonly SectionTile[]>(() => [
     {
         id: `agents`,
         to: `/agents`,
-        label: t(`shell.shellDesktop.agents`),
+        label: t(`shared.agents`),
         // RailIcon draws by section identity; these generic names remain the fallback vocabulary.
         icon: `robot`,
         // Both come from agentsTile.ts, shared with the phone tab bar; the note names the scope when it's wide.
@@ -233,7 +234,7 @@ const browserTile = computed<SectionTile | undefined>(() => {
     return {
         id: `browsers`,
         to: `/browsers`,
-        label: t(`shell.shellDesktop.browsers`),
+        label: t(`shared.browsers`),
         icon: `desktop`,
         // Neutral: an open browser is inventory, not a debt; warning only when the agent is waiting on the user.
         ...(helping > 0
@@ -253,7 +254,7 @@ const subagentTile = computed<SectionTile | undefined>(() => {
     return {
         id: `subagents`,
         to: `/subagents`,
-        label: t(`shell.shellDesktop.subagents`),
+        label: t(`shared.subagents`),
         icon: `users`,
         // Neutral, as with browsers: a subagent still working is the turn's own doing, not an errand.
         ...(live > 0 ? { badge: { count: live, tone: `neutral` as const, tooltip: t(`shell.shellDesktop.stillWorking`, { live }) } } : {}),
@@ -522,7 +523,13 @@ useKeybindings();
                             class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
                             aria-hidden="true"
                         >
-                            <RailIcon :section="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
+                            <RailIcon
+                                :section="tile.id"
+                                :fallback="tile.icon"
+                                :label="tile.label"
+                                :monogram="tile.monogram"
+                                class="icon-rail-glyph"
+                            />
                         </span>
                         <RouterLink
                             v-else
@@ -533,7 +540,13 @@ useKeybindings();
                             v-tooltip.right="railTileLabel(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
                         >
-                            <RailIcon :section="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
+                            <RailIcon
+                                :section="tile.id"
+                                :fallback="tile.icon"
+                                :label="tile.label"
+                                :monogram="tile.monogram"
+                                class="icon-rail-glyph"
+                            />
                             <!-- Three corners, one scale: `.icon-rail-mark` sets the type size all three are drawn from, so the only thing
      that separates them is the plate — which is the distinction worth seeing, and used to be three sizes. -->
                             <!-- One badge for every tile, core or extension: see SectionTile.badge. -->
@@ -684,8 +697,8 @@ useKeybindings();
                     ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),
                     { 'border-link bg-primary-600/15 text-link': isNavActive('/capabilities') },
                 ]"
-                :aria-label="t(`shell.shellDesktop.addCapability`)"
-                v-tooltip.right="t(`shell.shellDesktop.addCapability`)"
+                :aria-label="t(`shared.addCapability`)"
+                v-tooltip.right="t(`shared.addCapability`)"
             >
                 <RailIcon section="capabilities" class="icon-rail-glyph" />
             </RouterLink>

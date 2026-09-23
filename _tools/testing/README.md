@@ -13,7 +13,9 @@ The test-support seams every package's suites share: deep, self-naming stand-ins
 - [bin/suites.mjs](bin/suites.mjs): every package's `test` script — two `bun test` runs, the unit hang detector and
   the integration budget, each reading the package's own bunfig.toml.
 - [src/bun-preload.ts](src/bun-preload.ts): loaded per file through bunfig.toml — the budget by suite name.
-- [src/bun.ts](src/bun.ts): the `vi.*` surface bun:test lacks — `waitFor`, `stubGlobal`/`stubEnv`,
+- [src/globals.d.ts](src/globals.d.ts): types for the test globals `bun test` defines, named in each test
+  tsconfig's `types` as `@intentic/testing/globals`.
+- [src/bun.ts](src/bun.ts): helpers `bun test` lacks — `waitFor`, `stubGlobal`/`stubEnv`,
   `advanceTimersByTimeAsync`, `freshImport`.
 - [src/dom.ts](src/dom.ts): a jsdom window as globals, for the suite that imports it first.
 - [src/bun-vue.ts](src/bun-vue.ts): the `.vue` loader, so a component test mounts the real SFC.

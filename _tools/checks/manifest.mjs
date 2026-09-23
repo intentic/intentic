@@ -82,7 +82,7 @@ export const CHECKS = [
         needs: "checkout",
         gate: "code",
         fix: ["--fix"],
-        about: "every message catalog holds the same keys in every shipped language (--fix seeds them)",
+        about: "every translation holds only keys English has, with English's placeholders and plural-ness (--fix drops the rest)",
     },
     {
         id: "i18n-literals",

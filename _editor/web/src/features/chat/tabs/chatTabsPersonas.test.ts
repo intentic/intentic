@@ -4,8 +4,6 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { humanizeModelId } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { useChatGrouping } from "../transcript/chatGrouping";
 import { useChat } from "../run/useChat";
@@ -16,9 +14,9 @@ import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-hoisted(() => {
+(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-});
+})();
 
 let app: App | undefined;
 let selected: string[] = [];

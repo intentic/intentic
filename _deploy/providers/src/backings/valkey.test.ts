@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { createValkeyProvider } from "./valkey.js";
 import { createValkeyNamespaceProvider } from "./valkey-namespace.js";

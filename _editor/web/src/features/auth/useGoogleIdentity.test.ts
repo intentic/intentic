@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { idTokenClaims } from "./googleToken";
 
 const segment = (value: unknown): string => btoa(JSON.stringify(value)).replace(/=/g, ``).replace(/\+/g, `-`).replace(/\//g, `_`);

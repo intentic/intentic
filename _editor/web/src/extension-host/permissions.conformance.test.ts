@@ -4,8 +4,6 @@ import { repoRoot } from "@intentic/constants/node";
 import type { IntenticApi } from "@intentic/extension-api";
 import { type ExtensionManifest, ExtensionManifestSchema, extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { type ContractRoute, requestPathFor, SANDBOX_ROUTES } from "@intentic/sandbox-contract";
-import { describe, test, expect, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 
 // Conformance: every daemon route a first-party extension calls must be declared in its manifest's permissions.sandbox,
 // or apiImpl.ts throws at runtime.
@@ -218,7 +216,7 @@ describe.each(declaringCallers)("%s declares every sandbox route it calls", (nam
    through or refused exactly as the same method and path through `json` are, and judged on that same method and path. */
 
 // What a gate that let a call through judged, in the evidence it records: the only trace a permission leaves.
-const judged = hoisted(() => ({ calls: [] as string[] }));
+const judged = { calls: [] as string[] };
 
 // The extensions' typed client, reduced to its gate: a call runs the host's gate, and one let through is sent nowhere.
 const gatedClient = (gate: (procedure: readonly string[], input: unknown) => void): unknown =>
@@ -240,13 +238,13 @@ const gatedClient = (gate: (procedure: readonly string[], input: unknown) => voi
 const sandboxRpcModule = await import("../features/sandbox/client/sandboxRpc");
 const sandboxClientModule = await import("../features/sandbox/client/sandboxClient");
 const sandboxUsageModule = await import("./sandboxUsage");
-mock.module(`../features/sandbox/client/sandboxRpc`, () => ({ ...sandboxRpcModule, gatedSandboxRpc: gatedClient }));
-mock.module(`../features/sandbox/client/sandboxClient`, () => ({
+jest.mock(`../features/sandbox/client/sandboxRpc`, () => ({ ...sandboxRpcModule, gatedSandboxRpc: gatedClient }));
+jest.mock(`../features/sandbox/client/sandboxClient`, () => ({
     ...sandboxClientModule,
     sandboxJson: async () => undefined,
     sandboxRequest: async () => new Response(),
 }));
-mock.module(`./sandboxUsage`, () => ({
+jest.mock(`./sandboxUsage`, () => ({
     ...sandboxUsageModule,
     recordSandboxCall: (_id: string, _permissions: readonly string[], method: string, path: string) => void judged.calls.push(`${method} ${path}`),
 }));
@@ -256,8 +254,10 @@ const manifestOf = (name: string): ExtensionManifest =>
     ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(extensionsRoot, name, "intentic-extension.json"), "utf8")));
 
 const hostApiOf = (manifest: ExtensionManifest): IntenticApi =>
-    createExtensionApi({ id: extensionIdOf(manifest), manifest, commit: `conformance`, source: `builtin`, enabled: true }, { repos: () => [], capabilities: () => [] })
-        .api;
+    createExtensionApi(
+        { id: extensionIdOf(manifest), manifest, commit: `conformance`, source: `builtin`, enabled: true },
+        { repos: () => [], capabilities: () => [] },
+    ).api;
 
 // A value for every `{param}`, so the gate judges a concrete path, as it does for a real call.
 const inputOf = (route: ContractRoute): Record<string, string> =>

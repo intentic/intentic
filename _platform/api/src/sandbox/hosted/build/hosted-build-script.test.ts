@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES, REPORT_HEADERS } from "./hosted-build-script.js";
 
 /* THE SCRIPT'S PROMISES, pinned as text: the brakes it carries are the ones the platform cannot enforce from outside once the builder is running. */

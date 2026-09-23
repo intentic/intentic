@@ -3,8 +3,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as useSandboxOriginal from "../../sandbox/client/useSandbox";
@@ -12,17 +10,17 @@ import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 import { runningTurn } from "../../../testing/runningTurn";
 
 // The import-time globals a mounted chat surface needs.
-hoisted(() => {
+(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
         unobserve(): void {}
         disconnect(): void {}
     } as unknown as typeof globalThis.IntersectionObserver;
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-});
+})();
 
 // Fleet roster and workflow ledger are irrelevant here; empty mocks keep polling out of it.
-mock.module(`../../agents/fleet/useAgents`, () => {
+jest.mock(`../../agents/fleet/useAgents`, () => {
     return {
         useAgents: () => ({
             fleet: computed(() => []),
@@ -31,16 +29,16 @@ mock.module(`../../agents/fleet/useAgents`, () => {
             loadArchived: () => {},
             restore: () => {},
             busyIds: ref([]),
-            setResumeAfterOutage: mock().mockResolvedValue(undefined),
+            setResumeAfterOutage: jest.fn().mockResolvedValue(undefined),
         }),
     };
 });
-mock.module(`../../agents/fleet/useWorkflowRuns`, () => ({
+jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
     ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
 // The composer only renders once the sandbox is reachable; mocked online here.
-mock.module(`../../sandbox/client/useSandbox`, () => {
+jest.mock(`../../sandbox/client/useSandbox`, () => {
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
     const sandboxes = ref([{ id: `sandbox-1`, name: `test` }]);
     return {
@@ -72,7 +70,7 @@ mock.module(`../../sandbox/client/useSandbox`, () => {
 });
 
 // Imported after the mocks, not above them: a static import links the panel's whole graph to the real modules
-// before a single mock.module has run.
+// before a single jest.mock has run.
 const { providerAccounts } = await import("../accounts/providerAccounts");
 const { useChat } = await import("../run/useChat");
 const { queryClient } = await import("../../../lib/queryPersistence");

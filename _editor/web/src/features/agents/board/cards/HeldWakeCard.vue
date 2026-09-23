@@ -69,7 +69,7 @@ const autoRunLabel = computed(() => {
         <div class="flex items-center gap-2.5">
             <OriginMark :origin="entry.origin" />
             <span class="min-w-0 flex-1 truncate text-2xs text-subtle">
-                {{ autoRunLabel ?? t(`agents.heldWakeCard.waiting`) }} · {{ timeAgo(entry.createdAt) }}
+                {{ autoRunLabel ?? t(`shared.waiting`) }} · {{ timeAgo(entry.createdAt) }}
             </span>
             <!-- Compact action buttons use a 44px touch target on coarse pointers. -->
             <Button

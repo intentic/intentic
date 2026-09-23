@@ -1,5 +1,4 @@
 import type { FetchMessageObject } from "imapflow";
-import { test, expect } from "bun:test";
 import { CATCH_UP_MAX, configKeyOf, desiredAccounts, mailboxOf, syncNewMail, type SyncOptions, type SyncSource } from "./connection.js";
 
 const config = { provider: "imap", host: "imap.example.com", port: "993", username: "me@example.com", password: "pw" };

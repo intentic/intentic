@@ -1,4 +1,3 @@
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type FakeFly, installFakeFly } from "./fly-fake.js";
 
@@ -139,7 +138,7 @@ describe("what the fake records", () => {
     });
 
     it("passes anything that is not Fly through to the real fetch", async () => {
-        const elsewhere = mock(async () => new Response(`{"from":"elsewhere"}`));
+        const elsewhere = jest.fn(async () => new Response(`{"from":"elsewhere"}`));
         installFakeFly((name, value) => stubGlobal(name, value), { passThrough: elsewhere });
         const answered = await fetch("https://api.stripe.com/v1/subscriptions/sub_1");
         expect(await answered.json()).toEqual({ from: "elsewhere" });

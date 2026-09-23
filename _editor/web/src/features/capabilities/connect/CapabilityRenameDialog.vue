@@ -44,7 +44,7 @@ const unchanged = computed(() => renamed.value === props.id);
         <form class="flex flex-col gap-3" @submit.prevent="!problem && !unchanged && emit(`rename`, renamed)">
             <Notice v-if="error" :of="error" />
             <label class="ui-field">
-                <span class="ui-field-label">{{ t(`capabilities.capabilityRenameDialog.name`) }}</span>
+                <span class="ui-field-label">{{ t(`shared.name`) }}</span>
                 <!-- Autofocused: the dialog exists to change one field, so the caret starts in it. -->
                 <input
                     v-model="name"

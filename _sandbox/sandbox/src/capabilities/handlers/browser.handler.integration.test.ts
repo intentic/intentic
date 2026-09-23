@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { CapabilityContribution } from "@intentic/extension-manifest";
 import { hasSession, markConnected } from "../../browser/sessions/session-store.js";
 import { packFragment, readPack } from "../../environment/packs.js";

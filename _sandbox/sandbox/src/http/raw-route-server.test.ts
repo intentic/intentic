@@ -1,7 +1,6 @@
 import { type ContractRoute, RAW_ROUTE_LIST, SANDBOX_ROUTES, sandboxContract, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { StandardOpenAPIMatcher } from "@orpc/openapi/standard";
 import { type AnyProcedure, implement } from "@orpc/server";
-import { expect, test } from "bun:test";
 import { Hono } from "hono";
 import type { AppEnv } from "../app-env.js";
 import { rawRouteServer } from "./raw-route-server.js";
@@ -43,7 +42,9 @@ const spellingsOf = (route: ContractRoute): readonly string[] => {
         return route.path.replace(/\{[^}]+\}|\*$/gu, (token) => (token === "*" ? "a/b" : param((index += 1))));
     };
     const path = filled((index) => `p${index}`);
-    const siblings = route.path.includes("{") ? ["search", "connect", "enroll", "session", "credentials", "probe", "register", "self"].map((word) => filled(() => word)) : [];
+    const siblings = route.path.includes("{")
+        ? ["search", "connect", "enroll", "session", "credentials", "probe", "register", "self"].map((word) => filled(() => word))
+        : [];
     return [path, `${path}/`, `${path}//`, `${path}///`, `/${path}`, filled(() => ""), ...siblings];
 };
 

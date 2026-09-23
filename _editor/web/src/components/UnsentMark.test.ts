@@ -1,7 +1,6 @@
 // Tests what the hover says, not the markup: the mark itself can only say a message exists, so the hover carries
 // which one and how long. Mounted with plain Vue, glyph and tooltip stubbed as in MatchLine.test / Subagents.test.
 import "@intentic/testing/dom";
-import { describe, it, expect, spyOn, jest } from "bun:test";
 import { mocked } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 
@@ -40,7 +39,7 @@ describe(`<UnsentMark>`, () => {
     });
 
     it(`names the message and how long it has been standing`, () => {
-        spyOn(Date, `now`).mockReturnValue(1_000_000);
+        jest.spyOn(Date, `now`).mockReturnValue(1_000_000);
         try {
             expect(hintOf({ preview: `fix the login redirect`, at: 1_000_000 - 12 * 60_000 })).toBe(`Not sent, 12m: fix the login redirect`);
         } finally {
@@ -69,7 +68,7 @@ describe(`<UnsentMark>`, () => {
 
     // An attachment or a queued message has nothing to quote; the mark still shows, the hint just omits the words.
     it(`reports the age alone when what is unsent is not typed words`, () => {
-        spyOn(Date, `now`).mockReturnValue(2 * 86_400_000);
+        jest.spyOn(Date, `now`).mockReturnValue(2 * 86_400_000);
         try {
             expect(hintOf({ at: 0 })).toBe(`Not sent, 2d`);
         } finally {

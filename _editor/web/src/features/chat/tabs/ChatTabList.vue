@@ -15,6 +15,7 @@ import { cacheWarm } from "../../agents/fleet/promptCache";
 import HoverCard from "../../../components/HoverCard.vue";
 import RailCard from "../../../components/RailCard.vue";
 import RailLane from "../../../components/RailLane.vue";
+import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
 import { relativeTime } from "../models/catalog";
 import { type CardView, createCardViews, type OpenChat } from "./cardView";
 import ChatTabRow from "./ChatTabRow.vue";
@@ -63,8 +64,8 @@ const router = useRouter();
 const { grouping, set: setGrouping } = useChatGrouping();
 // Labelled "Agents", matching the fleet board's cards and how the product names them elsewhere.
 const GROUPINGS = computed((): readonly { label: string; value: ChatGrouping; title: string }[] => [
-    { label: t(`chat.chatTabList.agents`), value: `lane`, title: t(`chat.chatTabList.everyConversationWindowHolds`) },
-    { label: t(`chat.chatTabList.personas`), value: `persona`, title: t(`chat.chatTabList.peopleSandboxPickOne`) },
+    { label: t(`shared.agents`), value: `lane`, title: t(`chat.chatTabList.everyConversationWindowHolds`) },
+    { label: t(`shared.personas`), value: `persona`, title: t(`chat.chatTabList.peopleSandboxPickOne`) },
 ]);
 
 // The chat the Agents list was showing, parked while Personas is up and restored on return if it still exists.
@@ -164,9 +165,9 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
 // Clear's own words for the lane: the adjective its label counts ("3 working chats"), and what becomes of
 // those chats once they leave this window.
 const LANES = computed((): readonly { key: FleetLane; label: string; dot: string; clears: string; keeps: string }[] => [
-    { key: `attention`, label: t(`chat.chatTabList.attention`), dot: `bg-warning`, clears: `waiting`, keeps: `they keep waiting on the board` },
-    { key: `active`, label: t(`chat.chatTabList.active`), dot: `bg-success`, clears: `working`, keeps: `their turns keep running` },
-    { key: `finished`, label: t(`chat.chatTabList.finished`), dot: `bg-line-strong`, clears: `finished`, keeps: `they stay in Past chats` },
+    { key: `attention`, label: t(`shared.attention`), dot: `bg-warning`, clears: `waiting`, keeps: `they keep waiting on the board` },
+    { key: `active`, label: t(`shared.active`), dot: `bg-success`, clears: `working`, keeps: `their turns keep running` },
+    { key: `finished`, label: t(`shared.finished`), dot: `bg-line-strong`, clears: `finished`, keeps: `they stay in Past chats` },
 ]);
 // What Clear closes per lane, counted off the very set the press sends, so the button can't name a number it
 // doesn't close. Includes the chats a run's row folds away: they lane here too, and the lane is the target.
@@ -333,9 +334,7 @@ const showPreview = (event: MouseEvent, entry: OpenChat): void => {
         // Labelled "Latest" only when two prompts differ; a fresh draft with neither shows no preview.
         messages: [
             ...(first === undefined ? [] : [{ text: first.text, attachments: first.attachments }]),
-            ...(last === undefined || last === first
-                ? []
-                : [{ label: t(`chat.chatTabList.latest`), text: last.text, attachments: last.attachments }]),
+            ...(last === undefined || last === first ? [] : [{ label: t(`shared.latest`), text: last.text, attachments: last.attachments }]),
         ],
     });
 };
@@ -378,20 +377,18 @@ const onRowClick = (event: MouseEvent, id: string): void => {
         relayRows(`focus`, [id], id);
         return;
     }
-    if (event.shiftKey) {
-        const order = rowOrder.value;
-        const from = order.indexOf(anchor.value ?? activeId.value);
-        const to = order.indexOf(id);
-        if (to !== -1) {
-            const run = from === -1 ? [id] : order.slice(Math.min(from, to), Math.max(from, to) + 1);
+    const intent = clickIntent(event);
+    if (intent === `range`) {
+        const run = rangeSelect(rowOrder.value, anchor.value ?? activeId.value, id);
+        if (run !== undefined) {
             setPanes(run);
             relayRows(`panes`, run, id);
         }
         return;
     }
-    if (event.ctrlKey || event.metaKey) {
-        anchor.value = id;
-        // Toggle: a chat with a column gives it back; one without takes a new column beside the focus.
+    anchor.value = id;
+    if (intent === `toggle`) {
+        // A chat with a column gives it back; one without takes a new column beside the focus.
         if (showing(id) && split.value) {
             closePane(id);
             relayRows(`unpane`, [id], id);
@@ -401,7 +398,6 @@ const onRowClick = (event: MouseEvent, id: string): void => {
         relayRows(`beside`, [id], id);
         return;
     }
-    anchor.value = id;
     emit(`select`, id);
     // Resets any split to just this row; matters only where panes are drawn (docked keeps but hides the split).
     collapsePanes();
@@ -437,7 +433,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     const peeked = conversations.value.find((conversation) => conversation.conversationId === id)?.peek.value === true;
     return [
         // Keep Open leads the menu, shown only on a preview tab: same convention and wording as WorkspaceDesktop.
-        ...(peeked ? [{ label: t(`chat.chatTabList.keepOpen`), icon: `pin` as IconName, command: () => keepChat(id) }, { separator: true }] : []),
+        ...(peeked ? [{ label: t(`shared.keepOpen`), icon: `pin` as IconName, command: () => keepChat(id) }, { separator: true }] : []),
         { label: t(`ui.action.rename`), icon: `pencil`, shortcut: commandShortcut(`chat.rename`), command: () => beginRename(id) },
         // Share opens a dialog rather than acting directly; it renders a frozen snapshot, the conversation is
         // unchanged.
@@ -448,32 +444,32 @@ const tabMenuItems = computed<MenuItem[]>(() => {
             ? [
                   // No glyph, like the terminal's Split row; not the ×, which would suggest this ends the chat.
                   showing(id) && split.value
-                      ? { label: t(`chat.chatTabList.closePane`), shortcut: commandShortcut(`chat.closePane`), command: () => closePane(id) }
+                      ? { label: t(`shared.closePane`), shortcut: commandShortcut(`chat.closePane`), command: () => closePane(id) }
                       : { label: t(`chat.chatTabList.openBeside`), shortcut: commandShortcut(`chat.splitView`), command: () => openBeside(id) },
                   { separator: true },
               ]
             : []),
         { label: t(`ui.action.close`), icon: `times`, shortcut: commandShortcut(`chat.closeTab`), command: () => emit(`close`, new Set([id])) },
         {
-            label: t(`chat.chatTabList.closeOthers`),
+            label: t(`shared.closeOthers`),
             disabled: others.size === 0,
             shortcut: commandShortcut(`chat.closeOtherTabs`),
             command: () => emit(`close`, others),
         },
         {
-            label: t(`chat.chatTabList.closeToRight`),
+            label: t(`shared.closeToRight`),
             disabled: toRight.size === 0,
             shortcut: commandShortcut(`chat.closeTabsToRight`),
             command: () => emit(`close`, toRight),
         },
         { separator: true },
         {
-            label: t(`chat.chatTabList.closeFinished`),
+            label: t(`shared.closeFinished`),
             disabled: finished.size === 0,
             shortcut: commandShortcut(`chat.closeFinishedTabs`),
             command: () => emit(`close`, finished),
         },
-        { label: t(`chat.chatTabList.closeAll2`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
+        { label: t(`shared.closeAll2`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
         { separator: true },
         {
             label: floats.value ? `Dock chat back` : `Move chat into new window`,
@@ -523,7 +519,7 @@ const middleCloseTab = (id: string): void => {
             clearable
             :busy="searching"
             :aria-label="t(`chat.chatTabList.filterChatsByMessages`)"
-            :placeholder="t(`chat.chatTabList.filterByMessages`)"
+            :placeholder="t(`shared.filterByMessages`)"
             class="shrink-0"
         />
         <!-- A different list, not this one regrouped — its own component (see ChatPersonaRail). -->
@@ -578,8 +574,8 @@ const middleCloseTab = (id: string): void => {
                             v-model="edit.draft"
                             type="text"
                             maxlength="80"
-                            :aria-label="t(`chat.chatTabList.chatTitle`)"
-                            :placeholder="c.isolated.value ? t(`chat.chatTabList.newAgent`) : t(`chat.chatTabList.newChat`)"
+                            :aria-label="t(`shared.chatTitle`)"
+                            :placeholder="c.isolated.value ? t(`shared.newAgent`) : t(`shared.newChat`)"
                             class="ui-field-box ui-field-inline w-full shrink-0 select-text rounded-lg px-2.5 py-2 text-xs font-semibold placeholder:font-normal"
                             @keydown.enter.stop.prevent="edit.commit()"
                             @keydown.esc.stop.prevent="edit.cancel()"
@@ -617,7 +613,7 @@ const middleCloseTab = (id: string): void => {
                     @click="showAllFinished = !showAllFinished"
                 >
                     <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                    {{ showAllFinished ? t(`chat.chatTabList.showFewer`) : t(`chat.chatTabList.earlier`, { hiddenFinished }) }}
+                    {{ showAllFinished ? t(`shared.showFewer`) : t(`shared.earlier`, { hiddenFinished }) }}
                 </button>
             </RailLane>
 
@@ -641,12 +637,7 @@ const middleCloseTab = (id: string): void => {
                     >
                         <template #meta>
                             <!-- Archived, not gone: the branch, diff and transcript all survive, so this is a real destination. -->
-                            <Icon
-                                v-if="agent.archivedAt !== undefined"
-                                name="box"
-                                class="shrink-0 text-2xs"
-                                :aria-label="t(`chat.chatTabList.archived`)"
-                            />
+                            <Icon v-if="agent.archivedAt !== undefined" name="box" class="shrink-0 text-2xs" :aria-label="t(`shared.archived`)" />
                             <span v-if="agent.updatedAt > 0" class="ml-auto shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
                         </template>
                     </RailCard>

@@ -1,7 +1,5 @@
 import { type AgentEvent, type AgentReply, AgentReplySchema, type RequestField } from "@intentic/sandbox-contract";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
-import { hoisted } from "@intentic/testing/bun";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { ref } from "vue";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import type { SandboxRpc } from "../../sandbox/client/sandboxRpc";
@@ -11,8 +9,8 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // frozen only once the daemon took it, and what each kind of answer then does to the turn.
 
 // The daemon's reply route, the only call an answer makes; a test holds it open or refuses it.
-const { replyRoute } = hoisted(() => ({ replyRoute: mock<SandboxRpc["agent"]["reply"]>(async () => ({ ok: true as const })) }));
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { reply: replyRoute } }) }));
+const { replyRoute } = { replyRoute: jest.fn<SandboxRpc["agent"]["reply"]>(async () => ({ ok: true as const })) };
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { reply: replyRoute } }) }));
 
 const { CardReplies, afterReply, planFeedback, refusalOf, requestIdOf } = await import("./cardReplies");
 const { TranscriptClock } = await import("../transcript/transcriptClock");
@@ -92,7 +90,7 @@ const parkedOn = (...events: AgentEvent[]) => {
     }
     const transcript = new TranscriptClock(() => undefined);
     transcript.rebuild(fold.rows);
-    const turn = { stop: mock(), endedByReader: mock() };
+    const turn = { stop: jest.fn(), endedByReader: jest.fn() };
     const host = { box: ref<string | undefined>(`box-2`), transcript, error: ref<string | null>(null), turn, peek: ref(true) };
     const cardOf = (field: RequestField, requestId: string) => transcript.messages.value.find((row) => row[field]?.requestId === requestId)?.[field];
     return { host, turn, cardOf, replies: new CardReplies(host) };

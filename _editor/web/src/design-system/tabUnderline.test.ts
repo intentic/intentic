@@ -6,7 +6,6 @@
 // which is invisible in a screenshot of either state on its own. Lives here rather than beside the recipe because
 // @intentic/ui has no test runner; turbo re-runs this whenever the kit changes, since web depends on it.
 import "@intentic/testing/dom";
-import { it, expect } from "bun:test";
 import { ui } from "@intentic/ui";
 
 const classesOf = (active: boolean, ...overrides: string[]): string[] =>

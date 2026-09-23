@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, beforeEach } from "bun:test";
 import {
     activateVersion,
     collectGarbage,

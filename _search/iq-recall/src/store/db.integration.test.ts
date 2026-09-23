@@ -1,7 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import { openRecallDb } from "./db.js";
 
 let dir: string;

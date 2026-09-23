@@ -2,7 +2,6 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 
 // Exercises real processes and a real flock, not the pure policy (tested elsewhere): what happens to a slot when a
 // process doesn't exit politely. Timings are coarse; assertions are on order and count, never on latency.

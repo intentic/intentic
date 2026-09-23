@@ -1,5 +1,4 @@
 import { zstdDecompressSync, brotliDecompressSync, gunzipSync } from "node:zlib";
-import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { codingFor, compressResponses, MIN_COMPRESSED_BYTES } from "./compress-responses.js";
 

@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createResidentEngine, type QueryOutcome, type ResidentEngine } from "@intentic/iq-engine";
 import type { Logger } from "pino";
-import { test, expect, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { retrievalEvidenceOf, retrieveTurnContext, TURN_CONTEXT_NOTE_HEADER, type TurnContextDeps } from "./turn-context.js";
 import { stripTurnPreamble, withTurnPreamble } from "../../prompt/turn-preamble.js";
@@ -28,8 +27,8 @@ const outcome = (overrides: Partial<QueryOutcome> = {}): QueryOutcome => ({
     ...overrides,
 });
 
-const warn = mock();
-const debug = mock();
+const warn = jest.fn();
+const debug = jest.fn();
 const depsOf = (run: ResidentEngine["run"]): TurnContextDeps => ({
     iq: { run },
     logger: { warn, debug } as unknown as Pick<Logger, "warn" | "debug">,
@@ -156,7 +155,7 @@ test("the pre-injected query holds no stage back: the engine runs its full pipel
 });
 
 test("an ineligible prompt never reaches the engine", async () => {
-    const run = mock();
+    const run = jest.fn();
     expect(await retrieveTurnContext(depsOf(run as unknown as ResidentEngine["run"]), "go for it")).toMatchObject({ skipped: "ineligible" });
     expect(run).not.toHaveBeenCalled();
 });

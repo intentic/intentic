@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { cleanTranscription } from "./whisper.js";
 
 test("flattens whisper output onto one line", () => {

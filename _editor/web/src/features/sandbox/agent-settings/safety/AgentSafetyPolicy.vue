@@ -27,7 +27,7 @@ const draft = useDraft(() => (isLoading.value ? undefined : text.value));
             :saving="isSaving"
             save="explicit"
             :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)"
-            :placeholder="isLoading ? t(`sandbox.agentSafetyPolicy.loading`) : t(`sandbox.agentSafetyPolicy.whatAssistantShouldStop`)"
+            :placeholder="isLoading ? t(`shared.loading`) : t(`sandbox.agentSafetyPolicy.whatAssistantShouldStop`)"
             @save="save"
         >
             <template #note>
@@ -36,6 +36,8 @@ const draft = useDraft(() => (isLoading.value ? undefined : text.value));
             </template>
         </MarkdownDocument>
 
-        <RowNote v-if="error !== undefined" variant="block"><Notice tone="danger" class="text-2xs">{{ error }}</Notice></RowNote>
+        <RowNote v-if="error !== undefined" variant="block"
+            ><Notice tone="danger" class="text-2xs">{{ error }}</Notice></RowNote
+        >
     </RowGroup>
 </template>

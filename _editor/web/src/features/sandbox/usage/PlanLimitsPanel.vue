@@ -150,7 +150,7 @@ const roster = computed(() => {
 
 <template>
     <!-- `@container` over the section: columns thin against the panel, not the window's width. -->
-    <RowGroup v-if="rows.length > 0" id="accounts" class="@container" :label="t(`sandbox.planLimitsPanel.planLimits`)">
+    <RowGroup v-if="rows.length > 0" id="accounts" class="@container" :label="t(`shared.planLimits`)">
         <!-- 1. CAPACITY: headline is a count, not a percentage, since that question survives having 31 accounts. -->
         <RowNote variant="block">
             <div class="flex flex-col gap-2">
@@ -267,11 +267,7 @@ const roster = computed(() => {
                                             {{ formatUtilization(pool.percent, row.stale) }}
                                         </span>
                                         <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
-                                            {{
-                                                pool.resetsAt === undefined
-                                                    ? ``
-                                                    : t(`sandbox.planLimitsPanel.resets`, { resetsAt: formatReset(pool.resetsAt) })
-                                            }}
+                                            {{ pool.resetsAt === undefined ? `` : t(`shared.resets`, { resetsAt: formatReset(pool.resetsAt) }) }}
                                         </span>
                                     </div>
                                 </div>
@@ -357,8 +353,8 @@ const roster = computed(() => {
                         v-model="rosterQuery"
                         variant="field"
                         clearable
-                        :aria-label="t(`sandbox.planLimitsPanel.filterAccounts`)"
-                        :placeholder="t(`sandbox.planLimitsPanel.filterAccounts2`)"
+                        :aria-label="t(`shared.filterAccounts2`)"
+                        :placeholder="t(`shared.filterAccounts`)"
                         class="ml-auto w-full @xl:w-56"
                     />
                 </div>
@@ -367,8 +363,8 @@ const roster = computed(() => {
                     <table class="w-full text-2xs">
                         <thead class="text-left text-subtle">
                             <tr class="border-b border-line-subtle">
-                                <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.account`) }}</th>
-                                <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.provider`) }}</th>
+                                <th class="py-1.5 pr-3 font-medium">{{ t(`shared.account`) }}</th>
+                                <th class="py-1.5 pr-3 font-medium">{{ t(`shared.provider`) }}</th>
                                 <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.bindingPool`) }}</th>
                                 <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.planLimitsPanel.used`) }}</th>
                                 <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.reopens`) }}</th>
@@ -404,7 +400,7 @@ const roster = computed(() => {
     <!-- An unread state is not an empty one: drawn as the panel itself (headline, band strip, legend), not a "Reading..." sentence in its place. -->
     <RowGroup v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
         <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
-        <span class="sr-only">{{ t(`sandbox.planLimitsPanel.readingConnections`) }}</span>
+        <span class="sr-only">{{ t(`shared.readingConnections`) }}</span>
         <RowNote variant="block" aria-hidden="true">
             <div class="flex flex-col gap-2">
                 <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">

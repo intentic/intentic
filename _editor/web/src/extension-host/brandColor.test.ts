@@ -1,7 +1,6 @@
 // The subpath, not the barrel: brandColor.ts is pure arithmetic, and `@intentic/ui` would drag the whole component
 // graph (and a `window`) into a node-environment suite.
 import { brandPalette, contrastRatio, lightnessSeparation, officialHex } from "@intentic/ui/brand-color";
-import { describe, it, expect } from "bun:test";
 
 // Every brand in the catalog is legible in both schemes and keeps as much of its own colour as that allows. The marks
 // are painted in the theme's text colour where honouring the brand hex would be unreadable; brandColor.ts computes that

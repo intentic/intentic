@@ -55,7 +55,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
                     :class="ui.iconButton(`hover:bg-content/10`)"
                     @click="openLogs(row)"
                     v-tooltip.top="t(`terminal.backgroundProcesses.viewLogsReadOnly`)"
-                    :aria-label="t(`terminal.backgroundProcesses.viewLogs`)"
+                    :aria-label="t(`shared.viewLogs`)"
                 >
                     <Icon name="align-left" class="text-2xs" />
                 </button>
@@ -76,8 +76,8 @@ const openLogs = (row: BackgroundProcessRow): void => {
                     :class="ui.iconButton(`hover:bg-content/10`)"
                     :disabled="busy === row.id"
                     @click="start(row)"
-                    v-tooltip.top="t(`terminal.backgroundProcesses.restart`)"
-                    :aria-label="t(`terminal.backgroundProcesses.restart`)"
+                    v-tooltip.top="t(`shared.restart`)"
+                    :aria-label="t(`shared.restart`)"
                 >
                     <Icon name="refresh" class="text-2xs" />
                 </button>

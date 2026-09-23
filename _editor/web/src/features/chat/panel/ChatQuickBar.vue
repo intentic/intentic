@@ -8,6 +8,7 @@ import { focusComposer } from "../tabs/useChat-tabs";
 import { useChat } from "../run/useChat";
 import { useT } from "@intentic/ui/i18n";
 import IdentityTile from "../../capabilities/connect/IdentityTile.vue";
+import { contextPct } from "../../agents/fleet/agentStatus";
 
 // The chat's home while it is parked: a pill floating over the bottom of the area that grows into the focused chat's
 // own composer. The panel teleports here (PoppablePanels), so this is never a second composer — the words, the model,
@@ -60,12 +61,8 @@ const rim = computed<{ percent: number; tone: string; spin: boolean } | undefine
     if (streaming.value) {
         return { percent: 25, tone: `text-link`, spin: true };
     }
-    const usage = contextUsage.value;
-    if (usage === undefined || usage.contextWindow <= 0) {
-        return undefined;
-    }
-    const percent = Math.min(100, Math.round((usage.tokens / usage.contextWindow) * 100));
-    return { percent, tone: percent >= 80 ? `text-warning` : `text-primary-500`, spin: false };
+    const percent = contextPct(contextUsage.value?.tokens, contextUsage.value?.contextWindow);
+    return percent === undefined ? undefined : { percent, tone: percent >= 80 ? `text-warning` : `text-primary-500`, spin: false };
 });
 
 // Hover opens on intent, not on contact: the bottom of the area is also the way to a scrollbar and to the terminal,
@@ -242,7 +239,7 @@ const restingLine = computed(() => {
     if (standing.value === `unsent`) {
         return draft.value.trim();
     }
-    return title.value ?? (standing.value === `working` ? t(`chat.chatQuickBar.working`) : t(`chat.chatQuickBar.askAnything`));
+    return title.value ?? (standing.value === `working` ? t(`shared.working`) : t(`shared.askAnything`));
 });
 
 // A question can only be answered where its card is drawn, so here the press is a door, not a disclosure.

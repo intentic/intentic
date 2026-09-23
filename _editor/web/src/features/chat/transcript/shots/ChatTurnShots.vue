@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from "vue";
 import { useT } from "@intentic/ui/i18n";
 import { stopWaiting, whenNear } from "../../../workspace/home/nearViewport";
 import { type ChatShot, shotName } from "./shots";
-import { stripOf, viewOf } from "./shotPictures";
+import { picture } from "../../../workspace/home/thumbnails";
 
 // The pictures a finished turn's tools showed the agent, standing at the turn's end where its answer is read: the last
 // few as tiles, the rest behind a count on the first. A press opens the conversation's viewer at that picture.
@@ -12,7 +12,7 @@ const t = useT();
 
 const props = defineProps<{
     shots: readonly ChatShot[];
-    // Whose checkout the pictures are read in (shotPictures), undefined for the shared tree.
+    // Whose checkout the pictures are read in (thumbnails.ts), undefined for the shared tree.
     agent: string | undefined;
 }>();
 
@@ -40,14 +40,14 @@ onBeforeUnmount(() => {
 
 // A pointer resting on a tile is about to open it: its view starts coming now, not on the press.
 const prefetch = (shot: ChatShot): void => {
-    viewOf(props.agent, shot.path);
+    picture(props.agent, shot.path, `view`);
 };
 
 const tiles = computed(() =>
     props.shots.slice(-SHOWN).map((shot, index) => ({
         shot,
         name: shotName(shot.path),
-        picture: near.value ? stripOf(props.agent, shot.path) : undefined,
+        picture: near.value ? picture(props.agent, shot.path, `strip`) : undefined,
         // The counted tile opens the turn's first shot, so the viewer walks forward through everything it stands for.
         opens: index === 0 && earlier.value > 0 ? props.shots[0]! : shot,
         counted: index === 0 && earlier.value > 0,
@@ -71,11 +71,17 @@ const tiles = computed(() =>
         >
             <!-- Cropped from the top: a full-page capture is tall, and its top is the part that says which page it is. -->
             <img v-if="tile.picture?.url" :src="tile.picture.url" alt="" class="h-full w-full object-cover object-top" />
-            <span v-else-if="tile.picture" class="flex h-full w-full flex-col items-center justify-center gap-1 px-1 text-center text-2xs text-subtle">
-                <Icon name="image" class="text-xs" />{{ t(`chat.chatTurnShots.gone`) }}
+            <span
+                v-else-if="tile.picture"
+                class="flex h-full w-full flex-col items-center justify-center gap-1 px-1 text-center text-2xs text-subtle"
+            >
+                <Icon name="image" class="text-xs" />{{ t(`shared.gone`) }}
             </span>
             <span v-else class="block h-full w-full animate-pulse" />
-            <span v-if="tile.counted" class="absolute inset-0 flex items-center justify-center bg-canvas/70 text-sm font-medium text-content tabular-nums">
+            <span
+                v-if="tile.counted"
+                class="absolute inset-0 flex items-center justify-center bg-canvas/70 text-sm font-medium text-content tabular-nums"
+            >
                 {{ t(`chat.chatTurnShots.more`, { count: earlier + 1 }) }}
             </span>
         </button>

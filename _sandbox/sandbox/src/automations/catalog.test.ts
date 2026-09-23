@@ -1,7 +1,6 @@
 import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { CHORES } from "@intentic/sandbox-contract/chores";
 import { Cron } from "croner";
-import { describe, test, expect } from "bun:test";
 import { CORE_AUTOMATION_TEMPLATES, FIELD_NOTES_AUTOMATION_ID } from "./catalog.js";
 
 // Pins that scheduled chore templates come from `@intentic/sandbox-contract/chores`, not hand-written here.

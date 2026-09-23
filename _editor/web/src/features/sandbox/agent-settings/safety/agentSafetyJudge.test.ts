@@ -4,17 +4,16 @@ import "@intentic/testing/dom";
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
-import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-const patch = mock((fields: Partial<SandboxSettings>) => {
+const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-mock.module(`../../overview/useSandboxSettings`, () => ({
+jest.mock(`../../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
@@ -25,8 +24,8 @@ const CATALOGS: Record<string, readonly { value: string; label: string }[]> = {
 };
 const connected = ref<readonly string[]>([`codex`, `claude`]);
 
-mock.module(`../../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
-mock.module(`../../../chat/accounts/providerCatalog`, () => ({
+jest.mock(`../../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
+jest.mock(`../../../chat/accounts/providerCatalog`, () => ({
     endpointProviders: ref([]),
     providerModels: ref({}),
     modelOptionsFor: (provider: string) => CATALOGS[provider] ?? [],

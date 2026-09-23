@@ -1,17 +1,17 @@
 import { type EditorContext, isAwaitingDecision, type TranscriptRow } from "@intentic/sandbox-contract";
 import { basename } from "@intentic/ui/path";
-import { computed, ref, type Ref } from "vue";
+import { computed, ref } from "vue";
 import { trackPerf } from "../../../app/perf";
 import { uuid } from "../../../lib/uuid";
 import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import type { SessionRef } from "../run/turnRequest";
 import type { AttachEntry, TurnContext } from "../run/turnStream";
 import { olderTranscriptPage } from "../transcript/agentTranscript";
 import { type ChatAttachment, type ChatMessage, recordedRows, withCancelledCards } from "../transcript/transcript";
 import { readTranscript, saveTranscript } from "../transcript/transcriptCache";
 import { TranscriptClock } from "../transcript/transcriptClock";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
+import type { Conversation } from "./conversation";
 import type { TurnClient } from "./turnClient";
 
 // One conversation's transcript as a reader sees it: the rows and their clock (TranscriptClock), the pages above them,
@@ -24,24 +24,15 @@ const rewindRefusal = (status: number): string => {
     if (status === 409) {
         return `This agent is running a turn, stop it before going back.`;
     }
-    return status === 412 ? `This conversation has moved on since you opened it: reload it and try again.` : `That message can no longer be gone back to.`;
+    return status === 412
+        ? `This conversation has moved on since you opened it: reload it and try again.`
+        : `That message can no longer be gone back to.`;
 };
 
 // What an edit and a rewind need from the conversation around the transcript.
-export interface TranscriptHost {
-    readonly conversationId: string;
-    // The box every read and write here is aimed at; undefined for the active sandbox.
-    readonly box: Ref<string | undefined>;
-    // The composer an armed edit borrows and hands back.
-    readonly draft: Ref<string>;
-    readonly attachments: Ref<PendingAttachment[]>;
-    // The conversation's red line, which a refused rewind or place writes, and a redraw clears.
-    readonly error: Ref<string | null>;
-    // The session a rewind or a place retires: the next turn opens a fresh one.
-    readonly session: Ref<SessionRef | undefined>;
-    // The runs: a live one a mirror must never paint over, and the send an edit makes once its rewind has landed.
+export type TranscriptHost = Pick<Conversation, "conversationId" | "box" | "draft" | "attachments" | "error" | "session"> & {
     readonly turn: Pick<TurnClient, "streaming" | "say">;
-}
+};
 
 export class TranscriptView extends TranscriptClock {
     // True while a transcript read is in flight and nothing is painted, so the panel shows loading instead.
@@ -65,6 +56,13 @@ export class TranscriptView extends TranscriptClock {
 
     // Message being re-asked, keyed by id; disarmed by any transcript replacement, since ids repeat across transcripts.
     readonly editing = ref<{ readonly id: number; readonly restore: string; readonly attachments: readonly PendingAttachment[] } | undefined>();
+
+    // The ids an armed edit would drop, from the edited message down; by id, since ids survive a streaming rebuild.
+    readonly doomed = computed<ReadonlySet<number>>(() => {
+        const id = this.editing.value?.id;
+        const from = id === undefined ? -1 : this.messages.value.findIndex((message) => message.id === id);
+        return new Set(from < 0 ? [] : this.messages.value.slice(from).map((message) => message.id));
+    });
 
     // `applied` hears every entry after its rows landed, in arrival order (TranscriptClock).
     constructor(

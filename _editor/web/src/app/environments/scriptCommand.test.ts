@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot as findRepoRoot } from "@intentic/constants/node";
-import { test, expect, mock } from "bun:test";
 import type { WebEnvironment } from "./environment";
 
 // environment.ts reads `window.env` once, at import; this is the same object under the same name, and the module
@@ -13,7 +12,7 @@ const environment: WebEnvironment = {
     analytics: { posthogKey: ``, posthogHost: `` },
     afterSignOut: ``,
 };
-mock.module("./environment", () => ({ environment }));
+jest.mock("./environment", () => ({ environment }));
 
 const { SCRIPT_PATHS, bashCommand, psCommand, scriptSource } = await import("./scriptCommand");
 

@@ -2,7 +2,6 @@ import "@intentic/testing/dom";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
-import { afterEach, describe, expect, it, jest, mock } from "bun:test";
 import { type EffectScope, effectScope, nextTick, reactive, ref, shallowRef } from "vue";
 import type { LocationQuery, RouteLocationRaw, Router } from "vue-router";
 import { agentTabOf } from "../../../chat/panel/useChat-reveal";
@@ -138,14 +137,14 @@ describe(`the ring`, () => {
 describe(`a press on a card`, () => {
     const boardOf = (roster: FleetAgent[], strip: Strip = EMPTY_STRIP) => {
         const cards = shallowRef(roster);
-        const summon = mock((_summons: Summons) => undefined);
-        const push = mock(async (_to: RouteLocationRaw) => undefined);
-        const replace = mock(async (_to: RouteLocationRaw) => undefined);
+        const summon = jest.fn((_summons: Summons) => undefined);
+        const push = jest.fn(async (_to: RouteLocationRaw) => undefined);
+        const replace = jest.fn(async (_to: RouteLocationRaw) => undefined);
         const resolve = (to: RouteLocationRaw) => ({ href: typeof to === `string` ? to : JSON.stringify(to) });
         const router = unstubbed<Router>(`router`, { push, replace, resolve: resolve as unknown as Router[`resolve`] });
         const route = reactive({ query: {} as LocationQuery });
-        const reveal = mock(async (_id: string) => undefined);
-        const move = mock((_event: ViewEvent) => undefined);
+        const reveal = jest.fn(async (_id: string) => undefined);
+        const move = jest.fn((_event: ViewEvent) => undefined);
         const suppressed = { next: false };
         const host = {
             mobile: ref(false),
@@ -157,8 +156,8 @@ describe(`a press on a card`, () => {
                 sessionMatches: shallowRef([{ id: `s1`, title: `Old chat` }]),
             },
             agents: {
-                open: mock((_agent: FleetAgent, _mode?: `peek` | `keep`) => undefined),
-                markSeen: mock((_id: string) => undefined),
+                open: jest.fn((_agent: FleetAgent, _mode?: `peek` | `keep`) => undefined),
+                markSeen: jest.fn((_id: string) => undefined),
                 agentById: (id: string) => cards.value.find((agent) => agent.id === id),
             },
             lanes: { paneOrder: shallowRef(roster), finishedWindow: shallowRef({ shown: roster.slice(0, 2) }) },
@@ -273,11 +272,11 @@ describe(`a link to a card`, () => {
     const linked = (roster: FleetAgent[], over: { mobile?: boolean; filtering?: boolean } = {}) => {
         const cards = shallowRef<FleetAgent[]>([]);
         const route = reactive({ query: { focus: `a9`, tab: `x` } as LocationQuery });
-        const replace = mock(async (_to: RouteLocationRaw) => undefined);
+        const replace = jest.fn(async (_to: RouteLocationRaw) => undefined);
         const router = unstubbed<Router>(`router`, { replace });
-        const open = mock((_agent: FleetAgent, _mode?: `peek` | `keep`) => undefined);
-        const move = mock((_event: ViewEvent) => undefined);
-        const reveal = mock(async (_id: string) => undefined);
+        const open = jest.fn((_agent: FleetAgent, _mode?: `peek` | `keep`) => undefined);
+        const move = jest.fn((_event: ViewEvent) => undefined);
+        const reveal = jest.fn(async (_id: string) => undefined);
         const query = ref(`log`);
         const mobile = ref(over.mobile ?? false);
         const strip = shallowRef(EMPTY_STRIP);

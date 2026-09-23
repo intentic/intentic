@@ -17,7 +17,6 @@
         "upstreamBranchDeleted": "La rama upstream fue eliminada"
     },
     "extension": {
-        "git": "Git",
         "history": "Historial",
         "openGitHistory": "Abrir el historial de git"
     },
@@ -28,13 +27,10 @@
         "cancel": "Cancelar",
         "changed": "{count} cambiados",
         "changedFiles": "{count} archivo cambiado | {count} archivos cambiados",
-        "checkout": "Checkout…",
-        "checkout2": "Checkout",
         "checkout3": "Checkout de {local}",
         "cherryPick": "Cherry pick…",
         "clearFilter": "Vaciar el filtro",
         "clickToPeekDouble": "Clic para echar un vistazo · doble clic para conservar la pestaña",
-        "commit": "Commit",
         "conflicted": "{conflicted} en conflicto",
         "copyCommitHash": "Copiar el hash del commit",
         "copyCommitSubject": "Copiar el asunto del commit",
@@ -48,7 +44,6 @@
         "filterCommits": "Filtrar commits…",
         "filterCommitsByMessage": "Filtrar commits por mensaje, autor o sha",
         "hardDiscardsUncommittedChanges": "Hard: descarta los cambios sin commit del worktree.",
-        "head": "HEAD",
         "inProgress": "Hay un {operation} en curso",
         "loadingChangedFiles": "Cargando los archivos cambiados…",
         "loadingOlderCommits": "Cargando commits más antiguos…",
@@ -59,7 +54,6 @@
         "noLoadedCommitMatches": "Ningún commit cargado coincide. Desplázate para cargar más historial y busca de nuevo.",
         "of": "{count} de {count2}",
         "parents": "Padres",
-        "push": "Push",
         "pushTo": "Push a {remote}",
         "readingRepositorysHistory": "Leyendo el historial de este repositorio…",
         "rebaseCurrentBranchOn": "Rebasar la rama actual sobre este commit…",

@@ -3,7 +3,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookCallback, HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { IsolationPlan } from "../../../agents/worktrees/isolation.js";
 import { approveHookSet, HOOKS_HELD_NOTE, hookRequests } from "../../../guard/hook-approvals.js";
 import type { TurnPolicy, TurnSpec } from "../../providers/agent-request.js";
@@ -34,7 +33,12 @@ const writeHooks = (root: string, command = "echo done"): Promise<void> =>
     writeSettings(root, { hooks: { Stop: [{ hooks: [{ type: "command", command }] }] } });
 
 const turnAt = (cwd: string, isolation?: TurnSpec["isolation"]): { readonly spec: TurnSpec; readonly policy: TurnPolicy } => ({
-    spec: { prompt: "hello", cwd, notes: [{ title: "earlier", text: "a note planning already added" }], ...(isolation === undefined ? {} : { isolation }) },
+    spec: {
+        prompt: "hello",
+        cwd,
+        notes: [{ title: "earlier", text: "a note planning already added" }],
+        ...(isolation === undefined ? {} : { isolation }),
+    },
     policy: { unattended: true },
 });
 

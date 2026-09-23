@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { test, expect, afterEach, spyOn } from "bun:test";
 import { stubGlobal } from "@intentic/testing/bun";
 
 // The desktop app's webview drops a `target="_blank"` press without telling the app anything (WebView2 raises its
@@ -103,7 +102,7 @@ test("every other link on the page is left exactly as it was", () => {
 
 test("in a browser nothing is installed at all: `_blank` needs no help there", () => {
     asApp(undefined);
-    const watching = spyOn(document, `addEventListener`);
+    const watching = jest.spyOn(document, `addEventListener`);
     try {
         installDesktopLinks();
         expect(watching).not.toHaveBeenCalled();

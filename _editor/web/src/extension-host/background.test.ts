@@ -1,7 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { IntenticApi } from "@intentic/extension-api";
 import { resetSandboxScope, sandboxLedger, sandboxPoll } from "@intentic/extension-api";
-import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 // The background pair (extension-api/src/background.ts), tested from here since the SDK ships no test harness of its
@@ -57,7 +56,7 @@ describe(`sandboxPoll`, () => {
     it(`reads once on start and then on the interval, and stops when disposed`, async () => {
         jest.useFakeTimers();
         const { api } = fakeApi();
-        const read = mock(async () => `answer`);
+        const read = jest.fn(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 1_000, initial: () => ``, read });
 
         const running = poll.start();
@@ -75,7 +74,7 @@ describe(`sandboxPoll`, () => {
 
     it(`skips the opening read when the caller has nothing to ask yet`, async () => {
         const { api } = fakeApi();
-        const read = mock(async () => `answer`);
+        const read = jest.fn(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 60_000, immediate: false, initial: () => ``, read });
 
         poll.start().dispose();
@@ -86,7 +85,7 @@ describe(`sandboxPoll`, () => {
 
     it(`asks nothing of an unreachable daemon`, async () => {
         const { api } = fakeApi({ reachable: false });
-        const read = mock(async () => `answer`);
+        const read = jest.fn(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 60_000, initial: () => ``, read });
 
         poll.refresh();
@@ -114,7 +113,7 @@ describe(`sandboxPoll`, () => {
                 return `first`;
             },
         });
-        const secondRead = mock(async () => {
+        const secondRead = jest.fn(async () => {
             active++;
             widest = Math.max(widest, active);
             active--;
@@ -147,7 +146,7 @@ describe(`sandboxPoll`, () => {
                 return `done`;
             },
         });
-        const read = mock(async () => `answer`);
+        const read = jest.fn(async () => `answer`);
         const waiting = sandboxPoll({ host: () => api, everyMs: 60_000, initial: () => ``, read });
 
         blocker.refresh();
@@ -164,7 +163,7 @@ describe(`sandboxPoll`, () => {
     it(`runs one trailing read when triggers land during an active read`, async () => {
         const { api } = fakeApi();
         let releaseFirst = (): void => {};
-        const read = mock(async () => {
+        const read = jest.fn(async () => {
             if (read.mock.calls.length === 1) {
                 await new Promise<void>((resolve) => {
                     releaseFirst = resolve;
@@ -275,7 +274,7 @@ describe(`sandboxPoll`, () => {
     it(`re-reads when one of the extension's declared files is written, without waiting out the interval`, async () => {
         jest.useFakeTimers();
         const { api, writeLanded } = fakeApi({ watching: true });
-        const read = mock(async () => `answer`);
+        const read = jest.fn(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 600_000, initial: () => ``, read });
 
         const running = poll.start();
@@ -294,7 +293,7 @@ describe(`sandboxPoll`, () => {
     it(`coalesces a burst of writes into one read`, async () => {
         jest.useFakeTimers();
         const { api, writeLanded } = fakeApi({ watching: true });
-        const read = mock(async () => `answer`);
+        const read = jest.fn(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 600_000, immediate: false, initial: () => ``, read });
 
         const running = poll.start();
@@ -311,7 +310,7 @@ describe(`sandboxPoll`, () => {
     it(`stops listening for writes when the extension is disposed`, async () => {
         jest.useFakeTimers();
         const { api, writeLanded, watchers } = fakeApi({ watching: true });
-        const read = mock(async () => `answer`);
+        const read = jest.fn(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 600_000, immediate: false, initial: () => ``, read });
 
         poll.start().dispose();
@@ -327,7 +326,7 @@ describe(`sandboxPoll`, () => {
     it(`still runs on its timer on a host that cannot announce file writes`, async () => {
         jest.useFakeTimers();
         const { api } = fakeApi();
-        const read = mock(async () => `answer`);
+        const read = jest.fn(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 1_000, immediate: false, initial: () => ``, read });
 
         const running = poll.start();

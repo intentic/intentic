@@ -1,5 +1,4 @@
 import { STATE_DIR } from "@intentic/constants";
-import { describe, test, expect } from "bun:test";
 import { auditBrief, extensionBrief, publishBrief, tightenBrief, updateBrief } from "./extensionBrief";
 
 // What the brief must not lose: four facts an agent can't recover on its own, each once the cause of a directory

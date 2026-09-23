@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { nextTick } from "vue";
-import { describe, it, expect, beforeEach } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
 
 // The preference is read once, at module scope, so each case needs its own evaluation of the module.

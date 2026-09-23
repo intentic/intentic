@@ -1,13 +1,12 @@
 import "@intentic/testing/dom";
 import type { EngineRow, EnginesView } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { waitFor, stubGlobal, mocked, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-mock.module("../client/sandboxClient", () => ({ sandboxJson: mock() }));
-mock.module("../client/useSandbox", () => ({
+jest.mock("../client/sandboxClient", () => ({ sandboxJson: jest.fn() }));
+jest.mock("../client/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ reachable: ref(true) }),
 }));

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { countdownWords, destinationOf, isReply, limitOf, LONG_POST, postEdit, postsATitle } from "./postText";
 
 // No mocks: pure functions over a post's own fields, so the page can ask the same question from four sections.

@@ -1,7 +1,17 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { describe, it, expect, afterEach } from "bun:test";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { clearUnsettledUploads, dropProvisional, isLeaving, markFailed, markSettled, noteArriving, noteLeaving, provisionalAt, reconcileProvisional, withProvisionalEntries } from "./provisionalEntries";
+import {
+    clearUnsettledUploads,
+    dropProvisional,
+    isLeaving,
+    markFailed,
+    markSettled,
+    noteArriving,
+    noteLeaving,
+    provisionalAt,
+    reconcileProvisional,
+    withProvisionalEntries,
+} from "./provisionalEntries";
 
 /* The tree as the explorer draws it between a gesture and the walk that proves it happened: rows for what is arriving,
    no rows for what is leaving, and every one of them retired by the real listing rather than a timer. */

@@ -2,7 +2,6 @@ import type { AddressInfo } from "node:net";
 import { serve, type ServerType } from "@hono/node-server";
 import type { RunnerCredential } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import type { Services } from "../composition.js";
 import { createRunnerTranslatorProxyRoute, toRunnerCredential } from "./runner-credentials.routes.js";
 import { parentCredentialSource } from "./runner-credentials.js";

@@ -2,7 +2,6 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentCommand } from "@intentic/sandbox-contract";
 import { useT } from "@intentic/ui/i18n";
-import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { computed, createApp, h, nextTick, ref, shallowRef } from "vue";
 import { activeSandboxId } from "../../../sandbox/overview/activeSandbox";
 import { inputHistoryFor } from "../../drafts/inputHistory";
@@ -31,16 +30,16 @@ const keysOf = () => {
         mentionOpen: computed(() => open.value === `mention`),
         commandOpen: computed(() => open.value === `command`),
         popoverDismissed: ref(false),
-        recallInto: mock(),
+        recallInto: jest.fn(),
         caret: ref(0),
-        syncCaret: mock(),
+        syncCaret: jest.fn(),
         commandRun: computed(() => command.value),
     };
-    const list = (): PopoverList => ({ move: mock(), pickActive: mock(() => true) });
+    const list = (): PopoverList => ({ move: jest.fn(), pickActive: jest.fn(() => true) });
     const lists = { mention: ref<PopoverList>(list()), command: ref<PopoverList>(list()) };
     const live = ref(false);
     const spoken = ref<string>();
-    const voice = { live: computed(() => live.value), quit: mock(), slotHint: computed(() => spoken.value) };
+    const voice = { live: computed(() => live.value), quit: jest.fn(), slotHint: computed(() => spoken.value) };
     const host = {
         view,
         input,
@@ -51,8 +50,8 @@ const keysOf = () => {
         reachable: ref(true),
         mobile: ref(false),
         continueOffer: ref(false),
-        grow: mock(),
-        submit: mock(),
+        grow: jest.fn(),
+        submit: jest.fn(),
     };
     let keys: ReturnType<typeof useComposerKeys> | undefined;
     const app = createApp({
@@ -98,7 +97,7 @@ describe(`an open list`, () => {
     it(`lets Enter through to the composer when no row is active, and never takes Shift+Enter`, () => {
         const { host, open, press } = keysOf();
         open.value = `command`;
-        host.lists.command.value = { move: mock(), pickActive: mock(() => false) };
+        host.lists.command.value = { move: jest.fn(), pickActive: jest.fn(() => false) };
 
         press(`Enter`);
         expect(host.submit).toHaveBeenCalledTimes(1);
@@ -149,7 +148,7 @@ describe(`Escape`, () => {
 
     it(`stops a generating turn, and leaves one parked on a card alone`, () => {
         const { chat, press } = keysOf();
-        const stop = spyOn(chat.turn, `stop`).mockReturnValue(undefined);
+        const stop = jest.spyOn(chat.turn, `stop`).mockReturnValue(undefined);
         runningTurn(chat.turn);
 
         expect(press(`Escape`)).toBe(true);
@@ -187,7 +186,7 @@ describe(`recall`, () => {
         activeSandboxId.value = ring;
         const chat = shallowRef(new Conversation(`a`));
         const history = inputHistoryFor(ring);
-        const reset = spyOn(history, `reset`);
+        const reset = jest.spyOn(history, `reset`);
         const app = createApp({
             setup: () => {
                 useRecallRing(() => chat.value);

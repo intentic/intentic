@@ -1,7 +1,6 @@
 // Pins that a sub-agent delegation nests its own calls and thinking under the card (ChatToolCard renders
 // itself recursively) instead of a flat sibling list. Needs jsdom: a failed resolve renders wrong, not a throw.
 import "@intentic/testing/dom";
-import { describe, it, expect, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import type { TranscriptTool } from "@intentic/sandbox-contract";

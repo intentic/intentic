@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { pickUpNext, pickUpOf, pickUpStatus, pickUpWhen, pressCost } from "./pickUp";
 
 const NOW = 1_800_000_000_000;

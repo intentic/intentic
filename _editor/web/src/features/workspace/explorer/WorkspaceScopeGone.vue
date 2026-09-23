@@ -27,7 +27,7 @@ const title = useScopeTitle();
             <!-- A link styled as a button, not a button that navigates: it's a destination, meant to open in a new tab. -->
             <Button size="small" :as="RouterLink" :to="`/agents/${workspaceAgent}`">
                 <Icon name="check-square" />
-                {{ t(`workspace.workspaceScopeGone.seeChanges`) }}
+                {{ t(`shared.seeChanges`) }}
             </Button>
             <Button size="small" severity="secondary" @click="workspaceAgent = undefined">
                 <Icon name="folder" class="text-[0.7rem]" />

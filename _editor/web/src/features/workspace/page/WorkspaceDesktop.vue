@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, ResizeSeam, SegmentedControl, useNarrow } from "@intentic/ui";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
@@ -71,12 +70,10 @@ const { maker } = useAudience();
 const words = useVocabulary();
 const {
     tree,
-    rootHidden,
     barren,
-    entriesByPath,
-    lazyChildren,
-    lazyHidden,
-    loadChildren,
+    listingOf,
+    hiddenIn,
+    keepListed,
     error,
     isLoading,
     refetch,
@@ -89,25 +86,10 @@ const {
     refuseWrite,
 } = useWorkspaceTree();
 
-// The tree the explorer draws: the whole workspace, or one folder's contents when rooted there (workspaceDir). A
-// folder the walk carried opens at once; one it skipped is asked for, the way expanding it would.
-const scopedTree = computed<readonly WorkspaceTreeEntry[]>(() => {
-    const dir = workspaceDir.value;
-    if (dir === ``) {
-        return tree.value;
-    }
-    return entriesByPath.value.get(dir)?.children ?? lazyChildren.value.get(dir) ?? [];
-});
-watch(
-    () => [workspaceDir.value, entriesByPath.value.get(workspaceDir.value)?.children] as const,
-    ([dir, children]) => {
-        if (dir !== `` && children === undefined) {
-            void loadChildren(dir);
-        }
-    },
-    { immediate: true },
-);
-const scopedRootHidden = computed(() => (workspaceDir.value === `` ? rootHidden.value : (lazyHidden.value.get(workspaceDir.value) ?? 0)));
+// The tree the explorer draws: the whole workspace, or one folder's contents when rooted there (workspaceDir).
+const scopedTree = computed(() => listingOf(workspaceDir.value) ?? []);
+keepListed(() => workspaceDir.value);
+const scopedRootHidden = computed(() => hiddenIn(workspaceDir.value));
 const scopedBarren = computed(() =>
     workspaceDir.value === `` ? barren.value : barren.value.filter((path) => path.startsWith(`${workspaceDir.value}/`)),
 );
@@ -133,7 +115,7 @@ const changesMark = computed(() => {
 const sidebarMode = computed<SidebarPanel>({ get: () => layout.sidebarPanel.value, set: (value) => layout.setSidebarPanel(value) });
 const sidebarModeOptions = computed(() => [
     // No hint on Files/Changes, the label already says it; Changes gets one only while the mark shows.
-    { label: t(`workspace.workspaceDesktop.files`), value: `files` as const },
+    { label: t(`shared.files`), value: `files` as const },
     // Both audiences get the panel, since the rail badges this count at both and a badge with nowhere to press is
     // only a nag; what differs is the panel behind it (SavePanel has no index and writes its own message).
     { label: words.value.changes, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
@@ -487,9 +469,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     const toRight = new Set(paneTabs.slice(index + 1).map((tab) => tab.id));
     return [
         // Promotes the preview tab, mirroring the double-click that does the same thing.
-        ...(id === strip.value[home].preview
-            ? [{ label: t(`workspace.workspaceDesktop.keepOpen`), command: () => keepTab(id) }, { separator: true }]
-            : []),
+        ...(id === strip.value[home].preview ? [{ label: t(`shared.keepOpen`), command: () => keepTab(id) }, { separator: true }] : []),
         // The way into a split for pairings nothing can guess: a README beside its code, a test beside its subject.
         ...(canSplit.value
             ? [
@@ -510,7 +490,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
             command: () => requestClose(others),
         },
         {
-            label: t(`workspace.workspaceDesktop.closeToRight`),
+            label: t(`shared.closeToRight`),
             disabled: toRight.size === 0,
             shortcut: commandShortcut(`workspace.closeTabsToRight`),
             command: () => requestClose(toRight),
@@ -900,7 +880,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                             ref="filterInput"
                             v-model="filter"
                             type="text"
-                            :placeholder="contentMode ? t(`workspace.workspaceDesktop.searchInFiles`) : t(`workspace.workspaceDesktop.filterFiles`)"
+                            :placeholder="contentMode ? t(`shared.searchInFiles`) : t(`workspace.workspaceDesktop.filterFiles`)"
                             class="ui-field-box ui-field-sm w-full min-w-0 pl-7"
                             :class="textMode ? `pr-[4.75rem]` : `pr-7`"
                             @keydown.esc="clearFilter"
@@ -932,7 +912,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                                 type="button"
                                 class="flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
                                 v-tooltip.bottom="t(`workspace.workspaceDesktop.clearEsc`)"
-                                :aria-label="t(`workspace.workspaceDesktop.clearFilter`)"
+                                :aria-label="t(`shared.clearFilter`)"
                                 @click="clearFilter"
                             >
                                 <Icon name="times" />
@@ -949,9 +929,9 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                         <input
                             v-model="search.include.value"
                             type="text"
-                            :placeholder="t(`workspace.workspaceDesktop.filesToIncludeE`)"
+                            :placeholder="t(`shared.filesToIncludeE`)"
                             class="ui-field-box ui-field-sm w-full min-w-0 pr-2 pl-7"
-                            :aria-label="t(`workspace.workspaceDesktop.filesToInclude`)"
+                            :aria-label="t(`shared.filesToInclude`)"
                             v-tooltip.bottom="t(`workspace.workspaceDesktop.filesToIncludeComma`)"
                             @keydown.esc="search.include.value = ``"
                         />
@@ -973,8 +953,8 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 transition-colors"
                             :class="filtersActive ? 'bg-primary-600/15 text-link' : 'text-muted hover:text-content'"
                             aria-haspopup="menu"
-                            :aria-label="t(`workspace.workspaceDesktop.filterWhatExplorerLists`)"
-                            v-tooltip.bottom="lensLine ?? t(`workspace.workspaceDesktop.filter`)"
+                            :aria-label="t(`shared.filterWhatExplorerLists`)"
+                            v-tooltip.bottom="lensLine ?? t(`shared.filter2`)"
                             @click="filterMenu?.show($event)"
                         >
                             <Icon name="filter" class="text-xs" />
@@ -1053,7 +1033,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                 :min="toScreenPx(MIN_SIDEBAR_WIDTH)"
                 :max="toScreenPx(MAX_SIDEBAR_WIDTH)"
                 :reset="toScreenPx(defaultSidebarWidth())"
-                :title="t(`workspace.workspaceDesktop.dragToResizeDouble`)"
+                :title="t(`shared.dragToResizeDouble`)"
             />
 
             <!-- Dismisses the drawer by clicking the file it covers, the only affordance the toggle doesn't already provide. -->
@@ -1109,13 +1089,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                                 >{{ actionError.title }}</span
                             >
                             <!-- The one remaining status: a single spinner for both a running file action and a tree (re)load. -->
-                            <Icon
-                                name="spinner"
-                                v-if="busy || isLoading"
-                                class="text-sm text-muted"
-                                spin
-                                :aria-label="t(`workspace.workspaceDesktop.working`)"
-                            />
+                            <Icon name="spinner" v-if="busy || isLoading" class="text-sm text-muted" spin :aria-label="t(`shared.working2`)" />
                             <!-- Suppressed while the scope itself is broken, since the pane below already says so at full size. -->
                             <span v-if="error && !scopeBroken" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{
                                 error

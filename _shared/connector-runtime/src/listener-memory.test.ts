@@ -1,4 +1,3 @@
-import { test, expect, beforeEach, afterEach, jest } from "bun:test";
 import { chatRings, recentKeys, typingHeartbeat } from "./listener-memory.js";
 
 // Pins the memory contract shared by every listener; each listener's own tests cover its wiring.

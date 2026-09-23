@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { fuzzyScore } from "./fuzzy.js";
 
 test("a substring beats a subsequence over the same path", () => {

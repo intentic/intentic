@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { AgentRequest, TurnHooks } from "../../agent/providers/agent-request.js";
 import { parkedCards } from "../../agents/actor/parked-cards.js";
 import { vendorSubject } from "../../guard/command-guard.js";

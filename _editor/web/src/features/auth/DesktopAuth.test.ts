@@ -1,7 +1,6 @@
 // These tests mount the real page and read the first frame: Google's button must be there immediately, and the
 // credential mint it races runs without the shared sign-in overlay.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
@@ -10,7 +9,7 @@ import * as actualVueRouter from "vue-router";
 
 // The link's query params carrying the state and challenge the handoff is tied to.
 const query = ref<Record<string, string>>({ state: `nonce-1`, challenge: `chal-1` });
-mock.module(`vue-router`, () => ({
+jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRoute: () =>
         ({
@@ -24,21 +23,21 @@ mock.module(`vue-router`, () => ({
 }));
 
 // A mint that never settles, since a silent attempt going quiet is what these tests read on the first frame.
-const getIdToken = mock<(options?: { gate?: boolean; usableFor?: number }) => Promise<string | undefined>>(() => new Promise<never>(() => {}));
+const getIdToken = jest.fn<(options?: { gate?: boolean; usableFor?: number }) => Promise<string | undefined>>(() => new Promise<never>(() => {}));
 // An ordinary browser, where Google's button renders; the webview refusal case is signInSurfaces.test.ts's case.
-const renderButton = mock<(parent: HTMLElement, dark: boolean) => Promise<boolean>>().mockResolvedValue(true);
-const adoptIdToken = mock<(credential: string) => boolean>().mockReturnValue(true);
-mock.module(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken }) }));
-const signInWithGoogle = mock<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
+const renderButton = jest.fn<(parent: HTMLElement, dark: boolean) => Promise<boolean>>().mockResolvedValue(true);
+const adoptIdToken = jest.fn<(credential: string) => boolean>().mockReturnValue(true);
+jest.mock(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken }) }));
+const signInWithGoogle = jest.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
 // What this window's session resolves to; null means a signed-out browser, covered by the tests below.
 const user = ref<{ email: string } | null>({ email: `owner@example.com` });
-const refresh = mock<() => Promise<{ email: string } | null>>().mockResolvedValue(null);
-const signInWithGoogleCredential = mock<(idToken: string) => Promise<void>>().mockResolvedValue(undefined);
-mock.module(`./useAuth`, () => ({ useAuth: () => ({ user, refresh, signInWithGoogle, signInWithGoogleCredential }) }));
-const handoff = mock();
+const refresh = jest.fn<() => Promise<{ email: string } | null>>().mockResolvedValue(null);
+const signInWithGoogleCredential = jest.fn<(idToken: string) => Promise<void>>().mockResolvedValue(undefined);
+jest.mock(`./useAuth`, () => ({ useAuth: () => ({ user, refresh, signInWithGoogle, signInWithGoogleCredential }) }));
+const handoff = jest.fn();
 // The credential the platform already holds; undefined means it holds nothing usable.
-const googleIdToken = mock<() => Promise<{ idToken?: string }>>().mockResolvedValue({});
-mock.module(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff, googleIdToken } } }));
+const googleIdToken = jest.fn<() => Promise<{ idToken?: string }>>().mockResolvedValue({});
+jest.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff, googleIdToken } } }));
 
 // A Google credential shaped like idTokenClaims actually reads one, so the page's freshness check and its identity
 // check both run for real, not against a stub.

@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, afterEach, spyOn, jest } from "bun:test";
 import { nextTick, ref } from "vue";
 import { type RailTile, useRailMemory } from "./railMemory";
 
@@ -13,11 +12,11 @@ const KEY = `intentic.railTiles.local`;
 const tile = (id: string): RailTile => ({ id, to: `/ext/${id}`, label: id, icon: `robot` });
 const badged = (id: string, count: number): RailTile => ({ ...tile(id), badge: { count } }) as RailTile;
 
-let writes: ReturnType<typeof spyOn>;
+let writes: ReturnType<typeof jest.spyOn>;
 
 beforeEach(() => {
     localStorage.clear();
-    writes = spyOn(Storage.prototype, `setItem`);
+    writes = jest.spyOn(Storage.prototype, `setItem`);
 });
 
 afterEach(() => jest.restoreAllMocks());

@@ -1,7 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { AttachFrame } from "@intentic/sandbox-contract";
-import { test, expect, afterEach } from "bun:test";
 import { createDaemonClient } from "./daemon-client.js";
 
 /* The HTTP layer over a real node:http server: the turn is started and then watched (two requests). */

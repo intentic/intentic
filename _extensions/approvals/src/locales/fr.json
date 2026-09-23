@@ -41,7 +41,6 @@
         "goingAhead": "Part",
         "hookLedgerUnreadable": "Le registre des hooks que vous avez approuvés est illisible : aucun hook de l'espace de travail ne s'exécute tant que vous n'en approuvez pas un à nouveau.",
         "hookSetTitle": "Hook Claude Code | {count} hooks Claude Code",
-        "hooks": "Hooks",
         "hooksFound": "Trouvé par un tour",
         "hooksWaiting": "Hooks en attente de votre accord",
         "inProgress": "en cours",
@@ -77,8 +76,7 @@
     },
     "hookSetBody": {
         "filesPinned": "L'approbation couvre aussi ces fichiers, octet pour octet :",
-        "fromProjectSettings": ".claude/settings.json de l'espace de travail",
-        "fromUserSettings": "~/.claude/settings.json"
+        "fromProjectSettings": ".claude/settings.json de l'espace de travail"
     },
     "postBody": {
         "showLess": "Afficher moins",

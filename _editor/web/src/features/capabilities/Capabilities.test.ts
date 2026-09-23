@@ -2,7 +2,6 @@
 // since anything short of that (finding, opening, copying the config by hand) is slow enough to make re-typing a
 // gateway the faster path.
 import "@intentic/testing/dom";
-import { it, expect, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { ForticlientConnection } from "@intentic/sandbox-contract";
@@ -13,57 +12,54 @@ import * as actualVueRouter from "vue-router";
 
 // URL-driven: the route names the vpn tile and nothing navigates. Empty `query` isn't padding, the rail and grid
 // filter read off it, so a route without one is one vue-router never hands out.
-mock.module(`vue-router`, () => ({
+jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRoute: () => ({ params: { entry: `vpn` }, query: {} }) as never,
-    useRouter: () => ({ push: mock(), replace: mock() }) as never,
+    useRouter: () => ({ push: jest.fn(), replace: jest.fn() }) as never,
 }));
 
 // Stubbed to an empty-but-settled sandbox (no capabilities, no extension tiles, no tunnels); the vpn tile comes
 // from the static catalog regardless, so it, its form, and the import block are the whole subject.
-mock.module(`./connect/useCapabilities`, () => ({
+jest.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities: ref([]),
         error: ref(undefined),
-        add: mock(),
-        remove: { mutateAsync: mock(), isPending: ref(false) },
-        rename: { mutateAsync: mock(), isPending: ref(false) },
-        refetch: mock(),
-        dismissRecommendation: { mutateAsync: mock(), isPending: ref(false) },
+        add: jest.fn(),
+        remove: { mutateAsync: jest.fn(), isPending: ref(false) },
+        rename: { mutateAsync: jest.fn(), isPending: ref(false) },
+        refetch: jest.fn(),
+        dismissRecommendation: { mutateAsync: jest.fn(), isPending: ref(false) },
     }),
-    browseMarketplace: mock(),
+    browseMarketplace: jest.fn(),
     // The connect forms read these at link time though no case here opens one; a mock missing a name anything in
     // the graph imports is refused.
-    readRemoteRefs: mock(async () => ({ refs: [] })),
-    probeCapability: mock(),
+    readRemoteRefs: jest.fn(async () => ({ refs: [] })),
+    probeCapability: jest.fn(),
 }));
-mock.module(`../extensions/useExtensions`, () => ({
+jest.mock(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
 }));
 // The Extension tile's signpost reads two counts from here; empty renders the sentence without them, a first-visit
 // state.
-mock.module(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-mock.module(`../terminal/useBackgroundProcesses`, () => ({
-    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: mock(), stop: mock() }),
-    viewProcessLogs: mock(),
+jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
+jest.mock(`../terminal/useBackgroundProcesses`, () => ({
+    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
+    viewProcessLogs: jest.fn(),
 }));
-mock.module(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: mock(), refresh: mock(), start: mock(), stop: mock() }),
+jest.mock(`../composables/sandbox/useHostConnect`, () => ({
+    useHostConnect: () => ({ hostFor: () => undefined, revoke: jest.fn(), refresh: jest.fn(), start: jest.fn(), stop: jest.fn() }),
 }));
-mock.module(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-mock.module(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 // The one daemon call the import makes; what the spy receives (XML, not a filename) proves the file was actually
 // read here.
-const importForticlient = mock<(xml: string) => Promise<ForticlientConnection[]>>();
-// The whole composable, not just its list: <VpnConnections> both dials and lists, reading `error` on every render.
-mock.module(`../sandbox/devices/useVpn`, () => ({
+const importForticlient = jest.fn<(xml: string) => Promise<ForticlientConnection[]>>();
+// The whole composable, not just its list: <LiveLinkRows> both opens and lists, reading `error` on every render.
+jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
     importForticlient: (xml: string) => importForticlient(xml),
-    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: mock(), disconnect: mock() }),
-}));
-mock.module(`../sandbox/devices/useNetdisk`, () => ({
-    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: mock(), unmount: mock() }),
+    useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");

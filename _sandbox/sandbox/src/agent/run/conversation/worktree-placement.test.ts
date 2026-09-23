@@ -1,9 +1,14 @@
-import { describe, expect, test } from "bun:test";
 import type { RepoSync } from "../../../agents/land/sync.js";
 import type { ConversationWorktree } from "../../../agents/worktrees/worktrees.js";
 import { type WorktreeFrame, worktreeFrame } from "./worktree-placement.js";
 
-const worktree = (repos: ConversationWorktree["repos"]): ConversationWorktree => ({ cwd: "/w", branch: "agent/c", repos, fenced: false, elsewhere: [] });
+const worktree = (repos: ConversationWorktree["repos"]): ConversationWorktree => ({
+    cwd: "/w",
+    branch: "agent/c",
+    repos,
+    fenced: false,
+    elsewhere: [],
+});
 const moved = (repo: string, commits: number): RepoSync => ({ repo, onto: "f".repeat(40), commits, moved: [], overlap: [] });
 const blocked = (repo: string): RepoSync => ({ repo, onto: "e".repeat(40), commits: 0, moved: [], overlap: [], blocked: true });
 
@@ -20,7 +25,14 @@ describe("where the branch stands", () => {
             [],
             { kind: "worktree", branch: "agent/c", base: "aaaaaaa" },
         ],
-        ["names the first repo's when there is no root", worktree([{ repo: "web", base: "b".repeat(40) }]), new Map(), true, [], { kind: "worktree", branch: "agent/c", base: "bbbbbbb" }],
+        [
+            "names the first repo's when there is no root",
+            worktree([{ repo: "web", base: "b".repeat(40) }]),
+            new Map(),
+            true,
+            [],
+            { kind: "worktree", branch: "agent/c", base: "bbbbbbb" },
+        ],
         ["names nothing when there are no repos", worktree([]), new Map(), true, [], { kind: "worktree", branch: "agent/c", base: "" }],
         [
             "names where a rebase moved the root",
@@ -30,7 +42,14 @@ describe("where the branch stands", () => {
             [],
             { kind: "worktree", branch: "agent/c", base: "ccccccc" },
         ],
-        ["says when the container cannot enforce the tree", worktree([{ repo: "root", base: "a".repeat(40) }]), new Map(), false, [], { kind: "worktree", branch: "agent/c", base: "aaaaaaa", unenforced: true }],
+        [
+            "says when the container cannot enforce the tree",
+            worktree([{ repo: "root", base: "a".repeat(40) }]),
+            new Map(),
+            false,
+            [],
+            { kind: "worktree", branch: "agent/c", base: "aaaaaaa", unenforced: true },
+        ],
         [
             "counts what a rebase moved and names what it could not",
             worktree([{ repo: "root", base: "a".repeat(40) }]),

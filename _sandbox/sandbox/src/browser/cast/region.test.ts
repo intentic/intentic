@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { MIN_VIEWPORT, regionOf, regionsEqual, windowBoundsFor, type WindowGeometry } from "./region.js";
 
 // The grab region is arithmetic over what the page reports; wrong arithmetic is a picture of the toolbar, or a click

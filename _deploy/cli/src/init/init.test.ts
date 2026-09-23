@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { selfDeviceConfig } from "./init.js";
 
 describe("selfDeviceConfig", () => {

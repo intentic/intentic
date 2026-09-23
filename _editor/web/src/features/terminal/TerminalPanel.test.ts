@@ -4,43 +4,41 @@ import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import Tooltip from "primevue/tooltip";
 import { IconStub } from "@intentic/ui/testing";
-import { test, expect, afterEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
-hoisted(() => {
+(() => {
     // xterm needs a canvas jsdom doesn't implement; the pane is mocked, but PrimeVue's overlays still touch it.
     globalThis.HTMLCanvasElement.prototype.getContext ??= (() => null) as never;
-});
+})();
 
 const activeSandboxId = ref<string | undefined>(`sbx-a`);
-mock.module(`../sandbox/overview/activeSandbox`, () => ({
+jest.mock(`../sandbox/overview/activeSandbox`, () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId,
     sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId],
 }));
-mock.module(`../sandbox/client/sandboxClient`, () => ({ sandboxJson: mock() }));
-mock.module(`../sandbox/client/useSandbox`, () => ({
+jest.mock(`../sandbox/client/sandboxClient`, () => ({ sandboxJson: jest.fn() }));
+jest.mock(`../sandbox/client/useSandbox`, () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId }),
 }));
-mock.module(`./terminalSession`, () => ({
-    createTerminalSession: (name: string) => ({ name, term: { input: mock() } }),
-    mountTerminalSession: mock(),
-    parkTerminalSession: mock(),
-    disposeTerminalSession: mock(),
-    retypeTerminalSession: mock(),
-    retintTerminalSession: mock(),
-    copySelection: mock(),
-    pasteIntoTerminal: mock(),
+jest.mock(`./terminalSession`, () => ({
+    createTerminalSession: (name: string) => ({ name, term: { input: jest.fn() } }),
+    mountTerminalSession: jest.fn(),
+    parkTerminalSession: jest.fn(),
+    disposeTerminalSession: jest.fn(),
+    retypeTerminalSession: jest.fn(),
+    retintTerminalSession: jest.fn(),
+    copySelection: jest.fn(),
+    pasteIntoTerminal: jest.fn(),
 }));
 // Query cache reaches the network on its own schedule; stubbed down to the two writes the strip makes.
-mock.module(`./terminalsQuery`, () => ({
-    useTerminalsQuery: () => ({ sessions: ref([]), refetch: mock() }),
-    addPendingTerminal: mock(),
-    dropPendingTerminal: mock(),
-    listTerminals: mock(async () => []),
-    refreshTerminals: mock(async () => undefined),
-    removeTerminal: mock(),
+jest.mock(`./terminalsQuery`, () => ({
+    useTerminalsQuery: () => ({ sessions: ref([]), refetch: jest.fn() }),
+    addPendingTerminal: jest.fn(),
+    dropPendingTerminal: jest.fn(),
+    listTerminals: jest.fn(async () => []),
+    refreshTerminals: jest.fn(async () => undefined),
+    removeTerminal: jest.fn(),
 }));
 
 const { default: TerminalPanel } = await import("./TerminalPanel.vue");

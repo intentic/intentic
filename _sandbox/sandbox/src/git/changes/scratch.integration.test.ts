@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, afterEach } from "bun:test";
 import { OVERSIZED_BYTES, scratchOf, scratchScopeOf, withScratchExcluded } from "./scratch.js";
 
 const exec = promisify(execFile);
@@ -154,5 +153,7 @@ test("a stage-everything with the scratch excluded never stages it, and stages t
 
     await withScratchExcluded(scratch, (pathspecArgs) => exec("git", ["-C", dir, "add", "-A", ...pathspecArgs]));
 
-    expect(await sh(dir, "status", "--porcelain", "-uall")).toBe(["D  docs/guide.md", "A  src/feature.ts", "?? .trun/x.log", "?? we[ir]d/f*.log"].join("\n"));
+    expect(await sh(dir, "status", "--porcelain", "-uall")).toBe(
+        ["D  docs/guide.md", "A  src/feature.ts", "?? .trun/x.log", "?? we[ir]d/f*.log"].join("\n"),
+    );
 });

@@ -1,31 +1,26 @@
 <!-- The AskUserQuestion card: the ask, the options, and the answer being composed. -->
 <script setup lang="ts">
 import { growTextarea, Icon, type IconName, useDevice } from "@intentic/ui";
-import type { AskQuestion, TranscriptQuestion } from "@intentic/sandbox-contract";
+import type { AskQuestion } from "@intentic/sandbox-contract";
 import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
 import { clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../../drafts/questionDraft";
 import ChatCard from "./ChatCard.vue";
 import ChatDecisionButton from "./ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
-import { questionStatus } from "./cardStatus";
+import type { CardAnswer } from "../../session/cardReplies";
+import type { ChatMessage } from "../transcript";
+import { documentDrawn, questionStatus } from "./cardStatus";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { card, settling } = defineProps<{
-    card: TranscriptQuestion;
-    /** Whether the write-up the question is about opens drawn, or folded because the bubble already shows it. */
-    documentOpen: boolean;
-    /** An answer to this card is already in flight, so no button may start a second one. */
-    settling: boolean;
-}>();
-
-const emit = defineEmits<{ answer: [answers: Record<string, string[]>]; dismiss: [] }>();
+const props = defineProps<{ message: ChatMessage; settling: boolean; reply: (answer: CardAnswer) => Promise<void> }>();
+const card = computed(() => props.message.question!);
 
 const { mobile } = useDevice();
 
 // A multi-question card takes a generic title, since no one of its asks can stand for the rest.
-const title = computed(() => (card.questions.length > 1 ? `A few questions` : (card.questions[0]?.question ?? ``)));
+const title = computed(() => (card.value.questions.length > 1 ? `A few questions` : (card.value.questions[0]?.question ?? ``)));
 
 // Picks and typed text, keyed by question index; "Other" is an ordinary option label, not parallel state.
 const selections = ref<Record<number, string[]>>({});
@@ -45,14 +40,14 @@ const setOtherInput = (index: number, el: Element | ComponentPublicInstance | nu
 
 // Loads the draft when a pending card appears; clears it once the card settles (answered, dismissed, cancelled).
 watch(
-    () => [card.requestId, card.status] as const,
+    () => [card.value.requestId, card.value.status] as const,
     ([requestId, status]) => {
         if (status !== `pending`) {
             clearQuestionDraft(requestId);
             return;
         }
         // Normalizes the stored draft to picks the current card accepts (questionDraft.normalize).
-        const draft = readQuestionDraft(requestId, card.questions);
+        const draft = readQuestionDraft(requestId, card.value.questions);
         selections.value = draft.selections;
         otherTexts.value = draft.otherTexts;
     },
@@ -61,10 +56,10 @@ watch(
 
 // Both refs are replaced wholesale on every edit (see toggleOption/setOther), so a shallow watch sees them all.
 watch([selections, otherTexts], ([picks, texts]) => {
-    if (card.status !== `pending`) {
+    if (card.value.status !== `pending`) {
         return;
     }
-    writeQuestionDraft(card.requestId, { selections: picks, otherTexts: texts });
+    writeQuestionDraft(card.value.requestId, { selections: picks, otherTexts: texts });
 });
 
 const isSelected = (index: number, label: string): boolean => (selections.value[index] ?? []).includes(label);
@@ -120,17 +115,17 @@ const picksFor = (index: number): string[] =>
         return typed.length > 0 ? [typed] : [];
     });
 
-const canSubmit = computed(() => card.questions.every((_, index) => picksFor(index).length > 0 && !otherPending(index)));
+const canSubmit = computed(() => card.value.questions.every((_, index) => picksFor(index).length > 0 && !otherPending(index)));
 
-const submitAnswers = (): void => {
+const submitAnswers = async (): Promise<void> => {
     if (!canSubmit.value) {
         return;
     }
     const answers: Record<string, string[]> = {};
-    card.questions.forEach((question, index) => {
+    card.value.questions.forEach((question, index) => {
         answers[question.question] = picksFor(index);
     });
-    emit(`answer`, answers);
+    await props.reply({ kind: `question`, answers });
 };
 
 // Enter submits, Shift+Enter breaks the line; mobile Enter always inserts a newline.
@@ -139,7 +134,7 @@ const otherKeydown = (event: KeyboardEvent): void => {
         return;
     }
     event.preventDefault();
-    submitAnswers();
+    void submitAnswers();
 };
 
 // A decided question keeps every option, marking which were picked; a typed answer joins as an option-less row.
@@ -150,7 +145,7 @@ interface DecidedOption {
 }
 
 const decidedOptions = (question: AskQuestion): DecidedOption[] => {
-    const picks = card.answers?.[question.question] ?? [];
+    const picks = card.value.answers?.[question.question] ?? [];
     const typed = picks.filter((pick) => !question.options.some((option) => option.label === pick));
     return [
         ...question.options.map((option) => ({ label: option.label, description: option.description, picked: picks.includes(option.label) })),
@@ -168,7 +163,7 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
             :document="card.document"
             foldable
             in-card
-            :open="documentOpen"
+            :open="!documentDrawn(message, card.document)"
             max-height="min(58dvh, 40rem)"
             class="chat-card-doc-bottom-rule"
         />
@@ -281,8 +276,8 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
             <ChatDecisionButton
                 tone="secondary"
                 :disabled="settling"
-                v-tooltip.bottom="t(`chat.chatQuestionCard.alsoStopsTurn`)"
-                @click="emit(`dismiss`)"
+                v-tooltip.bottom="t(`shared.alsoStopsTurn`)"
+                @click="reply({ kind: `question`, cancelled: true })"
                 >{{ t(`ui.action.dismiss`) }}</ChatDecisionButton
             >
         </template>

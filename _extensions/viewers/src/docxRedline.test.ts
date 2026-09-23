@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { type DocxNode, MARK_CLASS, redline, textOfBody } from "./docxRedline";
 
 // The redline over hand-built pieces of docx-preview's model: what a paragraph keeps, what gets struck or underlined,

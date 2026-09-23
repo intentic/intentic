@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
 import type { GitRunner } from "@intentic/scaffold";
-import { test, expect } from "bun:test";
 import { capabilityRecommendations } from "./recommend.js";
 
 // Pins that evidence is found where repos actually sit, the right entry is picked, a connected capability suppresses it,

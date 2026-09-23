@@ -118,7 +118,7 @@ onUnmounted(() => inventoryWatch.dispose());
                         v-model="cfToken"
                         type="password"
                         autocomplete="off"
-                        :placeholder="t(`views.connectHost.pasteCloudflareApiToken`)"
+                        :placeholder="t(`shared.pasteCloudflareApiToken`)"
                         :class="[ui.input(), cfTokenTouched && cfToken.trim().length > 0 && !cfTokenValid ? 'ui-field-error-box' : '']"
                         @blur="cfTokenTouched = true"
                     />

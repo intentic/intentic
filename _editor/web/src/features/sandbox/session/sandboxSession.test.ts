@@ -1,12 +1,11 @@
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { waitFor, stubGlobal, unstubAllGlobals, hoisted, freshImport } from "@intentic/testing/bun";
+import { waitFor, stubGlobal, unstubAllGlobals, freshImport } from "@intentic/testing/bun";
 import * as endpointOriginal from "../secrets/endpoint";
 import { computed, ref } from "vue";
 
 // useSandboxSession picks the bearer for a call: a valid stored session needs no Google or network, a refusal
 // fails loudly instead of degrading to a raw ID token, and renewal near expiry uses the session itself.
 
-const state = hoisted(() => ({
+const state = {
     idToken: `id-token` as string | undefined,
     // The only proof a background reader may spend; undefined by default, since a reload finds no live Google cache.
     cachedIdToken: undefined as string | undefined,
@@ -25,12 +24,12 @@ const state = hoisted(() => ({
     select: (_id: string | undefined): void => {},
     // Whether the daemon says a passkey is registered for this origin, the one thing the sign-in moment asks it.
     passkeyOffered: false,
-}));
+};
 
 // The passkey ceremonies are the gate's; here only the offer the sign-in moment asks for is answered.
-mock.module("./passkeySignIn", () => ({ passkeyOffered: async () => state.passkeyOffered }));
+jest.mock("./passkeySignIn", () => ({ passkeyOffered: async () => state.passkeyOffered }));
 
-mock.module("../../auth/useGoogleIdentity", () => ({
+jest.mock("../../auth/useGoogleIdentity", () => ({
     useGoogleIdentity: () => ({
         getIdToken: async (options?: { interactive?: boolean }) => {
             // interactive:false is a caller with no standing to interrupt: silence or nothing, never a prompt to count.
@@ -56,13 +55,13 @@ mock.module("../../auth/useGoogleIdentity", () => ({
 }));
 // Stubs the reachability check at the seam rather than a real /health response; endpoint.ts tests that check
 // itself, and target resolution underneath is otherwise real.
-mock.module("../secrets/endpoint", () => ({
+jest.mock("../secrets/endpoint", () => ({
     ...endpointOriginal,
     healthAnswers: async () => state.daemonAnswers,
     sandboxIdOf: async () => `sb-1`,
 }));
 // A real ref, not a getter, since the module watches the active sandbox to settle a parked mint on a switch.
-mock.module("../client/useSandbox", () => {
+jest.mock("../client/useSandbox", () => {
     const activeSandboxId = ref(state.sandboxId);
     state.select = (id) => {
         activeSandboxId.value = id;
@@ -132,7 +131,7 @@ afterEach(async () => {
 
 it(`serves a valid stored session with no Google mint and no network`, async () => {
     localStorage.setItem(`intentic.session.sb-1`, session());
-    const fetchMock = mock();
+    const fetchMock = jest.fn();
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toEqual({ token: `sess-stored`, kind: `session` });
@@ -141,7 +140,7 @@ it(`serves a valid stored session with no Google mint and no network`, async () 
 });
 
 it(`establishes a session from a Google proof: one exchange, persisted, then served from cache`, async () => {
-    const fetchMock = mock(async (_url: string, _init: RequestInit) => sessionResponse());
+    const fetchMock = jest.fn(async (_url: string, _init: RequestInit) => sessionResponse());
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
@@ -157,7 +156,7 @@ it(`establishes a session from a Google proof: one exchange, persisted, then ser
 });
 
 it(`shares one in-flight establish across concurrent calls`, async () => {
-    const fetchMock = mock(async () => sessionResponse());
+    const fetchMock = jest.fn(async () => sessionResponse());
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { getSessionToken } = useSandboxSession();
@@ -176,7 +175,7 @@ it.each([
 ])(`fails loudly on a %i exchange rather than spending a raw Google token`, async (status, message) => {
     stubGlobal(
         `fetch`,
-        mock(async () => new Response(`refused`, { status })),
+        jest.fn(async () => new Response(`refused`, { status })),
     );
     const { useSandboxSession } = await load();
     await expect(useSandboxSession().getSessionToken()).rejects.toThrow(message);
@@ -184,7 +183,7 @@ it.each([
 
 it(`serves a session nearing expiry immediately and renews it in the background with the session bearer`, async () => {
     localStorage.setItem(`intentic.session.sb-1`, session({ expiresAt: Date.now() + 3 * DAY_MS }));
-    const fetchMock = mock(async (_url: string, _init: RequestInit) => sessionResponse(`sess-renewed`));
+    const fetchMock = jest.fn(async (_url: string, _init: RequestInit) => sessionResponse(`sess-renewed`));
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toEqual({ token: `sess-stored`, kind: `session` });
@@ -198,7 +197,7 @@ it(`serves a session nearing expiry immediately and renews it in the background 
 
 it(`re-establishes after an expired session, and after invalidateSession`, async () => {
     localStorage.setItem(`intentic.session.sb-1`, session({ expiresAt: Date.now() - 1000 }));
-    const fetchMock = mock(async () => sessionResponse());
+    const fetchMock = jest.fn(async () => sessionResponse());
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { getSessionToken, invalidateSession } = useSandboxSession();
@@ -225,7 +224,7 @@ it(`a late establishment cannot repopulate credentials after clearSessions`, asy
     let answer: ((response: Response) => void) | undefined;
     stubGlobal(
         `fetch`,
-        mock(
+        jest.fn(
             () =>
                 new Promise<Response>((resolve) => {
                     answer = resolve;
@@ -244,7 +243,7 @@ it(`a late establishment cannot repopulate credentials after clearSessions`, asy
 
 it(`resolves undefined when the user dismisses the sign-in gate. nothing to exchange`, async () => {
     state.idToken = undefined;
-    const fetchMock = mock();
+    const fetchMock = jest.fn();
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toBeUndefined();
@@ -256,7 +255,7 @@ it(`resolves undefined when the user dismisses the sign-in gate. nothing to exch
 const otherBox = { sandboxId: `sb-2`, base: `https://other.test`, connectToken: `connect-2` };
 
 it(`a background read with no proof in hand asks Google for nothing and exchanges nothing`, async () => {
-    const fetchMock = mock();
+    const fetchMock = jest.fn();
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken(otherBox, { background: true })).toBeUndefined();
@@ -267,7 +266,7 @@ it(`a background read with no proof in hand asks Google for nothing and exchange
 // The other half of the rule: a poll that can establish still does, silently, without prompting for one.
 it(`a background read spends a proof already in hand`, async () => {
     state.cachedIdToken = `cached-token`;
-    const fetchMock = mock(async (_url: string, _init: RequestInit) => sessionResponse(`sess-sb2`));
+    const fetchMock = jest.fn(async (_url: string, _init: RequestInit) => sessionResponse(`sess-sb2`));
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken(otherBox, { background: true })).toEqual({ token: `sess-sb2`, kind: `session` });
@@ -278,7 +277,7 @@ it(`a background read spends a proof already in hand`, async () => {
 // The probe is the same identity-checked /health the transport already uses, paid only on this path.
 it(`will not raise a sign-in for a daemon that is not answering`, async () => {
     state.daemonAnswers = false;
-    const fetchMock = mock();
+    const fetchMock = jest.fn();
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toBeUndefined();
@@ -288,7 +287,7 @@ it(`will not raise a sign-in for a daemon that is not answering`, async () => {
 
 it(`holds a failed background establishment for a cooldown, but never a foreground one`, async () => {
     state.cachedIdToken = `cached-token`;
-    const fetchMock = mock(() => Promise.reject(new TypeError(`fetch failed`)));
+    const fetchMock = jest.fn(() => Promise.reject(new TypeError(`fetch failed`)));
     stubGlobal(`fetch`, fetchMock);
     const { getSessionToken } = (await load()).useSandboxSession();
     await expect(getSessionToken(otherBox, { background: true })).rejects.toThrow(`fetch failed`);
@@ -305,7 +304,7 @@ it(`holds a failed background establishment for a cooldown, but never a foregrou
 it(`a press does not adopt an establishment a poll started`, async () => {
     state.cachedIdToken = `cached-token`;
     const answers: ((response: Response) => void)[] = [];
-    const fetchMock = mock(() => new Promise<Response>((resolve) => answers.push(resolve)));
+    const fetchMock = jest.fn(() => new Promise<Response>((resolve) => answers.push(resolve)));
     stubGlobal(`fetch`, fetchMock);
     const { getSessionToken } = (await load()).useSandboxSession();
     void getSessionToken(otherBox, { background: true });
@@ -361,7 +360,7 @@ it(`a background exchange refused with 401 keeps the Google proof`, async () => 
     state.cachedIdToken = `cached-token`;
     stubGlobal(
         `fetch`,
-        mock(async () => new Response(`no`, { status: 401 })),
+        jest.fn(async () => new Response(`no`, { status: 401 })),
     );
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken(otherBox, { background: true })).toBeUndefined();
@@ -400,7 +399,7 @@ it(`invalidating one sandbox does not discard a session another sandbox just min
     let answer: ((response: Response) => void) | undefined;
     stubGlobal(
         `fetch`,
-        mock(
+        jest.fn(
             () =>
                 new Promise<Response>((resolve) => {
                     answer = resolve;
@@ -431,7 +430,7 @@ it(`a switch away settles the sign-in left parked for the sandbox being left`, a
 
 it(`a switch with nothing parked leaves the sign-in alone`, async () => {
     localStorage.setItem(`intentic.session.sb-1`, session());
-    stubGlobal(`fetch`, mock());
+    stubGlobal(`fetch`, jest.fn());
     const { useSandboxSession } = await load();
     await useSandboxSession().getSessionToken();
 
@@ -459,7 +458,7 @@ const stepUpResponse = (enrolled: boolean): Response =>
 const PASSKEY_SESSION = { token: `sess-passkey`, expiresAt: Date.now() + 30 * DAY_MS, email: `o@x.com` };
 
 it(`a 428 on the exchange raises the step-up with the proof it took, and the ceremony's session becomes the bearer`, async () => {
-    const fetchMock = mock(async () => stepUpResponse(true));
+    const fetchMock = jest.fn(async () => stepUpResponse(true));
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { completeSignIn, useSignInPrompt } = await import("./signInPrompt");
@@ -477,7 +476,7 @@ it(`a 428 on the exchange raises the step-up with the proof it took, and the cer
 it(`dismissing the step-up resolves nothing, stores nothing, and keeps the Google proof`, async () => {
     stubGlobal(
         `fetch`,
-        mock(async () => stepUpResponse(false)),
+        jest.fn(async () => stepUpResponse(false)),
     );
     const { useSandboxSession } = await load();
     const { dismissSignIn, useSignInPrompt } = await import("./signInPrompt");
@@ -491,7 +490,7 @@ it(`dismissing the step-up resolves nothing, stores nothing, and keeps the Googl
 
 it(`a background exchange answered 428 raises no gate and establishes nothing`, async () => {
     state.cachedIdToken = `cached-token`;
-    const fetchMock = mock(async () => stepUpResponse(true));
+    const fetchMock = jest.fn(async () => stepUpResponse(true));
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { useSignInPrompt } = await import("./signInPrompt");
@@ -503,7 +502,7 @@ it(`a background exchange answered 428 raises no gate and establishes nothing`, 
 it(`with nothing in hand the prompt offers a passkey once the daemon has one, and its session wins without an exchange`, async () => {
     state.mintParks = true;
     state.passkeyOffered = true;
-    const fetchMock = mock();
+    const fetchMock = jest.fn();
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { completeSignIn, useSignInPrompt } = await import("./signInPrompt");
@@ -520,7 +519,7 @@ it(`with nothing in hand the prompt offers a passkey once the daemon has one, an
 
 it(`dismissing Google's gate takes the passkey offer down with it`, async () => {
     state.mintParks = true;
-    stubGlobal(`fetch`, mock());
+    stubGlobal(`fetch`, jest.fn());
     const { useSandboxSession } = await load();
     const { useSignInPrompt } = await import("./signInPrompt");
     const { prompt } = useSignInPrompt();
@@ -532,7 +531,7 @@ it(`dismissing Google's gate takes the passkey offer down with it`, async () => 
 });
 
 it(`adoptSession stores a session another ceremony minted, served from then on without a mint`, async () => {
-    const fetchMock = mock();
+    const fetchMock = jest.fn();
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { adoptSession, getSessionToken, presentedEmail } = useSandboxSession();

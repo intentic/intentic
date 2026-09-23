@@ -1,5 +1,4 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { test, expect, afterEach, jest } from "bun:test";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createManagedProcesses, launchEnv, type ProcessRunner, type ProcessSpec } from "./managed-processes.js";
 

@@ -9,9 +9,9 @@ import { t } from "@intentic/ui/i18n";
 // neither the summary nor a search. Files are the component's own list, appended after these.
 
 export const kindMeta = (): Record<QuickKind, { readonly label: string; readonly badge: string; readonly icon: IconName }> => ({
-    persona: { label: t(`chat.composerQuickPick.acts`), badge: `Persona`, icon: `users` },
-    sandbox: { label: t(`chat.composerQuickPick.whereRuns`), badge: `Where`, icon: `desktop` },
-    model: { label: t(`chat.composerQuickPick.model`), badge: `Model`, icon: `cpu` },
+    persona: { label: t(`shared.acts`), badge: `Persona`, icon: `users` },
+    sandbox: { label: t(`shared.whereRuns`), badge: `Where`, icon: `desktop` },
+    model: { label: t(`shared.model`), badge: `Model`, icon: `cpu` },
     effort: { label: t(`chat.composerQuickPick.effort`), badge: `Effort`, icon: `bolt` },
 });
 
@@ -76,7 +76,7 @@ const personaRows = (source: NonNullable<QuickPickSources[`persona`]>, query: st
             kind: `persona`,
             key: `persona:`,
             id: undefined,
-            label: t(`chat.composerQuickPick.anyone`),
+            label: t(`shared.anyone`),
             detail: t(`chat.composerQuickPick.everyConnectedAccount`),
             current: source.picked === undefined,
         },
@@ -100,7 +100,7 @@ const sandboxRows = (source: NonNullable<QuickPickSources[`sandbox`]>, query: st
             key: `sandbox:`,
             box: undefined,
             runner: undefined,
-            label: t(`chat.composerQuickPick.sandbox`),
+            label: t(`shared.sandbox`),
             detail: t(`chat.composerQuickPick.here`),
             current: here,
         },

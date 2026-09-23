@@ -1,7 +1,6 @@
 import { env, makeRef } from "@intentic/graph";
 import type { CloudflareIntent, HostIntent, IntentSet } from "@intentic/need-resolver";
 import { needKey, resolveNeeds } from "@intentic/need-resolver";
-import { test, expect } from "bun:test";
 import type { Catalog } from "../lib/catalog.js";
 import { forgejoCatalog, gitlabCatalog } from "../lib/catalog.js";
 import { IMAGES } from "../lib/images.js";

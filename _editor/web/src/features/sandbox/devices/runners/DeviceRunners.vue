@@ -251,7 +251,7 @@ const add = async (): Promise<void> => {
                 :lines="lines"
                 :running="busy !== undefined"
                 :empty="t(`sandbox.deviceRunners.startingOnDevice`)"
-                :note="t(`sandbox.deviceRunners.runningOnDeviceKeeps`)"
+                :note="t(`shared.runningOnDeviceKeeps`)"
             />
             <DeviceOpFailure v-if="failure" :of="failure.notice" :command="failure.command" :machine="machine.label" />
             <p v-else-if="done" class="text-xs text-muted">{{ done }}</p>

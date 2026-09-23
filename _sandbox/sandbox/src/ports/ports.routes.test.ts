@@ -1,7 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { portsContract, portUrl } from "@intentic/sandbox-contract";
 import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { test, expect } from "bun:test";
 import { workspacePaths } from "../workspace/workspace.js";
 import { testConfig } from "../testing.js";
 import { errorCode, routesClient } from "../harness/route-client.testing.js";

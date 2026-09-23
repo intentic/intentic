@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import type { WatchOutcome } from "./transcript.js";
 import { watchWakeOf, watchWakePrompt, watchWakeRow, type WatchWakeFields } from "./watch-wake.js";
 

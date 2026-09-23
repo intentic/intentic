@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { type ModelOffer, offerLines, parseModelPick, renewsInWords } from "./model-offer.js";
 
 /* THE OFFER the Auto judge chooses from, and the reading of what it replies. Pure both ways: no catalog, no account. */

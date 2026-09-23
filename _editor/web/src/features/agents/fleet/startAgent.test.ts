@@ -3,8 +3,6 @@
 // store-level test can't see, so this presses the real buttons and reads the real strip.
 import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { createApp, h, nextTick } from "vue";
 import ChatTabs from "../../chat/tabs/ChatTabs.vue";
 import { useChat } from "../../chat/run/useChat";
@@ -15,10 +13,10 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals as other mounted-component tests; matches:false keeps the device desktop, where the docked
 // chat is the whole point.
-hoisted(() => {
+(() => {
     // Focusing a tab makes the strip scroll it into view, which jsdom does not implement.
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-});
+})();
 
 // A bare mount with the app-level registrations the real app makes; both surfaces carry the agents filter, whose daemon
 // tier needs the query client.

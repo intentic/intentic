@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { checkRunningIn, isBuildOutputPath, markCheckRunning } from "./checks-in-flight.js";
 
 test("a check marks the repo it runs in and no other; the root project is the root repo's", () => {

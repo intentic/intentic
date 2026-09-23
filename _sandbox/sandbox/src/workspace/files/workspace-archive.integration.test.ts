@@ -3,7 +3,6 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pack } from "tar-stream";
-import { test, expect } from "bun:test";
 import { extractTarToWorkspace, PathEscapeError } from "./workspace-archive.js";
 import { UploadTooLargeError } from "./workspace-files-upload.js";
 

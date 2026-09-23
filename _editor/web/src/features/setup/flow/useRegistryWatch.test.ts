@@ -2,7 +2,6 @@ import "@intentic/testing/dom";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { afterEach, beforeEach, describe, expect, it, jest, mock } from "bun:test";
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
 import { hostedWaitView } from "../hostedWait";
@@ -34,15 +33,19 @@ const scopes: EffectScope[] = [];
 
 // `opened` is the row this page settled on; the registry answers `rows`.
 const stage = (rows: readonly SandboxSummary[] = [pending], opened: SandboxSummary = pending) => {
-    const setupRows = unstubbed<SetupRowHost[`sandbox`]>(`sandbox`, { sandboxes: ref([]), select: mock(), remove: mock(async () => undefined) });
-    const enter = mock(async () => undefined);
-    const refresh = mock(async () => [...rows]);
+    const setupRows = unstubbed<SetupRowHost[`sandbox`]>(`sandbox`, {
+        sandboxes: ref([]),
+        select: jest.fn(),
+        remove: jest.fn(async () => undefined),
+    });
+    const enter = jest.fn(async () => undefined);
+    const refresh = jest.fn(async () => [...rows]);
     const hosted = {
         machine: ref<Machine>(`mine`),
         lane: ref<HostedLane>(HOSTED_IDLE),
         hostedRow: ref<SandboxSummary[`hosted`]>(null),
         hostedWait: ref(waitView()),
-        readMachine: mock(async (_id: string, _action: number) => undefined),
+        readMachine: jest.fn(async (_id: string, _action: number) => undefined),
     };
     const mintedFor = ref<string | undefined>(`s1:tok`);
     const scope = effectScope();

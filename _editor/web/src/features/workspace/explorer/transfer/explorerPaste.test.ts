@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { freeName, movableInto, pastePairs } from "./explorerPaste";
 
 describe(`freeName`, () => {

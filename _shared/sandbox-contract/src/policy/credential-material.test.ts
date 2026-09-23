@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { holdsCredentialMaterial, maskCredentialMaterial } from "./credential-material.js";
 
 // The two directions aren't symmetric: a miss just raises an extra card, a wrong clear un-gates a real credential read.

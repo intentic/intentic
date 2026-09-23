@@ -128,7 +128,7 @@ const heldNote = computed((): { readonly subject: string; readonly retry: string
 
         <!-- Unread isn't empty: until accounts load, this must not claim the fleet has nothing — drawn as the shape that's coming, not stated in words. -->
         <div v-if="!accountsLoaded" class="flex min-h-0 flex-1 flex-col gap-4 px-3 py-1" role="status" aria-busy="true">
-            <span class="sr-only">{{ t(`chat.chatCapacityRail.readingConnections`) }}</span>
+            <span class="sr-only">{{ t(`shared.readingConnections`) }}</span>
             <div v-for="index in 3" :key="index" class="flex flex-col gap-1.5" aria-hidden="true">
                 <span class="skeleton block h-2.5 w-24" />
                 <span class="skeleton block h-1 w-full rounded-full" />

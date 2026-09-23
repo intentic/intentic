@@ -2,7 +2,6 @@
 // pane hands the sink `null` every time a browser stops or the picture path changes. Production caught this as
 // "Cannot read properties of null (reading 'style')" from both `attach` and `close`.
 import "@intentic/testing/dom";
-import { it, expect } from "bun:test";
 import { videoSink } from "./videoSink";
 
 const canvas = (): HTMLCanvasElement => document.createElement(`canvas`);

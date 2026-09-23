@@ -1,5 +1,4 @@
 import type { Device } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import {
     agentBehind,
     agentChip,

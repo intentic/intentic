@@ -1,4 +1,3 @@
-import { expect, test } from "bun:test";
 import { declaredTestNote, landedCommitMessage } from "./landed-commit.js";
 
 // The push gate reads a weakening's declaration off the commit (assertion-ratchet.mjs), so the trailer must survive

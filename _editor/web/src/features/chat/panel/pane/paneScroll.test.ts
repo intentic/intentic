@@ -1,18 +1,16 @@
 import "@intentic/testing/dom";
-import { hoisted } from "@intentic/testing/bun";
-import { afterEach, expect, it, mock } from "bun:test";
 import { effectScope, nextTick, ref } from "vue";
 
 // Pins when the pane moves its own scroller: to the newest message when another transcript comes on screen or a strip
 // shows the turns it withheld, and after every row it follows. Whether the reader scrolled up, which decides if a
 // follow moves anything, is the scroller's own rule (useStickToBottom), stood in for here.
 
-const { pin, follow } = hoisted(() => ({ pin: mock(), follow: mock() }));
-mock.module("../../transcript/useStickToBottom", () => ({ useStickToBottom: () => ({ pin, follow }) }));
+const { pin, follow } = { pin: jest.fn(), follow: jest.fn() };
+jest.mock("../../transcript/useStickToBottom", () => ({ useStickToBottom: () => ({ pin, follow }) }));
 const { usePaneScroll } = await import("./paneScroll");
 
 const paneOf = () => {
-    const state = { conversationId: ref(`c1`), bare: ref<boolean | undefined>(false), messageCount: ref(0), streaming: ref(false), grow: mock() };
+    const state = { conversationId: ref(`c1`), bare: ref<boolean | undefined>(false), messageCount: ref(0), streaming: ref(false), grow: jest.fn() };
     effectScope().run(() =>
         usePaneScroll({
             scroller: ref(null),

@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, it, expect } from "bun:test";
 import { anchorsOf } from "./anchors.js";
 import { monorepoRoot, packageRoot } from "./repos.js";
 import { QueryDatasetSchema } from "./schema.js";

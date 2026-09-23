@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { scrollToShow, uniformRows, variableRows, windowOf } from "./rowWindow";
 
 describe(`uniformRows`, () => {

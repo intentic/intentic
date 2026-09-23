@@ -1,6 +1,5 @@
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { PrismaClient } from "@intentic/prisma";
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../../../config.js";
 import { testIngressConfig } from "../../../testing.js";
@@ -19,14 +18,14 @@ import { hostedInstanceId } from "../hosted.js";
 import * as timersPromisesOriginal from "node:timers/promises";
 
 /* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real time in production, polled up to sixty times. */
-mock.module("node:timers/promises", () => ({
+jest.mock("node:timers/promises", () => ({
     ...timersPromisesOriginal,
     setTimeout: async () => undefined,
 }));
 
 /* THE BRAKES, PINNED. */
 
-const logger = { info: mock(), warn: mock(), error: mock() } as never;
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never;
 
 const BASE = `ghcr.io/intentic/sandbox:stable`;
 const config = (over?: Partial<Config[`hosted`]>): Config =>
@@ -83,6 +82,11 @@ const machineRow = (over: Record<string, unknown> = {}) => ({
     warm: false,
     wokeAt: null,
     idleWarnedAt: null,
+    tier: `free`,
+    cpuKind: `shared`,
+    cpus: 4,
+    memoryMb: 4096,
+    volumeGb: 10,
     image: null,
     baseImage: null,
     environmentHash: null,
@@ -129,24 +133,24 @@ const request = (over: Partial<Parameters<typeof requestHostedBuild>[3]> = {}) =
 });
 
 // Every model the module touches, stubbed to a harmless default; each case overrides only what it's testing.
-const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof mock>>> = {}) =>
+const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof jest.fn>>> = {}) =>
     ({
-        hostedPlan: { findUnique: mock().mockResolvedValue(null), ...overrides[`hostedPlan`] },
-        hostedUsage: { findUnique: mock().mockResolvedValue(null), upsert: mock().mockResolvedValue({}), ...overrides[`hostedUsage`] },
+        hostedPlan: { findUnique: jest.fn().mockResolvedValue(null), ...overrides[`hostedPlan`] },
+        hostedUsage: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), ...overrides[`hostedUsage`] },
         hostedMachine: {
-            findUnique: mock().mockResolvedValue(machineRow()),
-            updateMany: mock().mockResolvedValue({ count: 1 }),
-            update: mock().mockResolvedValue({}),
-            findMany: mock().mockResolvedValue([]),
+            findUnique: jest.fn().mockResolvedValue(machineRow()),
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            update: jest.fn().mockResolvedValue({}),
+            findMany: jest.fn().mockResolvedValue([]),
             ...overrides[`hostedMachine`],
         },
         hostedBuild: {
-            count: mock().mockResolvedValue(0),
-            aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }),
-            findFirst: mock().mockResolvedValue(null),
-            findUnique: mock().mockResolvedValue(null),
-            findMany: mock().mockResolvedValue([]),
-            create: mock().mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+            count: jest.fn().mockResolvedValue(0),
+            aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: null } }),
+            findFirst: jest.fn().mockResolvedValue(null),
+            findUnique: jest.fn().mockResolvedValue(null),
+            findMany: jest.fn().mockResolvedValue([]),
+            create: jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) =>
                 Promise.resolve(
                     buildRow({
                         ...data,
@@ -160,9 +164,9 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof m
                     }),
                 ),
             ),
-            updateMany: mock().mockResolvedValue({ count: 1 }),
-            update: mock().mockResolvedValue({}),
-            deleteMany: mock().mockResolvedValue({ count: 0 }),
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            update: jest.fn().mockResolvedValue({}),
+            deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
             ...overrides[`hostedBuild`],
         },
     }) as unknown as PrismaClient;
@@ -214,8 +218,8 @@ describe(`requesting a build: every refusal spends nothing`, () => {
         return {
             code,
             fetches: calls.length,
-            guards: (prisma.hostedMachine.updateMany as ReturnType<typeof mock>).mock.calls.length,
-            rows: (prisma.hostedBuild.create as ReturnType<typeof mock>).mock.calls.length,
+            guards: (prisma.hostedMachine.updateMany as ReturnType<typeof jest.fn>).mock.calls.length,
+            rows: (prisma.hostedBuild.create as ReturnType<typeof jest.fn>).mock.calls.length,
         };
     };
     const refused = (code: string) => ({ code, fetches: 0, guards: 0, rows: 0 });
@@ -225,7 +229,7 @@ describe(`requesting a build: every refusal spends nothing`, () => {
     });
 
     it(`needs a machine we run`, async () => {
-        expect(await outcome(fakePrisma({ hostedMachine: { findUnique: mock().mockResolvedValue(null) } }), config())).toEqual(refused(`no-machine`));
+        expect(await outcome(fakePrisma({ hostedMachine: { findUnique: jest.fn().mockResolvedValue(null) } }), config())).toEqual(refused(`no-machine`));
     });
 
     it(`refuses content that no longer hashes to what the owner reviewed`, async () => {
@@ -240,25 +244,25 @@ describe(`requesting a build: every refusal spends nothing`, () => {
     });
 
     it(`refuses a second build while one is in flight`, async () => {
-        const prisma = fakePrisma({ hostedMachine: { findUnique: mock().mockResolvedValue(machineRow({ buildingId: `b0` })) } });
+        const prisma = fakePrisma({ hostedMachine: { findUnique: jest.fn().mockResolvedValue(machineRow({ buildingId: `b0` })) } });
         expect(await outcome(prisma, config())).toEqual(refused(`busy`));
     });
 
     it(`refuses past the owner's builds for the day`, async () => {
-        const prisma = fakePrisma({ hostedBuild: { count: mock().mockResolvedValueOnce(5).mockResolvedValue(0) } });
+        const prisma = fakePrisma({ hostedBuild: { count: jest.fn().mockResolvedValueOnce(5).mockResolvedValue(0) } });
         expect(await outcome(prisma, config())).toEqual(refused(`daily`));
     });
 
     it(`refuses when the platform is building as many as it may at once`, async () => {
-        const prisma = fakePrisma({ hostedBuild: { count: mock().mockResolvedValueOnce(0).mockResolvedValue(4) } });
+        const prisma = fakePrisma({ hostedBuild: { count: jest.fn().mockResolvedValueOnce(0).mockResolvedValue(4) } });
         expect(await outcome(prisma, config())).toEqual(refused(`busy`));
     });
 
     it(`refuses when the platform's minutes for the day are spent, counting builds still running`, async () => {
         const prisma = fakePrisma({
             hostedBuild: {
-                count: mock().mockResolvedValueOnce(0).mockResolvedValue(3),
-                aggregate: mock().mockResolvedValue({ _sum: { minutes: 500 } }),
+                count: jest.fn().mockResolvedValueOnce(0).mockResolvedValue(3),
+                aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: 500 } }),
             },
         });
         // 500 finished + 3 x 30 running + 30 for this one = 620 > 600.
@@ -266,7 +270,7 @@ describe(`requesting a build: every refusal spends nothing`, () => {
     });
 
     it(`refuses a metered owner whose remaining hours are under the timeout`, async () => {
-        const prisma = fakePrisma({ hostedUsage: { findUnique: mock().mockResolvedValue({ minutes: 40 * 60 - 10 }), upsert: mock() } });
+        const prisma = fakePrisma({ hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 40 * 60 - 10 }), upsert: jest.fn() } });
         expect(await outcome(prisma, config())).toEqual(refused(`budget`));
     });
 });
@@ -328,7 +332,7 @@ describe(`requesting a build: the start`, () => {
         expect(create.config.env[BUILD_ENV.cache]).toBe(`registry.fly.io/intentic-sbx-abc:env-cache`);
         expect(create.config.env[BUILD_ENV.timeoutSeconds]).toBe(`1800`);
         expect(create.config.env[BUILD_ENV.reportUrl]).toMatch(/^https:\/\/api\.test\/sandbox\/hosted-build-report\/[0-9a-f-]+$/);
-        const created = (prisma.hostedBuild.create as ReturnType<typeof mock>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
+        const created = (prisma.hostedBuild.create as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
         expect(created.data).toMatchObject({
             state: `building`,
             hash: HASH,
@@ -347,9 +351,9 @@ describe(`requesting a build: the start`, () => {
             { match: (method, url) => method === `POST` && url.endsWith(`/machines`), respond: () => json({ id: `mb1`, state: `created` }) },
             { match: (method, url) => method === `DELETE` && url.includes(`/machines/mb1`), respond: () => json({ ok: true }) },
         ]);
-        const prisma = fakePrisma({ hostedBuild: { create: mock().mockRejectedValue(new Error(`db down`)) } });
+        const prisma = fakePrisma({ hostedBuild: { create: jest.fn().mockRejectedValue(new Error(`db down`)) } });
         await expect(requestHostedBuild(prisma, config(), logger, request())).rejects.toThrow(`db down`);
-        const releases = (prisma.hostedMachine.updateMany as ReturnType<typeof mock>).mock.calls.map(
+        const releases = (prisma.hostedMachine.updateMany as ReturnType<typeof jest.fn>).mock.calls.map(
             (call) => call[0] as { data: { buildingId: string | null } },
         );
         expect(releases.at(-1)?.data.buildingId).toBeNull();
@@ -360,11 +364,11 @@ describe(`requesting a build: the start`, () => {
         const built = buildRow({ state: `built`, digest: DIGEST, finishedAt: new Date() });
         const prisma = fakePrisma({
             hostedMachine: {
-                findUnique: mock().mockResolvedValue(
+                findUnique: jest.fn().mockResolvedValue(
                     machineRow({ environmentHash: HASH, baseImage: BASE, image: `registry.fly.io/intentic-sbx-abc@${DIGEST}` }),
                 ),
             },
-            hostedBuild: { findFirst: mock().mockResolvedValue(built) },
+            hostedBuild: { findFirst: jest.fn().mockResolvedValue(built) },
         });
         expect((await requestHostedBuild(prisma, config(), logger, request())).state).toBe(`built`);
         expect(calls).toHaveLength(0);
@@ -376,7 +380,7 @@ describe(`requesting a build: the start`, () => {
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `stopped` }) },
         ]);
         const built = buildRow({ state: `built`, digest: DIGEST, finishedAt: new Date() });
-        const prisma = fakePrisma({ hostedBuild: { findFirst: mock().mockResolvedValue(built) } });
+        const prisma = fakePrisma({ hostedBuild: { findFirst: jest.fn().mockResolvedValue(built) } });
         expect((await requestHostedBuild(prisma, config(), logger, request())).state).toBe(`built`);
         expect(calls.some((call) => call.method === `POST` && call.url.endsWith(`/machines`))).toBe(false);
         const update = calls.find((call) => call.method === `POST` && call.url.endsWith(`/machines/m1`))!.body as {
@@ -391,8 +395,8 @@ describe(`requesting a build: the start`, () => {
 });
 
 describe(`the builder's report`, () => {
-    const withBuild = (row: ReturnType<typeof buildRow>, over: Record<string, Record<string, ReturnType<typeof mock>>> = {}) =>
-        fakePrisma({ ...over, hostedBuild: { findUnique: mock().mockResolvedValue(row), ...over[`hostedBuild`] } });
+    const withBuild = (row: ReturnType<typeof buildRow>, over: Record<string, Record<string, ReturnType<typeof jest.fn>>> = {}) =>
+        fakePrisma({ ...over, hostedBuild: { findUnique: jest.fn().mockResolvedValue(row), ...over[`hostedBuild`] } });
 
     it(`answers unknown, forbidden and stale without touching anything`, async () => {
         const calls = stubFetch([]);
@@ -419,7 +423,7 @@ describe(`the builder's report`, () => {
         ]);
         const prisma = withBuild(buildRow());
         expect(await reportHostedBuild(prisma, config(), logger, `b1`, `s3cret`, { exitCode: 0, digest: DIGEST, log: `#1 DONE\n` })).toBe(`done`);
-        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof mock>).mock.calls[0]?.[0] as {
+        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as {
             where: unknown;
             data: Record<string, unknown>;
         };
@@ -479,7 +483,7 @@ describe(`the builder's report`, () => {
                 log: `E: Unable to locate package gnucobol\n`,
             }),
         ).toBe(`done`);
-        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof mock>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
+        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
         expect(verdict.data).toMatchObject({
             state: `failed`,
             exitCode: 100,
@@ -495,14 +499,14 @@ describe(`the builder's report`, () => {
         stubFetch([graphqlRoute(), { match: (method) => method === `DELETE`, respond: () => json({ ok: true }) }]);
         const prisma = withBuild(buildRow());
         await reportHostedBuild(prisma, config(), logger, `b1`, `s3cret`, { exitCode: 0, digest: undefined, log: `` });
-        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof mock>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
+        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
         expect(verdict.data[`state`]).toBe(`failed`);
     });
 });
 
 describe(`the reconcile`, () => {
     const building = (over: Record<string, unknown> = {}) =>
-        fakePrisma({ hostedBuild: { findMany: mock().mockResolvedValue([buildRow(over)]), findFirst: mock().mockResolvedValue(null) } });
+        fakePrisma({ hostedBuild: { findMany: jest.fn().mockResolvedValue([buildRow(over)]), findFirst: jest.fn().mockResolvedValue(null) } });
     const appMachines = (ids: string[]) => ({
         match: (method: string, url: string) => method === `GET` && url.endsWith(`/apps/intentic-sbx-abc/machines`),
         respond: () => json(ids.map((id) => ({ id, state: `started`, config: { metadata: {} } }))),
@@ -517,7 +521,7 @@ describe(`the reconcile`, () => {
         ]);
         const prisma = building();
         await reconcileHostedBuilds(prisma, config(), logger);
-        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof mock>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
+        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
         expect(verdict.data).toMatchObject({ state: `failed`, error: `the builder disappeared before it reported` });
     });
 
@@ -538,7 +542,7 @@ describe(`the reconcile`, () => {
         ]);
         const prisma = building();
         await reconcileHostedBuilds(prisma, config(), logger);
-        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof mock>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
+        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
         expect(verdict.data).toMatchObject({ state: `failed`, exitCode: 137, error: `the builder ran out of memory` });
     });
 
@@ -567,7 +571,7 @@ describe(`the reconcile`, () => {
         ]);
         const prisma = building({ createdAt: new Date(Date.now() - 50 * 60_000) });
         await reconcileHostedBuilds(prisma, config(), logger);
-        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof mock>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
+        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
         expect(verdict.data).toMatchObject({ state: `failed`, error: `the build ran past 30 minutes and was stopped`, minutes: 31 });
         expect(calls.some((call) => call.method === `DELETE` && call.url.endsWith(`/machines/mb1?force=true`))).toBe(true);
     });
@@ -600,8 +604,8 @@ describe(`the reconcile`, () => {
     it(`opens a guard whose build is no longer building`, async () => {
         stubFetch([]);
         const prisma = fakePrisma({
-            hostedBuild: { findMany: mock().mockResolvedValue([]), findFirst: mock().mockResolvedValue(null) },
-            hostedMachine: { findMany: mock().mockResolvedValue([{ id: `h1`, buildingId: `b-old` }]) },
+            hostedBuild: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null) },
+            hostedMachine: { findMany: jest.fn().mockResolvedValue([{ id: `h1`, buildingId: `b-old` }]) },
         });
         await reconcileHostedBuilds(prisma, config(), logger);
         expect(prisma.hostedMachine.updateMany).toHaveBeenCalledWith({ where: { id: `h1`, buildingId: `b-old` }, data: { buildingId: null } });
@@ -616,15 +620,15 @@ describe(`a moved base image`, () => {
         ]);
         const prisma = fakePrisma({
             hostedMachine: {
-                findUnique: mock().mockResolvedValue(
+                findUnique: jest.fn().mockResolvedValue(
                     machineRow({ image: `registry.fly.io/intentic-sbx-abc@${DIGEST}`, baseImage: BASE, environmentHash: HASH }),
                 ),
             },
-            hostedBuild: { findFirst: mock().mockResolvedValueOnce({ hash: HASH, content: OVERLAY }).mockResolvedValue(null) },
+            hostedBuild: { findFirst: jest.fn().mockResolvedValueOnce({ hash: HASH, content: OVERLAY }).mockResolvedValue(null) },
         });
         const moved = config({ image: `ghcr.io/intentic/sandbox:1.61.0` });
         await rebuildOnMovedBase(prisma, moved, logger, machineRow({ image: `x`, baseImage: BASE, environmentHash: HASH }), owner);
-        const created = (prisma.hostedBuild.create as ReturnType<typeof mock>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
+        const created = (prisma.hostedBuild.create as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
         expect(created.data).toMatchObject({ requestedBy: `platform`, baseImage: `ghcr.io/intentic/sandbox:1.61.0`, hash: HASH });
     });
 
@@ -642,9 +646,9 @@ describe(`status and retention`, () => {
     it(`answers the latest build and what the machine runs`, async () => {
         const prisma = fakePrisma({
             hostedBuild: {
-                findFirst: mock().mockResolvedValue(buildRow({ state: `failed`, error: `the build exited 1`, log: `boom`, finishedAt: new Date(0) })),
+                findFirst: jest.fn().mockResolvedValue(buildRow({ state: `failed`, error: `the build exited 1`, log: `boom`, finishedAt: new Date(0) })),
             },
-            hostedMachine: { findUnique: mock().mockResolvedValue({ environmentHash: `old` }) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ environmentHash: `old` }) },
         });
         const status = await hostedBuildStatus(prisma, `h1`);
         expect(status.applied).toBe(`old`);
@@ -665,8 +669,8 @@ describe(`status and retention`, () => {
     it(`drops old rows but keeps the newest built one per machine`, async () => {
         const prisma = fakePrisma({
             hostedBuild: {
-                findMany: mock().mockResolvedValue([{ id: `keep-1` }, { id: `keep-2` }]),
-                deleteMany: mock().mockResolvedValue({ count: 7 }),
+                findMany: jest.fn().mockResolvedValue([{ id: `keep-1` }, { id: `keep-2` }]),
+                deleteMany: jest.fn().mockResolvedValue({ count: 7 }),
             },
         });
         expect(await sweepHostedBuilds(prisma, () => Date.parse(`2026-09-04T00:00:00Z`))).toBe(7);

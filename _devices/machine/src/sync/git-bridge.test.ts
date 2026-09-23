@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { describe, it, expect } from "bun:test";
 import type { Pairing } from "./config.js";
 import { type BridgeExec, bridgeRepo, listSandboxRepos, runGitBridge } from "./git-bridge.js";
 

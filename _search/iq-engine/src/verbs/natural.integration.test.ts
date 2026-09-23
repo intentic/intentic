@@ -1,4 +1,3 @@
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import { createEngine } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";

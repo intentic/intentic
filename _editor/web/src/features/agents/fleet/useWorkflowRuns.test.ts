@@ -1,5 +1,4 @@
 import type { WorkflowRun } from "@intentic/sandbox-contract";
-import { describe, it, expect, mock } from "bun:test";
 import { mocked, waitFor } from "@intentic/testing/bun";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp, effectScope, ref } from "vue";
@@ -12,13 +11,13 @@ import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, useWorkfl
 
 // Importing these functions pulls in the fleet store, which reads `window.env` at import time; mocked here even
 // though this file never touches it.
-mock.module("../../../router", () => ({ router: { push: mock() } }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 // The two filing verbs this file presses; any other call names itself.
-const archiveRun = mock();
-const unarchiveRun = mock();
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workflows: { archiveRun, unarchiveRun } }) }));
-mock.module("../../sandbox/client/useSandboxQuery", () => ({ useSandboxQuery: mock() }));
+const archiveRun = jest.fn();
+const unarchiveRun = jest.fn();
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workflows: { archiveRun, unarchiveRun } }) }));
+jest.mock("../../sandbox/client/useSandboxQuery", () => ({ useSandboxQuery: jest.fn() }));
 
 // The grouping rule alone: the pure half of a run row shared by the board's lanes, the board's archive, and the
 // floating rail.

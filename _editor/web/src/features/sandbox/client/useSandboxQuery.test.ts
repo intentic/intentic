@@ -1,5 +1,4 @@
 // A failed read shows the daemon's message, or the version drift when this app's schema refused the answer.
-import { describe, it, expect, afterEach } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { effectScope, type EffectScope } from "vue";
 import { z } from "zod";

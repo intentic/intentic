@@ -1,7 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { fileUsageParkStore } from "./usage-parks.js";
 
 // The park store is only worth having on disk, so what it owes is a deadline that survives the process that earned it.

@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
-import { test, expect, afterEach } from "bun:test";
 import { isolatedAgent, noIsolation } from "../../testing.js";
 import { changesAgainstBase } from "../../git/changes/changes.js";
 import { stagePaths } from "../../git/changes/changes-index.js";

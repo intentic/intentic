@@ -2,23 +2,21 @@
 // composable test can't see this, since it's a property of how many rows the component builds.
 import "@intentic/testing/dom";
 import type { WorkspaceSearchGroup } from "@intentic/api-contract";
-import { test, expect, afterEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualUi from "@intentic/ui";
 
-const tokenized = hoisted(() => {
+const tokenized = (() => {
     const lines: string[] = [];
     return lines;
-});
+})();
 
 // The real barrel, with only tokenizeLine recording its cost instead of running it, since grammar loading is
 // what a mount can't afford; every call is a scheduled tokenize, exactly what's counted.
 // Snapshotted before the mock below replaces the module: a namespace is a live binding, so calling through it
 // afterwards would re-enter the stand-in rather than reach the real one.
 const realUi = { ...actualUi };
-mock.module("@intentic/ui", () => {
+jest.mock("@intentic/ui", () => {
     return {
         ...realUi,
         useHighlighter: () => ({

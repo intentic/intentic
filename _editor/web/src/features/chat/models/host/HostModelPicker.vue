@@ -25,7 +25,7 @@ const open = computed<boolean>({
 </script>
 
 <template>
-    <ResponsiveOverlay v-model="open" :anchor="modelRequest?.anchor" :header="t(`chat.hostModelPicker.model`)" panel-class="w-[26rem]">
+    <ResponsiveOverlay v-model="open" :anchor="modelRequest?.anchor" :header="t(`shared.model`)" panel-class="w-[26rem]">
         <HostPickerBody />
     </ResponsiveOverlay>
 </template>

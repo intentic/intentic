@@ -3,7 +3,6 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserContext } from "playwright";
-import { test, expect } from "bun:test";
 import { answerBrowserDialog, browserSessionContext, closeBrowserSession, listBrowserSessions, openBrowserSession } from "./browser-sessions.js";
 
 // A Playwright client dismisses any dialog nobody listens for, and this daemon attaches to the agent's browser as a

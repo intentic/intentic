@@ -1,5 +1,4 @@
 import type { SshExecutor, SshResult, SshTarget } from "@intentic/providers";
-import { describe, it, expect } from "bun:test";
 import { acquireApplyLock } from "./apply-lock.js";
 
 // Fake host fleet driven by the `#APPLYLOCK <op> <nonce> <ttl>` header each lock script starts with (a real shell reads

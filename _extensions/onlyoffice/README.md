@@ -49,11 +49,10 @@ Two things in the platform decide this shape, and both were verified rather than
   forward table is in-memory and a busy sandbox can evict a slot. The proxy's `frame-ancestors` names the editor
   origins AND `'self'`: the document frame `api.js` creates has this extension's own page as an ancestor, and without
   `'self'` the browser refuses it (`panels/preview-proxy.ts`, and the nested-frame test beside it). The same proxy
-  rewrites `Host` to `localhost:<port>` and forwards no `X-Forwarded-Host`, and the document server's nginx builds
-  `$the_host` from exactly those, so every absolute URL it hands the editor over the socket (the converted
-  `Editor.bin` to download, prints, images) would name the sandbox's localhost. The listener therefore sets
-  `X-Forwarded-Host`/`X-Forwarded-Proto` to the forwarded origin on every proxied request and upgrade
-  (`towardsDocumentServer` in `listener.ts`); "Download failed" in the editor is what the missing header looks like.
+  rewrites `Host` to `localhost:<port>` but names the browser's origin in `X-Forwarded-Host`/`X-Forwarded-Proto`,
+  which the listener passes through and the document server's nginx builds `$the_host` from, so every absolute URL it
+  hands the editor over the socket (the converted `Editor.bin` to download, prints, images) names that origin;
+  "Download failed" in the editor is what a missing header looks like.
 
 The core learned two small things for this: a viewer can be fed the `path` alone (its backend reads the file), and
 a viewer can declare `edit`, which outranks a render-only viewer for the same extension whatever order the two

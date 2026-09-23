@@ -1,4 +1,3 @@
-import { describe, it, expect, afterEach, mock, spyOn } from "bun:test";
 import { registerDocumentProvider } from "../../../core-views/documentRegistry";
 import { rowActionsFor, type RowActionSources } from "./rowActions";
 
@@ -9,10 +8,10 @@ const sources = (over: Partial<RowActionSources> = {}): RowActionSources => ({
     manageableDirs: new Set<string>(),
     personaDirs: new Map<string, number>(),
     checkDirs: new Map<string, { adopted: boolean; changed: boolean }>(),
-    openDirectory: mock(),
-    openPersonas: mock(),
-    openChecks: mock(),
-    openDocument: mock(),
+    openDirectory: jest.fn(),
+    openPersonas: jest.fn(),
+    openChecks: jest.fn(),
+    openDocument: jest.fn(),
     ...over,
 });
 
@@ -144,7 +143,7 @@ describe(`rowActionsFor`, () => {
     });
 
     it(`drops a provider whose detect throws, keeping the rest of the row`, () => {
-        spyOn(console, `error`).mockImplementation(() => {});
+        jest.spyOn(console, `error`).mockImplementation(() => {});
         disposables.push(
             registerDocumentProvider({
                 owner: `acme.broken`,

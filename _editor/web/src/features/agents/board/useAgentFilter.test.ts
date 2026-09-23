@@ -1,29 +1,28 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import * as actualVueQuery from "@tanstack/vue-query";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Same module-eval cuts useAgents.test.ts makes: importing the fleet store pulls in the router, analytics and sandbox
 // modules, which read environment.ts's `window.env` at import time.
-mock.module("../../../router", () => ({ router: { push: mock() } }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 // The roster's own report when it catches itself behind (auditRoster) posts through sandboxTarget, another of those
 // import-time reads.
-mock.module("../../../app/clientDiagnostics", () => ({ reportClient: mock() }));
-mock.module("../../sandbox/client/useSandbox", () => {
+jest.mock("../../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));
+jest.mock("../../sandbox/client/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(`sbx-1`), reachable: ref(true) }),
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     };
 });
 // The daemon tier never reaches the typed client here (its useQuery is stubbed below); anything else that asks says so.
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 // These cases run on fake timers, so useChat's hydrate watch actually runs here; the registered placeholder has an
 // empty transcript and other requests answer 404, irrelevant to the filter but must not unlatch `registered`.
-mock.module("../../sandbox/client/sandboxClient", () => ({
-    sandboxJson: mock(async () => ({})),
-    sandboxRequest: mock(async (path: string) =>
+jest.mock("../../sandbox/client/sandboxClient", () => ({
+    sandboxJson: jest.fn(async () => ({})),
+    sandboxRequest: jest.fn(async (path: string) =>
         path === `/agents/blank/transcript`
             ? { ok: true, status: 200, body: null, json: async () => ({ messages: [] }) }
             : { ok: false, status: 404, body: null },
@@ -35,7 +34,7 @@ mock.module("../../sandbox/client/sandboxClient", () => ({
 const answers = { agents: undefined as unknown, sessions: undefined as unknown };
 // The keys the composable asked under, kept live, since re-asking on a match-case flip is part of what's tested.
 const keys: Ref<unknown[]>[] = [];
-mock.module("@tanstack/vue-query", () => {
+jest.mock("@tanstack/vue-query", () => {
     return {
         ...actualVueQuery,
         useQuery: (options: { queryKey: Ref<unknown[]> }) => {

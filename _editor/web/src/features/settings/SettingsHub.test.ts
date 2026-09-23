@@ -5,24 +5,23 @@
 // gone, which is the only input the page's post-checkout wait has.
 import "@intentic/testing/dom";
 import { IconStub } from "@intentic/ui/testing";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
 
 // The plan read still in flight: `enabled` unanswered, so the Billing row has nothing to be drawn from yet.
 const planLoading = ref(true);
-mock.module(`./hosted-plan/useHostedPlan`, () => ({
+jest.mock(`./hosted-plan/useHostedPlan`, () => ({
     useHostedPlan: () => ({ offered: ref(false), isLoading: planLoading }),
 }));
 
-// A mock.module specifier must be a literal string, so the section list cannot be looped over here.
+// A jest.mock specifier must be a literal string, so the section list cannot be looped over here.
 const stub = (slug: string) => ({ default: defineComponent({ render: () => h(`section`, { "data-section": slug }) }) });
-mock.module(`./SettingsProfile.vue`, () => stub(`profile`));
-mock.module(`./SettingsBilling.vue`, () => stub(`billing`));
-mock.module(`./SettingsAppearance.vue`, () => stub(`appearance`));
-mock.module(`./SettingsNotifications.vue`, () => stub(`notifications`));
-mock.module(`./SettingsKeybindings.vue`, () => stub(`keybindings`));
-mock.module(`./SettingsData.vue`, () => stub(`data`));
+jest.mock(`./SettingsProfile.vue`, () => stub(`profile`));
+jest.mock(`./SettingsBilling.vue`, () => stub(`billing`));
+jest.mock(`./SettingsAppearance.vue`, () => stub(`appearance`));
+jest.mock(`./SettingsNotifications.vue`, () => stub(`notifications`));
+jest.mock(`./SettingsKeybindings.vue`, () => stub(`keybindings`));
+jest.mock(`./SettingsData.vue`, () => stub(`data`));
 
 const { default: SettingsHub } = await import("./SettingsHub.vue");
 

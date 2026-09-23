@@ -2,7 +2,6 @@
 // those fences reaches the DOM as components, and that a document without them still renders in the single-root shape
 // every surface depends on.
 import "@intentic/testing/dom";
-import { describe, it, expect } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, h } from "vue";
 

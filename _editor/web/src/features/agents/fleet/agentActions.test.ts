@@ -1,11 +1,9 @@
 import type { AgentSummary, LandConflict } from "@intentic/sandbox-contract";
-import { it, expect, afterEach, mock } from "bun:test";
-import { waitFor, stubGlobal, unstubAllGlobals, hoisted } from "@intentic/testing/bun";
+import { waitFor, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { PickAction } from "../../chat/session/selectionReducer";
 
-// A tab's selection as this suite reads it back: the picks it holds, and the one write every pick goes through, which
-// lands a plain write on those picks and records any model worn; hoisted, since the draft stub below is.
-const pickable = hoisted(() => <P extends Record<string, { value: string | undefined }>>(picks: P, worn: unknown[] = []) => ({
+// A tab's selection as this suite reads it back: its picks, and the one write that sets them and records any model worn.
+const pickable = <P extends Record<string, { value: string | undefined }>>(picks: P, worn: unknown[] = []) => ({
     ...picks,
     apply: (action: PickAction): void => {
         if (action.kind === `wearModel`) {
@@ -17,10 +15,10 @@ const pickable = hoisted(() => <P extends Record<string, { value: string | undef
             }
         }
     },
-}));
+});
 
-// The chat tabs agentActions sends through, swappable per test; hoisted because the module factory below is.
-const chat = hoisted(() => ({
+// The chat tabs agentActions sends through, swappable per test.
+const chat = {
     conversations: {
         value: [] as {
             conversationId: string;
@@ -37,7 +35,7 @@ const chat = hoisted(() => ({
     enqueued: [] as string[],
     // Every errand turn a conversation opened, by its opening: the row the chat draws before the words exist.
     opened: [] as string[],
-}));
+};
 // A registered tab: `isolated: false` keeps the fleet's draft join from carding it, so the empty roster here leaves
 // askAgentToResolve nothing to open. `unsent` is read of every tab regardless of the latch.
 const tab = (id: string) => ({
@@ -62,14 +60,14 @@ const tab = (id: string) => ({
 });
 
 // When the tab being opened has its transcript on screen; held open by the one case about what happens meanwhile.
-const painting = hoisted(() => ({ until: undefined as Promise<void> | undefined }));
-mock.module("../../chat/run/useChat-sessions", () => ({ transcriptShown: () => painting.until ?? Promise.resolve() }));
+const painting = { until: undefined as Promise<void> | undefined };
+jest.mock("../../chat/run/useChat-sessions", () => ({ transcriptShown: () => painting.until ?? Promise.resolve() }));
 
 // The daemon clients stay real, the typed one included: the bug under test lived in the gap between agentActions and the
 // actual request. Everything else mocked here is what agentActions's other actions need for a browser (device, router,
 // sandbox).
-mock.module("@intentic/ui", () => ({ useDevice: () => ({ mobile: { value: false } }) }));
-mock.module("../../chat/run/useChat", () => ({
+jest.mock("@intentic/ui", () => ({ useDevice: () => ({ mobile: { value: false } }) }));
+jest.mock("../../chat/run/useChat", () => ({
     // `active` and `releaseDone` are both reached by module-scope watchers in useAgents the moment that module loads.
     useChat: () => ({
         conversations: chat.conversations,
@@ -78,19 +76,19 @@ mock.module("../../chat/run/useChat", () => ({
     }),
 }));
 // The strip the fleet reads at module load; empty so no draft card competes with the registry rows under test.
-mock.module("../../chat/panel/useChat-strip", () => ({
+jest.mock("../../chat/panel/useChat-strip", () => ({
     chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
     chatPreviews: { value: {} },
     previewOf: () => undefined,
 }));
 // The draft startAgent pins and summons, one per test so its pins can be read back.
-const draft = hoisted(() => ({
+const draft = {
     value: {
         conversationId: `c1`,
         selection: pickable({ actsAs: { value: undefined as string | undefined }, startIn: { value: undefined as string | undefined } }),
     },
-}));
-mock.module("../../chat/panel/useChat-reveal", () => ({
+};
+jest.mock("../../chat/panel/useChat-reveal", () => ({
     // `actsAs` is on the stub since startAgent pins the draft before summoning it, including to `undefined` when
     // pressing Anyone un-pins a persona.
     draftConversation: () => ({ ...draft.value, turn: { say: (prompt: string) => chat.enqueued.push(prompt) } }),
@@ -99,13 +97,13 @@ mock.module("../../chat/panel/useChat-reveal", () => ({
 }));
 // The summons channel is the seam startAgent shows the new tab through; this suite has no second window to receive it,
 // so a summoned turn runs here, as summonTurn does in any window drawing the chat.
-mock.module("../../chat/run/summon", () => ({
+jest.mock("../../chat/run/summon", () => ({
     summonChat: () => {},
     summonTurn: (conversation: { turn: { say: (prompt: string) => void } }, prompt: string) => conversation.turn.say(prompt),
 }));
-mock.module("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined }, UNPERSISTED: `unpersisted` }));
-mock.module("../../../router", () => ({ router: { push: mock() } }));
-mock.module("../../sandbox/client/useSandbox", () => ({
+jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined }, UNPERSISTED: `unpersisted` }));
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
+jest.mock("../../sandbox/client/useSandbox", () => ({
     useSandbox: () => ({
         active: { value: { token: `connect` } },
         activeSandboxId: { value: `s1` },
@@ -113,7 +111,7 @@ mock.module("../../sandbox/client/useSandbox", () => ({
     }),
     sandboxKey: (...parts: unknown[]) => parts,
 }));
-mock.module("../../sandbox/session/sandboxSession", () => ({
+jest.mock("../../sandbox/session/sandboxSession", () => ({
     useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }),
 }));
 

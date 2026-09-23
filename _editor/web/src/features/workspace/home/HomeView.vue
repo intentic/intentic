@@ -1,13 +1,17 @@
 <!-- The home: the folder being looked at as large tiles, folders first and files by kind, with a quick look on hover. -->
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { ConfirmDialog, ContextMenu, iconForEntry, useLoadingReveal } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
-import { computed, inject, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { variableRows } from "../../../lib/rowWindow";
 import { useRowWindow } from "../../../lib/useRowWindow";
 import { useLayout } from "../../../shell/window/useLayout";
-import { type ExplorerFilters, explorerShows, technicalHidden } from "../explorer/explorerFilter";
+import { explorerShows, technicalHidden } from "../explorer/explorerFilter";
+import { consumeSuppressedClick, useEntryDrag } from "../explorer/transfer/useEntryDrag";
+import { deadLink } from "../explorer/tree/treeRows";
+import { focusField } from "../explorer/tree/useTreeEdits";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { opensAsFolder } from "../files/archiveEntries";
 import { withProvisionalEntries } from "../files/provisionalEntries";
@@ -30,35 +34,17 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const { homeDir, openDir, selected } = useHome();
-const { tree, entriesByPath, lazyChildren, lazyHidden, lazyLoading, rootHidden, loadChildren, isLoading } = useWorkspaceTree();
+const { tree, entriesByPath, entry: entryAt, listingOf, hiddenIn, keepListed, lazyLoading, isLoading } = useWorkspaceTree();
 const { openFile } = useWorkspaceTabs();
 const layout = useLayout();
 const dirActions = inject(HOME_DIR_ACTIONS, () => []);
 
+// The open folder's entries; undefined until a folder the walk skipped has been listed.
+const children = computed(() => listingOf(homeDir.value));
+keepListed(() => homeDir.value);
+
 // The same three switches as the tree, so the home never lists what the tree hides.
-const filters = computed<ExplorerFilters>(() => ({
-    showIgnored: layout.showIgnored.value,
-    hideTests: layout.hideTests.value,
-    hideTechnical: layout.hideTechnical.value,
-}));
-
-// The open folder's entries: inline from the walk, or the lazy listing for a folder the walk skipped; undefined until
-// that listing lands.
-const children = computed<readonly WorkspaceTreeEntry[] | undefined>(() => {
-    const dir = homeDir.value;
-    return dir === `` ? tree.value : (entriesByPath.value.get(dir)?.children ?? lazyChildren.value.get(dir));
-});
-watch(
-    () => [homeDir.value, children.value === undefined] as const,
-    ([dir, unlisted]) => {
-        if (dir !== `` && unlisted) {
-            void loadChildren(dir);
-        }
-    },
-    { immediate: true },
-);
-
-const shows = (entry: WorkspaceTreeEntry): boolean => explorerShows(entry, filters.value);
+const shows = (entry: WorkspaceTreeEntry): boolean => explorerShows(entry, layout.explorerFilters.value);
 
 // --- The query: the sidebar's own (HOME_SEARCH), answered here under the open folder ---------------------------------
 // Names the home matches itself over the loaded tree; text and smart are the daemon's, and the home draws the files
@@ -74,10 +60,6 @@ const query = computed<string>({
 });
 const querying = computed(() => query.value.trim() !== ``);
 const searching = computed(() => search?.searching.value === true);
-const entryAt = (path: string): WorkspaceTreeEntry | undefined =>
-    entriesByPath.value.get(path) ?? lazyChildren.value.get(parentDir(path))?.find((entry) => entry.path === path);
-const childrenOfEntry = (folder: WorkspaceTreeEntry): readonly WorkspaceTreeEntry[] | undefined =>
-    folder.children ?? lazyChildren.value.get(folder.path);
 const results = computed(() => {
     if (search === undefined || !querying.value) {
         return [];
@@ -88,7 +70,7 @@ const results = computed(() => {
               homeDir.value,
               entryAt,
           )
-        : nameMatches(query.value, homeDir.value, children.value ?? [], childrenOfEntry, shows);
+        : nameMatches(query.value, homeDir.value, children.value ?? [], (folder) => listingOf(folder.path), shows);
 });
 // The folder each result sits in, for the line under its name; "" (the open folder itself) draws nothing.
 const whereByPath = computed(() => new Map(results.value.map((result) => [result.entry.path, result.where])));
@@ -177,8 +159,8 @@ const painted = computed(() =>
 // and `bands.total` there would interpolate as "[object Object]" and silently leave the folder unscrollable.
 const homeHeight = computed(() => bands.total.value);
 // Two quiet lines under the tiles, each only when it has a number to say.
-const hiddenTooling = computed(() => technicalHidden(children.value ?? [], filters.value));
-const hiddenByCap = computed(() => (homeDir.value === `` ? rootHidden.value : (lazyHidden.value.get(homeDir.value) ?? 0)));
+const hiddenTooling = computed(() => technicalHidden(children.value ?? [], layout.explorerFilters.value));
+const hiddenByCap = computed(() => hiddenIn(homeDir.value));
 
 const loading = computed(() => (homeDir.value === `` ? isLoading.value : children.value === undefined && lazyLoading.value.has(homeDir.value)));
 const revealed = useLoadingReveal(loading, homeDir);
@@ -197,63 +179,27 @@ const crumbs = computed<readonly { readonly label: string; readonly path: string
 const here = computed(() => crumbs.value.at(-1)?.label ?? rootLabel.value);
 
 // --- The verbs: the tree's file management over these tiles (useHomeActions) -----------------------------------------
-const {
-    marked,
-    select,
-    clear,
-    editing,
-    renaming,
-    renameDraft,
-    commitRename,
-    cancelRename,
-    creating,
-    createDraft,
-    createError,
-    commitCreate,
-    cancelCreate,
-    confirmPaths,
-    deleteTitle,
-    confirmDelete,
-    cancelDelete,
-    onCopyEvent,
-    onPasteEvent,
-    dragging,
-    dragPaths,
-    over,
-    dropDir,
-    onPointerDown,
-    consumeSuppressedClick,
-    onDragOver,
-    onDragLeave,
-    onDrop,
-    menu,
-    menuItems,
-    openMenu,
-    handleKey,
-    locked,
-    noDrops,
-    archiveHere,
-    pending,
-} = useHomeActions({
-    dir: homeDir,
-    order,
-    lead: selected,
-    host: home,
-    // Closures, not the functions: both are declared below, and are only ever called later.
-    open: (entry) => open(entry),
-    openCreated: (path) => {
-        // A new file opens straight into edit mode; kept, not previewed, so a later peek can't close it mid-type.
-        openFile(path, `keep`);
-        layout.setEditMode(true);
-    },
-    dirActions,
-});
-// Focus and select the create field's text the moment it mounts.
-const focusField = (vnode: VNode): void => {
-    const el = vnode.el as HTMLInputElement;
-    el.focus();
-    el.select();
-};
+const { selection, select, clear, rules, inline, endEdit, confirmPaths, deleteTitle, confirmDelete, transfer, menu, menuItems, openMenu, handleKey } =
+    useHomeActions({
+        dir: homeDir,
+        order,
+        lead: selected,
+        host: home,
+        // Closures, not the functions: both are declared below, and are only ever called later.
+        open: (entry) => open(entry),
+        openCreated: (path) => {
+            // A new file opens straight into edit mode; kept, not previewed, so a later peek can't close it mid-type.
+            openFile(path, `keep`);
+            layout.setEditMode(true);
+        },
+        dirActions,
+    });
+const { pending, noDrops } = rules;
+const { edit, draft, createError, editing } = inline;
+const { onCopyEvent, onPasteEvent, onPointerDown, carried, dropDir, dropLit, onDragOver, onDragLeave, onDrop } = transfer;
+const { dragging, over } = useEntryDrag();
+// Says why there is no New File here and why a drop bounces.
+const archiveHere = computed(() => rules.archiveDir(homeDir.value));
 
 // Forward slides the tiles in from the right, back from the left: the direction the breadcrumb reads in.
 const direction = ref<"forward" | "back">(`forward`);
@@ -261,8 +207,7 @@ const direction = ref<"forward" | "back">(`forward`);
 const selectedEntry = computed(() => order.value.find((entry) => entry.path === selected.value));
 const go = (dir: string, toward: "forward" | "back"): void => {
     closePeek();
-    cancelRename();
-    cancelCreate();
+    void endEdit(`cancel`);
     // A query is about the folder it was typed in; going somewhere else starts fresh.
     if (querying.value) {
         search?.clear();
@@ -287,9 +232,6 @@ const up = (): void => {
     selected.value = from;
 };
 
-// Whether the tree still knows a folder: walked, or listed by its parent's lazy load.
-const known = (dir: string): boolean =>
-    entriesByPath.value.has(dir) || (lazyChildren.value.get(parentDir(dir))?.some((entry) => entry.path === dir) ?? false);
 // A folder deleted or renamed under the reader climbs to its nearest ancestor still there; never while the tree has
 // yet to arrive, when nothing is known.
 watch([children, () => tree.value.length], () => {
@@ -297,7 +239,7 @@ watch([children, () => tree.value.length], () => {
         return;
     }
     let dir = homeDir.value;
-    while (dir !== workspaceDir.value && !known(dir)) {
+    while (dir !== workspaceDir.value && !entriesByPath.value.has(dir)) {
         dir = parentDir(dir);
     }
     if (dir !== homeDir.value) {
@@ -306,16 +248,16 @@ watch([children, () => tree.value.length], () => {
 });
 
 // --- Tiles ---------------------------------------------------------------------------------------------------------
-const dimmed = (entry: WorkspaceTreeEntry): boolean => entry.ignored === true || entry.link?.state !== undefined;
+const dimmed = (entry: WorkspaceTreeEntry): boolean => entry.ignored === true || deadLink(entry);
 // The tab stop: the marked tile, else the first, so Tab always enters somewhere.
 const tabindexOf = (entry: WorkspaceTreeEntry): number =>
     selectedEntry.value === undefined ? (entry === order.value[0] ? 0 : -1) : selected.value === entry.path ? 0 : -1;
 // A folder takes a drop itself; a file stands in for the folder holding it, as with paste.
-const dropDirOf = (entry: WorkspaceTreeEntry): string => (entry.type === `dir` && entry.link?.state === undefined ? entry.path : homeDir.value);
+const dropDirOf = (entry: WorkspaceTreeEntry): string => (entry.type === `dir` && !deadLink(entry) ? entry.path : homeDir.value);
 // What a tile offers a move: that folder, unless the sandbox keeps it private or it is an archive's contents.
 const dropTargetOf = (entry: WorkspaceTreeEntry): string | undefined => (noDrops(dropDirOf(entry)) ? undefined : dropDirOf(entry));
-// A tile lights as a target for a move (useEntryDrag) or for OS files (dropDir); a file tile never does, its folder is the home.
-const targeted = (entry: WorkspaceTreeEntry): boolean => entry.type === `dir` && (dropDir.value === entry.path || over.value === entry.path);
+// A tile lights as a target for a move or for OS files; a file tile never does, its folder is the home.
+const targeted = (entry: WorkspaceTreeEntry): boolean => entry.type === `dir` && dropLit(entry.path);
 // The release that ended a drag lands as a click on the tile it started on; it was a drop, not a pick.
 const onTileSelect = (entry: WorkspaceTreeEntry, event: MouseEvent): void => {
     if (!consumeSuppressedClick()) {
@@ -326,12 +268,12 @@ const onTileSelect = (entry: WorkspaceTreeEntry, event: MouseEvent): void => {
 const open = (entry: WorkspaceTreeEntry): void => {
     closePeek();
     // A locked folder opens its explanation like a locked file: there is nothing inside it to enter.
-    if (locked(entry.path)) {
+    if (isLockedWorkspacePath(entry.path)) {
         openFile(entry.path, `keep`);
         return;
     }
     if (entry.type === `dir`) {
-        if (entry.link?.state === undefined) {
+        if (!deadLink(entry)) {
             go(entry.path, `forward`);
         }
         return;
@@ -386,7 +328,7 @@ const closePeek = (): void => {
 const onTileEnter = (entry: WorkspaceTreeEntry, el: HTMLElement): void => {
     clearTimers();
     // Nothing to look into: the padlock and the placeholder say all there is; a drag or a rename is not a look.
-    if (locked(entry.path) || pending(entry.path) || dragging.value || editing.value) {
+    if (isLockedWorkspacePath(entry.path) || pending(entry.path) || dragging.value || editing.value) {
         closePeek();
         return;
     }
@@ -519,10 +461,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
         <!-- Where you are; the root wears the scope's own name. Outside the scrolling area, so a long folder keeps its way
              back in view without the tiles having to scroll under it. A crumb also takes a drop, which is how a tile moves
              up a level or two. -->
-        <nav
-            class="z-10 flex shrink-0 items-center gap-1 bg-canvas px-5 pt-4 pb-2 text-xs"
-            :aria-label="t(`workspace.homeView.folderPath`)"
-        >
+        <nav class="z-10 flex shrink-0 items-center gap-1 bg-canvas px-5 pt-4 pb-2 text-xs" :aria-label="t(`workspace.homeView.folderPath`)">
             <template v-for="(crumb, index) in crumbs" :key="crumb.path">
                 <Icon v-if="index > 0" name="chevron-right" class="text-[0.55rem] text-subtle" aria-hidden="true" />
                 <span v-if="index === crumbs.length - 1" class="font-medium text-content" aria-current="location">{{ crumb.label }}</span>
@@ -530,7 +469,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     v-else
                     type="button"
                     class="-mx-1 rounded px-1 text-muted transition-colors hover:text-content"
-                    :class="{ 'ui-row-select-drop': dropDir === crumb.path || over === crumb.path }"
+                    :class="{ 'ui-row-select-drop': dropLit(crumb.path) }"
                     :data-drop-dir="noDrops(crumb.path) ? undefined : crumb.path"
                     @click="go(crumb.path, 'back')"
                     @dragover="onDragOver($event, crumb.path)"
@@ -543,7 +482,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             <!-- Says why there is no New File here and why a drop bounces; the menu's own note only shows on a right-click. -->
             <span v-if="archiveHere" class="ui-chip ml-2 h-5 shrink-0 gap-1 px-1.5 text-2xs text-muted">
                 <Icon name="box" aria-hidden="true" />
-                {{ t(`workspace.homeView.readOnly`) }}
+                {{ t(`shared.readOnly`) }}
             </span>
             <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. -->
             <div v-if="search !== undefined" class="ml-auto flex items-center gap-2 pl-4">
@@ -572,7 +511,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                         v-if="query"
                         type="button"
                         class="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                        :aria-label="t(`workspace.homeView.clearFilter`)"
+                        :aria-label="t(`shared.clearFilter`)"
                         @click.stop="clearQuery"
                     >
                         <Icon name="times" />
@@ -583,7 +522,14 @@ const onBackgroundMenu = (event: MouseEvent): void => {
 
         <!-- The tiles scroll under the breadcrumb rather than with it, so the window measures this element alone. Never
              sideways: the folder transition slides the tiles past the edge, which would flash a horizontal scrollbar. -->
-        <div ref="scroller" class="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto" @scroll.passive="bands.onScroll(); closePeek()">
+        <div
+            ref="scroller"
+            class="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+            @scroll.passive="
+                bands.onScroll();
+                closePeek();
+            "
+        >
             <!-- The measure: one tile and one label wearing the real classes, laid out but not painted. Outside the
                  Transition, so a folder change cannot swap the element out from under the observer, and the column count
                  and band heights stay the stylesheet's to decide rather than constants kept in the script. -->
@@ -607,86 +553,103 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                 :leave-to-class="direction === 'forward' ? 'opacity-0 -translate-x-2' : 'opacity-0 translate-x-2'"
                 @after-leave="bands.toTop()"
             >
-                <div :key="homeDir" class="px-4 pb-6" role="listbox" aria-multiselectable="true" :aria-label="t(`workspace.homeView.contents`, { here })">
-                <!-- A wait long enough to show: tile-shaped placeholders, still. -->
-                <div v-if="revealed" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5" aria-hidden="true">
-                    <div v-for="index in 8" :key="index" class="flex flex-col items-center gap-2 px-2 pt-3 pb-2">
-                        <div class="skeleton h-9 w-9 rounded-lg"></div>
-                        <div class="skeleton h-3 w-14"></div>
-                    </div>
-                </div>
-                <template v-else>
-                    <!-- The entry being named, drawn first in the open folder before it exists; the field owns its keys. -->
-                    <div v-if="creating !== undefined" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5 pt-3">
-                        <div class="flex flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2">
-                            <span class="flex h-14 items-center justify-center">
-                                <Icon :name="creating === 'dir' ? 'folder' : 'file'" class="text-[2.125rem] text-muted" />
-                            </span>
-                            <input
-                                v-model="createDraft"
-                                type="text"
-                                :aria-label="creating === 'dir' ? t(`workspace.homeView.newFolderName`) : t(`workspace.homeView.newFileName`)"
-                                class="ui-field-box ui-field-inline w-full min-w-0 px-1 text-center text-xs"
-                                :class="createError !== undefined ? 'ui-field-error-box' : ''"
-                                @click.stop
-                                @keydown.stop
-                                @keydown.enter.prevent="commitCreate"
-                                @keydown.esc.prevent="cancelCreate"
-                                @blur="createError !== undefined ? cancelCreate() : commitCreate()"
-                                @vue:mounted="focusField"
-                            />
-                            <p v-if="createError !== undefined" class="text-center text-2xs text-danger">{{ createError }}</p>
+                <div
+                    :key="homeDir"
+                    class="px-4 pb-6"
+                    role="listbox"
+                    aria-multiselectable="true"
+                    :aria-label="t(`workspace.homeView.contents`, { here })"
+                >
+                    <!-- A wait long enough to show: tile-shaped placeholders, still. -->
+                    <div v-if="revealed" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5" aria-hidden="true">
+                        <div v-for="index in 8" :key="index" class="flex flex-col items-center gap-2 px-2 pt-3 pb-2">
+                            <div class="skeleton h-9 w-9 rounded-lg"></div>
+                            <div class="skeleton h-3 w-14"></div>
                         </div>
                     </div>
-                    <p v-if="order.length === 0 && !loading && !searching && creating === undefined" class="py-12 text-center text-xs text-subtle">
-                        {{ querying ? t(`workspace.homeView.nothingMatchesIn`, { trim: query.trim(), here }) : t(`workspace.homeView.nothingHere`) }}
-                    </p>
-                    <!-- Only the bands crossing the viewport are drawn; the spacer carries the rest of the folder's height,
-                         so the scrollbar still measures all of it. A label band is a group's heading, a tile band one row. -->
-                    <div class="relative" :style="{ height: `${homeHeight}px` }">
-                        <template v-for="{ band, top } in painted" :key="band.key">
-                            <!-- Named only when there is a second kind to tell apart; a folder of one kind reads without a label. -->
-                            <h3 v-if="band.kind === 'label'" class="absolute inset-x-0 px-2 pt-3 pb-1 text-2xs text-muted" :style="{ top: `${top}px` }">
-                                {{ band.label }}
-                            </h3>
-                            <div
-                                v-else
-                                class="absolute inset-x-0 grid gap-0.5"
-                                :style="{ top: `${top}px`, gridTemplateColumns: `repeat(${gridLayout.columns}, minmax(0, 1fr))` }"
-                            >
-                                <HomeTile
-                                    v-for="(entry, column) in band.entries"
-                                    :key="entry.path"
-                                    v-model:draft="renameDraft"
-                                    :entry="entry"
-                                    :where="querying ? (whereByPath.get(entry.path) ?? '') : undefined"
-                                    :aria-setsize="gridLayout.count"
-                                    :aria-posinset="band.start + column + 1"
-                                    :selected="marked.has(entry.path)"
-                                :locked="locked(entry.path)"
-                                :pending="pending(entry.path)"
-                                :dimmed="dimmed(entry)"
-                                :tabindex="tabindexOf(entry)"
-                                :renaming="renaming === entry.path"
-                                :drop-dir="dropTargetOf(entry)"
-                                :drop-target="targeted(entry)"
-                                :dragging="dragging && dragPaths.includes(entry.path)"
-                                @select="(event) => onTileSelect(entry, event)"
-                                @open="open(entry)"
-                                @enter="(el) => onTileEnter(entry, el)"
-                                @leave="onTileLeave"
-                                @contextmenu="(event) => openMenu(event, entry)"
-                                @commit="commitRename"
-                                @cancel="cancelRename"
-                                @pointerdown="(event) => onPointerDown(event, entry)"
-                                @dragover="(event) => onDragOver(event, dropDirOf(entry))"
-                                @dragleave="(event) => onDragLeave(event, dropDirOf(entry))"
-                                    @drop="(event) => onDrop(event, dropDirOf(entry))"
+                    <template v-else>
+                        <!-- The entry being named, drawn first in the open folder before it exists; the field owns its keys. -->
+                        <div v-if="edit.kind === 'creating'" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5 pt-3">
+                            <div class="flex flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2">
+                                <span class="flex h-14 items-center justify-center">
+                                    <Icon :name="edit.type === 'dir' ? 'folder' : 'file'" class="text-[2.125rem] text-muted" />
+                                </span>
+                                <input
+                                    v-model="draft"
+                                    type="text"
+                                    :aria-label="edit.type === 'dir' ? t(`shared.newFolderName`) : t(`shared.newFileName`)"
+                                    class="ui-field-box ui-field-inline w-full min-w-0 px-1 text-center text-xs"
+                                    :class="createError !== undefined ? 'ui-field-error-box' : ''"
+                                    @click.stop
+                                    @keydown.stop
+                                    @keydown.enter.prevent="endEdit('commit')"
+                                    @keydown.esc.prevent="endEdit('cancel')"
+                                    @blur="endEdit('blur')"
+                                    @vue:mounted="focusField"
                                 />
+                                <p v-if="createError !== undefined" class="text-center text-2xs text-danger">{{ createError }}</p>
                             </div>
-                        </template>
-                    </div>
-                </template>
+                        </div>
+                        <p
+                            v-if="order.length === 0 && !loading && !searching && edit.kind !== 'creating'"
+                            class="py-12 text-center text-xs text-subtle"
+                        >
+                            {{
+                                querying
+                                    ? t(`workspace.homeView.nothingMatchesIn`, { trim: query.trim(), here })
+                                    : t(`workspace.homeView.nothingHere`)
+                            }}
+                        </p>
+                        <!-- Only the bands crossing the viewport are drawn; the spacer carries the rest of the folder's height,
+                         so the scrollbar still measures all of it. A label band is a group's heading, a tile band one row. -->
+                        <div class="relative" :style="{ height: `${homeHeight}px` }">
+                            <template v-for="{ band, top } in painted" :key="band.key">
+                                <!-- Named only when there is a second kind to tell apart; a folder of one kind reads without a label. -->
+                                <h3
+                                    v-if="band.kind === 'label'"
+                                    class="absolute inset-x-0 px-2 pt-3 pb-1 text-2xs text-muted"
+                                    :style="{ top: `${top}px` }"
+                                >
+                                    {{ band.label }}
+                                </h3>
+                                <div
+                                    v-else
+                                    class="absolute inset-x-0 grid gap-0.5"
+                                    :style="{ top: `${top}px`, gridTemplateColumns: `repeat(${gridLayout.columns}, minmax(0, 1fr))` }"
+                                >
+                                    <HomeTile
+                                        v-for="(entry, column) in band.entries"
+                                        :key="entry.path"
+                                        v-model:draft="draft"
+                                        :entry="entry"
+                                        :where="querying ? (whereByPath.get(entry.path) ?? '') : undefined"
+                                        :aria-setsize="gridLayout.count"
+                                        :aria-posinset="band.start + column + 1"
+                                        :selected="selection.has(entry.path)"
+                                        :locked="isLockedWorkspacePath(entry.path)"
+                                        :pending="pending(entry.path)"
+                                        :dimmed="dimmed(entry)"
+                                        :tabindex="tabindexOf(entry)"
+                                        :renaming="edit.kind === 'renaming' && edit.path === entry.path"
+                                        :drop-dir="dropTargetOf(entry)"
+                                        :drop-target="targeted(entry)"
+                                        :dragging="carried(entry.path)"
+                                        @select="(event) => onTileSelect(entry, event)"
+                                        @open="open(entry)"
+                                        @enter="(el) => onTileEnter(entry, el)"
+                                        @leave="onTileLeave"
+                                        @contextmenu="(event) => openMenu(event, entry)"
+                                        @commit="endEdit('commit')"
+                                        @cancel="endEdit('cancel')"
+                                        @pointerdown="(event) => onPointerDown(event, entry.path)"
+                                        @dragover="(event) => onDragOver(event, dropDirOf(entry))"
+                                        @dragleave="(event) => onDragLeave(event, dropDirOf(entry))"
+                                        @drop="(event) => onDrop(event, dropDirOf(entry))"
+                                    />
+                                </div>
+                            </template>
+                        </div>
+                    </template>
                     <p v-if="hiddenTooling > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
                         {{ t(`workspace.homeView.toolingHidden`, { count: hiddenTooling.toLocaleString() }, hiddenTooling) }}
                     </p>
@@ -716,7 +679,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             :confirm-label="t(`ui.action.delete`)"
             confirm-icon="trash"
             :items="confirmPaths ?? []"
-            @cancel="cancelDelete"
+            @cancel="confirmPaths = undefined"
             @confirm="confirmDelete"
         >
             <template #item="{ item }">
@@ -724,7 +687,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                 <span class="truncate text-content">{{ basename(item) }}</span>
                 <span v-if="parentDir(item) !== ''" class="min-w-0 truncate text-xs text-subtle">{{ parentDir(item) }}</span>
             </template>
-            <p class="mt-3 text-xs text-muted">{{ t(`workspace.homeView.cantUndone`) }}</p>
+            <p class="mt-3 text-xs text-muted">{{ t(`shared.cantUndone`) }}</p>
         </ConfirmDialog>
     </div>
 </template>

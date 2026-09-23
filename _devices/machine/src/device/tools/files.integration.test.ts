@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { agentHome } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { afterAll, expect, test } from "bun:test";
 import { ScopeError } from "../policy.js";
 import { editTextFile, readTextFile, trashFile, writeTextFile } from "./files.js";
 

@@ -1,6 +1,5 @@
 import type { Rule } from "@intentic/sandbox-contract";
-import { afterEach, describe, expect, mock, test } from "bun:test";
-import { hoisted, SETTLES, waitFor } from "@intentic/testing/bun";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../../composition.js";
 import { fakeHistory, recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../../harness/route-services.testing.js";
@@ -16,10 +15,10 @@ const cards = parkedCards(memoryFleet().conversations);
 
 // The nudge is a follow-up turn, so it is noted in one running order on its way through; the resume records are the
 // conversation's events, noted as they are sent (`traced`).
-const { order, nudged } = hoisted(() => ({ order: [] as string[], nudged: [] as Parameters<typeof verifyNudge.nudgeUnverifiedWork>[0][] }));
+const { order, nudged } = { order: [] as string[], nudged: [] as Parameters<typeof verifyNudge.nudgeUnverifiedWork>[0][] };
 // Each resume record's event, under the step it is in the running order.
-const RESUME_STEPS: Readonly<Record<string, string>> = { "auth-refused": "auth", "outage-stranded": "outage", "turn-held": "held", "turn-got-somewhere": "ladder" };
-mock.module("../../verification/verify-nudge.js", () => ({
+const RESUME_STEPS: Readonly<Record<string, string>> = { "turn-held": "held", "turn-got-somewhere": "ladder" };
+jest.mock("../../verification/verify-nudge.js", () => ({
     ...verifyNudge,
     nudgeUnverifiedWork: async (nudge: Parameters<typeof verifyNudge.nudgeUnverifiedWork>[0]) => {
         order.push("nudge");
@@ -45,7 +44,11 @@ const input = { prompt: "go", conversationId: "settle-1" };
 const noCode = { state: "no-code", paths: [], check: undefined } as const;
 
 // The stores the executor writes, recording, each call also noted in the running order.
-const traced = (): { readonly deps: Services; readonly writes: ReturnType<typeof recordingTurnStores>["writes"]; readonly lines: Record<string, unknown>[] } => {
+const traced = (): {
+    readonly deps: Services;
+    readonly writes: ReturnType<typeof recordingTurnStores>["writes"];
+    readonly lines: Record<string, unknown>[];
+} => {
     const { writes, overrides } = recordingTurnStores();
     const { lines, logger } = recordingLogger();
     const deps = services({ ...overrides, logger });
@@ -90,13 +93,26 @@ const traced = (): { readonly deps: Services; readonly writes: ReturnType<typeof
 const turn = { record: () => void order.push("completion"), flush: () => void order.push("flush") };
 
 const plan = (change: Partial<SettlementPlan> = {}): SettlementPlan => ({
-    authFailure: undefined,
-    outageFailure: undefined,
     hold: undefined,
     completion: { type: "turn.completed" },
     headroomRefresh: undefined,
-    usage: { provider: "claude", harness: "native", outcome: "ok", turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0, durationMs: 0 },
-    daemonStop: { conversationId: undefined, findings: { conversationId: undefined, isolated: false, request, edited: [], cwd: "/w" }, nudge: undefined },
+    usage: {
+        provider: "claude",
+        harness: "native",
+        outcome: "ok",
+        turns: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        costUsd: 0,
+        durationMs: 0,
+    },
+    daemonStop: {
+        conversationId: undefined,
+        findings: { conversationId: undefined, isolated: false, request, edited: [], cwd: "/w" },
+        nudge: undefined,
+    },
     snapshot: undefined,
     ...change,
 });
@@ -121,12 +137,15 @@ describe("a settlement", () => {
     test("records the resume first, then closes the turn, re-reads, bills, runs the Stop, nudges, flushes and snapshots", async () => {
         const { deps, writes } = traced();
         const stopped = { conversationId: "settle-1", isolated: true, request: redSuite, edited: ["/w/a.ts"], cwd: "/w" };
-        const nudge = { conversationId: "settle-1", profile: {}, rules: [suite], ledger: { edited: () => [], verdict: () => undefined, standing: () => noCode, noteEdit: () => {}, noteCommand: () => {} } };
+        const nudge = {
+            conversationId: "settle-1",
+            profile: {},
+            rules: [suite],
+            ledger: { edited: () => [], verdict: () => undefined, standing: () => noCode, noteEdit: () => {}, noteCommand: () => {} },
+        };
         await performSettlement(
             deps,
             plan({
-                authFailure: { input, account: "acct", refusedToken: "tok" },
-                outageFailure: { input, provider: "claude" },
                 hold: { kind: "held", held: { input, reason: "stopped", ran: true, standing: noCode } },
                 headroomRefresh: { scope: { providers: ["codex"] }, maxAgeMs: 10_000 },
                 daemonStop: { conversationId: "settle-1", findings: stopped, nudge },
@@ -135,11 +154,10 @@ describe("a settlement", () => {
             turn,
         );
 
-        expect(order).toStrictEqual(["auth", "outage", "held", "completion", "refresh", "usage", "nudge", "flush", "snapshot"]);
+        expect(order).toStrictEqual(["held", "completion", "refresh", "usage", "nudge", "flush", "snapshot"]);
         // The nudge reads what the Stop found, so it was awaited first.
         expect(nudged).toStrictEqual([{ ...nudge, findings: [finding] }]);
         expect(deps.conversations.state("settle-1")?.resume.held).toMatchObject({ reason: "stopped", ran: true });
-        expect(deps.conversations.state("settle-1")?.resume.outage).toMatchObject({ provider: "claude" });
         expect(writes.headroomRefreshes).toStrictEqual([{ scope: { providers: ["codex"] }, maxAgeMs: 10_000 }]);
         expect(writes.snapshots).toStrictEqual([{ trigger: "turn", label: "go" }]);
     });
@@ -162,7 +180,14 @@ describe("a settlement", () => {
             plan({ snapshot: "go" }),
             turn,
         );
-        await waitFor(() => expect(lines.filter((line) => line["level"] === "warn").map((line) => line["message"])).toStrictEqual(["usage: ledger append failed", "history: turn snapshot failed"]), SETTLES);
+        await waitFor(
+            () =>
+                expect(lines.filter((line) => line["level"] === "warn").map((line) => line["message"])).toStrictEqual([
+                    "usage: ledger append failed",
+                    "history: turn snapshot failed",
+                ]),
+            SETTLES,
+        );
     });
 });
 
@@ -176,7 +201,10 @@ describe("the daemon's Stop", () => {
     test("rebases before the checks, and says so ahead of what they then find", async () => {
         const synced: AgentRequest = {
             ...redSuite,
-            hooks: { ...redSuite.hooks, resync: async () => ({ kind: "worktree", branch: "agent/settle-1", base: "abc1234", sync: { commits: 3, blocked: [] } }) },
+            hooks: {
+                ...redSuite.hooks,
+                resync: async () => ({ kind: "worktree", branch: "agent/settle-1", base: "abc1234", sync: { commits: 3, blocked: [] } }),
+            },
         };
         const [note, ...found] = await daemonStopFindings(services(), { ...stop, request: synced });
         expect(note).toContain("3 commit(s) of other work were rebased under this branch");

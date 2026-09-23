@@ -1,5 +1,4 @@
 import { type RemoteRef, type RemoteRefs, VAULTED } from "@intentic/sandbox-contract";
-import { describe, test, expect } from "bun:test";
 import { initialChoice, MANUAL_KEY, refGroups, refKey, refSummary, versionReadToken } from "./refs";
 
 // The version picker's ordering and its opening selection: what a repository offers, turned into the list a person

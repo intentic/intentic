@@ -2,6 +2,7 @@ import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, symlink, writeFile 
 import { dirname, join, resolve } from "node:path";
 import { pathExists } from "../../path-exists.js";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { keyedLock } from "@intentic/base/async";
 import type { Logger } from "pino";
 import { gitDirOf } from "../../git/git-dir.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
@@ -160,31 +161,24 @@ export const createAgentWorktrees = (
     };
 
     // Per-repo op chains: worktree add/remove and land touch the repo's admin area and, for land, the main index.
-    const chains = new Map<string, Promise<unknown>>();
+    const repoChain = keyedLock<string>();
     // Tasks queued on each repo's chain right now; measurement only.
     const queued = new Map<string, number>();
     // Wait and hold are measured separately: a slow git op (hold) and one queued behind another repo's lock (wait) are
     // different problems.
     // `depth` is what was already ahead of it in the queue, so a line reads "waited 3.2s behind 2 tasks".
     const withRepoLock = <T>(repo: string, task: () => Promise<T>): Promise<T> => {
-        const chain = chains.get(repo) ?? Promise.resolve();
         const depth = queued.get(repo) ?? 0;
         queued.set(repo, depth + 1);
         const from = process.hrtime.bigint();
-        const measured = async (): Promise<T> => {
+        return repoChain(repo, async (): Promise<T> => {
             perf.record("git.lock.wait", Number(process.hrtime.bigint() - from) / 1e6, { repo, depth });
             try {
                 return await perf.track("git.lock.hold", { repo }, task);
             } finally {
                 queued.set(repo, (queued.get(repo) ?? 1) - 1);
             }
-        };
-        const next = chain.then(measured, measured);
-        chains.set(
-            repo,
-            next.catch(() => undefined),
-        );
-        return next;
+        });
     };
 
     const headSha = async (dir: string): Promise<string | undefined> => {

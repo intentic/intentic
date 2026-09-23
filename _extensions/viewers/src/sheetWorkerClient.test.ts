@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import type { SheetWorkerRequest, SheetWorkerResponse } from "./sheetProtocol";
 import { createSheetWorkerClient, type SheetWorkerPort } from "./sheetWorkerClient";
 

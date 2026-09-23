@@ -7,7 +7,7 @@ import { landOnAfterSwitch } from "../../sandbox/client/sandboxScreen";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { turnInFlight } from "./agentStatus";
 import type { FleetAgent } from "./useAgents-fleet";
-import { claimedCard } from "./useAgents-provisional";
+import { overlaid } from "./useAgents-provisional";
 import { useChat } from "../../chat/run/useChat";
 import { chatStrip } from "../../chat/panel/useChat-strip";
 
@@ -62,7 +62,7 @@ export const otherFleet = computed<readonly FleetAgent[]>(() => {
                 unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
             };
             // A press on this card from here draws at once; this box is polled, so its roster is the slow half.
-            const shown = claimedCard(card, agent, box.sandbox.id);
+            const shown = overlaid(card, agent, box.sandbox.id);
             return shown === undefined ? [] : [shown];
         }),
     );

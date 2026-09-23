@@ -4,7 +4,7 @@ import type { ForticlientConnection } from "@intentic/sandbox-contract";
 import { type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { ref } from "vue";
-import { importForticlient } from "../../sandbox/devices/useVpn";
+import { importForticlient } from "../../sandbox/devices/useLiveLinks";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -111,7 +111,7 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
                     <Icon v-if="importing" name="spinner" spin class="text-lg text-info" />
                     <Icon v-else name="upload" :class="['text-lg', dragging ? 'text-primary-500' : 'text-muted']" />
                     <span class="text-xs text-content">
-                        <template v-if="importing">{{ t(`capabilities.forticlientImport.reading`) }}</template>
+                        <template v-if="importing">{{ t(`shared.reading`) }}</template>
                         <template v-else-if="dragging">{{ t(`capabilities.forticlientImport.dropToReadConnections`) }}</template>
                         <template v-else>{{ t(`capabilities.forticlientImport.dropConfigurationFileHere`) }}</template>
                     </span>

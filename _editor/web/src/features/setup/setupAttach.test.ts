@@ -1,4 +1,3 @@
-import { test, expect, afterEach } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { addressZone, daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, probeDaemon } from "./setupAttach";
 

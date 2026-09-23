@@ -1,6 +1,5 @@
 // jsdom: the import chain reaches app-wide singletons that read browser globals (window.env) as they load.
 import "@intentic/testing/dom";
-import { it, expect, mock } from "bun:test";
 import { type PlanLimitsHeld, type PlanLimitsRefreshed, type TrialStatusResponse, TrialStatusSchema } from "@intentic/sandbox-contract";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
@@ -11,9 +10,9 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 const NO_TRIAL = TrialStatusSchema.parse({ available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` });
 
 // Every connection read answers empty; the plan-limits re-measure and the trial allowance are the two a test holds.
-const refreshPlanLimits = mock<(input: { force?: boolean }) => Promise<PlanLimitsRefreshed>>();
-const trial = mock(async (): Promise<TrialStatusResponse> => NO_TRIAL);
-mock.module("../../sandbox/client/sandboxRpc", () => ({
+const refreshPlanLimits = jest.fn<(input: { force?: boolean }) => Promise<PlanLimitsRefreshed>>();
+const trial = jest.fn(async (): Promise<TrialStatusResponse> => NO_TRIAL);
+jest.mock("../../sandbox/client/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         usage: { refreshPlanLimits },
         accounts: { accounts: async () => ({ accounts: [] }) },

@@ -2,7 +2,6 @@ import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { type AccountUsage, TranslatorAccountsSchema, type UsageWindow } from "@intentic/sandbox-contract";
-import { describe, test, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createCliProxyClient, renderConfig, TRANSLATOR_BINARY_MISSING } from "./translator.js";
 
@@ -45,7 +44,7 @@ test("strips the cache-retention parameter nothing here sends, for every model t
 afterEach(() => unstubAllGlobals());
 
 test("starts Kimi Code's headless device login through CLIProxyAPI", async () => {
-    const fetchMock = mock(async () =>
+    const fetchMock = jest.fn(async () =>
         Response.json({ url: "https://kimi.com/device?code=ABCD", user_code: "ABCD", state: "kmi-1", flow: "device" }),
     );
     stubGlobal("fetch", fetchMock);
@@ -70,7 +69,7 @@ test("starts Kimi Code's headless device login through CLIProxyAPI", async () =>
 
 // The whole list goes each time, since the daemon owns every entry; a rejection is answered, not thrown.
 test("replaces the running proxy's endpoint list with the entries it is handed", async () => {
-    const fetchMock = mock(async () => new Response("", { status: 422 }));
+    const fetchMock = jest.fn(async () => new Response("", { status: 422 }));
     stubGlobal("fetch", fetchMock);
     const client = createCliProxyClient({
         managementUrl: "http://127.0.0.1:8789/v0/management",
@@ -90,7 +89,7 @@ test("replaces the running proxy's endpoint list with the entries it is handed",
 });
 
 test("reads a managed device login's own status instead of inferring it from account count", async () => {
-    const fetchMock = mock(async () => Response.json({ status: "wait" }));
+    const fetchMock = jest.fn(async () => Response.json({ status: "wait" }));
     stubGlobal("fetch", fetchMock);
     const client = createCliProxyClient({
         managementUrl: "http://127.0.0.1:8789/v0/management",
@@ -111,7 +110,7 @@ test("marks the exact ChatGPT device login complete when its helper exits succes
     const child = Object.assign(new EventEmitter(), {
         stdout,
         stderr: new PassThrough(),
-        kill: mock(),
+        kill: jest.fn(),
     }) as unknown as ChildProcess;
     const client = createCliProxyClient({
         managementUrl: "http://127.0.0.1:8789/v0/management",
@@ -133,7 +132,7 @@ test("marks the exact ChatGPT device login complete when its helper exits succes
 });
 
 test("starts Google's redirect login through CLIProxyAPI Antigravity auth URL", async () => {
-    const fetchMock = mock(async () =>
+    const fetchMock = jest.fn(async () =>
         Response.json({ url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=123", state: "state-123", status: "ok" }),
     );
     stubGlobal("fetch", fetchMock);
@@ -159,7 +158,7 @@ test("starts Google's redirect login through CLIProxyAPI Antigravity auth URL", 
 // Builds a client whose proxy never answers, with or without the binary present; the two cases need different advice to
 // the user.
 const unreachableClient = (binaryPresent: boolean) => {
-    stubGlobal("fetch", mock().mockRejectedValue(new Error("fetch failed")));
+    stubGlobal("fetch", jest.fn().mockRejectedValue(new Error("fetch failed")));
     return createCliProxyClient({
         managementUrl: "http://127.0.0.1:8789/v0/management",
         token: "local",
@@ -185,7 +184,7 @@ test("asks the user to wait when the translator is present but not answering yet
 // needs a real auth dir.
 
 test("completes Google's redirect login via oauth-callback", async () => {
-    const fetchMock = mock(async () => Response.json({ status: "ok" }));
+    const fetchMock = jest.fn(async () => Response.json({ status: "ok" }));
     stubGlobal("fetch", fetchMock);
     const client = createCliProxyClient({
         managementUrl: "http://127.0.0.1:8789/v0/management",
@@ -214,7 +213,7 @@ test("completes Google's redirect login via oauth-callback", async () => {
 // sign-in is only done when the credential it wrote can serve a turn.
 test("refuses a Google sign-in whose credential landed with no Antigravity project", async () => {
     const calls: { url: string; method?: string; body?: Record<string, unknown> }[] = [];
-    const fetchMock = mock(async (input: string | URL | Request, init?: RequestInit) => {
+    const fetchMock = jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
         const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
         calls.push({ url, ...(init?.method === undefined ? {} : { method: init.method }), ...(body === undefined ? {} : { body }) });
@@ -249,7 +248,7 @@ test("refuses a Google sign-in whose credential landed with no Antigravity proje
 // to go and fix an address they had not touched.
 test("names the account this sign-in wrote, not one benched for the same thing long ago", async () => {
     const calls: { url: string; body?: Record<string, unknown> }[] = [];
-    const fetchMock = mock(async (input: string | URL | Request, init?: RequestInit) => {
+    const fetchMock = jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
         const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
         calls.push({ url, ...(body === undefined ? {} : { body }) });
@@ -283,7 +282,7 @@ test("names the account this sign-in wrote, not one benched for the same thing l
 test("reads Kimi's provider-scoped model definitions without owned_by inference", async () => {
     stubGlobal(
         "fetch",
-        mock(async () =>
+        jest.fn(async () =>
             Response.json({
                 channel: "kimi",
                 models: [
@@ -314,7 +313,7 @@ test("reads Kimi's provider-scoped model definitions without owned_by inference"
 test("projects CLIProxyAPI's Kimi auth files as connected subscription accounts", async () => {
     stubGlobal(
         "fetch",
-        mock(async () => Response.json({ files: [{ name: "kimi-user.json", provider: "kimi", label: "Kimi User" }] })),
+        jest.fn(async () => Response.json({ files: [{ name: "kimi-user.json", provider: "kimi", label: "Kimi User" }] })),
     );
     const client = createCliProxyClient({
         managementUrl: "http://127.0.0.1:8789/v0/management",

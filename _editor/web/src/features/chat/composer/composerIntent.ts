@@ -24,7 +24,7 @@ export interface PickUpSituation {
 export interface ComposerSituation {
     /** Words or files in the box: the ordinary reason a press sends anything at all. */
     readonly staged: boolean;
-/** At least one file staged; an attachment is something the user hands over, so it refuses the agent's voice. */
+    /** At least one file staged; an attachment is something the user hands over, so it refuses the agent's voice. */
     readonly attached: boolean;
     /** A staged file whose bytes are still going up. */
     readonly uploading: boolean;
@@ -87,8 +87,7 @@ const PLACEHOLDER: Record<SendIntent, (words: ComposerWords) => string> = {
     // Read only once the box is cleared, exactly when "what was I doing?" needs answering.
     edit: () => t(`chat.composerIntent.placeholderEdit`),
     plan: () => t(`chat.composerIntent.placeholderPlan`),
-    idle: (words) =>
-        words.onTrial ? t(`chat.composerIntent.placeholderIdleTrial`) : t(`chat.composerIntent.placeholderIdle`, { provider: words.provider }),
+    idle: (words) => (words.onTrial ? t(`shared.askAnything`) : t(`chat.composerIntent.placeholderIdle`, { provider: words.provider })),
     parked: () => t(`chat.composerIntent.placeholderParked`),
     steer: (words) => t(`chat.composerIntent.placeholderSteer`, { provider: words.provider }),
     queue: () => t(`chat.composerIntent.placeholderQueue`),

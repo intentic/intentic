@@ -2,8 +2,6 @@
 // chat a menu acts on, where right-click is heard, which rows disable, and that a mass close never confirms.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { it, expect, beforeAll, beforeEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { createApp, h, nextTick } from "vue";
 // Statically imported: this graph (app, PrimeVue, router, chat store) compiles too slowly for a hook's timeout,
 // but is fine at module load. bun.setup.ts installs the browser globals it needs before any file loads.
@@ -25,13 +23,13 @@ import { runningTurn } from "../../../testing/runningTurn";
 
 // Globals a mounted chat needs that jsdom lacks: matchMedia (kept desktop via matches:false), window.env,
 // ResizeObserver. window.open is stubbed to null; assertions only check that the pop-out row calls it.
-const { open } = hoisted(() => {
+const { open } = (() => {
     // scrollIntoView runs on every focus write and jsdom has none; without this stub a tab switch rejects.
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-    const openWindow = mock(() => null);
+    const openWindow = jest.fn(() => null);
     globalThis.window.open = openWindow;
     return { open: openWindow };
-});
+})();
 
 let strip: HTMLElement;
 
@@ -49,7 +47,7 @@ beforeAll(() => {
 
 beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
-    // `open` is hoisted once for the module, so its calls accumulate across tests unless cleared here.
+    // `open` is created once for the module, so its calls accumulate across tests unless cleared here.
     open.mockClear();
     resetSandboxScope();
     await nextTick();

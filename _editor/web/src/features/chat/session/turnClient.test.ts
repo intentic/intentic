@@ -3,8 +3,7 @@ import { type AttachFrame, type ConversationQueue, deriveTitle, type MessageRece
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { unstubbed } from "@intentic/testing";
 import { AsyncIteratorClass } from "@orpc/client";
-import { hoisted, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { computed, ref, shallowRef, watch } from "vue";
 import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
@@ -14,7 +13,7 @@ import { runningTurn } from "../../../testing/runningTurn";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import type { PickUp } from "../run/pickUp";
 import type { TurnFailures } from "../run/turnFailures";
-import type { SessionRef, TurnSettings } from "../run/turnRequest";
+import type { ForkLink, SessionRef, TurnSettings } from "../run/turnRequest";
 import type { ChatMessage } from "../transcript/transcript";
 import type { ComposerSelection } from "./composerSelection";
 import { IDLE } from "./runPhase";
@@ -23,16 +22,14 @@ import { IDLE } from "./runPhase";
 // a host that is nothing but the refs a run reads and writes and a daemon that is the procedures a run calls. Whole
 // conversations against a modelled daemon are conversation.test.ts's.
 
-const { run, attach, stop, resume, queueResume, queueRemove, queueEdit } = hoisted(() => ({
-    run: mock<SandboxRpc["agent"]["run"]>(),
-    attach: mock<SandboxRpc["agent"]["attach"]>(),
-    stop: mock<SandboxRpc["agent"]["stop"]>(),
-    resume: mock<SandboxRpc["agent"]["resume"]>(),
-    queueResume: mock<SandboxRpc["agent"]["queueResume"]>(),
-    queueRemove: mock<SandboxRpc["agent"]["queueRemove"]>(),
-    queueEdit: mock<SandboxRpc["agent"]["queueEdit"]>(),
-}));
-mock.module("../../sandbox/client/sandboxRpc", () => ({
+const run = jest.fn<SandboxRpc["agent"]["run"]>();
+const attach = jest.fn<SandboxRpc["agent"]["attach"]>();
+const stop = jest.fn<SandboxRpc["agent"]["stop"]>();
+const resume = jest.fn<SandboxRpc["agent"]["resume"]>();
+const queueResume = jest.fn<SandboxRpc["agent"]["queueResume"]>();
+const queueRemove = jest.fn<SandboxRpc["agent"]["queueRemove"]>();
+const queueEdit = jest.fn<SandboxRpc["agent"]["queueEdit"]>();
+jest.mock("../../sandbox/client/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({ agent: { run, attach, stop, resume, queueResume, queueRemove, queueEdit } }),
 }));
 
@@ -88,20 +85,20 @@ const clientOf = () => {
         },
         selection: unstubbed<ComposerSelection>(`selection`, {
             turnSettings: () => SETTINGS,
-            apply: mock(),
+            apply: jest.fn(),
             mode: computed(() => `default` as const),
             provider: computed(() => `claude` as const),
             account: computed(() => undefined),
             harness: computed(() => `native` as const),
         }),
-        failures: unstubbed<TurnFailures>(`failures`, { cancelProbe: mock(), clear: mock(), armRenewalProbe: mock() }),
+        failures: unstubbed<TurnFailures>(`failures`, { cancelProbe: jest.fn(), clear: jest.fn(), armRenewalProbe: jest.fn() }),
         title: ref<string | null>(null),
         isolated: ref(true),
         runner: ref<string | undefined>(),
         box,
         registered: ref(false),
         standing: ref<AgentStanding | undefined>(),
-        pendingForkOf: ref<{ conversationId: string; keep: number; files: "then" | "now" } | undefined>(),
+        pendingForkOf: ref<ForkLink | undefined>(),
         error,
         pickUp: ref<PickUp | undefined>(),
         session,
@@ -373,7 +370,11 @@ describe(`saying something`, () => {
 
     it(`lets a held queue go when the nudge it holds is pressed again, rather than saying it twice`, async () => {
         const { client, host } = clientOf();
-        host.queue.value = { items: [{ id: `m-go`, text: `Continue`, voice: `person`, queuedAt: 1_000, revision: 1 }], revision: 2, paused: `refused` };
+        host.queue.value = {
+            items: [{ id: `m-go`, text: `Continue`, voice: `person`, queuedAt: 1_000, revision: 1 }],
+            revision: 2,
+            paused: `refused`,
+        };
         queueResume.mockImplementation(async () => ({ run: `r8` }));
         attach.mockImplementation(async () => attached(`r8`, 5_000, `Continue`));
 
@@ -393,7 +394,10 @@ describe(`saying something`, () => {
         await client.say(``);
 
         expect(queueResume.mock.calls).toEqual([
-            [{ conversationId: `c1`, routing: { agent: `claude`, harness: `native`, account: undefined, model: `opus` } }, { context: { at: undefined } }],
+            [
+                { conversationId: `c1`, routing: { agent: `claude`, harness: `native`, account: undefined, model: `opus` } },
+                { context: { at: undefined } },
+            ],
         ]);
         expect(host.error.value).toBeNull();
         // The turn the queue started is followed here.

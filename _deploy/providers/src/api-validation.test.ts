@@ -1,4 +1,3 @@
-import { test, expect, afterEach } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { forgejoApi } from "./forgejo/forgejo-api.js";
 import { type AlerterConfig, komodoApi } from "./komodo/komodo-api.js";

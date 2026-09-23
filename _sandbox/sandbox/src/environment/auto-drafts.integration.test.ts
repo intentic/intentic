@@ -3,7 +3,6 @@ import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { EnvironmentDrift, RuntimeInstall } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { readWorkspaceFile, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { AUTO_MARKER, autoDraftedTools, draftFileName, stepFor, synthesizeAutoDrafts } from "./auto-drafts.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";

@@ -1,5 +1,4 @@
 import { type DeviceFolderRow, folderConflicts } from "@intentic/ui/device";
-import { describe, it, expect } from "bun:test";
 
 // The sentence over the conflict list is the whole of what a reader is told, and it used to say one thing about two
 // unlike situations — describing the common one (build output blocking a deletion) as the rare one (two people's

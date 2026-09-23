@@ -34,8 +34,8 @@ const t = useT();
 const SECTIONS = computed(
     () =>
         [
-            { label: t(`sandbox.sandboxAgent.models`), value: `models` },
-            { label: t(`sandbox.sandboxAgent.instructions`), value: `instructions` },
+            { label: t(`shared.models`), value: `models` },
+            { label: t(`shared.instructions`), value: `instructions` },
             { label: t(`sandbox.sandboxAgent.tools`), value: `tools` },
             { label: t(`sandbox.sandboxAgent.safety`), value: `safety` },
             { label: t(`sandbox.sandboxAgent.finishing`), value: `finishing` },

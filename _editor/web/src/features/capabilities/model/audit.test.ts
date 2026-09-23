@@ -2,7 +2,6 @@
 // changed rather than the whole tree (an edit moving the pin), and the brief each one hands the agent.
 import type { CapabilitySummary } from "@intentic/api-contract";
 import { updateBrief } from "@intentic/sandbox-contract/chores";
-import { describe, expect, it } from "bun:test";
 import { auditBrief } from "../../sandbox/extensions/extensionBrief";
 import { auditOffered, auditPrompt, replacedPin } from "./audit";
 

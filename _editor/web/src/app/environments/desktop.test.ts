@@ -1,4 +1,3 @@
-import { test, expect, mock } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
 
 /* The page's window, as the module reads it: a browser's until a test marks it as the app's (`__INTENTIC_DESKTOP__`). */
@@ -102,9 +101,9 @@ test("a browser window is closed, raised and widened by the page itself", async 
     (globalThis as { location?: unknown }).location = location;
     (globalThis as { document?: unknown }).document = { readyState: `complete` };
     const own = fakeWindow();
-    own.close = mock();
-    own.focus = mock();
-    own.resizeTo = mock();
+    own.close = jest.fn();
+    own.focus = jest.fn();
+    own.resizeTo = jest.fn();
     own.outerHeight = 700;
 
     closeOwnWindow();
@@ -125,9 +124,9 @@ test("a window of the app is closed, raised and widened by the app, one link eac
     (globalThis as { document?: unknown }).document = { readyState: `complete` };
     const own = fakeWindow();
     own.__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null, frameless: true };
-    own.close = mock();
-    own.focus = mock();
-    own.resizeTo = mock();
+    own.close = jest.fn();
+    own.focus = jest.fn();
+    own.resizeTo = jest.fn();
 
     closeOwnWindow();
     expect(location.href).toBe(`intentic://window?do=close`);

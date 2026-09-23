@@ -2,6 +2,7 @@
 import { formatTokens, Icon, ProgressRing, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
+import { contextPct } from "../../agents/fleet/agentStatus";
 import { effectiveAccount } from "../accounts/providerAccounts";
 import { formatReset, formatUtilization, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../session/usageStatus";
 import { usePaneView } from "./useChat-view";
@@ -42,10 +43,10 @@ const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability
 // Per-conversation context-window fill: a ring that warns as the chat approaches auto-compaction.
 const contextRing = computed(() => {
     const usage = contextUsage.value;
-    if (usage === undefined || usage.contextWindow <= 0) {
+    const pct = contextPct(usage?.tokens, usage?.contextWindow);
+    if (usage === undefined || pct === undefined) {
         return undefined;
     }
-    const pct = Math.min(100, Math.round((usage.tokens / usage.contextWindow) * 100));
     return {
         value: pct,
         label: `${pct}%`,

@@ -1,5 +1,4 @@
 import type { GitChange, LandedMessageDraft, RepoChanges } from "@intentic/api-contract";
-import { describe, test, expect } from "bun:test";
 import { chipMessageNotice, commitMessageOf, draftReport, landedMessage, ORIGIN_HUES, originHue, originsOf, summarizeOrigins } from "./changeOrigins";
 
 const change = (path: string, status: GitChange[`status`] = `modified`): GitChange => ({ path, status });

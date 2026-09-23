@@ -1,7 +1,6 @@
 // jsdom: half of what's pinned here happens inside a mounted component (a run button naming its model from a
 // computed), the rest is the same read with no component at all.
 import "@intentic/testing/dom";
-import { test, expect, beforeEach, jest } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref, watch } from "vue";
 
 // `agentRunChoice(role)` is the standing answer to which model a run-button click spends, kept per job role rather

@@ -2,7 +2,6 @@ import { HOST_HEARTBEAT_MS } from "@intentic/sandbox-contract";
 import { PEER_LINK_BACKOFF, peerLinkSilenceMs } from "@intentic/sandbox-contract/peer-dial";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { unstubbed } from "@intentic/testing";
-import { test, expect, afterEach, jest } from "bun:test";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { DaemonBase } from "../daemon-base.js";
 import type { HostLink } from "./config.js";

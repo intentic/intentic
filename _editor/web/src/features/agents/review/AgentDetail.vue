@@ -176,8 +176,8 @@ watch(
 // Mode switch only exists on mobile; desktop always renders the review.
 const view = ref<`chat` | `changes`>(mobile.value ? `chat` : `changes`);
 const viewOptions = computed((): { label: string; value: `chat` | `changes` }[] => [
-    { label: t(`agents.agentDetail.chat`), value: `chat` },
-    { label: t(`agents.agentDetail.changes`), value: `changes` },
+    { label: t(`shared.chat`), value: `chat` },
+    { label: t(`shared.changes`), value: `changes` },
 ]);
 
 // The name this page can honestly print: the roster's, or the open conversation's. Absent while the id is still a
@@ -376,7 +376,7 @@ const confirmHandOver = async (): Promise<void> => {
                 v-model="edit.draft"
                 type="text"
                 maxlength="80"
-                :aria-label="t(`agents.agentDetail.agentTitle`)"
+                :aria-label="t(`shared.agentTitle`)"
                 class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-xs font-medium"
                 @keydown.enter.prevent="edit.commit()"
                 @keydown.esc.prevent="edit.cancel()"
@@ -503,7 +503,7 @@ const confirmHandOver = async (): Promise<void> => {
                 @click="crossToAgent"
                 v-tooltip.bottom="t(`agents.agentDetail.switchesWindowToWhere`, { remoteName })"
             >
-                <Icon name="arrow-right" />{{ t(`agents.agentDetail.openIn`) }} {{ remoteName }}
+                <Icon name="arrow-right" />{{ t(`shared.openIn`) }} {{ remoteName }}
             </Button>
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
@@ -569,7 +569,7 @@ const confirmHandOver = async (): Promise<void> => {
         <ResponsiveOverlay
             v-model="identityOpen"
             :anchor="identityAnchor ?? undefined"
-            :header="t(`agents.agentDetail.sessionName`)"
+            :header="t(`shared.sessionName`)"
             side="bottom"
             cross="start"
             panel-class="w-96"

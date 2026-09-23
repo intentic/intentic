@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { setTimeout as sleep } from "node:timers/promises";
+import { pollUntil } from "@intentic/base/async";
 import { isProcessAlive, spawnDetached } from "@intentic/local-agent";
 import type { DeviceAgentOp, DeviceScopes } from "@intentic/sandbox-contract";
 import { agentLogPath } from "../../config.js";
@@ -58,31 +58,24 @@ const settled: Record<DeviceAgentOp, string> = {
 export const runAgentOp = async (op: DeviceAgentOp, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "shell");
     onLine(started(op, installedBuild()));
-    // Fresh watermark per run, taken before the spawn: the log is append-only and long-lived, so a reader must see
-    // only this run's lines.
-    const start = (await readFrom(agentLogPath, 0)).at;
+    // Taken before the spawn: the log is append-only and long-lived, and a reader sees only this run's lines.
+    let at = (await readFrom(agentLogPath, 0)).at;
     const argv = AGENT_VERB[op];
     const pid = await spawnDetached(agentLogPath, machineLauncher(), argv, { finishes: true });
     onLine(`Started ${argv.join(" ")} (pid ${pid}), detached from this connection so it finishes either way. Log: ${agentLogPath}`);
-
-    let at = start;
-    const deadline = Date.now() + WATCH_TIMEOUT_MS;
     let goneAt: number | undefined;
-    while (Date.now() < deadline) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a tail is serial by definition: read, emit, wait
+    const drained = async (): Promise<boolean> => {
         const { text, at: next } = await readFrom(agentLogPath, at);
         at = next;
         for (const line of text.split(/\r?\n/).filter((one) => one.trim() !== "")) {
             onLine(line);
         }
-        if (!isProcessAlive(pid)) {
-            goneAt ??= Date.now();
-            if (Date.now() - goneAt > DRAIN_MS) {
-                break;
-            }
+        if (isProcessAlive(pid)) {
+            return false;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-        await sleep(POLL_MS);
-    }
+        goneAt ??= Date.now();
+        return Date.now() - goneAt > DRAIN_MS;
+    };
+    await pollUntil(drained, { intervalMs: POLL_MS, timeoutMs: WATCH_TIMEOUT_MS });
     return settled[op];
 };

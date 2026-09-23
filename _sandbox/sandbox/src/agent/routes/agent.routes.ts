@@ -23,7 +23,6 @@ import type { OrpcContext } from "../../app-env.js";
 import { REPO_SYNC_NOTE_TITLE, type RepoSync, syncAdvisory, syncWorkspaceRepos } from "../../workspace/layout/sync-repos.js";
 import { resolveExistingWithin, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 import { startAnchor, type TurnPlacement } from "../../agents/worktrees/isolation.js";
-import { authResumable } from "../../agents/actor/conversation-decide.js";
 import { type QueueChange, queueView } from "../../agents/actor/conversation-queue.js";
 import { type PersistedAgent, worktreeOf } from "../../agents/registry/agents-store.js";
 import { holdAccount } from "../../runtimes/claude/claude-credentials.js";
@@ -57,7 +56,7 @@ import { handoffStateNote } from "../prompt/handoff-state.js";
 import { limitWayOf } from "../models/limit-way.js";
 import { nameAgentTitle } from "../models/title-namer.js";
 import { planTurn, type TurnPlan } from "../run/turn/turn-plan.js";
-import { classifyFailure, type ErrorFrame, type FailureQueries } from "../run/frames/classify-failure.js";
+import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "../run/frames/classify-failure.js";
 import { abortSuppresses, type Attribution, decorateFrame, silenceOf, silentEnding, withSilentEnding } from "../run/frames/frame-decorators.js";
 import { performFailureWrites, providerAnswered, recordFrame, turnActivity } from "../run/frames/frame-effects.js";
 import { createTurnFrames, type TurnFrames } from "../run/frames/frame-reducers.js";
@@ -103,7 +102,10 @@ export async function* streamAgent(services: Services, input: TurnInput, signal:
         steering = capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").steering ? new SteeringQueue() : undefined;
         unregister =
             input.conversationId !== undefined
-                ? services.conversations.registerTurn(input.conversationId, { abort: () => controller.abort(), ...(steering !== undefined ? { steering } : {}) })
+                ? services.conversations.registerTurn(input.conversationId, {
+                      abort: () => controller.abort(),
+                      ...(steering !== undefined ? { steering } : {}),
+                  })
                 : undefined;
         yield* runConversationTurn(services, input, controller.signal, steering);
     } finally {
@@ -188,22 +190,36 @@ async function* runConversationTurn(
     const existing = services.agents.entry(conversationId);
     const runner = runnerOf(existing, input);
     if (existing === undefined && runner !== undefined && !(await services.runners.enrolled(runner))) {
-        yield { kind: "error", message: `No runner named "${runner}" is paired with this sandbox — pair one first, or leave placement out to run here.` };
+        yield {
+            kind: "error",
+            message: `No runner named "${runner}" is paired with this sandbox — pair one first, or leave placement out to run here.`,
+        };
         yield { kind: "done" };
         return;
     }
     const isolated = isolatedOf(existing, input, runner);
-    if (!(await services.conversations.send(conversationId, { kind: "begin", turn: conversationIdentity(input, conversationId, { isolated, runner }) }).settled)) {
+    if (
+        !(await services.conversations.send(conversationId, {
+            kind: "begin",
+            turn: conversationIdentity(input, conversationId, { isolated, runner }),
+        }).settled)
+    ) {
         yield { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish." };
         yield { kind: "done" };
         return;
     }
     // Names the conversation while the turn runs, fire-and-forget; a gate skips one already better-named.
     // Warn, not debug: this pass is invisible by construction, so a debug failure goes unnoticed fleet-wide.
-    nameAgentTitle(services, conversationId, input.prompt).catch((error: unknown) => services.logger.warn({ err: error }, "agents: title naming failed"));
+    nameAgentTitle(services, conversationId, input.prompt).catch((error: unknown) =>
+        services.logger.warn({ err: error }, "agents: title naming failed"),
+    );
     // Read once above the placement, so every placement checkpoints under the same index.
     const snapshot: SnapshotTurn = { conversationId, index: await turnStartIndex(services, { ...input, conversationId }) };
-    yield* placedTurn(services.conversations, conversationId, placementOf(services, input, signal, steering, { id: conversationId, snapshot, runner, isolated }));
+    yield* placedTurn(
+        services.conversations,
+        conversationId,
+        placementOf(services, input, signal, steering, { id: conversationId, snapshot, runner, isolated }),
+    );
 }
 
 // What a settled plan answer leaves in the transcript: the decision's notice, and a rejection's feedback, which stays
@@ -311,7 +327,12 @@ const attachmentsOf = async (root: string, input: TurnInput): Promise<{ readonly
 };
 
 // Built only for the runtime that enters the namespace; others stay cwd'd, told so in the prompt instead.
-const isolationOf = async (services: Services, input: TurnInput, worktree: WorktreeRun | undefined, localCwd: string): Promise<TurnPlacement | undefined> => {
+const isolationOf = async (
+    services: Services,
+    input: TurnInput,
+    worktree: WorktreeRun | undefined,
+    localCwd: string,
+): Promise<TurnPlacement | undefined> => {
     if (worktree === undefined || !entersNamespace(input)) {
         return undefined;
     }
@@ -575,10 +596,11 @@ async function* prepareTurn(
     return { plan, request: wire.request, isolation: ready.isolation, effectiveCwd: ready.effectiveCwd, resumed: ready.resumed };
 }
 
-// Whether a mid-turn auth refusal would be re-minted and re-run: only a stored Claude account's credential qualifies,
-// on a turn that is not itself the re-mint.
-const resumeArmedFor = (input: TurnInput, account: string | undefined, request: AgentRequest): boolean =>
-    input.conversationId !== undefined && account !== undefined && request.credential.kind === "claude-oauth" && authResumable(input.prompt);
+// Only a stored Claude account's credential is re-minted, never on the re-mint itself: refused again, it is dead.
+const remintFor = (input: TurnInput, account: string | undefined, request: AgentRequest): FailureContext["remint"] =>
+    input.conversationId !== undefined && account !== undefined && request.credential.kind === "claude-oauth" && input.resume !== "auth"
+        ? { account, refusedToken: request.credential.token }
+        : undefined;
 
 // The questions a failure's classification asks, answered from the daemon's own records.
 const failureQueries = (services: Services): FailureQueries => ({
@@ -600,12 +622,12 @@ interface TurnState {
     readonly account: string | undefined;
     readonly attribution: Attribution;
     readonly request: AgentRequest;
-    readonly resumeArmed: boolean;
+    readonly remint: FailureContext["remint"];
     readonly frames: TurnFrames;
 }
 
 // A failure frame as the window reads it: counted against the provider's breaker when it is an outage on a
-// conversation, classified, its line logged and its records written, its walls folded, all before it goes out.
+// conversation, classified, its line logged, its records written and its hold taken, all before it goes out.
 const classified = async (services: Services, event: ErrorFrame, turn: TurnState): Promise<AgentEvent> => {
     const { input, provider, frames } = turn;
     const readings = frames.readings();
@@ -621,7 +643,7 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
             attribution: turn.attribution,
             sessionId: readings.sessionId,
             answered: readings.silence.answered,
-            resumeArmed: turn.resumeArmed,
+            remint: turn.remint,
             limitReset: readings.limitReset,
             outage,
             standing: frames.verification.standing(),
@@ -633,7 +655,7 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
     );
     services.logger[failure.log.level](failure.log.fields, failure.log.message);
     performFailureWrites(services, failure.writes);
-    frames.hit(failure.walls);
+    frames.hold(failure.held);
     return failure.frame;
 };
 
@@ -675,7 +697,7 @@ async function* runTurn(
     const sniffer = createOutboundSniffer(services, turnId);
     const frames = createTurnFrames(effectiveCwd, prepared.resumed);
     const record = turnActivity(services, { input, provider, turnId, attribution, sessionId: () => frames.readings().sessionId });
-    const state: TurnState = { input, turnId, provider, account, attribution, request, resumeArmed: resumeArmedFor(input, account, request), frames };
+    const state: TurnState = { input, turnId, provider, account, attribution, request, remint: remintFor(input, account, request), frames };
     const aborted = (): boolean => signal?.aborted === true;
     const silent = (): string | undefined => silentEnding(silenceOf(frames, { conversationId: input.conversationId, aborted: aborted() }));
     record({ type: "turn.started", content: input.prompt.slice(0, 2_000) });
@@ -888,7 +910,9 @@ export const createAgentRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: "That message has no saved file state to go back to." });
             }
             if (outcome === "stale") {
-                throw new ORPCError("PRECONDITION_FAILED", { message: "That message is no longer where you saw it: the conversation has moved since." });
+                throw new ORPCError("PRECONDITION_FAILED", {
+                    message: "That message is no longer where you saw it: the conversation has moved since.",
+                });
             }
             return outcome;
         }),

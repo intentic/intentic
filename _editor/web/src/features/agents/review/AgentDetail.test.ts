@@ -2,8 +2,6 @@
 // title (fixed by hiding words below @md), and at 390px the mode switch left no room for the title (fixed by
 // moving it outside `.view-header`). Asserted structurally, not just as "present somewhere".
 import "@intentic/testing/dom";
-import { it, expect, afterEach, mock, jest } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 // The threshold the header's bars wait for, read from where it's defined rather than restated as a number here.
@@ -15,16 +13,16 @@ import * as actualAgentActions from "../fleet/agentActions";
 
 // What the second test turns: the form factor (a desktop page is the review, where a phone's is the chat) and whether
 // either half of the fleet has answered for this id yet. Defaults are the first test's world, restored after each.
-const { knobs } = hoisted(() => ({ knobs: { mobile: true, known: true } }));
+const { knobs } = { knobs: { mobile: true, known: true } };
 
 // The header's back link is a real RouterLink now, which needs a router this bare mount never installs.
-// Every factory below is synchronous: a mock.module factory runs in place, and awaiting inside one that replaces a
+// Every factory below is synchronous: a jest.mock factory runs in place, and awaiting inside one that replaces a
 // module already in this file's graph never returns.
-mock.module("vue-router", () => ({
+jest.mock("vue-router", () => ({
     ...actualVueRouter,
     // `query` too: the page reads `?sandbox=`, and vue-router never produces a route object without one.
     useRoute: () => ({ params: { id: `agent-1` }, query: {} }) as never,
-    useRouter: () => ({ push: mock(), replace: mock() }) as never,
+    useRouter: () => ({ push: jest.fn(), replace: jest.fn() }) as never,
     RouterLink: RouterLinkStub as never,
 }));
 
@@ -33,7 +31,7 @@ mock.module("vue-router", () => ({
 const realUi = { ...actualUi };
 const realAgentActions = { ...actualAgentActions };
 
-mock.module("@intentic/ui", () => {
+jest.mock("@intentic/ui", () => {
     const empty = (name: string) => defineComponent({ name, render: () => null });
     return {
         ...realUi,
@@ -48,15 +46,15 @@ mock.module("@intentic/ui", () => {
     };
 });
 
-mock.module("../../chat/panel/ChatPanel.vue", () => ({ default: { render: () => null } }));
-mock.module("./AgentReviewPanel.vue", () => ({ default: { render: () => null } }));
-mock.module("../board/session/AgentSessionMenu.vue", () => ({ default: { render: () => null } }));
-mock.module("../board/session/SessionChip.vue", () => ({ default: { render: () => null } }));
-mock.module("../board/session/SessionIdentity.vue", () => ({ default: { render: () => null } }));
+jest.mock("../../chat/panel/ChatPanel.vue", () => ({ default: { render: () => null } }));
+jest.mock("./AgentReviewPanel.vue", () => ({ default: { render: () => null } }));
+jest.mock("../board/session/AgentSessionMenu.vue", () => ({ default: { render: () => null } }));
+jest.mock("../board/session/SessionChip.vue", () => ({ default: { render: () => null } }));
+jest.mock("../board/session/SessionIdentity.vue", () => ({ default: { render: () => null } }));
 // The phone's chats sheet hangs off the title; a header test only cares that the title is its handle.
-mock.module("../../chat/tabs/ChatSwitcherSheet.vue", () => ({ default: { render: () => null } }));
+jest.mock("../../chat/tabs/ChatSwitcherSheet.vue", () => ({ default: { render: () => null } }));
 
-mock.module("../fleet/agentStatus", () => ({
+jest.mock("../fleet/agentStatus", () => ({
     agentStatusMeta: () => ({ icon: `spinner`, spin: true, label: `Running`, class: `text-link` }),
     unregistered: () => false,
     writingNow: () => true,
@@ -64,23 +62,23 @@ mock.module("../fleet/agentStatus", () => ({
     turnInFlight: () => false,
 }));
 
-mock.module("../fleet/useAgents", () => {
+jest.mock("../fleet/useAgents", () => {
     const agent = { id: `agent-1`, branch: `agent/agent-1`, status: `running`, title: `Readable mobile title` };
     return {
         useAgents: () => ({
             fleet: ref(knobs.known ? [agent] : []),
             archived: ref([]),
             // An unknown id is asked about once and the page waits on the answer, so this read is the one left hanging.
-            refresh: mock(() => (knobs.known ? Promise.resolve() : new Promise<void>(() => {}))),
-            loadArchived: mock(async () => {}),
-            open: mock(),
+            refresh: jest.fn(() => (knobs.known ? Promise.resolve() : new Promise<void>(() => {}))),
+            loadArchived: jest.fn(async () => {}),
+            open: jest.fn(),
             agentById: () => (knobs.known ? agent : undefined),
-            rename: mock(async () => {}),
+            rename: jest.fn(async () => {}),
         }),
     };
 });
 
-mock.module("../../chat/run/useChat", () => {
+jest.mock("../../chat/run/useChat", () => {
     return {
         useChat: () => ({
             // `peek`/`unsent` are what the phone's focus-leave sweep checks (AgentDetail.sweepPeek); this agent is one
@@ -100,21 +98,21 @@ mock.module("../../chat/run/useChat", () => {
                       ]
                     : [],
             ),
-            setActive: mock(),
-            closeTabs: mock(),
-            openConversation: mock(),
+            setActive: jest.fn(),
+            closeTabs: jest.fn(),
+            openConversation: jest.fn(),
             active: ref({ conversationId: `agent-1` }),
         }),
     };
 });
 // Stubbed strip (nothing open) so this mount skips standing up the whole tab store for a header test.
-mock.module("../../chat/panel/useChat-strip", () => ({
+jest.mock("../../chat/panel/useChat-strip", () => ({
     chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
     chatPreviews: { value: {} },
     previewOf: () => undefined,
 }));
 
-mock.module("./useAgentChanges", () => {
+jest.mock("./useAgentChanges", () => {
     return {
         useAgentChanges: () => ({
             actionBusy: ref(false),
@@ -122,15 +120,15 @@ mock.module("./useAgentChanges", () => {
             pending: ref([]),
             count: ref(0),
             loading: ref(false),
-            land: mock(),
-            discard: mock(),
-            refresh: mock(),
+            land: jest.fn(),
+            discard: jest.fn(),
+            refresh: jest.fn(),
         }),
     };
 });
 
-mock.module("../fleet/agentActions", () => ({ ...realAgentActions, requestLandAgent: mock(async () => {}), startAgent: mock() }));
-mock.module("../../sandbox/secrets/useRole", () => ({ useRole: () => ({ canDrive: true, canReview: true, canShip: true }) }));
+jest.mock("../fleet/agentActions", () => ({ ...realAgentActions, requestLandAgent: jest.fn(async () => {}), startAgent: jest.fn() }));
+jest.mock("../../sandbox/secrets/useRole", () => ({ useRole: () => ({ canDrive: true, canReview: true, canShip: true }) }));
 
 const { default: AgentDetail } = await import("./AgentDetail.vue");
 

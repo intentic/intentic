@@ -2,7 +2,6 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import { CONTROL_SCOPES, controlScoped, fileControlTokens } from "./control-tokens.js";
 
 const storePath = async (): Promise<string> => join(await mkdtemp(join(tmpdir(), "control-")), "control-tokens.json");

@@ -1,7 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { test, expect } from "bun:test";
 
 // Enforces by discovery, not a list, that no file splices a value into a command via bare quotes without importing the
 // shared quoters. `.integration.`: it walks every .ts file in the repo, so timing reflects the machine, not the code.

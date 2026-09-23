@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { afterEach, beforeEach, describe, expect, it, jest, mock } from "bun:test";
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
 import { usePanelWait } from "./usePanelWait";
 
@@ -12,7 +11,7 @@ const stage = (initial?: { name: string; title?: string }) => {
     const tabs = {
         pending: ref<string | undefined>(undefined),
         answer: ref<`waiting` | `arrived` | `refused`>(`arrived`),
-        focus: mock(async (_name: string) => undefined),
+        focus: jest.fn(async (_name: string) => undefined),
     };
     const scope = effectScope();
     scopes.push(scope);

@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { createViewLedger, isObservingCall, isSurfacePath, verifyUiEditsMessage } from "./agent-viewing.js";
 
 // Two judgements this ledger rests on: a regex over tool names that arrive under a different prefix per MCP server, and

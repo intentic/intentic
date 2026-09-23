@@ -1,10 +1,9 @@
-import { describe, it, expect, mock } from "bun:test";
 import { computed, ref } from "vue";
 import type { MemberRole } from "@intentic/sandbox-contract";
 
 // The four affordance flags per tier, as one table: a guest drives its own chats but never reviews, ships or owns.
 const role = ref<MemberRole | undefined>(`owner`);
-mock.module(`../client/useSandbox`, () => ({
+jest.mock(`../client/useSandbox`, () => ({
     useSandbox: () => ({ active: computed(() => (role.value === undefined ? undefined : { role: role.value })) }),
 }));
 

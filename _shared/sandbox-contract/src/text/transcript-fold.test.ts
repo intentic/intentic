@@ -1,5 +1,4 @@
 import { STATE_DIR } from "@intentic/constants";
-import { describe, it, expect } from "bun:test";
 import type { AgentEvent } from "../events/agent-events.js";
 import type { TranscriptPatch, TranscriptRow } from "../events/transcript.js";
 import { watchWakePrompt } from "../events/watch-wake.js";
@@ -213,9 +212,19 @@ describe("foldTurn", () => {
         });
         // An outage nobody armed says so, instead of promising the breaker's retry.
         const unarmed: AgentEvent[] = [
-            { kind: "error", code: "provider-outage", message: "Anthropic is down.", autoResume: "available", outage: { retryAt: 1 }, retries: { made: 0, max: 6 } },
+            {
+                kind: "error",
+                code: "provider-outage",
+                message: "Anthropic is down.",
+                autoResume: "available",
+                outage: { retryAt: 1 },
+                retries: { made: 0, max: 6 },
+            },
         ];
-        expect(foldOf("hi", unarmed).at(-1)).toEqual({ role: "notice", text: "Anthropic is down. Nothing is retrying it, so the turn is waiting here." });
+        expect(foldOf("hi", unarmed).at(-1)).toEqual({
+            role: "notice",
+            text: "Anthropic is down. Nothing is retrying it, so the turn is waiting here.",
+        });
     });
 
     it("writes the turn's own events down as notices", () => {

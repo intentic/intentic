@@ -1,16 +1,15 @@
-import { it, expect, afterEach, mock } from "bun:test";
-import { mocked, hoisted } from "@intentic/testing/bun";
+import { mocked } from "@intentic/testing/bun";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
-const stub = hoisted(() => ({
+const stub = {
     // The app's one self-retiring receipt lane, so a test can tell an outcome from a failure by which channel it took.
     said: [] as string[],
     // The shared sentence both land presses take, held here so a test proves this one passes it through rather than
     // inventing its own wording.
     nothingLanded: `Nothing to land: this conversation's branch holds no work your workspace doesn't already have.`,
-}));
+};
 
-mock.module("@intentic/ui/async", () => ({
+jest.mock("@intentic/ui/async", () => ({
     useAsyncAction: () => ({
         busy: { value: false },
         notice: { value: undefined },
@@ -19,32 +18,32 @@ mock.module("@intentic/ui/async", () => ({
         run: (task: () => Promise<void>) => task(),
     }),
 }));
-mock.module("../../../shell/notifications/notifications", () => ({
+jest.mock("../../../shell/notifications/notifications", () => ({
     useNotifications: () => ({ say: (message: string) => stub.said.push(message) }),
 }));
-mock.module("../../../lib/queryPersistence", () => ({ queryClient: { fetchQuery: mock() }, UNPERSISTED: `unpersisted` }));
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
-mock.module("../../sandbox/client/useSandboxQuery", () => ({
+jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { fetchQuery: jest.fn() }, UNPERSISTED: `unpersisted` }));
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
+jest.mock("../../sandbox/client/useSandboxQuery", () => ({
     useSandboxQuery: () => ({
         query: {
             data: { value: undefined },
             isFetching: { value: false },
-            refetch: mock(),
+            refetch: jest.fn(),
         },
         error: { value: undefined },
     }),
 }));
-mock.module("../fleet/agentActions", () => ({
-    askAgentToResolve: mock(),
-    discardAgent: mock(),
-    invalidateAgentAction: mock(async () => undefined),
-    landAgent: mock(),
+jest.mock("../fleet/agentActions", () => ({
+    askAgentToResolve: jest.fn(),
+    discardAgent: jest.fn(),
+    invalidateAgentAction: jest.fn(async () => undefined),
+    landAgent: jest.fn(),
     nothingLanded: () => stub.nothingLanded,
 }));
 // `agentById` answers from the card each case puts on the board: whether that card is in a turn is what an ask lives as
 // long as. Read at call time, so the map below is in place by then.
-mock.module("../fleet/useAgents", () => ({
-    useAgents: () => ({ archive: mock(), setAutoLand: mock(), agentById: (id: string) => cards.value.get(id) }),
+jest.mock("../fleet/useAgents", () => ({
+    useAgents: () => ({ archive: jest.fn(), setAutoLand: jest.fn(), agentById: (id: string) => cards.value.get(id) }),
 }));
 
 import { nextTick, ref, shallowRef } from "vue";

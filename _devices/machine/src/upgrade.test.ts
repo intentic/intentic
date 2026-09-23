@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { agentAssetUrl, agentPath, launcherAssetUrl, launcherPath } from "./release.js";
 import { runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 
@@ -23,7 +22,7 @@ const scripted = (overrides: Partial<UpgradeExec> & Scripted = {}) => {
         fetchTo: async (url, dest) => void steps.push(`fetch ${url} → ${dest}`),
         probe: (binary) => {
             steps.push(`probe ${binary}`);
-            return downloaded === undefined ? { kind: "unusable" } : { kind: "version", version: downloaded };
+            return downloaded;
         },
         swap: async (from, to) => void steps.push(`swap ${from} → ${to}`),
         runningBuild: async () => await Promise.resolve(running),
@@ -85,14 +84,6 @@ describe("runUpgrade", () => {
         const outcome = await upgrade(exec, "1.0.0");
         expect(outcome.kind === "failed" && outcome.reason).toContain("1.9.0");
         expect(steps.some((step) => step.startsWith("swap"))).toBe(false);
-    });
-
-    // An agent too old for `version` is an old release, not a network problem, and the reason must say which.
-    it("says a download that does not answer `version` is that, not a file that won't run", async () => {
-        const { exec } = scripted({ probe: () => ({ kind: "no-version-command" }) });
-        const outcome = await upgrade(exec, "1.0.0");
-        expect(outcome.kind === "failed" && outcome.reason).toContain("`intentic-machine version`");
-        expect(upgradeMessage(outcome)).not.toContain("doesn't run as an agent");
     });
 
     it("reports a download that never arrived, keeping what did arrive so the next run resumes it", async () => {

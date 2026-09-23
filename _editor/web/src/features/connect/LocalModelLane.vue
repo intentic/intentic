@@ -120,7 +120,18 @@ const bestIsInstant = computed(() => fit?.best !== undefined && fit.best.model =
 // The rungs in reading order, each carrying whatever entry already holds its weights so the row below decides between
 // an offer and a report once, not twice.
 const rungs = computed(() => {
-    const offers: { key: string; model: string; context: string; icon: IconName; iconClass: string; badge: string; badgeClass: string; action: string; pitch: string; warn: string | undefined }[] = [];
+    const offers: {
+        key: string;
+        model: string;
+        context: string;
+        icon: IconName;
+        iconClass: string;
+        badge: string;
+        badgeClass: string;
+        action: string;
+        pitch: string;
+        warn: string | undefined;
+    }[] = [];
     if (fit?.instant !== undefined && !bestIsInstant.value) {
         offers.push({
             key: `instant`,
@@ -188,12 +199,20 @@ const stateTone = (state: string): string => STATE_TONE[state] ?? `text-subtle`;
 
                     <!-- Taken: the daemon's own words for where it has got to, in place of a button whose second press
                          would write a second entry and leave this one without the machine's single server slot. -->
-                    <span v-if="rung.installed" class="ml-auto flex min-w-0 items-center gap-1.5 text-2xs" :class="stateTone(rung.installed.status.state)">
-                        <Icon :name="stateIcon(rung.installed.status.state)" :spin="stateIcon(rung.installed.status.state) === `spinner`" class="shrink-0" />
+                    <span
+                        v-if="rung.installed"
+                        class="ml-auto flex min-w-0 items-center gap-1.5 text-2xs"
+                        :class="stateTone(rung.installed.status.state)"
+                    >
+                        <Icon
+                            :name="stateIcon(rung.installed.status.state)"
+                            :spin="stateIcon(rung.installed.status.state) === `spinner`"
+                            class="shrink-0"
+                        />
                         <span class="truncate">{{
                             rung.installed.status.state === `active`
                                 ? t(`connect.localModelLane.ready`)
-                                : (rung.installed.status.detail ?? t(`connect.localModelLane.starting`))
+                                : (rung.installed.status.detail ?? t(`shared.starting`))
                         }}</span>
                     </span>
                     <Button

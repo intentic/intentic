@@ -1,5 +1,4 @@
 import { ENGINE_IDS } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { ENGINE_DESCRIPTORS, engineDescriptor, releaseArch } from "./engine-descriptors.js";
 
 // Guards the descriptor table by discovery, not a second list: every contract engine must have a descriptor, and each

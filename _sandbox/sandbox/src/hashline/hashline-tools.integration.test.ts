@@ -2,7 +2,6 @@ import { chmod, lstat, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
-import { afterEach, expect, test } from "bun:test";
 import { fileAnchor } from "./hashline.js";
 import { createHashlineServer } from "./hashline-tools.js";
 
@@ -61,14 +60,20 @@ test("read takes a line range and says which lines it shows", async () => {
     const { call } = await workspace({ "five.txt": file });
     const { text } = await call("read", { path: "five.txt", offset: 2, limit: 2 });
     const [header, ...rows] = text.split("\n");
-    expect(header).toBe(`anchor ${fileAnchor(file)} · lines 2-3 of 5: pass this anchor and the line tags to hashline_edit; the rest: hashline_read with offset 4`);
+    expect(header).toBe(
+        `anchor ${fileAnchor(file)} · lines 2-3 of 5: pass this anchor and the line tags to hashline_edit; the rest: hashline_read with offset 4`,
+    );
     expect(rows.map((row) => row.slice(5))).toEqual(["2│2", "3│3"]);
 });
 
 test("an edit of a CRLF file writes CRLF lines and leaves every other byte alone", async () => {
     const { root, call } = await workspace({ "win.txt": "alpha\r\nbeta\r\ngamma\r\n" });
     const read = parse((await call("read", { path: "win.txt" })).text);
-    const edit = await call("edit", { path: "win.txt", anchor: read.anchor, ops: [{ op: "replace", from: read.tagOf(2), lines: ["BETA", "delta"] }] });
+    const edit = await call("edit", {
+        path: "win.txt",
+        anchor: read.anchor,
+        ops: [{ op: "replace", from: read.tagOf(2), lines: ["BETA", "delta"] }],
+    });
     expect(edit.isError).toBe(false);
     expect(await readFile(join(root, "win.txt"), "utf8")).toBe("alpha\r\nBETA\r\ndelta\r\ngamma\r\n");
 });
@@ -77,7 +82,9 @@ test("edits chain on each answer, which carries only the lines around the change
     const lines = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`);
     const { root, call } = await workspace({ "long.txt": `${lines.join("\n")}\n` });
     const read = parse((await call("read", { path: "long.txt" })).text);
-    const first = parse((await call("edit", { path: "long.txt", anchor: read.anchor, ops: [{ op: "replace", from: read.tagOf(20), lines: ["twenty"] }] })).text);
+    const first = parse(
+        (await call("edit", { path: "long.txt", anchor: read.anchor, ops: [{ op: "replace", from: read.tagOf(20), lines: ["twenty"] }] })).text,
+    );
     expect(first.lines).toEqual([18, 19, 20, 21, 22]);
     const second = await call("edit", {
         path: "long.txt",

@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, afterAll } from "bun:test";
 import { interpreterNear, runPythonDiag } from "./python-diagnostics.js";
 
 // Spawns ruff or pyright on real files, since only that proves the parsers match what the binaries actually print.

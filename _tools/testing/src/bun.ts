@@ -1,11 +1,9 @@
 import { fileURLToPath } from "node:url";
 import { jest, type Mock } from "bun:test";
 
-// The vi.* surface bun:test lacks, with the same semantics: real-clock waits under fake timers, stubs that restore,
-// and async timer advance that interleaves microtasks between timers.
+// Test helpers bun:test lacks: real-clock waits under fake timers, stubs that restore, async timer advance.
 
-// Under fake timers bun freezes every clock (Date, performance, hrtime) and every timer, a setTimeout captured
-// beforehand included; Atomics.waitAsync and setImmediate are the two schedulers it leaves on the real clock.
+// Bun's fake timers freeze every clock and timer; Atomics.waitAsync and setImmediate alone stay on the real clock.
 const sleepCell = new Int32Array(new SharedArrayBuffer(4));
 
 const realSleep = async (ms: number): Promise<void> => {
@@ -19,11 +17,10 @@ const realYield = (): Promise<void> => new Promise((resolve) => setImmediate(res
 
 export type WaitForOptions = { timeout?: number; interval?: number };
 
-// waitFor's 1s default is a latency bound no integration suite means to assert; 30s matches the 120s budget so a
-// wait is not read as a hang.
+// An integration suite's wait bound, inside its 120 s budget: waitFor's 1 s default is no latency it means to assert.
 export const SETTLES = { timeout: 30_000 } as const satisfies WaitForOptions;
 
-// vi.waitFor: retries `fn` on the real clock until it stops throwing/rejecting or `timeout` (1s) of sleeps has passed.
+// Retries `fn` on the real clock until it stops throwing/rejecting or `timeout` (1s) of sleeps has passed.
 export const waitFor = async <T>(fn: () => T | Promise<T>, { timeout = 1_000, interval = 50 }: WaitForOptions = {}): Promise<T> => {
     let slept = 0;
     let lastError: unknown;
@@ -43,7 +40,7 @@ export const waitFor = async <T>(fn: () => T | Promise<T>, { timeout = 1_000, in
 
 const globalStubs = new Map<string, PropertyDescriptor | undefined>();
 
-// vi.stubGlobal: sets `globalThis[name]`, remembering the original for unstubAllGlobals.
+// Sets `globalThis[name]`, remembering the original for unstubAllGlobals.
 export const stubGlobal = (name: string, value: unknown): void => {
     if (!globalStubs.has(name)) {
         globalStubs.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
@@ -64,7 +61,7 @@ export const unstubAllGlobals = (): void => {
 
 const envStubs = new Map<string, string | undefined>();
 
-// vi.stubEnv: sets `process.env[name]`, remembering the original for unstubAllEnvs.
+// Sets `process.env[name]`, remembering the original for unstubAllEnvs.
 export const stubEnv = (name: string, value: string | undefined): void => {
     if (!envStubs.has(name)) {
         envStubs.set(name, process.env[name]);
@@ -87,9 +84,7 @@ export const unstubAllEnvs = (): void => {
     envStubs.clear();
 };
 
-// vi.advanceTimersByTimeAsync: yields first, so a timer a pending continuation schedules exists before the clock moves,
-// then fires one timer per step up to the window's end and never past it (`advanceTimersByTime(0)` moves bun's clock
-// 1 ms, so the walk ends on the deadline instead).
+// One timer per step, each after a yield so a continuation's timer exists, never past `ms` (bun's `advanceTimersByTime(0)` moves 1 ms).
 export const advanceTimersByTimeAsync = async (ms: number): Promise<void> => {
     const deadline = Date.now() + ms;
     for (;;) {
@@ -105,7 +100,7 @@ export const advanceTimersByTimeAsync = async (ms: number): Promise<void> => {
     }
 };
 
-// vi.runAllTimersAsync, capped at 10_000 rounds so an interval cannot spin forever.
+// Fires every pending timer, capped at 10_000 rounds so an interval cannot spin forever.
 const RUN_ALL_ROUNDS = 10_000;
 
 export const runAllTimersAsync = async (): Promise<void> => {
@@ -123,15 +118,10 @@ type AnyFn = (...args: any[]) => any;
 
 export type Mocked<T> = T extends AnyFn ? Mock<T> : { [K in keyof T]: T[K] extends AnyFn ? Mock<T[K]> : T[K] };
 
-// vi.mocked: a type-level cast, the value passes through untouched.
+// A type-level cast to the mock a module mock installed; the value passes through untouched.
 export const mocked = <T>(item: T): Mocked<T> => item as Mocked<T>;
 
-// vi.hoisted: bun's mock.module is never hoisted, so the thunk runs in place.
-export const hoisted = <T>(factory: () => T): T => factory();
-
-// vi.resetModules for one module: a fresh evaluation per call, since a query makes bun treat the path as a new
-// module. The caller's `import.meta.url` resolves a relative specifier against the suite; the import takes a filesystem
-// path, since bun keeps a query on a path specifier and strips it from a `file:` href.
+// A fresh module per call: bun keys a module by path and query, and keeps the query only on a filesystem path.
 let freshCount = 0;
 export const freshImport = <T>(specifier: string, from: string): Promise<T> => {
     freshCount += 1;

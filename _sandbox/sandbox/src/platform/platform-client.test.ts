@@ -1,11 +1,10 @@
 import { EventEmitter } from "node:events";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 // A platform that accepts the connection but never answers: the response callback is never invoked. The fake
 // mirrors the two ClientRequest behaviors the timeout path relies on: setTimeout arms an idle timer, and
 // destroy(err) surfaces that error via the `error` event.
-const requestMock = mock((_url: URL, _opts: unknown, _cb: (res: unknown) => void) => {
+const requestMock = jest.fn((_url: URL, _opts: unknown, _cb: (res: unknown) => void) => {
     const req = new EventEmitter() as EventEmitter & {
         end: () => void;
         setTimeout: (ms: number, cb: () => void) => void;
@@ -16,7 +15,7 @@ const requestMock = mock((_url: URL, _opts: unknown, _cb: (res: unknown) => void
     req.destroy = (err) => void req.emit("error", err);
     return req;
 });
-mock.module("node:https", () => ({ request: (...args: unknown[]) => requestMock(...(args as Parameters<typeof requestMock>)) }));
+jest.mock("node:https", () => ({ request: (...args: unknown[]) => requestMock(...(args as Parameters<typeof requestMock>)) }));
 
 const { postToPlatform } = await import("./platform-client.js");
 

@@ -1,7 +1,6 @@
 import "@intentic/testing/dom";
 import { useHighlighter } from "@intentic/ui";
 import { LANGS } from "@intentic/code-read/langs";
-import { test, expect } from "bun:test";
 import { codeLangForPath } from "@intentic/code-read";
 
 // The grammar table's two silent-failure modes, neither visible to the compiler. `ShikiLang` types every surface that

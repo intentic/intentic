@@ -5,10 +5,11 @@
 //    (`.integration.`/`.e2e.`), even through an imported fixture module
 // 2. every package running `suites` preloads the shared budget through its bunfig.toml, and every preload it names
 //    exists
-// 3. an allow-list `mock.module` of a workspace package provides every name the code under test imports from it
+// 3. an allow-list `jest.mock` of a workspace package provides every name the code under test imports from it
 // 4. an emitted package's tsconfig references every emitted package it depends on, so `tsgo -b` builds them in order
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { INTEGRATION_NAME } from "../constants/src/test-suites.mjs";
 import { finish } from "./lib/report.mjs";
 import { byName, configFor, emitsDist, excludesOf, packages, root, sourceOf, TEST_FILE, walk } from "./lib/repo.mjs";
 
@@ -16,15 +17,14 @@ import { byName, configFor, emitsDist, excludesOf, packages, root, sourceOf, TES
 
 const MACHINE_PRIMITIVES = /mkdtemp|node:child_process|simple-git|dockerode|testcontainers/;
 const FIXTURE_MODULE = /(^|[.-])testing\.[cm]?tsx?$/;
-const INTEGRATION_NAME = /\.(integration|e2e)\.(test|spec)\.[cm]?[jt]sx?$/;
 // The package's test script is the shared runner (bin/suites.mjs in @intentic/testing), so the budget and the
 // bunfig.toml preload are what it counts on.
 const runsSuites = (pkg) => /\bsuites\b/.test(pkg.scripts?.test ?? "");
-// Cuts what names a module without running it: a `mock.module` replacing it, and a type-only import or
+// Cuts what names a module without running it: a `jest.mock` replacing it, and a type-only import or
 // `typeof import()` that erases before the suite runs.
 const runtimeText = (source) =>
     source
-        .replace(/mock\.module\([^)]*\)/g, "")
+        .replace(/jest\.mock\([^)]*\)/g, "")
         .replace(/\bimport\s+type\s[\s\S]*?from\s*["'][^"']+["'];?/g, "")
         .replace(/\btypeof\s+import\(\s*["'][^"']+["']\s*\)/g, "");
 
@@ -144,7 +144,7 @@ for (const { name, dir, pkg } of packages) {
 
 // Mock coverage.
 
-const MOCK = /mock\.module\(\s*["']([^"']+)["']\s*,\s*(async\s*)?\(\s*\)\s*=>\s*\(?\s*\{/g;
+const MOCK = /jest\.mock\(\s*["']([^"']+)["']\s*,\s*(async\s*)?\(\s*\)\s*=>\s*\(?\s*\{/g;
 const RELATIVE_IMPORT = /import\s+(?:[\w$]+\s*,?\s*)?(?:\{[^}]*\}\s*)?from\s*["'](\.[^"']+)["']/g;
 // The object literal that opens at `from`, found by brace depth.
 const literalAt = (source, from) => {
@@ -210,7 +210,7 @@ const mockGaps = (file, source, match, readers) => {
         return missing.length === 0
             ? []
             : [
-                  `${file.slice(root.length + 1)}: mock.module("${specifier}") provides {${[...provided].join(", ")}} but ` +
+                  `${file.slice(root.length + 1)}: jest.mock("${specifier}") provides {${[...provided].join(", ")}} but ` +
                       `${reader.slice(root.length + 1)} imports {${missing.join(", ")}} from it: spread the original module into the factory, or add them`,
               ];
     });

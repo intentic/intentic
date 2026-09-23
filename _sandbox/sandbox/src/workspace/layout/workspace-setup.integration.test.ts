@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { discoverProjects, installPanelKey, type ProjectSetupStatus, SETUP_NOTICE_HEADER, setupNoticeFor, setupStateOf } from "./workspace-setup.js";
 
@@ -125,12 +124,18 @@ test("a project whose manifest has outgrown its installed tree is stale, not rea
 test("a project whose installed versions trail its lockfile is stale, not ready", async () => {
     const root = await workspace();
     await write(root, "app/package.json", `{"name":"app","dependencies":{"left-pad":"catalog:"}}`);
-    await write(root, "app/pnpm-lock.yaml", `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      left-pad:\n        specifier: 'catalog:'\n        version: 1.3.0\n`);
+    await write(
+        root,
+        "app/pnpm-lock.yaml",
+        `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      left-pad:\n        specifier: 'catalog:'\n        version: 1.3.0\n`,
+    );
     await write(root, "app/node_modules/left-pad/package.json", `{"name":"left-pad","version":"1.2.0"}`);
     const [project] = await discoverProjects(root);
     const status = await setupStateOf(root, project!, processes(), installed);
     expect(status).toEqual({ state: "stale", outdated: [{ dir: "", name: "left-pad", installed: "1.2.0", locked: "1.3.0" }] });
-    expect(setupNoticeFor([{ ...project!, ...status }])).toContain("app: 1 are installed at another version than the lockfile resolves (left-pad 1.2.0 → 1.3.0)");
+    expect(setupNoticeFor([{ ...project!, ...status }])).toContain(
+        "app: 1 are installed at another version than the lockfile resolves (left-pad 1.2.0 → 1.3.0)",
+    );
     await write(root, "app/node_modules/left-pad/package.json", `{"name":"left-pad","version":"1.3.0"}`);
     expect(await stateOf(root, project!, processes(), installed)).toBe("ready");
 });

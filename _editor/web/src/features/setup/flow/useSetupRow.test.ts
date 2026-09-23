@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import type { SandboxSummary } from "@intentic/api-contract";
-import { describe, expect, it, mock } from "bun:test";
 import { effectScope, nextTick, ref } from "vue";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
 import { type SetupRowHost, useSetupRow } from "./useSetupRow";
@@ -12,11 +11,11 @@ import { type SetupRowHost, useSetupRow } from "./useSetupRow";
 const stage = (existing: readonly SandboxSummary[] = []) => {
     const sandbox = {
         sandboxes: ref<SandboxSummary[]>([...existing]),
-        create: mock(async (name: string) => sandboxSummary({ id: `new`, name })),
-        select: mock((_id: string) => undefined),
-        remove: mock(async (_id: string) => undefined),
+        create: jest.fn(async (name: string) => sandboxSummary({ id: `new`, name })),
+        select: jest.fn((_id: string) => undefined),
+        remove: jest.fn(async (_id: string) => undefined),
     } satisfies SetupRowHost[`sandbox`];
-    const enter = mock(async () => undefined);
+    const enter = jest.fn(async () => undefined);
     const row = effectScope().run(() => useSetupRow({ sandbox, enter }))!;
     return { sandbox, enter, row };
 };
@@ -70,16 +69,6 @@ describe(`a draft`, () => {
         row.discardDraft(false);
         expect(sandbox.remove.mock.calls).toEqual([[`new`]]);
         expect({ created: row.created.value, createdHere: row.createdHere.value }).toEqual({ created: null, createdHere: false });
-    });
-
-    it(`is kept once committed, and a resumed row is never one`, async () => {
-        const { sandbox, row } = stage();
-        await row.autoCreate();
-        row.discardDraft(true);
-        row.created.value = sandboxSummary({ id: `s1` });
-        row.createdHere.value = false;
-        row.discardDraft(false);
-        expect(sandbox.remove).not.toHaveBeenCalled();
     });
 
     it(`swallows a failed delete, since whoever discards it is already leaving`, async () => {

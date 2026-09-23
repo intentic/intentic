@@ -1,13 +1,11 @@
 import "@intentic/testing/dom";
 import { ref } from "vue";
-import { it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 
 // Needs jsdom: the stream router's import chain reaches the app's environment read at module eval.
 
-mock.module("../../../router", () => ({ router: { push: mock() } }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
-mock.module("../client/useSandbox", () => {
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../client/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
@@ -15,18 +13,18 @@ mock.module("../client/useSandbox", () => {
 });
 // Every name the app's graph imports from the daemon client, since bun links an ESM import against exactly what
 // this factory returns; only the two below are ever called here.
-mock.module("../client/sandboxClient", () => ({
-    sandboxJson: mock(),
-    sandboxRequest: mock(),
-    sandboxBlob: mock(),
-    sandboxUpload: mock(),
-    sandboxError: mock(async () => new Error(`unused`)),
+jest.mock("../client/sandboxClient", () => ({
+    sandboxJson: jest.fn(),
+    sandboxRequest: jest.fn(),
+    sandboxBlob: jest.fn(),
+    sandboxUpload: jest.fn(),
+    sandboxError: jest.fn(async () => new Error(`unused`)),
 }));
 // The two fields this import chain reads, both only as `.value`: `streaming` here, `conversations` in useChanges' own
 // module-scope watch. Hoisted so a case can flip `streaming` before the frame is routed.
-const streaming = hoisted(() => ({ value: false }));
-const conversations = hoisted(() => ({ value: [] as { streaming: { value: boolean } }[] }));
-mock.module("../../chat/run/useChat", () => ({ useChat: () => ({ streaming, conversations }) }));
+const streaming = { value: false };
+const conversations = { value: [] as { streaming: { value: boolean } }[] };
+jest.mock("../../chat/run/useChat", () => ({ useChat: () => ({ streaming, conversations }) }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { rpcKey, rpcKeyAt } from "../../../lib/queryKeys";
@@ -59,7 +57,7 @@ beforeEach(() => {
     // Fake, because the rescan is throttled at module scope: one test's window would otherwise swallow the next one's
     // leading call.
     jest.useFakeTimers();
-    spyOn(queryClient, `invalidateQueries`).mockImplementation(async (given) => {
+    jest.spyOn(queryClient, `invalidateQueries`).mockImplementation(async (given) => {
         filters.push(((typeof given === `function` ? given() : given) ?? {}) as Match);
     });
 });

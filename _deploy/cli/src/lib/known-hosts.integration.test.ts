@@ -2,7 +2,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { verifyHostKey } from "@intentic/providers";
-import { test, expect } from "bun:test";
 import { createKnownHostsStore } from "./known-hosts.js";
 
 const tempDir = () => mkdtemp(join(tmpdir(), "intentic-known-hosts-"));

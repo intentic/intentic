@@ -2,7 +2,6 @@
 // since mermaid's own parser is the validator and arrives behind a lazy import. Mermaid is the real library here, not a
 // stub: whether a diagram draws at all is the point of the feature.
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeAll } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, h } from "vue";
 

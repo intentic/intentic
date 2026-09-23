@@ -61,8 +61,8 @@ const pickerGroups = computed<readonly PickerGroup[]>(() => {
     }));
     const grouped: readonly { readonly label: string; readonly kind: PreviewTarget[`kind`] }[] = [
         { label: t(`preview.previewPanel.forwardedPorts`), kind: `port` },
-        { label: t(`preview.previewPanel.workspace`), kind: `public` },
-        { label: t(`preview.previewPanel.address`), kind: `address` },
+        { label: t(`shared.workspace`), kind: `public` },
+        { label: t(`shared.address`), kind: `address` },
     ];
     for (const { label, kind } of grouped) {
         const rows = targets.value.filter((entry) => entry.kind === kind);
@@ -390,7 +390,7 @@ onUnmounted(stopStartingPoll);
                     :options="pickerGroups"
                     variant="ghost"
                     :aria-label="t(`preview.previewPanel.appToPreview`)"
-                    :header="t(`preview.previewPanel.preview`)"
+                    :header="t(`shared.preview`)"
                 />
                 <!-- Repository and app targets always show their kind. -->
                 <StatusBadge
@@ -460,7 +460,7 @@ onUnmounted(stopStartingPoll);
                     type="button"
                     :class="ui.iconButton(`h-8 w-8`)"
                     :aria-label="t(`preview.previewPanel.reloadPreview`)"
-                    v-tooltip.bottom="t(`preview.previewPanel.reload`)"
+                    v-tooltip.bottom="t(`shared.reload`)"
                     @click="reload"
                 >
                     <Icon name="refresh" />
@@ -470,7 +470,7 @@ onUnmounted(stopStartingPoll);
                     type="button"
                     :class="ui.iconButton(`h-8 w-8`)"
                     :aria-label="t(`preview.previewPanel.openDevServersTerminal`)"
-                    v-tooltip.bottom="t(`preview.previewPanel.terminal`)"
+                    v-tooltip.bottom="t(`shared.terminal`)"
                     @click="terminal.openFocused(target.session!)"
                 >
                     <Icon name="code" />
@@ -484,7 +484,7 @@ onUnmounted(stopStartingPoll);
                         rel="noopener"
                         :class="ui.iconButton(`h-8 w-8`)"
                         :aria-label="t(`preview.previewPanel.openInNewTab`, { label: target.label })"
-                        v-tooltip.bottom="t(`preview.previewPanel.openInNewTab2`)"
+                        v-tooltip.bottom="t(`shared.openInNewTab`)"
                     >
                         <Icon name="arrow-up-right" />
                     </a>
@@ -542,7 +542,9 @@ onUnmounted(stopStartingPoll);
                 <Icon name="exclamation-triangle" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">{{ t(`preview.previewPanel.previewAddressDoesntReach`) }}</p>
                 <i18n-t keypath="preview.previewPanel.addressAnswersElsewhere" tag="p" class="max-w-sm text-2xs text-subtle" scope="global">
-                    <template #url><span class="font-mono">{{ target.url }}</span></template>
+                    <template #url
+                        ><span class="font-mono">{{ target.url }}</span></template
+                    >
                 </i18n-t>
                 <div class="flex items-center gap-2">
                     <Button :label="t(`ui.action.tryAgain`)" size="small" severity="secondary" @click="resolvePreview()" />
@@ -567,7 +569,9 @@ onUnmounted(stopStartingPoll);
                     scope="global"
                     :plural="target.servers.length"
                 >
-                    <template #label><span class="font-mono">{{ target.label }}</span></template>
+                    <template #label
+                        ><span class="font-mono">{{ target.label }}</span></template
+                    >
                     <template #count>{{ target.servers.length }}</template>
                 </i18n-t>
                 <ul class="flex w-full max-w-md flex-col gap-1">
@@ -580,7 +584,7 @@ onUnmounted(stopStartingPoll);
                             {{ server.dir ? `${server.dir} · ` : `` }}{{ server.url }}
                         </span>
                         <Button
-                            :label="forwarding === server.port ? t(`preview.previewPanel.opening`) : t(`preview.previewPanel.preview`)"
+                            :label="forwarding === server.port ? t(`preview.previewPanel.opening`) : t(`shared.preview`)"
                             size="small"
                             severity="secondary"
                             :disabled="forwarding !== undefined"
@@ -619,7 +623,7 @@ onUnmounted(stopStartingPoll);
                     <!-- Restart appears only after the wait becomes a verdict. -->
                     <Button
                         v-if="target.startable && (waitingLong || target.launch === `exited`)"
-                        :label="t(`preview.previewPanel.restart`)"
+                        :label="t(`shared.restart`)"
                         size="small"
                         :disabled="busy"
                         @click="restart"
@@ -632,7 +636,9 @@ onUnmounted(stopStartingPoll);
             <!-- The stopped state explains the next action and its destination. -->
             <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
                 <i18n-t keypath="preview.previewPanel.labelIsntRunning" tag="p" class="text-sm text-muted" scope="global">
-                    <template #label><span class="font-mono">{{ target.label }}</span></template>
+                    <template #label
+                        ><span class="font-mono">{{ target.label }}</span></template
+                    >
                 </i18n-t>
                 <p v-if="startHint" class="max-w-md text-2xs text-subtle">{{ startHint }}</p>
                 <i18n-t v-else keypath="preview.previewPanel.noDevServerToStart" tag="p" class="max-w-md text-2xs text-subtle" scope="global">

@@ -1,5 +1,4 @@
 import { compile, toNodeMap } from "@intentic/graph";
-import { test, expect } from "bun:test";
 import type { Provider, Providers } from "../provider.js";
 import { prune } from "./prune.js";
 

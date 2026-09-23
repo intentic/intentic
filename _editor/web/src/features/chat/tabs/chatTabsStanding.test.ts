@@ -6,8 +6,6 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { agentStatusMeta } from "../../agents/fleet/agentStatus";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
@@ -21,9 +19,9 @@ import { IconStub } from "@intentic/ui/testing";
 // The board's card reads browser globals through its import chain, so it's pulled in once the environment is up.
 const { default: AgentCard } = await import("../../agents/board/cards/AgentCard.vue");
 
-hoisted(() => {
+(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-});
+})();
 
 const NO_ATTENTION: AgentSummary[`attention`] = {
     plan: false,

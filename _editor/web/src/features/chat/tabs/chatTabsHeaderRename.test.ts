@@ -3,8 +3,6 @@
 // become active.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { it, expect, beforeAll, beforeEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { createApp, h, nextTick } from "vue";
 // Statically imported: this graph (app, PrimeVue, router, chat store) compiles too slowly for a hook's timeout.
 import ChatTabs from "./ChatTabs.vue";
@@ -15,10 +13,10 @@ import { draftConversation, reveal } from "../panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 
-hoisted(() => {
+(() => {
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-    globalThis.window.open = mock(() => null);
-});
+    globalThis.window.open = jest.fn(() => null);
+})();
 
 let strip: HTMLElement;
 

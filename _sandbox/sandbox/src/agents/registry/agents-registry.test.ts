@@ -1,6 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent, AgentSummary, LandConflictReason } from "@intentic/sandbox-contract";
-import { describe, it, expect } from "bun:test";
 import { noteSubagentTask, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../../agent/subagents/subagents.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import { beginTurn, conversationEntry, fleetStoreOver, isolatedAgent } from "../../testing.js";
@@ -13,7 +12,6 @@ import { sqliteTurnCheckpoints } from "../../agent/checkpoints/turn-checkpoints.
 import { type JournalledTurn, sqliteTurnJournal } from "../../agent/run/turn/turn-journal.js";
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
-
 
 // Hand-dialed stand-in for land standing; real derivation needs a git repo per case (standing.integration.test.ts).
 // This suite only pins the projection: which half wins, and what each surface reads off it.
@@ -273,7 +271,11 @@ describe("agents registry", () => {
     it("records the settings a turn ran under and keeps them for a turn that states none", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await beginTurn(conversations, turn({ profile: { agent: "claude", harness: "native", model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false } }), 1_000);
+        await beginTurn(
+            conversations,
+            turn({ profile: { agent: "claude", harness: "native", model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false } }),
+            1_000,
+        );
         expect(registry.get("c1")).toMatchObject({ model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false });
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         await beginTurn(conversations, turn({ prompt: "keep going" }), 3_000);
@@ -401,10 +403,22 @@ describe("agents registry", () => {
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.subagents));
         expect(frames).toEqual([undefined]);
 
-        conversations.send("c1", { kind: "frame", frame: frame({ subtype: "task_started", task_id: "task-a", tool_use_id: "call-1", description: "Locate the handler", subagent_type: "Explore" }) });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: frame({
+                subtype: "task_started",
+                task_id: "task-a",
+                tool_use_id: "call-1",
+                description: "Locate the handler",
+                subagent_type: "Explore",
+            }),
+        });
         expect(frames).toEqual([undefined, { running: 1, total: 1 }]);
 
-        conversations.send("c1", { kind: "frame", frame: frame({ subtype: "task_progress", task_id: "task-a", tool_use_id: "call-1", usage: { total_tokens: 9_000 } }) });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: frame({ subtype: "task_progress", task_id: "task-a", tool_use_id: "call-1", usage: { total_tokens: 9_000 } }),
+        });
         expect(frames).toEqual([undefined, { running: 1, total: 1 }]);
 
         conversations.send("c1", { kind: "frame", frame: frame({ subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } }) });
@@ -489,7 +503,10 @@ describe("agents registry", () => {
         const frames: (string | undefined)[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.title));
 
-        conversations.send("c1", { kind: "frame", frame: { kind: "plan", requestId: "r1", text: "## Fix the login submit handler\n\nFirst, read the form." } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "plan", requestId: "r1", text: "## Fix the login submit handler\n\nFirst, read the form." },
+        });
 
         // Rides the plan frame's own broadcast; no extra one is sent.
         expect(registry.get("c1")?.title).toBe("Fix the login submit handler");
@@ -576,7 +593,11 @@ describe("agents registry", () => {
 
     it.each(FAILURE_SENTENCES)("a stolen title reading %s forfeits its rank, so the next name heals it", async (sentence) => {
         // Fixture: an entry already titled with a failure sentence, at `model` rank, predating this guard.
-        const poisoned = isolatedAgent([], { social: { title: { text: sentence, source: "model" }, reactions: [] }, createdAt: 1_000, updatedAt: 1_000 });
+        const poisoned = isolatedAgent([], {
+            social: { title: { text: sentence, source: "model" }, reactions: [] },
+            createdAt: 1_000,
+            updatedAt: 1_000,
+        });
         const { agents: registry } = createFleet(memoryStore([poisoned]), standings(), presences());
         await registry.init();
         expect((await registry.setTitle("c1", "Fleet board broadcast", "model"))?.title).toBe("Fleet board broadcast");
@@ -602,7 +623,10 @@ describe("agents registry", () => {
         // The `ask` tool's question can arrive before its own `tool_call` frame (dispatch vs queued stream); a `delta`
         // afterward must not read as an answer.
         conversations.send("c1", { kind: "frame", frame: { kind: "question", requestId: "q1", questions: [] } });
-        conversations.send("c1", { kind: "frame", frame: { kind: "tool_call", id: "t1", name: "AskUserQuestion", category: "other", status: "in_progress" } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "tool_call", id: "t1", name: "AskUserQuestion", category: "other", status: "in_progress" },
+        });
         conversations.send("c1", { kind: "frame", frame: { kind: "delta", text: "still waiting" } });
         expect(registry.get("c1")?.status).toBe("awaiting");
         expect(registry.get("c1")?.attention.question).toBe(true);
@@ -675,7 +699,12 @@ describe("agents registry", () => {
         const first = createFleet(store, standings(), presences());
         await first.agents.init();
         await beginTurn(first.conversations, turn(), 1_000);
-        const item = { id: "m-1", voice: "person", queuedAt: 1_500, turn: { conversationId: "c1", prompt: "and the docs", messageId: "m-1" } } as const;
+        const item = {
+            id: "m-1",
+            voice: "person",
+            queuedAt: 1_500,
+            turn: { conversationId: "c1", prompt: "and the docs", messageId: "m-1" },
+        } as const;
         await first.conversations.send("c1", { kind: "queue-joined", item }).settled;
         await first.conversations.send("c1", { kind: "stop", ending: "stopped" }).settled;
 
@@ -824,7 +853,10 @@ describe("agents registry", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
-        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" },
+        });
         // Status stays `running` until finish; the error frame lands mid-stream.
         expect(registry.get("c1")?.status).toBe("running");
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
@@ -837,7 +869,10 @@ describe("agents registry", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
-        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" },
+        });
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(await beginTurn(conversations, turn({ prompt: "…resumed automatically. Fix the login bug" }), 3_000)).toBe(true);
         expect(registry.get("c1")?.status).toBe("running");
@@ -864,7 +899,10 @@ describe("agents registry", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
-        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" },
+        });
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         const failure = "The Claude sign-in this turn ran on could not be renewed.";
         expect(await conversations.send("c1", { kind: "resume-abandoned", reason: failure }, 3_000).settled).toBe(true);
@@ -881,12 +919,21 @@ describe("agents registry", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
-        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" },
+        });
         // No `finish()` yet: the generator is still unwinding.
-        expect(await conversations.send("c1", { kind: "resume-abandoned", reason: "The Claude sign-in this turn ran on could not be renewed." }, 2_000).settled).toBe(false);
+        expect(
+            await conversations.send("c1", { kind: "resume-abandoned", reason: "The Claude sign-in this turn ran on could not be renewed." }, 2_000)
+                .settled,
+        ).toBe(false);
         expect(registry.get("c1")?.status).toBe("running");
         await conversations.send("c1", { kind: "settle" }, 3_000).settled;
-        expect(await conversations.send("c1", { kind: "resume-abandoned", reason: "The Claude sign-in this turn ran on could not be renewed." }, 4_000).settled).toBe(true);
+        expect(
+            await conversations.send("c1", { kind: "resume-abandoned", reason: "The Claude sign-in this turn ran on could not be renewed." }, 4_000)
+                .settled,
+        ).toBe(true);
         expect(registry.get("c1")?.status).toBe("error");
     });
 
@@ -896,11 +943,14 @@ describe("agents registry", () => {
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
         const message = "Your organization has disabled Claude subscription access for Claude Code";
-        conversations.send("c1", { kind: "frame", frame: {
-            kind: "error",
-            code: "claude-not-entitled",
-            message,
-        } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: {
+                kind: "error",
+                code: "claude-not-entitled",
+                message,
+            },
+        });
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("error");
         expect(registry.get("c1")?.failure).toBe(message);
@@ -926,10 +976,16 @@ describe("agents registry", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
-        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" },
+        });
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         await beginTurn(conversations, turn({ prompt: "try again" }), 3_000);
-        expect(await conversations.send("c1", { kind: "resume-abandoned", reason: "The Claude sign-in this turn ran on could not be renewed." }, 4_000).settled).toBe(false);
+        expect(
+            await conversations.send("c1", { kind: "resume-abandoned", reason: "The Claude sign-in this turn ran on could not be renewed." }, 4_000)
+                .settled,
+        ).toBe(false);
         expect(registry.get("c1")?.status).toBe("running");
     });
 
@@ -938,7 +994,10 @@ describe("agents registry", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
-        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "provider-outage", message: "API Error: 529", autoResume: "available" } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "error", code: "provider-outage", message: "API Error: 529", autoResume: "available" },
+        });
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("error");
     });
@@ -1040,10 +1099,13 @@ describe("agents registry", () => {
         // A running turn's own end-of-turn land is still that turn running, not a card that stopped to land.
         await beginTurn(conversations, turn(), 3_000);
         let release: () => void = () => undefined;
-        const lease = conversations.withLandLease("c1", () =>
+        const lease = conversations.withLandLease(
+            "c1",
+            () =>
                 new Promise<void>((resolve) => {
                     release = resolve;
-                }));
+                }),
+        );
         expect(conversations.landing("c1")).toBe(true);
         expect(registry.get("c1")?.status).toBe("running");
         // The lease's work starts on the next tick; `release` is bound only once it has.
@@ -1067,7 +1129,9 @@ describe("agents registry", () => {
             adjudicated: true,
         });
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
-        expect(worktreeOf(store.saved().find((entry) => entry.id === "c1"))?.repos).toEqual([{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }]);
+        expect(worktreeOf(store.saved().find((entry) => entry.id === "c1"))?.repos).toEqual([
+            { repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) },
+        ]);
         expect(registry.get("c1")?.diff).toEqual({ files: 12, insertions: 412, deletions: 96 });
     });
 
@@ -1316,14 +1380,20 @@ describe("agents registry", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
-        conversations.send("c1", { kind: "frame", frame: { kind: "tool_call", id: "t1", name: "Edit", category: "edit", status: "in_progress", target: "src/app.ts" } });
-        conversations.send("c1", { kind: "frame", frame: {
-            kind: "todos",
-            items: [
-                { content: "done thing", status: "completed", activeForm: "doing" },
-                { content: "current thing", status: "in_progress", activeForm: "doing" },
-            ],
-        } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "tool_call", id: "t1", name: "Edit", category: "edit", status: "in_progress", target: "src/app.ts" },
+        });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: {
+                kind: "todos",
+                items: [
+                    { content: "done thing", status: "completed", activeForm: "doing" },
+                    { content: "current thing", status: "in_progress", activeForm: "doing" },
+                ],
+            },
+        });
         expect(registry.get("c1")?.activity).toEqual({ tool: "Edit", target: "src/app.ts", todo: "current thing" });
     });
 
@@ -1339,7 +1409,10 @@ describe("agents registry", () => {
             const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
             await beginTurn(conversations, turn(), 1_000);
-            conversations.send("c1", { kind: "frame", frame: list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]) });
+            conversations.send("c1", {
+                kind: "frame",
+                frame: list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]),
+            });
             await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 2, total: 3, next: "Draw the mark" } });
         });
@@ -1451,7 +1524,10 @@ describe("agents registry", () => {
             const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
             await beginTurn(conversations, turn(), 1_000);
-            conversations.send("c1", { kind: "check-ran", check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" } });
+            conversations.send("c1", {
+                kind: "check-ran",
+                check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" },
+            });
             await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, check: "Verify before you finish" });
         });
@@ -1460,8 +1536,14 @@ describe("agents registry", () => {
             const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
             await beginTurn(conversations, turn(), 1_000);
-            conversations.send("c1", { kind: "check-ran", check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" } });
-            conversations.send("c1", { kind: "check-ran", check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "passed" } });
+            conversations.send("c1", {
+                kind: "check-ran",
+                check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" },
+            });
+            conversations.send("c1", {
+                kind: "check-ran",
+                check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "passed" },
+            });
             await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             expect(registry.get("c1")?.unfinished).toBeUndefined();
         });
@@ -1471,7 +1553,10 @@ describe("agents registry", () => {
             const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
             await beginTurn(conversations, turn(), 1_000);
-            conversations.send("c1", { kind: "check-ran", check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" } });
+            conversations.send("c1", {
+                kind: "check-ran",
+                check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" },
+            });
             await conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
             await beginTurn(conversations, turn({ prompt: "carry on" }), 3_000);
@@ -1507,7 +1592,10 @@ describe("agents registry", () => {
                 const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
                 await registry.init();
                 await beginTurn(conversations, turn(), 1_000);
-                conversations.send("c1", { kind: "frame", frame: list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]) });
+                conversations.send("c1", {
+                    kind: "frame",
+                    frame: list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]),
+                });
                 expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3 });
             });
 
@@ -1528,14 +1616,20 @@ describe("agents registry", () => {
                 const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
                 await registry.init();
                 await beginTurn(conversations, turn(), 1_000);
-                conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "completed"], ["Cover it with tests", "pending"], ["Update the pages", "pending"]) });
+                conversations.send("c1", {
+                    kind: "frame",
+                    frame: list(["Draw the mark", "completed"], ["Cover it with tests", "pending"], ["Update the pages", "pending"]),
+                });
                 await conversations.send("c1", { kind: "settle" }, 2_000).settled;
                 expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3 });
 
                 await beginTurn(conversations, turn({ prompt: "carry on" }), 3_000);
                 expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3 });
 
-                conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "completed"], ["Cover it with tests", "completed"], ["Update the pages", "pending"]) });
+                conversations.send("c1", {
+                    kind: "frame",
+                    frame: list(["Draw the mark", "completed"], ["Cover it with tests", "completed"], ["Update the pages", "pending"]),
+                });
                 expect(registry.get("c1")?.checklist).toEqual({ done: 2, total: 3 });
             });
 
@@ -1705,7 +1799,10 @@ describe("agents registry", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
-        conversations.send("c1", { kind: "frame", frame: { kind: "context_usage", tokens: 142_000, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 3_600_000 } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "context_usage", tokens: 142_000, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 3_600_000 },
+        });
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.list()[0]?.promptCache).toEqual({ at: 1_500, ttlMs: 3_600_000 });
     });
@@ -1719,7 +1816,10 @@ describe("agents registry", () => {
         conversations.send("c1", { kind: "frame", frame: { kind: "context_usage", tokens: 10, contextWindow: 200_000, cachedAt: 1_500 } });
         expect(registry.list()[0]?.promptCache).toBeUndefined();
 
-        conversations.send("c1", { kind: "frame", frame: { kind: "context_usage", tokens: 20, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 300_000 } });
+        conversations.send("c1", {
+            kind: "frame",
+            frame: { kind: "context_usage", tokens: 20, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 300_000 },
+        });
         conversations.send("c1", { kind: "frame", frame: { kind: "context_usage", tokens: 30, contextWindow: 200_000 } });
         expect(registry.list()[0]?.promptCache).toEqual({ at: 1_500, ttlMs: 300_000 });
     });
@@ -1835,7 +1935,11 @@ describe("session ownership", () => {
         await registry.init();
         await beginTurn(conversations, turn({ conversationId: "bot", startedBy: "token:nightly" }), 1_000);
         expect(registry.get("bot")?.owner).toBeUndefined();
-        await beginTurn(conversations, turn({ conversationId: "parent", startedBy: "ania@example.com", owner: { email: "ania@example.com" } }), 1_000);
+        await beginTurn(
+            conversations,
+            turn({ conversationId: "parent", startedBy: "ania@example.com", owner: { email: "ania@example.com" } }),
+            1_000,
+        );
         await beginTurn(conversations, turn({ conversationId: "sub-1", startedBy: "agent:parent" }), 3_000);
         expect(registry.get("sub-1")?.owner).toEqual({ email: "ania@example.com", since: 3_000 });
         expect(registry.get("sub-1")?.startedBy).toBe("agent:parent");
@@ -1933,7 +2037,9 @@ describe("one write per fact", () => {
             adjudicated: true,
         });
         const landed = sqliteAgentsStore(db).load()[0];
-        expect(worktreeOf(landed)?.repos).toEqual([{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40), landedHead: "h".repeat(40), landedAt: 2_000 }]);
+        expect(worktreeOf(landed)?.repos).toEqual([
+            { repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40), landedHead: "h".repeat(40), landedAt: 2_000 },
+        ]);
         expect(landed?.landing.diff).toEqual({ files: 1, insertions: 1, deletions: 0 });
     });
 
@@ -1996,21 +2102,34 @@ it("a restarted fleet reads a spent allowance back without the hold, the booking
     await beginTurn(conversations, turn(), 1_000);
     conversations.send("c1", {
         kind: "frame",
-        frame: { kind: "error", code: "rate_limit", message: "spent", autoResume: "scheduled", resetsAt: 9_000, held: { ran: true, moving: "acct-2" } },
+        frame: {
+            kind: "error",
+            code: "rate_limit",
+            message: "spent",
+            autoResume: "scheduled",
+            resetsAt: 9_000,
+            held: { ran: true, moving: "acct-2" },
+        },
     });
     await conversations.send("c1", { kind: "settle" }, 2_000).settled;
-    expect(registry.get("c1")).toMatchObject({ failureCode: "rate_limit", limitResetsAt: 9_000, limitHeld: true, limitScheduled: true, limitMoving: "acct-2" });
+    expect(registry.get("c1")).toMatchObject({
+        failureCode: "rate_limit",
+        limitResetsAt: 9_000,
+        limitHeld: true,
+        limitScheduled: true,
+        limitMoving: "acct-2",
+    });
 
     const { agents: restarted } = createFleet(store, standings(), presences());
     await restarted.init();
     expect(restarted.entry("c1")?.ending).toEqual({ kind: "limited", failure: "spent", resetsAt: 9_000, held: false, scheduled: false });
     const summary = restarted.get("c1");
-    expect([summary?.status, summary?.failureCode, summary?.limitResetsAt, summary?.limitHeld, summary?.limitScheduled, summary?.limitMoving]).toEqual([
-        "error",
-        "rate_limit",
-        9_000,
-        undefined,
-        undefined,
-        undefined,
-    ]);
+    expect([
+        summary?.status,
+        summary?.failureCode,
+        summary?.limitResetsAt,
+        summary?.limitHeld,
+        summary?.limitScheduled,
+        summary?.limitMoving,
+    ]).toEqual(["error", "rate_limit", 9_000, undefined, undefined, undefined]);
 });

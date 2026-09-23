@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Moves files with `git mv` and rewrites every specifier the move invalidates: in the moved file, in every importer
-// (`mock.module`, dynamic `import()`), and in a package's `exports` targets, keeping each file's import style. Config path
+// (`jest.mock`, dynamic `import()`), and in a package's `exports` targets, keeping each file's import style. Config path
 // literals (tsconfig, vite, Dockerfile, baseline keys) are a separate sweep; refuses a file with unstaged changes
 // unless `--force`.
 import { execFileSync } from "node:child_process";
@@ -14,7 +14,7 @@ const EMITTED = { ".ts": ".js", ".tsx": ".js", ".mts": ".mjs", ".cts": ".cjs" };
 const CODE = /\.(ts|tsx|mts|cts|js|mjs|cjs|vue|astro)$/;
 
 // Matches real import syntax only, skipping a computed `${...}` specifier and matching typeof-import args too.
-const SPECIFIER = /(?<=\bfrom\s*|\bimport\s*\(\s*|\brequire\(\s*|\bimport\s+|\bmock\.module\s*\(\s*)(["'`])([^"'`\n$]+)\1/g;
+const SPECIFIER = /(?<=\bfrom\s*|\bimport\s*\(\s*|\brequire\(\s*|\bimport\s+|\bjest\.mock\s*\(\s*)(["'`])([^"'`\n$]+)\1/g;
 
 const posix = (path) => path.split("\\").join("/");
 const withoutExtension = (path) => path.replace(/\.[^./]+$/, "");

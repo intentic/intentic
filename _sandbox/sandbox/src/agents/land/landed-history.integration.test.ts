@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, afterEach } from "bun:test";
 import { headSha } from "../../git/changes/changes.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { createLogger } from "../../logger.js";
@@ -82,7 +81,8 @@ const placed = async (
     const landedHead = composed.landedHead;
     // Same fallback ladder the route walks: the recorded head while still on the main line, else the merge-base anchor.
     const from =
-        (landedHead === undefined ? undefined : await historySpanStart(work, landedHead, head)) ?? (await sh(work, "merge-base", head, entry.placement.branch));
+        (landedHead === undefined ? undefined : await historySpanStart(work, landedHead, head)) ??
+        (await sh(work, "merge-base", head, entry.placement.branch));
     const carried = await commitsCarrying(work, from, head, absorbed);
     return carried.map((commitOf) => ({ subject: commitOf.subject, paths: [...commitOf.paths].sort() }));
 };

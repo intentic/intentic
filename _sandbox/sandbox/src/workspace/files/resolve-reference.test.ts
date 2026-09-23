@@ -1,5 +1,4 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import { resolveReference } from "./resolve-reference.js";
 
 const WORKSPACE = [

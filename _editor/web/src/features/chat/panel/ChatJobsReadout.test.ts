@@ -1,15 +1,13 @@
 import "@intentic/testing/dom";
-import { afterEach, beforeEach, describe, expect, it, jest, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import type { AgentJob } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick, shallowRef } from "vue";
 
-const roster = hoisted(() => ({ jobs: undefined as AgentJob[] | undefined }));
-const opened = hoisted(() => mock((_session: string) => undefined));
+const roster = { jobs: undefined as AgentJob[] | undefined };
+const opened = jest.fn((_session: string) => undefined);
 
 // The overlay's placement is the kit's own suite; here only whether its contents are drawn.
-mock.module("@intentic/ui", async () => {
+jest.mock("@intentic/ui", async () => {
     const vue = await import("vue");
     return {
         AnchoredOverlay: vue.defineComponent({
@@ -22,9 +20,9 @@ mock.module("@intentic/ui", async () => {
         ui: { iconButton: (extra: string) => extra },
     };
 });
-mock.module("../../agents/fleet/useAgents", () => ({ useAgents: () => ({ agentById: () => ({ jobs: roster.jobs }) }) }));
-mock.module("./useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }) }) }));
-mock.module("../../terminal/useWorkTerminals", () => ({ openWorkTerminal: opened }));
+jest.mock("../../agents/fleet/useAgents", () => ({ useAgents: () => ({ agentById: () => ({ jobs: roster.jobs }) }) }));
+jest.mock("./useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }) }) }));
+jest.mock("../../terminal/useWorkTerminals", () => ({ openWorkTerminal: opened }));
 
 const { default: ChatJobsReadout } = await import("./ChatJobsReadout.vue");
 

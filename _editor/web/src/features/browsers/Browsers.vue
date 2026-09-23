@@ -390,7 +390,9 @@ watch(
                             <button
                                 v-if="current?.running"
                                 type="button"
-                                :class="ui.iconButton(page.id === activePage?.id ? '' : 'opacity-0 group-hover/tab:opacity-100 focus-visible:opacity-100')"
+                                :class="
+                                    ui.iconButton(page.id === activePage?.id ? '' : 'opacity-0 group-hover/tab:opacity-100 focus-visible:opacity-100')
+                                "
                                 :aria-label="t(`browsers.browsers.closeTab`)"
                                 @click="view.closeTab(page.id)"
                             >
@@ -480,7 +482,13 @@ watch(
 
                 <!-- Row two: history, reload, and the address bar, all this pane's own and answered by the page. -->
                 <div v-if="current?.running" class="flex shrink-0 items-center gap-0.5 border-b border-line px-1.5 py-1">
-                    <button type="button" :class="ui.iconButton()" :aria-label="t(`browsers.browsers.back`)" v-tooltip.bottom="t(`browsers.browsers.back`)" @click="view.back()">
+                    <button
+                        type="button"
+                        :class="ui.iconButton()"
+                        :aria-label="t(`browsers.browsers.back`)"
+                        v-tooltip.bottom="t(`browsers.browsers.back`)"
+                        @click="view.back()"
+                    >
                         <Icon name="backward" class="text-2xs" />
                     </button>
                     <button
@@ -492,7 +500,13 @@ watch(
                     >
                         <Icon name="forward" class="text-2xs" />
                     </button>
-                    <button type="button" :class="ui.iconButton()" :aria-label="t(`browsers.browsers.reload`)" v-tooltip.bottom="t(`browsers.browsers.reload`)" @click="view.reload()">
+                    <button
+                        type="button"
+                        :class="ui.iconButton()"
+                        :aria-label="t(`shared.reload`)"
+                        v-tooltip.bottom="t(`shared.reload`)"
+                        @click="view.reload()"
+                    >
                         <Icon name="refresh" class="text-2xs" />
                     </button>
                     <!-- The padlock reads off the page's real address, not the draft; typing changes nothing until Enter. -->
@@ -592,7 +606,9 @@ watch(
                             <div class="text-xs font-medium text-content">
                                 {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.leavePage`) : t(`browsers.browsers.pageSays`) }}
                             </div>
-                            <div v-if="dialog.kind !== `beforeunload`" class="whitespace-pre-wrap break-words text-xs text-content">{{ dialog.message }}</div>
+                            <div v-if="dialog.kind !== `beforeunload`" class="whitespace-pre-wrap break-words text-xs text-content">
+                                {{ dialog.message }}
+                            </div>
                             <input
                                 v-if="dialog.kind === `prompt`"
                                 v-model="dialogText"
@@ -602,16 +618,11 @@ watch(
                                 @keydown.esc.prevent="answerDialog(false)"
                             />
                             <div class="flex justify-end gap-2">
-                                <Button
-                                    v-if="dialog.kind !== `alert`"
-                                    size="small"
-                                    severity="secondary"
-                                    @click="answerDialog(false)"
-                                >
-                                    {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.stay`) : t(`browsers.browsers.cancel`) }}
+                                <Button v-if="dialog.kind !== `alert`" size="small" severity="secondary" @click="answerDialog(false)">
+                                    {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.stay`) : t(`shared.cancel`) }}
                                 </Button>
                                 <Button size="small" @click="answerDialog(true)">
-                                    {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.leave`) : t(`browsers.browsers.ok`) }}
+                                    {{ dialog.kind === `beforeunload` ? t(`shared.leave`) : t(`browsers.browsers.ok`) }}
                                 </Button>
                             </div>
                         </div>
@@ -632,7 +643,7 @@ watch(
                             >
                                 <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
                                 <span class="max-w-80 truncate">{{ current.help.message }}</span>
-                                <span class="shrink-0 text-link">{{ t(`browsers.browsers.answer`) }}</span>
+                                <span class="shrink-0 text-link">{{ t(`shared.answer`) }}</span>
                             </button>
                             <div
                                 v-else
@@ -643,7 +654,7 @@ watch(
                                     <!-- Kept on separate lines from the instruction below it: joined, a message ending in a period collides with a clause starting with a colon. -->
                                     <div class="min-w-0 flex-1">
                                         <div class="text-xs text-content">
-                                            <span class="font-medium">{{ t(`browsers.browsers.agentNeedsHelp`) }}</span>
+                                            <span class="font-medium">{{ t(`shared.agentNeedsHelp`) }}</span>
                                             {{ current.help.message }}
                                         </div>
                                         <div class="text-2xs text-muted">{{ t(`browsers.browsers.takeControlFixStep`) }}</div>
@@ -662,15 +673,15 @@ watch(
                                     <input
                                         v-model="helpNote"
                                         type="text"
-                                        :placeholder="t(`browsers.browsers.optionalNoteBackTo`)"
+                                        :placeholder="t(`shared.optionalNoteBackTo`)"
                                         class="ui-field-box ui-field-sm min-w-40 flex-1"
                                         @keydown.enter="resolveHelp(true)"
                                     />
                                     <Button size="small" class="shrink-0" @click="() => resolveHelp(true)">
-                                        {{ t(`browsers.browsers.doneHandBack`) }}
+                                        {{ t(`shared.doneHandBack`) }}
                                     </Button>
                                     <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)">
-                                        {{ t(`browsers.browsers.cantHelpNow`) }}
+                                        {{ t(`shared.cantHelpNow`) }}
                                     </Button>
                                 </div>
                             </div>
@@ -702,7 +713,7 @@ watch(
                             >
                                 <Icon name="exclamation-triangle" class="shrink-0 text-3xs text-warning" />
                                 {{ queuedHelp.length }} {{ t(`browsers.browsers.other`) }} {{ queuedHelp.length === 1 ? "browser" : "browsers" }}
-                                {{ t(`browsers.browsers.waiting`) }}
+                                {{ t(`shared.waiting`) }}
                                 <Icon :name="queueOpen ? 'chevron-down' : 'chevron-up'" class="shrink-0 text-3xs text-muted" />
                             </button>
                         </div>

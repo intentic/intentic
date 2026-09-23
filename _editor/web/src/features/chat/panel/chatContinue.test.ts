@@ -3,8 +3,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import type { Conversation } from "../session/conversation";
 import { providerAccounts, setAccountUsage } from "../accounts/providerAccounts";
@@ -22,14 +20,14 @@ import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 import * as useSandboxSettingsOriginal from "../../sandbox/overview/useSandboxSettings";
 
 // Import-time globals a mounted chat surface needs.
-hoisted(() => {
+(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
         unobserve(): void {}
         disconnect(): void {}
     } as unknown as typeof globalThis.IntersectionObserver;
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-});
+})();
 
 // This conversation's own answer for each ending, as the roster carries it, plus the writer the control calls. A ref
 // so a test can start from an armed conversation and watch the write go out. Carries the full card shape, not just the
@@ -41,16 +39,16 @@ const rosterEntry = (policies: Record<string, unknown> = {}): Record<string, unk
     attention: { ...NO_ATTENTION },
     ...policies,
 });
-const { agentEntry, setBreakPolicy, sandboxSettings } = await hoisted(async () => {
+const { agentEntry, setBreakPolicy, sandboxSettings } = await (async () => {
     const { ref: vueRef } = await import(`vue`);
     return {
         agentEntry: vueRef<Record<string, unknown> | undefined>(undefined),
-        setBreakPolicy: mock(),
+        setBreakPolicy: jest.fn(),
         sandboxSettings: vueRef<Record<string, unknown> | undefined>({}),
     };
-});
+})();
 // Fleet roster and workflow ledger the pane queries on mount; irrelevant here beyond the break policy, so answered empty.
-mock.module(`../../agents/fleet/useAgents`, () => {
+jest.mock(`../../agents/fleet/useAgents`, () => {
     return {
         useAgents: () => ({
             fleet: computed(() => []),
@@ -63,22 +61,22 @@ mock.module(`../../agents/fleet/useAgents`, () => {
         }),
     };
 });
-mock.module(`../../sandbox/overview/useSandboxSettings`, () => ({
+jest.mock(`../../sandbox/overview/useSandboxSettings`, () => ({
     ...useSandboxSettingsOriginal,
-    useSandboxSettings: () => ({ settings: sandboxSettings, patch: mock() }),
+    useSandboxSettings: () => ({ settings: sandboxSettings, patch: jest.fn() }),
 }));
-mock.module(`../../agents/fleet/useWorkflowRuns`, () => ({
+jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
     ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
 // The composer only renders once the sandbox is reachable; mocked online here, the state this file tests.
-const { sandboxReachable, sandboxConnection, ONLINE_CONNECTION } = await hoisted(async () => {
+const { sandboxReachable, sandboxConnection, ONLINE_CONNECTION } = await (async () => {
     const { ref: vueRef } = await import(`vue`);
     // Steady state for this file: `reachable` alone can't distinguish briefly retrying from down for a while.
     const online = { phase: `online`, failure: undefined, attempt: 0, retryDelayMs: 0, everOnline: true, unavailableSince: undefined, generation: 0 };
     return { sandboxReachable: vueRef(true), sandboxConnection: vueRef({ ...online }), ONLINE_CONNECTION: online };
-});
-mock.module(`../../sandbox/client/useSandbox`, () => {
+})();
+jest.mock(`../../sandbox/client/useSandbox`, () => {
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
     const sandboxes = ref([{ id: `sandbox-1`, name: `test` }]);
     return {
@@ -103,14 +101,14 @@ mock.module(`../../sandbox/client/useSandbox`, () => {
 
 // Stubbed at the composable, not the transport: whether the offer exists is the provider's judgement, and this file is
 // about what the strip does with it.
-const { resetOffer, claimReset } = await hoisted(async () => {
+const { resetOffer, claimReset } = await (async () => {
     const { ref: vueRef } = await import(`vue`);
     // A ref, since a claim retiring the offer must repaint the strip.
-    return { resetOffer: vueRef<unknown>(undefined), claimReset: mock() };
-});
-mock.module(`../session/limitReset`, () => ({
+    return { resetOffer: vueRef<unknown>(undefined), claimReset: jest.fn() };
+})();
+jest.mock(`../session/limitReset`, () => ({
     ...limitResetOriginal,
-    askLimitReset: mock().mockResolvedValue(undefined),
+    askLimitReset: jest.fn().mockResolvedValue(undefined),
     limitResetFor: () => resetOffer.value,
     claimLimitReset: claimReset,
 }));
@@ -208,7 +206,7 @@ afterEach(() => {
 
 it(`offers the stopped turn a way on, and sends the sentence when it is pressed`, async () => {
     const conversation = stoppedChat();
-    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     await mountPanel();
 
     expect(composerText()).toContain(`Turn stopped short · work kept`);
@@ -222,7 +220,7 @@ it(`offers the stopped turn a way on, and sends the sentence when it is pressed`
 
 it(`makes Enter on an empty composer continue, and says so under the box`, async () => {
     const conversation = stoppedChat();
-    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     await mountPanel();
 
     expect(composerText()).toContain(`Enter to continue`);
@@ -234,7 +232,7 @@ it(`makes Enter on an empty composer continue, and says so under the box`, async
 
 it(`stands down the moment the user types something of their own`, async () => {
     const conversation = stoppedChat();
-    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     await mountPanel();
     expect(continueButton()).toEqual(expect.any(Object));
 
@@ -308,7 +306,7 @@ it(`offers only the answers this ending can take`, async () => {
 // An unheld allowance means the daemon has no copy of the refused turn, so nothing can be resumed before it resets.
 it(`counts an unheld allowance down instead of going quiet, and keeps the press inert until it resets`, async () => {
     const conversation = stoppedChat();
-    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000 };
     await mountPanel();
 
@@ -323,8 +321,8 @@ it(`counts an unheld allowance down instead of going quiet, and keeps the press 
 
 it(`offers a held allowance the press straight away, and re-runs the turn instead of saying anything`, async () => {
     const conversation = stoppedChat();
-    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
-    const rerun = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
+    const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const rerun = jest.spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 8 * 3_600_000, held: { ran: false } };
     await mountPanel();
 
@@ -353,7 +351,7 @@ it(`tells a mid-turn allowance failure apart from one that refused the turn outr
 
 it(`hands the press over once the allowance has reset`, async () => {
     const conversation = stoppedChat();
-    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
+    const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() - 1_000 };
     await mountPanel();
 
@@ -471,7 +469,7 @@ const limitChat = (): Conversation => {
 it(`offers the other account by name on a spent allowance, and re-runs the held turn on it`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();
-    const resume = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = jest.spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     await openWays();
@@ -539,7 +537,7 @@ it(`offers the reset in the row when the provider is granting one, and re-runs t
     claimReset.mockResolvedValue({ result: `reset` });
     twoAccounts(99, 10);
     const conversation = limitChat();
-    const resume = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = jest.spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     const reset = button(`Reset limit now`);
@@ -573,7 +571,7 @@ it(`says why nothing happened when a claim changes nothing, and does not re-run 
     });
     twoAccounts(99, 10);
     const conversation = limitChat();
-    const resume = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = jest.spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     button(`Reset limit now`)?.click();
@@ -608,7 +606,7 @@ it(`offers the other account twice when the session is worth carrying, each with
         readyAt: Date.now() + 3_600_000,
         held: { ran: true, contextTokens: 85_000, handoffTokens: 6_000 },
     };
-    const resume = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = jest.spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     await openWays();
@@ -629,7 +627,7 @@ it(`offers only the fresh session when nothing ran`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000, held: { ran: false, handoffTokens: 6_000 } };
-    const resume = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = jest.spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     await openWays();

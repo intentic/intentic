@@ -1,7 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, it, expect } from "bun:test";
 
 // Pins that shutdown works by disposing a store of registered teardowns, never by naming subsystems, and that no phase
 // of boot leaves a timer holding the event loop open. Checked by shape over the sources, since a roster of names would

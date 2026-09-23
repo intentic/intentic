@@ -2,7 +2,6 @@
 // wire, and a summons for another sandbox's chats is ignored whole.
 import { resetSandboxScope } from "@intentic/extension-api";
 import { effectScope, nextTick, ref } from "vue";
-import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import type { Summons } from "./summon";
 import type { StoredTab } from "../tabs/tabSnapshot";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
@@ -10,12 +9,12 @@ import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // A daemon with nothing to say: every turn is refused at the door. A send is the one call only a turn makes.
-const run = mock(async (_turn: ProcedureInput<`agent.run`>) => {
+const run = jest.fn(async (_turn: ProcedureInput<`agent.run`>) => {
     throw new SandboxHttpError(404, `Request failed (404).`);
 });
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { run } }) }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
-mock.module("../../sandbox/client/useSandbox", () => {
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { run } }) }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../sandbox/client/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };

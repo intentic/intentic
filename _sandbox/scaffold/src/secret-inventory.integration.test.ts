@@ -1,7 +1,6 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it, expect } from "bun:test";
 import { collectSecretInventory, readSyncState, secretDigest, writeSyncState } from "./secret-inventory.js";
 
 const env = (key: string) => ({ $secret: { source: "env", key } });

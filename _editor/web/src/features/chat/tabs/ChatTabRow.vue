@@ -90,15 +90,15 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             <PresenceAvatars
                 v-if="props.conversation.session.value !== undefined"
                 :members="viewersOfSession(props.conversation.session.value!.id)"
-                :label="t(`chat.chatTabList.inChat`)"
+                :label="t(`shared.inChat`)"
             />
             <!-- The × is a hit target around an 11px glyph; a miss lands on the card and re-selects it. -->
             <!-- The peeked card keeps its pin action in the trailing slot. -->
             <span
                 v-if="props.conversation.peek.value"
                 role="button"
-                :aria-label="t(`chat.chatTabList.keepChatOpen`)"
-                v-tooltip.top="t(`chat.chatTabList.keepOpenOtherwiseChat`)"
+                :aria-label="t(`shared.keepChatOpen`)"
+                v-tooltip.top="t(`shared.keepOpenOtherwiseChat`)"
                 class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click="act($event, `keep`)"
             >
@@ -107,7 +107,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             <span
                 v-else-if="props.closable"
                 role="button"
-                :aria-label="t(`chat.chatTabList.closeChat`)"
+                :aria-label="t(`shared.closeChat`)"
                 class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click="act($event, `close`)"
             >
@@ -149,7 +149,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             >
                 <Icon name="boxes" class="text-2xs text-subtle" />
             </span>
-            <span v-if="isArchived(props.conversation)" class="flex shrink-0 items-center" :aria-label="t(`chat.chatTabList.archived`)">
+            <span v-if="isArchived(props.conversation)" class="flex shrink-0 items-center" :aria-label="t(`shared.archived`)">
                 <Icon name="box" class="text-2xs text-subtle" />
             </span>
             <!-- Spend, diff and turn count are deliberately absent here; they live on the board and Usage tab. -->

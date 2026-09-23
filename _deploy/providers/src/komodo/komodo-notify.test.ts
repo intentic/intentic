@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { SshExecutor } from "../core/ssh.js";
 import { unstubbed } from "@intentic/testing";
 import type { AlerterConfig, KomodoApi } from "./komodo-api.js";

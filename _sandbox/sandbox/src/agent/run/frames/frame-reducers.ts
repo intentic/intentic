@@ -1,8 +1,8 @@
 import type { AgentEvent, TodoItem } from "@intentic/sandbox-contract";
-import type { LimitWay } from "../../models/limit-way.js";
 import { createFrameLedger, type FrameLedger } from "../../verification/agent-verification.js";
 import { createViewFrameLedger, type ViewFrameLedger } from "../../verification/agent-viewing.js";
 import { createTurnMetrics, type TurnMetrics } from "../turn/turn-metrics.js";
+import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
 import { sumUsage, type UsageFrame } from "../turn/turn-usage.js";
 
 // One fold per concern over a turn's frames, walked once in stream order: each owns its state and answers a reading at
@@ -30,23 +30,8 @@ export interface Silence {
     readonly answered: boolean;
 }
 
-// The walls this turn hit, for the records its exit leaves: an answer after an outage or a limit means the harness rode
-// it out, while a refused credential stays refused.
-export interface Walls {
-    readonly outageHit: boolean;
-    readonly limitHit: boolean;
-    readonly authRefused: boolean;
-    // When the refusing allowance is due back, and the way on from it, both decided once at the frame.
-    readonly limitReopens: number | undefined;
-    readonly limitWay: LimitWay | undefined;
-}
-
-// What classifying one failure frame found; an absent member leaves its wall as it stood.
-export interface WallChange {
-    readonly outageHit?: true;
-    readonly authRefused?: true;
-    readonly limit?: { readonly hit: boolean; readonly reopens: number | undefined; readonly way: LimitWay | undefined };
-}
+// Walls an answer after them proves the harness rode out; every other hold stands.
+const RIDDEN_OUT: ReadonlySet<HeldReason> = new Set(["limit", "outage"]);
 
 export const foldUsage = (total: UsageFrame | undefined, event: AgentEvent): UsageFrame | undefined =>
     event.kind === "usage" ? sumUsage(total, event) : total;
@@ -77,14 +62,8 @@ export const foldSession = (sessionId: string | undefined, event: AgentEvent): s
 export const foldLimitReset = (resetsAt: number | undefined, event: AgentEvent): number | undefined =>
     event.kind === "rate_limit_info" ? (event.resetsAt ?? resetsAt) : resetsAt;
 
-export const foldWalls = (walls: Walls, event: AgentEvent): Walls => (ANSWERED_FRAMES.has(event.kind) ? { ...walls, outageHit: false, limitHit: false } : walls);
-
-export const applyWallChange = (walls: Walls, change: WallChange): Walls => ({
-    ...walls,
-    outageHit: walls.outageHit || change.outageHit === true,
-    authRefused: walls.authRefused || change.authRefused === true,
-    ...(change.limit === undefined ? {} : { limitHit: change.limit.hit, limitReopens: change.limit.reopens, limitWay: change.limit.way }),
-});
+export const foldHeld = (held: HeldTurn | undefined, event: AgentEvent): HeldTurn | undefined =>
+    held !== undefined && RIDDEN_OUT.has(held.reason) && ANSWERED_FRAMES.has(event.kind) ? undefined : held;
 
 // A fold with its state: `note` takes each frame in stream order, `reading` answers at any point.
 export interface FrameReducer<Reading> {
@@ -114,14 +93,15 @@ export interface TurnReadings {
     readonly context: ContextFrame | undefined;
     readonly failure: TurnFailure | undefined;
     readonly limitReset: number | undefined;
-    readonly walls: Walls;
+    // What the last failure frame's classification held the turn as, unless an answer since rode it out.
+    readonly held: HeldTurn | undefined;
 }
 
 export interface TurnFrames {
     // Folds one frame into every reading and ledger; true when it is the first proof the provider answered.
     readonly note: (event: AgentEvent) => boolean;
-    // Folds what classifying a failure frame found about the walls it hit.
-    readonly hit: (change: WallChange) => void;
+    // Takes what classifying a failure frame held the turn as, replacing what an earlier one held.
+    readonly hold: (held: HeldTurn | undefined) => void;
     readonly readings: () => TurnReadings;
     // Whether the turn proved its work, fed frames rather than hooks so it holds on every runtime.
     readonly verification: FrameLedger;
@@ -158,18 +138,18 @@ export const createTurnFrames = (root: string, resumed: string | undefined): Tur
         metrics,
     ];
     // Moved from both sides, by frames and by classifications, so one state both fold into.
-    let walls: Walls = { outageHit: false, limitHit: false, authRefused: false, limitReopens: undefined, limitWay: undefined };
+    let held: HeldTurn | undefined;
     return {
         note: (event) => {
             const answered = silence.reading().answered;
-            walls = foldWalls(walls, event);
+            held = foldHeld(held, event);
             for (const fold of folds) {
                 fold.note(event);
             }
             return !answered && silence.reading().answered;
         },
-        hit: (change) => {
-            walls = applyWallChange(walls, change);
+        hold: (next) => {
+            held = next;
         },
         readings: () => ({
             sessionId: sessionId.reading(),
@@ -180,7 +160,7 @@ export const createTurnFrames = (root: string, resumed: string | undefined): Tur
             context: context.reading(),
             failure: failure.reading(),
             limitReset: limitReset.reading(),
-            walls,
+            held,
         }),
         verification,
         viewing,

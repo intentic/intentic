@@ -1,7 +1,19 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
-import { describe, it, expect, beforeEach } from "bun:test";
-import { appBehind, comparedRouteCount, daemonBehind, daemonDrifted, driftedRouteReason, driftedRoutes, driftScope, missingRoutes, setDaemonRoutes, staleDaemonReason, supportsRoute, unknownDaemonRoutes } from "./useDaemonRoutes";
+import {
+    appBehind,
+    comparedRouteCount,
+    daemonBehind,
+    daemonDrifted,
+    driftedRouteReason,
+    driftedRoutes,
+    driftScope,
+    missingRoutes,
+    setDaemonRoutes,
+    staleDaemonReason,
+    supportsRoute,
+    unknownDaemonRoutes,
+} from "./useDaemonRoutes";
 import { resetContractFreshness } from "./contractFreshness";
 
 // This browser's full route set, and the same set with vpn routes removed (an older daemon).

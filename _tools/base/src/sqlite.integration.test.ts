@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { test, expect, afterEach } from "bun:test";
 import { guardSchemaVersion, wrapDb } from "./sqlite.js";
 
 const dirs: string[] = [];

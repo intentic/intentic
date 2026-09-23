@@ -5,16 +5,15 @@ import "@intentic/testing/dom";
 import type { CapabilityRecommendation, CapabilityStatus, CapabilitySummary } from "@intentic/api-contract";
 import { type AddCapabilityInput, CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { effectScope, type EffectScope, ref } from "vue";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import * as actualWalletPolicy from "./model/walletPolicy";
 
 // The platform's half of a wallet save; every other tile is one write, to the daemon.
-const pushWalletPolicy = mock<(config: Readonly<Record<string, string>>) => Promise<void>>(async () => {});
+const pushWalletPolicy = jest.fn<(config: Readonly<Record<string, string>>) => Promise<void>>(async () => {});
 // Snapshotted before the mock replaces the module: a namespace is a live binding.
 const realWalletPolicy = { ...actualWalletPolicy };
-mock.module(`./model/walletPolicy`, () => ({ ...realWalletPolicy, pushWalletPolicy }));
+jest.mock(`./model/walletPolicy`, () => ({ ...realWalletPolicy, pushWalletPolicy }));
 
 const { useCapabilityForm } = await import("./capabilityForm");
 const { submitOutcome, useCapabilitySubmit } = await import("./capabilitySubmit");
@@ -60,7 +59,7 @@ afterEach(() => {
 // The submit over a real form, with the daemon's streamed apply as `add`: it lists the connection with `status`.
 const submitOn = (entry: CapabilityCatalogEntry, status: CapabilityStatus, editing?: CapabilitySummary) => {
     const capabilities = ref<readonly CapabilitySummary[]>(editing === undefined ? [] : [editing]);
-    const add = mock(async (input: AddCapabilityInput, onLine?: (line: Record<string, unknown>) => void) => {
+    const add = jest.fn(async (input: AddCapabilityInput, onLine?: (line: Record<string, unknown>) => void) => {
         onLine?.({ kind: `terminal`, session: `install-${input.id}` });
         capabilities.value = [
             ...capabilities.value.filter((listed) => listed.id !== input.id),
@@ -78,9 +77,9 @@ const submitOn = (entry: CapabilityCatalogEntry, status: CapabilityStatus, editi
         error: ref<NoticeModel | null>(null),
     };
     const hands = {
-        walk: { onwardFrom: mock<(from: CapabilityCatalogEntry) => string | undefined>(() => `docker`), leaveTile: mock() },
-        handOff: mock(),
-        stopEditing: mock(),
+        walk: { onwardFrom: jest.fn<(from: CapabilityCatalogEntry) => string | undefined>(() => `docker`), leaveTile: jest.fn() },
+        handOff: jest.fn(),
+        stopEditing: jest.fn(),
     };
     const scope = effectScope();
     scopes.push(scope);

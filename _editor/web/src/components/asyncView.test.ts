@@ -2,14 +2,13 @@
 // swaps to the real view. Owns the failure path: a dead chunk gets the stale-window reload, anything else a notice with
 // retry.
 import "@intentic/testing/dom";
-import { it, expect, beforeAll, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, type Component, createApp, defineComponent, h, nextTick } from "vue";
 import { createMemoryHistory, createRouter, RouterView, type Router } from "vue-router";
 import { asyncView } from "./asyncView";
 
 // window.location is unforgeable in jsdom; the reload is observed via a replaced global, per staleChunk.test.
-const assign = mock();
+const assign = jest.fn();
 beforeAll(() => {
     Object.defineProperty(globalThis, `location`, {
         configurable: true,
@@ -79,7 +78,7 @@ it(`completes the navigation before the chunk arrives, reveals the outline only 
 });
 
 it(`a revisit renders synchronously: the chunk is fetched once and kept`, async () => {
-    const load = mock(() => Promise.resolve({ default: defineComponent({ render: () => h(`div`, { "data-view": `` }) }) }));
+    const load = jest.fn(() => Promise.resolve({ default: defineComponent({ render: () => h(`div`, { "data-view": `` }) }) }));
     const view = asyncView(load);
     const { router, el } = await mountAt(view);
 
@@ -115,7 +114,7 @@ it(`answers a dead chunk with one reload landed on the destination, and a notice
 
 it(`says a non-chunk failure instead of reloading, and the retry re-fetches`, async () => {
     let broken = true;
-    const load = mock(() =>
+    const load = jest.fn(() =>
         broken ? Promise.reject(new Error(`boom`)) : Promise.resolve({ default: defineComponent({ render: () => h(`div`, { "data-view": `` }) }) }),
     );
     const { router, el } = await mountAt(asyncView(load));

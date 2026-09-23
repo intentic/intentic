@@ -1,6 +1,5 @@
 {
     "branchSwitcher": {
-        "branch": "Branch",
         "cancel": "Abbrechen",
         "create": "Erstellen",
         "delete": "{name} löschen?",
@@ -17,7 +16,6 @@
         "upstreamBranchDeleted": "Der Upstream-Branch wurde gelöscht"
     },
     "extension": {
-        "git": "Git",
         "history": "Historie",
         "openGitHistory": "Git-Historie öffnen"
     },
@@ -34,7 +32,6 @@
         "cherryPick": "Cherry-Pick…",
         "clearFilter": "Filter leeren",
         "clickToPeekDouble": "Klicken zum Reinschauen · Doppelklick, um den Tab zu behalten",
-        "commit": "Commit",
         "conflicted": "{conflicted} in Konflikt",
         "copyCommitHash": "Commit-Hash kopieren",
         "copyCommitSubject": "Commit-Betreff kopieren",
@@ -48,7 +45,6 @@
         "filterCommits": "Commits filtern…",
         "filterCommitsByMessage": "Commits nach Nachricht, Autor oder SHA filtern",
         "hardDiscardsUncommittedChanges": "Hart: verwirft nicht committete Änderungen im Worktree.",
-        "head": "HEAD",
         "inProgress": "Ein {operation} läuft gerade",
         "loadingChangedFiles": "Geänderte Dateien werden geladen…",
         "loadingOlderCommits": "Ältere Commits werden geladen…",
@@ -59,7 +55,6 @@
         "noLoadedCommitMatches": "Kein geladener Commit passt. Scrollen Sie, um mehr Historie zu laden, und suchen Sie dann erneut.",
         "of": "{count} von {count2}",
         "parents": "Eltern",
-        "push": "Push",
         "pushTo": "Zu {remote} pushen",
         "readingRepositorysHistory": "Die Historie dieses Repositorys wird gelesen…",
         "rebaseCurrentBranchOn": "Aktuellen Branch auf diesen Commit rebasen…",

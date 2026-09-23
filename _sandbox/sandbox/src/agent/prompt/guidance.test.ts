@@ -1,5 +1,4 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import { expect, test } from "bun:test";
 import { GUIDANCE_HEADER, GUIDANCE_REVISION, guidanceBlock, type LoopFacts } from "./guidance.js";
 
 // The registry as the model reads it: one heading, the entries a turn's mechanisms allow, in either form.
@@ -78,7 +77,15 @@ test("either form names a mounted mechanism only on the turns that mounted it", 
     for (const variant of ["full", "lean"] as const) {
         const mounted = guidanceBlock(variant, EVERYTHING_MOUNTED);
         const bare = guidanceBlock(variant, NOTHING_MOUNTED);
-        for (const name of ["mcp__web__browser", "mcp__browser__", "mcp__diagnostics__", "mcp__terminal__request_help", "`rog`", "`chrome`", "`brave`"]) {
+        for (const name of [
+            "mcp__web__browser",
+            "mcp__browser__",
+            "mcp__diagnostics__",
+            "mcp__terminal__request_help",
+            "`rog`",
+            "`chrome`",
+            "`brave`",
+        ]) {
             expect(mounted).toContain(name);
             expect(bare).not.toContain(name);
         }
@@ -94,7 +101,9 @@ test("an unattended turn is not told about cards nobody can click, in either for
 test("the lean form describes a many-sided machine in one line per machine", () => {
     const lean = guidanceBlock("lean", EVERYTHING_MOUNTED);
     expect(lean).toContain("`rog` runs this sandbox.");
-    expect(lean).toContain("`rog`: `native` (PowerShell 7, C:\\Users\\radar), `wsl:archlinux` (/usr/bin/zsh, /home/radarsu); `run_command`'s `in` picks one.");
+    expect(lean).toContain(
+        "`rog`: `native` (PowerShell 7, C:\\Users\\radar), `wsl:archlinux` (/usr/bin/zsh, /home/radarsu); `run_command`'s `in` picks one.",
+    );
     expect(lean).not.toContain("ONE computer");
 });
 

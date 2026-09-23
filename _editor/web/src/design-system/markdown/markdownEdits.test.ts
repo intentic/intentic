@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { continueList, indentLines, insertLink, onListLine, outdentLines, toggleWrap } from "@intentic/ui/markdown";
 
 // Formatting keys and Enter-on-a-list, as edits to markdown source, tested from here beside the block splitter's suite.

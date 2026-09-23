@@ -2,7 +2,6 @@ import { readFile, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { fileSafetyPolicyStore, withAddedLine } from "./safety-policy-store.js";
 
 const store = async () => {

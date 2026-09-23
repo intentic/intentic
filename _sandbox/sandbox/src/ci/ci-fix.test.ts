@@ -1,4 +1,3 @@
-import { expect, test } from "bun:test";
 import { infraLog } from "./ci-fix.js";
 
 // A red read as the fleet's is re-run instead of fixed, so a test's own output must never read as the runner dying.

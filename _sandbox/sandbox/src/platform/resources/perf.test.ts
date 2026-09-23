@@ -1,5 +1,4 @@
 import { type Logger, pino } from "pino";
-import { test, expect, jest } from "bun:test";
 import { createPerfTracker } from "./perf.js";
 
 // Captures lines instead of writing them, so a test can assert which sink got a line. Explicit `Logger` type works

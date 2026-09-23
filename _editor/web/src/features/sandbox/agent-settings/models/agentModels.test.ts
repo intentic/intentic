@@ -5,7 +5,6 @@ import type { SandboxSettings } from "@intentic/api-contract";
 import { humanizeModelId, MODEL_ROLE_BLOCKS, MODEL_ROLES, type ModelPin } from "@intentic/sandbox-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
-import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
@@ -22,11 +21,11 @@ const RUN = `pipeline-fix` as const;
 const entry = (provider: string, model: string, rest: Record<string, unknown> = {}): ModelPin => ({ provider, model, ...rest }) as ModelPin;
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-const patch = mock((fields: Partial<SandboxSettings>) => {
+const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-mock.module(`../../overview/useSandboxSettings`, () => ({
+jest.mock(`../../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({
         settings,
         patch,
@@ -45,9 +44,9 @@ const CATALOGS: Record<string, readonly { value: string; label: string }[]> = {
 };
 const connected = ref<readonly string[]>([`codex`, `claude`]);
 
-mock.module(`../../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
+jest.mock(`../../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
 // Empty `providerModels`: puts every model on the static effort scale, the state every fixture here assumes.
-mock.module(`../../../chat/accounts/providerCatalog`, () => ({
+jest.mock(`../../../chat/accounts/providerCatalog`, () => ({
     endpointProviders: ref([]),
     providerModels: ref({}),
     modelOptionsFor: (provider: string) => CATALOGS[provider] ?? [],
@@ -61,7 +60,7 @@ mock.module(`../../../chat/accounts/providerCatalog`, () => ({
 // are handed over live, so a test can watch an entry change under the open panel.
 let opened: { readonly pin?: unknown; readonly knobs?: boolean; readonly taken?: unknown } | undefined;
 let answer: { pick: (pin: unknown) => void; configure: (pin: unknown) => void } | undefined;
-mock.module(`./ModelPinPicker.vue`, () => ({
+jest.mock(`./ModelPinPicker.vue`, () => ({
     // `__esModule` so the SFC interop reads `.default` the way it would off the real component.
     __esModule: true,
     default: defineComponent({
@@ -79,7 +78,7 @@ mock.module(`./ModelPinPicker.vue`, () => ({
 // hands it and what it does with a save, not the document surface, which is `@intentic/ui`'s own.
 let doc: { readonly modelValue?: string; readonly stored?: string; readonly maxChars?: number } | undefined;
 let saveDoc: ((text: string) => void) | undefined;
-mock.module(`@intentic/ui`, () => ({
+jest.mock(`@intentic/ui`, () => ({
     ...uiOriginal,
     MarkdownDocument: defineComponent({
         props: { modelValue: String, stored: String, maxChars: Number, placeholder: String, label: String, editable: Boolean, saving: Boolean },

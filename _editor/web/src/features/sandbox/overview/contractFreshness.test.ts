@@ -1,5 +1,4 @@
 import { SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals, mocked } from "@intentic/testing/bun";
 import { contractUncompiled, readContractFreshness, resetContractFreshness, uncompiledRoutes } from "./contractFreshness";
 
@@ -10,7 +9,7 @@ import { contractUncompiled, readContractFreshness, resetContractFreshness, unco
 const serve = (body: unknown, ok = true): void => {
     stubGlobal(
         `fetch`,
-        mock(() => Promise.resolve({ ok, json: () => Promise.resolve(body) } as Response)),
+        jest.fn(() => Promise.resolve({ ok, json: () => Promise.resolve(body) } as Response)),
     );
 };
 
@@ -52,7 +51,7 @@ it(`leaves the question open when the dev server cannot answer`, async () => {
 it(`leaves the question open when the fetch itself fails`, async () => {
     stubGlobal(
         `fetch`,
-        mock(() => Promise.reject(new Error(`offline`))),
+        jest.fn(() => Promise.reject(new Error(`offline`))),
     );
     await readContractFreshness();
     expect(contractUncompiled.value).toBe(false);

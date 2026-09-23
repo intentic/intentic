@@ -2,7 +2,6 @@
 // faithful enough to assert against. The module lives in `@intentic/ui/markdown` and is tested here beside the block
 // splitter's suite.
 import "@intentic/testing/dom";
-import { describe, test, expect } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { useHighlighter } from "@intentic/ui/highlighter";
 import { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "@intentic/ui/markdown";
@@ -60,7 +59,7 @@ const BLOCKS = {
 
 describe(`buildBlockElement keeps the source as its text`, () => {
     for (const [name, source] of Object.entries(BLOCKS)) {
-        test(name, () => {
+        test(`${name}`, () => {
             expect(blockBody(buildBlockElement(source)), `the block must read back as its source for ${name}`).toBe(source);
         });
     }

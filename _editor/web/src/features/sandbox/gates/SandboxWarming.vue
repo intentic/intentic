@@ -55,7 +55,7 @@ const now = useNow();
                     >{{ t(`sandbox.sandboxWarming.stepsDone`, { done, total: bootSteps.length })
                     }}<template v-if="running"> · {{ running.label }}</template> ·
                 </template>
-                {{ bootStartedAt === undefined ? t(`sandbox.sandboxWarming.starting`) : formatElapsed(bootStartedAt, now) }}
+                {{ bootStartedAt === undefined ? t(`shared.starting2`) : formatElapsed(bootStartedAt, now) }}
             </p>
         </template>
     </GateCard>

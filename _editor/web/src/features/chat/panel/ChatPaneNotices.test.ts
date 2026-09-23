@@ -3,7 +3,6 @@
 // wrongly telling a working answer's reader their message had failed.
 import "@intentic/testing/dom";
 import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
@@ -12,12 +11,12 @@ import { RouterLinkStub } from "../../../testing/routerLinkStub";
 const provider = ref<AgentProvider>(TRIAL_PROVIDER);
 const reachable = ref(true);
 const streaming = ref(false);
-const resume = mock(async () => {});
-const loadTrialStatus = mock(async () => {});
+const resume = jest.fn(async () => {});
+const loadTrialStatus = jest.fn(async () => {});
 
 // The pane's own view, injected as the real strip would from ChatPane, mounted here directly.
-mock.module(`../models/useChat-catalog`, () => ({ loadTrialStatus }));
-mock.module(`./useChat-view`, () => ({
+jest.mock(`../models/useChat-catalog`, () => ({ loadTrialStatus }));
+jest.mock(`./useChat-view`, () => ({
     usePaneView: () => ({
         conversation: ref({ conversationId: `agent-1`, turn: { resume } }),
         provider,
@@ -33,26 +32,26 @@ mock.module(`./useChat-view`, () => ({
 }));
 // The active sandbox, for the hosted-hours strip: a hosted row its reader owns, or nothing.
 const active = ref<{ hosted: { region: string; warm: boolean } | null; role: string } | undefined>(undefined);
-mock.module(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
+jest.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
 // The free plan's meter as the strip reads it: settable, so the threshold is hostedHours.ts's rule.
 const hostedMeter = ref<{ usedMinutes: number; allowanceMinutes: number; remainingMinutes: number; fraction: number; resetsAt: string } | undefined>(
     undefined,
 );
 const lowOnHours = ref(false);
 const planOffered = ref(true);
-mock.module(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ meter: hostedMeter, lowOnHours, offered: planOffered }) }));
-mock.module(`../../agents/fleet/useAgents`, () => ({
+jest.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ meter: hostedMeter, lowOnHours, offered: planOffered }) }));
+jest.mock(`../../agents/fleet/useAgents`, () => ({
     useAgents: () => ({
         agentById: () => undefined,
         archived: ref([]),
-        loadArchived: mock(async () => {}),
-        restore: mock(),
+        loadArchived: jest.fn(async () => {}),
+        restore: jest.fn(),
         busyIds: ref([]),
     }),
 }));
 // The account gate is its own component with its own test; this file is only about the trial strip beneath it.
-mock.module(`../accounts/ChatAccountPanel.vue`, () => ({ default: defineComponent({ name: `ChatAccountPanel`, setup: () => () => undefined }) }));
-mock.module(`vue-router`, () => ({
+jest.mock(`../accounts/ChatAccountPanel.vue`, () => ({ default: defineComponent({ name: `ChatAccountPanel`, setup: () => () => undefined }) }));
+jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
     RouterLink: RouterLinkStub as never,
 }));

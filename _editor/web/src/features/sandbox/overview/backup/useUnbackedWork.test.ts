@@ -3,7 +3,6 @@ import "@intentic/testing/dom";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { GitRemoteRepo } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { test, expect, beforeEach, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
@@ -12,19 +11,19 @@ import type { SandboxRpc } from "../../client/sandboxRpc";
 // Every window's header holds this condition, so what it costs is a read per window: the tree is the whole workspace,
 // refetched on every write burst, and it can only change the answer once no repository has a remote.
 
-const remoteRepos = mock<SandboxRpc[`git`][`remoteRepos`]>();
-const tree = mock<SandboxRpc[`workspace`][`tree`]>();
-mock.module("../../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ git: { remoteRepos }, workspace: { tree } }) }));
+const remoteRepos = jest.fn<SandboxRpc[`git`][`remoteRepos`]>();
+const tree = jest.fn<SandboxRpc[`workspace`][`tree`]>();
+jest.mock("../../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ git: { remoteRepos }, workspace: { tree } }) }));
 // Every name the import graph takes from the raw client, since bun links an ESM import against exactly what this
 // factory returns; nothing here calls it.
-mock.module("../../client/sandboxClient", () => ({
-    sandboxJson: mock(),
-    sandboxRequest: mock(),
-    sandboxBlob: mock(),
-    sandboxUpload: mock(),
-    sandboxError: mock(async () => new Error(`unused`)),
+jest.mock("../../client/sandboxClient", () => ({
+    sandboxJson: jest.fn(),
+    sandboxRequest: jest.fn(),
+    sandboxBlob: jest.fn(),
+    sandboxUpload: jest.fn(),
+    sandboxError: jest.fn(async () => new Error(`unused`)),
 }));
-mock.module("../../client/useSandbox", () => ({
+jest.mock("../../client/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ activeSandboxId: ref(`sbx-1`), reachable: ref(true) }),
 }));

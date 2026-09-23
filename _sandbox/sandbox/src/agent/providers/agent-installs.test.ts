@@ -1,5 +1,4 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { test, expect } from "bun:test";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
 import { syncHookOutput } from "../../testing.js";
 import { classifyImageInstalls, installSteeringHooks } from "./agent-installs.js";

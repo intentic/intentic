@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
 import { codeLangForPath } from "@intentic/code-read";
-import { isDelimitedPath, isDocumentPath, isSpreadsheetPath, rendersAsBytes, resolveFile, TEXT_EDIT_MAX_BYTES } from "./fileType";
+import { formatOf } from "@intentic/ui/file-format";
+import { rendersAsBytes, resolveFile, TEXT_EDIT_MAX_BYTES } from "./fileType";
 
 // Empty (0-byte) files: text types stay editable (code/markdown); binary ones show the "empty" fallback.
 describe(`resolveFile empty files`, () => {
@@ -149,8 +149,8 @@ describe(`resolveFile large text`, () => {
 });
 
 // Which diffs open as tracked changes over rendered text: the formats fileq reads, minus the ones that are looked at.
-describe(`isDocumentPath`, () => {
-    it(`claims documents, spreadsheets, decks, books, notebooks and archives`, () => {
+describe(`the format table's diff readings`, () => {
+    it(`reads documents, spreadsheets, decks, books, notebooks and archives as the text fileq renders`, () => {
         for (const name of [
             `Brief.DOCX`,
             `a/b.pdf`,
@@ -167,23 +167,31 @@ describe(`isDocumentPath`, () => {
             `dump.tar`,
             `dump.tgz`,
         ]) {
-            expect(isDocumentPath(name), name).toBe(true);
+            expect(formatOf(name).reads, name).toBe(`document`);
         }
     });
 
-    it(`leaves pictures, recordings, fonts and code to their own diffs`, () => {
-        for (const name of [`shot.png`, `logo.svg`, `clip.mp4`, `song.mp3`, `Inter.woff2`, `main.ts`, `README.md`, `notes.txt`, `.gitignore`]) {
-            expect(isDocumentPath(name), name).toBe(false);
-        }
+    it(`leaves pictures, recordings, fonts and code to their own diffs, and prose and tables to theirs`, () => {
+        expect([`shot.png`, `logo.svg`, `clip.mp4`, `song.mp3`, `Inter.woff2`, `main.ts`, `.gitignore`].map((name) => formatOf(name).reads)).toEqual([
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+        ]);
+        expect([`README.md`, `notes.txt`, `d.csv`, `e.TSV`].map((name) => formatOf(name).reads)).toEqual([`markdown`, `plain`, `table`, `table`]);
     });
-});
 
-// Which documents diff as a grid rather than as paragraphs, and which text does.
-describe(`isSpreadsheetPath and isDelimitedPath`, () => {
-    it(`names the workbook formats and the delimited text formats, and nothing else`, () => {
-        expect([`a.xlsx`, `b.ODS`, `c.ots`].map(isSpreadsheetPath)).toEqual([true, true, true]);
-        expect([`a.docx`, `d.csv`, `e.pptx`].map(isSpreadsheetPath)).toEqual([false, false, false]);
-        expect([`d.csv`, `e.TSV`].map(isDelimitedPath)).toEqual([true, true]);
-        expect([`a.xlsx`, `f.txt`, `g.md`].map(isDelimitedPath)).toEqual([false, false, false]);
+    it(`draws a grid of cells only for the workbook formats`, () => {
+        expect([`a.xlsx`, `b.ODS`, `c.ots`, `a.docx`, `d.csv`, `e.pptx`].map((name) => formatOf(name).sheet === true)).toEqual([
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+        ]);
     });
 });

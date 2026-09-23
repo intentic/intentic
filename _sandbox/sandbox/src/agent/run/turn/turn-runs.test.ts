@@ -1,5 +1,4 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { describe, it, expect, mock, jest } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import type { JournalledTurn } from "./turn-journal.js";
 import { type AttachEntry, type AttachHead, turnRunOf } from "../../../agents/actor/conversation-holdings.js";
@@ -301,7 +300,7 @@ describe(`turn runs`, () => {
 
     it(`hands the settled rows and the steered positions to the transcript sink`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const transcript = mock(async () => true);
+        const transcript = jest.fn(async () => true);
         const run = startTurnRun(deps, turnFn, turn(`c-sink`), { opening, transcript })!;
         push({ kind: `delta`, text: `a` });
         push({ kind: `steer`, text: `and`, sentAt: 2 });
@@ -323,7 +322,7 @@ describe(`turn runs`, () => {
     // put those same words in the conversation once per press. Nothing at all reaches the record.
     it(`writes no record for a turn that was refused before it ran`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const transcript = mock(async () => true);
+        const transcript = jest.fn(async () => true);
         const run = startTurnRun(deps, turnFn, turn(`c-unrun`), { opening, transcript })!;
         push({ kind: `error`, code: `sandbox-memory-low`, message: `Not enough sandbox memory to start this turn.` });
         close();
@@ -341,7 +340,7 @@ describe(`turn runs`, () => {
 
         it(`keeps its message, records it, and hands the turn over to be held`, async () => {
             const { turnFn, push, close } = crankedTurn();
-            const transcript = mock(async () => true);
+            const transcript = jest.fn(async () => true);
             const held: { conversationId: string; run: string }[] = [];
             const run = startTurnRun(deps, turnFn, turn(`c-kept`), {
                 opening,
@@ -398,11 +397,13 @@ describe(`turn runs`, () => {
             },
         });
         const journalDeps = { conversations: fleet.conversations, events: createDomainEvents(() => {}) };
-        const beginning =
-            (body: TurnStarter["stream"]): TurnStarter["stream"] =>
+        const beginning = (body: TurnStarter["stream"]): TurnStarter["stream"] =>
             async function* (input, signal) {
                 const conversationId = input.conversationId ?? ``;
-                await fleet.conversations.send(conversationId, { kind: `begin`, turn: { conversationId, isolated: false, prompt: input.prompt, profile: {} } }).settled;
+                await fleet.conversations.send(conversationId, {
+                    kind: `begin`,
+                    turn: { conversationId, isolated: false, prompt: input.prompt, profile: {} },
+                }).settled;
                 yield* body(input, signal);
                 await fleet.conversations.send(conversationId, { kind: `settle` }).settled;
             };
@@ -436,7 +437,7 @@ describe(`turn runs`, () => {
         const { turnFn, push, close } = crankedTurn();
         const { writes, journalDeps, beginning } = journalledFleet();
         let commit!: () => void;
-        const transcript = mock(
+        const transcript = jest.fn(
             () =>
                 new Promise<boolean>((resolve) => {
                     commit = () => resolve(true);
@@ -501,7 +502,8 @@ describe(`turn runs`, () => {
         close();
         await waitFor(() => expect(turnRunOf(conversations, `c-never`)!.done).toBe(true));
 
-        await conversations.send(`c-never`, { kind: `begin`, turn: { conversationId: `c-never`, isolated: false, prompt: `later`, profile: {} } }).settled;
+        await conversations.send(`c-never`, { kind: `begin`, turn: { conversationId: `c-never`, isolated: false, prompt: `later`, profile: {} } })
+            .settled;
         expect(writes).toEqual([]);
     });
 

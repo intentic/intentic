@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import { HOSTED_IDLE, type HostedEvent, type HostedLane, laneBusy, owesHandBack, stepHosted } from "./hostedLane";
 
 // Pins every move the hosted lane can make, and every event a lane refuses, as values: a start is taken only from

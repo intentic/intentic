@@ -109,7 +109,7 @@ const openStartOver = (): void => {
                     size="small"
                     severity="secondary"
                     text
-                    :label="t(`shell.pushQuestionBody.startOver`)"
+                    :label="t(`shared.startOver`)"
                     icon-pos="right"
                     :loading="pushFlow.fixBusy.value"
                     v-tooltip.top="t(`shell.pushQuestionBody.setAttemptAsideStart`)"

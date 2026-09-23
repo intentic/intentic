@@ -1,5 +1,6 @@
 import { computed, type ComputedRef } from "vue";
 import { plural } from "@intentic/base/format";
+import { isWork, KINDS } from "./terminalMeta";
 import { showWorkTerminals } from "./useWorkTerminals";
 import { useTerminalsQuery } from "./terminalsQuery";
 
@@ -16,26 +17,19 @@ interface TerminalActivity {
     readonly summary: ComputedRef<string | undefined>;
 }
 
-// Kinds counted only once showWorkTerminals is on, keeping the badge and the strip in agreement.
-const WORK_KINDS = new Set([`agent`, `job`]);
-
 export function useTerminalActivity(): TerminalActivity {
     const { sessions } = useTerminalsQuery();
 
     const live = computed(() =>
-        sessions.value.filter(
-            (session) => session.running && session.kind !== `process` && (!WORK_KINDS.has(session.kind) || showWorkTerminals.value),
-        ),
+        sessions.value.filter((session) => session.running && !KINDS[session.kind].logs && (!isWork(session) || showWorkTerminals.value)),
     );
 
     const summary = computed<string | undefined>(() => {
-        const parts = [
-            [live.value.filter((session) => session.kind === `shell`).length, `shell`, `shells`],
-            [live.value.filter((session) => session.kind === `panel`).length, `dev server`, `dev servers`],
-            [live.value.filter((session) => session.kind === `agent`).length, `agent shell`, `agent shells`],
-            [live.value.filter((session) => session.kind === `job`).length, `job`, `jobs`],
-        ] as const;
-        const said = parts.filter(([n]) => n > 0).map(([n, one, many]) => plural(n, one, many));
+        const said = (Object.keys(KINDS) as (keyof typeof KINDS)[]).flatMap((kind) => {
+            const noun = KINDS[kind].noun;
+            const count = live.value.filter((session) => session.kind === kind).length;
+            return noun === undefined || count === 0 ? [] : [plural(count, noun[0], noun[1])];
+        });
         return said.length === 0 ? undefined : said.join(`, `);
     });
 

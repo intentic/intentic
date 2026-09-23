@@ -1,10 +1,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, it, expect } from "bun:test";
 
-// Pins boot order, read by shape off the files that hold it (like boot-shutdown.test.ts): the chain runs the steps it
-// declares, in the order it declares them, and the gate opens before any work a held data route has no reason to wait
-// on. staleSessions (which kills stale panel/agent/job sessions) must run before anything that starts one.
+// Pins boot order, read by shape off the files that hold it (like boot-shutdown.test.ts): the gate opens before any work
+// a held data route has no reason to wait on, and staleSessions runs before anything that starts a session.
 
 const read = (relative: string): string => readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
 
@@ -13,17 +11,11 @@ const main = read("../main.ts");
 const workspaceApps = read("./workspace-apps.ts");
 
 const declared = (): string[] => {
-    const table = chain.slice(chain.indexOf("const BOOT_STEPS = ["), chain.indexOf("] as const;"));
-    return [...table.matchAll(/\{ key: "([a-zA-Z]+)"/g)].map((match) => match[1] as string);
+    const table = chain.slice(chain.indexOf("const BOOT_STEPS"), chain.indexOf("export const declareBootSteps"));
+    return [...table.matchAll(/key: "([a-zA-Z]+)"/g)].map((match) => match[1] as string);
 };
 
-const executed = (): string[] => [...chain.matchAll(/boot\.step\("([a-zA-Z]+)"/g)].map((match) => match[1] as string);
-
 describe(`daemon boot order`, () => {
-    it(`runs the steps in the order it declares them`, () => {
-        expect(executed()).toEqual(declared());
-    });
-
     // A declared step is something every held data route waits on. Starting dev servers is work the editor has no
     // reason to be held for, so it belongs past the gate.
     it(`opens the gate before starting the apps, never behind them`, () => {

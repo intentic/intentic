@@ -6,7 +6,6 @@
 // passed down a slot.
 import "@intentic/testing/dom";
 import { IconStub } from "@intentic/ui/testing";
-import { it, expect, afterEach } from "bun:test";
 import { type App, computed, createApp, defineComponent, h, nextTick } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { beginHubWork, forgetHubWork, hubWorkKey, hubWorkRunning, useHubWork } from "./hubWork";

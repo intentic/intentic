@@ -1,8 +1,6 @@
 import type { SetupReport } from "@intentic/api-contract";
 
-// Where the install command is on its way to a machine, why none is on screen yet, and when a quiet wait reads as a
-// misunderstanding worth correcting. Every fuse here is a guess from elapsed time, which a machine's own report makes
-// obsolete: those stay for machines running an ic too old to report.
+// Where the install command is on its way to a machine, why none is on screen yet, and when a quiet wait needs a word.
 
 // `locked` no command yet (`lockedReasonOf` says what is missing); `yours` shown, nothing in flight; `handed` copied or
 // given to the app, waiting on the reader's machine; `claimed` a machine redeemed the code, so the wait is earned.
@@ -77,7 +75,7 @@ export const lockedReasonOf = (lock: LockInput): string => {
 export const nudgeAfterMs = (roundabout: boolean): number => (roundabout ? 3 * 60_000 : 40_000);
 // Past this (ms), the correction stops assuming the command never ran and helps a terminal that errored instead.
 export const STALLED_MS = 3 * 60_000;
-// Claimed but no daemon yet (ms): the first image pull is slow, so this waits longer before suggesting a problem.
+// Claimed with no report yet (ms): only an ic older than reports (a desktop app's pinned one) is silent this long.
 export const SLOW_BUILD_MS = 6 * 60_000;
 
 // When the wait started (ms): the command becoming runnable, or the reader's last visible act where that is later.

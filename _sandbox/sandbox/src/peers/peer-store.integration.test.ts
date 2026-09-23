@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, setSystemTime } from "bun:test";
 import { z } from "zod";
 import { filePeerStore, type PeerStore } from "./peer-store.js";
 import { RUNNER_PAIR_TTL_MS, RUNNER_PEER } from "../runners/runner-peer.js";
@@ -173,12 +172,12 @@ test("a runner's pairing outlives the install between its mint and the container
         const pasted = hosts.mintPairing("laptop");
         expect(installed.expiresIn * 1000).toBe(RUNNER_PAIR_TTL_MS);
         // A half-hour pull and build.
-        setSystemTime(new Date(minted + 30 * 60 * 1000));
+        jest.setSystemTime(new Date(minted + 30 * 60 * 1000));
         expect(await runners.enroll(installed.token)).toMatchObject({ id: "omen", host: "omen" });
         expect(await hosts.enroll(pasted.token)).toBeUndefined();
-        setSystemTime(new Date(minted + RUNNER_PAIR_TTL_MS + 1_000));
+        jest.setSystemTime(new Date(minted + RUNNER_PAIR_TTL_MS + 1_000));
         expect(await runners.enroll(abandoned.token)).toBeUndefined();
     } finally {
-        setSystemTime();
+        jest.setSystemTime();
     }
 });

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { connectionsFrom, credentialOf, selectConnection } from "./accounts.js";
 
 // The daemon writes these; the shape of the fixture IS the contract with cli-env.ts (envSuffix + one var per

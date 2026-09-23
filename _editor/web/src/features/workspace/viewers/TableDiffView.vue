@@ -49,14 +49,20 @@ const plain = (cell: CellDiff): string => cell.after ?? cell.before ?? ``;
 
 <template>
     <div class="ui-softscroll h-full min-h-0 overflow-auto px-4 py-3">
-        <p v-if="cut" class="mb-3 text-2xs text-warning">{{ t(`workspace.tableDiffView.longTableOnlyFirstRows`, { rows: MAX_ROWS.toLocaleString() }) }}</p>
+        <p v-if="cut" class="mb-3 text-2xs text-warning">
+            {{ t(`workspace.tableDiffView.longTableOnlyFirstRows`, { rows: MAX_ROWS.toLocaleString() }) }}
+        </p>
         <p v-if="sheets.length === 0" class="text-2xs text-subtle">{{ t(`workspace.tableDiffView.neitherVersionHoldsTable`) }}</p>
         <section v-for="sheet of sheets" :key="sheet.name" class="mb-6 last:mb-0">
             <header class="mb-1.5 flex items-baseline gap-2">
-                <h3 class="text-sm font-semibold text-content" :class="sheet.kind === `removed` ? `line-through text-muted` : ``">{{ sheet.name }}</h3>
-                <span v-if="sheetBadge(sheet.kind)" class="text-2xs" :class="sheet.kind === `added` ? `text-success` : `text-danger`">{{ sheetBadge(sheet.kind) }}</span>
+                <h3 class="text-sm font-semibold text-content" :class="sheet.kind === `removed` ? `line-through text-muted` : ``">
+                    {{ sheet.name }}
+                </h3>
+                <span v-if="sheetBadge(sheet.kind)" class="text-2xs" :class="sheet.kind === `added` ? `text-success` : `text-danger`">{{
+                    sheetBadge(sheet.kind)
+                }}</span>
                 <span v-else-if="sheet.kind === `changed`" class="text-2xs tabular-nums text-muted">
-                    {{ t(`workspace.tableDiffView.rowsChanged`, { count: sheet.changedRows }, sheet.changedRows) }}
+                    {{ t(`shared.rowsChanged`, { count: sheet.changedRows }, sheet.changedRows) }}
                 </span>
                 <span v-else class="text-2xs text-subtle">{{ t(`workspace.tableDiffView.unchanged`) }}</span>
             </header>
@@ -68,9 +74,21 @@ const plain = (cell: CellDiff): string => cell.after ?? cell.before ?? ``;
                             <!-- A fold spans the whole width: one line for the rows it stands for, opened in place. -->
                             <template v-if="run.kind === `fold`">
                                 <template v-if="opened.has(`${sheet.name}:${run.at}`)">
-                                    <tr v-for="row of sheet.rows.slice(run.at, run.at + run.count)" :key="`${row.beforeLine}-${row.afterLine}`" class="text-muted">
-                                        <td class="border-l-2 border-transparent px-1.5 py-0.5 text-right tabular-nums text-2xs text-subtle">{{ row.afterLine ?? row.beforeLine }}</td>
-                                        <td v-for="(cell, column) of row.cells" :key="column" class="border-t border-line/60 px-2 py-0.5 whitespace-pre-wrap">{{ plain(cell) }}</td>
+                                    <tr
+                                        v-for="row of sheet.rows.slice(run.at, run.at + run.count)"
+                                        :key="`${row.beforeLine}-${row.afterLine}`"
+                                        class="text-muted"
+                                    >
+                                        <td class="border-l-2 border-transparent px-1.5 py-0.5 text-right tabular-nums text-2xs text-subtle">
+                                            {{ row.afterLine ?? row.beforeLine }}
+                                        </td>
+                                        <td
+                                            v-for="(cell, column) of row.cells"
+                                            :key="column"
+                                            class="border-t border-line/60 px-2 py-0.5 whitespace-pre-wrap"
+                                        >
+                                            {{ plain(cell) }}
+                                        </td>
                                     </tr>
                                 </template>
                                 <tr v-else>
@@ -82,25 +100,51 @@ const plain = (cell: CellDiff): string => cell.after ?? cell.before ?? ``;
                                 </tr>
                             </template>
                             <!-- Row 0 is the header wherever the source has one: drawn bold, still diffed like any row. -->
-                            <tr v-else :class="[ROW_CLASS[run.row.kind], run.row.kind === `same` ? `text-muted` : `text-content`, index === 0 ? `font-semibold` : ``]">
-<!-- The row's number in the new version, or the old one's struck through when it is gone; the mark on the margin says which. -->
+                            <tr
+                                v-else
+                                :class="[
+                                    ROW_CLASS[run.row.kind],
+                                    run.row.kind === `same` ? `text-muted` : `text-content`,
+                                    index === 0 ? `font-semibold` : ``,
+                                ]"
+                            >
+                                <!-- The row's number in the new version, or the old one's struck through when it is gone; the mark on the margin says which. -->
                                 <td class="px-1.5 py-0.5 text-right tabular-nums text-2xs text-subtle" :class="MARK_CLASS[run.row.kind]">
                                     <del v-if="run.row.kind === `removed`" class="line-through decoration-danger/70">{{ run.row.beforeLine }}</del>
                                     <template v-else>{{ run.row.afterLine }}</template>
                                 </td>
-                                <td v-for="(cell, column) of run.row.cells" :key="column" class="border-t border-line/60 px-2 py-0.5 whitespace-pre-wrap align-top">
+                                <td
+                                    v-for="(cell, column) of run.row.cells"
+                                    :key="column"
+                                    class="border-t border-line/60 px-2 py-0.5 whitespace-pre-wrap align-top"
+                                >
                                     <template v-if="cell.kind === `changed`">
                                         <del class="rounded-sm bg-danger/10 text-muted line-through decoration-danger/70">{{ cell.before }}</del>
                                         <span class="mx-1 text-subtle">→</span>
-                                        <ins class="rounded-sm bg-success/15 text-content no-underline decoration-success underline decoration-2 underline-offset-2">{{ cell.after }}</ins>
+                                        <ins
+                                            class="rounded-sm bg-success/15 text-content no-underline decoration-success underline decoration-2 underline-offset-2"
+                                            >{{ cell.after }}</ins
+                                        >
                                     </template>
-                                    <ins v-else-if="cell.kind === `added` && run.row.kind === `changed`" class="rounded-sm bg-success/15 no-underline decoration-success underline decoration-2 underline-offset-2">{{ cell.after }}</ins>
-                                    <del v-else-if="cell.kind === `removed` && run.row.kind === `changed`" class="rounded-sm bg-danger/10 text-muted line-through decoration-danger/70">{{ cell.before }}</del>
+                                    <ins
+                                        v-else-if="cell.kind === `added` && run.row.kind === `changed`"
+                                        class="rounded-sm bg-success/15 no-underline decoration-success underline decoration-2 underline-offset-2"
+                                        >{{ cell.after }}</ins
+                                    >
+                                    <del
+                                        v-else-if="cell.kind === `removed` && run.row.kind === `changed`"
+                                        class="rounded-sm bg-danger/10 text-muted line-through decoration-danger/70"
+                                        >{{ cell.before }}</del
+                                    >
                                     <del v-else-if="run.row.kind === `removed`" class="line-through decoration-danger/70">{{ plain(cell) }}</del>
                                     <template v-else>{{ plain(cell) }}</template>
                                 </td>
                                 <!-- Pads a short row so the grid's right edge stays straight. -->
-                                <td v-for="pad of Math.max(0, sheet.columns - run.row.cells.length)" :key="`pad-${pad}`" class="border-t border-line/60"></td>
+                                <td
+                                    v-for="pad of Math.max(0, sheet.columns - run.row.cells.length)"
+                                    :key="`pad-${pad}`"
+                                    class="border-t border-line/60"
+                                ></td>
                             </tr>
                         </template>
                     </tbody>

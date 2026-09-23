@@ -1,4 +1,3 @@
-import { it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { uuid } from "./uuid";
 
@@ -11,7 +10,7 @@ afterEach(() => {
 });
 
 it(`uses the platform's generator where the context is secure enough to have one`, () => {
-    const randomUUID = mock(() => `f81d4fae-7dec-41d0-a765-00a0c91e6bf6`);
+    const randomUUID = jest.fn(() => `f81d4fae-7dec-41d0-a765-00a0c91e6bf6`);
     stubGlobal(`crypto`, { ...globalThis.crypto, randomUUID });
 
     expect(uuid()).toBe(`f81d4fae-7dec-41d0-a765-00a0c91e6bf6`);

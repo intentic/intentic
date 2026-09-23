@@ -4,8 +4,6 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { ACTIVE_KEY, activeSandboxId } from "../../sandbox/overview/activeSandbox";
@@ -22,11 +20,11 @@ localStorage.setItem(ACTIVE_KEY, SANDBOX);
 activeSandboxId.value = SANDBOX;
 
 // Records daemon calls by procedure and input; a refused gesture must not reach the daemon at all, not just get a 403.
-const daemon = hoisted(() => ({ calls: [] as { procedure: ProcedureName; input: unknown }[] }));
+const daemon = { calls: [] as { procedure: ProcedureName; input: unknown }[] };
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in.
 const realSandboxRpc = { ...actualSandboxRpc };
-mock.module("../../sandbox/client/sandboxRpc", () => {
+jest.mock("../../sandbox/client/sandboxRpc", () => {
     return {
         ...realSandboxRpc,
         sandboxRpc: fakeSandboxRpc({
@@ -42,8 +40,8 @@ mock.module("../../sandbox/client/sandboxRpc", () => {
 
 // Signed-in member's tier, switched per test; mocked directly since the subject is what the explorer does with it.
 // The tier that writes is `writer`, below the operating one: a collaborator is read-only in the tree.
-const role = hoisted(() => ({ canWrite: false }));
-mock.module("../../sandbox/secrets/useRole", () => {
+const role = { canWrite: false };
+jest.mock("../../sandbox/secrets/useRole", () => {
     return {
         useRole: () => ({
             role: computed(() => (role.canWrite ? `writer` : `collaborator`)),

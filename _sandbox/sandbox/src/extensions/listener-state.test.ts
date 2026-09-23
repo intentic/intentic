@@ -1,5 +1,4 @@
 import type { Capability } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
 import { automationRecord } from "../harness/route-stores.testing.js";

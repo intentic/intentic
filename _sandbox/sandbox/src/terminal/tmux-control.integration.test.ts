@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { promisify } from "node:util";
-import { test, expect, beforeAll, afterEach } from "bun:test";
 import { attachControlTerminal, type ControlTerminal, spawnControlClient } from "./tmux-control.js";
 
 // @xterm/headless v6 ships as CommonJS; Node's ESM lexer can't detect its named exports.

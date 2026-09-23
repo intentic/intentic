@@ -1,5 +1,4 @@
 import type { ScanSource } from "@intentic/engine";
-import { test, expect } from "bun:test";
 import { listStampedContainers } from "./list-stamped.js";
 import type { SshExecutor, SshSession } from "./ssh.js";
 

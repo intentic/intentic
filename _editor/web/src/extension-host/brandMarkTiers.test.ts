@@ -2,7 +2,6 @@
 // what <BrandMark> then draws, which a passing gate cannot promise on its own.
 import "@intentic/testing/dom";
 import { BrandMark } from "@intentic/ui";
-import { describe, it, expect } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 
 const MARK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" fill="#6C4FE0"/></svg>`;

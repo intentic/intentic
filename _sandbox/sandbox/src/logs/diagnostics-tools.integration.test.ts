@@ -3,7 +3,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { UsageTurn } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { createDiagnosticsServer, type DiagnosticsToolDeps } from "./diagnostics-tools.js";
 
 // Tools as the model meets them: called by name, answered in text. Pins the wording, not just the filtering: the answer

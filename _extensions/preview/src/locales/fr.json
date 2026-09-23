@@ -1,8 +1,4 @@
 {
-    "extension": {
-        "ports": "Ports",
-        "public": "Public"
-    },
     "portRow": {
         "boundToLoopbackAlias": "Lié à un alias de loopback que le proxy d'aperçu ne peut pas joindre.",
         "forwarded": "transféré",

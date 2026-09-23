@@ -1,11 +1,10 @@
 // jsdom for the import chain: the device flow client touches the app's environment at module eval.
 import "@intentic/testing/dom";
-import { it, expect, mock } from "bun:test";
 
-mock.module(`../../client/sandboxClient`, () => ({
-    sandboxRequest: mock(),
-    sandboxJson: mock(),
-    sandboxError: mock(),
+jest.mock(`../../client/sandboxClient`, () => ({
+    sandboxRequest: jest.fn(),
+    sandboxJson: jest.fn(),
+    sandboxError: jest.fn(),
     // Named by useDevices but never thrown here; bun links an ESM import against exactly what this returns.
     SandboxHttpError: class SandboxHttpError extends Error {},
 }));

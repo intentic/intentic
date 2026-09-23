@@ -138,7 +138,7 @@ const detail = (row: LedgerRow): string => {
                     severity="secondary"
                     class="shrink-0"
                     :disabled="pushingRow !== undefined"
-                    :label="pushingRow === ledgerKey(row) ? t(`workspace.otherSandboxChanges.sending`) : sendVerb(row)"
+                    :label="pushingRow === ledgerKey(row) ? t(`shared.sending`) : sendVerb(row)"
                     v-tooltip.top="t(`workspace.otherSandboxChanges.straightHereOwnPre`, { row: sendVerb(row) })"
                     @click="pushRow(row)"
                 />

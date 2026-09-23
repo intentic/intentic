@@ -9,7 +9,6 @@ import { repoRoot } from "@intentic/constants/node";
 import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { Logger } from "pino";
-import { test, expect, afterEach } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import {
     ANCHOR_READY,
@@ -96,8 +95,7 @@ test("a fenced conversation's placement names its own session store and every di
         sessions: sessionsDir(HISTORY_ROOT, "abc"),
         // The checkouts, and every conversation's unit (its transcript, its prompt record, a fenced one's own store):
         // each is the whole workspace or the whole fleet's words, reachable from inside the namespace by an absolute path.
-        // The last two are where the layout before units kept the same words, still on disk on an older volume.
-        hidden: [`${HISTORY_ROOT}/worktrees`, conversationsRoot(HISTORY_ROOT), `${HISTORY_ROOT}/transcripts`, `${HISTORY_ROOT}/sessions`],
+        hidden: [`${HISTORY_ROOT}/worktrees`, conversationsRoot(HISTORY_ROOT)],
     });
     expect((await isolation.planFor(plan.worktree, false)).fence).toBeUndefined();
 });
@@ -107,7 +105,7 @@ test("a fenced turn is left no path to the whole tree: the main mount is gone an
     // Unmounted rather than masked: it is a bind of the workspace root, and what a fenced checkout cut out is
     // otherwise one `cat /mnt/intentic-main/...` away, for a shell and for a file tool alike.
     expect(lines).toContain(`umount ${shellQuote(MAIN_MOUNT)}`);
-    for (const hidden of [`${HISTORY_ROOT}/worktrees`, conversationsRoot(HISTORY_ROOT), `${HISTORY_ROOT}/transcripts`, `${HISTORY_ROOT}/sessions`]) {
+    for (const hidden of [`${HISTORY_ROOT}/worktrees`, conversationsRoot(HISTORY_ROOT)]) {
         expect(lines).toContain(`if [ -d ${shellQuote(hidden)} ]; then mount -t tmpfs intentic-fenced ${shellQuote(hidden)}; fi`);
     }
     // An unfenced turn keeps the main mount and every directory: nothing above it is conditional on anything else.

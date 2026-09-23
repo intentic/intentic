@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import {
     claimPidFile,

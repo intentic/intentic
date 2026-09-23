@@ -1,6 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { homedir } from "node:os";
-import { test, expect } from "bun:test";
 import { browserOutputDir } from "../../browser/cast/browser-artifacts.js";
 import {
     displayNameOf,
@@ -217,13 +216,11 @@ test("editDiffContent keeps a workspace-escaping path for display (locations enf
 const IMAGE_BLOCK = { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } };
 
 test("mayShowPicture names the two calls whose answer can be a picture", () => {
-    expect(["Read", "mcp__web__browser_take_screenshot", "mcp__reddit-main__browser_take_screenshot", "Bash", "mcp__web__browser_snapshot"].map(mayShowPicture)).toEqual([
-        true,
-        true,
-        true,
-        false,
-        false,
-    ]);
+    expect(
+        ["Read", "mcp__web__browser_take_screenshot", "mcp__reddit-main__browser_take_screenshot", "Bash", "mcp__web__browser_snapshot"].map(
+            mayShowPicture,
+        ),
+    ).toEqual([true, true, true, false, false]);
 });
 
 test("a Read that answered with an image carries the file it read, and no `[image]` placeholder", () => {
@@ -243,7 +240,9 @@ test("a Read of an image outside the workspace has no path the chat could fetch,
 
 test("a screenshot's answer keeps its words and gains the file they name", () => {
     const answer = "### Result\n- [Screenshot of viewport](.intentic/records/artifacts/browser/shot.png)";
-    expect(resultContent([{ type: "text", text: answer }, IMAGE_BLOCK], CWD, OUTPUT, { name: "mcp__web__browser_take_screenshot", input: {} })).toEqual([
+    expect(
+        resultContent([{ type: "text", text: answer }, IMAGE_BLOCK], CWD, OUTPUT, { name: "mcp__web__browser_take_screenshot", input: {} }),
+    ).toEqual([
         { type: "text", text: answer },
         { type: "image", path: ".intentic/records/artifacts/browser/shot.png" },
     ]);

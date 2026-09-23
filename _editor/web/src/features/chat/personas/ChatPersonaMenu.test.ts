@@ -2,7 +2,6 @@
 // persona" means on the attended side.
 import "@intentic/testing/dom";
 import type { Persona } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
@@ -14,9 +13,9 @@ const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
 // The reader's tier: a guest is offered its own personas and nothing wider.
 const isGuest = ref(false);
-mock.module(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
+jest.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
 
-mock.module(`../../sandbox/personas/usePersonas`, () => ({
+jest.mock(`../../sandbox/personas/usePersonas`, () => ({
     usePersonas: () => ({
         personas,
         connected,
@@ -27,9 +26,9 @@ mock.module(`../../sandbox/personas/usePersonas`, () => ({
 }));
 
 // Router stub keeps real hrefs on "manage personas" links; a push spy wouldn't see them at all.
-mock.module(`vue-router`, () => ({
+jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
-    useRouter: () => ({ push: mock() }) as never,
+    useRouter: () => ({ push: jest.fn() }) as never,
     RouterLink: RouterLinkStub as never,
 }));
 

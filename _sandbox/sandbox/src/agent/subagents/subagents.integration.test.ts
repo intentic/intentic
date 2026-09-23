@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { noteChildWork } from "./child-verification.js";
 import {
     closeSubagents,

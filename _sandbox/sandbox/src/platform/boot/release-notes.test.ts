@@ -1,4 +1,3 @@
-import { test, expect, afterEach } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { isDevBuild } from "../../version.js";
 import { breakingNotes, parseBreakingNotes, parseReleaseNotes, refreshReleaseNotes, startReleaseNotesCheck, updateNotes } from "./release-notes.js";

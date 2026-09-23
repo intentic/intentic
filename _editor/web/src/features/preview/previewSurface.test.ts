@@ -1,14 +1,13 @@
 //
 /* THE WELCOME THAT MUST NOT BECOME A HABIT. */
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, mock } from "bun:test";
 import { freshImport, mocked } from "@intentic/testing/bun";
 
 const SANDBOX = `sbx-1`;
 
-mock.module(`../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: { value: SANDBOX } }) }));
+jest.mock(`../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: { value: SANDBOX } }) }));
 
-const router = { push: mock() } as unknown as import("vue-router").Router;
+const router = { push: jest.fn() } as unknown as import("vue-router").Router;
 
 // The panel's `opened` flag is module state, so a case that asks what a fresh window does needs a fresh evaluation.
 const load = () => freshImport<typeof import("./previewSurface")>("./previewSurface", import.meta.url);

@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect, mock } from "bun:test";
 import DOMPurify from "dompurify";
 import { createIconRegistry, type SvgIconPack } from "mermaid/dist/rendering-util/svgIcons.mjs";
 
@@ -39,7 +38,7 @@ it(`gives repeated SVG definitions distinct IDs and updates their references`, a
 
 it(`shares an asynchronous loader and rejects unknown or cyclic names`, async () => {
     const registry = createIconRegistry((svg) => svg);
-    const loader = mock(async () => pack);
+    const loader = jest.fn(async () => pack);
     registry.registerIconPacks([{ name: `test`, loader }]);
     expect(await Promise.all([registry.isIconAvailable(`test:mark`), registry.isIconAvailable(`test:turned`)])).toEqual([true, true]);
     expect(loader).toHaveBeenCalledTimes(1);

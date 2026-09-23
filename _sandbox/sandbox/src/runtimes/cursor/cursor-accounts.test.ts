@@ -1,6 +1,5 @@
 import { unstubbed } from "@intentic/testing";
 import type { AccountUsage } from "@intentic/sandbox-contract";
-import { test, expect, mock } from "bun:test";
 import type { Services } from "../../composition.js";
 import { cursorAccountDoor } from "./cursor-accounts.js";
 
@@ -14,7 +13,7 @@ const spent = (label: string): AccountUsage => ({
     measuredAt: NOW,
 });
 
-const door = (stored: Record<string, AccountUsage>, refresh = mock(async () => undefined)) => {
+const door = (stored: Record<string, AccountUsage>, refresh = jest.fn(async () => undefined)) => {
     const services = unstubbed<Services>(`services`, {
         cursorStore: unstubbed<Services[`cursorStore`]>(`cursorStore`, {
             list: async () => [

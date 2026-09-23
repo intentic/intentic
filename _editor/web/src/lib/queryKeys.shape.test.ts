@@ -1,9 +1,8 @@
-import { describe, it, expect, mock } from "bun:test";
 import { partialMatchKey } from "@tanstack/vue-query";
 
 // `of()` and `ofSandbox()` must produce the same key shape, since sandboxQueryPredicate finds a box's entries by
 // reading the id off the last position. The scoping rule is mocked to a fixed id so keys can be spelled out in full.
-mock.module("../features/sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-here`] }));
+jest.mock("../features/sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-here`] }));
 
 const { agentReviewPrefixes, AGENTS, pushedKeys, rpcKey, rpcKeyAt, rpcPrefix, WORKSPACE_STATE, workingReviewKeys } = await import("./queryKeys");
 const { sandboxQueryPredicate } = await import("../features/sandbox/live/systemEventRouting");

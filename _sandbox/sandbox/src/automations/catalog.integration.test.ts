@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { AutomationCatalogSchema, type Capability } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect } from "bun:test";
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
 import { postJson } from "../harness/route-client.testing.js";

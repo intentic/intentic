@@ -4,7 +4,6 @@
 import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, contributionEntry } from "@intentic/capability-catalog";
 import type { CapabilityContribution } from "@intentic/extension-manifest";
-import { afterEach, describe, expect, it } from "bun:test";
 import { effectScope, type EffectScope, ref } from "vue";
 import { useCapabilityCatalog } from "./capabilityCatalog";
 import type { ConnectionSources } from "./model/connectionRows";

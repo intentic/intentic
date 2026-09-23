@@ -1,4 +1,3 @@
-import { describe, expect, test } from "bun:test";
 import { createDomainEvents, type DomainEventName } from "./domain-events.js";
 
 const failures = (): { readonly seen: [DomainEventName, unknown][]; readonly failed: (name: DomainEventName, error: unknown) => void } => {

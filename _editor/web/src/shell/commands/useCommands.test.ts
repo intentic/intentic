@@ -1,6 +1,5 @@
 // Needs jsdom: resolving a keystroke reads the focused surface off the event's target (contextKeys.ts).
 import "@intentic/testing/dom";
-import { describe, it, expect, afterEach } from "bun:test";
 import { ref } from "vue";
 import { publishContextKey } from "./contextKeys";
 import { boundCommand, type CommandRegistration, commands, executeCommand, registerCommand } from "./useCommands";

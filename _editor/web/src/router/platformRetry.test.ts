@@ -1,11 +1,10 @@
 // The way off the "Intentic isn't reachable" screen. The screen is a URL, so a reader can reload it, restore the tab
 // or open it from history — each of those has to ask the platform again, or the URL itself becomes the trap.
-import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createMemoryHistory, createRouter, type RouteLocationNormalized } from "vue-router";
 
-const refresh = mock<() => Promise<{ id: string } | null>>();
-mock.module(`../features/auth/useAuth`, () => ({ useAuth: () => ({ refresh }) }));
+const refresh = jest.fn<() => Promise<{ id: string } | null>>();
+jest.mock(`../features/auth/useAuth`, () => ({ useAuth: () => ({ refresh }) }));
 
 const { ENTRY_BUDGET_MS, platformRetry, retryOnEntry } = await import(`./platformRetry`);
 

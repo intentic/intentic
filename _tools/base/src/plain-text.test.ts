@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { plainText } from "./plain-text.js";
 
 // Built from their code points rather than pasted in: a control byte in a source file is invisible to whoever

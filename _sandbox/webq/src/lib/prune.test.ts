@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { bodyOf, type Element, parseHtml, textOf } from "./dom.js";
 import { renderMarkdown } from "./markdown.js";
 import { pruneTree } from "./prune.js";

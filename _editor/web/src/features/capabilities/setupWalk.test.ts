@@ -4,7 +4,6 @@
 import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry, CapabilityCategory } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { effectScope, type EffectScope, ref } from "vue";
 import type { PageMove } from "./capabilityRoute";
 import { catalogTiles } from "./model/slices";
@@ -62,8 +61,8 @@ const walkOn = (on: CapabilityCatalogEntry | undefined, walking: boolean) => {
         tiles: ref(tilesWith([connection(`github`)])),
         selected: ref(on),
         walking: ref(walking),
-        move: mock<(move: PageMove) => void>(),
-        dismissRecommendation: { mutateAsync: mock<(entry: string) => Promise<unknown>>(async () => undefined) },
+        move: jest.fn<(move: PageMove) => void>(),
+        dismissRecommendation: { mutateAsync: jest.fn<(entry: string) => Promise<unknown>>(async () => undefined) },
         error: ref<NoticeModel | null>(null),
     };
     const scope = effectScope();

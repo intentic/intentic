@@ -8,7 +8,7 @@ import { archived, archiveLoading, desyncRegistry, heldWakes, loadArchived, mark
 //
 // Five topic modules, each depending only downward:
 // - useAgents-registry: roster/archived list, revisions, pending moves, held wakes
-// - useAgents-provisional: what this browser's presses say a card is until the roster catches up
+// - useAgents-provisional: the per-card overlay of presses, writes and board actions the roster hasn't answered yet
 // - useAgents-fleet: registry/tab/draft merge into cards, lanes, counts
 // - useAgents-archive: archive/restore/purge/undo, busy cards
 // - useAgents-actions: per-agent writes, open

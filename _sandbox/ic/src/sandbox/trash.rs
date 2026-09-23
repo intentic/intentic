@@ -14,8 +14,40 @@ pub const TRASH_DIND_PREFIX: &str = "intentic-trash-dind-";
 /// date library, so a volume's own CreatedAt would be unreadable here.
 const MARKER_PREFIX: &str = "intentic-trashed-";
 
-/// How long a removed sandbox stays recoverable, in seconds.
-pub const GRACE_SECS: u64 = 7 * 24 * 60 * 60;
+const DAY_SECS: u64 = 24 * 60 * 60;
+
+/// Whole days a removed sandbox stays recoverable, compiled in from the platform's own declaration.
+pub const GRACE_DAYS: u64 =
+    declared_days(include_str!("../../../../_shared/api-contract/src/schemas.ts").as_bytes());
+
+const GRACE_SECS: u64 = GRACE_DAYS * DAY_SECS;
+
+/// The integer in `SANDBOX_RECOVERY_DAYS = <n>;`; a source that stops saying it that way fails the build.
+const fn declared_days(source: &[u8]) -> u64 {
+    const KEY: &[u8] = b"SANDBOX_RECOVERY_DAYS = ";
+    let mut at = 0;
+    'scan: while at + KEY.len() < source.len() {
+        let mut i = 0;
+        while i < KEY.len() {
+            if source[at + i] != KEY[i] {
+                at += 1;
+                continue 'scan;
+            }
+            i += 1;
+        }
+        let (mut end, mut days) = (at + KEY.len(), 0);
+        while source[end].is_ascii_digit() {
+            days = days * 10 + (source[end] - b'0') as u64;
+            end += 1;
+        }
+        assert!(
+            days > 0 && source[end] == b';',
+            "SANDBOX_RECOVERY_DAYS must be a whole number of days"
+        );
+        return days;
+    }
+    panic!("_shared/api-contract/src/schemas.ts no longer declares SANDBOX_RECOVERY_DAYS");
+}
 
 pub fn now_secs() -> u64 {
     SystemTime::now()
@@ -36,7 +68,7 @@ impl Trashed {
     /// Whole days still on the clock, rounded up — 0 only once the sandbox is due for purging.
     pub fn days_left(&self, now: u64) -> u64 {
         let spent = now.saturating_sub(self.removed_at);
-        GRACE_SECS.saturating_sub(spent).div_ceil(24 * 60 * 60)
+        GRACE_SECS.saturating_sub(spent).div_ceil(DAY_SECS)
     }
 
     pub fn expired(&self, now: u64) -> bool {
@@ -229,7 +261,15 @@ pub fn sweep() -> Vec<String> {
 mod tests {
     use super::*;
 
-    const DAY: u64 = 24 * 60 * 60;
+    const DAY: u64 = DAY_SECS;
+
+    #[test]
+    fn the_grace_is_read_from_the_declaration_the_platform_exports() {
+        assert_eq!(
+            declared_days(b"/* x */\nexport const SANDBOX_RECOVERY_DAYS = 12;\n"),
+            12
+        );
+    }
 
     #[test]
     fn marker_round_trips_a_slug_with_hyphens() {

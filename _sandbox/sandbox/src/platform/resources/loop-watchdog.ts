@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, readlinkSync } from "node:fs";
 import type { Logger } from "pino";
+import { readPressure } from "./cgroup.js";
 
 // Detects why the event loop stalled: in-process (CPU burns, PSI quiet), environmental (PSI screams, no daemon fault),
 // or a blocking DNS resolver (PSI and CPU both quiet, dnsInFlight nonzero); each needs a different fix. Logs one
@@ -10,38 +11,6 @@ const TICK_MS = 500;
 const STALL_THRESHOLD_MS = 1_500;
 // One warn per window; a burst's later stalls only bump the counter the next logged one reports.
 const LOG_WINDOW_MS = 10_000;
-
-// One /proc/pressure/<kind> file reduced to two numbers: avg10 of `some` (anything stalling) and `full` (everything
-// stalling).
-export interface PressureSnapshot {
-    readonly some: number;
-    readonly full: number;
-}
-
-const avg10 = (line: string | undefined): number | undefined => {
-    const value = line?.match(/avg10=([0-9.]+)/)?.[1];
-    return value === undefined ? undefined : Number(value);
-};
-
-export const parsePressure = (text: string): PressureSnapshot | undefined => {
-    const lines = text.split("\n");
-    const some = avg10(lines.find((line) => line.startsWith("some")));
-    if (some === undefined) {
-        return undefined;
-    }
-    // `full` is absent for CPU (a runnable task always makes progress on something); reported as 0.
-    return { some, full: avg10(lines.find((line) => line.startsWith("full"))) ?? 0 };
-};
-
-// PSI is a Linux cgroup2 feature; absent (macOS dev, old kernels) just means the stall log carries no attribution. Sync
-// reads on purpose: procfs pressure files are memory-backed and this runs once per logged stall.
-const pressure = (kind: "memory" | "cpu" | "io"): PressureSnapshot | undefined => {
-    try {
-        return parsePressure(readFileSync(`/proc/pressure/${kind}`, "utf8"));
-    } catch {
-        return undefined;
-    }
-};
 
 // The remote-port column of /proc/net/udp{,6} is hex, so a DNS query reads as `:0035`; the inode column ties such a row
 // back to its owning process.
@@ -113,23 +82,25 @@ export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
             counts[resource] = (counts[resource] ?? 0) + 1;
             return counts;
         }, {});
-        logger.warn(
-            {
-                lagMs: Math.round(lagMs),
-                // Taken at recovery: thrash that stalled the loop is usually still measurable the instant after.
-                psi: { memory: pressure("memory"), cpu: pressure("cpu"), io: pressure("io") },
-                // Nonzero means the loop was parked in getaddrinfo, roughly 8s lost per unanswered lookup attempt.
-                dnsInFlight: dnsQueriesInFlight(),
-                // Quiet PSI plus high CPU is JS/GC; near-zero CPU with quiet PSI is a blocking native call.
-                processCpuMs: Math.round((cpu.user + cpu.system) / 1000),
-                resources,
-                heapUsedMb: Math.round(memory.heapUsed / 1048576),
-                heapTotalMb: Math.round(memory.heapTotal / 1048576),
-                externalMb: Math.round(memory.external / 1048576),
-                rssMb: Math.round(memory.rss / 1048576),
-                ...(suppressedCount > 0 ? { earlierStallsSuppressed: suppressedCount } : {}),
-            },
-            "event loop stalled: high PSI means the machine (builds/tests/swap), dnsInFlight means a blocking resolver lookup, quiet both means this process",
+        const stall = {
+            lagMs: Math.round(lagMs),
+            // Nonzero means the loop was parked in getaddrinfo, roughly 8s lost per unanswered lookup attempt.
+            dnsInFlight: dnsQueriesInFlight(),
+            // Quiet PSI plus high CPU is JS/GC; near-zero CPU with quiet PSI is a blocking native call.
+            processCpuMs: Math.round((cpu.user + cpu.system) / 1000),
+            resources,
+            heapUsedMb: Math.round(memory.heapUsed / 1048576),
+            heapTotalMb: Math.round(memory.heapTotal / 1048576),
+            externalMb: Math.round(memory.external / 1048576),
+            rssMb: Math.round(memory.rss / 1048576),
+            ...(suppressedCount > 0 ? { earlierStallsSuppressed: suppressedCount } : {}),
+        };
+        // Taken at recovery: thrash that stalled the loop is usually still measurable the instant after.
+        void readPressure().then((psi) =>
+            logger.warn(
+                { ...stall, psi },
+                "event loop stalled: high PSI means the sandbox (builds/tests/swap), dnsInFlight means a blocking resolver lookup, quiet both means this process",
+            ),
         );
         suppressedSince = Date.now();
         suppressedCount = 0;

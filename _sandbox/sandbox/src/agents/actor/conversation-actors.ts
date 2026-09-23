@@ -1,3 +1,4 @@
+import { keyedLock } from "@intentic/base/async";
 import type { ActiveTurn } from "../../agent/checkpoints/agent-steering.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import { recordConversationPrompt, recordPrompt } from "../../sessions/transcript-search.js";
@@ -5,7 +6,7 @@ import type { PersistedAgent } from "../registry/agents-store.js";
 import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, type ReplyOf, type SettleFlush } from "./conversation-decide.js";
 import { createHoldingsIndex, type Holding, type Holdings, type Share } from "./conversation-holdings.js";
 import { NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
-import { type ConversationState, idleConversation, type ResumeRecords, type StrandedKind, writing } from "./conversation-state.js";
+import { type ConversationState, type HeldRecord, idleConversation, writing } from "./conversation-state.js";
 
 // One actor per conversation, each holding the conversation's state and applying events to it through `decide`, the
 // only writer: an event is applied whole, synchronously, before any effect it named runs, so a claim is one atomic step
@@ -74,9 +75,8 @@ export interface ConversationActors {
     // Turns registered right now; a machine mid-turn is never idle.
     readonly activeTurnCount: () => number;
     readonly turnActive: (conversationId: string) => boolean;
-    // Every stranded record of one kind, oldest first: the order they were recorded in, which a re-record keeps and a
-    // drop forgets. A snapshot, since the pass reading it sends events that move it.
-    readonly stranded: <K extends StrandedKind>(kind: K) => readonly Stranded<K>[];
+    // Every held turn, first recorded first (a re-record keeps its place); a snapshot, since the pass moves what it reads.
+    readonly stranded: () => readonly Stranded[];
     // One kind of what conversations hold beside their state, each conversation's share on its actor.
     readonly holdings: <V>(kind: Holding<V>) => Holdings<V>;
     // What still holds anything of this conversation's, by name: its actor, a stranded record, a holding's item held by
@@ -86,18 +86,14 @@ export interface ConversationActors {
     readonly dispose: (conversationIds: readonly string[]) => Promise<void>;
 }
 
-export interface Stranded<K extends StrandedKind> {
+export interface Stranded {
     readonly conversationId: string;
-    readonly record: NonNullable<ResumeRecords[K]>;
+    readonly record: HeldRecord;
 }
-
-const STRANDED_KINDS: readonly StrandedKind[] = ["auth", "outage", "held"];
 
 interface Actor {
     state: ConversationState;
-    // The last queued land, which the next one waits behind; transport, not state, since a promise is not a value.
-    landChain: Promise<unknown> | undefined;
-    // The live turn's hard-cancel and steering queue, transport for the same reason.
+    // The live turn's hard-cancel and steering queue; transport, not state, since a callback is not a value.
     activeTurn: ActiveTurn | undefined;
     // Its share of every holding: records their owning module patches in place, waiters and timers, none of them values
     // `decide` could own.
@@ -130,16 +126,15 @@ const effectsOn = (books: ConversationBooks): { readonly [K in ConversationEffec
 
 export const createConversationActors = (books: ConversationBooks): ConversationActors => {
     const actors = new Map<string, Actor>();
-    // Which conversations hold a stranded record of each kind, in the order each was first recorded; an index over the
-    // actors' own state, kept beside it so the resume pass meets them oldest first.
-    const strandedOrder: Readonly<Record<StrandedKind, Set<string>>> = { auth: new Set(), outage: new Set(), held: new Set() };
+    // Lands queued per conversation, each behind the last however it ended.
+    const landChain = keyedLock<string>();
+    // Conversations holding a turn, in first-recorded order, so the resume pass meets them oldest first.
+    const strandedOrder = new Set<string>();
     const indexStranded = (id: string, state: ConversationState): void => {
-        for (const kind of STRANDED_KINDS) {
-            if (state.resume[kind] === undefined) {
-                strandedOrder[kind].delete(id);
-            } else {
-                strandedOrder[kind].add(id);
-            }
+        if (state.resume.held === undefined) {
+            strandedOrder.delete(id);
+        } else {
+            strandedOrder.add(id);
         }
     };
 
@@ -148,7 +143,7 @@ export const createConversationActors = (books: ConversationBooks): Conversation
         if (existing !== undefined) {
             return existing;
         }
-        const fresh: Actor = { state: idleConversation(books.entry(id)?.queue), landChain: undefined, activeTurn: undefined, held: new Map() };
+        const fresh: Actor = { state: idleConversation(books.entry(id)?.queue), activeTurn: undefined, held: new Map() };
         actors.set(id, fresh);
         return fresh;
     };
@@ -190,7 +185,9 @@ export const createConversationActors = (books: ConversationBooks): Conversation
         // An actor is made only for a conversation whose entry kept something waiting: asking must not leave a trace.
         queued: (id) => {
             const stored = books.entry(id)?.queue;
-            return actors.get(id)?.state.queue ?? (stored === undefined || stored.items.length === 0 ? (stored ?? NO_QUEUE) : actorOf(id).state.queue);
+            return (
+                actors.get(id)?.state.queue ?? (stored === undefined || stored.items.length === 0 ? (stored ?? NO_QUEUE) : actorOf(id).state.queue)
+            );
         },
         running,
         writing: (id) => {
@@ -217,21 +214,10 @@ export const createConversationActors = (books: ConversationBooks): Conversation
         },
         withLandLease: async (id, fn) => {
             send(id, { kind: "land-leased" });
-            const actor = actorOf(id);
-            const ahead = actor.landChain ?? Promise.resolve();
-            // Queued behind whatever is ahead, whichever way that ended.
-            const turn = ahead.then(
-                () => fn(),
-                () => fn(),
-            );
-            actor.landChain = turn.catch(() => undefined);
             try {
-                return await turn;
+                return await landChain(id, fn);
             } finally {
                 send(id, { kind: "land-released" });
-                if (actorOf(id).state.land.held === 0) {
-                    actorOf(id).landChain = undefined;
-                }
             }
         },
         withRewindLease: async (id, fn) => {
@@ -262,24 +248,18 @@ export const createConversationActors = (books: ConversationBooks): Conversation
         },
         activeTurnCount: () => [...actors.values()].filter((actor) => actor.activeTurn !== undefined).length,
         turnActive: (id) => actors.get(id)?.activeTurn !== undefined,
-        stranded: (kind) =>
-            [...strandedOrder[kind]].flatMap((conversationId) => {
-                const record = actors.get(conversationId)?.state.resume[kind];
+        stranded: () =>
+            [...strandedOrder].flatMap((conversationId) => {
+                const record = actors.get(conversationId)?.state.resume.held;
                 return record === undefined ? [] : [{ conversationId, record }];
             }),
         holdings: holdings.holdings,
-        traces: (id) => [
-            ...(actors.has(id) ? ["actor"] : []),
-            ...STRANDED_KINDS.filter((kind) => strandedOrder[kind].has(id)).map((kind) => `stranded ${kind}`),
-            ...holdings.traces(id),
-        ],
+        traces: (id) => [...(actors.has(id) ? ["actor"] : []), ...(strandedOrder.has(id) ? ["stranded"] : []), ...holdings.traces(id)],
         dispose: async (ids) => {
             const owed = holdings.release(new Set(ids));
             for (const id of ids) {
                 actors.delete(id);
-                for (const kind of STRANDED_KINDS) {
-                    strandedOrder[kind].delete(id);
-                }
+                strandedOrder.delete(id);
             }
             // Only once the actors are gone, so an owner letting go of an item meets none of them.
             for (const drop of owed) {

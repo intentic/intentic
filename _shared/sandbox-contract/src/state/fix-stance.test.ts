@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { fixStance } from "./fix-stance.js";
 import type { AgentSummary } from "../schemas/agents.js";
 

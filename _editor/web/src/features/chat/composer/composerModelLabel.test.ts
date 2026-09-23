@@ -2,7 +2,6 @@
 // line above the composer says nothing is connected, and a pill reading "Claude Opus 5" beside it contradicts it and
 // hides the one thing the control is there for.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach } from "bun:test";
 import { composerModelReading } from "./composerModelLabel";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, perProvider, providerModels, trialStatus } from "../accounts/providerCatalog";

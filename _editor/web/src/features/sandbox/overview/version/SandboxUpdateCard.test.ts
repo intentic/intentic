@@ -3,13 +3,12 @@
 // the rebuild from that checkout, and the trade is spelled out rather than made by a click.
 import "@intentic/testing/dom";
 import type { Environment } from "@intentic/sandbox-contract";
-import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const updateAvailable = ref(true);
 const localImage = ref<Environment[`localImage`]>(undefined);
-mock.module(`./useSandboxVersion`, () => ({
+jest.mock(`./useSandboxVersion`, () => ({
     useSandboxVersion: () => ({
         info: ref({ version: `1.53.0`, channel: `stable` }),
         installed: ref(`1.53.0`),
@@ -25,11 +24,11 @@ mock.module(`./useSandboxVersion`, () => ({
         localImage,
     }),
 }));
-mock.module(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet: ref([]) }) }));
-mock.module(`../../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ id: `sb1`, role: `owner` }) }) }));
-mock.module(`../../../../lib/useApi`, () => ({ apiClient: { sandbox: { hostedRestart: async () => undefined } } }));
+jest.mock(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet: ref([]) }) }));
+jest.mock(`../../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ id: `sb1`, role: `owner` }) }) }));
+jest.mock(`../../../../lib/useApi`, () => ({ apiClient: { sandbox: { hostedRestart: async () => undefined } } }));
 // Marked, not mounted: which executor the card chose is the whole subject, and each reaches a device on its own.
-mock.module(`../../../capabilities/connect/HostRecreate.vue`, () => ({
+jest.mock(`../../../capabilities/connect/HostRecreate.vue`, () => ({
     default: defineComponent({
         props: { action: { type: String, default: `` } },
         render(): ReturnType<typeof h> {
@@ -37,7 +36,7 @@ mock.module(`../../../capabilities/connect/HostRecreate.vue`, () => ({
         },
     }),
 }));
-mock.module(`../../environment/DevRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `checkout` }) }) }));
+jest.mock(`../../environment/DevRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `checkout` }) }) }));
 
 const { default: SandboxUpdateCard } = await import("./SandboxUpdateCard.vue");
 

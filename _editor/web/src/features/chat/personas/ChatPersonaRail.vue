@@ -98,11 +98,13 @@ const liveOf = (entry: PersonaChat | undefined): { icon: IconName; text: string;
     if (agent !== undefined && turnInFlight(agent)) {
         return {
             icon: (agent.subagents?.running ?? 0) > 0 ? `users` : activityIcon(agent.activity?.tool),
-            text: activityLine(agent) ?? t(`chat.chatPersonaRail.working`),
+            text: activityLine(agent) ?? t(`shared.working`),
             since: agent.startedAt,
         };
     }
-    return conversation.turn.streaming.value ? { icon: activityIcon(undefined), text: t(`chat.chatPersonaRail.working`), since: conversation.turn.turnStartedAt.value } : undefined;
+    return conversation.turn.streaming.value
+        ? { icon: activityIcon(undefined), text: t(`shared.working`), since: conversation.turn.turnStartedAt.value }
+        : undefined;
 };
 
 interface PersonaRow {
@@ -201,7 +203,7 @@ const sessionsOf = (row: PersonaRow) =>
                 <!-- A real link, since the sandbox hub has an address and this is often the first place someone finds it. -->
                 <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
                     <Icon name="plus" class="text-2xs" />
-                    {{ t(`chat.chatPersonaRail.setUpPersona`) }}
+                    {{ t(`shared.setUpPersona`) }}
                 </RouterLink>
             </template>
 
@@ -282,7 +284,7 @@ const sessionsOf = (row: PersonaRow) =>
                 <!-- Link to the page that owns these rows, in the same place the composer's picker puts it. -->
                 <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
                     <Icon name="cog" class="text-2xs" />
-                    {{ t(`chat.chatPersonaRail.managePersonas`) }}
+                    {{ t(`shared.managePersonas`) }}
                 </RouterLink>
             </template>
         </div>

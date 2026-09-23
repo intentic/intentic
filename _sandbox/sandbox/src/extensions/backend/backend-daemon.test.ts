@@ -5,7 +5,6 @@ import { type ExtensionManifest, ExtensionManifestSchema, extensionIdOf, sandbox
 import { type ContractRoute, requestPathFor, SANDBOX_ROUTES } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { afterEach, describe, expect, test } from "bun:test";
 import { admitByGrant, type GrantSources, grantsOf } from "../../auth/grants.js";
 import { createDaemonApi } from "./backend-daemon.js";
 

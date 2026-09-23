@@ -1,22 +1,27 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
+// The daemon's answers to the card writes, one mock per procedure, each held open until a case settles it.
+const daemon = { rename: jest.fn(), autoLand: jest.fn(), breakPolicy: jest.fn(), stopWatching: jest.fn() };
+
 // The fleet store pulls useChat and the app shell at import time; these cut the edges that reach `window.env` (router,
 // analytics, sandbox client, diagnostics) without touching the merge under test. The same cuts as useAgents.test.ts.
-mock.module("../../../router", () => ({ router: { push: mock() } }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
-mock.module("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }) }));
-mock.module("../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock(), sandboxRequest: mock() }));
-mock.module("../../../app/clientDiagnostics", () => ({ reportClient: mock() }));
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../sandbox/client/useSandbox", () => ({
+    useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
+}));
+jest.mock("../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: daemon }) }));
+jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
+jest.mock("../../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { useAgents } from "./useAgents";
-import { CEILING_MS, GRACE_MS, claim } from "./useAgents-provisional";
+import type { FleetAgent } from "./useAgents-fleet";
+import { CEILING_MS, GRACE_MS, claim, hold, pendingOn } from "./useAgents-provisional";
 import { setAgents } from "./useAgents-registry";
 
 const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
@@ -43,6 +48,9 @@ const laneOf = (id: string): string | undefined =>
 beforeEach(() => {
     resetSandboxScope();
     rev = 0;
+    for (const procedure of Object.values(daemon)) {
+        procedure.mockReset();
+    }
 });
 
 afterEach(() => {
@@ -93,7 +101,11 @@ describe("what a press draws before the daemon answers", () => {
     // A claim may only draw what the daemon could reach from where the card really is: a turn's own land reads
     // `running`, a settled card has nothing to stop, and a parked turn is answered rather than restarted.
     it("draws nothing the card's real standing couldn't reach", () => {
-        roster(card(`live`, { status: `running`, startedAt: 500 }), card(`done`), card(`asks`, { status: `awaiting`, attention: { ...none, question: true } }));
+        roster(
+            card(`live`, { status: `running`, startedAt: 500 }),
+            card(`done`),
+            card(`asks`, { status: `awaiting`, attention: { ...none, question: true } }),
+        );
 
         claim(`live`, undefined, `land`);
         claim(`done`, undefined, `stop`);
@@ -194,5 +206,90 @@ describe("how a claim retires", () => {
         roster(card(`a1`, { status: `ready` }));
 
         expect(shown(`a1`)?.status).toBe(`ready`);
+    });
+});
+
+describe("the board action out on a card", () => {
+    // Keyed by (box, id), since ids repeat across boxes: no other card's press or answer may spin or quiet this one.
+    it("scopes each action to its own card and box, and lifts only its own", () => {
+        const at = (): unknown[] => [pendingOn(`a`), pendingOn(`b`), pendingOn(`a`, `box-2`)];
+        const liftA = hold(`a`, undefined, { action: `resolve` });
+        const liftB = hold(`b`, undefined, { action: `stop` });
+        const liftThere = hold(`a`, `box-2`, { action: `land` });
+        expect(at()).toEqual([`resolve`, `stop`, `land`]);
+
+        liftA();
+        expect(at()).toEqual([undefined, `stop`, `land`]);
+        liftThere();
+        liftB();
+        expect(at()).toEqual([undefined, undefined, undefined]);
+    });
+
+    it("keeps a claim drawn when the action beside it lifts", () => {
+        roster(card(`a1`, { status: `ready` }));
+        const lift = hold(`a1`, undefined, { action: `land` });
+        claim(`a1`, undefined, `land`);
+
+        lift();
+
+        expect({ pending: pendingOn(`a1`), status: shown(`a1`)?.status }).toEqual({ pending: undefined, status: `landing` });
+    });
+
+    it("lifts nothing from the next board when its press answers after a switch", () => {
+        const lift = hold(`a`, undefined, { action: `resolve` });
+        resetSandboxScope();
+        const next = hold(`a`, undefined, { action: `stop` });
+
+        lift();
+
+        expect(pendingOn(`a`)).toBe(`stop`);
+        next();
+    });
+});
+
+describe("a write drawn from the press", () => {
+    const first = { id: `w1`, note: `CI`, intervalSeconds: 60, deadlineAt: 9_000 };
+    const second = { id: `w2`, note: `deploy`, intervalSeconds: 60, deadlineAt: 9_000 };
+    const before = card(`a1`, { status: `idle`, title: `Old name`, autoLand: true, outagePolicy: `wait`, watches: [first, second] });
+    // The daemon's own word, different from both `before` and every drawn value, so a lingering draw shows.
+    const answered = card(`a1`, { status: `idle`, title: `The daemon's name`, autoLand: false, outagePolicy: `retry`, watches: [first] });
+    // Each write, the procedure it goes through, and the fields it draws until that procedure answers.
+    const writes: [string, () => Promise<void>, keyof typeof daemon, Partial<AgentSummary>][] = [
+        [`a rename, trimmed`, () => useAgents().rename(`a1`, `  New name `), `rename`, { title: `New name` }],
+        [`an auto-land cleared back to inherit`, () => useAgents().setAutoLand(`a1`, null), `autoLand`, { autoLand: undefined }],
+        [
+            `a policy its ending cannot take, as inherit`,
+            () => useAgents().setBreakPolicy(`a1`, `outage`, `move`),
+            `breakPolicy`,
+            { outagePolicy: undefined },
+        ],
+        [`one watch disarmed`, () => useAgents().stopWatching(`a1`, `w1`), `stopWatching`, { watches: [second] }],
+        [`every watch disarmed`, () => useAgents().stopWatching(`a1`), `stopWatching`, { watches: undefined }],
+    ];
+    const fieldsOf = (fields: Partial<AgentSummary>, of: Partial<FleetAgent> | undefined = shown(`a1`)): Record<string, unknown> =>
+        Object.fromEntries(Object.keys(fields).map((key) => [key, of?.[key as keyof FleetAgent]]));
+
+    it.each(writes)(`draws %s over every frame before its answer, then the answer itself`, async (_, press, procedure, drawn) => {
+        roster(before);
+        let answer: (summary: AgentSummary) => void = () => undefined;
+        daemon[procedure].mockImplementation(() => new Promise((settle) => (answer = settle)));
+
+        const pressed = press();
+        expect(fieldsOf(drawn)).toEqual(drawn);
+        roster(before);
+        expect(fieldsOf(drawn)).toEqual(drawn);
+
+        answer(answered);
+        await pressed;
+        expect(fieldsOf(drawn)).toEqual(fieldsOf(drawn, answered));
+    });
+
+    it("puts the daemon's own value back when the write is refused", async () => {
+        roster(before);
+        daemon.autoLand.mockRejectedValue(new Error(`refused`));
+
+        await expect(useAgents().setAutoLand(`a1`, false)).rejects.toThrow(`refused`);
+
+        expect(shown(`a1`)?.autoLand).toBe(true);
     });
 });

@@ -1,7 +1,6 @@
 // Tests what a control does between click and answer, across three surfaces (state machine, Button,
 // directive) sharing one press lock contract.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createApp, h, nextTick, withDirectives, type App } from "vue";
 import { Button, vAction } from "@intentic/ui";

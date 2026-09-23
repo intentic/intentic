@@ -3,11 +3,12 @@
 // a module that binds the whole Services and hands it to nothing (NARROW_TAKERS), and a value import between subsystems
 // whose target already reaches back to its source, a cycle of any length (the standing ones: baselines/daemon-cycles.json).
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { importsOf } from "./lib/imports.mjs";
+import { ratchet } from "./lib/ratchet.mjs";
 import { finish } from "./lib/report.mjs";
-import { root, writesBaselines } from "./lib/repo.mjs";
+import { root } from "./lib/repo.mjs";
 import { stronglyConnected } from "./lib/strongly-connected.mjs";
 
 const src = join(root, "_sandbox/sandbox/src");
@@ -157,24 +158,12 @@ const closes = ([from, to]) => {
     return `${from} -> ${to} closes ${[from, ...back].join(" -> ")}: imported at ${files.slice(0, 3).join(", ")}${more}; the way back is ${hops.join(", ")}`;
 };
 
-// Each key is one standing edge, its value the reason it stands where one was recorded ("" where none was).
-const baseline = existsSync(join(root, BASELINE_PATH)) ? JSON.parse(readFileSync(join(root, BASELINE_PATH), "utf8")) : {};
-const addedCycles = [...cycleEdges.keys()]
-    .filter((edge) => !Object.hasOwn(baseline, edge))
+// Each baseline key is one standing edge, its value the reason it stands ("" where none was recorded).
+const { grown: newEdges } = ratchet("daemon-boundaries", "daemon-cycles", new Map([...cycleEdges.keys()].map((edge) => [edge, 1])));
+const addedCycles = newEdges
+    .map(({ key }) => key)
     .sort()
     .map((edge) => closes(cycleEdges.get(edge)));
-
-// A standing edge the tree has cut is tightened out of the baseline, never failed (lib/repo.mjs's writesBaselines).
-const beaten = Object.keys(baseline).filter((edge) => !cycleEdges.has(edge));
-if (beaten.length > 0 && writesBaselines()) {
-    const kept = Object.fromEntries(Object.entries(baseline).filter(([edge]) => cycleEdges.has(edge)));
-    writeFileSync(join(root, BASELINE_PATH), `${JSON.stringify(kept, null, 4)}\n`);
-    console.log(`daemon-boundaries: tightened ${BASELINE_PATH} to what the tree has (${beaten.join(", ")} cut); it rides the next commit`);
-} else if (beaten.length > 0) {
-    console.log(
-        `daemon-boundaries: the tree beats its baseline (${beaten.join(", ")} cut); the checkout that commits tightens ${BASELINE_PATH} on its next run`,
-    );
-}
 
 const cycleSubsystems = new Set([...cycleEdges.values()].flat());
 const edgeCount = [...edges.values()].reduce((count, targets) => count + targets.size, 0);

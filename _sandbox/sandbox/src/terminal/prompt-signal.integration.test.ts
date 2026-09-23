@@ -1,7 +1,6 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { watchPromptSignals } from "./prompt-signal.js";
 

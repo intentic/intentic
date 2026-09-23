@@ -3,7 +3,6 @@ import { createORPCClient, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { RPCLink } from "@orpc/client/websocket";
 import { RPCHandler } from "@orpc/server/websocket";
-import { test, expect } from "bun:test";
 import { createHostRouter } from "./router.js";
 
 // Both ends of the socket, over a real oRPC handler and link built from the same `deviceContract`, so a

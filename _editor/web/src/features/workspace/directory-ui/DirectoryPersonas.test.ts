@@ -3,15 +3,14 @@
 import "@intentic/testing/dom";
 import type { Persona } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const personas = ref<Persona[]>([]);
-const save = mock<(persona: Persona) => Promise<unknown>>().mockResolvedValue({ ok: true });
+const save = jest.fn<(persona: Persona) => Promise<unknown>>().mockResolvedValue({ ok: true });
 
-mock.module(`../../sandbox/personas/usePersonas`, () => ({
+jest.mock(`../../sandbox/personas/usePersonas`, () => ({
     usePersonas: () => ({
         personas,
         connected: ref([]),
@@ -19,12 +18,12 @@ mock.module(`../../sandbox/personas/usePersonas`, () => ({
         error: ref(undefined),
         isLoading: ref(false),
         save: { mutateAsync: save, isPending: ref(false) },
-        remove: { mutateAsync: mock(), isPending: ref(false) },
+        remove: { mutateAsync: jest.fn(), isPending: ref(false) },
     }),
 }));
 
 // Mocked since the real composable reaches the sandbox client at import time, unavailable under jsdom.
-mock.module(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities: ref([]) }) }));
+jest.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities: ref([]) }) }));
 
 const { default: DirectoryPersonas } = await import("./DirectoryPersonas.vue");
 

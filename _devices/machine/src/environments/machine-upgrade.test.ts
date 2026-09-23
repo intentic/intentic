@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import type { UpgradeOutcome } from "../upgrade.js";
 import { machineTarget, type MachineIo, upgradeMachine } from "./machine-upgrade.js";
 

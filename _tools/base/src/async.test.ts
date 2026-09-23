@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { Coalescer, createBackoff, Delayer, narrate, pollUntil, retry, sleep, SingleFlight } from "./async.js";
+import { Coalescer, createBackoff, Delayer, keyedLock, narrate, pollUntil, retry, sleep, SingleFlight } from "./async.js";
 
 beforeEach(() => {
     jest.useFakeTimers();
@@ -13,7 +12,7 @@ afterEach(() => {
 describe(`Delayer`, () => {
     it(`runs once after the caller goes quiet`, async () => {
         const delayer = new Delayer<string>(50);
-        const task = mock(() => `done`);
+        const task = jest.fn(() => `done`);
 
         const first = delayer.trigger(task);
         await advanceTimersByTimeAsync(5);
@@ -53,7 +52,7 @@ describe(`Delayer`, () => {
 
     it(`drops the pending run when disposed`, async () => {
         const delayer = new Delayer<string>(10);
-        const task = mock(() => `done`);
+        const task = jest.fn(() => `done`);
         void delayer.trigger(task);
 
         delayer.dispose();
@@ -66,7 +65,7 @@ describe(`Delayer`, () => {
 
 describe(`Coalescer`, () => {
     it(`flushes on the window opened by the first item, however long the burst runs`, () => {
-        const flush = mock();
+        const flush = jest.fn();
         const coalescer = new Coalescer<string>(50, flush);
 
         coalescer.add(`a`);
@@ -79,7 +78,7 @@ describe(`Coalescer`, () => {
     });
 
     it(`opens a fresh window for what arrives after a flush`, () => {
-        const flush = mock();
+        const flush = jest.fn();
         const coalescer = new Coalescer<string>(50, flush);
         coalescer.add(`first`);
         jest.advanceTimersByTime(50);
@@ -91,7 +90,7 @@ describe(`Coalescer`, () => {
     });
 
     it(`keeps working when add is detached from the instance`, () => {
-        const flush = mock();
+        const flush = jest.fn();
         const { add } = new Coalescer<string>(50, flush);
 
         add(`detached`);
@@ -102,7 +101,7 @@ describe(`Coalescer`, () => {
     });
 
     it(`never flushes an empty batch`, () => {
-        const flush = mock();
+        const flush = jest.fn();
         const idle = new Coalescer<string>(50, flush);
 
         jest.advanceTimersByTime(100);
@@ -112,7 +111,7 @@ describe(`Coalescer`, () => {
     });
 
     it(`emits what it holds on flushNow, and drops it on dispose`, () => {
-        const flush = mock();
+        const flush = jest.fn();
         const coalescer = new Coalescer<string>(50, flush);
         coalescer.add(`held`);
 
@@ -130,7 +129,7 @@ describe(`Coalescer`, () => {
 describe(`SingleFlight`, () => {
     it(`shares one run between concurrent callers for the same key`, async () => {
         const flight = new SingleFlight<string, number>();
-        const task = mock(async () => {
+        const task = jest.fn(async () => {
             await new Promise((resolve) => setTimeout(resolve, 10));
             return 42;
         });
@@ -144,7 +143,7 @@ describe(`SingleFlight`, () => {
 
     it(`runs different keys independently`, async () => {
         const flight = new SingleFlight<string, number>();
-        const task = mock(async () => 1);
+        const task = jest.fn(async () => 1);
 
         await Promise.all([flight.run(`one`, task), flight.run(`other`, task)]);
 
@@ -153,7 +152,7 @@ describe(`SingleFlight`, () => {
 
     it(`lets the next caller retry after a failed run`, async () => {
         const flight = new SingleFlight<string, number>();
-        const task = mock().mockRejectedValueOnce(new Error(`transient`)).mockResolvedValueOnce(7);
+        const task = jest.fn().mockRejectedValueOnce(new Error(`transient`)).mockResolvedValueOnce(7);
 
         await expect(flight.run(`account`, task)).rejects.toThrow(`transient`);
 
@@ -163,7 +162,7 @@ describe(`SingleFlight`, () => {
 
     it(`hands back the run in flight, and nothing once it has settled`, async () => {
         const flight = new SingleFlight<string, number>();
-        const task = mock(async () => {
+        const task = jest.fn(async () => {
             await new Promise((resolve) => setTimeout(resolve, 10));
             return 1;
         });
@@ -183,9 +182,37 @@ describe(`SingleFlight`, () => {
     });
 });
 
+describe(`keyedLock`, () => {
+    it(`runs one task at a time per key, the next after the last however it ended`, async () => {
+        const lock = keyedLock<string>();
+        const order: string[] = [];
+        const slow = (name: string, fail = false) => async (): Promise<string> => {
+            order.push(`${name} start`);
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            order.push(`${name} end`);
+            if (fail) {
+                throw new Error(name);
+            }
+            return name;
+        };
+
+        const first = lock(`repo`, slow(`first`, true));
+        const second = lock(`repo`, slow(`second`));
+        const other = lock(`other`, slow(`other`));
+        await advanceTimersByTimeAsync(20);
+
+        await expect(first).rejects.toThrow(`first`);
+        await expect(second).resolves.toBe(`second`);
+        await expect(other).resolves.toBe(`other`);
+        expect(order.filter((step) => !step.startsWith(`other`))).toEqual([`first start`, `first end`, `second start`, `second end`]);
+        // Another key never waits on this one's queue.
+        expect(order.indexOf(`other start`)).toBeLessThan(order.indexOf(`first end`));
+    });
+});
+
 describe(`retry`, () => {
     it(`returns the first success without waiting again`, async () => {
-        const task = mock().mockRejectedValueOnce(new Error(`once`)).mockResolvedValueOnce(`ok`);
+        const task = jest.fn().mockRejectedValueOnce(new Error(`once`)).mockResolvedValueOnce(`ok`);
 
         const pending = retry(task, 10, 3);
         await advanceTimersByTimeAsync(10);
@@ -195,7 +222,7 @@ describe(`retry`, () => {
     });
 
     it(`throws what the final attempt threw`, async () => {
-        const task = mock().mockRejectedValue(new Error(`still failing`));
+        const task = jest.fn().mockRejectedValue(new Error(`still failing`));
 
         // Caught before the clock advances, or the runner reports the rejection as unhandled during the tick.
         const settled = retry(task, 10, 3).catch((error: unknown) => error);
@@ -236,8 +263,8 @@ describe(`sleep`, () => {
 
     it(`leaves no listener behind on either path`, async () => {
         const controller = new AbortController();
-        const added = spyOn(controller.signal, `addEventListener`);
-        const removed = spyOn(controller.signal, `removeEventListener`);
+        const added = jest.spyOn(controller.signal, `addEventListener`);
+        const removed = jest.spyOn(controller.signal, `removeEventListener`);
 
         const pending = sleep(10, { signal: controller.signal });
         await advanceTimersByTimeAsync(10);
@@ -251,7 +278,7 @@ describe(`sleep`, () => {
 describe(`pollUntil`, () => {
     it(`probes before consulting the clock, then every interval until the check passes`, async () => {
         let answers = 0;
-        const check = mock(() => ++answers >= 3);
+        const check = jest.fn(() => ++answers >= 3);
         const outcome = pollUntil(check, { intervalMs: 50, timeoutMs: 10_000 });
         expect(check).toHaveBeenCalledTimes(1);
         await advanceTimersByTimeAsync(100);
@@ -287,7 +314,7 @@ describe(`pollUntil`, () => {
     });
 
     it(`runs onRetry only when another probe is coming`, async () => {
-        const onRetry = mock();
+        const onRetry = jest.fn();
         const missed = pollUntil(() => false, { intervalMs: 50, timeoutMs: 120, onRetry });
         await advanceTimersByTimeAsync(200);
         await expect(missed).resolves.toBe(false);
@@ -300,7 +327,7 @@ describe(`pollUntil`, () => {
 
     it(`runs on an injected clock, so a long wait costs a test nothing`, async () => {
         let clock = 0;
-        const wait = mock(async (ms: number) => {
+        const wait = jest.fn(async (ms: number) => {
             clock += ms;
         });
         let answers = 0;

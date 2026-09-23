@@ -1,4 +1,3 @@
-import { describe, expect, test } from "bun:test";
 import { AgentTurnSchema, profileOf, TurnProfileSchema } from "./agent.js";
 
 // The profile is what every continuation carries whole, so its field set and its normalisation are the contract: a key

@@ -1,7 +1,6 @@
 // Pins that a recommendation carries the evidence read to make it, and that scan-known answers (e.g. an instance
 // url) are pre-filled. The evidence is legible on the entry, not the entry, since the grid stays one-line entrys.
 import "@intentic/testing/dom";
-import { it, expect, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { CapabilityRecommendation } from "@intentic/api-contract";
@@ -13,17 +12,17 @@ import * as actualVueRouter from "vue-router";
 // Which entry the page is on and whether the setup walk runs, both read off the URL; `` is the catalog itself.
 let entry = ``;
 let setup: string | undefined;
-const push = mock();
-mock.module(`vue-router`, () => ({
+const push = jest.fn();
+jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRoute: () => ({ params: { entry }, query: setup === undefined ? {} : { setup } }) as never,
-    useRouter: () => ({ push, replace: mock() }) as never,
+    useRouter: () => ({ push, replace: jest.fn() }) as never,
 }));
 
 // The gitlab entry is contributed, not static, with its instance url as the field the scan can answer. The registry
 // cache backs the Extension entry's counts; nothing here has browsed it.
-mock.module(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-mock.module(`../extensions/useExtensions`, () => ({
+jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
+jest.mock(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
         extensions: ref([]),
@@ -52,41 +51,38 @@ mock.module(`../extensions/useExtensions`, () => ({
 }));
 
 const recommendations = ref<CapabilityRecommendation[]>([]);
-const dismiss = mock();
-mock.module(`./connect/useCapabilities`, () => ({
+const dismiss = jest.fn();
+jest.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: (id: string) => recommendations.value.find((recommendation) => recommendation.entry === id),
         capabilities: ref([]),
         error: ref(undefined),
-        add: mock(),
-        remove: { mutateAsync: mock(), isPending: ref(false) },
-        rename: { mutateAsync: mock(), isPending: ref(false) },
-        refetch: mock(),
+        add: jest.fn(),
+        remove: { mutateAsync: jest.fn(), isPending: ref(false) },
+        rename: { mutateAsync: jest.fn(), isPending: ref(false) },
+        refetch: jest.fn(),
         dismissRecommendation: { mutateAsync: dismiss, isPending: ref(false) },
     }),
-    browseMarketplace: mock(),
+    browseMarketplace: jest.fn(),
     // The connect forms read these at link time though no case here opens one; a mock missing a name anything in
     // the graph imports is refused.
-    readRemoteRefs: mock(async () => ({ refs: [] })),
-    probeCapability: mock(),
+    readRemoteRefs: jest.fn(async () => ({ refs: [] })),
+    probeCapability: jest.fn(),
 }));
-mock.module(`../terminal/useBackgroundProcesses`, () => ({
-    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: mock(), stop: mock() }),
-    viewProcessLogs: mock(),
+jest.mock(`../terminal/useBackgroundProcesses`, () => ({
+    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
+    viewProcessLogs: jest.fn(),
 }));
-mock.module(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: mock(), refresh: mock(), start: mock(), stop: mock() }),
+jest.mock(`../composables/sandbox/useHostConnect`, () => ({
+    useHostConnect: () => ({ hostFor: () => undefined, revoke: jest.fn(), refresh: jest.fn(), start: jest.fn(), stop: jest.fn() }),
 }));
-// VpnConnections dials as well as lists, so `error` must be present or the render throws.
-mock.module(`../sandbox/devices/useVpn`, () => ({
-    importForticlient: mock(),
-    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: mock(), disconnect: mock() }),
+// LiveLinkRows opens as well as lists, so `error` must be present or the render throws.
+jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
+    importForticlient: jest.fn(),
+    useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));
-mock.module(`../sandbox/devices/useNetdisk`, () => ({
-    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: mock(), unmount: mock() }),
-}));
-mock.module(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-mock.module(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");
 

@@ -1,6 +1,5 @@
-import { type AgentEvent, RESUME_NOTES, SandboxSettingsSchema, type UsageWindow } from "@intentic/sandbox-contract";
-import { afterEach, expect, mock, test } from "bun:test";
-import { hoisted, SETTLES, waitFor } from "@intentic/testing/bun";
+import type { AgentEvent, UsageWindow } from "@intentic/sandbox-contract";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import { collect } from "../../harness/route-client.testing.js";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";
@@ -13,18 +12,15 @@ import * as verifyNudge from "../verification/verify-nudge.js";
 import type { AgentRequest } from "../providers/agent-request.js";
 import { streamAgent } from "./agent.routes.js";
 
-// Pins a turn's frames and every write it makes, exactly, through streamAgent with a scripted runtime: the stream a
-// window reads, the stores a settled turn leaves behind, and the resume bookkeeping a held turn is re-run from.
+// streamAgent's wiring with a scripted runtime: frames, settled stores, the recorded hold; the matrix is classify-failure.test.ts.
 
 // The resume bookkeeping is what the turn tells its conversation, noted as it is sent (`turnServices`); the verify nudge
 // is module state, recorded on its way through to the real one.
-const { resumes, nudges } = hoisted(() => ({
-    resumes: [] as { readonly conversationId: string; readonly event: ConversationEvent }[],
-    nudges: [] as Parameters<typeof verifyNudge.nudgeUnverifiedWork>[0][],
-}));
+const resumes = [] as { readonly conversationId: string; readonly event: ConversationEvent }[];
+const nudges = [] as Parameters<typeof verifyNudge.nudgeUnverifiedWork>[0][];
 // The events that are resume bookkeeping, among everything else a turn tells its conversation.
-const RESUME_EVENTS: ReadonlySet<string> = new Set(["resume-superseded", "turn-got-somewhere", "turn-held", "auth-refused", "outage-stranded"]);
-mock.module("../verification/verify-nudge.js", () => ({
+const RESUME_EVENTS: ReadonlySet<string> = new Set(["resume-superseded", "turn-got-somewhere", "turn-held"]);
+jest.mock("../verification/verify-nudge.js", () => ({
     ...verifyNudge,
     nudgeUnverifiedWork: async (nudge: Parameters<typeof verifyNudge.nudgeUnverifiedWork>[0]) => {
         nudges.push(nudge);
@@ -344,58 +340,6 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
     ]);
 });
 
-test("a spent allowance with no reset anywhere is held without one, and without a conversation goes out bare", async () => {
-    const refusal: AgentEvent[] = [{ kind: "error", code: "rate_limit", message: "Claude usage limit reached." }, { kind: "done" }];
-    const held = turnServices(scripted(refusal));
-
-    expect(await collect(streamAgent(held.services, { prompt: "carry on", conversationId: "frames-limit-open" }, undefined))).toStrictEqual([
-        { kind: "error", code: "rate_limit", message: "Claude usage limit reached.", held: { ran: false, handoffTokens: expect.any(Number) } },
-        { kind: "done" },
-    ]);
-    expect(resumes.filter(({ event }) => event.kind === "turn-held")).toStrictEqual([
-        {
-            conversationId: "frames-limit-open",
-            event: {
-                kind: "turn-held",
-                held: {
-                    input: { prompt: "carry on", conversationId: "frames-limit-open" },
-                    reason: "limit",
-                    ran: false,
-                    standing: { state: "no-code", paths: [], check: undefined },
-                    handoffTokens: expect.any(Number),
-                },
-            },
-        },
-    ]);
-
-    resumes.length = 0;
-    const bare = turnServices(scripted(refusal));
-    expect(await collect(streamAgent(bare.services, { prompt: "carry on" }, undefined))).toStrictEqual([...refusal]);
-    // Nothing to hold without a conversation, and no ladder to reset either.
-    expect(resumes).toStrictEqual([]);
-    expect(bare.writes.providerRefusals).toStrictEqual([
-        { provider: "claude", refusal: { at: expect.any(Number), kind: "limit", message: "Claude usage limit reached.", account: "default" } },
-    ]);
-    expect(bare.writes.usage).toStrictEqual([
-        {
-            provider: "claude",
-            account: "default",
-            harness: "native",
-            outcome: "error",
-            errorCode: "rate_limit",
-            errorMessage: "Claude usage limit reached.",
-            turns: 0,
-            inputTokens: 0,
-            outputTokens: 0,
-            cacheReadTokens: 0,
-            cacheCreationTokens: 0,
-            costUsd: 0,
-            durationMs: 0,
-            autoPicked: undefined,
-        },
-    ]);
-});
-
 test("an outage goes out as the breaker's retry frame, and remembers the session for the resume", async () => {
     const input: TurnInput = { prompt: "keep going", conversationId: "frames-outage" };
     const {
@@ -429,12 +373,10 @@ test("an outage goes out as the breaker's retry frame, and remembers the session
         {
             conversationId: "frames-outage",
             event: {
-                kind: "outage-stranded",
-                failure: { input: { ...input, conversationId: "frames-outage" }, sessionId: "s-outage", provider: "claude" },
+                kind: "turn-held",
+                held: { input: { ...input, conversationId: "frames-outage" }, reason: "outage", sessionId: "s-outage", ran: false },
             },
         },
-        // A coded failure named its own remedy, so nothing is held and the ladder starts over.
-        { conversationId: "frames-outage", event: { kind: "turn-got-somewhere" } },
     ]);
     expect(writes.providerRefusals).toStrictEqual([]);
     expect(writes.headroomRefreshes).toStrictEqual([]);
@@ -454,38 +396,14 @@ test("an outage goes out as the breaker's retry frame, and remembers the session
     ]);
 });
 
-test("an outage on a conversation armed to retry names the appointment the breaker keeps", async () => {
-    const { services: s } = turnServices(
-        scripted([{ kind: "error", code: "provider-outage", message: "Anthropic is overloaded." }, { kind: "done" }]),
-        {
-            sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ outagePolicy: "retry" }) },
-        },
-    );
-
-    const [failure] = await collect(streamAgent(s, { prompt: "keep going", conversationId: "frames-outage-armed" }, undefined));
-
-    expect(failure).toStrictEqual({
-        kind: "error",
-        code: "provider-outage",
-        message: "Anthropic is overloaded.",
-        autoResume: "scheduled",
-        nextAt: expect.any(Number),
-        outage: { retryAt: expect.any(Number) },
-        retries: { made: 0, max: 6 },
-    });
-    // The appointment is the breaker's own retry, not a second clock.
-    expect(failure?.kind === "error" ? failure.nextAt : undefined).toBe(failure?.kind === "error" ? failure.outage?.retryAt : undefined);
-});
-
-test("a refused credential is promised a re-mint when the turn can be resumed, and recorded for it", async () => {
+test("a refused credential is promised a re-mint and held for it, unless the turn is itself the re-mint", async () => {
     const input: TurnInput = { prompt: "go", conversationId: "frames-token" };
-    const { services: s, writes } = turnServices(
-        scripted([
-            { kind: "session", sessionId: "s-token" },
-            { kind: "error", code: "claude-token-refused", message: "401 invalid bearer token" },
-            { kind: "done" },
-        ]),
-    );
+    const refusal = scripted([
+        { kind: "session", sessionId: "s-token" },
+        { kind: "error", code: "claude-token-refused", message: "401 invalid bearer token" },
+        { kind: "done" },
+    ]);
+    const { services: s, writes } = turnServices(refusal);
 
     const frames = await collect(streamAgent(s, input, undefined));
 
@@ -503,174 +421,30 @@ test("a refused credential is promised a re-mint when the turn can be resumed, a
         {
             conversationId: "frames-token",
             event: {
-                kind: "auth-refused",
-                failure: { input: { ...input, conversationId: "frames-token" }, sessionId: "s-token", account: "default", refusedToken: "tok-xyz" },
-            },
-        },
-        { conversationId: "frames-token", event: { kind: "turn-got-somewhere" } },
-    ]);
-});
-
-test("a refused credential on a turn that is itself the re-mint goes out bare and records nothing to resume", async () => {
-    const prompt = `${RESUME_NOTES.auth}\n\ngo`;
-    const { services: s } = turnServices(
-        scripted([{ kind: "error", code: "claude-token-refused", message: "401 invalid bearer token" }, { kind: "done" }]),
-    );
-
-    const frames = await collect(streamAgent(s, { prompt, conversationId: "frames-token-again" }, undefined));
-
-    expect(frames).toStrictEqual([{ kind: "error", code: "claude-token-refused", message: "401 invalid bearer token" }, { kind: "done" }]);
-    expect(resumes).toStrictEqual([
-        { conversationId: "frames-token-again", event: { kind: "resume-superseded" } },
-        { conversationId: "frames-token-again", event: { kind: "turn-got-somewhere" } },
-    ]);
-});
-
-test("a seat the org switched off is filed against the account, and the frame goes out as the runtime said it", async () => {
-    const {
-        services: s,
-        writes,
-        lines,
-    } = turnServices(
-        scripted([{ kind: "error", code: "claude-not-entitled", message: "Claude Code is not enabled for this organization" }, { kind: "done" }]),
-    );
-
-    const frames = await collect(streamAgent(s, { prompt: "go", conversationId: "frames-seat" }, undefined));
-
-    expect(frames).toStrictEqual([
-        { kind: "error", code: "claude-not-entitled", message: "Claude Code is not enabled for this organization" },
-        { kind: "done" },
-    ]);
-    expect(writes.seatsRefused).toStrictEqual([{ account: "default", reason: "Claude Code is not enabled for this organization" }]);
-    expect(writes.providerRefusals).toStrictEqual([
-        {
-            provider: "claude",
-            refusal: { at: expect.any(Number), kind: "entitlement", message: "Claude Code is not enabled for this organization", account: "default" },
-        },
-    ]);
-    expect(writes.headroomRefreshes).toStrictEqual([{ scope: { providers: ["claude"], account: "default" }, maxAgeMs: 0 }]);
-    expect(failureLines(lines).map(({ level, code, message }) => ({ level, code, message }))).toStrictEqual([
-        { level: "warn", code: "claude-not-entitled", message: "turn refused" },
-    ]);
-});
-
-test("a model the plan does not cover is filed against the model, not the provider", async () => {
-    const {
-        services: s,
-        writes,
-        lines,
-    } = turnServices(scripted([{ kind: "error", code: "model-unavailable", message: "Your plan does not include Opus." }, { kind: "done" }]));
-
-    const frames = await collect(streamAgent(s, { prompt: "go", conversationId: "frames-model", model: "opus" }, undefined));
-
-    expect(frames).toStrictEqual([{ kind: "error", code: "model-unavailable", message: "Your plan does not include Opus." }, { kind: "done" }]);
-    expect(writes.modelRefusals).toStrictEqual([
-        { provider: "claude", model: "opus", refusal: { at: expect.any(Number), message: "Your plan does not include Opus." } },
-    ]);
-    expect(writes.providerRefusals).toStrictEqual([]);
-    expect(writes.headroomRefreshes).toStrictEqual([]);
-    expect(failureLines(lines).map(({ level, code, message }) => ({ level, code, message }))).toStrictEqual([
-        { level: "warn", code: "model-unavailable", message: "turn refused" },
-    ]);
-});
-
-test("a runtime that dies with no code after answering is held as stopped, logged as a failure", async () => {
-    const input: TurnInput = { prompt: "fix the pipeline", conversationId: "frames-stopped" };
-    const {
-        services: s,
-        writes,
-        lines,
-    } = turnServices(
-        scripted([
-            { kind: "session", sessionId: "s-stopped" },
-            { kind: "delta", text: "looking" },
-            { kind: "context_usage", tokens: 9_000, contextWindow: 200_000 },
-            { kind: "error", message: "Google turn timed out waiting for OpenCode." },
-            { kind: "done" },
-        ]),
-    );
-
-    const frames = await collect(streamAgent(s, input, undefined));
-
-    expect(frames.slice(-2)).toStrictEqual([
-        { kind: "error", message: "Google turn timed out waiting for OpenCode.", held: { ran: true, contextTokens: 9_000 }, autoResume: "available" },
-        { kind: "done" },
-    ]);
-    expect(resumes).toStrictEqual([
-        { conversationId: "frames-stopped", event: { kind: "resume-superseded" } },
-        {
-            conversationId: "frames-stopped",
-            event: {
                 kind: "turn-held",
                 held: {
-                    input: { ...input, conversationId: "frames-stopped" },
-                    reason: "stopped",
-                    sessionId: "s-stopped",
-                    ran: true,
-                    standing: { state: "no-code", paths: [], check: undefined },
-                    contextTokens: 9_000,
-                },
-            },
-        },
-    ]);
-    expect(failureLines(lines).map(({ level, message, reason }) => ({ level, message, reason }))).toStrictEqual([
-        { level: "error", message: "turn failed", reason: "Google turn timed out waiting for OpenCode." },
-    ]);
-    expect(
-        writes.usage.map(({ outcome, errorMessage, verification, toolCalls }) => ({ outcome, errorMessage, verification, toolCalls })),
-    ).toStrictEqual([{ outcome: "error", errorMessage: "Google turn timed out waiting for OpenCode.", verification: "no-code", toolCalls: 0 }]);
-});
-
-// The frame promises the fresh session and the settle holds the turn for it, never as stopped, whose ladder would
-// resume the session that overflowed; the fresh re-run overflowing too is told to split the task and holds nothing.
-test("a session past its window is held for one fresh re-run, and the re-run's own overflow ends it", async () => {
-    const input: TurnInput = { prompt: "summarise the logs", conversationId: "frames-overflow" };
-    const overflow: AgentEvent[] = [
-        { kind: "session", sessionId: "s-full" },
-        { kind: "delta", text: "reading" },
-        { kind: "error", code: "context-overflow", message: "Prompt is too long" },
-        { kind: "done" },
-    ];
-    const first = turnServices(scripted(overflow));
-
-    expect((await collect(streamAgent(first.services, input, undefined))).slice(-2)).toStrictEqual([
-        {
-            kind: "error",
-            code: "context-overflow",
-            message:
-                "Prompt is too long. Resuming this session would only overflow again, so the turn is being sent again in a fresh session that carries the conversation so far and where the work stands.",
-            held: { ran: true },
-            autoResume: "scheduled",
-        },
-        { kind: "done" },
-    ]);
-    expect(resumes.filter(({ event }) => event.kind === "turn-held")).toStrictEqual([
-        {
-            conversationId: "frames-overflow",
-            event: {
-                kind: "turn-held",
-                held: {
-                    input: { ...input, conversationId: "frames-overflow" },
-                    reason: "overflow",
-                    sessionId: "s-full",
-                    ran: true,
-                    standing: { state: "no-code", paths: [], check: undefined },
+                    input: { ...input, conversationId: "frames-token" },
+                    reason: "auth",
+                    sessionId: "s-token",
+                    ran: false,
+                    remint: { account: "default", refusedToken: "tok-xyz" },
                 },
             },
         },
     ]);
 
     resumes.length = 0;
-    const rerun: TurnInput = { prompt: `${RESUME_NOTES.overflow}\n\nsummarise the logs`, conversationId: "frames-overflow" };
-    const again = turnServices(scripted(overflow));
-    const ended = (await collect(streamAgent(again.services, rerun, undefined))).find((frame) => frame.kind === "error");
-    expect(ended).toStrictEqual({
+    const again = turnServices(refusal);
+    const rerun = await collect(streamAgent(again.services, { ...input, conversationId: "frames-token-again", resume: "auth" }, undefined));
+    expect(rerun.find((frame) => frame.kind === "error")).toStrictEqual({
         kind: "error",
-        code: "context-overflow",
-        message:
-            "Prompt is too long. A fresh session could not hold this turn either: the message, an attachment or a tool output it read is larger than the model's context window. Split the task into smaller steps, or read large files and command output in parts.",
+        code: "claude-token-refused",
+        message: "401 invalid bearer token",
     });
-    expect(resumes.filter(({ event }) => event.kind === "turn-held")).toStrictEqual([]);
+    expect(resumes).toStrictEqual([
+        { conversationId: "frames-token-again", event: { kind: "resume-superseded" } },
+        { conversationId: "frames-token-again", event: { kind: "turn-got-somewhere" } },
+    ]);
 });
 
 test("a turn that ends with nothing to show gets its failure synthesized ahead of done, and is held like any stopped turn", async () => {

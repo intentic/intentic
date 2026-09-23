@@ -1,5 +1,4 @@
 import { accountsContract, type OauthAccount } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
 import { errorCode, routesClient } from "../../harness/route-client.testing.js";
 import { createAccountsRoutes } from "./accounts.routes.js";

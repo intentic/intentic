@@ -19,6 +19,8 @@ import type { Ref } from "vue";
  */
 export type ExtensionT = (key: string, values?: Record<string, unknown>, plural?: number) => string;
 
+const namespaceOf = (extensionId: string): string => `ext.${extensionId}`;
+
 /**
  * One extension's translator, bound to the slice of the message tree the host mounted its catalog under. Keys are its
  * own — `t("panel.title")` for what lives at `ext.<id>.panel.title` — so nothing it writes can collide with the app's
@@ -34,7 +36,7 @@ export type ExtensionT = (key: string, values?: Record<string, unknown>, plural?
  * The messages themselves are declared on the extension's module (`export const messages`), which the host loads for
  * the reader's language before it calls `activate`.
  */
-export const extensionT = (extensionId: string): ExtensionT => useT(`ext.${extensionId}`);
+export const extensionT = (extensionId: string): ExtensionT => useT(namespaceOf(extensionId));
 
 /**
  * One extension's words in one call: the catalog the host mounts (`messages`) and the translator its components
@@ -70,7 +72,7 @@ export const extensionI18n = (
 export const registerExtensionMessages = (
     extensionId: string,
     messages: { readonly base: MessageTree; readonly load: (locale: string) => Promise<{ readonly default: MessageTree }> },
-): Promise<void> => registerCatalog({ namespace: `ext.${extensionId}`, base: messages.base, load: (locale: string) => messages.load(locale) });
+): Promise<void> => registerCatalog({ namespace: namespaceOf(extensionId), ...messages });
 
 /** The language on screen, for the rare contribution that formats something itself. Read-only: change it with nothing. */
 export const activeLocale: Readonly<Ref<Locale>> = active;

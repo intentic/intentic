@@ -1,4 +1,3 @@
-import { test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { blessedList, blessedListReadAt, forgetUpstream, lowestSatisfying, targetVersion } from "./engine-channel.js";
 import type { EngineState } from "./engine-store.js";
@@ -26,30 +25,30 @@ afterEach(() => {
 });
 
 test("the image channel asks for nothing at all", async () => {
-    stubGlobal("fetch", mock());
+    stubGlobal("fetch", jest.fn());
     expect(await targetVersion("claude", { kind: "image" }, CLEAN)).toBeUndefined();
     expect(fetch).not.toHaveBeenCalled();
 });
 
 test("a pin is the answer, without asking anybody", async () => {
-    stubGlobal("fetch", mock());
+    stubGlobal("fetch", jest.fn());
     expect(await targetVersion("claude", { kind: "pinned", version: "0.3.240" }, CLEAN)).toBe("0.3.240");
     expect(fetch).not.toHaveBeenCalled();
 });
 
 test("the blessed channel takes what the list names", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ engines: { claude: { blessed: "0.3.257" } } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { claude: { blessed: "0.3.257" } } })));
     expect(await targetVersion("claude", { kind: "blessed" }, CLEAN)).toBe("0.3.257");
 });
 
 test("the latest channel takes upstream's own newest", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ "dist-tags": { latest: "0.3.260" }, versions: { "0.3.260": {} } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ "dist-tags": { latest: "0.3.260" }, versions: { "0.3.260": {} } })));
     expect(await targetVersion("claude", { kind: "latest" }, CLEAN)).toBe("0.3.260");
 });
 
 // The card, every tab and each Update-all step read the same answer.
 test("one registry answer serves repeated reads of the latest channel", async () => {
-    const fetchMock = mock().mockResolvedValue(jsonResponse({ "dist-tags": { latest: "0.3.260" }, versions: { "0.3.260": {} } }));
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ "dist-tags": { latest: "0.3.260" }, versions: { "0.3.260": {} } }));
     stubGlobal("fetch", fetchMock);
     const reads = await Promise.all([1, 2, 3].map(() => targetVersion("claude", { kind: "latest" }, CLEAN)));
     expect(reads).toEqual(["0.3.260", "0.3.260", "0.3.260"]);
@@ -58,7 +57,8 @@ test("one registry answer serves repeated reads of the latest channel", async ()
 });
 
 test("an unreachable registry is asked again on the next read, not remembered as nothing on offer", async () => {
-    const fetchMock = mock()
+    const fetchMock = jest
+        .fn()
         .mockRejectedValueOnce(new Error("offline"))
         .mockResolvedValueOnce(jsonResponse({ "dist-tags": { latest: "0.3.260" }, versions: { "0.3.260": {} } }));
     stubGlobal("fetch", fetchMock);
@@ -68,7 +68,8 @@ test("an unreachable registry is asked again on the next read, not remembered as
 
 // A turn just died on a floor upstream raised minutes ago; a held answer could predate the version that clears it.
 test("a floor always asks the registry afresh", async () => {
-    const fetchMock = mock()
+    const fetchMock = jest
+        .fn()
         .mockResolvedValueOnce(jsonResponse({ "dist-tags": { latest: "1.0.0" }, versions: { "1.0.0": {} } }))
         .mockResolvedValueOnce(jsonResponse({ "dist-tags": { latest: "1.2.0" }, versions: { "1.0.0": {}, "1.2.0": {} } }));
     stubGlobal("fetch", fetchMock);
@@ -77,7 +78,7 @@ test("a floor always asks the registry afresh", async () => {
 });
 
 test("a version already refused here is not offered again", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ engines: { claude: { blessed: "0.3.257" } } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { claude: { blessed: "0.3.257" } } })));
     const refused: EngineState = { quarantined: [{ version: "0.3.257", reason: "would not launch", at: "2026-09-01T00:00:00.000Z" }] };
     expect(await targetVersion("claude", { kind: "blessed" }, refused)).toBeUndefined();
 });
@@ -87,25 +88,28 @@ test("a version already refused here is not offered again", async () => {
 test("a CLI-versioned floor selects the lowest npm version that ships it", async () => {
     stubGlobal(
         "fetch",
-        mock().mockResolvedValue(
-            jsonResponse({ "dist-tags": { latest: "0.3.260" }, versions: { "0.3.233": {}, "0.3.251": {}, "0.3.257": {}, "0.3.260": {} } }),
-        ),
+        jest
+            .fn()
+            .mockResolvedValue(
+                jsonResponse({ "dist-tags": { latest: "0.3.260" }, versions: { "0.3.233": {}, "0.3.251": {}, "0.3.257": {}, "0.3.260": {} } }),
+            ),
     );
     expect(await lowestSatisfying("claude", "2.1.251")).toBe("0.3.251");
 });
 
 test("a floor stated in the package's own numbers still compares normally", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ versions: { "0.3.233": {}, "0.3.251": {}, "0.3.257": {} } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ versions: { "0.3.233": {}, "0.3.251": {}, "0.3.257": {} } })));
     expect(await lowestSatisfying("claude", "0.3.251")).toBe("0.3.251");
 });
 
 test("the smallest step is taken, not the newest release", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ versions: { "1.0.0": {}, "1.2.0": {}, "1.5.0": {} } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ versions: { "1.0.0": {}, "1.2.0": {}, "1.5.0": {} } })));
     expect(await lowestSatisfying("opencode", "1.2.0")).toBe("1.2.0");
 });
 
 test("a failed refresh keeps the last list that was read", async () => {
-    const fetchMock = mock()
+    const fetchMock = jest
+        .fn()
         .mockResolvedValueOnce(jsonResponse({ engines: { claude: { blessed: "0.3.257" } } }, { etag: `"abc"` }))
         .mockRejectedValueOnce(new Error("offline"));
     stubGlobal("fetch", fetchMock);
@@ -115,14 +119,15 @@ test("a failed refresh keeps the last list that was read", async () => {
 });
 
 test("an unreachable list is not a version, and says so by having no read time", async () => {
-    stubGlobal("fetch", mock().mockRejectedValue(new Error("offline")));
+    stubGlobal("fetch", jest.fn().mockRejectedValue(new Error("offline")));
     expect(await blessedList()).toBeUndefined();
     expect(blessedListReadAt()).toBeUndefined();
     expect(await targetVersion("claude", { kind: "blessed" }, CLEAN)).toBeUndefined();
 });
 
 test("a re-read is conditional on the etag it already holds", async () => {
-    const fetchMock = mock()
+    const fetchMock = jest
+        .fn()
         .mockResolvedValueOnce(jsonResponse({ engines: { claude: { blessed: "0.3.257" } } }, { etag: `"abc"` }))
         .mockResolvedValueOnce(new Response(undefined, { status: 304 }));
     stubGlobal("fetch", fetchMock);
@@ -136,6 +141,6 @@ test("a re-read is conditional on the etag it already holds", async () => {
 
 // A list that fails to parse reads as absent, not as a version to run.
 test("a list that does not parse is ignored", async () => {
-    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ engines: { claude: { blessed: 257 } } })));
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { claude: { blessed: 257 } } })));
     expect(await blessedList()).toBeUndefined();
 });

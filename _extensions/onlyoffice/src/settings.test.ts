@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { manifest } from "./manifest.js";
 import { AUTO_START, autoStartOf } from "./settings.js";
 

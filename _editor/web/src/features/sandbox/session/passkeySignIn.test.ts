@@ -1,7 +1,6 @@
 // The browser half of a passkey ceremony: the daemon's base64url options become the bytes WebAuthn takes, the
 // credential's bytes come back as the base64url the daemon parses, and every call carries the daemon's own refusal.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { passkeyOffered, PasskeyRefusedError, recoverWithCode, registerPasskey, signInWithPasskey } from "./passkeySignIn";
 
@@ -35,9 +34,9 @@ class FakeCredential {
     ) {}
 }
 
-const get = mock();
-const create = mock();
-const fetchMock = mock();
+const get = jest.fn();
+const create = jest.fn();
+const fetchMock = jest.fn();
 
 const json = (body: unknown, status = 200): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": `application/json` } });

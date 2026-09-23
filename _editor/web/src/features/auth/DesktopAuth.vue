@@ -342,7 +342,7 @@ onMounted(() => void hand());
                     <p class="gate-say" role="status">{{ t(`auth.desktopAuth.closeTab`) }}</p>
                     <p class="gate-aside">{{ t(`auth.desktopAuth.appDidntComeForward`) }}</p>
                     <div class="gate-actions">
-                        <Button :label="t(`auth.desktopAuth.sendAgain`)" severity="secondary" :loading="working" @click="hand" />
+                        <Button :label="t(`shared.sendItAgain`)" severity="secondary" :loading="working" @click="hand" />
                     </div>
                 </template>
 
@@ -377,7 +377,7 @@ onMounted(() => void hand());
 
                     <!-- The button is always rendered because blocked frames are indistinguishable. -->
                     <button v-if="googleReady" type="button" class="escape" v-action="useGooglesOwnPage">
-                        {{ t(`auth.desktopAuth.troubleSigningInUse`) }}
+                        {{ t(`shared.troubleSigningInUse`) }}
                     </button>
                 </template>
             </section>

@@ -1,16 +1,15 @@
 import type { AccountUsage, Model, NativeProvider, OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect, beforeEach, mock } from "bun:test";
 import type { Services } from "../../composition.js";
 
 /* WHAT THE AUTO JUDGE MAY CHOOSE FROM, at the seam it reads: readiness, accounts and catalogs are all handed in, so a
    test can state an allowance and see which models survive it. */
 
-const ready = mock<() => Record<string, boolean>>();
-const accountLists = mock<() => Record<string, readonly OauthAccount[]>>();
-const routed = mock<() => TranslatorAccounts>();
+const ready = jest.fn<() => Record<string, boolean>>();
+const accountLists = jest.fn<() => Record<string, readonly OauthAccount[]>>();
+const routed = jest.fn<() => TranslatorAccounts>();
 
-mock.module("../providers/provider-registry.js", () => ({
+jest.mock("../providers/provider-registry.js", () => ({
     providerReadiness: async () => ready(),
     providerAccountLists: async () => accountLists(),
     sharedProviderReads: () => ({ translatorAccounts: async () => routed() }),
@@ -42,8 +41,8 @@ const account = (id: string, snapshot?: AccountUsage): OauthAccount => ({
     ...(snapshot === undefined ? {} : { usage: snapshot }),
 });
 
-const warn = mock();
-const catalogs = mock<(provider: NativeProvider) => Promise<{ models: Model[]; default: string }>>();
+const warn = jest.fn();
+const catalogs = jest.fn<(provider: NativeProvider) => Promise<{ models: Model[]; default: string }>>();
 
 const services = (): Services =>
     unstubbed<Services>("services", {

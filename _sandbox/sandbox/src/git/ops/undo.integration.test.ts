@@ -3,7 +3,6 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, afterEach } from "bun:test";
 import { undoableAction, undoLastAction } from "./undo.js";
 
 // Against real repos: every claim is about what git writes into a reflog (subject wording per verb, which ref gets an

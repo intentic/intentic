@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { readLogLines, readMetricSeries, TAIL_BUDGET_BYTES } from "./diagnostics.js";
 
 // Pins the ways a naive tail misleads: oldest-first order, routine lines drowning real ones, and an empty answer that

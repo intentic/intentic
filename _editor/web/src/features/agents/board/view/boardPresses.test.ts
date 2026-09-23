@@ -1,7 +1,6 @@
 import "@intentic/testing/dom";
 import { unstubbed } from "@intentic/testing";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { type EffectScope, effectScope, nextTick, ref, shallowRef } from "vue";
 import type { RouteLocationRaw, Router } from "vue-router";
 import { useBoardPresses } from "./boardPresses";
@@ -22,12 +21,12 @@ afterEach(() => {
 
 const pressesOf = () => {
     const runs = shallowRef<readonly WorkflowRun[]>([run(`r1`, `running`)]);
-    const write = () => ({ mutateAsync: mock(async (_runId: string): Promise<unknown> => undefined) });
+    const write = () => ({ mutateAsync: jest.fn(async (_runId: string): Promise<unknown> => undefined) });
     const workflows = { runs, stop: write(), archive: write(), unarchive: write() };
-    const push = mock(async (_to: RouteLocationRaw) => undefined);
+    const push = jest.fn(async (_to: RouteLocationRaw) => undefined);
     const agents = {
-        releaseHeld: mock(async (_id: string, _verb: `approve` | `reject`) => undefined),
-        refresh: mock(async () => undefined),
+        releaseHeld: jest.fn(async (_id: string, _verb: `approve` | `reject`) => undefined),
+        refresh: jest.fn(async () => undefined),
         notice: ref<string>(),
     };
     const effects = effectScope();

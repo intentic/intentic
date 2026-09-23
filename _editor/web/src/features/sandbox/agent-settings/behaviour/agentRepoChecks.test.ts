@@ -4,15 +4,14 @@
 import "@intentic/testing/dom";
 import type { RepoChecksSummary } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { timeAgo } from "@intentic/ui";
 
 const repos = ref<RepoChecksSummary[] | undefined>([]);
-const adopt = mock();
+const adopt = jest.fn();
 
-mock.module(`../../environment/useRepoChecks`, () => ({
+jest.mock(`../../environment/useRepoChecks`, () => ({
     useRepoChecks: () => ({ repos, adopt, pending: ref(undefined), error: ref(undefined), isLoading: ref(false), busy: ref(false) }),
 }));
 

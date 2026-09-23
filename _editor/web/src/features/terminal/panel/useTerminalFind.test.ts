@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { unstubbed } from "@intentic/testing";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
 import type { TerminalSession } from "../terminalSession";
 import { useTerminalFind } from "./useTerminalFind";
@@ -16,17 +15,17 @@ const scopes: EffectScope[] = [];
 
 const sessionNamed = () => {
     let listener: ResultsListener | undefined;
-    const results = { dispose: mock() };
+    const results = { dispose: jest.fn() };
     const search = {
-        findNext: mock((_query: string, _options?: { incremental?: boolean }) => true),
-        findPrevious: mock((_query: string, _options?: { incremental?: boolean }) => true),
-        clearDecorations: mock(),
-        onDidChangeResults: mock((next: ResultsListener) => {
+        findNext: jest.fn((_query: string, _options?: { incremental?: boolean }) => true),
+        findPrevious: jest.fn((_query: string, _options?: { incremental?: boolean }) => true),
+        clearDecorations: jest.fn(),
+        onDidChangeResults: jest.fn((next: ResultsListener) => {
             listener = next;
             return results;
         }),
     };
-    const term = { focus: mock() };
+    const term = { focus: jest.fn() };
     const session = { search: unstubbed<Search>(`search`, search), term: unstubbed<TerminalSession[`term`]>(`term`, term) };
     return { session, search, term, results, report: (index: number, count: number) => listener?.({ resultIndex: index, resultCount: count }) };
 };

@@ -2,7 +2,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
@@ -18,9 +17,9 @@ stubGlobal(`localStorage`, {
     removeItem: (key: string) => store.delete(key),
 });
 // The daemon's session list, scripted per case by daemonLists.
-const terminals = mock();
-mock.module("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { terminals } }) }));
-mock.module("../sandbox/client/useSandbox", () => ({
+const terminals = jest.fn();
+jest.mock("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { terminals } }) }));
+jest.mock("../sandbox/client/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ reachable: ref(true) }),
 }));

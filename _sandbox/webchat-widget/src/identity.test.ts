@@ -1,4 +1,3 @@
-import { test, expect, afterEach, spyOn, jest } from "bun:test";
 import { unstubAllGlobals } from "@intentic/testing/bun";
 import {
     resetConversation,
@@ -60,10 +59,10 @@ test(`a cursor that storage lost or a hand corrupted reads as the start of the t
 });
 
 test(`a browser that refuses storage still chats: it just gets a fresh thread each time`, () => {
-    spyOn(Storage.prototype, `getItem`).mockImplementation(() => {
+    jest.spyOn(Storage.prototype, `getItem`).mockImplementation(() => {
         throw new Error(`SecurityError`);
     });
-    spyOn(Storage.prototype, `setItem`).mockImplementation(() => {
+    jest.spyOn(Storage.prototype, `setItem`).mockImplementation(() => {
         throw new Error(`SecurityError`);
     });
     expect(visitorConversationId(`support`)).toMatch(/^[0-9a-f-]{36}$/);

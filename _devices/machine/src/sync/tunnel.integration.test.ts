@@ -1,6 +1,5 @@
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
-import { describe, it, expect, afterEach, jest } from "bun:test";
 import { stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { Dialed } from "../daemon-base.js";
 import type { Pairing } from "./config.js";

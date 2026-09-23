@@ -27,7 +27,7 @@ const seamWidth = computed<number>({
             :min="toScreenPx(MIN_RAIL_WIDTH)"
             :max="toScreenPx(MAX_RAIL_WIDTH)"
             :reset="toScreenPx(DEFAULT_RAIL_WIDTH)"
-            :title="t(`common.railColumn.dragToResizeDouble`)"
+            :title="t(`shared.dragToResizeDouble`)"
         />
     </aside>
 </template>

@@ -13,8 +13,7 @@
         "postWhatPipelineKnows": "Haz POST de lo que la pipeline sabe —commit, rama, URL de vista previa— y la respuesta espera a la ejecución: un",
         "rotate": "Rotar",
         "rotateToken": "Rotar el token",
-        "sureEveryPipelineWired": "¿Seguro? A cada pipeline conectada a esta URL hay que darle la nueva.",
-        "webhook": "Webhook"
+        "sureEveryPipelineWired": "¿Seguro? A cada pipeline conectada a esta URL hay que darle la nueva."
     },
     "gatePanel": {
         "addGate": "Añadir una puerta",
@@ -24,7 +23,6 @@
         "fieldGateReads": "Campo que lee la puerta",
         "gateGivesWorkflowWebhook": "Una puerta le da a este flujo de trabajo un webhook que una pipeline de CI puede llamar: la pipeline hace POST de lo que sabe, todo el diseño se ejecuta, y la respuesta es «pass», «fail» o «blocked»: leída de un campo declarado, nunca rascada de la prosa.",
         "gateReadsDeclaredOutput": "Una puerta lee un campo de salida declarado, y todavía ningún paso declara uno. Dale primero un campo de datos al paso que decide: selecciónalo en el lienzo y añade uno en Avanzado.",
-        "pass": "pass",
         "removeGateUrlStops": "Quitar la puerta: su URL deja de funcionar, y una puerta futura recibe una nueva",
         "runsPerDay": "Ejecuciones al día",
         "savingMintsWebhookUrl": "Al guardar se acuña la URL del webhook: aparece aquí y bajo la insignia de puerta en la tarjeta del flujo de trabajo.",
@@ -52,7 +50,6 @@
         "newLoop": "Bucle nuevo",
         "optionalLeaveEmptyAgent": "Opcional. Déjalo vacío y el agente trabajará hacia lo que escribas en la caja de mensajes, como le parezca mejor.",
         "optionalOneLineUnder": "Opcional. Una línea bajo el nombre en el selector.",
-        "pnpmTest": "pnpm test",
         "reviewerAgrees": "Un revisor está de acuerdo",
         "rounds": "rondas",
         "runTestsPickTop": "ejecutar las pruebas, tomar el primer fallo, arreglarlo",
@@ -89,7 +86,6 @@
         "onlyDone": "Y solo terminado cuando",
         "personaStep": "Persona de este paso",
         "pinOneWhereModel": "Fija uno donde el modelo forme parte del diseño: dos pasos en dos proveedores es como se comparan. Si lo dejas en paz, este paso se ejecuta con lo que uses normalmente.",
-        "pnpmTest": "pnpm test",
         "removeField": "Quitar el campo",
         "repeatsUntilTrue": "Se repite hasta que esto sea cierto.",
         "required": "obligatorio",

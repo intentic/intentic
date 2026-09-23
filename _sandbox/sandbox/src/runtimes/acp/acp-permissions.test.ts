@@ -1,5 +1,4 @@
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
-import { test, expect } from "bun:test";
 import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
 import { createCommandGuard } from "../../guard/command-guard.js";
 import { createTurnTaint, NO_TAINT } from "../../guard/turn-taint.js";

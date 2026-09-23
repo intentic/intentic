@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { pruneAnnounced } from "./watermark.js";
 import { addressedTo, newMessageIds } from "./poller.js";
 

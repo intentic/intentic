@@ -1,11 +1,10 @@
 import { EventEmitter } from "node:events";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { stubGlobal, unstubAllGlobals, stubEnv, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 // The platform post, mocked like announce.test.ts: every post succeeds and is recorded, since what matters is what gets
 // reported.
 const posted: Array<{ path: string; body: unknown }> = [];
-const requestMock = mock((url: URL, _opts: unknown, cb: (res: { statusCode: number; resume: () => void }) => void) => {
+const requestMock = jest.fn((url: URL, _opts: unknown, cb: (res: { statusCode: number; resume: () => void }) => void) => {
     const req = new EventEmitter() as EventEmitter & { end: (payload: string) => void };
     req.end = (payload: string) => {
         posted.push({ path: url.pathname, body: JSON.parse(payload) as unknown });
@@ -13,10 +12,14 @@ const requestMock = mock((url: URL, _opts: unknown, cb: (res: { statusCode: numb
     };
     return req;
 });
-mock.module("node:https", () => ({ request: (...args: unknown[]) => requestMock(...(args as Parameters<typeof requestMock>)) }));
+jest.mock("node:https", () => ({ request: (...args: unknown[]) => requestMock(...(args as Parameters<typeof requestMock>)) }));
 
 const { createReachReporter, probeSelf } = await import("./reach-report.js");
 const { sandboxIdFromToken } = await import("@intentic/sandbox-contract/tunnel-ids");
+const { readCgroup } = await import("../resources/cgroup.js");
+
+// A cgroup with no files: the reading settles in microtasks, never on disk I/O the fake clock cannot drain.
+const noCgroup = () => readCgroup(async () => undefined);
 
 const PUBLIC_URL = "https://sandbox-abc.sbx.test";
 const config = {
@@ -25,7 +28,7 @@ const config = {
     // The id /health has to match is derived from this token, so the probe proves it reached itself.
     connectToken: "tok",
 } as unknown as Parameters<typeof createReachReporter>[0];
-const logger = { info: mock(), warn: mock(), debug: mock() } as unknown as Parameters<typeof createReachReporter>[1];
+const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn() } as unknown as Parameters<typeof createReachReporter>[1];
 // What the reporter expects its own /health to answer with, derived from the token exactly as the daemon does.
 const OWN_ID = sandboxIdFromToken("tok");
 
@@ -112,7 +115,7 @@ describe("probeSelf", () => {
 describe("createReachReporter", () => {
     it("says it is checking before it knows, then reports the verdict and goes quiet", async () => {
         stubGlobal("fetch", async () => new Response(JSON.stringify({ sandboxId: OWN_ID }), { status: 200 }));
-        const reporter = createReachReporter(config, logger);
+        const reporter = createReachReporter(config, logger, undefined, noCgroup);
         reporter.start({ by: "tunnel" });
         await settle();
 
@@ -126,7 +129,7 @@ describe("createReachReporter", () => {
 
     it("keeps reporting an address that does not answer, and keeps its reason", async () => {
         stubGlobal("fetch", async () => new Response("nope", { status: 404 }));
-        const reporter = createReachReporter(config, logger);
+        const reporter = createReachReporter(config, logger, undefined, noCgroup);
         reporter.start({ by: "tunnel" });
         await settle();
 
@@ -140,7 +143,7 @@ describe("createReachReporter", () => {
 
     it("stops retrying after the give-up window, keeping the last reason", async () => {
         stubGlobal("fetch", async () => new Response("nope", { status: 404 }));
-        const reporter = createReachReporter(config, logger);
+        const reporter = createReachReporter(config, logger, undefined, noCgroup);
         reporter.start({ by: "tunnel" });
         await advanceTimersByTimeAsync(10 * 60_000);
         const settled = posted.length;
@@ -152,14 +155,14 @@ describe("createReachReporter", () => {
     });
 
     it("is off until started: a headless run has no address to probe", () => {
-        expect(createReachReporter(config, logger).status()).toEqual({ state: "off" });
+        expect(createReachReporter(config, logger, undefined, noCgroup).status()).toEqual({ state: "off" });
     });
 
     /* A container told a public name but given nothing to dial with. */
     it("settles at once when the daemon dials no edge, naming why and probing nothing", async () => {
-        const probe = mock(async () => new Response(JSON.stringify({ sandboxId: OWN_ID }), { status: 200 }));
+        const probe = jest.fn(async () => new Response(JSON.stringify({ sandboxId: OWN_ID }), { status: 200 }));
         stubGlobal("fetch", probe);
-        const reporter = createReachReporter(config, logger);
+        const reporter = createReachReporter(config, logger, undefined, noCgroup);
 
         reporter.start({ by: "loopback", reason: "no INGRESS_URL, so there is no edge to dial" });
         await settle();
@@ -184,7 +187,7 @@ describe("createReachReporter", () => {
         stubEnv("SANDBOX_PUBLIC_URL", PUBLIC_URL);
         stubEnv("SANDBOX_GRANT", "");
         stubEnv("INGRESS_URL", "");
-        const reporter = createReachReporter(config, logger);
+        const reporter = createReachReporter(config, logger, undefined, noCgroup);
 
         reporter.start({ by: "loopback", reason: "no INGRESS_URL, so there is no edge to dial" });
         await settle();
@@ -201,7 +204,7 @@ describe("createReachReporter", () => {
         stubEnv("SANDBOX_PUBLIC_URL", PUBLIC_URL);
         stubEnv("SANDBOX_GRANT", "ig1.payload.sig");
         stubEnv("INGRESS_URL", "https://ingress.intentic.dev");
-        const reporter = createReachReporter(config, logger);
+        const reporter = createReachReporter(config, logger, undefined, noCgroup);
 
         reporter.start({ by: "loopback", reason: "this profile serves no front door for a tunnel to reach" });
         await settle();

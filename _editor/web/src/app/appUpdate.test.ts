@@ -1,7 +1,6 @@
 // DOM: the desktop app's update event, the visibility-change re-ask, and the `window` marker it injects at load are
 // all meaningless in a bare node context.
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
 import { freshImport, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { nextTick } from "vue";
 
@@ -26,7 +25,7 @@ const load = async (options: {
     // `window.env`, which every module in the import graph reads at load.
     window.__INTENTIC_DESKTOP__ =
         options.desktopUpdate === undefined ? undefined : { version: `1.0.0`, installId: `id`, update: options.desktopUpdate };
-    mock.module(`./buildEpoch`, () => ({ buildId: () => options.running, dropOutdatedMirrors: () => undefined }));
+    jest.mock(`./buildEpoch`, () => ({ buildId: () => options.running, dropOutdatedMirrors: () => undefined }));
     return await freshImport<typeof import("./appUpdate")>("./appUpdate", import.meta.url);
 };
 

@@ -91,7 +91,7 @@ const sections = computed<ExtensionSection[]>(() => [
         : [
               {
                   id: `attention`,
-                  label: t(`sandbox.extensionsInstalled.needsAttention`),
+                  label: t(`shared.needsAttention`),
                   entries: attention.value,
               },
           ]),
@@ -182,7 +182,11 @@ const confirmRemove = async (): Promise<void> => {
 <template>
     <div class="flex flex-col gap-5">
         <!-- Written in this workspace and not approved in its current shape: nothing of it runs until the yes, so it leads. -->
-        <RowGroup v-if="waiting.length > 0" :label="t(`sandbox.extensionsInstalled.waitingForApproval`)" :caption="t(`sandbox.extensionsInstalled.waitingCaption`)">
+        <RowGroup
+            v-if="waiting.length > 0"
+            :label="t(`sandbox.extensionsInstalled.waitingForApproval`)"
+            :caption="t(`sandbox.extensionsInstalled.waitingCaption`)"
+        >
             <Row v-for="extension in waiting" :key="extension.id">
                 <template #title>
                     <span class="block truncate">{{ extension.id }}</span>
@@ -197,10 +201,16 @@ const confirmRemove = async (): Promise<void> => {
                 <!-- The same vocabulary and marks the update card reads out: what a yes allows, and what it no longer asks for. -->
                 <template #below>
                     <div class="flex flex-col gap-1 pb-2">
-                        <p v-if="extension.powers.added.length === 0" class="text-2xs text-subtle">{{ t(`sandbox.extensionsInstalled.asksForNothing`) }}</p>
+                        <p v-if="extension.powers.added.length === 0" class="text-2xs text-subtle">
+                            {{ t(`sandbox.extensionsInstalled.asksForNothing`) }}
+                        </p>
                         <template v-else>
                             <p class="text-2xs text-muted">
-                                {{ extension.approvedBefore ? t(`sandbox.extensionsInstalled.newPowersSinceApproved`) : t(`sandbox.extensionsInstalled.whatItAsksFor`) }}
+                                {{
+                                    extension.approvedBefore
+                                        ? t(`sandbox.extensionsInstalled.newPowersSinceApproved`)
+                                        : t(`sandbox.extensionsInstalled.whatItAsksFor`)
+                                }}
                             </p>
                             <ul class="flex flex-col gap-0.5">
                                 <li v-for="power in extension.powers.added" :key="power" class="text-2xs text-content">+ {{ power }}</li>
@@ -229,7 +239,7 @@ const confirmRemove = async (): Promise<void> => {
 
         <!-- Sections render nothing while the read is out, so this outline gives the wait the list's own shape instead of a sentence. -->
         <template v-if="isLoading">
-            <RowGroup v-if="outline" :label="t(`sandbox.extensionsInstalled.installed`)">
+            <RowGroup v-if="outline" :label="t(`shared.installed`)">
                 <div role="status" aria-busy="true">
                     <span class="sr-only">{{ t(`sandbox.extensionsInstalled.readingSandboxsExtensions`) }}</span>
                     <SkeletonRows :rows="3" description control />
@@ -246,12 +256,7 @@ const confirmRemove = async (): Promise<void> => {
             <button v-if="matches.length === 0 && publishedMatches > 0" type="button" :class="ui.linkButton(`text-xs`)" @click="emit(`browse`)">
                 {{ t(`sandbox.extensionsInstalled.publishedMatches`, { count: publishedMatches, query: query.trim() }, publishedMatches) }}
             </button>
-            <Button
-                v-if="matches.length === 0 && entries.length > 0"
-                size="small"
-                :label="t(`sandbox.extensionsInstalled.clearFilter`)"
-                @click="emit(`clear`)"
-            />
+            <Button v-if="matches.length === 0 && entries.length > 0" size="small" :label="t(`shared.clearFilter`)" @click="emit(`clear`)" />
         </div>
 
         <!-- Unenumerated workspace extensions are listed with their reason. -->

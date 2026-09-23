@@ -1,7 +1,8 @@
 import { type AgentReply, type RequestField, settledRequests, type TranscriptRequests } from "@intentic/sandbox-contract";
-import { ref, type Ref } from "vue";
+import { ref } from "vue";
 import { postTurnControl } from "../run/turnStream";
 import type { ChatAttachment, ChatMessage } from "../transcript/transcript";
+import type { Conversation } from "./conversation";
 import type { TranscriptView } from "./transcriptView";
 import type { TurnClient } from "./turnClient";
 
@@ -77,14 +78,10 @@ export const requestIdOf = (row: TranscriptRequests): string | undefined =>
         .find((requestId) => requestId !== undefined);
 
 // What replying reads and writes of the conversation around it.
-export interface RepliesHost {
-    readonly box: Ref<string | undefined>;
+type RepliesHost = Pick<Conversation, "box" | "error" | "peek"> & {
     readonly transcript: Pick<TranscriptView, "messages" | "attachCard">;
-    readonly error: Ref<string | null>;
     readonly turn: Pick<TurnClient, "stop" | "endedByReader">;
-    // Answering a card the turn is parked on is an act on this chat, whichever card it is: it leaves the peek slot.
-    readonly peek: Ref<boolean>;
-}
+};
 
 export class CardReplies {
     // Cards whose answer is in flight, by request id; claimed before the request leaves so it can't double-answer.

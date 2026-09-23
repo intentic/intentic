@@ -1,5 +1,3 @@
-import { test, expect } from "bun:test";
-
 import { unstubbed } from "@intentic/testing";
 import { createCfRouteProvider } from "./cf-route.js";
 import type { CloudflareApi } from "./cloudflare-api.js";

@@ -1,6 +1,5 @@
 import http from "node:http";
 import { Readable } from "node:stream";
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { signJwt } from "./jwt.js";
 import { createListener, type Listener } from "./listener.js";
 import { Sessions } from "./sessions.js";
@@ -12,7 +11,6 @@ const sessions = new Sessions();
 let listener: Listener;
 let port = 0;
 let documentServerPort: number | undefined;
-let publicOrigin: string | undefined = `https://port-abc-def.docs.example.test`;
 let fakeServer: http.Server;
 const saved: { key: string; path: string; url: string }[] = [];
 const logged: string[] = [];
@@ -45,7 +43,6 @@ beforeAll(async () => {
         secret,
         sessions,
         documentServerPort: () => documentServerPort,
-        publicOrigin: () => publicOrigin,
         pageFor: (session) => `<html>${session.path}:${session.mode}</html>`,
         readDocument: async (document) => (document.path === `gone.docx` ? undefined : Readable.from([Buffer.from(`bytes of ${document.path}`)])),
         saveDocument: async (key, document, url) => {
@@ -139,31 +136,15 @@ describe(`the save callback`, () => {
 });
 
 describe(`everything else`, () => {
-    it(`is the document server's, proxied on this origin, and told the public origin it is reached at`, async () => {
-        const response = await call(`/web-apps/apps/api/documents/api.js?x=1`);
+    it(`is the document server's, proxied on this origin with the forwarded host the proxy in front named`, async () => {
+        const response = await call(`/web-apps/apps/api/documents/api.js?x=1`, {
+            headers: { "x-forwarded-host": `port-abc-def.localhost:30559`, "x-forwarded-proto": `http` },
+        });
         expect(response.status).toBe(200);
         expect(response.headers.get(`x-upstream-path`)).toBe(`/web-apps/apps/api/documents/api.js?x=1`);
-        // The server builds the download URLs it hands the editor from these; localhost here would be the sandbox's.
-        expect(response.headers.get(`x-upstream-forwarded-host`)).toBe(`port-abc-def.docs.example.test`);
-        expect(response.headers.get(`x-upstream-forwarded-proto`)).toBe(`https`);
-        expect(await response.text()).toBe(`upstream says hi`);
-    });
-
-    it(`keeps the forwarded host the proxy in front already named: the lane the browser is on, not the backend's guess`, async () => {
-        const response = await call(`/web-apps/x`, { headers: { "x-forwarded-host": `port-abc-def.localhost:30559`, "x-forwarded-proto": `http` } });
         expect(response.headers.get(`x-upstream-forwarded-host`)).toBe(`port-abc-def.localhost:30559`);
         expect(response.headers.get(`x-upstream-forwarded-proto`)).toBe(`http`);
-    });
-
-    it(`leaves the forwarded headers alone while no public origin is known`, async () => {
-        const was = publicOrigin;
-        publicOrigin = undefined;
-        try {
-            const response = await call(`/web-apps/x`);
-            expect(response.headers.get(`x-upstream-forwarded-host`)).toBe(`-`);
-        } finally {
-            publicOrigin = was;
-        }
+        expect(await response.text()).toBe(`upstream says hi`);
     });
 
     it(`answers 503 while the document server is down, and keeps its own routes`, async () => {

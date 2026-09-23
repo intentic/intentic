@@ -1,7 +1,6 @@
 import { FREE_TIER, type HostedTier, PAID_TIERS } from "@intentic/constants";
 import { Prisma } from "@intentic/prisma";
 import { call, ORPCError } from "@orpc/server";
-import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { OrpcContext } from "../../context.js";
 import type { Config } from "../../config.js";
@@ -16,15 +15,15 @@ import { fakeHostedAppLock, testIngressConfig } from "../../testing.js";
 import { RECOVERY_WINDOW_MS } from "../../durations.js";
 import * as timersPromisesOriginal from "node:timers/promises";
 
-mock.module(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
+jest.mock(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
 
 /* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real time in production, polled up to sixty times. */
-mock.module("node:timers/promises", () => ({
+jest.mock("node:timers/promises", () => ({
     ...timersPromisesOriginal,
     setTimeout: async () => undefined,
 }));
 
-const logger = { info: mock(), warn: mock(), error: mock() } as never;
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never;
 
 // Enabled hosted config fixture; each case overrides only the fields it's testing.
 const config = (over?: Record<string, unknown>): Config =>
@@ -68,60 +67,60 @@ const ENTRY = PAID_TIERS[0] as HostedTier;
 const PAID = ENTRY;
 
 /* Every model the hosted routes touch, stubbed to the harmless answer, with the case's own overrides on top. */
-const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof mock>>>) => {
+const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof jest.fn>>>) => {
     const prisma = {
-        hostedPlan: { findUnique: mock().mockResolvedValue(null) },
+        hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
         hostedUsage: {
-            findUnique: mock().mockResolvedValue(null),
-            upsert: mock().mockResolvedValue({}),
-            aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }),
+            findUnique: jest.fn().mockResolvedValue(null),
+            upsert: jest.fn().mockResolvedValue({}),
+            aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: null } }),
         },
         // In good standing, and the provision ledger accepts every row.
-        user: { findUnique: mock().mockResolvedValue({ hostedSuspendedAt: null, hostedSuspendedReason: null }) },
-        hostedProvision: { create: mock().mockResolvedValue({}), findMany: mock().mockResolvedValue([]) },
+        user: { findUnique: jest.fn().mockResolvedValue({ hostedSuspendedAt: null, hostedSuspendedReason: null }) },
+        hostedProvision: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
         /* Two shapes. */
-        $transaction: mock((work: Promise<unknown>[] | ((tx: unknown) => Promise<unknown>)) =>
+        $transaction: jest.fn((work: Promise<unknown>[] | ((tx: unknown) => Promise<unknown>)) =>
             typeof work === `function` ? work(prisma) : Promise.all(work),
         ),
-        $executeRaw: mock().mockResolvedValue(0),
-        $queryRaw: mock().mockResolvedValue([]),
+        $executeRaw: jest.fn().mockResolvedValue(0),
+        $queryRaw: jest.fn().mockResolvedValue([]),
         ...overrides,
         hostedCleanup: {
-            findUnique: mock().mockResolvedValue({}),
-            create: mock().mockResolvedValue({}),
-            deleteMany: mock().mockResolvedValue({ count: 1 }),
-            upsert: mock().mockResolvedValue({}),
-            findMany: mock().mockResolvedValue([]),
+            findUnique: jest.fn().mockResolvedValue({}),
+            create: jest.fn().mockResolvedValue({}),
+            deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+            upsert: jest.fn().mockResolvedValue({}),
+            findMany: jest.fn().mockResolvedValue([]),
             ...overrides[`hostedCleanup`],
         },
         // The reaper reads this for apps held back from a deleted sandbox; empty unless a test is about one.
         sandboxTrash: {
-            findMany: mock().mockResolvedValue([]),
+            findMany: jest.fn().mockResolvedValue([]),
             ...overrides[`sandboxTrash`],
         },
         // Empty pool by default so tests not about the pool exercise the cold path.
         hostedPoolMachine: {
-            findMany: mock().mockResolvedValue([]),
-            updateMany: mock().mockResolvedValue({ count: 1 }),
-            delete: mock().mockResolvedValue({}),
-            deleteMany: mock().mockResolvedValue({ count: 1 }),
+            findMany: jest.fn().mockResolvedValue([]),
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            delete: jest.fn().mockResolvedValue({}),
+            deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
             ...overrides[`hostedPoolMachine`],
         },
         // `findMany` is the hour meter's live read (an owner's open stretches): none open unless a test says so;
         // `count` is the owner's slot use at the row write, none unless a test says so.
         hostedMachine: {
-            update: mock().mockResolvedValue({}),
-            findUnique: mock().mockResolvedValue(null),
-            findMany: mock().mockResolvedValue([]),
-            count: mock().mockResolvedValue(0),
+            update: jest.fn().mockResolvedValue({}),
+            findUnique: jest.fn().mockResolvedValue(null),
+            findMany: jest.fn().mockResolvedValue([]),
+            count: jest.fn().mockResolvedValue(0),
             ...overrides[`hostedMachine`],
         },
         // The claim adopts the pool machine's identity onto the sandbox row inside the hand-off transaction, and
         // the slot write reads the row's owner first.
         sandbox: {
-            update: mock().mockResolvedValue({}),
-            findUnique: mock().mockResolvedValue({ tokenDigest: sha256Hex(`t0k3n`) }),
-            findUniqueOrThrow: mock().mockResolvedValue({ ownerId: `u1` }),
+            update: jest.fn().mockResolvedValue({}),
+            findUnique: jest.fn().mockResolvedValue({ tokenDigest: sha256Hex(`t0k3n`) }),
+            findUniqueOrThrow: jest.fn().mockResolvedValue({ ownerId: `u1` }),
             ...overrides[`sandbox`],
         },
     };
@@ -275,7 +274,7 @@ describe(`provisionHosted`, () => {
     const hostnameOf = (token: string): string => `sandbox-${sandboxIdFromToken(token)}.sbx.test`;
 
     it(`creates app → volume → machine and stamps the row; the env is the contract's vocabulary`, async () => {
-        const created = mock().mockResolvedValue({});
+        const created = jest.fn().mockResolvedValue({});
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
             { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
@@ -336,7 +335,7 @@ describe(`provisionHosted`, () => {
             { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ error: `internal error` }, 500) },
             { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) },
         ]);
-        await expect(provisionHosted(fakePrisma({ hostedMachine: { create: mock() } }) as never, config(), logger, args)).rejects.toThrow(
+        await expect(provisionHosted(fakePrisma({ hostedMachine: { create: jest.fn() } }) as never, config(), logger, args)).rejects.toThrow(
             /internal error/,
         );
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
@@ -345,9 +344,9 @@ describe(`provisionHosted`, () => {
     it(`refuses without touching the provider when the fleet is at its ceiling`, async () => {
         const fetchSpy = stubFetch([]);
         const full = fakePrisma({
-            hostedMachine: { create: mock(), count: mock().mockResolvedValue(100) },
-            hostedPoolMachine: { count: mock().mockResolvedValue(0) },
-            hostedBuild: { count: mock().mockResolvedValue(0) },
+            hostedMachine: { create: jest.fn(), count: jest.fn().mockResolvedValue(100) },
+            hostedPoolMachine: { count: jest.fn().mockResolvedValue(0) },
+            hostedBuild: { count: jest.fn().mockResolvedValue(0) },
         });
         await expect(
             provisionHosted(full as never, config({ hosted: { ...config().hosted, maxMachines: 100 } }), logger, args),
@@ -365,7 +364,7 @@ describe(`provisionHosted`, () => {
             },
             { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) },
         ]);
-        await expect(provisionHosted(fakePrisma({ hostedMachine: { create: mock() } }) as never, config(), logger, args)).rejects.toBeInstanceOf(
+        await expect(provisionHosted(fakePrisma({ hostedMachine: { create: jest.fn() } }) as never, config(), logger, args)).rejects.toBeInstanceOf(
             HostedAtCapacity,
         );
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
@@ -394,10 +393,10 @@ describe(`provisionHosted`, () => {
     };
 
     it(`claims a warm machine when one is waiting: brands it, starts it, and opens the meter at claim`, async () => {
-        const created = mock().mockResolvedValue({});
-        const poolDelete = mock().mockResolvedValue({});
-        const adopt = mock().mockResolvedValue({});
-        const updateMany = mock().mockResolvedValue({ count: 1 });
+        const created = jest.fn().mockResolvedValue({});
+        const poolDelete = jest.fn().mockResolvedValue({});
+        const adopt = jest.fn().mockResolvedValue({});
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
         const machine = settlingMachine(`m7`);
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `stopped` }) },
@@ -406,7 +405,7 @@ describe(`provisionHosted`, () => {
         ]);
         const prisma = fakePrisma({
             hostedMachine: { create: created },
-            hostedPoolMachine: { findMany: mock().mockResolvedValue([poolRow]), updateMany, delete: poolDelete },
+            hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow]), updateMany, delete: poolDelete },
             sandbox: { update: adopt },
         });
         const result = await provisionHosted(prisma as never, config(), logger, args);
@@ -465,8 +464,8 @@ describe(`provisionHosted`, () => {
     });
 
     it(`waits out the replacement, then starts the machine: replacing is neither a dead row nor a running one`, async () => {
-        const created = mock().mockResolvedValue({});
-        const poolDelete = mock().mockResolvedValue({});
+        const created = jest.fn().mockResolvedValue({});
+        const poolDelete = jest.fn().mockResolvedValue({});
         const machine = settlingMachine(`m7`, { replacingFor: 2 });
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `replacing` }) },
@@ -476,8 +475,8 @@ describe(`provisionHosted`, () => {
         const prisma = fakePrisma({
             hostedMachine: { create: created },
             hostedPoolMachine: {
-                findMany: mock().mockResolvedValue([poolRow]),
-                updateMany: mock().mockResolvedValue({ count: 1 }),
+                findMany: jest.fn().mockResolvedValue([poolRow]),
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
                 delete: poolDelete,
             },
         });
@@ -495,23 +494,20 @@ describe(`provisionHosted`, () => {
             { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
             { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
         ]);
-        const findMany = mock().mockResolvedValue([]);
-        const prisma = fakePrisma({ hostedMachine: { create: mock().mockResolvedValue({}) }, hostedPoolMachine: { findMany } });
+        const findMany = jest.fn().mockResolvedValue([]);
+        const prisma = fakePrisma({ hostedMachine: { create: jest.fn().mockResolvedValue({}) }, hostedPoolMachine: { findMany } });
         await provisionHosted(prisma as never, config(), logger, { ...args, region: `arn` });
         expect(findMany).toHaveBeenCalledWith({
-            // Excludes pool rows with no token: such a row names no app the edge could reach.
-            // The IMAGE is no longer part of this query: a row now stores the digest its machine actually holds,
-            // which only a registry round trip can name, and an empty pool must not pay for one to learn it is
-            // empty. The claim filters the rows it got back against the resolved digest instead.
-            where: { region: `arn`, state: `ready`, NOT: { token: `` } },
+            // No image filter: a row holds its machine's digest, which an empty pool must not pay a registry round trip to name.
+            where: { region: `arn`, state: `ready` },
             orderBy: { createdAt: `asc` },
         });
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
     });
 
     it(`falls back to a cold build when the claim stumbles: the reader is owed a machine, not a pool hit`, async () => {
-        const created = mock().mockResolvedValue({});
-        const poolDelete = mock().mockResolvedValue({});
+        const created = jest.fn().mockResolvedValue({});
+        const poolDelete = jest.fn().mockResolvedValue({});
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ error: `host unavailable` }, 500) },
             { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
@@ -521,8 +517,8 @@ describe(`provisionHosted`, () => {
         const prisma = fakePrisma({
             hostedMachine: { create: created },
             hostedPoolMachine: {
-                findMany: mock().mockResolvedValue([poolRow]),
-                updateMany: mock().mockResolvedValue({ count: 1 }),
+                findMany: jest.fn().mockResolvedValue([poolRow]),
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
                 delete: poolDelete,
             },
         });
@@ -548,11 +544,11 @@ describe(`provisionHosted`, () => {
             { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => machine.read() },
         ]);
         const prisma = fakePrisma({
-            hostedMachine: { create: mock().mockResolvedValue({}) },
+            hostedMachine: { create: jest.fn().mockResolvedValue({}) },
             hostedPoolMachine: {
-                findMany: mock().mockResolvedValue([{ ...poolRow, image: PINNED_IMAGE }]),
-                updateMany: mock().mockResolvedValue({ count: 1 }),
-                delete: mock().mockResolvedValue({}),
+                findMany: jest.fn().mockResolvedValue([{ ...poolRow, image: PINNED_IMAGE }]),
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+                delete: jest.fn().mockResolvedValue({}),
             },
         });
         const result = await provisionHosted(prisma as never, config(), logger, args);
@@ -575,14 +571,14 @@ describe(`provisionHosted`, () => {
             { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
             { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
         ]);
-        const poolDelete = mock().mockResolvedValue({});
+        const poolDelete = jest.fn().mockResolvedValue({});
         const prisma = fakePrisma({
-            hostedMachine: { create: mock().mockResolvedValue({}) },
+            hostedMachine: { create: jest.fn().mockResolvedValue({}) },
             hostedPoolMachine: {
-                findMany: mock().mockResolvedValue([
+                findMany: jest.fn().mockResolvedValue([
                     { ...poolRow, image: `ghcr.io/intentic/sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000` },
                 ]),
-                updateMany: mock().mockResolvedValue({ count: 1 }),
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
                 delete: poolDelete,
             },
         });
@@ -596,8 +592,8 @@ describe(`provisionHosted`, () => {
 
     // Candidates are tried oldest-first, so the most likely-dead row is tried before any healthy one.
     it(`tries the next warm machine when the first one is gone: one dead row must not cost a cold build`, async () => {
-        const created = mock().mockResolvedValue({});
-        const poolDelete = mock().mockResolvedValue({});
+        const created = jest.fn().mockResolvedValue({});
+        const poolDelete = jest.fn().mockResolvedValue({});
         const secondMachine = settlingMachine(`m8`);
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ error: `machine not found` }, 404) },
@@ -609,8 +605,8 @@ describe(`provisionHosted`, () => {
         const prisma = fakePrisma({
             hostedMachine: { create: created },
             hostedPoolMachine: {
-                findMany: mock().mockResolvedValue([poolRow, second]),
-                updateMany: mock().mockResolvedValue({ count: 1 }),
+                findMany: jest.fn().mockResolvedValue([poolRow, second]),
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
                 delete: poolDelete,
             },
         });
@@ -631,8 +627,8 @@ describe(`provisionHosted`, () => {
             code: `P2002`,
             clientVersion: `test`,
         });
-        const created = mock().mockRejectedValue(duplicate);
-        const poolDelete = mock().mockResolvedValue({});
+        const created = jest.fn().mockRejectedValue(duplicate);
+        const poolDelete = jest.fn().mockResolvedValue({});
         const machine = settlingMachine(`m7`);
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `stopped` }) },
@@ -640,14 +636,14 @@ describe(`provisionHosted`, () => {
             { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => machine.read() },
         ]);
         const second = { ...poolRow, id: `p2`, appName: SECOND_APP, machineId: `m8`, volumeId: `vol_8`, token: SECOND_TOKEN };
-        const claim = mock().mockResolvedValue({ count: 1 });
+        const claim = jest.fn().mockResolvedValue({ count: 1 });
         const prisma = fakePrisma({
             hostedMachine: {
                 create: created,
                 // Winner's row already exists: this is the concurrent-provision race, not an appName collision.
-                findUnique: mock().mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
+                findUnique: jest.fn().mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
             },
-            hostedPoolMachine: { findMany: mock().mockResolvedValue([poolRow, second]), updateMany: claim, delete: poolDelete },
+            hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow, second]), updateMany: claim, delete: poolDelete },
         });
         await expect(provisionHosted(prisma as never, config(), logger, args)).rejects.toBeInstanceOf(HostedAlreadyProvisioned);
         // Exactly one row is branded per attempt: the guarded ready-to-claimed win must be paid once regardless of how
@@ -670,8 +666,8 @@ describe(`provisionHosted`, () => {
         ]);
         const prisma = fakePrisma({
             hostedMachine: {
-                create: mock().mockRejectedValue(duplicate),
-                findUnique: mock().mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
+                create: jest.fn().mockRejectedValue(duplicate),
+                findUnique: jest.fn().mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
             },
         });
         await expect(provisionHosted(prisma as never, config(), logger, args)).rejects.toBeInstanceOf(HostedAlreadyProvisioned);
@@ -738,8 +734,8 @@ describe(`reapHostedOrphans`, () => {
 
     const deleteRoute = { match: (method: string) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) };
     const knownRows = fakePrisma({
-        hostedMachine: { findMany: mock().mockResolvedValue([{ appName: `intentic-sbx-live` }]) },
-        hostedPoolMachine: { findMany: mock().mockResolvedValue([{ appName: `intentic-sbx-pool-warm1` }]) },
+        hostedMachine: { findMany: jest.fn().mockResolvedValue([{ appName: `intentic-sbx-live` }]) },
+        hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([{ appName: `intentic-sbx-pool-warm1` }]) },
     });
     const deletedApps = (calls: { method: string; url: string }[]) => calls.filter((entry) => entry.method === `DELETE`).map((entry) => entry.url);
 
@@ -780,7 +776,7 @@ describe(`reapHostedOrphans`, () => {
             machinesOf({ "intentic-sbx-deleted": [flyMachine({ platform: INSTANCE })] }),
             deleteRoute,
         ]);
-        const held = fakePrisma({ sandboxTrash: { findMany: mock().mockResolvedValue([{ appName: `intentic-sbx-deleted` }]) } });
+        const held = fakePrisma({ sandboxTrash: { findMany: jest.fn().mockResolvedValue([{ appName: `intentic-sbx-deleted` }]) } });
         await reapHostedOrphans(held as never, config(), logger);
         expect(deletedApps(calls)).toHaveLength(0);
     });
@@ -840,7 +836,7 @@ describe(`reapHostedOrphans`, () => {
             deleteRoute,
         ]);
         // An empty database: nothing is known, so every app looks like litter.
-        await reapHostedOrphans(fakePrisma({ hostedMachine: { findMany: mock().mockResolvedValue([]) } }) as never, config(), logger);
+        await reapHostedOrphans(fakePrisma({ hostedMachine: { findMany: jest.fn().mockResolvedValue([]) } }) as never, config(), logger);
         expect(deletedApps(calls)).toHaveLength(0);
     });
 
@@ -856,7 +852,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     // hostedMachine.count answers two different questions per request: no `where` means the whole fleet (the ceiling);
     // a `where` means one owner's allowance. This stub only answers the fleet question.
     const fleetOf = (machines: number) =>
-        mock().mockImplementation((query?: { where?: unknown }) => Promise.resolve(query?.where === undefined ? machines : 0));
+        jest.fn().mockImplementation((query?: { where?: unknown }) => Promise.resolve(query?.where === undefined ? machines : 0));
 
     // `headers` feeds the region pick and the offer's stock-region check; empty means "cannot tell", the same as a
     // self-hosted platform with no Cloudflare in front.
@@ -869,7 +865,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
         expect(off).toEqual({ enabled: false, remaining: 0 });
         const on = await call(sandboxRoutes.hostedOffer, undefined, {
-            context: routeContext({ prisma: fakePrisma({ hostedMachine: { count: mock().mockResolvedValue(0) } }) }),
+            context: routeContext({ prisma: fakePrisma({ hostedMachine: { count: jest.fn().mockResolvedValue(0) } }) }),
         });
         // Ceiling is surfaced before any of it is spent, so the offer card doesn't say "free" and correct itself later.
         expect(on).toEqual({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
@@ -880,9 +876,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
      * because this platform sells nothing; the case below sets a price and gets it.) */
     it(`tells a subscriber the free plan's hours too, since the machine on offer is still a free one`, async () => {
         const member = fakePrisma({
-            hostedMachine: { count: mock().mockResolvedValue(0) },
+            hostedMachine: { count: jest.fn().mockResolvedValue(0) },
             // Plan row: status and the slots it holds at each rung.
-            hostedPlan: { findUnique: mock().mockResolvedValue({ status: `active`, items: [] }) },
+            hostedPlan: { findUnique: jest.fn().mockResolvedValue({ status: `active`, items: [] }) },
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma: member }) })).toEqual({
             enabled: true,
@@ -890,7 +886,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             hours: { allowance: config().hosted.monthlyHours, remaining: config().hosted.monthlyHours },
         });
         const uncapped = routeContext({
-            prisma: fakePrisma({ hostedMachine: { count: mock().mockResolvedValue(0) } }),
+            prisma: fakePrisma({ hostedMachine: { count: jest.fn().mockResolvedValue(0) } }),
             config: config({ hosted: { ...config().hosted, monthlyHours: 0 } }),
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: uncapped })).toEqual({ enabled: true, remaining: 1 });
@@ -914,13 +910,13 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const fetchSpy = stubFetch([]);
         const spent = fakePrisma({
             sandbox: {
-                findFirst: mock().mockResolvedValue({
+                findFirst: jest.fn().mockResolvedValue({
                     id: `s1`,
                     ownerId: `u1`,
-                    hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
+                    hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null, tier: `free` },
                 }),
             },
-            hostedUsage: { findUnique: mock().mockResolvedValue({ minutes: 40 * 60 }) },
+            hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 40 * 60 }) },
         });
         await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent }) })).rejects.toMatchObject({
             code: `PAYMENT_REQUIRED`,
@@ -935,16 +931,16 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const spent = (tier: string) =>
             fakePrisma({
                 sandbox: {
-                    findFirst: mock().mockResolvedValue({
+                    findFirst: jest.fn().mockResolvedValue({
                         id: `s1`,
                         ownerId: `u1`,
                         hosted: { id: `h1`, sandboxId: `s1`, tier, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
                     }),
                 },
-                hostedUsage: { findUnique: mock().mockResolvedValue({ minutes: FREE_TIER.monthlyHours * 60 }) },
-                hostedPlan: { findUnique: mock().mockResolvedValue({ status: `active`, items: [] }) },
+                hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: FREE_TIER.monthlyHours * 60 }) },
+                hostedPlan: { findUnique: jest.fn().mockResolvedValue({ status: `active`, items: [] }) },
                 // The row the wake opens its stretch on, still there when the start lands.
-                hostedMachine: { findUnique: mock().mockResolvedValue({ wokeAt: null }) },
+                hostedMachine: { findUnique: jest.fn().mockResolvedValue({ wokeAt: null }) },
             });
         await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(FREE_TIER.id) }) })).rejects.toThrow(
             /free hours are used up/u,
@@ -964,6 +960,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         lastSeenAt: null,
         setupCodeClaimedAt: null,
         setupReport: null,
+        bootReport: null,
+        announceRefusal: null,
         removedAt: null,
         removedBy: null,
     };
@@ -971,8 +969,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     it(`hostedProvision refuses over-quota before touching any provider`, async () => {
         const fetchSpy = stubFetch([]);
         const prisma = fakePrisma({
-            sandbox: { findFirst: mock().mockResolvedValue(ownedRow) },
-            hostedMachine: { findUnique: mock().mockResolvedValue(null), count: mock().mockResolvedValue(1) },
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(1) },
         });
         await expect(
             call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma }) }),
@@ -986,8 +984,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     it(`hostedOffer says the lane is full when the fleet is at its ceiling with no stock left`, async () => {
         const full = fakePrisma({
             hostedMachine: { count: fleetOf(100) },
-            hostedPoolMachine: { count: mock().mockResolvedValue(0) },
-            hostedBuild: { count: mock().mockResolvedValue(0) },
+            hostedPoolMachine: { count: jest.fn().mockResolvedValue(0) },
+            hostedBuild: { count: jest.fn().mockResolvedValue(0) },
         });
         const context = routeContext({ prisma: full, config: config({ hosted: { ...config().hosted, maxMachines: 100 } }) });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context })).toEqual({
@@ -1004,8 +1002,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             hostedMachine: { count: fleetOf(98) },
             // Both machines are claimable, so the count reads the same whether it asks about the whole pool or just
             // ready stock.
-            hostedPoolMachine: { count: mock().mockResolvedValue(2) },
-            hostedBuild: { count: mock().mockResolvedValue(0) },
+            hostedPoolMachine: { count: jest.fn().mockResolvedValue(2) },
+            hostedBuild: { count: jest.fn().mockResolvedValue(0) },
         });
         const context = routeContext({ prisma: stocked, config: config({ hosted: { ...config().hosted, maxMachines: 100 } }) });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context })).toEqual({
@@ -1019,10 +1017,10 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     it(`hostedProvision answers a full fleet as unavailable, in words a person can act on`, async () => {
         const fetchSpy = stubFetch([]);
         const prisma = fakePrisma({
-            sandbox: { findFirst: mock().mockResolvedValue(ownedRow) },
-            hostedMachine: { findUnique: mock().mockResolvedValue(null), count: fleetOf(100) },
-            hostedPoolMachine: { count: mock().mockResolvedValue(0), findMany: mock().mockResolvedValue([]) },
-            hostedBuild: { count: mock().mockResolvedValue(0) },
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(null), count: fleetOf(100) },
+            hostedPoolMachine: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+            hostedBuild: { count: jest.fn().mockResolvedValue(0) },
         });
         const context = routeContext({ prisma, config: config({ hosted: { ...config().hosted, maxMachines: 100 } }) });
         await expect(call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context })).rejects.toMatchObject({
@@ -1046,10 +1044,10 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const fetchSpy = stubFetch([]);
         const prisma = fakePrisma({
             sandbox: {
-                findFirst: mock().mockResolvedValue(ownedRow),
-                findUniqueOrThrow: mock().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, warm: true } }),
+                findFirst: jest.fn().mockResolvedValue(ownedRow),
+                findUniqueOrThrow: jest.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, warm: true } }),
             },
-            hostedMachine: { findUnique: mock().mockResolvedValue({ appName: `intentic-sbx-pool-abc123`, machineId: `m1` }), count: mock() },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ appName: `intentic-sbx-pool-abc123`, machineId: `m1` }), count: jest.fn() },
         });
         const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma }) });
         // `warm` is read off the app name: a pool claim keeps its pool-assigned name.
@@ -1071,15 +1069,15 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const duplicate = new Prisma.PrismaClientKnownRequestError(`Unique constraint failed`, { code: `P2002`, clientVersion: `test` });
         const prisma = fakePrisma({
             sandbox: {
-                findFirst: mock().mockResolvedValue(ownedRow),
-                findUniqueOrThrow: mock().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, warm: true } }),
-                update: mock().mockResolvedValue(ownedRow),
+                findFirst: jest.fn().mockResolvedValue(ownedRow),
+                findUniqueOrThrow: jest.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, warm: true } }),
+                update: jest.fn().mockResolvedValue(ownedRow),
             },
             hostedMachine: {
                 // Null for the route's own pre-flight read, then the winner's row once the write is refused.
-                findUnique: mock().mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
-                count: mock().mockResolvedValue(0),
-                create: mock().mockRejectedValue(duplicate),
+                findUnique: jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
+                count: jest.fn().mockResolvedValue(0),
+                create: jest.fn().mockRejectedValue(duplicate),
             },
         });
         const context = routeContext({ prisma, headers: new Headers() });
@@ -1089,19 +1087,19 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     });
 
     it.each([null, new Date()])(`hostedRelease durably cancels setup with lastSeenAt %s`, async (lastSeenAt) => {
-        const fetch = mock();
+        const fetch = jest.fn();
         stubGlobal(`fetch`, fetch);
-        const machineDelete = mock().mockResolvedValue({});
-        const upsert = mock().mockResolvedValue({});
+        const machineDelete = jest.fn().mockResolvedValue({});
+        const upsert = jest.fn().mockResolvedValue({});
         const prisma = fakePrisma({
             sandbox: {
-                findFirst: mock().mockResolvedValue({ ...ownedRow, lastSeenAt }),
-                findUniqueOrThrow: mock()
+                findFirst: jest.fn().mockResolvedValue({ ...ownedRow, lastSeenAt }),
+                findUniqueOrThrow: jest.fn()
                     .mockResolvedValueOnce({ ...ownedRow, lastSeenAt, hosted: { id: `h1`, appName: `intentic-sbx-a`, wokeAt: null } })
                     .mockResolvedValue({ ...ownedRow, hosted: null }),
             },
             hostedCleanup: { upsert },
-            hostedMachine: { findUnique: mock().mockResolvedValue({ appName: `intentic-sbx-a` }), delete: machineDelete },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ appName: `intentic-sbx-a` }), delete: machineDelete },
         });
         const before = Date.now();
         const summary = await call(sandboxRoutes.hostedRelease, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
@@ -1140,10 +1138,11 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             volumeId: `vol_1`,
             region: `iad`,
             wokeAt: null,
+            tier: `free`,
         };
         const prisma = fakePrisma({
-            sandbox: { findFirst: mock().mockResolvedValue(ownedRow) },
-            hostedMachine: { findUnique: mock().mockResolvedValue(hosted), update: mock().mockResolvedValue({}) },
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(hosted), update: jest.fn().mockResolvedValue({}) },
         });
 
         expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
@@ -1165,10 +1164,18 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     // Same sandbox identity (name, address, sharing) on a fresh, empty disk; nothing on a destroyed machine is worth
     // preserving.
     it(`hostedRestart builds a replacement when the provider says the machine is gone`, async () => {
-        const machineCreate = mock().mockResolvedValue({});
+        const machineCreate = jest.fn().mockResolvedValue({});
         // The dead row until the rebuild deletes it; after that the sandbox has no row, as the new app's check expects.
-        let row: Record<string, unknown> | null = { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null };
-        const rowDelete = mock(async () => {
+        let row: Record<string, unknown> | null = {
+            id: `h1`,
+            appName: `intentic-sbx-a`,
+            machineId: `m1`,
+            volumeId: `vol_1`,
+            region: `iad`,
+            wokeAt: null,
+            tier: `free`,
+        };
+        const rowDelete = jest.fn(async () => {
             row = null;
             return {};
         });
@@ -1185,12 +1192,12 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m2`, state: `created` }) },
         ]);
         const prisma = fakePrisma({
-            sandbox: { findFirst: mock().mockResolvedValue(ownedRow) },
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
             hostedMachine: {
-                findUnique: mock(async () => row),
+                findUnique: jest.fn(async () => row),
                 create: machineCreate,
                 delete: rowDelete,
-                update: mock().mockResolvedValue({}),
+                update: jest.fn().mockResolvedValue({}),
             },
         });
         expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
@@ -1201,7 +1208,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     });
 
     it(`hostedRestart destroys nothing when the provider merely refuses`, async () => {
-        const rowDelete = mock();
+        const rowDelete = jest.fn();
         stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/stop`), respond: () => json({ ok: true }) },
             {
@@ -1212,18 +1219,19 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ error: `host unavailable` }, 500) },
         ]);
         const prisma = fakePrisma({
-            sandbox: { findFirst: mock().mockResolvedValue(ownedRow) },
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
             hostedMachine: {
-                findUnique: mock().mockResolvedValue({
+                findUnique: jest.fn().mockResolvedValue({
                     id: `h1`,
                     appName: `intentic-sbx-a`,
                     machineId: `m1`,
                     volumeId: `vol_1`,
                     region: `iad`,
                     wokeAt: null,
+                    tier: `free`,
                 }),
                 delete: rowDelete,
-                update: mock().mockResolvedValue({}),
+                update: jest.fn().mockResolvedValue({}),
             },
         });
         await expect(call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
@@ -1236,14 +1244,14 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     it(`hostedStatus answers gone when the provider says there is no such machine`, async () => {
         stubFetch([{ match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ error: `app not found` }, 404) }]);
         const prisma = fakePrisma({
-            sandbox: { findFirst: mock().mockResolvedValue(ownedRow) },
-            hostedMachine: { findUnique: mock().mockResolvedValue({ appName: `intentic-sbx-a`, machineId: `m1` }) },
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ appName: `intentic-sbx-a`, machineId: `m1` }) },
         });
         expect(await call(sandboxRoutes.hostedStatus, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ machine: `gone` });
     });
 
     it(`wake 404s for a sandbox that is not hosted (or not the caller's)`, async () => {
-        const prisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(null) } });
+        const prisma = fakePrisma({ sandbox: { findFirst: jest.fn().mockResolvedValue(null) } });
         await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toBeInstanceOf(ORPCError);
     });
 
@@ -1252,19 +1260,19 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const written: unknown[] = [];
         const prisma = fakePrisma({
             sandbox: {
-                findFirst: mock().mockResolvedValue({
+                findFirst: jest.fn().mockResolvedValue({
                     id: `s1`,
                     ownerId: `u1`,
-                    hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
+                    hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null, tier: `free` },
                 }),
-                update: mock((args: unknown) => {
+                update: jest.fn((args: unknown) => {
                     written.push(args);
                     return Promise.resolve({});
                 }),
             },
             hostedMachine: {
-                findUnique: mock().mockResolvedValue({ wokeAt: null }),
-                delete: mock((args: unknown) => {
+                findUnique: jest.fn().mockResolvedValue({ wokeAt: null }),
+                delete: jest.fn((args: unknown) => {
                     written.push(args);
                     return Promise.resolve({});
                 }),
@@ -1282,15 +1290,15 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     // A refusal is not evidence of anything; treating it as "gone" would reset every hosted sandbox on one bad minute.
     it(`wake keeps the row when the provider merely refuses`, async () => {
         stubFetch([{ match: () => true, respond: () => json({ error: `host unavailable` }, 500) }]);
-        const remove = mock();
+        const remove = jest.fn();
         const prisma = fakePrisma({
             sandbox: {
-                findFirst: mock().mockResolvedValue({
+                findFirst: jest.fn().mockResolvedValue({
                     id: `s1`,
                     ownerId: `u1`,
-                    hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
+                    hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null, tier: `free` },
                 }),
-                update: mock().mockResolvedValue({}),
+                update: jest.fn().mockResolvedValue({}),
             },
             hostedMachine: { delete: remove },
         });
@@ -1302,11 +1310,11 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
 
     it(`wake starts the machine for an accepted member's hosted sandbox`, async () => {
         stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ ok: true }) }]);
-        const findFirst = mock().mockResolvedValue({
+        const findFirst = jest.fn().mockResolvedValue({
             id: `s1`,
-            hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, region: `iad` },
+            hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, region: `iad`, tier: `free` },
         });
-        const prisma = fakePrisma({ sandbox: { findFirst }, hostedMachine: { findUnique: mock().mockResolvedValue({ wokeAt: null }) } });
+        const prisma = fakePrisma({ sandbox: { findFirst }, hostedMachine: { findUnique: jest.fn().mockResolvedValue({ wokeAt: null }) } });
         const result = await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
         expect(result).toEqual({ ok: true });
         // Access query admits owner OR accepted member; the OR is the contract under test.
@@ -1321,14 +1329,14 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         ]);
         const prisma = fakePrisma({
             sandbox: {
-                findFirst: mock().mockResolvedValue({
+                findFirst: jest.fn().mockResolvedValue({
                     id: `s1`,
                     ownerId: `u1`,
-                    hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
+                    hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null, tier: `free` },
                 }),
             },
             // What the stretch's row lock finds: no row.
-            hostedMachine: { findUnique: mock().mockResolvedValue(null) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(null) },
         });
         await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
             code: `NOT_FOUND`,

@@ -38,9 +38,9 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
         key: `configuration`,
         label: t(`sandbox.sandboxNav.configuration`),
         items: [
-            { slug: `environment`, label: t(`sandbox.sandboxNav.environment`), icon: `box` },
+            { slug: `environment`, label: t(`shared.environment`), icon: `box` },
             { slug: `secrets`, label: t(`sandbox.sandboxNav.secrets`), icon: `key`, maintainer: true },
-            { slug: `agent`, label: t(`sandbox.sandboxNav.agent`), icon: `sparkles`, maintainer: true },
+            { slug: `agent`, label: t(`shared.agent`), icon: `sparkles`, maintainer: true },
             // Finding, installing, managing and disabling as one.
             { slug: `extensions`, label: t(`sandbox.sandboxNav.extensions`), icon: `sliders-h` },
         ],
@@ -51,22 +51,22 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
         items: [
             // Who may use this box: members, invites, roles. `shield`, not `users` (Personas' glyph, one row below).
             // Access stays below maintainer: revoking your own grant is anyone's.
-            { slug: `access`, label: t(`sandbox.sandboxNav.access`), icon: `shield` },
+            { slug: `access`, label: t(`shared.access`), icon: `shield` },
             // What the folders behind a grant are. Beside Access rather than under Configuration: an area is half of
             // a grant, and reading it as configuration is how somebody edits one without noticing whose reach moved.
-            { slug: `areas`, label: t(`sandbox.sandboxNav.areas`), icon: `folder`, maintainer: true },
+            { slug: `areas`, label: t(`shared.areas`), icon: `folder`, maintainer: true },
             // Who this box acts as outward; not beside `agent` in Configuration, easy to conflate, opposite in stakes.
-            { slug: `personas`, label: t(`sandbox.sandboxNav.personas`), icon: `user`, maintainer: true },
+            { slug: `personas`, label: t(`shared.personas`), icon: `user`, maintainer: true },
             // "Devices", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
             // enrollment this tab used to be named after is one property of one of them.
-            { slug: `devices`, label: t(`sandbox.sandboxNav.devices`), icon: `desktop`, maintainer: true },
+            { slug: `devices`, label: t(`shared.devices2`), icon: `desktop`, maintainer: true },
         ],
     },
     {
         // The account's other boxes, not this one; last, since nothing here is about the sandbox the hub is named for.
         key: `account`,
         label: t(`sandbox.sandboxNav.yourSandboxes`),
-        items: [{ slug: `deleted`, label: t(`sandbox.sandboxNav.deleted`), icon: `trash` }],
+        items: [{ slug: `deleted`, label: t(`shared.recentlyDeleted`), icon: `trash` }],
     },
 ];
 

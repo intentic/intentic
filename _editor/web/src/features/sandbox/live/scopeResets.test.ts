@@ -2,7 +2,6 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, mock } from "bun:test";
 import { createApp, effectScope, nextTick, ref } from "vue";
 import { activeSandboxId } from "../overview/activeSandbox";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
@@ -11,11 +10,11 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // workspace replaced under the same sandbox id (the hello) and a switch to another sandbox (sandboxScope.ts). The
 // sandboxes' own reads answer with nothing; the stores, the hello and the switch are the real ones.
 
-mock.module("../../../router", () => ({ router: { push: mock() } }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 const reachable = ref(false);
-mock.module("../client/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId, reachable }) }));
-mock.module("../client/sandboxRpc", () => ({
+jest.mock("../client/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId, reachable }) }));
+jest.mock("../client/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         agents: { list: async () => ({ agents: [], rev: 0, held: [] }), archived: async () => ({ agents: [], rev: 0, held: [] }) },
     }),

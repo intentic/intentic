@@ -1,7 +1,6 @@
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, afterEach } from "bun:test";
 import { fakeCodexRunner, memoryFleet } from "../../testing.js";
 import { createCodexAgent } from "./codex-agent.js";
 import { parkedCards } from "../../agents/actor/parked-cards.js";

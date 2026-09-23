@@ -1,14 +1,13 @@
 // The `@` token's setting rows, pinned as a table: what an empty token lists, what a word matches, what a drill
 // shows, and that a kind the pill row refuses is nowhere.
 import type { AgentProvider, Persona } from "@intentic/sandbox-contract";
-import { it, expect, mock } from "bun:test";
 import type { PickerEntry } from "../models/modelPickerState";
 import { DRILLED_ROWS, FLAT_MODEL_ROWS, kindMeta, type QuickPickSources, quickRows } from "./composerQuickPick";
 import { QUICK_KINDS } from "./useMentions";
 
 // modelPickerState imports conversation.ts for the live catalogs; stub its side-effects so the import is inert.
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: mock() }));
-mock.module("../models/useChat-catalog", () => ({ loadProviderModels: mock(async () => {}) }));
+jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: jest.fn() }));
+jest.mock("../models/useChat-catalog", () => ({ loadProviderModels: jest.fn(async () => {}) }));
 
 const entry = (provider: AgentProvider, value: string, label: string): PickerEntry => ({ key: `${provider}:${value}`, provider, value, label });
 const persona = (id: string, extra: Partial<Persona> = {}): Persona => ({ id, capabilities: [], ...extra });
@@ -95,14 +94,20 @@ it(`puts the kind's summary row first when the word names the kind, so Enter dri
 
 it(`caps models in a flat search at the boundary, so files below stay within reach`, () => {
     const many = Array.from({ length: FLAT_MODEL_ROWS + 1 }, (_, index) => entry(`claude`, `claude-m-${index}`, `Claude M${index}`));
-    const sources: QuickPickSources = { ...ALL, model: { entries: many, provider: `claude`, model: `claude-m-0`, label: `Claude M 0`, isReady: () => true } };
+    const sources: QuickPickSources = {
+        ...ALL,
+        model: { entries: many, provider: `claude`, model: `claude-m-0`, label: `Claude M 0`, isReady: () => true },
+    };
     expect(quickRows(sources, { kind: undefined, query: `claude` }).filter((row) => row.kind === `model`)).toHaveLength(FLAT_MODEL_ROWS);
     expect(quickRows(sources, { kind: `model`, query: `claude` })).toHaveLength(FLAT_MODEL_ROWS + 1);
 });
 
 it(`drills into one kind alone, caps its list at the boundary, and leads with the current pick`, () => {
     const many = Array.from({ length: DRILLED_ROWS + 1 }, (_, index) => entry(`claude`, `claude-m-${index}`, `Claude M${index}`));
-    const sources: QuickPickSources = { ...ALL, model: { entries: many, provider: `claude`, model: `claude-m-7`, label: `Claude M 7`, isReady: () => true } };
+    const sources: QuickPickSources = {
+        ...ALL,
+        model: { entries: many, provider: `claude`, model: `claude-m-7`, label: `Claude M 7`, isReady: () => true },
+    };
     const rows = quickRows(sources, { kind: `model`, query: `` });
     expect(rows).toHaveLength(DRILLED_ROWS);
     expect(rows.every((row) => row.kind === `model`)).toBe(true);

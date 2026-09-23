@@ -1,4 +1,3 @@
-import { describe, test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { STILL_DELAY_MS, STILL_IDLE_MS } from "./screencast.js";
 import { createStillTaker, isLoud, QUIET_BYTES } from "./stills.js";
@@ -21,7 +20,7 @@ const keyframe = { key: true, bytes: 60_000 };
 // One taker over a capture that answers what `shot` holds; `sent` is every still that went to the client.
 const taker = (shot: { value: string | undefined }) => {
     const sent: Buffer[] = [];
-    const capture = mock(async () => shot.value);
+    const capture = jest.fn(async () => shot.value);
     const made = createStillTaker({ capture, send: (still) => sent.push(still) });
     return { made, capture, sent };
 };

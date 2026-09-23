@@ -1,5 +1,4 @@
 import { type AgentSummary, type AgentTurn, ciFixConversationId, fixAttemptId } from "@intentic/sandbox-contract";
-import { describe, test, expect, mock } from "bun:test";
 import { type FixAttemptDeps, startFixAttempt } from "./fix-attempts.js";
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
@@ -24,14 +23,14 @@ const fakes = (roster: AgentSummary[] = [], archived: string[] = [], options: { 
     const deps: FixAttemptDeps = {
         roster: () => roster,
         archivedIds: () => archived,
-        stop: mock(async (id: string) => void calls.push(`stop ${id}`)),
-        archive: mock(async (id: string) => void calls.push(`archive ${id}`)),
-        start: mock(async (turn: AgentTurn & { conversationId: string }) => {
+        stop: jest.fn(async (id: string) => void calls.push(`stop ${id}`)),
+        archive: jest.fn(async (id: string) => void calls.push(`archive ${id}`)),
+        start: jest.fn(async (turn: AgentTurn & { conversationId: string }) => {
             calls.push(`start ${turn.conversationId}`);
             started.push(turn);
             return options.taken === true ? undefined : { run: true };
         }),
-        rerun: mock(async (id: string) => {
+        rerun: jest.fn(async (id: string) => {
             calls.push(`rerun ${id}`);
             return id === options.kept ? { run: true } : undefined;
         }),

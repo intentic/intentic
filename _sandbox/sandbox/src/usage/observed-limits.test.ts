@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { observedTurnLimit, type ObservedSpend, observedUsage, pickObservedAccount } from "./observed-limits.js";
 
 /* A refusal is the only measurement some plans give, so what this suite pins is that it is read as narrowly as it was

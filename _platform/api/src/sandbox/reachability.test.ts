@@ -1,7 +1,6 @@
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import { verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { describe, it, expect } from "bun:test";
 import type { Config } from "../config.js";
 import { INGRESS_TEST_PUBLIC_KEY, testIngressConfig } from "../testing.js";
 import { ensureReachability, ingressEnabled, sandboxHostname } from "./reachability.js";

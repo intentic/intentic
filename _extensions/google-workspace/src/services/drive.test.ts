@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { driveQuery, exportMimeFor } from "./drive.js";
 
 const DOC = "application/vnd.google-apps.document";

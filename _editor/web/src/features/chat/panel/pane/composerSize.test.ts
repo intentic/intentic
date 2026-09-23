@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { afterEach, expect, it } from "bun:test";
 import { createApp, h, ref } from "vue";
 import { useComposerSize } from "./composerSize";
 

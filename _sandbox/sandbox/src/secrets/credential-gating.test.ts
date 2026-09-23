@@ -1,5 +1,4 @@
 import { type Capability, type CredentialGate, envSuffix } from "@intentic/sandbox-contract";
-import { it, expect } from "bun:test";
 import { createCredentialGrants } from "./credential-grants.js";
 import { gatedCapabilities, gatedCliEnv, gatedCredentialsNote, gatedSkills } from "./credential-gating.js";
 

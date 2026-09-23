@@ -5,20 +5,14 @@ import type { Logger } from "pino";
 // Declaring a chain closes the gate until finish() opens it; a tracker with no declared chain is converged from birth.
 // A failed step is recorded and the chain continues; failure here is not fatal to boot.
 
-export interface BootStepDeclaration<Key extends string = string> {
-    readonly key: Key;
-    readonly label: string;
-}
-
-// `Key` lets a caller with a known chain (boot-chain.ts) get its declarations checked by tsc instead of at runtime.
-export interface BootTracker<Key extends string = string> {
+export interface BootTracker {
     // Resolves once the chain converges; data routes await it, /health and /events never do.
     readonly converged: Promise<void>;
     // Declares the chain, in run order, and closes the gate until finish().
-    declare(steps: readonly BootStepDeclaration<Key>[]): void;
+    declare(steps: readonly Pick<BootStep, "key" | "label">[]): void;
     // Runs one declared step, recording its state and elapsed time, and returns what `run` returns. A rejection marks
     // the step failed and still propagates.
-    step<T>(key: Key, run: () => Promise<T>): Promise<T>;
+    step<T>(key: string, run: () => Promise<T>): Promise<T>;
     // Opens the gate: `converged` resolves and progress reads ready.
     finish(): void;
     progress(): BootProgress;

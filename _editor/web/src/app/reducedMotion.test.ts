@@ -1,6 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { describe, it, expect } from "bun:test";
 
 /* Request and route activity must not start CSS animations: Chrome DevTools rebuilds an open Styles editor when those animations start or stop. */
 

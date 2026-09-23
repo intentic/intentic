@@ -3,7 +3,6 @@ import { appendFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CivilDay } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { fileUsageStore, utcDay } from "./usage-store.js";
 
 const storePath = (): string => join(mkdtempSync(join(tmpdir(), "usage-")), "usage.jsonl");

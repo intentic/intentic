@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { defaultGit } from "@intentic/scaffold";
-import { test, expect, afterEach } from "bun:test";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { discardPaths } from "../../git/changes/changes-index.js";
 import { createLogger } from "../../logger.js";

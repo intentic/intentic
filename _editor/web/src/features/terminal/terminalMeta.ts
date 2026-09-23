@@ -1,6 +1,7 @@
 import { sandboxRef } from "@intentic/extension-api";
 import type { IconName } from "@intentic/ui";
 import { useSandbox } from "../sandbox/client/useSandbox";
+import type { TerminalTab } from "./useTerminal";
 
 // Per-terminal cosmetic overrides (label, pill color, pill icon) keyed by tmux session name. Client-side
 // preference only, persisted per sandbox in localStorage.
@@ -11,14 +12,18 @@ export interface TerminalMeta {
     readonly icon?: IconName;
 }
 
-// Default glyph per KIND; shared by the pills and Recent-work rows so a glyph means one thing everywhere.
-export const KIND_ICONS = {
-    agent: `sparkles`,
-    job: `bolt`,
-    process: `cog`,
-    shell: `code`,
-    panel: `code`,
-} as const satisfies Record<string, IconName>;
+type TerminalKind = TerminalTab[`kind`];
+
+// Per kind: glyph, whether it is work (tabbed only when shown), whether it is a read-only log view, and its count noun.
+export const KINDS = {
+    shell: { icon: `code`, work: false, logs: false, noun: [`shell`, `shells`] },
+    panel: { icon: `code`, work: false, logs: false, noun: [`dev server`, `dev servers`] },
+    agent: { icon: `sparkles`, work: true, logs: false, noun: [`agent shell`, `agent shells`] },
+    job: { icon: `bolt`, work: true, logs: false, noun: [`job`, `jobs`] },
+    process: { icon: `cog`, work: false, logs: true, noun: undefined },
+} as const satisfies Record<TerminalKind, { icon: IconName; work: boolean; logs: boolean; noun: readonly [string, string] | undefined }>;
+
+export const isWork = <T extends { readonly kind: TerminalKind }>(tab: T): tab is T & { readonly kind: `agent` | `job` } => KINDS[tab.kind].work;
 
 // Offered pill colors, tuned for the dark pill background.
 export const TERMINAL_COLORS = {

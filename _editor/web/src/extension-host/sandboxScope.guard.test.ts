@@ -1,7 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { test, expect } from "bun:test";
 
 // Refuses module-level reactive state in an extension unless declared through sandboxRef (extension-api/src/scope.ts);
 // state that isn't scoped survives a sandbox switch and shows stale data.

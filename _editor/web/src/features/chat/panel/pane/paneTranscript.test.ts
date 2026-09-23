@@ -1,13 +1,12 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { REVEAL_DELAY_MS } from "@intentic/ui/loading-reveal";
-import { afterEach, describe, expect, it, jest } from "bun:test";
 import { nextTick, ref } from "vue";
 import type { ChatMessage } from "../../transcript/transcript";
 import { usePaneTranscript } from "./paneTranscript";
 
 // Pins what a pane draws of its transcript beyond the rows: which bubble is live, when the working line stands in for
-// one, which turn's pictures get a strip, and which rows an armed edit would take with it.
+// one, and which turn's pictures get a strip.
 
 const SHOT: TranscriptTool = {
     id: `t1`,
@@ -29,7 +28,6 @@ const paneOf = (rows: readonly ChatMessage[] = ROWS) => {
         messages: ref<readonly ChatMessage[]>(rows),
         streaming: ref(false),
         awaitingDecision: ref(false),
-        editing: ref<ChatMessage | undefined>(),
         showToolCalls: ref(false),
         loading: ref(false),
         conversationId: ref(`c1`),
@@ -81,25 +79,6 @@ describe(`a turn's pictures`, () => {
 
         state.awaitingDecision.value = true;
         expect(pane.stripOf(pane.turns.value[0]!)?.map((shot) => shot.path)).toEqual([`${STATE_DIR}/shots/home.png`]);
-    });
-});
-
-describe(`an armed edit`, () => {
-    it(`dooms the edited prompt and everything below it`, () => {
-        const { state, pane } = paneOf();
-        expect([...pane.doomed.value]).toEqual([]);
-        expect(pane.editDropped.value).toBe(0);
-
-        state.editing.value = ROWS[2];
-        expect([...pane.doomed.value]).toEqual([3, 4]);
-        expect(pane.editDropped.value).toBe(2);
-    });
-
-    it(`dooms nothing when the prompt it aimed at is no longer drawn`, () => {
-        const { state, pane } = paneOf();
-        state.editing.value = { ...ROWS[2]! };
-
-        expect(pane.editDropped.value).toBe(0);
     });
 });
 

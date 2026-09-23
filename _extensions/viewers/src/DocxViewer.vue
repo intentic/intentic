@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/extension-ui";
+import { Icon, useLatest } from "@intentic/extension-ui";
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { fitPages, keepFitted } from "./docxFit.js";
 
@@ -10,35 +10,34 @@ const { blob } = defineProps<{ blob: Blob }>();
 const container = ref<HTMLElement>();
 const loading = ref(true);
 const error = ref<string>();
-// Drops a stale render when the open file changes mid-parse (a new blob prop supersedes the in-flight one).
-let seq = 0;
+const latest = useLatest();
 
 const render = async (source: Blob): Promise<void> => {
     const host = container.value;
     if (host === undefined) {
         return;
     }
-    const id = ++seq;
+    const isLatest = latest();
     loading.value = true;
     error.value = undefined;
     host.replaceChildren();
     try {
         const { renderAsync } = await import("docx-preview");
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         await renderAsync(source, host);
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         fitPages(host);
     } catch (err) {
-        if (id !== seq) {
+        if (!isLatest()) {
             return;
         }
         error.value = err instanceof Error ? err.message : `Could not render this document.`;
     } finally {
-        if (id === seq) {
+        if (isLatest()) {
             loading.value = false;
         }
     }

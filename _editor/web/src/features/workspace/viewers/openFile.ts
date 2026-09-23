@@ -1,4 +1,5 @@
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { extensionOf } from "@intentic/ui/file-format";
 import type { RegisteredViewer } from "../../../core-views/viewerRegistry";
 import { viewerForExtension } from "../../../core-views/viewerRegistry";
 import { RAW_MAX_BYTES, resolveFile } from "../explorer/fileType";
@@ -20,14 +21,6 @@ export type OpenFile =
 // `url` and `text` viewers stream or window their reads instead, and a `path` viewer reads nothing through the host.
 const oversizeForViewer = (viewer: RegisteredViewer, size: number | undefined): boolean =>
     viewer.fetch === `blob` && size !== undefined && size > RAW_MAX_BYTES;
-
-// The lowercased extension of a path, or "" for a dotfile/extensionless name. Matches fileType.ts's rule (dot > 0), so
-// both agree `.gitignore` has no extension.
-const extensionOf = (path: string): string => {
-    const name = path.slice(path.lastIndexOf(`/`) + 1).toLowerCase();
-    const dot = name.lastIndexOf(`.`);
-    return dot > 0 ? name.slice(dot + 1) : ``;
-};
 
 // Resolve how to open `path` given its byte size; undefined (unknown, cap, or stat failure) proceeds optimistically,
 // leaving the post-read NUL check / daemon 413 to catch bad cases.

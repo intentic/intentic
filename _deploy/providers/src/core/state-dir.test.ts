@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { stateDir } from "./backing-ssh.js";
 
 /* stateDir's output is a path built by concatenation, and composeDown ends with `rm -rf` on it. */

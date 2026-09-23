@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
-import { afterEach, beforeEach, expect, it } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { type FakeTurns, fakeTurns, memoryFleet } from "../../testing.js";
 import { memoryWatchJournal } from "./watch-journal.js";

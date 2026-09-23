@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { test, expect } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
 import type { ManagedProcesses, ProcessSpec } from "../../processes/managed-processes.js";
 import type { DependencyLandOrigin } from "./dependency-origin.js";
@@ -356,7 +355,9 @@ test("failures a red names for the first time go back to the land, and no chore 
     };
     queueVerify({ ...deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"] }), events, feed), route }, context, ["app"]);
     await settle(() => feed.length > 0 && routed.length > 0);
-    expect(routed).toEqual([{ project: "app", command: "pnpm run test", lands: [context], fresh: ["app#test a.test.ts › x"], logTail: "1 test failed\n" }]);
+    expect(routed).toEqual([
+        { project: "app", command: "pnpm run test", lands: [context], fresh: ["app#test a.test.ts › x"], logTail: "1 test failed\n" },
+    ]);
     expect(events).toEqual([]);
 });
 

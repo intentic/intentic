@@ -140,7 +140,8 @@ const {
     runHere,
 } = step;
 const wait = useCommandWait({ command, row, step, reader, desktopReport });
-const { emailed, handoff, reportFailures, buildStage, nudging, stalled, nudgeVariant, nudgeCopyable, slowBuild, onCopied, onEmailed, onDownload } = wait;
+const { emailed, handoff, reportFailures, buildStage, nudging, stalled, nudgeVariant, nudgeCopyable, slowBuild, onCopied, onEmailed, onDownload } =
+    wait;
 const attach = useAttachLane({ sandbox, row, minted: () => setup.value?.hostname, getIdToken, probe: probeDaemon });
 const { domain, attachToken, attaching, attachOutcome, originHelp, normalizedDomain, ownAddress, domainProblem, connectDomain } = attach;
 const { status } = useRegistryWatch({ sandbox, row, hosted, mintedFor: command.mintedFor });
@@ -173,7 +174,15 @@ const warmSandboxCredential = async (): Promise<void> => {
     }
 };
 
-const { arrival, elsewhere, loaded, lanes, laneTakeable, readArrival, forget: forgetArrival } = useSetupArrival({
+const {
+    arrival,
+    elsewhere,
+    loaded,
+    lanes,
+    laneTakeable,
+    readArrival,
+    forget: forgetArrival,
+} = useSetupArrival({
     sandbox,
     platform: apiClient.sandbox,
     row,
@@ -388,7 +397,7 @@ onUnmounted(() => row.discardDraft(committed.value));
                             {{ t(`setup.setup.alreadyRunningSandboxContainer`) }}
                         </p>
                         <label class="ui-field">
-                            <span class="ui-field-label">{{ t(`setup.setup.domain`) }}</span>
+                            <span class="ui-field-label">{{ t(`shared.domain`) }}</span>
                             <!-- Stack the domain field on phones so its address remains readable. -->
                             <div class="flex flex-col gap-2 md:flex-row md:items-center">
                                 <input
@@ -649,7 +658,7 @@ onUnmounted(() => row.discardDraft(committed.value));
                                 v-if="addressFact !== `own`"
                                 class="grid min-w-0 grid-cols-1 gap-x-3 gap-y-1 sm:min-h-8 sm:grid-cols-facts sm:content-center sm:items-baseline"
                             >
-                                <span :class="factLabel">{{ t(`setup.setup.address`) }}</span>
+                                <span :class="factLabel">{{ t(`shared.address`) }}</span>
                                 <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                                     <!-- Address facts are keyed by the selected rung, not machine state. -->
                                     <template v-if="addressFact === `hosted`">
@@ -704,8 +713,8 @@ onUnmounted(() => row.discardDraft(committed.value));
                                     <button v-if="intenticAvailable" type="button" :class="ui.linkButton()" @click="mode = `intentic`">
                                         {{ t(`setup.setup.useIntenticsDomain`) }}
                                     </button>
-                                    <InfoHint :label="t(`setup.setup.whyCloudflareApiToken`)">
-                                        <p class="mb-1 text-sm font-medium text-content">{{ t(`setup.setup.whyToken`) }}</p>
+                                    <InfoHint :label="t(`shared.whyCloudflareApiToken`)">
+                                        <p class="mb-1 text-sm font-medium text-content">{{ t(`shared.whyToken`) }}</p>
                                         <p class="mb-3 text-xs leading-relaxed text-muted">
                                             {{ t(`setup.setup.intenticReachesSandboxOver`) }}
                                         </p>
@@ -734,7 +743,7 @@ onUnmounted(() => row.discardDraft(committed.value));
 
                                 <!-- The zone suffix wraps so the subdomain keeps phone width. -->
                                 <label v-if="selectedZone" class="ui-field">
-                                    <span class="ui-field-label">{{ t(`setup.setup.domain`) }}</span>
+                                    <span class="ui-field-label">{{ t(`shared.domain`) }}</span>
                                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                                         <input
                                             :value="subdomain"
@@ -747,7 +756,7 @@ onUnmounted(() => row.discardDraft(committed.value));
                                         />
                                         <span class="text-sm break-words text-subtle">.{{ selectedZone }}</span>
                                     </div>
-                                    <span v-if="!subdomainValid" class="text-xs text-warning">{{ t(`setup.setup.useLettersNumbersHyphens`) }}</span>
+                                    <span v-if="!subdomainValid" class="text-xs text-warning">{{ t(`shared.useLettersNumbersHyphens`) }}</span>
                                     <span v-else class="text-xs text-success"
                                         >{{ t(`setup.setup.sandboxReachableAt`) }}
                                         <span class="break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
@@ -833,7 +842,7 @@ onUnmounted(() => row.discardDraft(committed.value));
                                         <template #icon><Icon name="desktop" /></template>
                                     </Button>
                                     <button type="button" :class="ui.linkButton()" :disabled="hostedBusy" @click="recheckCapacity">
-                                        {{ t(`setup.setup.checkAgain`) }}
+                                        {{ t(`shared.checkAgain`) }}
                                     </button>
                                 </div>
                             </template>

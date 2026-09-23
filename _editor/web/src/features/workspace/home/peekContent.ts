@@ -1,8 +1,7 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import type { ShikiLang } from "@intentic/code-read/langs";
-import { categoryForEntry, type FileCategory } from "@intentic/ui/file-icon";
+import { type FileCategory, formatOf } from "@intentic/ui/file-format";
 import { resolveFile } from "../explorer/fileType";
-import { extOf, isVideoName } from "./homeOrder";
 
 // What a hover can show of an entry, and what to call it. Text gets its first lines, a picture gets painted, a video
 // plays silently, a document is drawn as its own first page, a folder lists what it holds; anything else (a PDF, an
@@ -16,13 +15,6 @@ export interface PeekPlan {
     readonly lang?: ShikiLang;
 }
 
-// Pictures a browser paints on its own; the rest of the `image` category (psd, tiff, heic) has no viewer here either.
-const PICTURE_EXTS: ReadonlySet<string> = new Set([`png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`, `bmp`, `ico`, `svg`]);
-
-// Formats whose viewer draws pages and nothing else, so the card can mount it as it stands: a deck, a book and a
-// spreadsheet bring their own toolbar, and a PDF is the browser's plugin, neither of which belongs in a card that
-// takes no pointer.
-const DOCUMENT_EXTS: ReadonlySet<string> = new Set([`docx`, `odt`, `ott`, `rtf`]);
 // Parsed on the main thread under the pointer, so a document this big is left to the tab that can afford it.
 const DOCUMENT_MAX_BYTES = 4 * 1024 * 1024;
 const documentPlan = (size: number | undefined): PeekPlan => ((size ?? 0) > DOCUMENT_MAX_BYTES ? { kind: `none` } : { kind: `document` });
@@ -35,14 +27,14 @@ export const peekPlan = (entry: WorkspaceTreeEntry): PeekPlan => {
     if (entry.size === 0) {
         return { kind: `none` };
     }
-    const ext = extOf(entry.name);
-    if (PICTURE_EXTS.has(ext)) {
+    const format = formatOf(entry.name);
+    if (format.category === `image`) {
         return { kind: `picture` };
     }
-    if (isVideoName(entry.name)) {
+    if (format.category === `video`) {
         return { kind: `video` };
     }
-    if (DOCUMENT_EXTS.has(ext)) {
+    if (format.pages === true) {
         return documentPlan(entry.size);
     }
     const resolved = resolveFile(entry.path, entry.size);
@@ -52,89 +44,7 @@ export const peekPlan = (entry: WorkspaceTreeEntry): PeekPlan => {
     return resolved.lang === undefined ? { kind: `text` } : { kind: `text`, lang: resolved.lang };
 };
 
-// Names people use, for the extensions they meet most; the category word covers the rest.
-const BY_EXT: Readonly<Record<string, string>> = {
-    ts: `TypeScript`,
-    tsx: `TypeScript`,
-    mts: `TypeScript`,
-    cts: `TypeScript`,
-    js: `JavaScript`,
-    mjs: `JavaScript`,
-    cjs: `JavaScript`,
-    jsx: `JavaScript`,
-    vue: `Vue component`,
-    svelte: `Svelte component`,
-    astro: `Astro page`,
-    html: `Web page`,
-    htm: `Web page`,
-    css: `Style sheet`,
-    scss: `Style sheet`,
-    sass: `Style sheet`,
-    less: `Style sheet`,
-    md: `Markdown`,
-    markdown: `Markdown`,
-    mdx: `Markdown`,
-    txt: `Plain text`,
-    pdf: `PDF document`,
-    json: `JSON`,
-    jsonc: `JSON`,
-    yaml: `YAML`,
-    yml: `YAML`,
-    toml: `TOML`,
-    xml: `XML`,
-    sql: `SQL`,
-    prisma: `Prisma schema`,
-    graphql: `GraphQL`,
-    gql: `GraphQL`,
-    py: `Python`,
-    rs: `Rust`,
-    go: `Go`,
-    rb: `Ruby`,
-    java: `Java`,
-    kt: `Kotlin`,
-    swift: `Swift`,
-    c: `C`,
-    h: `C header`,
-    cpp: `C++`,
-    cs: `C#`,
-    php: `PHP`,
-    sh: `Shell script`,
-    bash: `Shell script`,
-    zsh: `Shell script`,
-    ps1: `PowerShell script`,
-    png: `PNG picture`,
-    jpg: `JPEG picture`,
-    jpeg: `JPEG picture`,
-    gif: `GIF picture`,
-    webp: `WebP picture`,
-    avif: `AVIF picture`,
-    svg: `SVG drawing`,
-    ico: `Icon`,
-    mp3: `MP3 audio`,
-    wav: `WAV audio`,
-    flac: `FLAC audio`,
-    ogg: `Ogg audio`,
-    m4a: `AAC audio`,
-    mp4: `MP4 video`,
-    webm: `WebM video`,
-    mov: `QuickTime video`,
-    mkv: `Matroska video`,
-    zip: `ZIP archive`,
-    tar: `Tar archive`,
-    gz: `Gzip archive`,
-    tgz: `Tar archive`,
-    "7z": `7-Zip archive`,
-    rar: `RAR archive`,
-    woff: `Web font`,
-    woff2: `Web font`,
-    ttf: `TrueType font`,
-    otf: `OpenType font`,
-    docx: `Word document`,
-    xlsx: `Excel spreadsheet`,
-    pptx: `PowerPoint deck`,
-    lock: `Lockfile`,
-};
-
+// The word for a format with no name of its own.
 const BY_CATEGORY: Record<FileCategory, string> = {
     code: `Code`,
     style: `Style sheet`,
@@ -142,6 +52,7 @@ const BY_CATEGORY: Record<FileCategory, string> = {
     data: `Data`,
     image: `Picture`,
     audio: `Sound`,
+    video: `Video`,
     doc: `Document`,
     shell: `Script`,
     archive: `Archive`,
@@ -154,7 +65,8 @@ export const kindLabel = (entry: Pick<WorkspaceTreeEntry, "name" | "type">): str
     if (entry.type === `dir`) {
         return `Folder`;
     }
-    return BY_EXT[extOf(entry.name)] ?? BY_CATEGORY[categoryForEntry(entry.name)];
+    const format = formatOf(entry.name);
+    return format.label ?? BY_CATEGORY[format.category];
 };
 
 // Lines the card shows: enough to recognise a file, few enough to stay a glance.

@@ -1,4 +1,3 @@
-import { describe, it, test, expect } from "bun:test";
 import { blockAtOffset, type MarkdownBlock, offsetOfLine, splitMarkdownBlocks } from "@intentic/ui/markdown";
 
 // The block splitter behind the file viewer's pretty-editing surface. No DOM here: this is the lexer's view of a
@@ -41,7 +40,7 @@ const DOCUMENTS = {
 // somebody edits a paragraph.
 describe(`splitMarkdownBlocks tiles every document`, () => {
     for (const [name, source] of Object.entries(DOCUMENTS)) {
-        it(name, () => {
+        it(`${name}`, () => {
             const { blocks } = splitMarkdownBlocks(source);
             expect(tiles(source, blocks), `blocks do not tile ${name}`).toBe(true);
             expect(rejoin(source, blocks)).toBe(source);

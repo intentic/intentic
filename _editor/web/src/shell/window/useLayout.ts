@@ -3,6 +3,7 @@ import { computed, type Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 import { useAudience } from "../../app/useAudience";
 import { activeSandboxId } from "../../features/sandbox/overview/activeSandbox";
+import type { ExplorerFilters } from "../../features/workspace/explorer/explorerFilter";
 import { iconRailScreenPx, useIconRailSize } from "../rail/useIconRailSize";
 import { toAppPx } from "./uiScale";
 import { readWindowState, writeWindowState } from "./windowStore";
@@ -71,7 +72,8 @@ export const MIN_REVIEW_LIST_WIDTH = 180;
 export const MAX_REVIEW_LIST_WIDTH = 800;
 
 export const defaultSidebarWidth = (): number => (isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_SIDEBAR_WIDTH : DEFAULT_SIDEBAR_WIDTH);
-export const defaultReviewListWidth = (): number => (isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_REVIEW_LIST_WIDTH : DEFAULT_REVIEW_LIST_WIDTH);
+export const defaultReviewListWidth = (): number =>
+    isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_REVIEW_LIST_WIDTH : DEFAULT_REVIEW_LIST_WIDTH;
 
 // Only the open state lives here; height belongs to the shared TerminalPanel. Tied to the active sandbox, so toggling
 // it in one sandbox doesn't affect another's layout.
@@ -185,7 +187,15 @@ const sidebarPanel = enumPref(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`]
 const showIgnored = boolPref(SHOW_IGNORED_KEY);
 const hideTests = boolPref(HIDE_TESTS_KEY);
 const hideTechnicalChoice = enumPref(HIDE_TECHNICAL_KEY, [`auto`, `on`, `off`] as const, `auto`);
-const hideTechnical = computed<boolean>(() => (hideTechnicalChoice.value === `auto` ? useAudience().maker.value : hideTechnicalChoice.value === `on`));
+const hideTechnical = computed<boolean>(() =>
+    hideTechnicalChoice.value === `auto` ? useAudience().maker.value : hideTechnicalChoice.value === `on`,
+);
+// The explorer's three switches as the one value every listing of the workspace filters by (explorerShows).
+const explorerFilters = computed<ExplorerFilters>(() => ({
+    showIgnored: showIgnored.value,
+    hideTests: hideTests.value,
+    hideTechnical: hideTechnical.value,
+}));
 const editMode = boolPref(EDIT_MODE_KEY);
 const showComments = boolPref(SHOW_COMMENTS_KEY);
 const hideFileComments = boolPref(HIDE_FILE_COMMENTS_KEY);
@@ -328,6 +338,7 @@ export function useLayout() {
         showIgnored,
         hideTests,
         hideTechnical,
+        explorerFilters,
         editMode,
         showComments,
         hideFileComments,

@@ -1,16 +1,13 @@
-import { describe, test, expect, beforeEach, afterAll, mock } from "bun:test";
-import { freshImport, stubGlobal, hoisted } from "@intentic/testing/bun";
+import { freshImport, stubGlobal } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 
-// hoisted lets these exist before the mocked imports below, which read them at import time.
-const { active, stored } = hoisted(() => {
-    const state = { active: { sandboxId: undefined as string | undefined }, stored: new Map<string, string>() };
-    return state;
-});
+// Declared before the mocked imports below, which read them at import time.
+const active = { sandboxId: undefined as string | undefined };
+const stored = new Map<string, string>();
 
-// The factory is synchronous: a mock.module factory runs in place, and awaiting inside one that replaces a module
+// The factory is synchronous: a jest.mock factory runs in place, and awaiting inside one that replaces a module
 // already in this file's graph never returns.
-mock.module("../../sandbox/client/useSandbox", () => ({
+jest.mock("../../sandbox/client/useSandbox", () => ({
     useSandbox: () => ({ activeSandboxId: ref<string | undefined>(active.sandboxId) }),
 }));
 

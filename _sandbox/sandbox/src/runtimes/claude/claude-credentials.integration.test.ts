@@ -3,7 +3,6 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
-import { test, expect } from "bun:test";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 import {
     buildAuthorizeUrl,

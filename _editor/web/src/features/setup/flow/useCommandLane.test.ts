@@ -2,7 +2,6 @@ import "@intentic/testing/dom";
 import type { SandboxSummary, SetupCode } from "@intentic/api-contract";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { afterEach, beforeEach, describe, expect, it, jest, mock } from "bun:test";
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
 import type { Machine } from "./machineLadder";
@@ -21,7 +20,7 @@ const code = (sandboxId: string): SetupCode => ({
 const scopes: EffectScope[] = [];
 
 const stage = () => {
-    const setupCode = mock(async ({ sandboxId }: { sandboxId: string }) => code(sandboxId));
+    const setupCode = jest.fn(async ({ sandboxId }: { sandboxId: string }) => code(sandboxId));
     const row = { created: ref<SandboxSummary | null>(null), claimedAt: ref<string | null>(null) };
     const hosted = { machine: ref<Machine>(`mine`), hostedRow: ref<SandboxSummary[`hosted`]>(null), releasingHosted: ref(false) };
     const lane = ref<`provision` | `attach`>(`provision`);

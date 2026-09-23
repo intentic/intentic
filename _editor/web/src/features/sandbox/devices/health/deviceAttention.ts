@@ -132,7 +132,7 @@ const BLOCK_ACTION: Partial<Record<ManageBlock[`kind`], string>> = {
 // card hands out, which installs or re-enrolls the agent and registers it to come back after a reboot.
 const reconnect = (): DeviceConnectFix => ({
     kind: `connect`,
-    label: t(`sandbox.deviceAttention.reconnect`),
+    label: t(`shared.reconnect`),
     hint: t(`sandbox.deviceAttention.handsFreshOneTime`),
 });
 
@@ -213,9 +213,7 @@ const linksConcern = (device: Device, readAt: number): DeviceConcern | undefined
     }
     const since = links.unreachableSince;
     const count =
-        links.unreachable === 1
-            ? `One of its ${links.total} sandbox links has`
-            : `${links.unreachable} of its ${links.total} sandbox links have`;
+        links.unreachable === 1 ? `One of its ${links.total} sandbox links has` : `${links.unreachable} of its ${links.total} sandbox links have`;
     return {
         key: `links`,
         tone: `info`,

@@ -1,6 +1,5 @@
 // A collapsed run renders outside a ChatPane (the Subagents page) and opens its file through the injected surface.
 import "@intentic/testing/dom";
-import { describe, it, expect, afterEach } from "bun:test";
 import { type App, createApp, h } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import type { ChatSurface } from "./chatToolSurface";

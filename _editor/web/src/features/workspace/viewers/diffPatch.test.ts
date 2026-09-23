@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { PATCH_GAP, patchedSides } from "./diffPatch";
 
 /* Rebuilt diff hunks preserve their source line numbers. */

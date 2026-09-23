@@ -1,7 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { CapabilityContribution } from "@intentic/extension-manifest";
-import { test, expect, afterEach } from "bun:test";
 import type { ResolvedContribution } from "./contributions.js";
 import { probeCapability } from "./probe.js";
 

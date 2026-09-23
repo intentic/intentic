@@ -1,8 +1,6 @@
 // Asserts the invariant, not RailColumn's internals: the chat's rail (ChatTabs) and any other host's
 // RailColumn are the same element at the same width, and dragging one drags both.
 import "@intentic/testing/dom";
-import { it, expect, beforeAll } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { createApp, h, nextTick } from "vue";
 import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
@@ -13,10 +11,10 @@ import { DEFAULT_RAIL_WIDTH, railWidth, setRailWidth } from "../features/agents/
 import { queryClient } from "../lib/queryPersistence";
 import { router } from "../router";
 
-hoisted(() => {
+(() => {
     // jsdom has no scrollIntoView; without this stub, focusing a card throws an unhandled rejection on mount.
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-});
+})();
 
 const mount = (component: Parameters<typeof h>[0]): HTMLElement => {
     const host = document.createElement(`div`);

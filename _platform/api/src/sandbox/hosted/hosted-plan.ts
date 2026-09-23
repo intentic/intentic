@@ -77,38 +77,39 @@ export const onHostedPlan = async (prisma: PrismaClient, config: Config, userId:
     return isComped(prisma, config, userId);
 };
 
-/** What an account may hold: free machines, and paid ones rung by rung. */
-export interface HostedSlots {
-    // The free rung's allowance (config.hosted.perUser); nothing buys more of these.
-    readonly free: number;
-    // Slots bought at each paid rung, keyed by rung id; absent means none.
-    readonly paid: ReadonlyMap<HostedTierId, number>;
-    readonly total: number;
-}
-
-/**
- * HOW MANY HOSTED SANDBOXES THIS OWNER MAY HAVE, AND ON WHICH RUNGS. Slots are what a plan sells; which machine
- * stands on which slot is a separate question (hosted-migrate.ts), and that separation is what lets a failed move
- * leave a paid-for empty slot rather than a charge with nothing behind it. A lapsed plan's paid slots are simply
- * not counted, so its machines come down a rung rather than disappearing.
- */
-export const hostedSlotsOf = async (prisma: Pick<PrismaClient, "hostedPlan">, config: Config, userId: string): Promise<HostedSlots> => {
-    const free = config.hosted.perUser;
+/** An owner's slots by rung, none where absent: free's is `hosted.perUser` and never bought, and a lapsed plan's paid ones count none. */
+export const hostedSlotsOf = async (
+    prisma: Pick<PrismaClient, "hostedPlan">,
+    config: Config,
+    userId: string,
+): Promise<ReadonlyMap<HostedTierId, number>> => {
+    const slots = new Map<HostedTierId, number>([[FREE_TIER.id, config.hosted.perUser]]);
     const plan = await prisma.hostedPlan.findUnique({ where: { userId }, select: { status: true, items: true } });
     if (plan === null || !isOnPlan(plan)) {
-        return { free, paid: new Map(), total: free };
+        return slots;
     }
-    const paid = new Map<HostedTierId, number>();
     for (const item of plan.items) {
-        if (isHostedTierId(item.tier) && item.quantity > 0) {
-            paid.set(item.tier, item.quantity);
+        if (item.tier !== FREE_TIER.id && item.quantity > 0) {
+            slots.set(hostedTier(item.tier).id, item.quantity);
         }
     }
-    return { free, paid, total: free + [...paid.values()].reduce((sum, count) => sum + count, 0) };
+    return slots;
 };
 
-/** How many slots this account holds at one rung; the free rung's is the lane's allowance, never bought. */
-export const slotsAtTier = (slots: HostedSlots, tier: HostedTierId): number => (tier === FREE_TIER.id ? slots.free : (slots.paid.get(tier) ?? 0));
+/** The owner's machines at one rung, `except` one sandbox's own, and the slots left there for another. */
+export const hostedSlotUse = async (
+    prisma: Pick<PrismaClient, "hostedPlan" | "hostedMachine">,
+    config: Config,
+    ownerId: string,
+    tier: HostedTierId,
+    except?: string,
+): Promise<{ used: number; left: number }> => {
+    const [used, slots] = await Promise.all([
+        prisma.hostedMachine.count({ where: { tier, sandbox: { ownerId }, ...(except === undefined ? {} : { NOT: { sandboxId: except } }) } }),
+        hostedSlotsOf(prisma, config, ownerId),
+    ]);
+    return { used, left: (slots.get(tier) ?? 0) - used };
+};
 
 const money = (cents: number, currency: string): string => `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`;
 
@@ -156,7 +157,10 @@ export const checkHostedPlanPrices = async (config: Config, logger: Logger, gate
         }
         const faults = priceFaults(price, tier);
         if (faults.length > 0) {
-            logger.error({ tier: tier.id, priceId, livemode: price.livemode, faults }, `hosted plan: ${tier.id} cannot be sold: ${faults.join(`; `)}`);
+            logger.error(
+                { tier: tier.id, priceId, livemode: price.livemode, faults },
+                `hosted plan: ${tier.id} cannot be sold: ${faults.join(`; `)}`,
+            );
             continue;
         }
         const selling = `hosted plan: selling ${tier.id} (${priceId}) at ${money(price.unitAmount, price.currency)} per ${price.interval}`;
@@ -248,7 +252,13 @@ const mirrorItems = async (prisma: PrismaClient, config: Config, planId: string,
 
 // Ends the subscription of an account being deleted: both deletion paths cascade the plan row alone, which used to
 // leave Stripe still charging a ghost account. Called before the cascade; a Stripe refusal is logged, not blocking.
-export const cancelHostedPlan = async (prisma: PrismaClient, config: Config, logger: Logger, userId: string, gateway?: StripeGateway): Promise<void> => {
+export const cancelHostedPlan = async (
+    prisma: PrismaClient,
+    config: Config,
+    logger: Logger,
+    userId: string,
+    gateway?: StripeGateway,
+): Promise<void> => {
     if (!hostedPlanEnabled(config)) {
         return;
     }

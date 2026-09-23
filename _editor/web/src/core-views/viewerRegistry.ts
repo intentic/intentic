@@ -1,6 +1,6 @@
 import type { Disposable } from "@intentic/extension-api";
-import type { Component } from "vue";
-import { shallowRef } from "vue";
+import { useLatest } from "@intentic/ui/async";
+import { type Component, type Ref, type ShallowRef, shallowRef, watch } from "vue";
 
 // Registry of custom file viewers from extensions (contributes.viewers); FileViewer resolves an open file
 // to one by extension and renders it. Module-level singleton, same shape as the view registry.
@@ -56,3 +56,23 @@ export const renderViewerForExtension = (ext: string): RegisteredViewer | undefi
 
 // The viewer that can draw two versions of this format as one marked document, for a diff's Changes reading.
 export const compareViewerForExtension = (ext: string): RegisteredViewer | undefined => claimants(ext).find((entry) => entry.compare !== undefined);
+
+// The component of whichever viewer `viewer` names: undefined while it imports, and dropped when the viewer changes.
+export const useViewerComponent = (viewer: Readonly<Ref<RegisteredViewer | undefined>>): Readonly<ShallowRef<Component | undefined>> => {
+    const component = shallowRef<Component>();
+    const latest = useLatest();
+    watch(
+        viewer,
+        (next) => {
+            const isLatest = latest();
+            component.value = undefined;
+            void next?.component().then((loaded) => {
+                if (isLatest()) {
+                    component.value = loaded;
+                }
+            });
+        },
+        { immediate: true },
+    );
+    return component;
+};

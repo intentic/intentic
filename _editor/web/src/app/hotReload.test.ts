@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
 import { reloadOnHotUpdate } from "./hotReload";
 
@@ -22,11 +21,11 @@ const hotContext = (): { context: ImportMeta["hot"]; accepted: (() => void)[] } 
     return { context, accepted };
 };
 
-let reload: ReturnType<typeof mock>;
+let reload: ReturnType<typeof jest.fn>;
 
 beforeEach(() => {
     globalThis.intenticSingletonModules = undefined;
-    reload = mock();
+    reload = jest.fn();
     // jsdom refuses a real navigation; the assertion is only that reload was called.
     Object.defineProperty(window, `location`, { configurable: true, value: { reload } });
 });

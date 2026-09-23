@@ -1,5 +1,4 @@
-import { describe, expect, it } from "bun:test";
-import { STORAGE_CATEGORIES, STORAGE_CLEANABILITY, type StorageCategoryUsage, type StorageScan } from "@intentic/sandbox-contract";
+import { STORAGE_CLEANABILITY, StorageCategoryIdSchema, type StorageCategoryUsage, type StorageScan } from "@intentic/sandbox-contract";
 import { storageCategoryText } from "./storageCategories";
 import { cleanOffer, shareOfDisk, uncountedBytes } from "./storageView";
 
@@ -69,7 +68,7 @@ describe(`cleanOffer`, () => {
 describe(`storageCategoryText`, () => {
     // Discovered from the contract: a category added there without words would otherwise draw its own dotted key.
     it(`words every category, and warns before cleaning each one that asks first`, () => {
-        const unworded = STORAGE_CATEGORIES.flatMap((id) =>
+        const unworded = StorageCategoryIdSchema.options.flatMap((id) =>
             Object.entries(storageCategoryText({ id, cleanability: STORAGE_CLEANABILITY[id] }))
                 .filter(([, words]) => words.startsWith(`sandbox.storageCategories.`))
                 .map(([field]) => `${id}.${field}`),

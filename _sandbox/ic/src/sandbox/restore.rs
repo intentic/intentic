@@ -1,4 +1,5 @@
 use crate::docker;
+use crate::sandbox::trash::GRACE_DAYS;
 use crate::sandbox::{list_slugs, trash};
 use crate::tty;
 use crate::util::{bail, Result};
@@ -87,9 +88,6 @@ pub fn run(args: Args) -> Result<()> {
     println!("intentic: if the browser can't reach it, run 'ic sandbox doctor {slug}'.");
     Ok(())
 }
-
-/// Whole days of grace, for the sentences that quote it.
-const GRACE_DAYS: u64 = trash::GRACE_SECS / (24 * 60 * 60);
 
 /// `ic sandbox purge` — end the grace period early for one slug, or for everything in the trash.
 pub struct PurgeArgs {

@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
-import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createTurnIsolation } from "../../agents/worktrees/isolation.js";
 import { watchCheck } from "./watch-check.js";
 

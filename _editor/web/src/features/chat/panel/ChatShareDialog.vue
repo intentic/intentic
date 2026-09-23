@@ -79,7 +79,7 @@ const share = async (): Promise<void> => {
                     rel="noopener"
                     class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-subtle hover:bg-overlay hover:text-content"
                     :aria-label="t(`chat.chatShareDialog.openSharedConversationIn`)"
-                    v-tooltip.bottom="t(`chat.chatShareDialog.openInNewTab`)"
+                    v-tooltip.bottom="t(`shared.openInNewTab`)"
                 >
                     <Icon name="external-link" class="text-2xs" />
                 </a>
@@ -134,7 +134,7 @@ const share = async (): Promise<void> => {
                 <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" text @click="emit(`update:visible`, false)" />
                 <Button :label="t(`chat.chatShareDialog.share`)" size="small" :loading="busy" :disabled="name.trim().length === 0" @click="share" />
             </template>
-            <CopyButton v-if="result?.url" :text="result.url" :label="t(`chat.chatShareDialog.copyLink`)" />
+            <CopyButton v-if="result?.url" :text="result.url" :label="t(`shared.copyLink`)" />
         </template>
     </Modal>
 </template>

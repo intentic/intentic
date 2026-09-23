@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { localDaemonPort } from "@intentic/sandbox-run";
-import { test, expect } from "bun:test";
 
 // Proves the protocol a caller sees: NUL-framed env, allowlist here, a directive failure killing the process.
 

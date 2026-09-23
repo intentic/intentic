@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { deletedReceipt, deleteHeader, joinPath, newNameError } from "./entryNames";
 
 describe(`a new name being typed`, () => {

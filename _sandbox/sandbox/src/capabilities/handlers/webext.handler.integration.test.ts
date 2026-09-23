@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";

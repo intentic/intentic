@@ -6,7 +6,6 @@ import { promisify } from "node:util";
 import { repoRoot } from "@intentic/constants/node";
 import type { Capability } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { readEnvironmentContents } from "./contents.js";

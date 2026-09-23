@@ -14,7 +14,6 @@ import {
     type TranscriptRow,
     withResumeNote,
 } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 import { sqliteAgentsStore } from "../../../agents/registry/agents-store.js";
 import { conversationsDbPath, openConversationsDb } from "../../../store/conversations-db.js";
@@ -36,15 +35,7 @@ import { type JournalledTurn, sqliteTurnJournal, type TurnJournal } from "./turn
 import { turnRunOf } from "../../../agents/actor/conversation-holdings.js";
 import { createDomainEvents } from "../../../seams/domain-events.js";
 import type { TurnStarter } from "../../../seams/turn-starter.js";
-import {
-    type AuthFailure,
-    createTurnResumeScheduler,
-    fireHeldResume,
-    type HeldTurn,
-    type OutageFailure,
-    resumeInterruptedTurns,
-    startConversationTurn,
-} from "./turn-resume.js";
+import { createTurnResumeScheduler, fireHeldResume, type HeldTurn, resumeInterruptedTurns, startConversationTurn } from "./turn-resume.js";
 import { parkedCards } from "../../../agents/actor/parked-cards.js";
 
 // `takes` answers each abandon attempt (false: the turn is still unwinding); `armed`/`limitArmed` are per-conversation
@@ -104,15 +95,12 @@ const fakeServices = (
 };
 
 // What a settlement tells the conversation it belongs to, sent the way it sends it, and what a pass reads back.
-const recordAuthFailure = (services: Services, failure: AuthFailure, now?: number): void =>
-    void services.conversations.send(failure.input.conversationId, { kind: "auth-refused", failure }, now);
-const recordOutageFailure = (services: Services, failure: OutageFailure, now?: number): void =>
-    void services.conversations.send(failure.input.conversationId, { kind: "outage-stranded", failure }, now);
 const recordHeldTurn = (services: Services, held: HeldTurn, now?: number): void =>
     void services.conversations.send(held.input.conversationId, { kind: "turn-held", held }, now);
-const clearPendingResume = (services: Services, conversationId: string): void => void services.conversations.send(conversationId, { kind: "resume-superseded" });
-const clearStopLadder = (services: Services, conversationId: string): void => void services.conversations.send(conversationId, { kind: "turn-got-somewhere" });
-const pendingOutageFailure = (services: Services, conversationId: string): OutageFailure | undefined => services.conversations.state(conversationId)?.resume.outage;
+const clearPendingResume = (services: Services, conversationId: string): void =>
+    void services.conversations.send(conversationId, { kind: "resume-superseded" });
+const clearStopLadder = (services: Services, conversationId: string): void =>
+    void services.conversations.send(conversationId, { kind: "turn-got-somewhere" });
 const heldTurn = (services: Services, conversationId: string): HeldTurn | undefined => services.conversations.state(conversationId)?.resume.held;
 
 const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>
@@ -400,13 +388,21 @@ const brokenStore = (): Services["claudeStore"] =>
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }),
     });
 
+// A turn whose Claude credential the API refused mid-flight, held for its re-mint.
+const authHold = (conversationId: string): HeldTurn => ({
+    input: { prompt: "finish the report", conversationId, isolated: true },
+    reason: "auth",
+    ran: false,
+    remint: { account: "acct", refusedToken: "tok-1" },
+});
+
 const authServices = (root: string, claudeStore: Services["claudeStore"], abandoned: string[] = [], takes: () => boolean = () => true): Services =>
     unstubbed<Services>("services", { ...fakeServices(root, abandoned, takes), claudeStore });
 
 test("a turn the API refused mid-flight is re-minted and re-run on the next pass", async () => {
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
     const prompts: string[] = [];
-    recordAuthFailure(services, { input: { prompt: "finish the report", conversationId: "auth-1", isolated: true }, account: "acct", refusedToken: "tok-1" });
+    recordHeldTurn(services, authHold("auth-1"));
     await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick();
     await settle(services, "auth-1");
     expect(prompts).toHaveLength(1);
@@ -419,33 +415,16 @@ test("no resume when the credential is genuinely dead, the error frame's reconne
     const abandoned: string[] = [];
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-1", revokedAt: 1 }), abandoned);
     const prompts: string[] = [];
-    recordAuthFailure(services, { input: { prompt: "finish the report", conversationId: "auth-2", isolated: true }, account: "acct", refusedToken: "tok-1" });
+    recordHeldTurn(services, authHold("auth-2"));
     await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick();
     expect(prompts).toHaveLength(0);
     expect(abandoned).toEqual(["auth-2"]);
 });
 
-test("a resume that is itself refused is not resumed again: a dead credential must not respawn forever", async () => {
-    const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
-    const prompts: string[] = [];
-    // The recorded prompt must match exactly what a fired resume builds, or the loop guard won't recognise it.
-    recordAuthFailure(services, {
-        input: {
-            prompt: withResumeNote("finish the report", RESUME_NOTES.auth),
-            conversationId: "auth-3",
-            isolated: true,
-        },
-        account: "acct",
-        refusedToken: "tok-1",
-    });
-    await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick();
-    expect(prompts).toHaveLength(0);
-});
-
 test("the next turn on the conversation supersedes a pending auth resume", async () => {
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
     const prompts: string[] = [];
-    recordAuthFailure(services, { input: { prompt: "finish the report", conversationId: "auth-4", isolated: true }, account: "acct", refusedToken: "tok-1" });
+    recordHeldTurn(services, authHold("auth-4"));
     clearPendingResume(services, "auth-4");
     await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick();
     expect(prompts).toHaveLength(0);
@@ -456,10 +435,7 @@ test("a re-mint that cannot be attempted keeps its place, then gives the card up
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), brokenStore(), abandoned);
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
-    recordAuthFailure(services, 
-        { input: { prompt: "finish the report", conversationId: "auth-5", isolated: true }, account: "acct", refusedToken: "tok-1" },
-        1_000,
-    );
+    recordHeldTurn(services, authHold("auth-5"), 1_000);
     await scheduler.tick(1_000);
     expect(prompts).toHaveLength(0);
     expect(abandoned).toEqual([]);
@@ -484,10 +460,7 @@ test("an abandon lost to a turn still unwinding is made good on the next pass", 
     );
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
-    recordAuthFailure(services, 
-        { input: { prompt: "finish the report", conversationId: "auth-6", isolated: true }, account: "acct", refusedToken: "tok-1" },
-        1_000,
-    );
+    recordHeldTurn(services, authHold("auth-6"), 1_000);
     await scheduler.tick(1_000);
     expect(abandoned).toEqual(["auth-6"]);
     unwound = true;
@@ -504,10 +477,11 @@ test("an abandon lost to a turn still unwinding is made good on the next pass", 
 
 const OUT_NOW = 5_000_000;
 
-const outage = (conversationId: string, provider: string, extra: Record<string, unknown> = {}) => ({
-    input: { prompt: "finish the report", conversationId, isolated: true },
-    provider,
-    ...extra,
+// A turn the provider's outage stranded; the provider that served it is the breaker's key.
+const outage = (conversationId: string, provider: string): HeldTurn => ({
+    input: { prompt: "finish the report", conversationId, isolated: true, agent: provider },
+    reason: "outage",
+    ran: false,
 });
 
 // `outagePolicy` is the sandbox-wide answer; `armed` is the per-conversation override that takes precedence.
@@ -526,7 +500,7 @@ const outageServices = async (
 test("a stranded turn resumes once the provider's wait elapses, under a note saying why", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     const { retryAt } = recordProviderFailure("out-fire", OUT_NOW);
-    recordOutageFailure(services, outage("out-1", "out-fire"), OUT_NOW);
+    recordHeldTurn(services, outage("out-1", "out-fire"), OUT_NOW);
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
 
@@ -539,14 +513,14 @@ test("a stranded turn resumes once the provider's wait elapses, under a note say
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain("finish the report");
     expect(prompts[0]).toMatch(/unavailable|outage/i);
-    expect(pendingOutageFailure(services, "out-1")).toBeUndefined();
+    expect(heldTurn(services, "out-1")).toBeUndefined();
 });
 
 test("an outage costs ONE turn per window however many conversations are stranded on it", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     const { retryAt } = recordProviderFailure("out-herd", OUT_NOW);
     for (const id of ["herd-1", "herd-2", "herd-3", "herd-4"]) {
-        recordOutageFailure(services, outage(id, "out-herd"), OUT_NOW);
+        recordHeldTurn(services, outage(id, "out-herd"), OUT_NOW);
     }
     const prompts: string[] = [];
     await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick(retryAt);
@@ -554,9 +528,9 @@ test("an outage costs ONE turn per window however many conversations are strande
 
     // Firing moves the breaker's clock, so the other three are refused within this same pass.
     expect(prompts).toHaveLength(1);
-    expect(pendingOutageFailure(services, "herd-1")).toBeUndefined();
-    expect(pendingOutageFailure(services, "herd-2")).toEqual(expect.any(Object));
-    expect(pendingOutageFailure(services, "herd-4")).toEqual(expect.any(Object));
+    expect(heldTurn(services, "herd-1")).toBeUndefined();
+    expect(heldTurn(services, "herd-2")).toEqual(expect.any(Object));
+    expect(heldTurn(services, "herd-4")).toEqual(expect.any(Object));
     for (const id of ["herd-2", "herd-3", "herd-4"]) {
         clearPendingResume(services, id);
     }
@@ -565,7 +539,7 @@ test("an outage costs ONE turn per window however many conversations are strande
 test("evidence that the provider is back releases the stranded set without waiting out the backoff", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     recordProviderFailure("out-back", OUT_NOW);
-    recordOutageFailure(services, outage("back-1", "out-back"), OUT_NOW);
+    recordHeldTurn(services, outage("back-1", "out-back"), OUT_NOW);
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick(OUT_NOW);
@@ -581,13 +555,13 @@ test("evidence that the provider is back releases the stranded set without waiti
 test("with the toggle off the turn is remembered, not resumed: turning it on arms that same turn", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), false);
     const { retryAt } = recordProviderFailure("out-toggle", OUT_NOW);
-    recordOutageFailure(services, outage("toggle-1", "out-toggle"), OUT_NOW);
+    recordHeldTurn(services, outage("toggle-1", "out-toggle"), OUT_NOW);
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick(retryAt);
     await settle(services, "toggle-1");
     expect(prompts).toEqual([]);
-    expect(pendingOutageFailure(services, "toggle-1")).toEqual(expect.any(Object));
+    expect(heldTurn(services, "toggle-1")).toEqual(expect.any(Object));
 
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, outagePolicy: "retry" });
@@ -599,8 +573,8 @@ test("with the toggle off the turn is remembered, not resumed: turning it on arm
 test("a conversation armed on its own resumes while the sandbox default leaves the rest alone", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), false, [], new Map([["own-armed", true]]));
     const { retryAt } = recordProviderFailure("out-own", OUT_NOW);
-    recordOutageFailure(services, outage("own-armed", "out-own"), OUT_NOW);
-    recordOutageFailure(services, outage("own-quiet", "out-own"), OUT_NOW + 1);
+    recordHeldTurn(services, outage("own-armed", "out-own"), OUT_NOW);
+    recordHeldTurn(services, outage("own-quiet", "out-own"), OUT_NOW + 1);
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
 
@@ -608,7 +582,7 @@ test("a conversation armed on its own resumes while the sandbox default leaves t
     await settle(services, "own-armed");
     expect(prompts).toHaveLength(1);
     // Remembered without ever spending the breaker's window.
-    expect(pendingOutageFailure(services, "own-quiet")).toEqual(expect.any(Object));
+    expect(heldTurn(services, "own-quiet")).toEqual(expect.any(Object));
     // Process-wide map: an uncleared entry here would leak into the next test's pass.
     clearPendingResume(services, "own-quiet");
 });
@@ -616,25 +590,25 @@ test("a conversation armed on its own resumes while the sandbox default leaves t
 test("a conversation that opted out stays stopped even though the sandbox default resumes", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), true, [], new Map([["own-off", false]]));
     const { retryAt } = recordProviderFailure("out-opt", OUT_NOW);
-    recordOutageFailure(services, outage("own-off", "out-opt"), OUT_NOW);
+    recordHeldTurn(services, outage("own-off", "out-opt"), OUT_NOW);
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
 
     await scheduler.tick(retryAt);
     await settle(services, "own-off");
     expect(prompts).toEqual([]);
-    expect(pendingOutageFailure(services, "own-off")).toEqual(expect.any(Object));
+    expect(heldTurn(services, "own-off")).toEqual(expect.any(Object));
     clearPendingResume(services, "own-off");
 });
 
 test("a stranded turn nobody resumed within the hour is dropped rather than sprung back to life", async () => {
     const abandoned: string[] = [];
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), true, abandoned);
-    recordOutageFailure(services, outage("stale-1", "out-stale"), OUT_NOW - 61 * 60_000);
+    recordHeldTurn(services, outage("stale-1", "out-stale"), OUT_NOW - 61 * 60_000);
     const prompts: string[] = [];
     await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick(OUT_NOW);
     expect(prompts).toEqual([]);
-    expect(pendingOutageFailure(services, "stale-1")).toBeUndefined();
+    expect(heldTurn(services, "stale-1")).toBeUndefined();
     expect(abandoned).toEqual(["stale-1"]);
 });
 
@@ -646,7 +620,7 @@ test("once the attempt budget is spent the failure stands: the retrying is finit
     // Each iteration: a window releases one attempt, the attempt fails again, and the failure re-records the turn.
     for (let i = 0; i < OUTAGE_MAX_ATTEMPTS + 2; i += 1) {
         const { retryAt } = recordProviderFailure("out-spent", now);
-        recordOutageFailure(services, outage("spent-1", "out-spent"), now);
+        recordHeldTurn(services, outage("spent-1", "out-spent"), now);
         now = retryAt;
         await scheduler.tick(now);
         // Settles to avoid racing the next window's resume under the one-turn-per-conversation rule.
@@ -659,7 +633,7 @@ test("once the attempt budget is spent the failure stands: the retrying is finit
 test("the next turn on the conversation supersedes a pending outage resume", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     const { retryAt } = recordProviderFailure("out-super", OUT_NOW);
-    recordOutageFailure(services, outage("super-1", "out-super"), OUT_NOW);
+    recordHeldTurn(services, outage("super-1", "out-super"), OUT_NOW);
     clearPendingResume(services, "super-1");
     const prompts: string[] = [];
     await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick(retryAt);
@@ -669,14 +643,14 @@ test("the next turn on the conversation supersedes a pending outage resume", asy
 test("one provider's outage never gates a conversation on another", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     recordProviderFailure("out-claude", OUT_NOW);
-    recordOutageFailure(services, outage("iso-claude", "out-claude"), OUT_NOW);
-    recordOutageFailure(services, outage("iso-codex", "out-codex"), OUT_NOW);
+    recordHeldTurn(services, outage("iso-claude", "out-claude"), OUT_NOW);
+    recordHeldTurn(services, outage("iso-codex", "out-codex"), OUT_NOW);
     const prompts: string[] = [];
     await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick(OUT_NOW);
     await settle(services, "iso-codex");
     expect(prompts).toHaveLength(1);
-    expect(pendingOutageFailure(services, "iso-codex")).toBeUndefined();
-    expect(pendingOutageFailure(services, "iso-claude")).toEqual(expect.any(Object));
+    expect(heldTurn(services, "iso-codex")).toBeUndefined();
+    expect(heldTurn(services, "iso-claude")).toEqual(expect.any(Object));
     clearPendingResume(services, "iso-claude");
 });
 
@@ -1372,7 +1346,12 @@ test("a turn the sandbox started is kept when the door turns it away, its messag
     });
     await settle(services, "door-kept");
 
-    expect(heldTurn(services, "door-kept")).toMatchObject({ reason: "door", ran: false, run: started!.id, input: { prompt: "fix the pipeline", isolated: true } });
+    expect(heldTurn(services, "door-kept")).toMatchObject({
+        reason: "door",
+        ran: false,
+        run: started!.id,
+        input: { prompt: "fix the pipeline", isolated: true },
+    });
     await waitFor(async () => expect(await record.read("door-kept")).toHaveLength(2), SETTLES);
     expect(await record.read("door-kept")).toEqual([
         { role: "user", text: "fix the pipeline", sentAt: expect.any(Number), messageId: "m-fix", run: started!.id },
@@ -1380,7 +1359,12 @@ test("a turn the sandbox started is kept when the door turns it away, its messag
     ]);
 
     // A person's words go back to the conversation's queue: a second copy kept here would be sent twice.
-    await startConversationTurn(services, fakeWake([], TURNED_AWAY), { prompt: "fix the pipeline", conversationId: "door-sent" }, { senderKeeps: true });
+    await startConversationTurn(
+        services,
+        fakeWake([], TURNED_AWAY),
+        { prompt: "fix the pipeline", conversationId: "door-sent" },
+        { senderKeeps: true },
+    );
     await settle(services, "door-sent");
     expect(heldTurn(services, "door-sent")).toBeUndefined();
     expect(await record.read("door-sent")).toEqual([]);
@@ -1509,7 +1493,11 @@ test("an overflow is re-run fresh on the next pass, on no policy, and only once"
     await services.sandboxSettings.set({ ...settings, stopPolicy: "wait" });
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
-    recordHeldTurn(services, { reason: "overflow", input: { prompt: "ship the parser", conversationId: "over-2", isolated: true }, sessionId: "s-full", ran: true }, RECORDED);
+    recordHeldTurn(
+        services,
+        { reason: "overflow", input: { prompt: "ship the parser", conversationId: "over-2", isolated: true }, sessionId: "s-full", ran: true },
+        RECORDED,
+    );
 
     await scheduler.tick(RECORDED + 5_000);
     await settle(services, "over-2");
@@ -1540,7 +1528,8 @@ test("an armed conversation sends the held turn again once the window reopens, a
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-1", true]]));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
-    recordHeldTurn(services, 
+    recordHeldTurn(
+        services,
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-1", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
@@ -1562,7 +1551,8 @@ test("an armed conversation fires exactly once per hold", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-2", true]]));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
-    recordHeldTurn(services, 
+    recordHeldTurn(
+        services,
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-2", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
@@ -1582,7 +1572,8 @@ test("an unarmed conversation is never fired for, however long the window has be
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
-    recordHeldTurn(services, 
+    recordHeldTurn(
+        services,
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-3", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
@@ -1599,7 +1590,8 @@ test("the sandbox setting arms a conversation that has said nothing itself", asy
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, limitPolicy: "resend" });
     const turns: AgentTurn[] = [];
-    recordHeldTurn(services, 
+    recordHeldTurn(
+        services,
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-4", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
@@ -1615,7 +1607,11 @@ test("the sandbox setting arms a conversation that has said nothing itself", asy
 test("a limit that named no reset instant is never fired for, armed or not", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-5", true]]));
     const turns: AgentTurn[] = [];
-    recordHeldTurn(services, { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-5", isolated: true }, ran: false }, RECORDED);
+    recordHeldTurn(
+        services,
+        { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-5", isolated: true }, ran: false },
+        RECORDED,
+    );
 
     await createTurnResumeScheduler(drivenBy(services, heldWake(turns))).tick(RECORDED + 24 * 60 * 60 * 1000);
     expect(turns).toHaveLength(0);
@@ -1628,7 +1624,8 @@ test("a reset instant that had already passed when the refusal happened is never
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-6", true]]));
     const turns: AgentTurn[] = [];
     const stale = Math.round((RECORDED - 60 * 60 * 1000) / 1000);
-    recordHeldTurn(services, 
+    recordHeldTurn(
+        services,
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-6", isolated: true }, ran: false, reopensAt: stale },
         RECORDED,
     );
@@ -1667,7 +1664,8 @@ test("a carry the other account refused re-runs fresh on that account, once", as
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
-    recordHeldTurn(services, 
+    recordHeldTurn(
+        services,
         {
             reason: "limit",
             input: { prompt: "ship the parser", conversationId: "lim-refused-carry", isolated: true, account: "with-room" },
@@ -1697,7 +1695,8 @@ test("a booked move fires on the next pass, with the session the policy said to 
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
-    recordHeldTurn(services, 
+    recordHeldTurn(
+        services,
         {
             reason: "limit",
             input: { prompt: "ship the parser", conversationId: "lim-move", isolated: true, account: "spent-one" },
@@ -1728,7 +1727,8 @@ test("a held turn with no booked move and no arming stays held", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
-    recordHeldTurn(services, 
+    recordHeldTurn(
+        services,
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-unbooked", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );

@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
-import { afterEach, describe, expect, it } from "bun:test";
 import { memoryWatchJournal } from "../verification/watch-journal.js";
 import { startWatcherRuntime, type WatcherRuntime } from "../verification/watchers.js";
 import { adoptBackgroundJobs, completionCheck, jobNote } from "./background-adoption.js";

@@ -1,7 +1,6 @@
 // Mounts the vpn tile over a live tunnel: filled from the connection not the tile, states whose settings are on
 // screen, and a credential never shown survives a save untouched.
 import "@intentic/testing/dom";
-import { it, expect, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
@@ -14,12 +13,12 @@ import * as actualVueRouter from "vue-router";
 
 // Which connection the form is over lives in the URL (`edit`), mirroring how the page reads the tile off the path.
 let query: Record<string, string> = {};
-const replace = mock();
-mock.module(`vue-router`, () => ({
+const replace = jest.fn();
+jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRoute: () => ({ params: { entry: `vpn` }, query }) as never,
     // `resolve` as well as `push`: a row's menu carries the address of what it opens (menuLink.ts).
-    useRouter: () => ({ push: mock(), replace, resolve: (to: string) => ({ href: to }) }) as never,
+    useRouter: () => ({ push: jest.fn(), replace, resolve: (to: string) => ({ href: to }) }) as never,
 }));
 
 // `secrets: ['config']` marks the WireGuard key as stored but withheld, distinguishing a real secret from an empty
@@ -33,45 +32,42 @@ const office = (): CapabilitySummary => ({
     secrets: [`config`],
 });
 
-const add = mock<(input: AddCapabilityInput) => Promise<void>>(async () => {});
-mock.module(`./connect/useCapabilities`, () => ({
+const add = jest.fn<(input: AddCapabilityInput) => Promise<void>>(async () => {});
+jest.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities,
         error: ref(undefined),
         add: (input: AddCapabilityInput) => add(input),
-        remove: { mutateAsync: mock(), isPending: ref(false) },
-        rename: { mutateAsync: mock(), isPending: ref(false) },
-        refetch: mock(),
-        dismissRecommendation: { mutateAsync: mock(), isPending: ref(false) },
+        remove: { mutateAsync: jest.fn(), isPending: ref(false) },
+        rename: { mutateAsync: jest.fn(), isPending: ref(false) },
+        refetch: jest.fn(),
+        dismissRecommendation: { mutateAsync: jest.fn(), isPending: ref(false) },
     }),
-    browseMarketplace: mock(),
+    browseMarketplace: jest.fn(),
     // The connect forms read these at link time though no case here opens one; a mock missing a name anything in
     // the graph imports is refused.
-    readRemoteRefs: mock(async () => ({ refs: [] })),
-    probeCapability: mock(),
+    readRemoteRefs: jest.fn(async () => ({ refs: [] })),
+    probeCapability: jest.fn(),
 }));
-mock.module(`../extensions/useExtensions`, () => ({
+jest.mock(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
 }));
-mock.module(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-mock.module(`../terminal/useBackgroundProcesses`, () => ({
-    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: mock(), stop: mock() }),
-    viewProcessLogs: mock(),
+jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
+jest.mock(`../terminal/useBackgroundProcesses`, () => ({
+    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
+    viewProcessLogs: jest.fn(),
 }));
-mock.module(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: mock(), refresh: mock(), start: mock(), stop: mock() }),
+jest.mock(`../composables/sandbox/useHostConnect`, () => ({
+    useHostConnect: () => ({ hostFor: () => undefined, revoke: jest.fn(), refresh: jest.fn(), start: jest.fn(), stop: jest.fn() }),
 }));
-// VpnConnections dials as well as lists, so `error` must be present or the render throws.
-mock.module(`../sandbox/devices/useVpn`, () => ({
-    importForticlient: mock(),
-    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: mock(), disconnect: mock() }),
+// LiveLinkRows opens as well as lists, so `error` must be present or the render throws.
+jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
+    importForticlient: jest.fn(),
+    useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));
-mock.module(`../sandbox/devices/useNetdisk`, () => ({
-    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: mock(), unmount: mock() }),
-}));
-mock.module(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-mock.module(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");
 

@@ -1,5 +1,4 @@
 import { type AgentProvider, providerLabel } from "@intentic/sandbox-contract";
-import { test, expect, afterEach, mock } from "bun:test";
 import {
     AUTO_KEY,
     autoEntry,
@@ -18,8 +17,8 @@ import { endpointProviders, LOCAL_MODELS_GROUP } from "../accounts/providerCatal
 // during the window before catalogs adopt it.
 
 // modelPicker imports conversation.ts for the live catalogs; stub its side-effects so the import is inert.
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: mock() }));
-mock.module("./useChat-catalog", () => ({ loadProviderModels: mock(async () => {}) }));
+jest.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: jest.fn() }));
+jest.mock("./useChat-catalog", () => ({ loadProviderModels: jest.fn(async () => {}) }));
 
 const entry = (provider: AgentProvider, value: string, label: string): PickerEntry => ({ key: `${provider}:${value}`, provider, value, label });
 

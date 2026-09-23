@@ -1,5 +1,4 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { it, expect } from "bun:test";
 import { connectedSandboxes, unfinishedSandboxes } from "./roster";
 
 /* The partition every sandbox list draws itself from. */

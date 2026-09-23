@@ -239,7 +239,7 @@ const showDelivery = (result: { link: string; delivery: InviteDelivery; reason?:
                   title: DELIVERY_NOTE[result.delivery],
                   detail: result.reason,
                   action: {
-                      label: t(`sandbox.sandboxAccess.copyLink`),
+                      label: t(`shared.copyLink`),
                       // Uses the clicked element's own window; best-effort, so a refusal here isn't the invite failing.
                       run: () => void Promise.resolve(clipboardOf(document.activeElement)?.writeText(result.link)).catch(() => undefined),
                   },
@@ -424,7 +424,7 @@ const revoke = async (target: string): Promise<void> => {
     <div class="flex flex-col gap-6">
         <!-- Members + invites (owner) / read-only note (member). -->
         <!-- Rows use <Row>, taking the group's own tier, like every other list in the app. -->
-        <RowGroup :label="t(`sandbox.sandboxAccess.access`)">
+        <RowGroup :label="t(`shared.access`)">
             <template v-if="isOwner">
                 <Row icon="user" :title="user?.email">
                     <template #meta><StatusBadge variant="primary" :label="t(`sandbox.sandboxAccess.owner`)" size="xs" /></template>
@@ -436,73 +436,73 @@ const revoke = async (target: string): Promise<void> => {
                     </template>
                 </div>
                 <template v-for="member in members" :key="member.email">
-                <!-- A guest's description is the assistants its fence reaches, the whole of what that tier can do. -->
-                <Row icon="user" :title="member.email" :description="guestLine(member)">
-                    <!-- Status belongs in metadata, not the action slot. -->
-                    <template #meta>
-                        <StatusBadge
-                            :variant="STATUS[member.status].variant"
-                            :label="STATUS[member.status].label"
-                            :dot="STATUS[member.status].dot"
-                            size="xs"
-                        />
-                        <!-- Which parts of the workspace they see; no badge at all is the whole of it. -->
-                        <StatusBadge v-for="area in rowAreas(member.email) ?? []" :key="area" variant="info" :label="areaLabel(area)" size="xs" />
-                    </template>
-                    <template #control>
-                        <!-- Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. -->
-                        <Picker
-                            :model-value="rowRole(member)"
-                            :options="ROLE_OPTIONS"
-                            variant="ghost"
-                            :disabled="busy"
-                            class="shrink-0"
-                            :aria-label="t(`sandbox.sandboxAccess.role`, { email: member.email })"
-                            :header="t(`sandbox.sandboxAccess.role`, { email: member.email })"
-                            @update:model-value="(role: GrantedRole | undefined) => role !== undefined && pickRole(member, role)"
-                        />
-                        <!-- Opens this row's fence; the badges above already say what it holds. -->
-                        <Button
-                            v-if="rowRole(member) !== 'maintainer'"
-                            :label="t(`sandbox.sandboxAccess.areas`)"
-                            size="small"
-                            severity="secondary"
-                            :text="true"
-                            :disabled="busy"
-                            @click="fenceOpen = fenceOpen === member.email ? undefined : member.email"
-                        />
-                        <Button
-                            v-if="member.status !== 'accepted'"
-                            :label="t(`sandbox.sandboxAccess.resend`)"
-                            size="small"
-                            severity="secondary"
-                            :text="true"
-                            :disabled="busy"
-                            @click="resend(member.email)"
-                        />
-                        <Button
-                            size="small"
-                            severity="danger"
-                            :text="true"
-                            :disabled="busy"
-                            :aria-label="t(`sandbox.sandboxAccess.revokeAccess`)"
-                            @click="revoke(member.email)"
-                        >
-                            <template #icon><Icon name="times" /></template>
-                        </Button>
-                    </template>
-                </Row>
-                <!-- Which parts of the workspace they reach, and with it which assistants. Not offered to a
+                    <!-- A guest's description is the assistants its fence reaches, the whole of what that tier can do. -->
+                    <Row icon="user" :title="member.email" :description="guestLine(member)">
+                        <!-- Status belongs in metadata, not the action slot. -->
+                        <template #meta>
+                            <StatusBadge
+                                :variant="STATUS[member.status].variant"
+                                :label="STATUS[member.status].label"
+                                :dot="STATUS[member.status].dot"
+                                size="xs"
+                            />
+                            <!-- Which parts of the workspace they see; no badge at all is the whole of it. -->
+                            <StatusBadge v-for="area in rowAreas(member.email) ?? []" :key="area" variant="info" :label="areaLabel(area)" size="xs" />
+                        </template>
+                        <template #control>
+                            <!-- Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. -->
+                            <Picker
+                                :model-value="rowRole(member)"
+                                :options="ROLE_OPTIONS"
+                                variant="ghost"
+                                :disabled="busy"
+                                class="shrink-0"
+                                :aria-label="t(`sandbox.sandboxAccess.role`, { email: member.email })"
+                                :header="t(`sandbox.sandboxAccess.role`, { email: member.email })"
+                                @update:model-value="(role: GrantedRole | undefined) => role !== undefined && pickRole(member, role)"
+                            />
+                            <!-- Opens this row's fence; the badges above already say what it holds. -->
+                            <Button
+                                v-if="rowRole(member) !== 'maintainer'"
+                                :label="t(`shared.areas`)"
+                                size="small"
+                                severity="secondary"
+                                :text="true"
+                                :disabled="busy"
+                                @click="fenceOpen = fenceOpen === member.email ? undefined : member.email"
+                            />
+                            <Button
+                                v-if="member.status !== 'accepted'"
+                                :label="t(`sandbox.sandboxAccess.resend`)"
+                                size="small"
+                                severity="secondary"
+                                :text="true"
+                                :disabled="busy"
+                                @click="resend(member.email)"
+                            />
+                            <Button
+                                size="small"
+                                severity="danger"
+                                :text="true"
+                                :disabled="busy"
+                                :aria-label="t(`shared.revokeAccess`)"
+                                @click="revoke(member.email)"
+                            >
+                                <template #icon><Icon name="times" /></template>
+                            </Button>
+                        </template>
+                    </Row>
+                    <!-- Which parts of the workspace they reach, and with it which assistants. Not offered to a
                      maintainer: that tier carries the owner's operating authority, so a folder fence over it would be
                      a line on a screen. Forced open on a staged row, since there the fence is what makes the tier. -->
-                <RowNote v-if="(fenceOpen === member.email || fenceStaged(member.email)) && rowRole(member) !== 'maintainer'" variant="block">
-                    <AreaPicker
-                        :picked="rowAreas(member.email)"
-                        :role="rowRole(member)"
-                        :disabled="busy"
-                        @change="(areas) => void pickAreas(member, areas)"
-                    />
-                </RowNote>
+                    <RowNote v-if="(fenceOpen === member.email || fenceStaged(member.email)) && rowRole(member) !== 'maintainer'" variant="block">
+                        <AreaPicker
+                            :picked="rowAreas(member.email)"
+                            :role="rowRole(member)"
+                            :disabled="busy"
+                            @change="(areas) => void pickAreas(member, areas)"
+                        />
+                    </RowNote>
                 </template>
 
                 <!-- Invite affordance as the group's footer row (mirrors the Secrets \"add\" pattern). -->
@@ -573,7 +573,7 @@ const revoke = async (target: string): Promise<void> => {
                 <Row icon="user" :title="user?.email">
                     <template #meta>
                         <StatusBadge variant="primary" :label="sandbox.active.value?.role ?? `viewer`" size="xs" />
-                        <StatusBadge variant="neutral" :label="t(`sandbox.sandboxAccess.you`)" size="xs" />
+                        <StatusBadge variant="neutral" :label="t(`shared.you`)" size="xs" />
                     </template>
                 </Row>
                 <RowNote>{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</RowNote>
@@ -660,7 +660,7 @@ const revoke = async (target: string): Promise<void> => {
         </RowGroup>
 
         <!-- Live presence: who else is connected right now (everyone sees this). -->
-        <RowGroup :label="t(`sandbox.sandboxAccess.hereNow`)">
+        <RowGroup :label="t(`shared.hereNow`)">
             <RowNote v-if="presenceOthers.length === 0" variant="empty">{{ t(`sandbox.sandboxAccess.noOneElseConnected`) }}</RowNote>
             <template v-else>
                 <Row

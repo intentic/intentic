@@ -1,5 +1,4 @@
 import type { AgentEvent, CredentialGate as GatePolicy } from "@intentic/sandbox-contract";
-import { it, expect } from "bun:test";
 import { createCredentialGate, type CredentialCheck, type CredentialGateDeps } from "./credential-gate.js";
 import type { CredentialGatesStore } from "./credential-gates.js";
 import { createCredentialGrants } from "./credential-grants.js";

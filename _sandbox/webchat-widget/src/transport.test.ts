@@ -1,4 +1,3 @@
-import { test, expect, mock } from "bun:test";
 import { stubGlobal } from "@intentic/testing/bun";
 import type { WebchatMessage } from "@intentic/sandbox-contract";
 import { EmbedError } from "@intentic/sandbox-contract/embed";
@@ -23,7 +22,7 @@ const bodyOf = (chunks: string[]): ReadableStream<Uint8Array> => {
 const collect = async (chunks: string[]): Promise<{ text: string; pending: string[]; failed: string[] }> => {
     stubGlobal(
         `fetch`,
-        mock(async () => new Response(bodyOf(chunks), { status: 200 })),
+        jest.fn(async () => new Response(bodyOf(chunks), { status: 200 })),
     );
     let text = ``;
     const pending: string[] = [];
@@ -88,7 +87,7 @@ test(`a stream that ends without a done frame still delivers what arrived`, asyn
 test(`a refusal surfaces the daemon's own sentence and its status, not a generic failure`, async () => {
     stubGlobal(
         `fetch`,
-        mock(async () => new Response(JSON.stringify({ error: `origin not allowed` }), { status: 403 })),
+        jest.fn(async () => new Response(JSON.stringify({ error: `origin not allowed` }), { status: 403 })),
     );
     await expect(sendMessage(ENDPOINT, MESSAGE, { delta: () => {}, pending: () => {}, failed: () => {} })).rejects.toThrow(
         expect.objectContaining({ message: `origin not allowed`, status: 403 }) as Error,
@@ -98,7 +97,7 @@ test(`a refusal surfaces the daemon's own sentence and its status, not a generic
 test(`a refusal with no JSON body still names its status`, async () => {
     stubGlobal(
         `fetch`,
-        mock(async () => new Response(`<html>502</html>`, { status: 502 })),
+        jest.fn(async () => new Response(`<html>502</html>`, { status: 502 })),
     );
     const error = await sendMessage(ENDPOINT, MESSAGE, { delta: () => {}, pending: () => {}, failed: () => {} }).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(EmbedError);
@@ -109,7 +108,7 @@ test(`the message posts to the automation's own path`, async () => {
     const urls: string[] = [];
     stubGlobal(
         `fetch`,
-        mock(async (url: string) => {
+        jest.fn(async (url: string) => {
             urls.push(url);
             return new Response(bodyOf([`event: done\ndata: \n\n`]), { status: 200 });
         }),
@@ -122,7 +121,7 @@ test(`the poll names the visitor's thread and its cursor, so one browser never c
     const urls: string[] = [];
     stubGlobal(
         `fetch`,
-        mock(async (url: string) => {
+        jest.fn(async (url: string) => {
             urls.push(url);
             return new Response(JSON.stringify({ replies: [{ seq: 3, at: 1, text: `a person wrote back` }], cursor: 3 }), { status: 200 });
         }),
@@ -137,7 +136,7 @@ test(`the poll names the visitor's thread and its cursor, so one browser never c
 test(`a refused poll carries the server's own sentence, so a misconfigured origin is legible`, async () => {
     stubGlobal(
         `fetch`,
-        mock(async () => new Response(JSON.stringify({ error: `origin not allowed` }), { status: 403 })),
+        jest.fn(async () => new Response(JSON.stringify({ error: `origin not allowed` }), { status: 403 })),
     );
     const error = await fetchPending(ENDPOINT, `v-1`, 0).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(EmbedError);

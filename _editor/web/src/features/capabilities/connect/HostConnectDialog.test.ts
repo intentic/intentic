@@ -4,25 +4,24 @@
 import "@intentic/testing/dom";
 import type { Device } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { it, expect, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // The composable reads only the sandbox's address and a minted pairing token; everything else in the command is
 // built here.
-mock.module(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`) }) }));
+jest.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`) }) }));
 // The roster a test connects a machine into; the pair route answers a token regardless.
 const roster = ref<unknown[]>([]);
-mock.module(`../../sandbox/client/sandboxClient`, () => ({
-    sandboxRequest: mock(async () => ({ ok: true, json: async () => ({ token: `pair-token`, hosts: roster.value }) })),
+jest.mock(`../../sandbox/client/sandboxClient`, () => ({
+    sandboxRequest: jest.fn(async () => ({ ok: true, json: async () => ({ token: `pair-token`, hosts: roster.value }) })),
 }));
 // Taking the hostname is a rename, which is the capabilities composable's; this spies on the call rather than on the wire.
-const renamed = mock(async (_: { id: string; to: string }) => ({}));
-mock.module(`./useCapabilities`, () => ({ useCapabilities: () => ({ rename: { mutateAsync: renamed } }) }));
+const renamed = jest.fn(async (_: { id: string; to: string }) => ({}));
+jest.mock(`./useCapabilities`, () => ({ useCapabilities: () => ({ rename: { mutateAsync: renamed } }) }));
 // The fleet the dialog reads Windows PCs' distros off; empty unless a test connects one.
 const fleet = ref<Device[]>([]);
-mock.module(`../../sandbox/devices/useDevices`, () => ({
+jest.mock(`../../sandbox/devices/useDevices`, () => ({
     useDevices: () => ({ devices: computed(() => fleet.value), readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
 }));
 
@@ -51,7 +50,7 @@ const mount = (id = `my-desktop`, unnamed = false): { open: () => void } => {
     };
 };
 
-const onRenamed = mock();
+const onRenamed = jest.fn();
 
 const pill = (label: string): HTMLButtonElement =>
     [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label)!;

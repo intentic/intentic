@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { type AgentEvent, type AgentOrigin, type AgentTurn, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { unstubbed } from "@intentic/testing";
-import { test, expect } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { z } from "zod";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";

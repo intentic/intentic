@@ -1,7 +1,6 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, afterEach, mock } from "bun:test";
 import { RESOURCE_METRICS_FILE, type ResourceSampler, type ResourceSnapshot, startResourceMetrics } from "./resource-metrics.js";
 
 const roots: string[] = [];
@@ -24,8 +23,8 @@ test("samples immediately into the durable logs tree as JSONL", async () => {
         queue: { heavy: { slots: 2, held: 1, longestHoldSeconds: 12 } },
         owners: { turnRuns: { frames: 3 } },
     };
-    const sampler: ResourceSampler = { sample: mock(async () => snapshot), stop: mock() };
-    const metrics = startResourceMetrics({ historyRoot, logger: { warn: mock(), error: mock() }, intervalMs: 3_600_000, sampler });
+    const sampler: ResourceSampler = { sample: jest.fn(async () => snapshot), stop: jest.fn() };
+    const metrics = startResourceMetrics({ historyRoot, logger: { warn: jest.fn(), error: jest.fn() }, intervalMs: 3_600_000, sampler });
 
     // The explicit sample joins any eager one still in flight, so startup is deterministic without a poll.
     await metrics.sample();
@@ -43,8 +42,8 @@ test("samples immediately into the durable logs tree as JSONL", async () => {
 });
 
 test("an empty history root is the explicit persistence opt-out", async () => {
-    const sampler: ResourceSampler = { sample: mock(), stop: mock() };
-    const metrics = startResourceMetrics({ historyRoot: "", logger: { warn: mock(), error: mock() }, sampler });
+    const sampler: ResourceSampler = { sample: jest.fn(), stop: jest.fn() };
+    const metrics = startResourceMetrics({ historyRoot: "", logger: { warn: jest.fn(), error: jest.fn() }, sampler });
     await metrics.sample();
     metrics.stop();
     expect(sampler.sample).not.toHaveBeenCalled();
@@ -73,9 +72,9 @@ test("an OOM kill logs at error, naming how many and which roles shrank", async 
         withCgroup("2026-08-09T00:01:00.000Z", 2, { browser: 13, terminal: 4 }),
     ];
     let index = 0;
-    const sampler: ResourceSampler = { sample: mock(async () => samples[index++] ?? samples[1]!), stop: mock() };
-    const error = mock();
-    const metrics = startResourceMetrics({ historyRoot, logger: { warn: mock(), error }, intervalMs: 3_600_000, sampler });
+    const sampler: ResourceSampler = { sample: jest.fn(async () => samples[index++] ?? samples[1]!), stop: jest.fn() };
+    const error = jest.fn();
+    const metrics = startResourceMetrics({ historyRoot, logger: { warn: jest.fn(), error }, intervalMs: 3_600_000, sampler });
 
     await metrics.sample();
     // First sample has nothing to diff against; comparing to zero would replay every historical kill.
@@ -94,9 +93,9 @@ test("a steady OOM counter is silent: the alarm is the delta, not the level", as
     roots.push(historyRoot);
     // Absolute count stays 5 forever after one historical kill; alarming on the level would fire every minute.
     const snapshot = withCgroup("2026-08-09T00:00:00.000Z", 5, { browser: 2 });
-    const sampler: ResourceSampler = { sample: mock(async () => snapshot), stop: mock() };
-    const error = mock();
-    const metrics = startResourceMetrics({ historyRoot, logger: { warn: mock(), error }, intervalMs: 3_600_000, sampler });
+    const sampler: ResourceSampler = { sample: jest.fn(async () => snapshot), stop: jest.fn() };
+    const error = jest.fn();
+    const metrics = startResourceMetrics({ historyRoot, logger: { warn: jest.fn(), error }, intervalMs: 3_600_000, sampler });
 
     await metrics.sample();
     await metrics.sample();

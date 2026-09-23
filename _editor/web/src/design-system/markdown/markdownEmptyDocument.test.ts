@@ -3,7 +3,6 @@
 // click, nothing to focus and nowhere to put a caret. Mounted for real (jsdom, plain Vue) since the whole question is
 // what the DOM ends up holding.
 import "@intentic/testing/dom";
-import { describe, test, expect } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 import { MarkdownDocument } from "@intentic/ui";
 

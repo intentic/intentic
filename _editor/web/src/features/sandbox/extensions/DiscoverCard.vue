@@ -45,7 +45,7 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
                         name="shield"
                         class="shrink-0 text-success"
                         v-tooltip.top="listing.entry.trustReason ?? t(`sandbox.discoverCard.deterministicScanAgentAudit`)"
-                        :aria-label="t(`sandbox.discoverCard.verified`)"
+                        :aria-label="t(`shared.verified`)"
                     />
                 </div>
                 <div v-if="name.publisher !== ``" class="truncate text-2xs text-subtle">{{ name.publisher }}</div>
@@ -89,7 +89,7 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
                     :label="listing.state.unaudited ? t(`sandbox.discoverCard.unauditedUpdate`) : t(`sandbox.discoverCard.update`)"
                     v-tooltip.top="listing.state.unaudited ? t(`sandbox.discoverCard.notPassedAudit`) : undefined"
                 />
-                <StatusBadge v-else-if="listing.state.kind === `blocked`" size="xs" variant="danger" :label="t(`sandbox.discoverCard.blocked`)" />
+                <StatusBadge v-else-if="listing.state.kind === `blocked`" size="xs" variant="danger" :label="t(`shared.blocked`)" />
                 <span v-else-if="listing.state.kind === `unavailable`" class="text-2xs text-subtle" v-tooltip.top="listing.state.reason">
                     {{ t(`sandbox.discoverCard.cantInstall`) }}
                 </span>

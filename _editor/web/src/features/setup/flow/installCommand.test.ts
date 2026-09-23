@@ -1,5 +1,4 @@
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
-import { describe, expect, it } from "bun:test";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
 import { type CommandInput, installCommand, platformUrlOf, uninstallCommand, unixPrefix, webOriginOf, windowsEnv } from "./installCommand";
 

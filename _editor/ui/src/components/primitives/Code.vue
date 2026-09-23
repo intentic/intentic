@@ -6,6 +6,7 @@ import { useHighlighter } from "../../composables/useHighlighter.js";
 import { useT } from "../../i18n/index.js";
 import type { ShikiLang } from "@intentic/code-read/langs";
 import CopyButton from "./CopyButton.vue";
+import { useLatest } from "../../composables/useLatest.js";
 
 const t = useT();
 
@@ -98,18 +99,17 @@ onMounted(() => {
 onUnmounted(() => observer?.disconnect());
 
 // Safe: Shiki HTML-escapes the code, so the only markup is its own `<span style>` colour tokens.
-let seq = 0;
+const latest = useLatest();
 watch(
     () => [code, lang] as const,
     ([nextCode, nextLang]) => {
-        const id = ++seq;
+        const isLatest = latest();
         if (nextLang === undefined) {
             html.value = undefined;
             return;
         }
         void highlight(nextCode, nextLang).then((out) => {
-            // Ignore a stale result if code/lang changed while highlighting was in flight.
-            if (id === seq) {
+            if (isLatest()) {
                 html.value = out;
             }
         });

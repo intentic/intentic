@@ -1,4 +1,3 @@
-import { test, expect, jest } from "bun:test";
 import { createWsTickets, redeemTicket } from "./ws-tickets.js";
 
 const IDENTITY = { email: "owner@x.com", role: "owner" as const };

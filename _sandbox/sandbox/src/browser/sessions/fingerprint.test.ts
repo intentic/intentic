@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { acceptLanguage, type BrowserFingerprint } from "./fingerprint.js";
 import { stealthInit } from "./stealth.js";
 

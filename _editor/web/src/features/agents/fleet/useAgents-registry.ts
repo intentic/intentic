@@ -74,8 +74,7 @@ const latchRegistered = (agents: readonly AgentSummary[]): void => {
     }
 };
 
-// Recompute fresh every frame; never cache the fingerprint string. In-place optimistic writes (markSeen, rename,
-// ...) mutate the held entry, so a cached string would compare stale and mask a declined write.
+// Recompute fresh every frame; never cache the fingerprint string: markSeen stamps the held entry in place.
 export const snapshotFingerprint = (value: unknown): string => JSON.stringify(value);
 
 const registryStable = sandboxValue(() => new Map<string, AgentSummary>());
@@ -152,47 +151,24 @@ export const holdPending = (moves: readonly { id: string; present?: AgentSummary
     registry.value = withPending(registry.value.filter((agent) => !pending.value.has(agent.id)));
 };
 
-// Optimistic remove: the card leaves before the daemon answers, held at +Infinity since there's no revision yet
-// to retire it. Returns a rollback that restores everything except ids in `keep` (confirmed as moved).
-export const takeOffBoard = (ids: readonly string[]): ((keep?: ReadonlySet<string>) => void) => {
-    const held = new Map(registry.value.filter((agent) => ids.includes(agent.id)).map((agent) => [agent.id, agent]));
-    holdPending(
-        ids.map((id) => ({ id })),
-        Number.POSITIVE_INFINITY,
-    );
+// Moves cards off (no `present`) or onto the board before the daemon answers, held at +Infinity since there is no
+// revision yet. The rollback undoes every move but the ids in `keep` (confirmed), and only while its own hold stands.
+export const moveAhead = (moves: readonly { id: string; present?: AgentSummary }[]): ((keep?: ReadonlySet<string>) => void) => {
+    const before = registry.value.filter((agent) => moves.some((move) => move.id === agent.id));
+    holdPending(moves, Number.POSITIVE_INFINITY);
+    const mine = new Map(moves.map((move) => [move.id, pending.value.get(move.id)]));
     return (keep) => {
-        const back = [...held].filter(([id]) => keep?.has(id) !== true);
-        for (const [id] of back) {
-            // Only this call's own pending intent; dropping a since-reheld one would flicker an archived card back.
-            if (pending.value.get(id)?.untilRev === Number.POSITIVE_INFINITY) {
-                pending.value.delete(id);
-            }
+        const undone = new Set(
+            moves.filter((move) => keep?.has(move.id) !== true && pending.value.get(move.id) === mine.get(move.id)).map((move) => move.id),
+        );
+        for (const id of undone) {
+            pending.value.delete(id);
         }
-        const returning = back.filter(([id]) => !pending.value.has(id)).map(([, agent]) => agent);
-        if (returning.length > 0) {
-            registry.value = withPending([...registry.value, ...returning]);
-        }
-    };
-};
-
-// takeOffBoard's inverse: the cards join the board before the daemon answers, held at +Infinity until its revision.
-// Returns a rollback taking back all but the ids in `keep` (confirmed as moved), and only what this call put there.
-export const putOnBoard = (agents: readonly AgentSummary[]): ((keep?: ReadonlySet<string>) => void) => {
-    holdPending(
-        agents.map((agent) => ({ id: agent.id, present: agent })),
-        Number.POSITIVE_INFINITY,
-    );
-    return (keep) => {
-        const back = new Set(agents.filter((agent) => keep?.has(agent.id) !== true).map((agent) => agent.id));
-        for (const id of back) {
-            // Only this call's own intent: a hold since replaced by a revision is the daemon's confirmation, not ours.
-            if (pending.value.get(id)?.untilRev === Number.POSITIVE_INFINITY && pending.value.get(id)?.present !== undefined) {
-                pending.value.delete(id);
-            }
-        }
-        const leaving = [...back].filter((id) => !pending.value.has(id));
-        if (leaving.length > 0) {
-            registry.value = withPending(registry.value.filter((agent) => !leaving.includes(agent.id)));
+        if (undone.size > 0) {
+            registry.value = withPending([
+                ...registry.value.filter((agent) => !undone.has(agent.id)),
+                ...before.filter((agent) => undone.has(agent.id)),
+            ]);
         }
     };
 };
@@ -271,7 +247,7 @@ export const markAllSeen = (): void => {
 };
 
 // An open tab adopts the registry's title unconditionally: the daemon never promotes a title that would overwrite
-// a rename. rename() writes the registry optimistically, so a rename lands here the same tick, not a round trip later.
+// a rename, and rename() moves the tab's own title on the press.
 const appliedTitles = new Map<string, string | undefined>();
 
 // Detects a title change via per-entry lookup, no per-frame allocation. A shrunk roster isn't caught by lookups

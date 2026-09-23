@@ -1,15 +1,13 @@
 // Pins that focusing a tab from outside the strip (tree, Changes, reload) scrolls it into view. jsdom lays nothing
 // out, so assertions check the scrollIntoView call (target + `nearest`), not actual position.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import FileTabs from "./FileTabs.vue";
 import type { WorkspaceTab } from "./workspaceTabs";
 import { IconStub } from "@intentic/ui/testing";
 
 // scrollIntoView is stubbed as a recorder; jsdom implements none, and assertions read what it captured.
-const { reveals } = hoisted(() => {
+const { reveals } = (() => {
     const recorded: { tab: string; inline: string | undefined }[] = [];
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: boolean | ScrollIntoViewOptions): void {
         recorded.push({
@@ -18,7 +16,7 @@ const { reveals } = hoisted(() => {
         });
     };
     return { reveals: recorded };
-});
+})();
 
 // Enough files to overflow any real strip; named so a reveal is identifiable by the label it drew.
 const PATHS = Array.from({ length: 8 }, (_unused, at) => `src/file${at}.ts`);

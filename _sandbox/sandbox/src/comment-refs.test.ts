@@ -2,7 +2,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
-import { test, expect } from "bun:test";
 
 // Every file a comment names still exists under that name; a reference is recognized by shape (a known stem, a long or
 // hyphenated/camelCase stem, or a PascalCase component name), not a list of known-bad names.

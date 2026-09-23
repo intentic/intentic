@@ -4,8 +4,6 @@
 // real lane.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { it, expect, beforeEach, afterEach } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
 import { laneOf, NO_ATTENTION, standingFrom } from "../../agents/fleet/agentStatus";
@@ -19,9 +17,9 @@ import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 import { runningTurn } from "../../../testing/runningTurn";
 
-hoisted(() => {
+(() => {
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-});
+})();
 
 let app: App | undefined;
 let host: HTMLElement | undefined;

@@ -1,5 +1,4 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { describe, it, expect } from "bun:test";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { syncHookOutput } from "../../testing.js";
 import { checklistCloseHooks, checklistCloseNote } from "./checklist-close.js";

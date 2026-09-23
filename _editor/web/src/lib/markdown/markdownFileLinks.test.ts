@@ -2,11 +2,10 @@ import "@intentic/testing/dom";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 // Needs jsdom: the linkifier and DOMPurify require a real document. Asserted end-to-end through renderMarkdown since
 // the order (parse, sanitize, then linkify) is what's pinned.
-import { describe, it, expect, beforeEach, mock } from "bun:test";
 
 // The container-root lookup reads the workspace-tree query; `queryData` is that seam.
 let queryData: { root?: string; tree?: unknown[] }[] = [];
-mock.module("../queryPersistence", () => ({
+jest.mock("../queryPersistence", () => ({
     queryClient: { getQueriesData: () => queryData.map((data) => [[], data] as const) },
 }));
 

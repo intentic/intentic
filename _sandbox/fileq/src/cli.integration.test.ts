@@ -6,7 +6,6 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { captureCli, type CliOutcome } from "@intentic/agent-cli/testing";
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { app } from "./app.js";
 import { deriverStamp } from "./lib/derivers/deriver.js";
 import { docxDeriver } from "./lib/derivers/docx.js";

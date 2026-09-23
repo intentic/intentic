@@ -2,7 +2,6 @@ import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { homedir } from "node:os";
 import { type AgentEvent, type AgentReply, type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract";
-import { test, expect, afterEach, jest, mock } from "bun:test";
 import { stubEnv, unstubAllEnvs, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -16,7 +15,9 @@ import { parkedCards } from "../../agents/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
-mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }) }));
+jest.mock("../prompt/preset-prompt.js", () => ({
+    presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }),
+}));
 
 // One fleet's actors for every turn here: the cards a turn parks, the children and commands it starts.
 const actors = memoryFleet().conversations;
@@ -146,7 +147,16 @@ test("a Read that answers with an image settles its card with the picture, not `
             {
                 type: "assistant",
                 session_id: "s1",
-                message: { content: [{ type: "tool_use", id: "r1", name: "Read", input: { file_path: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser/after.png` } }] },
+                message: {
+                    content: [
+                        {
+                            type: "tool_use",
+                            id: "r1",
+                            name: "Read",
+                            input: { file_path: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser/after.png` },
+                        },
+                    ],
+                },
             },
             {
                 type: "user",
@@ -165,7 +175,12 @@ test("a Read that answers with an image settles its card with the picture, not `
         ),
     );
     expect(events.filter((event) => event.kind === "tool_call_update")).toEqual([
-        { kind: "tool_call_update", id: "r1", status: "completed", content: [{ type: "image", path: `${STATE_DIR}/records/artifacts/browser/after.png` }] },
+        {
+            kind: "tool_call_update",
+            id: "r1",
+            status: "completed",
+            content: [{ type: "image", path: `${STATE_DIR}/records/artifacts/browser/after.png` }],
+        },
     ]);
 });
 
@@ -1397,15 +1412,29 @@ test("an overflow the assistant's error already said is not said again by the re
         request,
         fakeQuery(
             { type: "assistant", session_id: "s", error: "invalid_request", message: { content: [{ type: "text", text: "Prompt is too long" }] } },
-            { type: "result", subtype: "error_during_execution", is_error: true, errors: ["Prompt is too long"], terminal_reason: "api_error", session_id: "s" },
+            {
+                type: "result",
+                subtype: "error_during_execution",
+                is_error: true,
+                errors: ["Prompt is too long"],
+                terminal_reason: "api_error",
+                session_id: "s",
+            },
         ),
     );
-    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "context-overflow", message: "Prompt is too long" }, { kind: "done" }]);
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "context-overflow", message: "Prompt is too long" },
+        { kind: "done" },
+    ]);
 });
 
 // Not every ending is a full window: an ordinary API failure keeps its subtype's code.
 test("a failed result with another ending is still the harness failing", async () => {
-    const events = await collect(request, fakeQuery({ type: "result", subtype: "error_during_execution", terminal_reason: "model_error", session_id: "s" }));
+    const events = await collect(
+        request,
+        fakeQuery({ type: "result", subtype: "error_during_execution", terminal_reason: "model_error", session_id: "s" }),
+    );
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
         { kind: "error", code: "harness-incomplete", message: "agent did not complete (error_during_execution)" },
@@ -1417,9 +1446,18 @@ test("a failed result with another ending is still the harness failing", async (
 test("a trial turn past its window is an overflow, not a model the trial cannot run", async () => {
     const events = await collect(
         { ...request, credential: { kind: "trial", baseUrl: "http://127.0.0.1:8788", authToken: "local" } },
-        fakeQuery({ type: "assistant", session_id: "s", error: "invalid_request", message: { content: [{ type: "text", text: "Prompt is too long" }] } }),
+        fakeQuery({
+            type: "assistant",
+            session_id: "s",
+            error: "invalid_request",
+            message: { content: [{ type: "text", text: "Prompt is too long" }] },
+        }),
     );
-    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "context-overflow", message: "Prompt is too long" }, { kind: "done" }]);
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "context-overflow", message: "Prompt is too long" },
+        { kind: "done" },
+    ]);
 });
 
 test("a rate_limit_event surfaces the subscription usage snapshot (window, utilization, reset)", async () => {
@@ -1703,12 +1741,7 @@ test("a running total that falls is a count started over: the frame carries the 
             { type: "result", subtype: "success", total_cost_usd: 0.125 },
         ),
     );
-    expect(events).toEqual([
-        { kind: "usage", costUsd: 0.3 },
-        { kind: "usage", costUsd: 0.05 },
-        { kind: "usage", costUsd: 0.075 },
-        { kind: "done" },
-    ]);
+    expect(events).toEqual([{ kind: "usage", costUsd: 0.3 }, { kind: "usage", costUsd: 0.05 }, { kind: "usage", costUsd: 0.075 }, { kind: "done" }]);
 });
 
 test("after the last result a steered stream settles: the grace window closes the queue so the input ends", async () => {
@@ -2358,7 +2391,14 @@ const QUESTIONS = [{ question: "How much of the fix?", header: "Scope", multiSel
 // The server validates a call against the registered schema before the handler runs; the model leaves multiSelect out.
 test("a question without multiSelect validates as a single choice", async () => {
     withoutTmux();
-    const question = { question: "Which store?", header: "Store", options: [{ label: "Postgres", description: "p" }, { label: "SQLite", description: "s" }] };
+    const question = {
+        question: "Which store?",
+        header: "Store",
+        options: [
+            { label: "Postgres", description: "p" },
+            { label: "SQLite", description: "s" },
+        ],
+    };
     let parsed: unknown;
     const query: QueryFn = async function* (args) {
         const server = args.options.mcpServers?.["ui"] as { instance: unknown } | undefined;

@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { effectScope } from "vue";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { stubGlobal } from "@intentic/testing/bun";
 
 // A link pressed in a popped-out panel goes to the window with the app in it, never itself; pinned via channel notes,
@@ -40,14 +39,14 @@ const FILE = { kind: `file`, path: `src/foo.ts`, line: 42, scope: { agent: `c-1`
 // Simulates the popped-out chat window, which has nowhere of its own to put a file.
 const popOut = (): (() => void) => {
     const scope = effectScope();
-    scope.run(() => claimFloating(`chat`, mock()));
+    scope.run(() => claimFloating(`chat`, jest.fn()));
     return () => scope.stop();
 };
 
 // Simulates a window with the app open, announcing itself; `at` is when its reader was last active there.
 const appWindow = (id: string, at = 1_000): void => receiveMainWindowNote({ kind: `here`, id, at });
 
-let open: ReturnType<typeof mock>;
+let open: ReturnType<typeof jest.fn>;
 
 // Advanced far past any prior test's claims and errands each run, so the module's roster starts effectively empty.
 let clock = 1_000_000;
@@ -57,7 +56,7 @@ beforeEach(() => {
     clock += 10_000_000;
     jest.setSystemTime(clock);
     posted.length = 0;
-    open = mock(() => ({ focus: mock() }) as unknown as Window);
+    open = jest.fn(() => ({ focus: jest.fn() }) as unknown as Window);
     stubGlobal(`open`, open);
 });
 
@@ -226,7 +225,7 @@ describe(`the window with the app in it`, () => {
     };
 
     it(`answers a roll-call at once, so a window that has just popped out never has to wait out a beat`, () => {
-        const leave = mount(mock());
+        const leave = mount(jest.fn());
 
         receiveMainWindowNote({ kind: `roll` });
 
@@ -235,8 +234,8 @@ describe(`the window with the app in it`, () => {
     });
 
     it(`does the errand addressed to it, and raises itself so the reader sees it`, () => {
-        const show = mock();
-        const focus = mock();
+        const show = jest.fn();
+        const focus = jest.fn();
         stubGlobal(`focus`, focus);
         const leave = mount(show);
         receiveMainWindowNote({ kind: `roll` });
@@ -250,7 +249,7 @@ describe(`the window with the app in it`, () => {
     });
 
     it(`leaves another window's errand alone`, () => {
-        const show = mock();
+        const show = jest.fn();
         const leave = mount(show);
 
         receiveMainWindowNote({ kind: `errand`, to: `somebody-else`, errand: FILE });
@@ -260,7 +259,7 @@ describe(`the window with the app in it`, () => {
     });
 
     it(`says nothing while nothing is floating, and starts the moment something is`, () => {
-        const leave = mount(mock());
+        const leave = mount(jest.fn());
         expect(posted.some((note) => note.kind === `here`)).toBe(false);
 
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `f-1`, since: 1_000 });

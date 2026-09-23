@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { ref } from "vue";
 import { freshImport } from "@intentic/testing/bun";
 import { TrialStatusSchema } from "@intentic/sandbox-contract";
@@ -18,8 +17,8 @@ const TWO = [
 
 // Two Claude accounts, a Cursor one so a second-provider pick is actually runnable (an unrunnable pick would resolve
 // elsewhere and hide whether it was remembered), and every other connection read answering empty.
-const providerModels = mock<(input: ProcedureInput<`providers.models`>) => Promise<ProcedureOutput<`providers.models`>>>();
-mock.module("../../sandbox/client/sandboxRpc", () => ({
+const providerModels = jest.fn<(input: ProcedureInput<`providers.models`>) => Promise<ProcedureOutput<`providers.models`>>>();
+jest.mock("../../sandbox/client/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         accounts: {
             accounts: async ({ provider }) => ({
@@ -33,10 +32,10 @@ mock.module("../../sandbox/client/sandboxRpc", () => ({
         endpoints: { trial: async () => TrialStatusSchema.parse({ available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` }) },
     }),
 }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
 // The app's one active-sandbox ref, as every store reads it.
 activeSandboxId.value = `sb1`;
-mock.module("../../sandbox/client/useSandbox", () => {
+jest.mock("../../sandbox/client/useSandbox", () => {
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
 });

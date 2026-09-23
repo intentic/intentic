@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { publicContract } from "@intentic/sandbox-contract";
 import { SHARE_DIR } from "@intentic/sandbox-contract/share-paths";
 import { PUBLIC_DIR } from "@intentic/workspace-ignore";
-import { test, expect } from "bun:test";
 import { errorCode, routesClient } from "../harness/route-client.testing.js";
 import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";

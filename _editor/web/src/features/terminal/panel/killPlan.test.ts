@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import type { TerminalTab } from "../useTerminal";
 import { hasWork, killAsks, killQuestion } from "./killPlan";
 

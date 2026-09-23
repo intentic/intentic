@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { readWatermark, resumePoint, watermarkPath, writeWatermark } from "./watermark.js";
 
 const current = { mailbox: "INBOX", uidValidity: "111", uidNext: 500 };

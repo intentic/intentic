@@ -1,7 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
-import { hoisted } from "@intentic/testing/bun";
-import { afterEach, describe, expect, it, mock } from "bun:test";
 import { computed, ref } from "vue";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import type { SandboxRpc } from "../../sandbox/client/sandboxRpc";
@@ -14,8 +12,8 @@ import type { ChatMessage } from "../transcript/transcript";
 // borrows the composer and hands it back, a fork's cut, and the in-place rewording of this window's own lines.
 
 // The daemon's rewind, the one call these ways back make; a test refuses it.
-const { rewind } = hoisted(() => ({ rewind: mock<SandboxRpc["agent"]["rewind"]>(async () => ({ snapshot: `cp-1`, dropped: 2 })) }));
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { rewind } }) }));
+const { rewind } = { rewind: jest.fn<SandboxRpc["agent"]["rewind"]>(async () => ({ snapshot: `cp-1`, dropped: 2 })) };
+jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { rewind } }) }));
 
 const { TranscriptView } = await import("./transcriptView");
 type Host = ConstructorParameters<typeof TranscriptView>[1];
@@ -40,7 +38,7 @@ const viewOf = (rows: readonly ChatMessage[] = ROWS) => {
         attachments: ref<PendingAttachment[]>([STAGED]),
         error: ref<string | null>(`an older failure`),
         session: ref<SessionRef | undefined>(SESSION),
-        turn: { streaming: computed(() => false), say: mock<Host["turn"]["say"]>(async () => undefined) },
+        turn: { streaming: computed(() => false), say: jest.fn<Host["turn"]["say"]>(async () => undefined) },
     };
     const view = new TranscriptView(() => undefined, host);
     view.adopt(rows);
@@ -119,6 +117,17 @@ describe(`an edit`, () => {
         expect(host.draft.value).toBe(`half a thought`);
         expect(host.attachments.value).toEqual([STAGED]);
         expect(view.editing.value).toBeUndefined();
+    });
+
+    it(`dooms the edited prompt and every row below it, and nothing once disarmed`, () => {
+        const { view, row } = viewOf();
+        expect([...view.doomed.value]).toEqual([]);
+
+        view.beginEdit(row(4));
+        expect([...view.doomed.value]).toEqual([4, 5]);
+
+        view.cancelEdit();
+        expect([...view.doomed.value]).toEqual([]);
     });
 
     it(`is offered only on a prompt of this transcript that has a checkpoint`, () => {

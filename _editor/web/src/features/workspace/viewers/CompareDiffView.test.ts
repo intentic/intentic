@@ -1,12 +1,11 @@
 // The pane around a viewer's compare component: both sides' bytes fetched and handed over with the path, and a pair
 // the component cannot draw as one turned into the two other readings, one press each.
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const fetched: string[] = [];
-mock.module("../../sandbox/client/sandboxClient", () => ({
+jest.mock("../../sandbox/client/sandboxClient", () => ({
     sandboxBlob: (path: string) => {
         fetched.push(path);
         return Promise.resolve(new Blob([path]));

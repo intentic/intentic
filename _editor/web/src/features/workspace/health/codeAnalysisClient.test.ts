@@ -1,4 +1,3 @@
-import { describe, it, expect, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import type { CodeAnalysis } from "@intentic/code-read";
 import { createCodeAnalysisClient, type WorkerPort } from "./codeAnalysisClient";
@@ -36,7 +35,7 @@ class FakeWorker implements WorkerPort {
 describe(`code analysis worker client`, () => {
     it(`coalesces the same text and language, then keeps the settled analysis warm`, async () => {
         const worker = new FakeWorker();
-        const local = mock();
+        const local = jest.fn();
         const analyze = createCodeAnalysisClient(async () => worker, local);
         const expected: CodeAnalysis = { code: { text: `const a = 1;`, lines: [2] }, imports: [] };
 
@@ -54,7 +53,7 @@ describe(`code analysis worker client`, () => {
 
     it(`uses the local analyzer when workers are unavailable`, async () => {
         const expected: CodeAnalysis = { code: { text: `a`, lines: [1] }, imports: [] };
-        const local = mock(async () => expected);
+        const local = jest.fn(async () => expected);
         const analyze = createCodeAnalysisClient(async () => undefined, local);
 
         await expect(analyze(`a`, `typescript`)).resolves.toEqual(expected);

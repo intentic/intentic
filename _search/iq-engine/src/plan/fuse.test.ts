@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import type { EngineResult } from "../types.js";
 import { fuse, type FuseContext } from "./fuse.js";
 

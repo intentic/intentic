@@ -31,7 +31,7 @@ import {
 } from "./fly/fly.js";
 import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity, providerWords } from "./hosted-capacity.js";
 import { resolveHostedImage } from "./build/hosted-image.js";
-import { hostedSlotsOf, slotsAtTier } from "./hosted-plan.js";
+import { hostedSlotUse } from "./hosted-plan.js";
 import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelled, lockHostedSandbox, withHostedApp } from "./hosted-cleanup.js";
 import { hostedShapeFor, volumeOptions } from "./hosted-shape.js";
 import { dropHostedMachine } from "./hosted-usage.js";
@@ -90,13 +90,9 @@ export const withHostedSlot = async <T>(
         const { ownerId } = await tx.sandbox.findUniqueOrThrow({ where: { id: sandboxId }, select: { ownerId: true } });
         // Two int4 keys, the first naming the purpose, so nothing else on this database can share the owner's lock.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('hosted-slot'), hashtext(${ownerId}))`;
-        // Counted at the rung this machine is being made on: a Standard slot is not a free one, and holding one
-        // must not stop the free machine everybody is promised.
-        const [used, slots] = await Promise.all([
-            tx.hostedMachine.count({ where: { tier: args.tier, sandbox: { ownerId } } }),
-            hostedSlotsOf(tx, config, ownerId),
-        ]);
-        if (used >= slotsAtTier(slots, args.tier)) {
+        // Counted at this machine's own rung: holding a Standard slot must not stop the free machine everybody is promised.
+        const { used, left } = await hostedSlotUse(tx, config, ownerId, args.tier);
+        if (left <= 0) {
             throw new HostedSlotsExhausted(slotsMessage(used));
         }
         const result = await write(tx);
@@ -256,8 +252,7 @@ const claimPoolMachine = async (
         return undefined;
     }
     const ready = await prisma.hostedPoolMachine.findMany({
-        // Rows with no token predate identities and name no app the edge could route to; reconcile replaces them.
-        where: { region: args.region, state: `ready`, NOT: { token: `` } },
+        where: { region: args.region, state: `ready` },
         orderBy: { createdAt: `asc` },
     });
     // Resolved only once there is something to match it against: an empty pool is the ordinary cold path, and it
@@ -265,7 +260,7 @@ const claimPoolMachine = async (
     if (ready.length === 0) {
         return undefined;
     }
-/* ROWS ON ANY OTHER IMAGE ARE DRIFT, not stock. */
+    /* ROWS ON ANY OTHER IMAGE ARE DRIFT, not stock. */
     const stockImage = await resolveHostedImage(config, logger);
     const candidates = ready.filter((row) => row.image === stockImage);
     for (const row of candidates) {
@@ -394,7 +389,17 @@ export const provisionHosted = async (
             // does not hand out an uncounted first session to everyone who ever provisions one.
             await withHostedSlot(prisma, config, args, appName, (tx) =>
                 tx.hostedMachine.create({
-                    data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, warm: false, wokeAt: new Date(), tier: args.tier, ...shape },
+                    data: {
+                        sandboxId: args.sandboxId,
+                        appName,
+                        machineId,
+                        volumeId,
+                        region,
+                        warm: false,
+                        wokeAt: new Date(),
+                        tier: args.tier,
+                        ...shape,
+                    },
                 }),
             );
             return { appName, region, warm: false };
@@ -439,7 +444,11 @@ export const destroyHosted = async (config: Config, appName: string): Promise<vo
 
 // Drops the machine row and clears `daemonUrl`, so the browser reads "not connected" instead of reconnecting into a
 // machine that's gone. `lastSeenAt` stays: it's what keeps this a workspace to reopen, not a fresh setup.
-export const forgetHostedMachine = async (prisma: PrismaClient, machine: { id: string; sandboxId: string; ownerId: string }, endedAt?: Date): Promise<void> => {
+export const forgetHostedMachine = async (
+    prisma: PrismaClient,
+    machine: { id: string; sandboxId: string; ownerId: string },
+    endedAt?: Date,
+): Promise<void> => {
     await prisma.$transaction(async (tx) => {
         // Sandbox row before machine row: the lock order trash and release take.
         await tx.sandbox.update({ where: { id: machine.sandboxId }, data: { daemonUrl: null } });
@@ -492,7 +501,7 @@ const appEvidence = async (config: Config, app: string): Promise<{ owner: AppOwn
 // 1. unreadable: Fly wouldn't answer; never a verdict
 // 2. theirs: a machine names another deployment (checked first, and true regardless of age)
 // 3. young: inside the grace window, likely mid-provision
-// 4. unknown: has machines, none carrying a stamp; predates the stamp, left standing on purpose
+// 4. unknown: has machines, none carrying a stamp; ownership cannot be proven, so never destroyed
 // An app with no machines is not skipped: emptiness is its own evidence that it's collectable.
 export type OrphanSkip = "theirs" | "unknown" | "young" | "unreadable";
 
@@ -553,15 +562,13 @@ export const reapHostedOrphans = async (prisma: PrismaClient, config: Config, lo
         // without this the reaper would read that absence as litter and destroy the disk inside the hour.
         prisma.sandboxTrash.findMany({ where: { appName: { not: null } }, select: { appName: true } }),
     ]);
-    const known = new Set(
-        [...machines, ...pooled, ...pending, ...trashed].map((row) => row.appName).filter((name): name is string => name !== null),
-    );
+    const known = new Set([...machines, ...pooled, ...pending, ...trashed].map((row) => row.appName).filter((name): name is string => name !== null));
     const { doomed, skipped } = await sortUnknownApps(
         config,
         names.filter((candidate) => !known.has(candidate)),
     );
     if (skipped.length > 0) {
-        // One line an operator can act on: skipped apps are either somebody else's, or ours from before the stamp.
+        // One line an operator can act on: every skipped app is one this platform cannot prove is its own.
         logger.warn({ skipped }, `hosted reaper: apps left standing because this platform cannot prove they are its own`);
     }
     const ceiling = Math.max(REAP_MAX_APPS, Math.floor(names.length * REAP_MAX_SHARE));

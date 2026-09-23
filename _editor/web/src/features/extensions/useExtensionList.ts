@@ -68,7 +68,7 @@ export function useExtensionList() {
                 // A blocked advisory or unhealthy update outranks both halves, always pinning the row to attention.
                 const registryState: ExtensionState | undefined =
                     extension.advisory !== undefined
-                        ? { label: t(`extensions.useExtensionList.blocked`), variant: `danger`, badge: true, attention: true }
+                        ? { label: t(`shared.blocked`), variant: `danger`, badge: true, attention: true }
                         : extension.health?.state === `unhealthy`
                           ? {
                                 label: extension.health.autoReverted === true ? `update rolled back` : `update unhealthy`,

@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { it, expect } from "bun:test";
 import { createApp, h } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 // bun.setup.ts installs window.env and ui's useDevice media queries at module scope before this file loads.

@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { describe, expect, it, mock } from "bun:test";
 import { computed, ref } from "vue";
 import { showWorkTerminals } from "../useWorkTerminals";
 import { panelCommands, type PanelVerbs } from "./panelCommands";
@@ -12,22 +11,21 @@ const stage = (over: { split?: boolean; canKill?: boolean; selected?: string[] }
     const renamingName = ref<string | undefined>(undefined);
     const strip = {
         renamingName,
-        beginRename: mock((_name: string) => undefined),
-        openCustomize: mock((_name: string, _mode: `color` | `icon`) => undefined),
-        joinSelected: mock(),
+        beginRename: jest.fn((_name: string) => undefined),
+        openCustomize: jest.fn((_name: string, _mode: `color` | `icon`) => undefined),
+        joinSelected: jest.fn(),
         selectedNames: computed(() => over.selected ?? []),
-        requestKill: mock((_names: string[]) => undefined),
+        requestKill: jest.fn((_names: string[]) => undefined),
         killable: computed(() => [`a`, `b`]),
-        sweepInactive: mock(),
-        cycleTab: mock((_delta: number) => undefined),
+        sweepInactive: jest.fn(),
+        cycleTab: jest.fn((_delta: number) => undefined),
     };
     const verbs: PanelVerbs = {
         activeName,
-        strip,
-        unsplit: mock((_name: string) => undefined),
-        splitTab: over.split === false ? undefined : mock((_name: string) => undefined),
+        ...strip,
+        unsplit: jest.fn((_name: string) => undefined),
+        splitTab: over.split === false ? undefined : jest.fn((_name: string) => undefined),
         canKill: over.canKill ?? true,
-        openFind: mock(),
     };
     const commands = panelCommands(verbs);
     const run = (id: string): void => void commands.find((entry) => entry.command === id)?.handler();
@@ -43,7 +41,6 @@ describe(`the panel's commands`, () => {
             [`terminal.join`, `Ctrl+Shift+G`, undefined],
             [`terminal.unsplit`, `Ctrl+Shift+U`, undefined],
             [`terminal.toggleWorkTerminals`, undefined, undefined],
-            [`terminal.find`, `Mod+F`, `tabSurface == 'terminal'`],
             [`terminal.nextTab`, `Alt+PageDown`, `tabSurface == 'terminal'`],
             [`terminal.previousTab`, `Alt+PageUp`, `tabSurface == 'terminal'`],
             [`terminal.split`, `Ctrl+Shift+5`, undefined],
@@ -65,7 +62,7 @@ describe(`the panel's commands`, () => {
         activeName.value = undefined;
         run(`terminal.changeColor`);
         run(`terminal.split`);
-        expect({ customized: strip.openCustomize.mock.calls, unsplit: (verbs.unsplit as ReturnType<typeof mock>).mock.calls }).toEqual({
+        expect({ customized: strip.openCustomize.mock.calls, unsplit: (verbs.unsplit as ReturnType<typeof jest.fn>).mock.calls }).toEqual({
             customized: [[`a`, `icon`]],
             unsplit: [[`a`]],
         });

@@ -2,7 +2,6 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentTurn, type Automation, SandboxSettingsSchema, type ListenerMessage } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";

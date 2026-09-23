@@ -5,22 +5,21 @@
 // flipped the switch, watched nothing happen, and concluded the feature had no way to name anybody.
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
-import { it, expect, mock } from "bun:test";
 import { createApp, h, nextTick, ref } from "vue";
 import type { CredentialGate } from "@intentic/sandbox-contract";
 import type { SecretRow } from "../../sandbox/secrets/secretRows";
 import { IconStub } from "@intentic/ui/testing";
 
-const setGate = { mutateAsync: mock(async () => undefined) };
-const removeGate = { mutateAsync: mock(async () => undefined) };
+const setGate = { mutateAsync: jest.fn(async () => undefined) };
+const removeGate = { mutateAsync: jest.fn(async () => undefined) };
 const approverChoices = ref<string[]>([]);
 const isOwner = ref(true);
 const stored = ref<CredentialGate | undefined>(undefined);
 
-mock.module(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
-mock.module(`./useSecrets`, () => ({
-    reveal: mock(),
-    useSecrets: () => ({ remove: { mutateAsync: mock() } }),
+jest.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
+jest.mock(`./useSecrets`, () => ({
+    reveal: jest.fn(),
+    useSecrets: () => ({ remove: { mutateAsync: jest.fn() } }),
     useCredentialGates: () => ({
         gates: ref([]),
         gateFor: (subject: string) => (stored.value?.subject === subject ? stored.value : undefined),

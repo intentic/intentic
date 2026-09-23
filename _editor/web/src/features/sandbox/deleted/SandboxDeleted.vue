@@ -36,7 +36,7 @@ const restore = async (trashId: string): Promise<void> => {
     <div class="flex flex-col gap-4">
         <Notice v-if="notice" :of="notice" />
 
-        <RowGroup v-if="trash.deleted.value === undefined && trash.readError.value === undefined" :label="t(`sandbox.sandboxDeleted.recentlyDeleted`)">
+        <RowGroup v-if="trash.deleted.value === undefined && trash.readError.value === undefined" :label="t(`shared.recentlyDeleted`)">
             <div role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`sandbox.sandboxDeleted.reading`) }}</span>
                 <SkeletonRows :rows="2" description control />
@@ -47,13 +47,15 @@ const restore = async (trashId: string): Promise<void> => {
             <Icon name="trash" class="text-xl text-subtle" />
             <div class="flex flex-col gap-1">
                 <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxDeleted.nothingToRestore`) }}</span>
-                <span class="max-w-md text-xs text-muted">{{ t(`sandbox.sandboxDeleted.keptForDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS) }}</span>
+                <span class="max-w-md text-xs text-muted">{{
+                    t(`sandbox.sandboxDeleted.keptForDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
+                }}</span>
             </div>
         </div>
 
         <RowGroup
             v-else
-            :label="t(`sandbox.sandboxDeleted.recentlyDeleted`)"
+            :label="t(`shared.recentlyDeleted`)"
             :count="trash.recoverable.value.length"
             :caption="t(`sandbox.sandboxDeleted.keptForDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)"
         >
@@ -73,7 +75,7 @@ const restore = async (trashId: string): Promise<void> => {
                     <Button
                         size="small"
                         severity="secondary"
-                        :label="t(`sandbox.sandboxDeleted.restore`)"
+                        :label="t(`shared.restore`)"
                         :loading="trash.restoring.value === row.id"
                         :disabled="trash.restoring.value !== undefined"
                         @click="void restore(row.id)"

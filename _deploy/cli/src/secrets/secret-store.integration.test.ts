@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { SshExecutor, SshTarget } from "@intentic/providers";
-import { describe, it, expect } from "bun:test";
 import { createHostSecretStore, createLayeredSecretStore, createLocalSecretStore, type SecretStore } from "./secret-store.js";
 
 const HOST_PATH = `${HOST_STATE_ROOT}/secrets.json`;

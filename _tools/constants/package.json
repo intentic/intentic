@@ -60,6 +60,10 @@
         "./mirror-roots": {
             "types": "./src/mirror-roots.d.mts",
             "default": "./src/mirror-roots.mjs"
+        },
+        "./test-suites": {
+            "types": "./src/test-suites.d.mts",
+            "default": "./src/test-suites.mjs"
         }
     },
     "scripts": {

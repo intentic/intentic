@@ -1,77 +1,14 @@
 import { STATE_DIR } from "@intentic/constants";
-import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { describe, expect, it, mock } from "bun:test";
-import { computed, effectScope, nextTick, ref, shallowRef } from "vue";
-import { barrenChainOf, barrenChildren, barrenRoots, branchDirPaths } from "../emptyDirs";
-import { branchOf, sweepPlan, useTreeDelete } from "./useTreeDelete";
+import "@intentic/testing/dom";
+import { nextTick } from "vue";
+import { dir, emptyDirsOver, file, treeSurface } from "../../../../testing/treeSurface";
+import { branchOf, sweepPlan } from "./useTreeDelete";
 
-// Pins deleting from the tree: what the confirm is asked about and what its receipt says once the delete lands, and the
-// empty-folder line, which names each branch, sweeps without a dialog, and whose Undo rebuilds exactly what went.
-
-const nameOf = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
-const dir = (path: string): WorkspaceTreeEntry => ({ name: nameOf(path), path, type: `dir`, children: [] });
-const file = (path: string): WorkspaceTreeEntry => ({ name: nameOf(path), path, type: `file` });
+// Pins deleting: the confirm and its receipt, and the empty-folder line, which sweeps without asking and undoes exactly.
 
 // `web/demo/assets` is one chain at the root; `src/old` sits under a folder with real content.
 const BARREN = [`web`, `web/demo`, `web/demo/assets`, `src/old`];
-const emptyDirsOver = (barren: readonly string[]) => {
-    const settled = shallowRef(barren);
-    return {
-        settled,
-        emptyDirs: {
-            isBarren: (path: string) => settled.value.includes(path),
-            roots: computed(() => barrenRoots(settled.value, new Set(settled.value))),
-            chainOf: (path: string) => barrenChainOf(path, barrenChildren(settled.value)),
-            branchDirs: (root: string) => branchDirPaths(root, settled.value),
-        },
-    };
-};
-
-const deleteOver = (barren: readonly string[] = BARREN, canWrite = true) => {
-    const { settled, emptyDirs } = emptyDirsOver(barren);
-    const byPath = shallowRef(new Map([...BARREN.map(dir), dir(`src`), file(`src/main.ts`), file(`README.md`)].map((entry) => [entry.path, entry])));
-    const selecting = {
-        selection: ref(new Set<string>()),
-        lead: ref<string | null>(null),
-        selectSingle: mock((path: string) => {
-            selecting.selection.value = new Set([path]);
-        }),
-        clear: mock(() => {
-            selecting.selection.value = new Set();
-        }),
-    };
-    const store = {
-        run: mock((task: () => Promise<void>, wrote: string): Promise<void> => task()),
-        removeEntries: mock((paths: readonly string[]): Promise<void> => Promise.resolve()),
-        createDir: mock((path: string): Promise<void> => Promise.resolve()),
-        createFile: mock((path: string): Promise<void> => Promise.resolve()),
-        refuseWrite: mock(() => !canWrite),
-    };
-    const say = mock((message: string, undo?: () => void | Promise<void>) => [message, undo]);
-    const openAll = mock((dirs: readonly string[]) => dirs.length);
-    const showRow = mock(async (path: string) => (path === `` ? undefined : document.createElement(`button`)));
-    const deleting = effectScope().run(() =>
-        useTreeDelete({
-            byPath,
-            targetDir: (path) => (path === null ? `` : path.slice(0, Math.max(0, path.lastIndexOf(`/`)))),
-            rules: {
-                refuseIn: (at) => at === `locked` || !canWrite,
-                unlockedOnly: (paths) => paths.filter((path) => path !== `${STATE_DIR}/config/capabilities.json`),
-            },
-            emptyDirs,
-            selecting,
-            store,
-            say,
-            openAll,
-            showRow,
-        }),
-    )!;
-    return { deleting, selecting, store, say, openAll, showRow, settled };
-};
-const pick = (selecting: ReturnType<typeof deleteOver>[`selecting`], paths: readonly string[]): void => {
-    selecting.selection.value = new Set(paths);
-    selecting.lead.value = paths.at(-1) ?? null;
-};
+const TREE = [dir(`web`, [dir(`web/demo`, [dir(`web/demo/assets`, [])])]), dir(`src`, [file(`src/main.ts`), dir(`src/old`, [])]), file(`README.md`)];
 const drain = async (): Promise<void> => {
     for (let tick = 0; tick < 4; tick += 1) {
         await Promise.resolve();
@@ -101,8 +38,8 @@ describe(`the sweep's plan`, () => {
 
 describe(`deleting the selection`, () => {
     it(`asks first about what may be deleted, and deletes it only on the confirm, the receipt after`, async () => {
-        const { deleting, selecting, store, say } = deleteOver();
-        pick(selecting, [`src/main.ts`, `${STATE_DIR}/config/capabilities.json`, `README.md`]);
+        const { deleting, selecting, store, say, select } = treeSurface(TREE, { barren: BARREN });
+        select(`src/main.ts`, `${STATE_DIR}/config/capabilities.json`, `README.md`);
 
         deleting.requestDelete();
         expect([deleting.confirmPaths.value, deleting.deleteTitle.value, store.removeEntries.mock.calls]).toEqual([
@@ -123,12 +60,12 @@ describe(`deleting the selection`, () => {
     });
 
     it(`asks nothing and deletes nothing for a refused folder or an empty selection`, () => {
-        const readOnly = deleteOver(BARREN, false);
-        pick(readOnly.selecting, [`README.md`]);
+        const readOnly = treeSurface(TREE, { barren: BARREN, canWrite: false });
+        readOnly.select(`README.md`);
         readOnly.deleting.requestDelete();
 
-        const nothing = deleteOver();
-        pick(nothing.selecting, [`${STATE_DIR}/config/capabilities.json`]);
+        const nothing = treeSurface(TREE, { barren: BARREN });
+        nothing.select(`${STATE_DIR}/config/capabilities.json`);
         nothing.deleting.requestDelete();
 
         expect([readOnly.deleting.confirmPaths.value, nothing.deleting.confirmPaths.value, readOnly.store.removeEntries.mock.calls]).toEqual([
@@ -139,19 +76,19 @@ describe(`deleting the selection`, () => {
     });
 
     it(`titles the confirm by what it names: one folder, one file, or a count`, () => {
-        const { deleting, selecting } = deleteOver([]);
-        pick(selecting, [`src`]);
+        const { deleting, select } = treeSurface(TREE);
+        select(`src`);
         deleting.requestDelete();
         const folder = deleting.deleteTitle.value;
-        pick(selecting, [`README.md`]);
+        select(`README.md`);
         deleting.requestDelete();
 
         expect([folder, deleting.deleteTitle.value]).toEqual([`Delete folder?`, `Delete file?`]);
     });
 
     it(`sweeps a selection of empty folders without asking, and its Undo rebuilds them`, async () => {
-        const { deleting, selecting, store, say } = deleteOver();
-        pick(selecting, [`web`]);
+        const { deleting, selecting, store, say, select } = treeSurface(TREE, { barren: BARREN });
+        select(`web`);
 
         deleting.requestDelete();
         await drain();
@@ -165,7 +102,7 @@ describe(`deleting the selection`, () => {
 
 describe(`the empty-folder line`, () => {
     it(`names each branch, and one alone without a disclosure`, async () => {
-        const { deleting, settled } = deleteOver();
+        const { deleting, settled } = treeSurface(TREE, { barren: BARREN });
         expect([deleting.barrenBranches.value.map((branch) => branch.label), deleting.soleBarren.value]).toEqual([
             [`web / demo / assets`, `old`],
             undefined,
@@ -177,7 +114,7 @@ describe(`the empty-folder line`, () => {
     });
 
     it(`folds its list closed and lets go of the pointed branch once they stop applying`, async () => {
-        const { deleting, settled } = deleteOver();
+        const { deleting, settled } = treeSurface(TREE, { barren: BARREN });
         deleting.sweepOpen.value = true;
         deleting.pointedBarren.value = `web`;
 
@@ -191,10 +128,10 @@ describe(`the empty-folder line`, () => {
     });
 
     it(`sweeps every branch it names on Clean up, refusing a read-only member`, async () => {
-        const writer = deleteOver();
+        const writer = treeSurface(TREE, { barren: BARREN });
         writer.deleting.sweepAll();
         await drain();
-        const reader = deleteOver(BARREN, false);
+        const reader = treeSurface(TREE, { barren: BARREN, canWrite: false });
         reader.deleting.sweepAll();
 
         expect([writer.store.removeEntries.mock.calls, writer.say.mock.calls[0]?.[0], reader.store.removeEntries.mock.calls]).toEqual([
@@ -204,25 +141,16 @@ describe(`the empty-folder line`, () => {
         ]);
     });
 
-    it(`keeps a branch by dropping a placeholder into its deepest folder`, async () => {
-        const { deleting, store, say } = deleteOver();
+    it(`keeps a branch by dropping a placeholder into its deepest folder, refusing a read-only member`, async () => {
+        const writer = treeSurface(TREE, { barren: BARREN });
+        const reader = treeSurface(TREE, { barren: BARREN, canWrite: false });
 
-        await deleting.keepFolder(`web`);
-        await deleting.keepFolder(`locked`);
-        expect([store.createFile.mock.calls, say.mock.calls]).toEqual([[[`web/demo/assets/.gitkeep`]], [[`Folder kept`]]]);
-    });
-
-    it(`opens the way down to a named branch, selects it and brings its row on screen`, async () => {
-        const { deleting, selecting, openAll, showRow, settled } = deleteOver();
-        await deleting.revealBarren(`web/demo`);
-        settled.value = [`src/old`];
-        await nextTick();
-        await deleting.revealSoleBarren();
-
-        expect([openAll.mock.calls, [...selecting.selection.value], showRow.mock.calls]).toEqual([
-            [[[`web`]], [[`src`]]],
-            [`src/old`],
-            [[`web/demo`], [`src/old`]],
+        await writer.deleting.keepFolder(`web`);
+        await reader.deleting.keepFolder(`web`);
+        expect([writer.store.createFile.mock.calls, writer.say.mock.calls, reader.store.createFile.mock.calls]).toEqual([
+            [[`web/demo/assets/.gitkeep`]],
+            [[`Folder kept`]],
+            [],
         ]);
     });
 });

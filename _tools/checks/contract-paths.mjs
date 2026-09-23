@@ -3,17 +3,16 @@
 // is a second copy of the route that the contract cannot type, validate or rename. Discovered by shape: the contract's
 // own `path: "…"` literals (read by regex, since this runs pre-install) against every literal, and every literal inside
 // one, outside tests; a match fails in what is held to zero, and extension packages are held to a ratchet baseline.
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cannotMeasure, finish } from "./lib/report.mjs";
-import { root, subjectFiles, subjectScope, TEST_FILE, writesBaselines } from "./lib/repo.mjs";
+import { ADOPTING, ratchet } from "./lib/ratchet.mjs";
+import { root, subjectFiles, TEST_FILE } from "./lib/repo.mjs";
 
 const CONTRACTS = `_shared/sandbox-contract/src/contracts`;
 // The app's own route table: `/agents/:id` is a screen as well as a daemon route, and a literal it answers to is
 // navigation unless its line hands it to a daemon call.
 const APP_ROUTER = `_editor/web/src/router/index.ts`;
-const BASELINE = join(root, "_tools/checks/baselines/contract-paths.json");
-const writeBaseline = process.argv.includes("--write-baseline");
 
 // Held to zero: the app, and what an author copies from (the extension seed, the site's code samples); each has a typed
 // client. Ratcheted: the extension packages, to what the baseline allows.
@@ -212,39 +211,14 @@ for (const path of subjects) {
     }
 }
 
-const scope = subjectScope();
-if (writeBaseline) {
-    if (scope !== undefined) {
-        console.error(`contract-paths: --write-baseline adopts the whole tree's findings, so it cannot run under --paths`);
-        process.exit(2);
-    }
-    const adopted = Object.fromEntries([...perFile].map(([path, findings]) => [path, findings.length]).sort(([a], [b]) => (a < b ? -1 : 1)));
-    writeFileSync(BASELINE, `${JSON.stringify(adopted, undefined, 4)}\n`);
-    console.log(`contract-paths: baseline adopts ${Object.keys(adopted).length} extension file(s)`);
+const { grown: over } = ratchet("contract-paths", "contract-paths", new Map([...perFile].map(([path, findings]) => [path, findings.length])));
+if (ADOPTING) {
     process.exit(0);
 }
-
-// A count may only shrink: a file past its entry fails whole; a beaten entry is tightened where the write can become a
-// commit (lib/repo.mjs's writesBaselines), and never under a scope, which did not read the files it would erase.
-const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : {};
-const grown = [];
-const next = { ...baseline };
-for (const [path, findings] of perFile) {
-    const allowed = baseline[path] ?? 0;
-    if (findings.length > allowed) {
-        grown.push(...findings.map(({ at, route }) => `${at}  spells ${route}`), `${path}: ${findings.length} spelled route(s), the baseline allows ${allowed}`);
-    } else {
-        next[path] = findings.length;
-    }
-}
-for (const path of Object.keys(baseline)) {
-    if (!perFile.has(path) && (scope === undefined || scope.has(path))) {
-        delete next[path];
-    }
-}
-if (scope === undefined && writesBaselines() && JSON.stringify(next) !== JSON.stringify(baseline)) {
-    writeFileSync(BASELINE, `${JSON.stringify(Object.fromEntries(Object.entries(next).sort(([a], [b]) => (a < b ? -1 : 1))), undefined, 4)}\n`);
-}
+const grown = over.flatMap(({ key, count, allowed }) => [
+    ...perFile.get(key).map(({ at, route }) => `${at}  spells ${route}`),
+    `${key}: ${count} spelled route(s), the baseline allows ${allowed}`,
+]);
 
 finish(
     [

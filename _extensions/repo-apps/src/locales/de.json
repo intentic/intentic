@@ -3,13 +3,11 @@
         "add": "Hinzufügen",
         "addApp": "Eine App hinzufügen",
         "eGShopApi": "z. B. shop-api",
-        "name": "Name:",
         "pickOneMoreTemplates": "Wählen Sie eine oder mehrere Vorlagen, die in dieses Monorepo gerüstet werden. Benennen Sie jede Instanz, um mehrere derselben Art zu betreiben."
     },
     "appsView": {
         "addApp": "App hinzufügen",
         "addingAppsFollowProgress": "Apps werden hinzugefügt: verfolgen Sie den Fortschritt im Terminal.",
-        "api": "API",
         "libraryTests": "Bibliothekstests",
         "noAppsYetUse": "Noch keine Apps: nutzen Sie „App hinzufügen“, um eine zu gerüsten und eine Live-Vorschau zu bekommen.",
         "noVitestProjectsFound": "Keine Testprojekte gefunden: nichts hier besitzt eine vitest.config.*-, bunfig.toml- oder *.test.*-Datei.",
@@ -25,12 +23,9 @@
         "start": "Starten",
         "startAll": "Alle starten",
         "stop": "Stoppen",
-        "stopAll": "Alle stoppen",
-        "terminal": "Terminal",
-        "web": "Web"
+        "stopAll": "Alle stoppen"
     },
     "dependenciesView": {
-        "dev": "dev",
         "devDependencies": "Dev-Abhängigkeiten",
         "noWorkspacePackagesFound": "Keine Workspace-Pakete gefunden: pnpm-workspace.yaml nennt keine Paketverzeichnisse.",
         "readingWorkspaceGraph": "Der Workspace-Graph wird gelesen…",
@@ -38,7 +33,6 @@
         "uses": "benutzt"
     },
     "extension": {
-        "apps": "Apps",
         "dependencies": "Abhängigkeiten"
     }
 }

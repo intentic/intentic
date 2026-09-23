@@ -1,5 +1,4 @@
 import { STATE_DIR } from "@intentic/constants";
-import { describe, it, expect } from "bun:test";
 import { barrenChainOf, barrenChildren, barrenRoots, branchDirPaths, settleBarren, sweepableDirs } from "./emptyDirs";
 
 // Daemon sends every folder holding only empty folders, root-relative, tree order; this file

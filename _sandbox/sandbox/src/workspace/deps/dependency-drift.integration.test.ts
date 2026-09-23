@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { modulesNear, outdatedDependencies, outdatedSummary, unresolvedDependencies, unresolvedSummary } from "./dependency-drift.js";
 
 const project = async (): Promise<string> => mkdtemp(join(tmpdir(), "drift-"));
@@ -231,5 +230,10 @@ test("a lockfile rewritten after a read is read again", async () => {
 
 test("the outdated summary shows both versions once per name", () => {
     const bump = { name: "@cursor/sdk", installed: "1.0.31", locked: "1.0.32" };
-    expect(outdatedSummary([{ dir: "a", ...bump }, { dir: "b", ...bump }])).toBe("@cursor/sdk 1.0.31 → 1.0.32");
+    expect(
+        outdatedSummary([
+            { dir: "a", ...bump },
+            { dir: "b", ...bump },
+        ]),
+    ).toBe("@cursor/sdk 1.0.31 → 1.0.32");
 });

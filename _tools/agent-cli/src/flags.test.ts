@@ -1,5 +1,4 @@
 import { numberParser } from "@stricli/core";
-import { test, expect } from "bun:test";
 import { countParser } from "./flags.js";
 
 test("a count is a finite non-negative number", () => {

@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
-import { test, expect } from "bun:test";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { fileCiStore } from "./ci-store.js";
 import { createCiHookReconciler, webhookUrlFor } from "./hooks.js";

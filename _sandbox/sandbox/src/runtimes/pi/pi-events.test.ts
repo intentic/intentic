@@ -1,5 +1,4 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import { createPiEventMapper } from "./pi-events.js";
 
 /* The Pi event → AgentEvent mapping, exercised as the pure table it is: one Pi RPC event in, its frames out. */

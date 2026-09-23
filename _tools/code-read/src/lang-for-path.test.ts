@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { codeLangForPath, highlightLangFor, langFromShebang } from "./lang-for-path.js";
 
 // Which grammar a path resolves to, the first question every reading here asks: the table, the shebang

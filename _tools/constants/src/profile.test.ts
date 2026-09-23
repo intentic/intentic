@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { sharedCookieDomain } from "./profile.js";
 
 // The site writes its edition cookie on this domain so the app's origin reads it; a wrong answer here is a reader who

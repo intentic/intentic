@@ -7,7 +7,6 @@ import {
     type SafetyVerdict,
     WORKSPACE_ROOT,
 } from "@intentic/sandbox-contract";
-import { describe, test, expect } from "bun:test";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandGateHooks, type CommandGuardOptions } from "./command-guard.js";

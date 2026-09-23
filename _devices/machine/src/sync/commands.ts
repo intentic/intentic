@@ -1,13 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { setTimeout as sleep } from "node:timers/promises";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { plural } from "@intentic/base/format";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
-import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
-import { resolveDaemonBase } from "../daemon-base.js";
+import { buildCommand, buildRouteMap, type CommandContext, type FlagParametersForType } from "@stricli/core";
+import { postWhileWarming } from "../daemon-base.js";
 import { completeSetup, prepareSetup } from "../install.js";
 import { ensureResident, readResidentPid } from "../resident.js";
 import { machineLauncher } from "../supervision.js";
@@ -70,70 +69,49 @@ export const selectPairings = (state: SyncState, selector: string | undefined): 
     return matched;
 };
 
-// Enroll our SSH public key using the browser-minted pairing token (single-use); the daemon answers with the
-// sync token, its own machine report, and the SSH transport it serves on loopback (tunnel.ts). This fires right
-// after the sandbox's tunnel comes up, so it may still be warming (transient 502/503/504, or DNS not resolved
-// yet): retried, but 401 and other 4xx are the daemon's own definitive answers and are never retried.
+// Enrolls this machine's SSH key with the single-use pairing token; a 423 or any other 4xx is the daemon's final answer.
 export const enrollKey = async (
     sandboxUrl: string,
     pairToken: string,
     key: string,
-    { attempts = 10, delayMs = 3000, takeover = false }: { attempts?: number; delayMs?: number; takeover?: boolean } = {},
+    { attempts, delayMs, takeover = false }: { attempts?: number; delayMs?: number; takeover?: boolean } = {},
 ): Promise<{ syncToken: string; mode: SyncMode }> => {
-    for (let attempt = 1; ; attempt++) {
-        // Resolve the daemon per attempt so a down tunnel does not fail key pairing.
-        const { base } = await resolveDaemonBase(sandboxUrl);
-        const url = `${base}/system/authorized-key`;
-        let response: Response;
-        try {
-            response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    "content-type": "application/json",
-                    "x-intentic-pair": pairToken,
-                    ...(takeover ? { "x-intentic-sync-takeover": "1" } : {}),
-                },
-                body: JSON.stringify({ key }),
-            });
-        } catch (error) {
-            if (attempt >= attempts) {
-                throw error;
-            }
-            process.stderr.write(`enrolling the sync key: sandbox tunnel not reachable yet, retrying (${attempt}/${attempts})…\n`);
-            await sleep(delayMs);
-            continue;
-        }
-        if (response.status === 401) {
-            throw new Error("pairing expired: click 'Enable desktop sync' again in your browser for a fresh command.");
-        }
-        if (response.status >= 500 && attempt < attempts) {
-            process.stderr.write(`enrolling the sync key: sandbox tunnel warming up (HTTP ${response.status}), retrying (${attempt}/${attempts})…\n`);
-            await sleep(delayMs);
-            continue;
-        }
-        // 423 = another machine already holds sync for this sandbox. The daemon won't clobber it without an explicit
-        // takeover.
-        if (response.status === 423) {
-            const held = (await response.json().catch(() => ({}))) as { machine?: string };
-            const from = held.machine !== undefined ? ` from "${held.machine}"` : "";
-            throw new Error(
-                `desktop sync is already active on this sandbox${from}. Re-run with --takeover to move it to this machine (this stops syncing on the other one).`,
-            );
-        }
-        if (!response.ok) {
-            throw new Error(`enrolling the sync key failed (${response.status}): ${await response.text()}`);
-        }
-        const body = (await response.json()) as { syncToken?: string; mode?: SyncMode };
-        // The sync token is the whole enrollment now: it authorizes the port read, the machine report AND the SSH
-        // transport. A daemon that answers without one fails here instead of ten minutes later as a session that never
-        // connects.
-        if (body.syncToken === undefined) {
-            throw new Error("the sandbox enrolled this machine but returned no sync credential: update the sandbox and enable sync again.");
-        }
-        // `mode` is what the daemon granted (per the pairing's role): "sync" = file sync + mirroring (single holder),
-        // "mirror" = ports only (unlimited collaborators).
-        return { syncToken: body.syncToken, mode: body.mode ?? "sync" };
+    const response = await postWhileWarming(
+        sandboxUrl,
+        "/system/authorized-key",
+        {
+            headers: {
+                "content-type": "application/json",
+                "x-intentic-pair": pairToken,
+                ...(takeover ? { "x-intentic-sync-takeover": "1" } : {}),
+            },
+            body: JSON.stringify({ key }),
+        },
+        {
+            doing: "enrolling the sync key",
+            expired: "pairing expired: click 'Enable desktop sync' again in your browser for a fresh command.",
+            attempts,
+            delayMs,
+        },
+    );
+    // Another machine holds sync for this sandbox, and the daemon moves it only on an explicit takeover.
+    if (response.status === 423) {
+        const held = (await response.json().catch(() => ({}))) as { machine?: string };
+        const from = held.machine !== undefined ? ` from "${held.machine}"` : "";
+        throw new Error(
+            `desktop sync is already active on this sandbox${from}. Re-run with --takeover to move it to this machine (this stops syncing on the other one).`,
+        );
     }
+    if (!response.ok) {
+        throw new Error(`enrolling the sync key failed (${response.status}): ${await response.text()}`);
+    }
+    const body = (await response.json()) as { syncToken?: string; mode?: SyncMode };
+    // The sync token authorizes the port read, the machine report and the SSH transport: without one, fail here, not as a dead session.
+    if (body.syncToken === undefined) {
+        throw new Error("the sandbox enrolled this machine but returned no sync credential: update the sandbox and enable sync again.");
+    }
+    // What the daemon granted: "sync" is file sync plus mirroring (one holder), "mirror" is ports only (any number).
+    return { syncToken: body.syncToken, mode: body.mode ?? "sync" };
 };
 
 // Self-revoke this machine's enrollment (uninstall): DELETE /system/authorized-key authed by the sync token.
@@ -326,32 +304,59 @@ export const syncSwitchPlan = (
 
 const named = (pairings: readonly Pairing[]): string => pairings.map((pairing) => pairing.sandboxId).join(", ");
 
-// Pause/resume act on file sync, skipped with a note for a mirror-only enrollment (mirroring rides the
-// resident agent, not a Mutagen pause).
-const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
-    buildCommand<SandboxFlags>({
+// A command over the pairings `--sandbox` selects; `none` is what it says when that selects nothing.
+const pairingCommand = <F extends SandboxFlags>(
+    brief: string,
+    flags: FlagParametersForType<F>,
+    none: string,
+    act: (selected: readonly Pairing[], flags: F, out: Log) => Promise<void>,
+) =>
+    buildCommand<F>({
         docs: { brief },
-        parameters: { flags: sandboxFlag },
-        async func(this: CommandContext, flags: SandboxFlags) {
+        parameters: { flags },
+        async func(this: CommandContext, given: F) {
             const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-            const selected = selectPairings(await readState(), flags.sandbox);
+            const selected = selectPairings(await readState(), given.sandbox);
             if (selected.length === 0) {
-                out(`no sandboxes are paired on this machine: nothing to ${verb}. Enable sync from a sandbox's Desktop sync card.`);
+                out(none);
                 return;
             }
+            await act(selected, given, out);
+        },
+    });
+
+const NONE_TO_MIRROR = "no sandboxes are paired on this machine: nothing to mirror. Enable it from a sandbox's Desktop sync card.";
+
+// The watcher is what gives mirrored ports back, so a stopped agent turns that into a promise nothing keeps.
+const noteIfStopped = async (out: Log): Promise<void> => {
+    if ((await readResidentPid()) === undefined) {
+        out("Note: this machine's agent is NOT running, so nothing will mirror until you start it: `intentic-machine run`.");
+    }
+};
+
+// Pause/resume act on file sync only: mirroring rides the resident agent, not a Mutagen pause.
+const fileSyncSwitch = (brief: string, verb: "pause" | "resume") =>
+    pairingCommand<SandboxFlags>(
+        brief,
+        sandboxFlag,
+        `no sandboxes are paired on this machine: nothing to ${verb}. Enable sync from a sandbox's Desktop sync card.`,
+        async (selected, _flags, out) => {
             const syncing = selected.filter((pairing) => pairing.mode === "sync");
             if (syncing.length === 0) {
                 out(`mirror-only enrollment${selected.length > 1 ? "s" : ""}, no file sync to ${verb}.`);
                 return;
             }
             const mutagen = await ensureMutagen();
-            // Pause and resume act on the pair: leaving the backup running under a deliberate `pause` would keep
-            // writing to a folder the owner just asked this agent to stop touching. Only the names the daemon holds
-            // reach Mutagen, since one it can't resolve fails the call for every pairing named beside it.
-            const plan = syncSwitchPlan(syncing, existingSyncSessions(mutagen, syncing.flatMap((pairing) => syncSessionNames(pairing.sandboxId))));
+            // Both sessions of the pair, and only names the daemon holds: one it can't resolve fails the whole call.
+            const plan = syncSwitchPlan(
+                syncing,
+                existingSyncSessions(
+                    mutagen,
+                    syncing.flatMap((pairing) => syncSessionNames(pairing.sandboxId)),
+                ),
+            );
             if (plan.names.length === 0) {
-                // Not a failure: a pairing whose sandbox has never answered has no session yet, and there is nothing
-                // here to pause. The agent creates it as soon as the sandbox is reachable.
+                // Not a failure: a sandbox that has never answered has no session yet, and the agent creates one when it does.
                 out(`No file-sync session is running for: ${named(syncing)}. Nothing to ${verb}; syncing starts when the sandbox answers again.`);
                 return;
             }
@@ -361,50 +366,27 @@ const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
                 out(`No file-sync session to ${verb} for: ${named(plan.idle)}.`);
             }
         },
-    });
+    );
 
-const pause = fileSyncOnly("Pause file syncing", "pause");
-const resume = fileSyncOnly("Resume file syncing", "resume");
-
-// Port mirroring, on or off, the twin of pause/resume for the other half of what this agent does. Mirroring is
-// the half that changes THIS device: stopping it used to mean unpairing the sandbox entirely or revoking every
-// machine's enrollment. Bare, it acts on every sandbox this machine pairs; `--sandbox` takes one. The state is
-// local and durable (config.ts setMirrorOff), so it holds through a reboot and while the sandbox is unreachable.
+// Port mirroring on or off, durable and local (config.ts setMirrorOff), so it holds through a reboot and an unreachable sandbox.
 const mirrorSwitch = (brief: string, off: boolean) =>
-    buildCommand<SandboxFlags>({
-        docs: { brief },
-        parameters: { flags: sandboxFlag },
-        async func(this: CommandContext, flags: SandboxFlags) {
-            const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-            const selected = selectPairings(await readState(), flags.sandbox);
-            if (selected.length === 0) {
-                out("no sandboxes are paired on this machine: nothing to mirror. Enable it from a sandbox's Desktop sync card.");
-                return;
-            }
-            const mutagen = await ensureMutagen();
-            for (const pairing of selected) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
-                await setMirrorOff(pairing.sandboxId, off);
-                // OFF takes effect now, not on the watcher's next pass: somebody who just asked for their localhost
-                // back should
-                // have it before they can alt-tab. Turning it back ON is left to the watcher, since creating a forward
-                // dials
-                // the sandbox over the transport that agent holds.
-                if (off) {
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's teardown at a time, as everywhere else here
-                    await retirePairingMirror(mutagen, pairing.sandboxId);
-                }
-            }
+    pairingCommand<SandboxFlags>(brief, sandboxFlag, NONE_TO_MIRROR, async (selected, _flags, out) => {
+        const mutagen = await ensureMutagen();
+        for (const pairing of selected) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+            await setMirrorOff(pairing.sandboxId, off);
+            // OFF takes effect now, ON is the watcher's: creating a forward dials over the transport that agent holds.
             if (off) {
-                out(`Port mirroring OFF for: ${named(selected)}. Those ports are off this device's localhost. File syncing is untouched.`);
-                return;
+                // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's teardown at a time, as everywhere else here
+                await retirePairingMirror(mutagen, pairing.sandboxId);
             }
-            out(`Port mirroring on for: ${named(selected)}. Their ports return to localhost within a few seconds.`);
-            // The watcher is what puts them back, so a stopped agent turns this command into a promise nothing keeps.
-            if ((await readResidentPid()) === undefined) {
-                out("Note: this machine's agent is NOT running, so nothing will mirror until you start it: `intentic-machine run`.");
-            }
-        },
+        }
+        if (off) {
+            out(`Port mirroring OFF for: ${named(selected)}. Those ports are off this device's localhost. File syncing is untouched.`);
+            return;
+        }
+        out(`Port mirroring on for: ${named(selected)}. Their ports return to localhost within a few seconds.`);
+        await noteIfStopped(out);
     });
 
 // The one numeric flag this CLI takes. Parsed strictly rather than through a bare Number(): a NaN reaching the
@@ -421,35 +403,19 @@ interface MirrorPortFlags extends SandboxFlags {
     readonly port: number;
 }
 
-// ONE PORT, not the whole pairing — the case the switch above has no answer for. A number that is permanently taken
-// on THIS machine's localhost (a database this device already runs on 5440) is not a contest that will ever resolve,
-// and turning every port off to be rid of one notice is the wrong trade. Machine-side because the conflict is the
-// device's: the same sandbox keeps mirroring that port on every other machine it pairs with.
+// One port left off THIS machine's localhost, where something of its own holds it; every other machine keeps mirroring it.
 const mirrorPortSwitch = (brief: string, ignored: boolean) =>
-    buildCommand<MirrorPortFlags>({
-        docs: { brief },
-        parameters: {
-            flags: {
-                ...sandboxFlag,
-                port: { kind: "parsed", parse: parsePort, brief: "The port number, as the sandbox serves it" },
-            },
-        },
-        async func(this: CommandContext, flags: MirrorPortFlags) {
-            const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-            const selected = selectPairings(await readState(), flags.sandbox);
-            if (selected.length === 0) {
-                out("no sandboxes are paired on this machine: nothing to mirror. Enable it from a sandbox's Desktop sync card.");
-                return;
-            }
+    pairingCommand<MirrorPortFlags>(
+        brief,
+        { ...sandboxFlag, port: { kind: "parsed", parse: parsePort, brief: "The port number, as the sandbox serves it" } },
+        NONE_TO_MIRROR,
+        async (selected, flags, out) => {
             const mutagen = await ensureMutagen();
             let taken = 0;
             for (const pairing of selected) {
                 // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
                 await setPortIgnored(pairing.sandboxId, flags.port, ignored);
                 if (ignored) {
-                    // Like `mirror off`: the taking-away happens now, since somebody who just asked for their port
-                    // back should have it before they can alt-tab. Giving it back is the watcher's, which holds the
-                    // transport a fresh forward dials over.
                     // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's teardown at a time, as everywhere else here
                     taken += (await retireMirroredPort(mutagen, pairing.sandboxId, flags.port)) ? 1 : 0;
                 }
@@ -463,12 +429,9 @@ const mirrorPortSwitch = (brief: string, ignored: boolean) =>
             out(
                 `Port ${flags.port} will be mirrored again for: ${named(selected)}. It returns to localhost within a few seconds, unless something else on this machine is holding it.`,
             );
-            // The watcher is what puts it back, so a stopped agent turns this command into a promise nothing keeps.
-            if ((await readResidentPid()) === undefined) {
-                out("Note: this machine's agent is NOT running, so nothing will mirror until you start it: `intentic-machine run`.");
-            }
+            await noteIfStopped(out);
         },
-    });
+    );
 
 const mirror = buildRouteMap({
     routes: {
@@ -520,30 +483,18 @@ const clean = buildCommand<SandboxFlags>({
     },
 });
 
-// The switch over the clearing the watcher does by itself. Off is durable and per pairing, like mirroring's, because it
-// decides what this agent may delete on THIS device. Nothing about `clean` above is gated by it: asking for it once is
-// not the same as leaving it on.
+// Whether the watcher clears build output by itself, durable and per pairing; `clean` is not gated by it.
 const autoHealSwitch = (brief: string, off: boolean) =>
-    buildCommand<SandboxFlags>({
-        docs: { brief },
-        parameters: { flags: sandboxFlag },
-        async func(this: CommandContext, flags: SandboxFlags) {
-            const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-            const selected = selectPairings(await readState(), flags.sandbox);
-            if (selected.length === 0) {
-                out("no sandboxes are paired on this machine: nothing to switch.");
-                return;
-            }
-            for (const pairing of selected) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
-                await setAutoHealOff(pairing.sandboxId, off);
-            }
-            out(
-                off
-                    ? `Clearing derived residue is OFF for: ${named(selected)}. A deletion the sandbox makes will now stop syncing whenever this device has build output inside it; \`intentic-machine sync clean\` clears one by hand.`
-                    : `Clearing derived residue is on for: ${named(selected)}.`,
-            );
-        },
+    pairingCommand<SandboxFlags>(brief, sandboxFlag, "no sandboxes are paired on this machine: nothing to switch.", async (selected, _flags, out) => {
+        for (const pairing of selected) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+            await setAutoHealOff(pairing.sandboxId, off);
+        }
+        out(
+            off
+                ? `Clearing derived residue is OFF for: ${named(selected)}. A deletion the sandbox makes will now stop syncing whenever this device has build output inside it; \`intentic-machine sync clean\` clears one by hand.`
+                : `Clearing derived residue is on for: ${named(selected)}.`,
+        );
     });
 
 const autoheal = buildRouteMap({
@@ -620,5 +571,8 @@ const uninstall = buildCommand<SandboxFlags>({
         await syncUninstall(out, flags.sandbox);
     },
 });
+
+const pause = fileSyncSwitch("Pause file syncing", "pause");
+const resume = fileSyncSwitch("Resume file syncing", "resume");
 
 export const syncCommands = { setup, pause, resume, mirror, clean, autoheal, uninstall };

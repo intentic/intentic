@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { localSandboxMemory } from "@intentic/sandbox-run";
 import { type DeviceSandboxResources, resourcesSummary } from "@intentic/ui/device";
 import {

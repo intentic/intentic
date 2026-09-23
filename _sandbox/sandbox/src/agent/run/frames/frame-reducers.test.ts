@@ -1,26 +1,22 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent, TodoItem } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "bun:test";
-import type { LimitWay } from "../../models/limit-way.js";
+import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
 import type { UsageFrame } from "../turn/turn-usage.js";
 import {
-    applyWallChange,
     type ContextFrame,
     createTurnFrames,
     foldChecklist,
     foldCompactions,
     foldContext,
     foldFailure,
+    foldHeld,
     foldLimitReset,
     foldSession,
     foldSilence,
     foldUsage,
-    foldWalls,
     frameReducer,
     type Silence,
     type TurnFailure,
-    type WallChange,
-    type Walls,
 } from "./frame-reducers.js";
 
 const walk = <Reading>(initial: Reading, fold: (reading: Reading, event: AgentEvent) => Reading, frames: readonly AgentEvent[]): Reading =>
@@ -28,8 +24,7 @@ const walk = <Reading>(initial: Reading, fold: (reading: Reading, event: AgentEv
 
 const kinds = (...names: AgentEvent["kind"][]): ReadonlySet<AgentEvent["kind"]> => new Set(names);
 const quiet: Silence = { proseChars: 0, kinds: kinds(), answered: false };
-const clear: Walls = { outageHit: false, limitHit: false, authRefused: false, limitReopens: undefined, limitWay: undefined };
-const way: LimitWay = { standing: { state: "no-code", paths: [], check: undefined }, handoffTokens: 12 };
+const heldAs = (reason: HeldReason): HeldTurn => ({ input: { prompt: "go", conversationId: "c-1" }, reason, ran: false });
 const edit: AgentEvent = { kind: "tool_call", id: "e", name: "Edit", category: "edit", status: "completed", locations: [{ path: "/work/a.ts" }] };
 
 describe("each fold reads only its own frames", () => {
@@ -164,32 +159,15 @@ describe("each fold reads only its own frames", () => {
     });
 });
 
-describe("walls", () => {
-    const all: Walls = { outageHit: true, limitHit: true, authRefused: true, limitReopens: 9, limitWay: way };
-    const answers: [string, AgentEvent, Walls][] = [
-        ["prose rides an outage and a limit out, not a refused credential", { kind: "delta", text: "back" }, { ...all, outageHit: false, limitHit: false }],
-        ["so does a tool call", edit, { ...all, outageHit: false, limitHit: false }],
-        ["a usage frame proves nothing", { kind: "usage", costUsd: 1 }, all],
-    ];
-    test.each(answers)("%s", (_case, event, after) => {
-        expect(foldWalls(all, event)).toStrictEqual(after);
-    });
-
-    const held: Walls = { ...clear, limitHit: true, limitReopens: 3, limitWay: way };
-    const changes: [string, WallChange, Walls][] = [
-        ["an empty change moves nothing", {}, held],
-        ["an outage", { outageHit: true }, { ...held, outageHit: true }],
-        ["a refused credential", { authRefused: true }, { ...held, authRefused: true }],
-        ["a held limit replaces the instant and the way", { limit: { hit: true, reopens: 7, way: undefined } }, { ...clear, limitHit: true, limitReopens: 7 }],
-        ["an unheld limit clears what an earlier one named", { limit: { hit: false, reopens: undefined, way: undefined } }, clear],
-    ];
-    test.each(changes)("applying %s", (_case, change, after) => {
-        expect(applyWallChange(held, change)).toStrictEqual(after);
-    });
-
-    test("a wall already hit stays hit through a change that does not name it", () => {
-        expect(applyWallChange({ ...clear, outageHit: true, authRefused: true }, {})).toStrictEqual({ ...clear, outageHit: true, authRefused: true });
-    });
+// A limit or an outage the harness rode out is over once the provider answers; every other hold stands.
+test.each([
+    ["prose rides out a limit", "limit", { kind: "delta", text: "back" }, undefined],
+    ["a tool call rides out an outage", "outage", edit, undefined],
+    ["a usage frame proves nothing", "limit", { kind: "usage", costUsd: 1 }, "limit"],
+    ["a refused credential stays refused", "auth", { kind: "delta", text: "back" }, "auth"],
+    ["a stopped turn stays held", "stopped", { kind: "thinking", text: "again" }, "stopped"],
+] as const)("held: %s", (_case, reason, event, after) => {
+    expect(foldHeld(heldAs(reason), event)?.reason).toBe(after);
 });
 
 test("a reducer answers its reading at any point of the walk", () => {
@@ -228,7 +206,7 @@ describe("a turn's frames", () => {
             context: { kind: "context_usage", tokens: 9, contextWindow: 90 },
             failure: { code: undefined, message: "stopped" },
             limitReset: 50,
-            walls: clear,
+            held: undefined,
         });
         expect(frames.verification.edited()).toStrictEqual(["/work/a.ts"]);
         expect(frames.viewing.edited()).toStrictEqual([]);
@@ -245,15 +223,16 @@ describe("a turn's frames", () => {
             context: undefined,
             failure: undefined,
             limitReset: undefined,
-            walls: clear,
+            held: undefined,
         });
     });
 
-    test("fold a classification's walls, which a later answer then partly clears", () => {
+    test("take the last classification's hold, which a later answer then rides out", () => {
         const frames = createTurnFrames(WORKSPACE_ROOT, undefined);
-        frames.hit({ outageHit: true, authRefused: true, limit: { hit: true, reopens: 4, way } });
-        expect(frames.readings().walls).toStrictEqual({ outageHit: true, limitHit: true, authRefused: true, limitReopens: 4, limitWay: way });
+        frames.hold(heldAs("stopped"));
+        frames.hold(heldAs("limit"));
+        expect(frames.readings().held).toStrictEqual(heldAs("limit"));
         frames.note({ kind: "thinking", text: "again" });
-        expect(frames.readings().walls).toStrictEqual({ outageHit: false, limitHit: false, authRefused: true, limitReopens: 4, limitWay: way });
+        expect(frames.readings().held).toBeUndefined();
     });
 });

@@ -1,5 +1,4 @@
 import { parseEnv } from "node:util";
-import { test, expect } from "bun:test";
 import { envKeys, removeEnv, upsertEnv } from "./secrets.routes.js";
 
 /* These assert through parseEnv (the parser that reads these files back) rather than against the exact bytes. */

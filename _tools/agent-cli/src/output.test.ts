@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { capsule, clip } from "./output.js";
 
 describe("capsule", () => {

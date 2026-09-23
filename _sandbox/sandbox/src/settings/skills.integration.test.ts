@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import {

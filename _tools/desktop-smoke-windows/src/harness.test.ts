@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { createHarness, type Harness } from "./harness.js";
 
 /* The polling loop's deadline arithmetic, asserted without spending real seconds, which is the whole reason `now` and `sleep` are injected. */

@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { isScratch } from "./git.js";
 
 test("a scratch directory entry covers everything under it, and a file entry only itself", () => {

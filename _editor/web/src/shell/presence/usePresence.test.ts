@@ -1,14 +1,13 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { PresenceUser } from "@intentic/sandbox-contract";
-import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { runAllTimersAsync } from "@intentic/testing/bun";
 import { ref } from "vue";
 import type { ProcedureInput } from "../../features/sandbox/client/sandboxRpc";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 
-const requestMock = mock(async (_report: ProcedureInput<`system.presence`>) => ({ ok: true as const }));
-mock.module("../../features/sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { presence: requestMock } }) }));
-mock.module("../../features/auth/useAuth", () => ({ useAuth: () => ({ user: ref({ id: `u`, email: `Me@x.com`, name: `Me`, image: null }) }) }));
+const requestMock = jest.fn(async (_report: ProcedureInput<`system.presence`>) => ({ ok: true as const }));
+jest.mock("../../features/sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { presence: requestMock } }) }));
+jest.mock("../../features/auth/useAuth", () => ({ useAuth: () => ({ user: ref({ id: `u`, email: `Me@x.com`, name: `Me`, image: null }) }) }));
 const { presenceOthers, presenceStreamOpened, reportOpenPath, reportView, clearPresence, setPresenceUsers, viewersOfPath, viewersOfSession } =
     await import("./usePresence");
 

@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { localDaemonUrlInsecure } from "@intentic/sandbox-run";
@@ -72,6 +73,39 @@ export const resolveDaemonBase = async (sandboxUrl: string, fetchImpl: FetchImpl
     }
     // Unreachable while the floor is always last; only here to satisfy the compiler.
     return { base: sandboxUrl.replace(/\/$/, ""), local: false };
+};
+
+export interface WarmingAsk {
+    // What the retry notes say is being done, e.g. "connecting".
+    readonly doing: string;
+    // Thrown on a 401: an expired pairing token is definitive, and retrying it only delays the fresh one.
+    readonly expired: string;
+    readonly attempts?: number | undefined;
+    readonly delayMs?: number | undefined;
+}
+
+// A POST through a tunnel that may still be warming: a network error or a 5xx is retried, anything else is the caller's.
+export const postWhileWarming = async (sandboxUrl: string, path: string, init: RequestInit, ask: WarmingAsk): Promise<Response> => {
+    const { doing, expired, attempts = 10, delayMs = 3000 } = ask;
+    for (let attempt = 1; ; attempt++) {
+        // Resolved per attempt, since loopback may only appear partway through the retries.
+        const { base } = await resolveDaemonBase(sandboxUrl);
+        const response = await fetch(`${base}${path}`, { ...init, method: "POST" }).catch((error: unknown) => {
+            if (attempt >= attempts) {
+                throw error;
+            }
+            return undefined;
+        });
+        if (response?.status === 401) {
+            throw new Error(expired);
+        }
+        if (response !== undefined && (response.status < 500 || attempt >= attempts)) {
+            return response;
+        }
+        const why = response === undefined ? "the sandbox isn't reachable yet" : `the sandbox is warming up (HTTP ${response.status})`;
+        process.stderr.write(`${doing}: ${why}, retrying (${attempt}/${attempts})…\n`);
+        await sleep(delayMs);
+    }
 };
 
 // The sync half's caching policy for resolve; the device half resolves once per dial and skips all of this

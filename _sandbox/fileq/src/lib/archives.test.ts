@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { gzipHead, looksLikeTar, parseTarListing, tarEntries, zipEntries } from "./archives.js";
 import { gzipBytes, tarBytes, zipBytes } from "../testing.js";
 

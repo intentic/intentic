@@ -17,7 +17,7 @@ export const postures = (): readonly PickerOption<Posture>[] => [
     { value: `default`, label: t(`sandbox.spawnPosture.default`), icon: `circle`, description: t(`sandbox.spawnPosture.runsAsksAfterOutside`) },
     { value: `allow`, label: t(`sandbox.spawnPosture.alwaysAllow`), icon: `check-circle` },
     { value: `hold`, label: t(`sandbox.spawnPosture.askMe`), icon: `lock` },
-    { value: `deny`, label: t(`sandbox.spawnPosture.never`), icon: `times` },
+    { value: `deny`, label: t(`shared.never`), icon: `times` },
 ];
 
 export const postureOf = (rules: Readonly<Record<string, AdmissionRule>>): Posture => rules[SPAWN_KEY] ?? `default`;

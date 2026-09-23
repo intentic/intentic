@@ -46,7 +46,7 @@ const chipsShown = computed(() => thinkingOffered.value || fastOffered.value);
 <template>
     <!-- REASONING EFFORT, the app's own meter, the same control the composer draws beside its model pill. -->
     <div v-if="effortShown" class="flex items-center justify-between gap-2">
-        <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.pickerRunSettings.reasoningEffort`) }}</span>
+        <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`shared.reasoningEffort`) }}</span>
         <EffortMeter :efforts="efforts" :effort="level" class="shrink-0" @pick="emit(`update`, { effort: $event })" />
     </div>
 

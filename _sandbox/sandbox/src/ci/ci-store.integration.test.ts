@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
 import { fileCiStore } from "./ci-store.js";
 
 const storeIn = (name: string) => fileCiStore(join(mkdtempSync(join(tmpdir(), name)), "ci.json"));

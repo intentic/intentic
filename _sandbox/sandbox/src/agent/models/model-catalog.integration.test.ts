@@ -1,7 +1,6 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect, afterEach, mock, jest } from "bun:test";
 import { jsonFile } from "../../store/json-file.js";
 import { ABSENT_FOR_MS, discoveredCatalog } from "./model-catalog.js";
 
@@ -31,7 +30,7 @@ const catalogOf = (discover: () => Promise<readonly string[]>, store?: ReturnTyp
     });
 
 test("a live answer is served, persisted, and then cached for the TTL", async () => {
-    const discover = mock(async () => ["a", "b"]);
+    const discover = jest.fn(async () => ["a", "b"]);
     const store = storeAt();
     const catalog = catalogOf(discover, store);
 
@@ -91,7 +90,7 @@ test("lets a row go once the vendor has stopped listing it for the whole window"
 });
 
 test("a seeded answer is not cached, so the next read retries the vendor", async () => {
-    const discover = mock(async () => []);
+    const discover = jest.fn(async () => []);
     const catalog = catalogOf(discover);
 
     expect(await catalog.models()).toEqual({ models: ["seed"], default: "seed" });

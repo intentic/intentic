@@ -1,17 +1,16 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { afterEach, expect, it, mock } from "bun:test";
 import { ref } from "vue";
 
 // Pins that the cache is one sandbox's: an answer that left before a switch is not filed under the sandbox switched
 // to, whose next ask fetches afresh. The daemon's address is stood in for; nothing here waits on one resolving.
 
-mock.module("../secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase: ref(`https://box-a.test`) }) }));
+jest.mock("../secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase: ref(`https://box-a.test`) }) }));
 const { lazyByPath } = await import("./lazyByPath");
 
 // A load held open until the test answers it, one answer per ask.
 const heldLoads = () => {
     const answers: ((value: string) => void)[] = [];
-    const load = mock((_path: string) => new Promise<string>((resolve) => void answers.push(resolve)));
+    const load = jest.fn((_path: string) => new Promise<string>((resolve) => void answers.push(resolve)));
     return { load, answer: (index: number, value: string) => answers[index]?.(value) };
 };
 

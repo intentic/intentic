@@ -1,6 +1,5 @@
 import "@intentic/testing/dom";
 import { InlineRename } from "@intentic/ui";
-import { it, expect, afterEach, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 
@@ -49,14 +48,14 @@ afterEach(() => {
 });
 
 it(`reads as text until it is pressed, and says so to a screen reader`, () => {
-    const host = mount({ value: `radarsu-intentic`, write: mock(), action: `Rename sandbox` });
+    const host = mount({ value: `radarsu-intentic`, write: jest.fn(), action: `Rename sandbox` });
     expect(host.querySelector(`input`)).toBeNull();
     expect(name(host).textContent).toBe(`radarsu-intentic, Rename sandbox`);
     expect(name(host).querySelector(`.sr-only`)?.textContent).toBe(`, Rename sandbox`);
 });
 
 it(`opens a field carrying the name, selected, in the text's own place`, async () => {
-    const host = mount({ value: `radarsu-intentic`, write: mock() });
+    const host = mount({ value: `radarsu-intentic`, write: jest.fn() });
     name(host).click();
     await nextTick();
 
@@ -74,7 +73,7 @@ it(`opens a field carrying the name, selected, in the text's own place`, async (
 // With both present the cell is as wide as the longer, which is why the field starts the width of the name it
 // replaced and grows with what is typed instead of jumping to a fixed width.
 it(`sizes the box from the name at rest and from the draft while typing`, async () => {
-    const host = mount({ value: `radarsu-intentic`, write: mock() });
+    const host = mount({ value: `radarsu-intentic`, write: jest.fn() });
     expect(twins(host)).toEqual([`radarsu-intentic`]);
 
     name(host).click();
@@ -88,7 +87,7 @@ it(`sizes the box from the name at rest and from the draft while typing`, async 
 // Nothing appears beside the name when editing starts: the row holds the same two boxes in both modes, the
 // affordance slot simply changes which glyph it carries.
 it(`adds no control to the row when the mode changes`, async () => {
-    const host = mount({ value: `radarsu-intentic`, write: mock() });
+    const host = mount({ value: `radarsu-intentic`, write: jest.fn() });
     expect(root(host).children.length).toBe(2);
     expect(root(host).querySelectorAll(`button`).length).toBe(2);
 
@@ -100,7 +99,7 @@ it(`adds no control to the row when the mode changes`, async () => {
 });
 
 it(`commits the trimmed name on Enter and closes`, async () => {
-    const write = mock<(next: string) => Promise<void>>().mockResolvedValue(undefined);
+    const write = jest.fn<(next: string) => Promise<void>>().mockResolvedValue(undefined);
     const host = mount({ value: `radarsu-intentic`, write });
     name(host).click();
     await nextTick();
@@ -113,7 +112,7 @@ it(`commits the trimmed name on Enter and closes`, async () => {
 });
 
 it(`commits on blur, so clicking away keeps what was typed`, async () => {
-    const write = mock<(next: string) => Promise<void>>().mockResolvedValue(undefined);
+    const write = jest.fn<(next: string) => Promise<void>>().mockResolvedValue(undefined);
     const host = mount({ value: `radarsu-intentic`, write });
     name(host).click();
     await nextTick();
@@ -124,7 +123,7 @@ it(`commits on blur, so clicking away keeps what was typed`, async () => {
 });
 
 it(`writes nothing on Escape, and nothing for a name that did not change`, async () => {
-    const write = mock<(next: string) => Promise<void>>().mockResolvedValue(undefined);
+    const write = jest.fn<(next: string) => Promise<void>>().mockResolvedValue(undefined);
     const host = mount({ value: `radarsu-intentic`, write });
 
     name(host).click();
@@ -142,7 +141,7 @@ it(`writes nothing on Escape, and nothing for a name that did not change`, async
 });
 
 it(`writes nothing for an emptied name, rather than saving a nameless thing`, async () => {
-    const write = mock<(next: string) => Promise<void>>().mockResolvedValue(undefined);
+    const write = jest.fn<(next: string) => Promise<void>>().mockResolvedValue(undefined);
     const host = mount({ value: `radarsu-intentic`, write });
     name(host).click();
     await nextTick();
@@ -155,7 +154,7 @@ it(`writes nothing for an emptied name, rather than saving a nameless thing`, as
 
 // The failure the three hand-rolled sites all got wrong: they closed the field and threw the typed name away.
 it(`keeps the field open with the typed name when the write refuses, and floats the reason`, async () => {
-    const write = mock<(next: string) => Promise<void>>().mockRejectedValue(new Error(`The sandbox is offline.`));
+    const write = jest.fn<(next: string) => Promise<void>>().mockRejectedValue(new Error(`The sandbox is offline.`));
     const host = mount({ value: `radarsu-intentic`, write, failure: `Couldn't save the sandbox's name.` });
     name(host).click();
     await nextTick();
@@ -174,7 +173,7 @@ it(`keeps the field open with the typed name when the write refuses, and floats 
 });
 
 it(`says the app's own sentence when the refusal has no message of its own`, async () => {
-    const write = mock<(next: string) => Promise<void>>().mockRejectedValue(new Error(``));
+    const write = jest.fn<(next: string) => Promise<void>>().mockRejectedValue(new Error(``));
     const host = mount({ value: `radarsu-intentic`, write, failure: `Couldn't save the sandbox's name.` });
     name(host).click();
     await nextTick();
@@ -186,7 +185,7 @@ it(`says the app's own sentence when the refusal has no message of its own`, asy
 });
 
 it(`draws a nameless thing in its fallback words, and caps what can be typed`, async () => {
-    const host = mount({ value: undefined, write: mock(), fallback: `Sandbox`, maxlength: 60 });
+    const host = mount({ value: undefined, write: jest.fn(), fallback: `Sandbox`, maxlength: 60 });
     expect(name(host).textContent).toBe(`Sandbox, Rename`);
 
     name(host).click();
@@ -196,7 +195,7 @@ it(`draws a nameless thing in its fallback words, and caps what can be typed`, a
 });
 
 it(`is plain text where the name is not the reader's to change`, () => {
-    const host = mount({ value: `radarsu-intentic`, write: mock(), editable: false });
+    const host = mount({ value: `radarsu-intentic`, write: jest.fn(), editable: false });
     expect(host.querySelector(`button`)).toBeNull();
     // The cell alone: no affordance slot to reserve when there is nothing to press.
     expect(root(host).children.length).toBe(1);

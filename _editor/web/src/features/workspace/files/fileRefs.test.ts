@@ -1,10 +1,9 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { describe, it, expect, beforeEach, mock } from "bun:test";
 
 // Stubs the workspace-tree query (root + file index) so path helpers run without the app graph; `queryData` is the seam
 // both lookups read.
 let queryData: { root?: string; tree?: unknown[] }[] = [];
-mock.module("../../../lib/queryPersistence", () => ({
+jest.mock("../../../lib/queryPersistence", () => ({
     queryClient: { getQueriesData: () => queryData.map((data) => [[], data] as const) },
 }));
 

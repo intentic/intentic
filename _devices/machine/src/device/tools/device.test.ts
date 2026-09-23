@@ -1,6 +1,5 @@
 import { DesktopError } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { test, expect, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type Caller, calling, createIndicator, type Indicator, PAUSE_HOTKEY } from "../indicator.js";
 import { ScopeError } from "../policy.js";

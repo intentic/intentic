@@ -1,5 +1,4 @@
 import { DEV_VERSION, type DevicePairing, type DeviceReport, AGENT_STALL_AFTER_MS, DeviceScopesSchema } from "@intentic/sandbox-contract";
-import { describe, it, expect, afterEach, mock, jest } from "bun:test";
 import { stubGlobal } from "@intentic/testing/bun";
 import { agentLine, buildSkewLine, conflictLines, linkLine, pairingLine, statusSummary } from "../status.js";
 import { enrollKey, selectPairings, syncSwitchPlan } from "./commands.js";
@@ -15,7 +14,7 @@ afterEach(() => {
 
 describe("enrollKey", () => {
     it("retries through transient tunnel-warmup 502s, then returns the sync token + granted mode", async () => {
-        const fetchMock = mock<typeof fetch>()
+        const fetchMock = jest.fn<typeof fetch>()
             .mockResolvedValueOnce(new Response("bad gateway", { status: 502 }))
             .mockResolvedValueOnce(new Response("bad gateway", { status: 502 }))
             .mockResolvedValueOnce(jsonResponse(200, { ok: true, syncToken: "ist_tok", mode: "mirror" }));
@@ -28,7 +27,7 @@ describe("enrollKey", () => {
     });
 
     it("retries when fetch throws, and defaults mode to sync for a daemon that omits it", async () => {
-        const fetchMock = mock<typeof fetch>()
+        const fetchMock = jest.fn<typeof fetch>()
             .mockRejectedValueOnce(new Error("getaddrinfo ENOTFOUND"))
             .mockResolvedValueOnce(jsonResponse(200, { syncToken: "ist_tok" }));
         stubGlobal("fetch", fetchMock);
@@ -44,7 +43,7 @@ describe("enrollKey", () => {
     // daemon that enrolls the key and hands back nothing to use it with fails here rather than as a Mutagen session
     // that silently never comes up.
     it("refuses an enrollment that comes back without a credential", async () => {
-        const fetchMock = mock<typeof fetch>().mockResolvedValue(jsonResponse(200, { ok: true, mode: "sync" }));
+        const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, { ok: true, mode: "sync" }));
         stubGlobal("fetch", fetchMock);
 
         await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).rejects.toThrow(/no sync credential/);
@@ -52,7 +51,7 @@ describe("enrollKey", () => {
     });
 
     it("fails fast on 401 without retrying", async () => {
-        const fetchMock = mock<typeof fetch>().mockResolvedValue(new Response("nope", { status: 401 }));
+        const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(new Response("nope", { status: 401 }));
         stubGlobal("fetch", fetchMock);
 
         await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).rejects.toThrow(/pairing expired/);
@@ -60,7 +59,7 @@ describe("enrollKey", () => {
     });
 
     it("throws the same 502 message when warmup never resolves", async () => {
-        const fetchMock = mock<typeof fetch>().mockResolvedValue(new Response("bad gateway", { status: 502 }));
+        const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(new Response("bad gateway", { status: 502 }));
         stubGlobal("fetch", fetchMock);
 
         await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { attempts: 3, delayMs: 0 })).rejects.toThrow(

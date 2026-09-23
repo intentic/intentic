@@ -3,7 +3,6 @@ import { serveIngressSession, webSocketDuplex, type IngressSessionServer } from 
 import { generateKeyPairSync } from "node:crypto";
 import { createServer, request as h1Request, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { WebSocket } from "ws";
 import { createCluster, createInternalServer, HOP_HEADER, type Cluster } from "./cluster.js";
 import type { Peer, PeerDiscovery } from "./peers.js";

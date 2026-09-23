@@ -1,6 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { afterEach, describe, expect, it } from "bun:test";
 import { effectScope, ref, shallowRef } from "vue";
 import { noteArriving } from "../../files/provisionalEntries";
 import { barrenChainOf, barrenChildren } from "../emptyDirs";
@@ -27,7 +26,7 @@ const rowsOver = (tree: readonly WorkspaceTreeEntry[], rootDir = ``, barren: rea
         lazyChildren: shallowRef(new Map<string, readonly WorkspaceTreeEntry[]>()),
         lazyHidden: shallowRef(new Map<string, number>()),
     };
-    const switches = { showIgnored: ref(false), hideTests: ref(false), hideTechnical: ref(false) };
+    const filters = ref({ showIgnored: false, hideTests: false, hideTechnical: false });
     const filter = ref(``);
     const model = effectScope().run(() =>
         useTreeRows({
@@ -35,13 +34,13 @@ const rowsOver = (tree: readonly WorkspaceTreeEntry[], rootDir = ``, barren: rea
             rootDir: () => rootDir,
             rootHidden: () => 0,
             filter: () => filter.value,
-            switches,
+            filters,
             nesting: ref(false),
             store,
             emptyDirs: { isBarren: (path) => barren.includes(path), chainOf: (path) => barrenChainOf(path, barrenChildren(barren)) },
         }),
     )!;
-    return { model, store, switches, filter };
+    return { model, store, filters, filter };
 };
 
 afterEach(() => {
@@ -64,10 +63,10 @@ describe(`the visible rows`, () => {
     });
 
     it(`follow the toolbar's switches, and count what the technical one took out of the root`, () => {
-        const { model, switches } = rowsOver([dir(`src`, []), file(`package.json`), file(`.gitignore`), file(`README.md`)]);
+        const { model, filters } = rowsOver([dir(`src`, []), file(`package.json`), file(`.gitignore`), file(`README.md`)]);
         expect([model.orderedPaths.value, model.technicalCount.value]).toEqual([[`src`, `package.json`, `.gitignore`, `README.md`], 0]);
 
-        switches.hideTechnical.value = true;
+        filters.value = { ...filters.value, hideTechnical: true };
         expect([model.orderedPaths.value, model.technicalCount.value]).toEqual([[`src`, `README.md`], 2]);
     });
 

@@ -1,8 +1,7 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { clipboardOf } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
-import { type Ref, ref } from "vue";
+import { onScopeDispose, type Ref, ref } from "vue";
 import type { useNotifications } from "../../../../shell/notifications/notifications";
 import type { useUploadQueue } from "../../files/upload/useUploadQueue";
 import { joinPath } from "../entryNames";
@@ -11,14 +10,12 @@ import { filesToEntries } from "../transfer/dropEntries";
 import { movableInto, pastePairs } from "../transfer/explorerPaste";
 import { beginEntryDrag, useEntryDrag } from "../transfer/useEntryDrag";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
-import { dropDirOf, isUnlisted, type Row } from "./treeRows";
+import { isUnlisted } from "./treeRows";
 import type { useInlineEdit } from "./useTreeEdits";
 import type { useTreeRules } from "./useTreeRules";
 import type { useTreeSelection } from "./useTreeSelection";
 
-// Entries into, out of and around the tree: cut, copy and paste over the whole selection (native clipboard events, since
-// only those carry `clipboardData` and fire regardless of focus), rows moved by pointer (useEntryDrag, never the
-// platform's drag loop, which in Brave freezes the tab), OS files dropped or pasted in, and an archive extracted.
+// Entries into, out of and around a file surface (the tree, the home); a pointer move never uses the platform's drag.
 
 export interface TreeTransferHost {
     readonly tree: () => readonly WorkspaceTreeEntry[];
@@ -133,8 +130,10 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         const files = event.clipboardData?.files;
         if (files !== undefined && files.length > 0) {
             event.preventDefault();
-            host.openFolder(dir);
-            void host.uploads.enqueue(dir, filesToEntries(files));
+            if (!rules.refuseIn(dir)) {
+                host.openFolder(dir);
+                void host.uploads.enqueue(dir, filesToEntries(files));
+            }
             return;
         }
         if (clipboard.value === undefined) {
@@ -153,16 +152,14 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         }
         await store.run(() => store.moveIntoMany(paths, dir), `Couldn't move those items.`);
     };
-    // A modified press is a selection gesture and a press on the name field is the field's; a locked row never travels.
-    // Each carries nothing rather than returning: every press must reach beginEntryDrag, which ends a drag's claim on a click.
-    const onRowPointerDown = (event: PointerEvent, row: Row): void => {
-        const path = row.entry.path;
+    // Every press reaches beginEntryDrag, carrying nothing when it cannot travel: that is what ends a drag's claim on a click.
+    const onPointerDown = (event: PointerEvent, path: string): void => {
         const edit = host.inline.edit.value;
         const modified = event.shiftKey || event.ctrlKey || event.metaKey || event.altKey;
         const held =
             modified || (edit.kind === `renaming` && edit.path === path)
                 ? []
-                : // Dragging a selected row moves the whole selection; otherwise just that row.
+                : // Dragging a selected entry moves the whole selection; otherwise just that entry.
                   rules.unlockedOnly(selection.value.has(path) ? [...selection.value] : [path]);
         beginEntryDrag(event, { paths: held, onDrop: (dir) => void dragOnto(held, dir) });
     };
@@ -170,39 +167,41 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
     // Dimmed while it travels.
     const carried = (path: string): boolean => dragging.value && dragged.value.includes(path);
 
-    // The folder an OS file drag is over; a row on the move lights its target through useEntryDrag's `over` instead.
-    const dragOverPath = ref<string | undefined>(undefined);
+    // The folder an OS file drag is over; undefined over nothing, or over a folder that takes no drop.
+    const dropDir = ref<string | undefined>(undefined);
     // Lit as where a drop would land, by either drag.
-    const dropLit = (path: string): boolean => path === dragOverPath.value || (over.value !== undefined && over.value !== `` && path === over.value);
-    // OS files only: any other drag is left alone, so the browser declines it, as the background does.
-    const onRowDragOver = (event: DragEvent, row: Row): void => {
+    const dropLit = (path: string): boolean => path === dropDir.value || path === over.value;
+    // OS files only: any other drag is left alone, so the browser declines it. Stopped here, so no zone behind claims it too.
+    const onDragOver = (event: DragEvent, dir: string): void => {
         if (!filesOffered(event)) {
             return;
         }
-        // preventDefault even on an invalid target so the drop lands here (a no-op) instead of bubbling to the root.
         event.preventDefault();
-        const dir = dropDirOf(row);
-        const invalid = isLockedWorkspacePath(dir);
+        event.stopPropagation();
+        const invalid = rules.noDrops(dir);
         if (event.dataTransfer !== null) {
             event.dataTransfer.dropEffect = invalid ? `none` : `copy`;
         }
-        // Highlights the destination folder, not the hovered row; a root-level file has none to highlight.
-        dragOverPath.value = invalid || dir === `` ? undefined : dir;
+        dropDir.value = invalid ? undefined : dir;
     };
-    const onRowDragLeave = (row: Row): void => {
-        if (dragOverPath.value === dropDirOf(row)) {
-            dragOverPath.value = undefined;
+    // `dragleave` also fires when the pointer crosses into a child; only a real exit clears the target.
+    const onDragLeave = (event: DragEvent, dir: string): void => {
+        const to = event.relatedTarget;
+        if (to instanceof Node && event.currentTarget instanceof Node && event.currentTarget.contains(to)) {
+            return;
+        }
+        if (dropDir.value === dir) {
+            dropDir.value = undefined;
         }
     };
     // A refused drop is swallowed here, so it can't bubble to the root and land files unexpectedly.
-    const onRowDrop = (event: DragEvent, row: Row): void => {
+    const onDrop = (event: DragEvent, dir: string): void => {
         if (event.dataTransfer === null || !filesOffered(event)) {
             return;
         }
         event.preventDefault();
         event.stopPropagation();
-        const dir = dropDirOf(row);
-        dragOverPath.value = undefined;
+        dropDir.value = undefined;
         if (rules.noDrops(dir) || rules.refuseIn(dir)) {
             return;
         }
@@ -211,6 +210,16 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         // Synchronous, since webkitGetAsEntry must fire while the drag items are still alive.
         host.uploads.enqueueFromDataTransfer(dir, event.dataTransfer);
     };
+    // A file drag that ends anywhere (dropped elsewhere, cancelled) clears the hint; capture, so a stopped drop counts.
+    const clearDropDir = (): void => {
+        dropDir.value = undefined;
+    };
+    window.addEventListener(`dragend`, clearDropDir, true);
+    window.addEventListener(`drop`, clearDropDir, true);
+    onScopeDispose(() => {
+        window.removeEventListener(`dragend`, clearDropDir, true);
+        window.removeEventListener(`drop`, clearDropDir, true);
+    });
 
     // Unpacks an archive into the folder holding it, selected once the daemon answers: only it can say what the entry is
     // called, and a guessed name would mark the wrong row whenever the archive turned out to hold its own folder.
@@ -225,5 +234,5 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         }, `Couldn't extract that.`);
     };
 
-    return { stage, paste, extract, onCopyEvent, onPasteEvent, onRowPointerDown, carried, dropLit, onRowDragOver, onRowDragLeave, onRowDrop };
+    return { stage, paste, extract, onCopyEvent, onPasteEvent, onPointerDown, carried, dropDir, dropLit, onDragOver, onDragLeave, onDrop };
 };

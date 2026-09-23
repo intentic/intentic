@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { test, expect } from "bun:test";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { syncHookOutput, memoryFleet } from "../../testing.js";
 import { DEFAULT_HEAVY_COMMANDS, type HeavyCommands, HeavyCommandsSchema } from "../../platform/resources/heavy-commands.js";

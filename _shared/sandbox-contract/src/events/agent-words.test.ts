@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import { agentWordsOf, agentWordsRow, childReportPrompt, peerMessagePrompt, unspokenPromptRow } from "./agent-words.js";
 import { watchWakePrompt } from "./watch-wake.js";
 

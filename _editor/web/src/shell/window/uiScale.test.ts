@@ -1,5 +1,4 @@
 import "@intentic/testing/dom";
-import { describe, it, expect, beforeEach } from "bun:test";
 import { useTextSize } from "@intentic/ui/text-size";
 import { toAppPx, toScreenPx, uiLength } from "./uiScale";
 

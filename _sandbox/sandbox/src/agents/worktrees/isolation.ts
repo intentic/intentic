@@ -6,8 +6,8 @@ import { conversationsRoot } from "../../store/conversation-units.js";
 import { stateRelPath } from "../../state-paths.js";
 import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
 import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
-import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+import { walkDirs } from "../../workspace/layout/dir-walk.js";
 import type { Logger } from "pino";
 import { promisify } from "node:util";
 
@@ -203,34 +203,23 @@ const mirrorable = async (path: string): Promise<boolean> => {
 // files. `intoNestedRepos` differs: the plan wants every repo's dirs, the symlink mirror stops at a nested `.git`.
 export const mirroredDirs = async (main: string, worktree: string, { intoNestedRepos }: { readonly intoNestedRepos: boolean }): Promise<string[]> => {
     const found: string[] = [];
-    const walk = async (dir: string, rel: string, depth: number): Promise<void> => {
-        const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-        if (!intoNestedRepos && rel !== "" && entries.some((entry) => entry.name === ".git")) {
-            return;
+    await walkDirs(main, { maxDepth: MAX_LINK_DEPTH }, async (dir, entries, subdirs) => {
+        if (!intoNestedRepos && dir.rel !== "" && entries.some((entry) => entry.name === ".git")) {
+            return [];
         }
         await Promise.all(
             entries
                 .filter((entry) => entry.isDirectory() && MIRRORED_DIRS.has(entry.name))
                 .map(async (entry) => {
-                    const mirror = rel === "" ? entry.name : `${rel}/${entry.name}`;
+                    const mirror = dir.rel === "" ? entry.name : `${dir.rel}/${entry.name}`;
                     if (await mirrorable(join(worktree, mirror))) {
                         found.push(mirror);
                     }
                 }),
         );
-        if (depth >= MAX_LINK_DEPTH) {
-            return;
-        }
         // A mirror's own contents are never mirror points; walking an installed tree would cost thousands of readdirs.
-        await Promise.all(
-            entries
-                .filter(
-                    (entry) => entry.isDirectory() && !entry.name.startsWith(".") && !MIRRORED_DIRS.has(entry.name) && !IGNORED_DIRS.has(entry.name),
-                )
-                .map((entry) => walk(join(dir, entry.name), rel === "" ? entry.name : `${rel}/${entry.name}`, depth + 1)),
-        );
-    };
-    await walk(main, "", 0);
+        return subdirs.filter((subdir) => !MIRRORED_DIRS.has(subdir.name));
+    });
     // Shallowest first, so a parent is never mounted after a child already sits inside it.
     return found.toSorted((a, b) => a.split("/").length - b.split("/").length || (a < b ? -1 : 1));
 };
@@ -296,16 +285,12 @@ export const startAnchor = async (plan: IsolationPlan): Promise<IsolationAnchor>
     return { pid, cwd: plan.root, plan, dispose };
 };
 
-// Where the layout before conversation units kept every conversation's transcripts and fenced session stores. Nothing
-// reads or deletes them any more, so on a volume that still holds them they stay masked like the units.
-const PRE_UNIT_STORES = ["transcripts", "sessions"] as const;
-
 // What a fenced conversation's namespace hides, derived rather than configured: the worktrees root is this worktree's
 // own parent, and the conversation units are the daemon's account of every conversation — the transcripts it keeps and
 // the session stores fenced ones write to. Its own store is bound before the mask goes over them.
 const fencedPlacement = (historyRoot: string, worktree: string): FencedPlacement => ({
     sessions: sessionsDir(historyRoot, basename(worktree)),
-    hidden: [dirname(worktree), conversationsRoot(historyRoot), ...PRE_UNIT_STORES.map((name) => join(historyRoot, name))],
+    hidden: [dirname(worktree), conversationsRoot(historyRoot)],
 });
 
 export interface TurnIsolation {

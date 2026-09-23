@@ -134,6 +134,6 @@ export const convergedBadge = (converged: boolean | undefined): { label: string;
         return undefined;
     }
     return converged
-        ? { label: t(`extensions.reconcileStatus.upToDate`), variant: `success` }
+        ? { label: t(`shared.upToDate`), variant: `success` }
         : { label: t(`extensions.reconcileStatus.changesPending`), variant: `info` };
 };

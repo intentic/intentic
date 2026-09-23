@@ -6,7 +6,6 @@ import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
 import { type AgentTurn, type PipelineRun, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { beforeEach, expect, test } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -21,7 +20,9 @@ import { drivenBy, memoryFleet } from "../testing.js";
 
 /* When main's red gets an agent unasked: only on main's newest word, once per failure, never for the fleet's own death. */
 
-const CODE_JOBS = { jobs: [{ id: 7, name: "verify-core", conclusion: "failure", steps: [{ name: "Run pnpm turbo run test", conclusion: "failure" }] }] };
+const CODE_JOBS = {
+    jobs: [{ id: 7, name: "verify-core", conclusion: "failure", steps: [{ name: "Run pnpm turbo run test", conclusion: "failure" }] }],
+};
 const FLEET_JOBS = { jobs: [{ id: 8, name: "verify-core", conclusion: "failure", steps: [{ name: "Set up job", conclusion: "failure" }] }] };
 
 const run = (runId: number, status: PipelineRun["status"], branch = "main"): PipelineRun => ({

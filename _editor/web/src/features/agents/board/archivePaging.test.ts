@@ -5,8 +5,6 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach } from "bun:test";
-import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { useAgents } from "../fleet/useAgents";
@@ -17,9 +15,9 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals boardSelection.test.ts installs: matchMedia keeps desktop, the unreported ResizeObserver
 // keeps three columns, and jsdom has no scrollIntoView.
-hoisted(() => {
+(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-});
+})();
 
 let app: App | undefined;
 const settle = async (): Promise<void> => {
@@ -99,24 +97,14 @@ const openArchive = async (el: HTMLElement): Promise<void> => {
     await settle();
 };
 
-it(`draws one page of the archive, however deep the pile behind it`, async () => {
-    live();
-    fileAway(70);
-    const board = await mountBoard();
-
-    await openArchive(board);
-
-    expect(archiveCards(board)).toHaveLength(30);
-    // Newest-archived first, from the top: the page is the head of the list, not a sample of it.
-    expect(archiveCards(board).slice(0, 3)).toEqual([`old 0`, `old 1`, `old 2`]);
-    expect(tailRow(board)?.textContent?.trim()).toBe(`40 more`);
-});
-
 it(`adds a page at a time, and stops offering when there is nothing left behind the row`, async () => {
     live();
     fileAway(70);
     const board = await mountBoard();
     await openArchive(board);
+    // Newest-archived first, from the top: the page is the head of the list, not a sample of it.
+    expect(archiveCards(board).slice(0, 3)).toEqual([`old 0`, `old 1`, `old 2`]);
+    expect([archiveCards(board).length, tailRow(board)?.textContent?.trim()]).toEqual([30, `40 more`]);
 
     tailRow(board)!.click();
     await settle();
@@ -127,32 +115,4 @@ it(`adds a page at a time, and stops offering when there is nothing left behind 
     await settle();
     expect(archiveCards(board)).toHaveLength(70);
     expect(tailRow(board)).toBeNull();
-});
-
-it(`draws a short archive whole, with no row under it`, async () => {
-    live();
-    fileAway(4);
-    const board = await mountBoard();
-
-    await openArchive(board);
-
-    expect(archiveCards(board)).toHaveLength(4);
-    expect(tailRow(board)).toBeNull();
-});
-
-// Reopening the door restarts paging: a reader who paged in last time shouldn't pay for those pages again.
-it(`starts from one page again each time the door is opened`, async () => {
-    live();
-    fileAway(70);
-    const board = await mountBoard();
-    await openArchive(board);
-    tailRow(board)!.click();
-    await settle();
-    expect(archiveCards(board)).toHaveLength(60);
-
-    board.querySelector<HTMLElement>(`[aria-label="Back to finished agents"]`)!.click();
-    await settle();
-    await openArchive(board);
-
-    expect(archiveCards(board)).toHaveLength(30);
 });

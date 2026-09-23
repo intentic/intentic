@@ -3,12 +3,11 @@
 // implemented, so an unguarded button renders and does nothing, and the silent attempt behind it stalls for five
 // seconds before failing.
 import "@intentic/testing/dom";
-import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
-import { advanceTimersByTimeAsync, hoisted } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 // Configured client id, overriding bun.setup.ts's empty default, so a refusal below is the posture rule, not a
 // missing client id. Assigned, not `??=`, since the setup file already ran.
-hoisted(() => {
+(() => {
     globalThis.window.env = {
         production: false,
         api: { url: `http://localhost` },
@@ -16,22 +15,22 @@ hoisted(() => {
         analytics: { posthogKey: ``, posthogHost: `` },
         afterSignOut: ``,
     };
-});
+})();
 
-const desktopVersion = mock<() => string | undefined>();
-mock.module(`../../app/environments/desktop`, () => ({ desktopVersion: () => desktopVersion() }));
+const desktopVersion = jest.fn<() => string | undefined>();
+jest.mock(`../../app/environments/desktop`, () => ({ desktopVersion: () => desktopVersion() }));
 
 const { useGoogleIdentity } = await import("./useGoogleIdentity");
 
 // Stands in for a working Google script, so any refusal is the posture rule, not a missing dependency.
-const prompt = mock();
-const gisRenderButton = mock();
+const prompt = jest.fn();
+const gisRenderButton = jest.fn();
 
 beforeEach(() => {
     desktopVersion.mockReset();
     prompt.mockReset();
     gisRenderButton.mockReset();
-    window.google = { accounts: { id: { initialize: mock(), renderButton: gisRenderButton, prompt } } };
+    window.google = { accounts: { id: { initialize: jest.fn(), renderButton: gisRenderButton, prompt } } };
 });
 
 afterEach(() => {

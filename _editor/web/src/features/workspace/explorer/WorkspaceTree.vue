@@ -1,9 +1,19 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { ConfirmDialog, ContextMenu, type ExplorerTreatment, explorerTreatment, iconForEntry, type IconName, useExplorerStyle, vAction } from "@intentic/ui";
+import {
+    ConfirmDialog,
+    ContextMenu,
+    type ExplorerTreatment,
+    explorerTreatment,
+    iconForEntry,
+    type IconName,
+    useExplorerStyle,
+    vAction,
+} from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { basename, parentDir } from "@intentic/ui/path";
+import { nextTick } from "vue";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
@@ -11,11 +21,13 @@ import { viewersOfPath } from "../../../shell/presence/usePresence";
 import { useLayout } from "../../../shell/window/useLayout";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { isRecentlyChanged } from "../changes/live/useWorkspaceLive";
+import { lensRefuses } from "../directory-ui/personaReach";
 import { useUploadQueue } from "../files/upload/useUploadQueue";
 import type { OpenMode } from "../tabs/workspaceTabs";
+import { ancestorDirs } from "./revealPath";
 import type { RowAction } from "./rowActions";
 import { specialChip } from "./specialPaths";
-import { deadLink, linkTooltip, provisionalTooltip, type Row } from "./tree/treeRows";
+import { deadLink, dropDirOf, linkTooltip, provisionalTooltip, type Row } from "./tree/treeRows";
 import { useTreeDelete } from "./tree/useTreeDelete";
 import { focusField, useInlineEdit, useTreeEdits } from "./tree/useTreeEdits";
 import { useTreeGestures } from "./tree/useTreeGestures";
@@ -78,24 +90,29 @@ const { byPath, childrenOf, visibleRows, orderedPaths, technicalCount, targetDir
     rootDir: () => rootDir,
     rootHidden: () => rootHidden,
     filter: () => filter,
-    switches: layout,
+    filters: layout.explorerFilters,
     nesting: fileNesting,
     store,
     emptyDirs,
 });
+const rules = useTreeRules({ byPath, store });
+const { pendingRow, pending, dropTargetOf } = rules;
+// An arriving row holding nothing a press can reach: a pending file, not a pending folder, which still expands.
+const notYetOpenable = (row: Row): boolean => pending(row.entry.path) && !expandable(row);
 const { personas } = usePersonas();
-const rules = useTreeRules({ byPath, expandable, store, personas });
-const { refused, pendingRow, pending, notYetOpenable, dropTargetOf } = rules;
+// Only dims the rows the read-as persona's fence refuses: a lens must not restrict the actual user.
+const refused = (path: string): boolean => lensRefuses(personas.value, path);
 const selecting = useTreeSelection({ selectedPath: () => selectedPath, order: orderedPaths });
 const { selection, lead, tabbablePath } = selecting;
 const inline = useInlineEdit((path) => byPath.value.has(path));
 const { edit, draft, createError, editing } = inline;
-const { scroller, treeEl, preamble, probeRow, rowHeight, createBlock, painted, treeHeight, onScroll, setRowEl, showRow, focusLead, focusRow } = useTreeWindow({
-    rows: visibleRows,
-    lead,
-    edit,
-    createError,
-});
+const { scroller, treeEl, preamble, probeRow, rowHeight, createBlock, painted, treeHeight, onScroll, setRowEl, showRow, focusLead, focusRow } =
+    useTreeWindow({
+        rows: visibleRows,
+        lead,
+        edit,
+        createError,
+    });
 useTreeReveal({ selectedPath: () => selectedPath, rows: visibleRows, tree: () => tree, byPath, childrenOf, nesting: fileNesting, openAll, showRow });
 
 const { beginRename, beginCreate, endEdit } = useTreeEdits({
@@ -112,9 +129,26 @@ const { beginRename, beginCreate, endEdit } = useTreeEdits({
         layout.setEditMode(true);
     },
 });
-const { confirmPaths, deleteTitle, requestDelete, confirmDelete, keepFolder, sweepOpen, pointedBarren, barrenBranches, soleBarren, sweepAll, revealBarren, revealSoleBarren } =
-    useTreeDelete({ byPath, targetDir, rules, emptyDirs, selecting, store, say, openAll, showRow });
-const { stage, paste, extract, onCopyEvent, onPasteEvent, onRowPointerDown, carried, dropLit, onRowDragOver, onRowDragLeave, onRowDrop } = useTreeTransfer({
+const { confirmPaths, deleteTitle, requestDelete, confirmDelete, keepFolder, sweepOpen, pointedBarren, barrenBranches, soleBarren, sweepAll } =
+    useTreeDelete({
+        byPath,
+        targetDir,
+        rules,
+        emptyDirs,
+        selecting,
+        store,
+        say,
+    });
+// Opens the way down to an empty folder, selects it and brings its row on screen; the keyboard stays with the sweep line.
+const revealBarren = async (path: string): Promise<void> => {
+    openAll(ancestorDirs(path));
+    selecting.selectSingle(path);
+    await nextTick();
+    await showRow(path);
+};
+// Reads `soleBarren` here, since a template closure would read it outside the `v-if` proving it.
+const revealSoleBarren = (): Promise<void> => (soleBarren.value === undefined ? Promise.resolve() : revealBarren(soleBarren.value.path));
+const { stage, paste, extract, onCopyEvent, onPasteEvent, onPointerDown, carried, dropLit, onDragOver, onDragLeave, onDrop } = useTreeTransfer({
     tree: () => tree,
     rootDir: () => rootDir,
     byPath,
@@ -164,6 +198,12 @@ const { menu, menuItems, openMenu, runAction } = useTreeMenu({
     requestDelete,
     stage,
     paste,
+    frame: () => ({
+        tail:
+            store.expanded.value.size > 0
+                ? [{ label: t(`workspace.workspaceTree.collapseFolders`), icon: `collapse-all`, command: store.collapseAll }]
+                : [],
+    }),
 });
 
 // The active file-tree setup (minimal/colorful/vivid): size, colour and folder emphasis for every row.
@@ -171,7 +211,13 @@ const { explorerStyle } = useExplorerStyle();
 // A barren row dims like an ignored one: nothing is at risk, so it reads as a fact, not an alarm. A locked row wears a
 // padlock instead of its own icon.
 const treat = (row: Row): ExplorerTreatment => {
-    const treatment = explorerTreatment(explorerStyle.value, row.entry.name, row.entry.type, row.isExpanded, row.entry.ignored === true || row.barren === true);
+    const treatment = explorerTreatment(
+        explorerStyle.value,
+        row.entry.name,
+        row.entry.type,
+        row.isExpanded,
+        row.entry.ignored === true || row.barren === true,
+    );
     return isLockedWorkspacePath(row.entry.path) ? { ...treatment, icon: `lock` satisfies IconName, colorClass: `text-subtle` } : treatment;
 };
 // Icon resting opacity: hidden for an action, dimmed for evidence there's a page, full for the selected row.
@@ -205,21 +251,21 @@ const restingClass = (action: RowAction, path: string): string =>
                      workspace). The root draws no row of its own, so this is the only place its input can sit. -->
                 <div v-if="edit.kind === 'creating' && edit.dir === rootDir" class="flex flex-col" style="padding-left: 0.5rem">
                     <div class="flex items-center gap-1.5 py-1 pr-2">
-                    <span class="w-[0.7rem] shrink-0"></span>
-                    <Icon class="shrink-0 text-2xs text-muted" :name="edit.type === 'dir' ? 'folder' : 'file'" />
-                    <input
-                        v-model="draft"
-                        type="text"
-                        :aria-label="edit.type === 'dir' ? t(`workspace.workspaceTree.newFolderName`) : t(`workspace.workspaceTree.newFileName`)"
-                        class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
-                        :class="createError !== undefined ? 'ui-field-error-box' : ''"
-                        @click.stop
-                        @keydown.enter.prevent="endEdit('commit')"
-                        @keydown.esc.prevent="endEdit('cancel')"
-                        @blur="endEdit('blur')"
-                        @vue:mounted="focusField"
-                    />
-                </div>
+                        <span class="w-[0.7rem] shrink-0"></span>
+                        <Icon class="shrink-0 text-2xs text-muted" :name="edit.type === 'dir' ? 'folder' : 'file'" />
+                        <input
+                            v-model="draft"
+                            type="text"
+                            :aria-label="edit.type === 'dir' ? t(`shared.newFolderName`) : t(`shared.newFileName`)"
+                            class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
+                            :class="createError !== undefined ? 'ui-field-error-box' : ''"
+                            @click.stop
+                            @keydown.enter.prevent="endEdit('commit')"
+                            @keydown.esc.prevent="endEdit('cancel')"
+                            @blur="endEdit('blur')"
+                            @vue:mounted="focusField"
+                        />
+                    </div>
                     <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
                 </div>
             </div>
@@ -237,194 +283,199 @@ const restingClass = (action: RowAction, path: string): string =>
                  scrollbar still measures the whole tree. -->
             <div class="relative" :style="{ height: `${treeHeight}px` }">
                 <template v-for="{ row, top } in painted" :key="'more' in row ? row.key : row.entry.path">
-                <div
-                    v-if="'more' in row"
-                    class="absolute inset-x-0 flex items-center gap-1.5 pr-2 text-2xs italic text-subtle select-none"
-                    :style="{ top: `${top}px`, height: `${rowHeight}px`, paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
-                    v-tooltip.top="t(`workspace.workspaceTree.searchCtrlP`)"
-                >
-                    <span class="w-[0.7rem] shrink-0"></span>
-                    <span class="min-w-0 flex-1 truncate">{{
-                        t(`workspace.workspaceTree.moreItems`, { count: row.more.toLocaleString() }, row.more)
-                    }}</span>
-                </div>
-                <template v-else>
-                    <button
-                        :ref="(el) => setRowEl(row.entry.path, el)"
-                        type="button"
-                        role="treeitem"
-                        :aria-selected="selection.has(row.entry.path)"
-                        :aria-expanded="expandable(row) ? row.isExpanded : undefined"
-                        :aria-disabled="notYetOpenable(row) || undefined"
-                        :tabindex="tabbablePath === row.entry.path ? 0 : -1"
-                        :data-drop-dir="dropTargetOf(row)"
-                        class="ui-row-select group absolute inset-x-0 flex items-center gap-1.5 pr-2 text-left text-[0.8125rem]"
-                        :class="{
-                            'ui-row-select-on': selection.has(row.entry.path),
-                            'ui-row-select-pointed': row.entry.path === pointedBarren,
-                            'ui-row-select-drop': dropLit(row.entry.path),
-                            'ui-row-select-changed': isRecentlyChanged(row.entry.path),
-                            'opacity-50': clipboard?.mode === 'cut' && clipboard.paths.includes(row.entry.path),
-                            'opacity-40': carried(row.entry.path),
-                            'ui-row-select-arriving': pending(row.entry.path),
-                        }"
-                        v-tooltip.right="provisionalTooltip(pendingRow(row.entry.path))"
-                        :style="{ top: `${top}px`, height: `${rowHeight}px`, paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
-                        @click="onRowClick($event, row)"
-                        @dblclick="onRowDblClick(row)"
-                        @contextmenu.prevent.stop="openMenu($event, row.entry)"
-                        @pointerdown="onRowPointerDown($event, row)"
-                        @dragstart.prevent
-                        @dragover="onRowDragOver($event, row)"
-                        @dragleave="onRowDragLeave(row)"
-                        @drop="onRowDrop($event, row)"
-                    >
-                        <!-- Locked and empty folders have no expandable child. -->
-                        <span
-                            v-if="expandable(row)"
-                            class="tree-chevron relative flex w-[0.7rem] shrink-0 items-center justify-center self-stretch"
-                            @click="onChevronClick($event, row)"
-                        >
-                            <Icon class="text-[0.6rem] text-subtle" :name="row.isExpanded ? 'chevron-down' : 'chevron-right'" />
-                        </span>
-                        <span v-else class="w-[0.7rem] shrink-0"></span>
-                        <!-- Row icons use explorer sizing; locked rows show a padlock. -->
-                        <span
-                            class="flex shrink-0 items-center justify-center"
-                            :class="treat(row).slotClass"
-                            v-tooltip.right="isLockedWorkspacePath(row.entry.path) ? t(`workspace.workspaceTree.keptPrivateBySandbox`) : undefined"
-                        >
-                            <Icon :name="treat(row).icon" :class="[treat(row).sizeClass, treat(row).colorClass]" />
-                        </span>
-                        <input
-                            v-if="edit.kind === 'renaming' && edit.path === row.entry.path"
-                            v-model="draft"
-                            type="text"
-                            class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
-                            @click.stop
-                            @keydown.enter.prevent="endEdit('commit')"
-                            @keydown.esc.prevent="endEdit('cancel')"
-                            @blur="endEdit('blur')"
-                            @vue:mounted="focusField"
-                        />
-                        <!-- Collapsed barren chains act as one selectable path. -->
-                        <span
-                            v-else
-                            class="min-w-0 flex-1 truncate"
-                            :class="[
-                                row.entry.ignored || row.barren || isLockedWorkspacePath(row.entry.path) || deadLink(row.entry) || pending(row.entry.path)
-                                    ? 'text-subtle'
-                                    : 'text-content/90',
-                                // Out of the persona being read as: dimmed FURTHER, and only while a lens is on.
-                                // Opacity rather than a colour, so it stacks on whatever the row already was:
-                                // an ignored row outside the fence should read as both, not as one of the two.
-                                refused(row.entry.path) ? 'opacity-40' : '',
-                            ]"
-                            >{{ row.chain !== undefined ? row.chain.join(" / ") : row.entry.name }}</span
-                        >
-                        <!-- Symlink badge after the name, since the row already wears the target's icon; hover shows where it points. -->
-                        <Icon
-                            v-if="row.entry.link !== undefined"
-                            :name="deadLink(row.entry) ? 'link-broken' : 'link'"
-                            aria-hidden="true"
-                            class="shrink-0 text-2xs"
-                            :class="deadLink(row.entry) ? 'text-warning' : 'text-subtle'"
-                            v-tooltip.right="linkTooltip(row.entry.link)"
-                        />
-                        <!-- What the sandbox does with this entry, which its name doesn't say (specialPaths.ts); hover gives the rule. -->
-                        <span
-                            v-if="specialChip(row.entry.path, words)"
-                            class="ui-status-pill shrink-0 text-2xs font-medium"
-                            :class="
-                                specialChip(row.entry.path, words)?.tone === `warning` ? `bg-warning/10 text-warning` : `bg-subtle/10 text-subtle`
-                            "
-                            v-tooltip.right="specialChip(row.entry.path, words)?.tooltip"
-                            >{{ specialChip(row.entry.path, words)?.label }}</span
-                        >
-                        <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
-                        <Icon
-                            v-if="row.entry.type === 'dir' && lazyLoading.has(row.entry.path)"
-                            name="spinner"
-                            :spin="true"
-                            aria-hidden="true"
-                            class="shrink-0 text-2xs text-subtle"
-                        />
-                        <!-- Still on its way in: sending, or on disk with the workspace listing yet to catch up. -->
-                        <Icon
-                            v-if="pendingRow(row.entry.path)?.state === 'failed'"
-                            name="exclamation-triangle"
-                            aria-hidden="true"
-                            class="shrink-0 text-2xs text-danger"
-                        />
-                        <Icon
-                            v-else-if="pending(row.entry.path)"
-                            name="spinner"
-                            :spin="true"
-                            aria-hidden="true"
-                            class="shrink-0 text-2xs text-subtle"
-                        />
-                        <!-- Row actions appear on hover or selection and use the row handlers. -->
-                        <Icon
-                            v-for="action in row.entry.type === 'dir' ? actionsFor(row.entry.path) : []"
-                            :key="action.id"
-                            :name="action.icon"
-                            aria-hidden="true"
-                            class="shrink-0 cursor-pointer text-2xs text-subtle transition-opacity hover:text-content group-hover:pointer-events-auto group-hover:opacity-100 group-focus:pointer-events-auto group-focus:opacity-100"
-                            :class="restingClass(action, row.entry.path)"
-                            v-tooltip.right="action.tooltip"
-                            @click.stop="runAction(row.entry, action)"
-                        />
-                        <!-- Other members with this file open right now: live co-presence on the row. -->
-                        <PresenceAvatars
-                            v-if="row.entry.type === 'file'"
-                            :members="viewersOfPath(row.entry.path)"
-                            :label="t(`workspace.workspaceTree.viewingFile`)"
-                        />
-                        <!-- Transient "just changed" dot (a shape cue, not color-only) alongside the row tint. -->
-                        <Icon
-                            name="circle-fill"
-                            v-if="isRecentlyChanged(row.entry.path)"
-                            aria-hidden="true"
-                            class="shrink-0 text-[0.4rem] text-warning"
-                        />
-                    </button>
-                    <!-- Phantom create row as the first child of the target dir (sorted position lands on refetch).
-                         Sits in the height its anchor row was given for it, so the rows below stay where they are. -->
                     <div
-                        v-if="edit.kind === 'creating' && edit.dir === row.entry.path"
-                        class="absolute inset-x-0 flex flex-col"
-                        :style="{
-                            top: `${top + rowHeight}px`,
-                            height: `${createBlock}px`,
-                            paddingLeft: `${0.5 + (row.depth + 1) * 0.75}rem`,
-                        }"
+                        v-if="'more' in row"
+                        class="absolute inset-x-0 flex items-center gap-1.5 pr-2 text-2xs italic text-subtle select-none"
+                        :style="{ top: `${top}px`, height: `${rowHeight}px`, paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
+                        v-tooltip.top="t(`workspace.workspaceTree.searchCtrlP`)"
                     >
-                        <div class="flex items-center gap-1.5 py-1 pr-2">
-                            <span class="w-[0.7rem] shrink-0"></span>
-                            <span class="flex shrink-0 items-center justify-center" :class="explorerTreatment(explorerStyle, '', edit.type, false, false).slotClass">
-                                <Icon
-                                    :name="edit.type === 'dir' ? 'folder' : 'file'"
-                                    :class="[explorerTreatment(explorerStyle, '', edit.type, false, false).sizeClass, 'text-muted']"
-                                />
+                        <span class="w-[0.7rem] shrink-0"></span>
+                        <span class="min-w-0 flex-1 truncate">{{
+                            t(`workspace.workspaceTree.moreItems`, { count: row.more.toLocaleString() }, row.more)
+                        }}</span>
+                    </div>
+                    <template v-else>
+                        <button
+                            :ref="(el) => setRowEl(row.entry.path, el)"
+                            type="button"
+                            role="treeitem"
+                            :aria-selected="selection.has(row.entry.path)"
+                            :aria-expanded="expandable(row) ? row.isExpanded : undefined"
+                            :aria-disabled="notYetOpenable(row) || undefined"
+                            :tabindex="tabbablePath === row.entry.path ? 0 : -1"
+                            :data-drop-dir="dropTargetOf(row)"
+                            class="ui-row-select group absolute inset-x-0 flex items-center gap-1.5 pr-2 text-left text-[0.8125rem]"
+                            :class="{
+                                'ui-row-select-on': selection.has(row.entry.path),
+                                'ui-row-select-pointed': row.entry.path === pointedBarren,
+                                'ui-row-select-drop': dropLit(row.entry.path),
+                                'ui-row-select-changed': isRecentlyChanged(row.entry.path),
+                                'opacity-50': clipboard?.mode === 'cut' && clipboard.paths.includes(row.entry.path),
+                                'opacity-40': carried(row.entry.path),
+                                'ui-row-select-arriving': pending(row.entry.path),
+                            }"
+                            v-tooltip.right="provisionalTooltip(pendingRow(row.entry.path))"
+                            :style="{ top: `${top}px`, height: `${rowHeight}px`, paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
+                            @click="onRowClick($event, row)"
+                            @dblclick="onRowDblClick(row)"
+                            @contextmenu.prevent.stop="openMenu($event, row.entry)"
+                            @pointerdown="onPointerDown($event, row.entry.path)"
+                            @dragstart.prevent
+                            @dragover="onDragOver($event, dropDirOf(row))"
+                            @dragleave="onDragLeave($event, dropDirOf(row))"
+                            @drop="onDrop($event, dropDirOf(row))"
+                        >
+                            <!-- Locked and empty folders have no expandable child. -->
+                            <span
+                                v-if="expandable(row)"
+                                class="tree-chevron relative flex w-[0.7rem] shrink-0 items-center justify-center self-stretch"
+                                @click="onChevronClick($event, row)"
+                            >
+                                <Icon class="text-[0.6rem] text-subtle" :name="row.isExpanded ? 'chevron-down' : 'chevron-right'" />
+                            </span>
+                            <span v-else class="w-[0.7rem] shrink-0"></span>
+                            <!-- Row icons use explorer sizing; locked rows show a padlock. -->
+                            <span
+                                class="flex shrink-0 items-center justify-center"
+                                :class="treat(row).slotClass"
+                                v-tooltip.right="isLockedWorkspacePath(row.entry.path) ? t(`shared.keptPrivateBySandbox`) : undefined"
+                            >
+                                <Icon :name="treat(row).icon" :class="[treat(row).sizeClass, treat(row).colorClass]" />
                             </span>
                             <input
+                                v-if="edit.kind === 'renaming' && edit.path === row.entry.path"
                                 v-model="draft"
                                 type="text"
-                                :aria-label="
-                                    edit.type === 'dir' ? t(`workspace.workspaceTree.newFolderName`) : t(`workspace.workspaceTree.newFileName`)
-                                "
                                 class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
-                                :class="createError !== undefined ? 'ui-field-error-box' : ''"
                                 @click.stop
                                 @keydown.enter.prevent="endEdit('commit')"
                                 @keydown.esc.prevent="endEdit('cancel')"
                                 @blur="endEdit('blur')"
                                 @vue:mounted="focusField"
                             />
+                            <!-- Collapsed barren chains act as one selectable path. -->
+                            <span
+                                v-else
+                                class="min-w-0 flex-1 truncate"
+                                :class="[
+                                    row.entry.ignored ||
+                                    row.barren ||
+                                    isLockedWorkspacePath(row.entry.path) ||
+                                    deadLink(row.entry) ||
+                                    pending(row.entry.path)
+                                        ? 'text-subtle'
+                                        : 'text-content/90',
+                                    // Out of the persona being read as: dimmed FURTHER, and only while a lens is on.
+                                    // Opacity rather than a colour, so it stacks on whatever the row already was:
+                                    // an ignored row outside the fence should read as both, not as one of the two.
+                                    refused(row.entry.path) ? 'opacity-40' : '',
+                                ]"
+                                >{{ row.chain !== undefined ? row.chain.join(" / ") : row.entry.name }}</span
+                            >
+                            <!-- Symlink badge after the name, since the row already wears the target's icon; hover shows where it points. -->
+                            <Icon
+                                v-if="row.entry.link !== undefined"
+                                :name="deadLink(row.entry) ? 'link-broken' : 'link'"
+                                aria-hidden="true"
+                                class="shrink-0 text-2xs"
+                                :class="deadLink(row.entry) ? 'text-warning' : 'text-subtle'"
+                                v-tooltip.right="linkTooltip(row.entry.link)"
+                            />
+                            <!-- What the sandbox does with this entry, which its name doesn't say (specialPaths.ts); hover gives the rule. -->
+                            <span
+                                v-if="specialChip(row.entry.path, words)"
+                                class="ui-status-pill shrink-0 text-2xs font-medium"
+                                :class="
+                                    specialChip(row.entry.path, words)?.tone === `warning` ? `bg-warning/10 text-warning` : `bg-subtle/10 text-subtle`
+                                "
+                                v-tooltip.right="specialChip(row.entry.path, words)?.tooltip"
+                                >{{ specialChip(row.entry.path, words)?.label }}</span
+                            >
+                            <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
+                            <Icon
+                                v-if="row.entry.type === 'dir' && lazyLoading.has(row.entry.path)"
+                                name="spinner"
+                                :spin="true"
+                                aria-hidden="true"
+                                class="shrink-0 text-2xs text-subtle"
+                            />
+                            <!-- Still on its way in: sending, or on disk with the workspace listing yet to catch up. -->
+                            <Icon
+                                v-if="pendingRow(row.entry.path)?.state === 'failed'"
+                                name="exclamation-triangle"
+                                aria-hidden="true"
+                                class="shrink-0 text-2xs text-danger"
+                            />
+                            <Icon
+                                v-else-if="pending(row.entry.path)"
+                                name="spinner"
+                                :spin="true"
+                                aria-hidden="true"
+                                class="shrink-0 text-2xs text-subtle"
+                            />
+                            <!-- Row actions appear on hover or selection and use the row handlers. -->
+                            <Icon
+                                v-for="action in row.entry.type === 'dir' ? actionsFor(row.entry.path) : []"
+                                :key="action.id"
+                                :name="action.icon"
+                                aria-hidden="true"
+                                class="shrink-0 cursor-pointer text-2xs text-subtle transition-opacity hover:text-content group-hover:pointer-events-auto group-hover:opacity-100 group-focus:pointer-events-auto group-focus:opacity-100"
+                                :class="restingClass(action, row.entry.path)"
+                                v-tooltip.right="action.tooltip"
+                                @click.stop="runAction(row.entry, action)"
+                            />
+                            <!-- Other members with this file open right now: live co-presence on the row. -->
+                            <PresenceAvatars
+                                v-if="row.entry.type === 'file'"
+                                :members="viewersOfPath(row.entry.path)"
+                                :label="t(`workspace.workspaceTree.viewingFile`)"
+                            />
+                            <!-- Transient "just changed" dot (a shape cue, not color-only) alongside the row tint. -->
+                            <Icon
+                                name="circle-fill"
+                                v-if="isRecentlyChanged(row.entry.path)"
+                                aria-hidden="true"
+                                class="shrink-0 text-[0.4rem] text-warning"
+                            />
+                        </button>
+                        <!-- Phantom create row as the first child of the target dir (sorted position lands on refetch).
+                         Sits in the height its anchor row was given for it, so the rows below stay where they are. -->
+                        <div
+                            v-if="edit.kind === 'creating' && edit.dir === row.entry.path"
+                            class="absolute inset-x-0 flex flex-col"
+                            :style="{
+                                top: `${top + rowHeight}px`,
+                                height: `${createBlock}px`,
+                                paddingLeft: `${0.5 + (row.depth + 1) * 0.75}rem`,
+                            }"
+                        >
+                            <div class="flex items-center gap-1.5 py-1 pr-2">
+                                <span class="w-[0.7rem] shrink-0"></span>
+                                <span
+                                    class="flex shrink-0 items-center justify-center"
+                                    :class="explorerTreatment(explorerStyle, '', edit.type, false, false).slotClass"
+                                >
+                                    <Icon
+                                        :name="edit.type === 'dir' ? 'folder' : 'file'"
+                                        :class="[explorerTreatment(explorerStyle, '', edit.type, false, false).sizeClass, 'text-muted']"
+                                    />
+                                </span>
+                                <input
+                                    v-model="draft"
+                                    type="text"
+                                    :aria-label="edit.type === 'dir' ? t(`shared.newFolderName`) : t(`shared.newFileName`)"
+                                    class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
+                                    :class="createError !== undefined ? 'ui-field-error-box' : ''"
+                                    @click.stop
+                                    @keydown.enter.prevent="endEdit('commit')"
+                                    @keydown.esc.prevent="endEdit('cancel')"
+                                    @blur="endEdit('blur')"
+                                    @vue:mounted="focusField"
+                                />
+                            </div>
+                            <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
                         </div>
-                        <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
-                    </div>
-                </template>
+                    </template>
                 </template>
             </div>
             <p v-if="visibleRows.length === 0 && edit.kind !== 'creating'" class="px-3 py-3 text-center text-2xs text-subtle">
@@ -528,7 +579,7 @@ const restingClass = (action: RowAction, path: string): string =>
                 <span class="truncate text-content">{{ basename(item) }}</span>
                 <span v-if="parentDir(item) !== ''" class="min-w-0 truncate text-xs text-subtle">{{ parentDir(item) }}</span>
             </template>
-            <p class="mt-3 text-xs text-muted">{{ t(`workspace.workspaceTree.cantUndone`) }}</p>
+            <p class="mt-3 text-xs text-muted">{{ t(`shared.cantUndone`) }}</p>
         </ConfirmDialog>
     </div>
 </template>

@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
-import { afterEach, expect, test } from "bun:test";
 import type { Logger } from "pino";
 import { createDiskStorage, type DiskStorageOptions } from "./disk-storage.js";
 import type { RunningProgram } from "./running-programs.js";

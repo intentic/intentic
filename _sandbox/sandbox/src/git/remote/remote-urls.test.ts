@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { parseRemote } from "./remote-urls.js";
 
 test("parseRemote covers the three remote forms git writes", () => {

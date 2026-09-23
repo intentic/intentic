@@ -1,5 +1,4 @@
 import type { OauthAccount } from "@intentic/sandbox-contract";
-import { describe, it, expect } from "bun:test";
 import { accountBadge, shortAccount } from "./accountChip";
 
 const account = (over: Partial<OauthAccount> & Pick<OauthAccount, "id" | "label">): OauthAccount => ({ connectedAt: 1, ...over });

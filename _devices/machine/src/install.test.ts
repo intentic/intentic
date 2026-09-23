@@ -1,4 +1,3 @@
-import { describe, it, expect, mock } from "bun:test";
 import { UPGRADE_ENV } from "./environments/machine-upgrade.js";
 import { addToWindowsPathValue, selfUpdateBeforeSetup, type SelfUpdateIo } from "./install.js";
 import type { UpgradeOutcome } from "./upgrade.js";
@@ -72,7 +71,7 @@ describe("selfUpdateBeforeSetup", () => {
     });
 
     it("says nothing and continues when already current", async () => {
-        const out = mock();
+        const out = jest.fn();
         const t = io();
         await selfUpdateBeforeSetup(t.io, {}, ["sync", "setup"], out);
         expect(t.upgraded()).toBe(true);

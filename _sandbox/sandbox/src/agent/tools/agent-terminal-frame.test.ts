@@ -1,7 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { test, expect, afterEach, mock } from "bun:test";
 import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
 import { type HarnessRequest, runAgent } from "../run/agent.js";
 import type { QueryFn } from "../run/sdk-stream.js";
@@ -14,7 +13,9 @@ const actors = memoryFleet().conversations;
 const cards = parkedCards(actors);
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
-mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }) }));
+jest.mock("../prompt/preset-prompt.js", () => ({
+    presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }),
+}));
 
 // Force the tmux gate ON. In CI the wrapper is absent so tmuxRunEnabled() is false and no `terminal` frame is
 // emitted (agent.test.ts covers that gated-off path); here we stub existsSync true FOR THE WRAPPER'S PATH ONLY
@@ -22,7 +23,7 @@ mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () 
 // emit is exercised. Only the gate's own path is lied about because everything else in this test's import
 // graph deserves the truth: version.ts finds its package.json by walking up with existsSync, and an
 // always-true stub stops that walk at src/ and fails the whole suite on a module far from the tmux gate.
-mock.module("node:fs", async () => {
+jest.mock("node:fs", async () => {
     const actual = fsOriginal;
     return {
         ...actual,

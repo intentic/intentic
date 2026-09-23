@@ -64,7 +64,7 @@ export { default as Icon } from "./components/primitives/Icon.vue";
 // Shared image viewer (zoom, pan, transparency checkerboard): the workspace file viewer, the SVG preview and both
 // sides of a binary diff all use it.
 export { default as ImageView } from "./components/primitives/ImageView.vue";
-export { type ImageViewState, isRenderableImage } from "./components/primitives/imageView.js";
+export { type ImageViewState } from "./components/primitives/imageView.js";
 // The app's one rename: a name in place, with the field, the affordance and the failure state it takes. The state
 // machine behind it is at `@intentic/ui/inline-rename`, for the surfaces that draw their own field (a tab strip, a
 // card that must not open while it is being renamed) and must consult the edit.
@@ -244,14 +244,9 @@ export { sinceOf, timeWindows, type TimeWindow, timeWindowWords, withinWindow } 
 // barrel's component graph. Icon names live at `@intentic/ui/icons` for the same reason; render with <Icon name="…">.
 export { type IconName } from "./icons/iconSets.js";
 export { type ExplorerStyle, explorerStyles } from "./icons/explorerStyle.js";
-export {
-    categoryForEntry,
-    explorerColorClass,
-    type ExplorerTreatment,
-    explorerTreatment,
-    type FileCategory,
-    iconForEntry,
-} from "./icons/fileIcon.js";
+export { explorerColorClass, type ExplorerTreatment, explorerTreatment, iconForEntry } from "./icons/fileIcon.js";
+// What a file is by its name; pure modules take it from `@intentic/ui/file-format` without this barrel.
+export { type FileFormat, formatOf } from "./lib/fileFormat.js";
 export { useExplorerStyle } from "./composables/useExplorerStyle.js";
 export { commandLang, type CommandOs, osOptions, useOsPreference } from "./composables/useOsPreference.js";
 export { type Device, useDevice } from "./composables/useDevice.js";
@@ -271,6 +266,7 @@ export { type StickyTop, useStickyTop } from "./composables/useStickyTop.js";
 export { useRailMemory } from "./composables/useRailMemory.js";
 // Shared wall clock and mutation-report shape, for any view with a live readout or a user-facing mutation.
 export { useNow } from "./composables/useNow.js";
+export { useLatest } from "./composables/useLatest.js";
 // Gates when a loading placeholder may appear; a fast response resolves within the reveal delay so nothing
 // flashes for a normal round trip.
 export { useLoadingReveal } from "./composables/loadingReveal.js";

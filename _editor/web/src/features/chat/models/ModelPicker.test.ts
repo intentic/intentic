@@ -4,23 +4,22 @@
 // - the door to connecting one lives here, since nothing else in the picker offers it
 import "@intentic/testing/dom";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
 
 // Catalogs are daemon-owned and refreshed on open; mocked to no-ops so the mount reflects only seeded state.
-mock.module(`./useChat-catalog`, () => ({
+jest.mock(`./useChat-catalog`, () => ({
     loadAllProviderModels: () => Promise.resolve(),
     loadProviderModels: () => Promise.resolve(),
 }));
-mock.module(`../accounts/useChat-accounts`, () => ({ refreshConnections: () => Promise.resolve() }));
+jest.mock(`../accounts/useChat-accounts`, () => ({ refreshConnections: () => Promise.resolve() }));
 // The runtime-health probe is the daemon's; silent here, which is its own "not probed yet" state.
-mock.module(`../../sandbox/overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ runtimeIssue: () => undefined }) }));
-mock.module(`vue-router`, () => ({
+jest.mock(`../../sandbox/overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ runtimeIssue: () => undefined }) }));
+jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
-    useRouter: () => ({ push: mock() }) as never,
+    useRouter: () => ({ push: jest.fn() }) as never,
     RouterLink: RouterLinkStub as never,
 }));
 

@@ -1,5 +1,4 @@
 import { type GateVerdict, GateVerdictSchema } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import { clientTimeoutMs, dialOf, exitOf, parseArgs, readVerdict, WAIT_DEFAULT_S } from "./gate.js";
 
 test("a URL, some words, and nothing else is a call with the defaults", () => {

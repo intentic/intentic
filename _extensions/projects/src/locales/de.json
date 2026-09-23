@@ -11,7 +11,6 @@
         "everyProjectRepositoryIn": "Jedes Projekt ist ein Repository in diesem Workspace. Öffnen Sie eines, und die Dateien, die Agenten und die Prüfungen verengen sich darauf.",
         "folder": "Ordner: {slug}",
         "freshRepositoryReadyAgent": "Ein frisches Repository, bereit für einen Agenten.",
-        "name": "Name",
         "newProject": "Neues Projekt",
         "noDescriptionInReadme": "Noch keine Beschreibung in seiner README.",
         "open": "{name} öffnen",

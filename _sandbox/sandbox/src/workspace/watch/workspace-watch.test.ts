@@ -1,6 +1,5 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
-import { test, expect, afterEach, jest } from "bun:test";
 import {
     announceUnwatchedWrite,
     createPathBatcher,

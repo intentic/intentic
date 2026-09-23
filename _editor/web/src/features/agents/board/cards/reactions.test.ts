@@ -1,5 +1,4 @@
 import type { AgentReaction } from "@intentic/sandbox-contract";
-import { describe, it, expect } from "bun:test";
 import { PICKER_EMOJI, QUICK_EMOJI, reactionChips, withPress } from "./reactions";
 
 const reader = { me: `ada@example.com`, you: `you` };
@@ -85,9 +84,16 @@ describe(`withPress`, () => {
     });
 
     it(`takes the chip away with its last wearer`, () => {
-        expect(withPress([{ emoji: `👍`, by: [{ ...me, at: 2_000 }] }, { emoji: `🚀`, by: [bob] }], { emoji: `👍`, on: false }, me)).toEqual([
-            { emoji: `🚀`, by: [bob] },
-        ]);
+        expect(
+            withPress(
+                [
+                    { emoji: `👍`, by: [{ ...me, at: 2_000 }] },
+                    { emoji: `🚀`, by: [bob] },
+                ],
+                { emoji: `👍`, on: false },
+                me,
+            ),
+        ).toEqual([{ emoji: `🚀`, by: [bob] }]);
     });
 
     // Pressing a mark the reader already wears (a second window caught up first) must not wear it twice.

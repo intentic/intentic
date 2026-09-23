@@ -1,5 +1,5 @@
 import type { AdminCosts } from "@intentic/api-contract";
-import { FLY_VOLUME_GB_USD, hostedTier, isHostedTierId } from "@intentic/constants";
+import { FLY_VOLUME_GB_USD, hostedTier } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { trialEnabled } from "../trial/trial-pool.js";
@@ -30,16 +30,15 @@ const costByTier = (
     }
     return machines
         .map((row) => {
-            const rung = isHostedTierId(row.tier) ? hostedTier(row.tier) : undefined;
+            const rung = hostedTier(row.tier);
             const spent = totals.get(row.tier) ?? { minutes: 0, volumeGb: 0 };
-            // A rung this ladder no longer has is counted at nothing rather than guessed at.
-            const flyUsd = rung === undefined ? 0 : (spent.minutes / 60) * rung.flyHourUsd + spent.volumeGb * FLY_VOLUME_GB_USD;
+            const flyUsd = (spent.minutes / 60) * rung.flyHourUsd + spent.volumeGb * FLY_VOLUME_GB_USD;
             return {
                 tier: row.tier,
                 machines: row._count._all,
                 minutes: spent.minutes,
                 flyUsd: Math.round(flyUsd * 100) / 100,
-                priceUsd: (rung?.priceUsd ?? 0) * row._count._all,
+                priceUsd: rung.priceUsd * row._count._all,
             };
         })
         .sort((left, right) => right.flyUsd - left.flyUsd);

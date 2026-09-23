@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { z } from "zod";
 import { createMcpServer, type McpAuditEntry, textResult, tool } from "./peer-mcp-server.js";
 

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "bun:test";
 import { slugFor } from "./output.js";
 
 describe("slugFor", () => {

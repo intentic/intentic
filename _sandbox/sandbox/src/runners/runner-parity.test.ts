@@ -1,5 +1,4 @@
 import { runnerSlug, SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
 import { adoptDefinitionSettings } from "../portability/apply-definition.js";
 import { emitDefinitionToml, parseDefinitionToml, settingsDefinition } from "../portability/definition.js";

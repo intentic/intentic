@@ -15,7 +15,6 @@ import {
     windowsPathOf,
     wslPathOf,
 } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 
 // The join behind "one PC, two doors": environments of one card are one computer by construction, and a distro with a
 // card of its own joins the machine whose hostname it carries, which is the one fact that makes a name safe to join

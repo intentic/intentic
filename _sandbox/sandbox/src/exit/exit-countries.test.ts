@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { countryLocale, countryName, isCountryCode, rankCountries, TOR_FALLBACK, VPNGATE_FALLBACK } from "./exit-countries.js";
 
 test("country codes render as names, case-insensitively, and never throw", () => {

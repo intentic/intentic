@@ -3,7 +3,6 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { setAgents } from "../fleet/useAgents-registry";
@@ -73,10 +72,10 @@ beforeEach(() => {
         });
         return {
             onfinish: null,
-            cancel: mock(),
-            play: mock(),
-            pause: mock(),
-            finish: mock(),
+            cancel: jest.fn(),
+            play: jest.fn(),
+            pause: jest.fn(),
+            finish: jest.fn(),
         } as unknown as Animation;
     };
 });
@@ -94,7 +93,7 @@ it(`animates cross-lane flight with elevation and fast-deceleration easing when 
 
     // Stubs distinct lane coordinates for the cross-lane vector probe.
     let laneCalls = 0;
-    spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
+    jest.spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
         const lane = this.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`];
         laneCalls += 1;
         if (lane === `active`) {
@@ -131,17 +130,17 @@ it(`skips translation physics when reduced motion is requested`, async () => {
         matches: query === `(prefers-reduced-motion: reduce)`,
         media: query,
         onchange: null,
-        addListener: mock(),
-        removeListener: mock(),
-        addEventListener: mock(),
-        removeEventListener: mock(),
-        dispatchEvent: mock(),
+        addListener: jest.fn(),
+        removeListener: jest.fn(),
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        dispatchEvent: jest.fn(),
     }));
 
     setAgents([agent(`a1`, `running`)], 1);
     await mountBoard();
 
-    spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
+    jest.spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
         const lane = this.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`];
         if (lane === `active`) {
             return { left: 400, top: 100, right: 600, bottom: 200, width: 200, height: 100, x: 400, y: 100, toJSON: () => ({}) };
@@ -163,7 +162,7 @@ it(`animates sibling reflow within the same lane when a neighboring card leaves`
     await mountBoard();
 
     // Sibling a2 starts at top: 220, then shifts up to top: 100 once a1 finishes.
-    spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
+    jest.spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
         const lane = this.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`];
         const label = this.getAttribute(`aria-label`) ?? ``;
         if (lane === `active`) {

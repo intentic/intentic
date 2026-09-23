@@ -1,4 +1,3 @@
-import { describe, test, expect } from "bun:test";
 import { notesOf } from "./docx.js";
 
 // mammoth's messages as they reach the notes: a template's worth of style warnings folds to one line, everything

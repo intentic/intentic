@@ -38,8 +38,6 @@
         "loop": "Boucle",
         "mute": "Couper le son",
         "muteM": "Couper le son (M)",
-        "pause": "Pause",
-        "pauseK": "Pause (K)",
         "pictureInPicture": "Image dans l'image",
         "pictureInPictureP": "Image dans l'image (P)",
         "play": "Lire",
@@ -48,8 +46,7 @@
         "playbackSpeed2": "Vitesse de lecture (, et .)",
         "seek": "Se déplacer : {displayTime} sur {duration}",
         "spaceToPlayArrows": "{filename} : espace pour lire, flèches pour se déplacer, F pour le plein écran",
-        "unmute": "Rétablir le son",
-        "volume": "Volume"
+        "unmute": "Rétablir le son"
     },
     "odfSlidesViewer": {
         "presentationNoSlides": "Cette présentation n'a aucune diapositive."
@@ -68,7 +65,6 @@
         "sheetEmpty": "Cette feuille est vide."
     },
     "svgViewer": {
-        "preview": "Aperçu",
-        "source": "Source"
+        "preview": "Aperçu"
     }
 }

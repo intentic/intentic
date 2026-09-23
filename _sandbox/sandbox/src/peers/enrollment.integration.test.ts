@@ -3,7 +3,6 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { describe, it, expect } from "bun:test";
 import { enrollments, pairings } from "./enrollment.js";
 
 // Pins the shared mechanic four doors use, not any one door's specifics: which pairings get written down at all, and

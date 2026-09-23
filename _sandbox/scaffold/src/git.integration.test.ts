@@ -3,7 +3,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { test, expect } from "bun:test";
 import type { GitRunner } from "./exec.js";
 import { gitClone, gitCommitAll, gitInit, gitStageAll, gitStatus, gitSync } from "./git.js";
 

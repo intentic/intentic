@@ -2,7 +2,6 @@ import { join, relative } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { INVENTORY_PATH } from "@intentic/sandbox-contract";
 import { CONFIG_FILE, REPO_ROLES } from "@intentic/scaffold";
-import { test, expect } from "bun:test";
 import { workspacePaths } from "./workspace.js";
 
 test("workspacePaths lays each role repo out directly under <root>", () => {

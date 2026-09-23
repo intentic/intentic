@@ -1,9 +1,8 @@
 import type { Disposable, ViewRegistration } from "@intentic/extension-api";
-import { describe, it, expect, afterEach, mock, spyOn } from "bun:test";
 import { ref } from "vue";
 
 // The registry's rail table asks who is reading (a guest gets two tiles); this is about warming, so everyone is the owner.
-mock.module(`../../../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest: ref(false) }) }));
+jest.mock(`../../../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest: ref(false) }) }));
 
 import { registerView } from "../../../core-views/registry";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -69,7 +68,7 @@ describe(`the extensions' wish list`, () => {
     });
 
     it(`contains one extension's broken wish list rather than losing everybody else's`, () => {
-        const noise = spyOn(console, `error`).mockImplementation(() => undefined);
+        const noise = jest.spyOn(console, `error`).mockImplementation(() => undefined);
         register(
             `ext-broken`,
             view(`broken`, () => {

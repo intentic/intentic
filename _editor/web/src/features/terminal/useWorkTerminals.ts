@@ -1,6 +1,7 @@
 import { sandboxRef } from "@intentic/extension-api";
 import { computed, type ComputedRef, type Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
+import { isWork } from "./terminalMeta";
 import { type TerminalSession, useTerminalsQuery } from "./terminalsQuery";
 import { importOrReload } from "../../router/staleChunk";
 
@@ -51,9 +52,6 @@ export const openWorkTerminal = (session: string): void => {
         (module) => module.useTerminalPanel().openFocused(session),
     );
 };
-
-const isWork = (session: TerminalSession): session is TerminalSession & { kind: "agent" | "job" } =>
-    session.kind === `agent` || session.kind === `job`;
 
 const toRow = (session: TerminalSession & { kind: "agent" | "job" }): WorkTerminalRow => ({
     session: session.name,

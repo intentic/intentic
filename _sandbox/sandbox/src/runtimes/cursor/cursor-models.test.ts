@@ -1,6 +1,5 @@
 import type { ModelListItem } from "@cursor/sdk";
 import { EFFORT_TIERS } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
 import {
     CURSOR_DEFAULT_MODEL,
     effortParameterOf,

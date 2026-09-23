@@ -119,7 +119,7 @@ onBeforeUnmount(hide);
                 <div class="ui-anchored-surface w-60 gap-3 px-3 py-2.5 text-left">
                     <!-- Age sits in the header, not the footer: every figure below is a floor once stale, qualifying the whole card. -->
                     <div class="flex items-baseline justify-between gap-2">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`common.usageRing.planLimits`) }}</span>
+                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`shared.planLimits`) }}</span>
                         <span class="shrink-0 text-2xs text-subtle">{{
                             t(`common.usageRing.measured`, { measuredAt: formatAge(headroom.measuredAt) })
                         }}</span>
@@ -144,13 +144,13 @@ onBeforeUnmount(hide);
                             />
                         </div>
                         <span v-if="pool.resetsAt !== undefined" class="text-2xs text-subtle">{{
-                            t(`common.usageRing.resets`, { resetsAt: formatReset(pool.resetsAt) })
+                            t(`shared.resets`, { resetsAt: formatReset(pool.resetsAt) })
                         }}</span>
                     </div>
 
                     <!-- Kept apart from the pools above: those are the plan's allowances, this is spend against them. -->
                     <div v-if="activity" class="mt-1 flex flex-col gap-1">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`common.usageRing.sandbox`) }}</span>
+                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`shared.sandbox`) }}</span>
                         <span class="text-xs leading-relaxed text-muted">{{ activity }}</span>
                     </div>
 

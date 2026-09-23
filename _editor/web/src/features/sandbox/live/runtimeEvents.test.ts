@@ -1,12 +1,11 @@
 import "@intentic/testing/dom";
 import { ref } from "vue";
-import { it, expect, beforeEach, mock, spyOn } from "bun:test";
 
 // Needs jsdom: the stream router's import chain reaches the app's environment read at module eval.
 
-mock.module("../../../router", () => ({ router: { push: mock() } }));
-mock.module("../../../app/analytics", () => ({ track: mock() }));
-mock.module("../client/useSandbox", () => {
+jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../client/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
@@ -14,12 +13,12 @@ mock.module("../client/useSandbox", () => {
 });
 // Every name the app's graph imports from the daemon client, since bun links an ESM import against exactly what
 // this factory returns; only the two below are ever called here.
-mock.module("../client/sandboxClient", () => ({
-    sandboxJson: mock(),
-    sandboxRequest: mock(),
-    sandboxBlob: mock(),
-    sandboxUpload: mock(),
-    sandboxError: mock(async () => new Error(`unused`)),
+jest.mock("../client/sandboxClient", () => ({
+    sandboxJson: jest.fn(),
+    sandboxRequest: jest.fn(),
+    sandboxBlob: jest.fn(),
+    sandboxUpload: jest.fn(),
+    sandboxError: jest.fn(async () => new Error(`unused`)),
 }));
 
 import { queryClient } from "../../../lib/queryPersistence";
@@ -34,10 +33,10 @@ const SANDBOX = `sbx-1`;
 
 // Which query keys were asked to refresh, spied rather than driven through a real cache.
 let invalidated: unknown[][];
-let invalidateSpy: ReturnType<typeof spyOn>;
+let invalidateSpy: ReturnType<typeof jest.spyOn>;
 beforeEach(() => {
     invalidated = [];
-    invalidateSpy = spyOn(queryClient, `invalidateQueries`).mockImplementation(async (filters) => {
+    invalidateSpy = jest.spyOn(queryClient, `invalidateQueries`).mockImplementation(async (filters) => {
         const resolved = typeof filters === `function` ? filters() : filters;
         invalidated.push([...(resolved?.queryKey ?? [])]);
     });

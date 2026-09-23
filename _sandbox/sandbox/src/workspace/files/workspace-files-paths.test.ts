@@ -1,4 +1,3 @@
-import { test, expect } from "bun:test";
 import { resolveWithin } from "./workspace-files-paths.js";
 
 test("resolveWithin returns the absolute path for a contained file", () => {

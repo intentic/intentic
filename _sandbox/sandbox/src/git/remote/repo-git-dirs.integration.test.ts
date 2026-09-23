@@ -3,7 +3,6 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { test, expect, afterEach } from "bun:test";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { createLogger } from "../../logger.js";
 import { workspacePaths } from "../../workspace/workspace.js";

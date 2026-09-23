@@ -2,7 +2,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, request as h1Request, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { type Duplex, duplexPair } from "node:stream";
-import { test, expect, beforeAll, afterAll } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { INITIAL_WINDOW_SIZE, openIngressSession, serveIngressSession } from "./ingress-protocol.js";
 

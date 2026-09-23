@@ -1,11 +1,10 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { type AgentEvent, RESUME_NOTES } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "bun:test";
-import type { LimitWay } from "../../models/limit-way.js";
+import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../../providers/agent-request.js";
-import { createTurnFrames, type WallChange } from "../frames/frame-reducers.js";
+import { createTurnFrames } from "../frames/frame-reducers.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
-import { daemonStopConversation, holdOf, settleTurn, type TurnEnd } from "./turn-settlement.js";
+import type { HeldTurn } from "../turn/turn-resume.js";
+import { daemonStopConversation, settleTurn, type TurnEnd } from "./turn-settlement.js";
 import { parkedCards } from "../../../agents/actor/parked-cards.js";
 import { memoryFleet } from "../../../testing.js";
 
@@ -23,20 +22,18 @@ const request: AgentRequest = {
 const input: TurnInput & { conversationId: string } = { prompt: "ship the parser", conversationId: "c-1" };
 const noCode = { state: "no-code", paths: [], check: undefined } as const;
 
-// A turn that walked `stream` and then had its walls set by classification; each case names what it is about.
-const ended = (stream: readonly AgentEvent[], change: Partial<Omit<TurnEnd, "frames">> = {}, walls: WallChange = {}): TurnEnd => {
+// A turn that walked `stream`, held as classification left it; each case names what it is about.
+const ended = (stream: readonly AgentEvent[], change: Partial<Omit<TurnEnd, "frames">> = {}, held?: HeldTurn): TurnEnd => {
     const frames = createTurnFrames(WORKSPACE_ROOT, undefined);
     for (const event of stream) {
         frames.note(event);
     }
-    frames.hit(walls);
+    frames.hold(held);
     return {
         input,
         provider: "claude",
-        account: "acct",
         attribution: { account: "acct" },
         request,
-        resumeArmed: false,
         spawnedChild: false,
         aborted: false,
         isolated: false,
@@ -48,8 +45,22 @@ const ended = (stream: readonly AgentEvent[], change: Partial<Omit<TurnEnd, "fra
     };
 };
 
-const edit: AgentEvent = { kind: "tool_call", id: "e", name: "Edit", category: "edit", status: "completed", locations: [{ path: "/work/src/parser.ts" }] };
-const check: AgentEvent = { kind: "tool_call", id: "t", name: "Bash", category: "execute", status: "in_progress", target: `pnpm test ${"x".repeat(250)}` };
+const edit: AgentEvent = {
+    kind: "tool_call",
+    id: "e",
+    name: "Edit",
+    category: "edit",
+    status: "completed",
+    locations: [{ path: "/work/src/parser.ts" }],
+};
+const check: AgentEvent = {
+    kind: "tool_call",
+    id: "t",
+    name: "Bash",
+    category: "execute",
+    status: "in_progress",
+    target: `pnpm test ${"x".repeat(250)}`,
+};
 const passed: AgentEvent = { kind: "tool_call_update", id: "t", status: "completed", content: [{ type: "text", text: "--- [exit 0, 1s]" }] };
 
 describe("a finished turn", () => {
@@ -60,7 +71,13 @@ describe("a finished turn", () => {
             edit,
             check,
             passed,
-            { kind: "todos", items: [{ content: "a", status: "completed" }, { content: "b", status: "pending" }] },
+            {
+                kind: "todos",
+                items: [
+                    { content: "a", status: "completed" },
+                    { content: "b", status: "pending" },
+                ],
+            },
             { kind: "compact", trigger: "auto" },
             { kind: "context_usage", tokens: 1_000, contextWindow: 200_000 },
             { kind: "usage", costUsd: 0.25, inputTokens: 100, numTurns: 1 },
@@ -110,7 +127,9 @@ describe("a finished turn", () => {
     });
 
     test("that failed before the provider answered is filed unbilled, with its code and sentence and no verdict", () => {
-        const end = ended([{ kind: "error", code: "claude-not-entitled", message: `not enabled ${"y".repeat(500)}` }], { input: { ...input, model: "" } });
+        const end = ended([{ kind: "error", code: "claude-not-entitled", message: `not enabled ${"y".repeat(500)}` }], {
+            input: { ...input, model: "" },
+        });
         expect(settleTurn(end).usage).toStrictEqual({
             provider: "claude",
             account: "acct",
@@ -133,7 +152,15 @@ describe("a finished turn", () => {
     });
 
     test("that was stopped is cancelled, whatever its frames said", () => {
-        const plan = settleTurn(ended([{ kind: "delta", text: "x" }, { kind: "error", message: "aborted" }], { aborted: true, provider: "codex" }));
+        const plan = settleTurn(
+            ended(
+                [
+                    { kind: "delta", text: "x" },
+                    { kind: "error", message: "aborted" },
+                ],
+                { aborted: true, provider: "codex" },
+            ),
+        );
         expect(plan.usage.outcome).toBe("cancelled");
         expect(plan.daemonStop.conversationId).toBeUndefined();
     });
@@ -158,102 +185,15 @@ describe("a finished turn", () => {
     });
 });
 
-describe("the resume records", () => {
-    test("remember a refused credential only when the frame promised its re-mint", () => {
-        const refused = { authRefused: true } as const;
-        const armed = { resumeArmed: true, request: { ...request, credential: { kind: "claude-oauth" as const, token: "tok-1" } } };
-        const session: AgentEvent[] = [{ kind: "session", sessionId: "s-1" }];
-        expect(settleTurn(ended(session, armed, refused)).authFailure).toStrictEqual({ input, sessionId: "s-1", account: "acct", refusedToken: "tok-1" });
-        expect(settleTurn(ended(session, { ...armed, resumeArmed: false }, refused)).authFailure).toBeUndefined();
-        expect(settleTurn(ended(session, { ...armed, account: undefined }, refused)).authFailure).toBeUndefined();
-        expect(settleTurn(ended(session, { resumeArmed: true }, refused)).authFailure).toBeUndefined();
-        expect(settleTurn(ended(session, armed)).authFailure).toBeUndefined();
+describe("the resume record", () => {
+    test("is the hold the last failure's classification left, as it stands", () => {
+        const held: HeldTurn = { input, reason: "stopped", sessionId: "s-1", ran: true, standing: noCode };
+        expect(settleTurn(ended([{ kind: "error", message: "died" }], {}, held)).hold).toStrictEqual({ kind: "held", held });
     });
 
-    test("hand an outage the turn's last session, and nothing without a conversation or an outage", () => {
-        const outage = { outageHit: true } as const;
-        expect(settleTurn(ended([{ kind: "session", sessionId: "s-9" }], {}, outage)).outageFailure).toStrictEqual({ input, sessionId: "s-9", provider: "claude" });
-        expect(settleTurn(ended([], { input: { prompt: "p" } }, outage)).outageFailure).toBeUndefined();
-        expect(settleTurn(ended([], {}, {})).outageFailure).toBeUndefined();
-    });
-});
-
-describe("a held turn", () => {
-    const way: LimitWay = { standing: noCode, checklist: [{ content: "a", status: "pending" }], handoffTokens: 40, move: { account: "sibling", carry: true } };
-
-    test("on a spent allowance is held whole, with the instant and the way the frame published", () => {
-        const end = ended([{ kind: "session", sessionId: "s-1" }], {}, { limit: { hit: true, reopens: 1_900_000_000, way } });
-        expect(holdOf(end)).toStrictEqual({
-            kind: "held",
-            held: { input, reason: "limit", sessionId: "s-1", ran: false, reopensAt: 1_900_000_000, ...way },
-        });
-    });
-
-    test("on a carried session a sibling refused outright is held for a fresh run on that account", () => {
-        const carried: TurnInput & { conversationId: string } = { prompt: `${RESUME_NOTES.carried}\n\nship it`, conversationId: "c-1", account: "sibling" };
-        const end = ended(
-            [
-                { kind: "todos", items: [{ content: "a", status: "pending" }] },
-                { kind: "error", message: "session not found" },
-            ],
-            { input: carried },
-        );
-        expect(holdOf(end)).toStrictEqual({
-            kind: "held",
-            held: {
-                input: carried,
-                reason: "limit",
-                ran: true,
-                carryRefused: true,
-                move: { account: "sibling", carry: false },
-                standing: noCode,
-                checklist: [{ content: "a", status: "pending" }],
-            },
-        });
-    });
-
-    test("on an uncoded death is held as stopped, with what it left behind", () => {
-        const end = ended([
-            { kind: "session", sessionId: "s-1" },
-            { kind: "delta", text: "looking" },
-            { kind: "context_usage", tokens: 9_000, contextWindow: 90_000 },
-            { kind: "error", message: "timed out" },
-        ]);
-        expect(holdOf(end)).toStrictEqual({
-            kind: "held",
-            held: { input, reason: "stopped", sessionId: "s-1", ran: true, standing: noCode, contextTokens: 9_000 },
-        });
-    });
-
-    // Held as `stopped`, the ladder would resume the very session that overflowed; `overflow` makes the pass open a fresh
-    // one, carrying what the dead turn's ledgers measured.
-    test("on a session past its window is held for a fresh re-run, never as stopped", () => {
-        const end = ended([
-            { kind: "session", sessionId: "s-1" },
-            { kind: "delta", text: "reading the log" },
-            { kind: "context_usage", tokens: 199_000, contextWindow: 200_000 },
-            { kind: "error", code: "context-overflow", message: "Prompt is too long" },
-        ]);
-        expect(holdOf(end)).toStrictEqual({
-            kind: "held",
-            held: { input, reason: "overflow", sessionId: "s-1", ran: true, standing: noCode, contextTokens: 199_000 },
-        });
-    });
-
-    // The fresh re-run overflowing too has no session left to try: nothing is held, so nothing fires again.
-    test("is not one for a fresh re-run that overflowed as well", () => {
-        const rerun: TurnInput & { conversationId: string } = { prompt: `${RESUME_NOTES.overflow}\n\nship the parser`, conversationId: "c-1" };
-        const end = ended([{ kind: "error", code: "context-overflow", message: "Prompt is too long" }], { input: rerun });
-        expect(holdOf(end)).toStrictEqual({ kind: "got-somewhere", conversationId: "c-1" });
-    });
-
-    test("is not one when the turn named its own remedy, which resets the ladder instead", () => {
-        expect(holdOf(ended([{ kind: "error", code: "context-window-too-small", message: "too small" }]))).toStrictEqual({ kind: "got-somewhere", conversationId: "c-1" });
-        expect(holdOf(ended([{ kind: "delta", text: "done" }]))).toStrictEqual({ kind: "got-somewhere", conversationId: "c-1" });
-    });
-
-    test("is nothing at all without a conversation", () => {
-        expect(holdOf(ended([{ kind: "error", message: "died" }], { input: { prompt: "p" } }))).toBeUndefined();
+    test("is proof the run got somewhere when nothing is held, and nothing at all without a conversation", () => {
+        expect(settleTurn(ended([{ kind: "delta", text: "done" }])).hold).toStrictEqual({ kind: "got-somewhere", conversationId: "c-1" });
+        expect(settleTurn(ended([{ kind: "error", message: "died" }], { input: { prompt: "p" } })).hold).toBeUndefined();
     });
 });
 

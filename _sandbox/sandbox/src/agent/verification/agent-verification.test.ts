@@ -1,6 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { describe, test, expect } from "bun:test";
 import { classifyCommand, createFrameLedger, createVerificationLedger } from "./agent-verification.js";
 
 describe("command classification", () => {

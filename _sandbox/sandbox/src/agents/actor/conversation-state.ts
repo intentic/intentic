@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentJob, AgentSummary, AgentWatch, TodoItem } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
-import type { AuthFailure, HeldTurn, OutageFailure } from "../../agent/run/turn/turn-resume.js";
+import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
 import type { CheckVerdict } from "../../agent/verification/turn-checks.js";
 import type { FailedEnding } from "../registry/agents-store.js";
 import { NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
@@ -89,20 +89,15 @@ export interface LandLease {
 // rungs of the stop ladder it inherited.
 export type HeldRecord = HeldTurn & { readonly recordedAt: number; readonly fired: boolean; readonly tries: number };
 
-// Turns a wall stranded, each waiting for a press or the resume pass's clock (turn-resume.ts). A new turn on the
-// conversation supersedes all three at once.
+// The turn a wall stranded, until a press or the resume pass (turn-resume.ts) fires it or a new turn supersedes it.
 export interface ResumeRecords {
-    readonly auth: (AuthFailure & { readonly recordedAt: number }) | undefined;
+    readonly held: HeldRecord | undefined;
     // A re-mint in flight, so a slow one isn't refired by the next pass underneath itself.
     readonly authFiring: boolean;
-    readonly outage: (OutageFailure & { readonly recordedAt: number }) | undefined;
-    readonly held: HeldRecord | undefined;
     // Rungs the stop ladder has spent without the run getting anywhere. Kept apart from `held`, which every turn start
     // wipes, since a count kept there would reset itself on the very fire it bounds.
     readonly stopTries: number;
 }
-
-export type StrandedKind = "auth" | "outage" | "held";
 
 // A steered message's before-state checkpoint, reserved the instant the turn accepts the message and filled once its
 // capture resolves: position is fixed at reserve time, so two captures finishing out of order can't swap messages.
@@ -157,7 +152,7 @@ export interface RestoredGrant {
     readonly grantedAt: number;
 }
 
-const NO_RESUME: ResumeRecords = { auth: undefined, authFiring: false, outage: undefined, held: undefined, stopTries: 0 };
+const NO_RESUME: ResumeRecords = { held: undefined, authFiring: false, stopTries: 0 };
 
 export const NO_USAGE: TurnUsage = { costUsd: 0, inputTokens: 0, outputTokens: 0, toolUses: 0, subagents: 0 };
 

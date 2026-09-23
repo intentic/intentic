@@ -267,13 +267,9 @@ model HostedMachine {
     // coming back cancels the notice and a later absence earns a fresh one — the stamp is what stops the
     // warning arriving every morning of the week it covers.
     idleWarnedAt DateTime?
-    /* WHICH RUNG OF THE LADDER THIS MACHINE WAS SOLD ON, and WHAT IT ACTUALLY IS. Both, because the two
-     * diverge: mid-migration the machine is still the old shape while the rung is already the new one, and an
-     * edit to the ladder (@intentic/constants hosted-tiers) changes what a rung means without touching a
-     * single machine. Every surface that tells someone what their machine is reads these columns; reading the
-     * config instead is how the Billing page came to report a shape nobody's machine necessarily had. */
-    tier      String   @default("free")
-    cpuKind   String   @default("shared")
+    // The rung sold and the shape actually running, which diverge mid-migration and after a ladder edit.
+    tier      String
+    cpuKind   String
     cpus      Int
     memoryMb  Int
     volumeGb  Int
@@ -379,8 +375,7 @@ model SandboxTrash {
     flyImage        String?
     baseImage       String?
     environmentHash String?
-    /* The rung and shape the machine was on. The disk held back from teardown is a particular size on a
-     * particular rung, so a restore has to put the machine back as it was rather than as a new one would be. */
+    // The machine's rung and shape, so a restore puts back the disk's own machine; null exactly when appName is.
     tier     String?
     cpuKind  String?
     cpus     Int?
@@ -438,7 +433,7 @@ model HostedPoolMachine {
     image     String
     state     String
     /* A pool machine's token is minted before claim so its deterministic app name is stable. */
-    token     String   @default("")
+    token     String
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 

@@ -1,3 +1,4 @@
+import { KINDS } from "../terminalMeta";
 import type { TerminalTab } from "../useTerminal";
 
 // Whether killing terminals asks first, and what the question names: a kill confirms only where there is something to
@@ -5,7 +6,7 @@ import type { TerminalTab } from "../useTerminal";
 // always running, and a guard keyed on that would fire on every close and teach the reader to click through it.
 
 // A session with work in it; a process tab's × closes a view, not a session, so it is never busy.
-export const hasWork = (tab: TerminalTab | undefined): boolean => tab !== undefined && tab.kind !== `process` && tab.command !== undefined;
+export const hasWork = (tab: TerminalTab | undefined): boolean => tab !== undefined && !KINDS[tab.kind].logs && tab.command !== undefined;
 
 const busyIn = (order: readonly TerminalTab[], names: readonly string[]): TerminalTab[] =>
     order.filter((tab) => names.includes(tab.name) && hasWork(tab));
