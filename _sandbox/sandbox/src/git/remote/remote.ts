@@ -2,7 +2,9 @@ import type { GitRemoteState } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { upstreamOf } from "../ops/branches.js";
 import type { ActionResult } from "../changes/changes-commits.js";
-import { gitFailureReason } from "../git.js";
+import { gitFailureReason, identity } from "../git.js";
+
+type Author = { readonly name: string; readonly email: string };
 
 // Remote state and the fetch/pull/push verbs; failures return as `ActionResult` or an empty `GitRemoteState`, never an
 // exception. Git here never prompts: piped stdio already runs non-interactively, so a credential-less fetch fails fast.
@@ -57,9 +59,79 @@ export const remoteState = async (
 // branches deleted upstream so a stale behind count can't linger.
 export const fetchRemote = async (dir: string, git: GitRunner = defaultGit): Promise<ActionResult> => run(dir, ["fetch", "--prune", "--quiet"], git);
 
-// `--ff-only` fails a non-fast-forward pull instead of creating a merge commit or a conflicted worktree; nothing to
-// abort, so no runOrAbort bracket is needed.
-export const pullRemote = async (dir: string, git: GitRunner = defaultGit): Promise<ActionResult> => run(dir, ["pull", "--ff-only", "--quiet"], git);
+// `reset --keep` names each refused path in quotes on an `error:` line; the trailing `fatal:` names only a sha.
+const refusedPaths = (error: unknown): string[] => {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    return (typeof stderr === "string" ? stderr : "")
+        .split("\n")
+        .filter((line) => line.startsWith("error:"))
+        .flatMap((line) => /'([^']+)'/.exec(line)?.[1] ?? []);
+};
+
+// Local-only commits rebuilt on `upstream` by `git replay`, which writes no file, index or ref; `reset --keep` then moves
+// the checkout as a fast-forward would, refusing rather than touching an uncommitted file the move would change.
+const replayOnto = async (dir: string, branch: string, upstream: string, ahead: number, author: Author, git: GitRunner): Promise<ActionResult> => {
+    const local = ahead === 1 ? "1 local commit" : `${ahead} local commits`;
+    let replayed: string;
+    try {
+        replayed = (await git(dir, [...identity(author), "replay", "--onto", upstream, `${upstream}..refs/heads/${branch}`])).stdout;
+    } catch (error) {
+        // Exit 1 with nothing printed is a conflict; any other exit prints its own reason (a merge commit in range).
+        return (error as { code?: unknown }).code === 1
+            ? { ok: false, reason: `${local} conflict with ${upstream}; rebase in a terminal to resolve them` }
+            : { ok: false, reason: gitFailureReason(error, "git replay failed") };
+    }
+    const prefix = `update refs/heads/${branch} `;
+    const tip = replayed
+        .split("\n")
+        .find((line) => line.startsWith(prefix))
+        ?.slice(prefix.length)
+        .split(" ")[0];
+    if (tip === undefined || tip === "") {
+        return { ok: false, reason: `git replay named no new tip for ${branch}` };
+    }
+    try {
+        await git(dir, ["reset", "--quiet", "--keep", tip], { GIT_REFLOG_ACTION: `pull: replay onto ${upstream}` });
+        return { ok: true };
+    } catch (error) {
+        const paths = refusedPaths(error);
+        return paths.length === 0
+            ? { ok: false, reason: gitFailureReason(error, "git reset failed") }
+            : { ok: false, reason: `uncommitted changes to ${paths.join(", ")} overlap ${upstream}; commit or discard them, then sync` };
+    }
+};
+
+// Levels a branch with its upstream, never with a merge commit: behind-only fast-forwards, diverged replays the
+// local-only commits onto upstream. Every refusal leaves branch, index and worktree exactly as they were.
+export const pullRemote = async (dir: string, author: Author, git: GitRunner = defaultGit): Promise<ActionResult> => {
+    const tracked = await trackedBranch(dir, git);
+    // Detached or untracked: git's own pull names what is missing.
+    if (tracked === undefined) {
+        return run(dir, ["pull", "--ff-only", "--quiet"], git);
+    }
+    const fetched = await run(dir, ["fetch", "--quiet", tracked.remote], git);
+    if (!fetched.ok) {
+        return fetched;
+    }
+    // Re-read after the fetch: the counts that offered this pull predate it.
+    const { ahead, behind } = await upstreamOf(dir, tracked.branch, git);
+    if (behind === 0) {
+        return { ok: true };
+    }
+    if (ahead === 0) {
+        return run(dir, ["merge", "--ff-only", "--quiet", tracked.upstream], git);
+    }
+    return replayOnto(dir, tracked.branch, tracked.upstream, ahead, author, git);
+};
+
+const trackedBranch = async (dir: string, git: GitRunner): Promise<{ branch: string; upstream: string; remote: string } | undefined> => {
+    const branch = (await git(dir, ["branch", "--show-current"]).catch(() => undefined))?.stdout.trim();
+    if (branch === undefined || branch === "") {
+        return undefined;
+    }
+    const { upstream, remote } = await upstreamOf(dir, branch, git).catch(() => ({ upstream: undefined, remote: undefined }));
+    return upstream === undefined || remote === undefined ? undefined : { branch, upstream, remote };
+};
 
 // Push plan: the branch's own remote (not the first configured one) and `-u` only when it has no upstream yet. Shared
 // with the terminal push so remote/branch/publish is decided once.

@@ -159,28 +159,70 @@ test("a caller that knows no branch still gets a truthful answer, at the cost of
     expect(calls.map((args) => args[0])).toEqual(["branch", "for-each-ref"]);
 });
 
-test("pullRemote fast-forwards, and reports a non-fast-forward as a reason rather than throwing", async () => {
-    const { clone, origin } = await cloned();
+const AUTHOR = { name: "t", email: "t@t" };
+
+// A second clone of the same origin, standing in for whoever pushes upstream meanwhile.
+const upstreamPusher = async (origin: string): Promise<(name: string, body: string) => Promise<void>> => {
     const other = await temp();
     await exec("git", ["clone", "-q", origin, other]);
-    await sh(other, "config", "user.name", "t");
-    await sh(other, "config", "user.email", "t@t");
-    await commit(other, "c.txt", "three");
-    await sh(other, "push", "-q", "origin", "main");
+    return async (name, body) => {
+        await commit(other, name, body);
+        await sh(other, "push", "-q", "origin", "main");
+    };
+};
 
-    expect(await pullRemote(clone)).toEqual({ ok: true });
+test("pullRemote fast-forwards a branch that is only behind, fetching first", async () => {
+    const { clone, origin } = await cloned();
+    const push = await upstreamPusher(origin);
+    await push("c.txt", "three");
+
+    expect(await pullRemote(clone, AUTHOR)).toEqual({ ok: true });
     expect(existsSync(join(clone, "c.txt"))).toBe(true);
+    expect(await remoteState(clone)).toMatchObject({ ahead: 0, behind: 0 });
+});
 
-    // Diverges: a local commit plus a separate upstream commit means the pull can't fast-forward.
+test("pullRemote replays diverged local commits onto upstream, keeping uncommitted work and making no merge", async () => {
+    const { clone, origin } = await cloned();
+    const push = await upstreamPusher(origin);
     await commit(clone, "local.txt", "local");
-    await commit(other, "d.txt", "four");
-    await sh(other, "push", "-q", "origin", "main");
+    await push("d.txt", "four");
+    await writeFile(join(clone, "a.txt"), "edited, not committed\n");
 
-    const result = await pullRemote(clone);
-    expect(result.ok).toBe(false);
-    expect(result.ok === false && result.reason.length > 0).toBe(true);
-    // Nothing half-applied: the local commit is still the tip.
-    expect(await sh(clone, "log", "-1", "--format=%s")).toBe("local");
+    expect(await pullRemote(clone, AUTHOR)).toEqual({ ok: true });
+
+    expect(await sh(clone, "log", "--format=%s", "-3")).toBe("local\nfour\none");
+    expect(await sh(clone, "rev-list", "--merges", "--count", "HEAD")).toBe("0");
+    expect(await remoteState(clone)).toMatchObject({ ahead: 1, behind: 0 });
+    expect(await sh(clone, "status", "--porcelain")).toBe("M a.txt");
+});
+
+test("pullRemote leaves branch and tree as they were when a local commit conflicts with upstream", async () => {
+    const { clone, origin } = await cloned();
+    const push = await upstreamPusher(origin);
+    await commit(clone, "a.txt", "mine");
+    await push("a.txt", "theirs");
+    const before = await sh(clone, "rev-parse", "HEAD");
+
+    const result = await pullRemote(clone, AUTHOR);
+
+    expect(result).toEqual({ ok: false, reason: "1 local commit conflict with origin/main; rebase in a terminal to resolve them" });
+    expect(await sh(clone, "rev-parse", "HEAD")).toBe(before);
+    expect(await sh(clone, "status", "--porcelain")).toBe("");
+});
+
+test("pullRemote refuses, naming the file, when an uncommitted edit overlaps what the replay would move", async () => {
+    const { clone, origin } = await cloned();
+    const push = await upstreamPusher(origin);
+    await commit(clone, "local.txt", "local");
+    await push("a.txt", "theirs");
+    await writeFile(join(clone, "a.txt"), "draft\n");
+    const before = await sh(clone, "rev-parse", "HEAD");
+
+    const result = await pullRemote(clone, AUTHOR);
+
+    expect(result).toEqual({ ok: false, reason: "uncommitted changes to a.txt overlap origin/main; commit or discard them, then sync" });
+    expect(await sh(clone, "rev-parse", "HEAD")).toBe(before);
+    expect(await sh(clone, "diff", "--", "a.txt")).toContain("+draft");
 });
 
 test("pushBranch sends the current branch and clears ahead", async () => {

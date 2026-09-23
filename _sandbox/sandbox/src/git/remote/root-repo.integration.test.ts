@@ -50,6 +50,7 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
     expect(await sh(work, "ls-files")).toBe("notes.md");
     expect(await bothSides(work)).toEqual([]);
     expect(await sh(work, "config", "--get", ROOT_BASELINE_CONFIG)).toBe(await sh(work, "rev-parse", "HEAD"));
+    expect(await sh(work, "config", "--local", "--get", "core.fileMode")).toBe("false");
 });
 
 test("the baseline commits the config slice and still refuses every credential and ledger beside it", async () => {

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -116,4 +116,16 @@ test("an occupied target leaves the repo working rather than clobbering either g
 
     expect((await lstat(join(repo, ".git"))).isDirectory()).toBe(true);
     expect(await git(repo, "log", "--format=%s", "-1")).toBe("first");
+});
+
+test("a synced executable bit reads as no edit to a terminal's git, as it already does to the daemon's", async () => {
+    const { root, historyRoot, repo } = await workspace();
+    await git(repo, "config", "core.fileMode", "true");
+    await chmod(join(repo, "file.txt"), 0o755);
+    expect(await git(repo, "status", "--porcelain")).toBe("M file.txt");
+
+    await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
+
+    expect(await git(repo, "config", "--local", "--get", "core.fileMode")).toBe("false");
+    expect(await git(repo, "status", "--porcelain")).toBe("");
 });

@@ -848,11 +848,11 @@ const outgoing = computed<"flow" | "held" | "offer" | undefined>(() =>
 const showCounts = computed(() => outgoing.value === `offer` || (outgoing.value === `held` && (aheadTotal.value > 0 || behindTotal.value > 0)));
 // Commit keeps the primary slot while there's anything to record, so the two buttons are never both full-weight.
 const syncSeverity = computed<"secondary" | undefined>(() => (changes.count.value > 0 ? `secondary` : undefined));
-// Names which repos, since the summary beside the button only counts. The fast-forward caveat rides here too
+// Names which repos, since the summary beside the button only counts. The replay caveat rides here too
 // — the one thing about this verb a user can be surprised by, now that the per-row pull pill is gone.
 const syncHint = computed(() => {
     const named = `${syncMeta.value?.label ?? `Sync`} ${syncRepos.value.map((repo) => repo.repo).join(`, `)}`;
-    return behindTotal.value > 0 ? `${named}. Pulls fast-forward only: a diverged history is reported, never auto-merged` : named;
+    return behindTotal.value > 0 ? `${named}. Unpushed commits are replayed onto upstream, never merged; a conflict changes nothing` : named;
 });
 // Every repo with a remote — the honest scope for a verb whose whole job is proving a stale zero wrong.
 const fetchable = computed(() => scannable.value.filter((repo) => syncable(repo)).map((repo) => repo.repo));

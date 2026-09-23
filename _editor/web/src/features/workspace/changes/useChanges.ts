@@ -319,7 +319,7 @@ const fetchRepos = (repos: readonly string[]): Promise<void> =>
 // push can't be rejected for commits it could have taken first. Flags come straight off each row's ahead/behind.
 export interface SyncTarget {
     readonly repo: string;
-    readonly pull: boolean; // True when behind upstream; fast-forwarded before any push.
+    readonly pull: boolean; // True when behind upstream; levelled (fast-forward or replay) before any push.
     readonly push: boolean; // True when ahead, or unpublished; sent (and published, if new) after any pull.
 }
 

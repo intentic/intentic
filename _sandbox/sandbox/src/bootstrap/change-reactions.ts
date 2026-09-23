@@ -1,7 +1,9 @@
+import { join } from "node:path";
 import { startVanishedRepoSweep } from "../agents/registry/vanished-repos.js";
 import { startSidecarService } from "../derived/sidecar-service.js";
 import { onListenerStatusMoved } from "../extensions/listener-status.js";
 import { startRefWatch, subscribeRefChanges } from "../git/remote/ref-watch.js";
+import { ignoreFileMode } from "../git/remote/repo-git-dirs.js";
 import { stateRelPath } from "../state-paths.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { startRepoWatch, subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
@@ -16,7 +18,7 @@ const extensionSource = (path: string): boolean =>
     path.startsWith(`${stateRelPath(".intentic/local/extensions/")}/`) ||
     path === stateRelPath(".intentic/config/extension-enablement.json");
 
-export const startChangeReactions = ({ logger, services, shutdown }: BootPhase): void => {
+export const startChangeReactions = ({ logger, services, shutdown, traits }: BootPhase): void => {
     startWorkspaceWatch(services.workspace.root, logger);
     subscribeWorkspaceChanges(() => services.iq.markDirty());
     // Loaded code can't be unloaded, so a debounced restart is the reload.
@@ -34,6 +36,18 @@ export const startChangeReactions = ({ logger, services, shutdown }: BootPhase):
     // A ref can move without a workspace byte changing, so only the ref feed can invalidate health.
     shutdown.push(subscribeRefChanges(() => services.iq.invalidateHealth()));
     shutdown.push(startVanishedRepoSweep(services, subscribeRepoChanges));
+    // A repo cloned mid-session gets the file-mode rule boot gave the rest, not a boot later.
+    if (traits.relocateGitDirs) {
+        shutdown.push(
+            subscribeRepoChanges((repos) => {
+                for (const repo of repos) {
+                    void ignoreFileMode(join(services.workspace.root, repo)).catch((error: unknown) =>
+                        logger.warn({ err: error, repo }, "could not persist core.fileMode=false, a terminal's git may see mode-only edits"),
+                    );
+                }
+            }),
+        );
+    }
     // A gateway's live status is half of what the Activity view shows, and it has no file to watch.
     shutdown.push(onListenerStatusMoved(() => publishRuntimeChange("activity")));
 

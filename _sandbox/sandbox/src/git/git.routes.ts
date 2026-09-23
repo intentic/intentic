@@ -609,7 +609,7 @@ export const createGitRoutes = (services: Services) => {
             await services.git.deleteBranch(await repoDir(input.repo), input.name, input.force === true);
             return { ok: true } as const;
         }),
-        // Each returns a GitActionResult, so "no remote"/"no upstream"/"won't fast-forward" render as reasons, not
+        // Each returns a GitActionResult, so "no remote"/"no upstream"/"conflicts with upstream" render as reasons, not
         // 500s; only pull touches the worktree, so only pull checkpoints.
         remote: i.remote.handler(async ({ input }) => services.git.remoteState(await repoDir(input.repo))),
         fetch: i.fetch.handler(async ({ input }) => {
@@ -623,7 +623,7 @@ export const createGitRoutes = (services: Services) => {
         pull: i.pull.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 await services.history.snapshot("user", "before pull");
-                const result = await services.git.pullRemote(dir);
+                const result = await services.git.pullRemote(dir, AGENT_GIT_AUTHOR);
                 if (result.ok) {
                     invalidateScan();
                     services.history.notifyUserWrite();

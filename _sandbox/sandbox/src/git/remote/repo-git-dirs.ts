@@ -37,6 +37,17 @@ const unbare = async (repoDir: string, git: GitRunner): Promise<void> => {
     await git(repoDir, ["config", "core.bare", "false"]);
 };
 
+// GIT_GLOBAL_ARGS' core.fileMode=false written into the shared config, where init/clone put `true` on Linux: a terminal's
+// git must read the tree as the daemon does, or a synced executable bit is an edit only it sees and it refuses to pull.
+// `--local`, since the daemon's own `-c` would otherwise answer the read.
+export const ignoreFileMode = async (repoDir: string, git: GitRunner = defaultGit): Promise<void> => {
+    const current = await git(repoDir, ["config", "--local", "--get", "core.fileMode"]).catch(() => undefined);
+    if (current?.stdout.trim() === "false") {
+        return;
+    }
+    await git(repoDir, ["config", "--local", "core.fileMode", "false"]);
+};
+
 const relocateOne = async (repo: string, workspace: WorkspacePaths, historyRoot: string, logger: Logger, git: GitRunner): Promise<void> => {
     const repoDir = join(workspace.root, repo);
     if ((await gitEntryKind(repoDir)) !== "dir") {
@@ -64,8 +75,8 @@ const relocateOne = async (repo: string, workspace: WorkspacePaths, historyRoot:
     logger.info({ repo, target }, "git dirs: relocated in-tree git dir off the workspace root");
 };
 
-// Converges every repo onto an out-of-tree git dir, unpinned and non-bare. Best-effort: one repo's failure costs only
-// its own isolation, never the boot; repairs run on every repo so a stale pin can't persist.
+// Converges every repo onto an out-of-tree git dir, unpinned, non-bare, mode-blind. Best-effort: one repo's failure
+// costs only its own isolation, never the boot; repairs run on every repo so a stale pin can't persist.
 export const ensureRepoGitDirs = async (
     workspace: WorkspacePaths,
     historyRoot: string,
@@ -79,6 +90,9 @@ export const ensureRepoGitDirs = async (
         await unpinWorktree(join(workspace.root, repo), git);
         await unbare(join(workspace.root, repo), git).catch((error: unknown) =>
             logger.warn({ err: error, repo }, "git dirs: could not clear core.bare, the main checkout stays unreadable to git"),
+        );
+        await ignoreFileMode(join(workspace.root, repo), git).catch((error: unknown) =>
+            logger.warn({ err: error, repo }, "git dirs: could not persist core.fileMode=false, a terminal's git may see mode-only edits"),
         );
     }
 };

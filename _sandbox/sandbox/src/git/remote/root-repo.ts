@@ -10,6 +10,7 @@ import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { commitIndex, stageAll } from "../changes/changes-index.js";
 import { scratchOf, scratchScopeOf } from "../changes/scratch.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
+import { ignoreFileMode } from "./repo-git-dirs.js";
 
 // The whole /work workspace under version control, not just nested repos, so root files commit/discard like any repo's.
 // Git dir lives on /history; the in-worktree `.git` is a pointer reconverged if deleted. Idempotent: init runs once;
@@ -147,6 +148,7 @@ export const ensureRootRepo = async (
     } else if (!(await pathExists(join(workspace.root, ".git")))) {
         await writeFile(join(workspace.root, ".git"), `gitdir: ${gitDir}\n`);
     }
+    await ignoreFileMode(workspace.root, git);
     // Exclude list lives in $GIT_DIR/info/exclude, outside /work, and is re-synced before every baseline commit.
     await syncRootExcludes(historyRoot, await discoverRepos(workspace.root));
     if (fresh) {

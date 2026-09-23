@@ -604,7 +604,7 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         // known.branch lets a caller that already holds the checked-out branch skip re-deriving it.
         readonly remoteState: (dir: string, known?: { readonly branch?: string | undefined }) => Promise<GitRemoteState>;
         readonly fetchRemote: (dir: string) => Promise<ActionResult>;
-        readonly pullRemote: (dir: string) => Promise<ActionResult>;
+        readonly pullRemote: (dir: string, author: { name: string; email: string }) => Promise<ActionResult>;
         // Where the repo is online (host + owner/name), so it can be matched against a project id from elsewhere.
         readonly remoteProjectOf: (dir: string) => Promise<{ host: string; project: string } | undefined>;
         // One file onto the default branch and out to the remote in one step; write is passed in by the router.
