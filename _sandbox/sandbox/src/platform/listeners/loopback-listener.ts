@@ -122,6 +122,9 @@ export const createLoopbackListener = (options: LoopbackListenerOptions): Loopba
 
     // The port itself is a bare TCP listener; neither backing server binds it, they're only fed sockets.
     const router: NetServer = createNetServer((socket) => {
+        // Set here or nowhere: the TLS server writes through the `rewound` wrapper, so its own setNoDelay never reaches
+        // this socket, and Nagle holds a new connection's first answer for a delayed ACK (about 45 ms measured).
+        socket.setNoDelay(true);
         const timer = setTimeout(() => socket.destroy(), FIRST_BYTE_TIMEOUT_MS);
         // Unref'd so a pending classification never keeps the process alive at shutdown.
         timer.unref();

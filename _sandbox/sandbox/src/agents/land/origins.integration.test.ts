@@ -278,6 +278,25 @@ test("advancing HEAD does not re-read a merge-base: the branch point cannot move
     expect(calls.filter((args) => args[0] === "merge-base")).toEqual([]);
 });
 
+test("a scan at an unmoved head over unchanged landings answers from memory: no git, not even a diff", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    const calls: string[][] = [];
+    const origins = originsOf(registryOf(isolatedAgent(landed.repos)), countingGit(calls));
+    const head = await sh(work, "rev-parse", "HEAD");
+    expect(await origins.forRepo("root", work, head)).toEqual({ "app.ts": ["c1"] });
+
+    calls.length = 0;
+    expect(await origins.forRepo("root", work, head)).toEqual({ "app.ts": ["c1"] });
+    expect(calls).toEqual([]);
+
+    // A head move is a new answer: the user's commit retires the claim, which the remembered map must not hide.
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed");
+    expect(await origins.forRepo("root", work, await sh(work, "rev-parse", "HEAD"))).toEqual({});
+});
+
 // A superseded head's cache entry is replaced, not accumulated, so the caches stay flat as HEAD advances; a retired
 // landing drops its own entries entirely.
 test("advancing HEAD replaces the expiry entry: the caches do not grow with the commit count", async () => {

@@ -279,7 +279,12 @@ export const createGitRoutes = (services: Services) => {
                             change.from === undefined ? [change.path] : [change.path, change.from],
                         ),
                     );
-                    const origins = Object.fromEntries(Object.entries(landed).filter(([path]) => dirty.has(path)));
+                    // Copied out: the attribution map is shared with every scan until the head moves.
+                    const origins = Object.fromEntries(
+                        Object.entries(landed)
+                            .filter(([path]) => dirty.has(path))
+                            .map(([path, ids]) => [path, [...ids]]),
+                    );
                     return {
                         repo,
                         ...(branch !== undefined ? { branch } : {}),

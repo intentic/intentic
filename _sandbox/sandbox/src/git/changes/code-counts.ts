@@ -1,9 +1,9 @@
 import { join } from "node:path";
-import { codeLineStat, type LineStat } from "@intentic/code-read";
-import { analyze } from "@intentic/code-read/grammars";
+import type { LineStat } from "@intentic/code-read";
 import type { GitChange } from "@intentic/sandbox-contract";
 import { gitBytes } from "@intentic/scaffold";
 import { readWorkspaceFile, statWorkspaceSizeMtime } from "../../workspace/files/workspace-files.js";
+import { siblingModule, workerCalls } from "../../worker-calls.js";
 import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
 
 // The code-only +/- a diff row shows, computed here (not per-render) so counts never change after they're drawn; uses
@@ -87,8 +87,18 @@ export const refAgainstRef =
 // Past this many files, rows keep git's raw numbers only (same fallback as a binary file).
 const MAX_COUNTED = 400;
 
-// Concurrent file walks; kept modest since the walk runs on the daemon's own CPU loop.
+// Concurrent file walks; the reads overlap, the tokenizing queues on the one counting thread.
 const LANES = 4;
+
+// One count's inputs, the question the counting thread answers.
+export interface CodeCountAsk {
+    readonly before: string;
+    readonly after: string;
+    readonly path: string;
+}
+
+// The counting thread (code-counts-worker.ts), spawned on the first count.
+const counter = workerCalls<CodeCountAsk>(siblingModule(import.meta, "code-counts-worker"), undefined);
 
 // Counts cached by side-identity pair, FIFO-evicted past the limit; `undefined` is a cached answer too.
 const CACHE_LIMIT = 4_000;
@@ -153,8 +163,8 @@ const countOne = async (dir: string, path: string, sides: Sides): Promise<LineSt
     if (beforeText === undefined || afterText === undefined) {
         return key === undefined ? undefined : remember(key, undefined);
     }
-    // `codeLineStat` returns undefined when no grammar ships for the path; cached like an unreadable side.
-    const stat = await codeLineStat(beforeText, afterText, path, analyze).catch(() => undefined);
+    // Undefined when no grammar ships for the path, or the thread failed; cached like an unreadable side.
+    const stat = await counter.call<LineStat | undefined>({ before: beforeText, after: afterText, path }).catch(() => undefined);
     return key === undefined ? stat : remember(key, stat);
 };
 

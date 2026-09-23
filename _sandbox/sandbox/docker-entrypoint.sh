@@ -177,4 +177,33 @@ if [ "$memory_high_percent" -gt 0 ] && [ "$cgroup_max" != "max" ] && [ -n "$cgro
     fi
 fi
 
+# The daemon in a cgroup of its own, beside one for everything it starts. On a box short of memory the kernel swaps out
+# whatever is idle, and most of the daemon's heap is idle between requests: faulting it back in froze the event loop for
+# seconds (in minutes with heavy faulting, a quarter held a freeze over 5 s). `memory.swap.max` 0 keeps it resident, and
+# a larger cpu and io weight keeps an agent's build from starving the process every keystroke waits on. The daemon
+# moves each process it starts into `workload` (src/platform/resources/workload-priority.ts). Silent on refusal, like
+# memory.high above.
+cgroup_root=/sys/fs/cgroup
+if [ -w "$cgroup_root/cgroup.subtree_control" ] && grep -qw memory "$cgroup_root/cgroup.controllers" 2>/dev/null; then
+    mkdir -p "$cgroup_root/daemon" "$cgroup_root/workload" 2>/dev/null || true
+    # A cgroup whose children get controllers may hold no process itself, so every process here moves to a leaf first.
+    while read -r pid; do
+        echo "$pid" > "$cgroup_root/workload/cgroup.procs" 2>/dev/null || true
+    done < "$cgroup_root/cgroup.procs"
+    for controller in cpu io memory; do
+        if grep -qw "$controller" "$cgroup_root/cgroup.controllers"; then
+            echo "+$controller" > "$cgroup_root/cgroup.subtree_control" 2>/dev/null || true
+        fi
+    done
+    echo $$ > "$cgroup_root/daemon/cgroup.procs" 2>/dev/null || true
+    echo 0 > "$cgroup_root/daemon/memory.swap.max" 2>/dev/null || true
+    echo 1000 > "$cgroup_root/daemon/cpu.weight" 2>/dev/null || true
+    echo "default 1000" > "$cgroup_root/daemon/io.weight" 2>/dev/null || true
+fi
+
+# UV_THREADPOOL_SIZE: every fs, dns and zlib call the daemon makes shares libuv's pool, four threads by default, so a
+# workspace walk's thousands of stats queue the file a person just opened behind them (measured: a small read's p99
+# went from 268 ms at 4 threads to 112 ms at 64). Children inherit it, which costs them idle threads and nothing else.
+export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-32}"
+
 exec node --max-old-space-size="$heap_mb" --report-on-fatalerror --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js

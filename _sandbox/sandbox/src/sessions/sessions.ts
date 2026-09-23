@@ -35,7 +35,7 @@ import { matchLines, sessionOverlay } from "./transcript-search.js";
 
 // The index's own search, passed in rather than imported, since this module knows how to ask what a session said, not
 // where the index lives.
-type SaidLookup = (...args: Parameters<SearchIndex["search"]>) => Promise<ReturnType<SearchIndex["search"]>>;
+type SaidLookup = SearchIndex["search"];
 
 // A past conversation for the chat-history list. `title` is the SDK's resolved display summary; `updatedAt` is
 // last-modified ms; `snippet` is set only by a search, and only when the title doesn't already show the hit.

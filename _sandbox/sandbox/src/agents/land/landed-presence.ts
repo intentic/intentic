@@ -4,7 +4,7 @@ import { headSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { checkpointOf } from "./agent-changes.js";
 import type { IsolatedAgent } from "../registry/agents-store.js";
-import { type ExpiryTracker, pathWeight } from "../registry/expiry.js";
+import { createPathLists, type ExpiryTracker } from "../registry/expiry.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 // Whether a land's uncommitted work is still in the main tree, the one thing sha-keyed standing (standing.ts) can't
@@ -58,7 +58,7 @@ export const createLandedPresences = (
 ): LandedPresences => {
     const readings = new Map<string, LandedPresence>();
     // One diff per fixed span, cached; `--no-renames` so a rename's source isn't lost; paths copied out.
-    const spans = new Map<string, readonly string[]>();
+    const spans = createPathLists();
     const pathsBetween = async (dir: string, key: string, from: string, to: string): Promise<readonly string[]> => {
         const hit = spans.get(key);
         if (hit !== undefined) {
@@ -84,10 +84,10 @@ export const createLandedPresences = (
 
     return {
         metrics: () => ({
-            spans: spans.size,
+            spans: spans.size(),
             anchors: anchors.size,
             readings: readings.size,
-            pathCharacters: pathWeight(spans.values()),
+            pathCharacters: spans.weight(),
         }),
         of: (id) => readings.get(id),
         forget: (ids) => {

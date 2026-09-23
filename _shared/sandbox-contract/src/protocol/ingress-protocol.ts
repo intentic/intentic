@@ -111,7 +111,12 @@ const NOTHING_DROPPED: ReadonlySet<string> = new Set();
 const MAX_SESSION_MEMORY_MB = 128;
 
 // Per-stream receive window, larger than h2's 64KB default since this session crosses the internet.
-const INITIAL_WINDOW_SIZE = 1024 * 1024;
+export const INITIAL_WINDOW_SIZE = 1024 * 1024;
+
+// Session-wide receive window. SETTINGS only sizes streams: without this every stream shares h2's 65,535 bytes per
+// round trip. Held to twice the stream window, since Bun's client stops updating a stream's window past that ratio,
+// and near the bandwidth-delay product, since a larger one queues a keystroke behind a download on a slow link.
+export const CONNECTION_WINDOW_SIZE = 2 * INITIAL_WINDOW_SIZE;
 
 // Concurrent stream ceiling per sandbox, raised since streams here can stay open for a session's whole life.
 const PEER_MAX_CONCURRENT_STREAMS = 256;
@@ -211,6 +216,7 @@ export const openIngressSession = async (duplex: Duplex): Promise<IngressSession
     // tunnel down with it. Destroying the duplex closes the WebSocket, which the reconnect loop waits on.
     session.on("error", () => duplex.destroy());
     session.on("close", () => duplex.destroy());
+    session.once("connect", () => session.setLocalWindowSize(CONNECTION_WINDOW_SIZE));
 
     // Authority to route the stream by. The ingress already refuses any Host that doesn't own a sandbox, so a request
     // with no Host here is a caller bug, not a routing decision.
@@ -332,6 +338,7 @@ export const serveIngressSession = async (duplex: Duplex, options: ServeIngressS
     server.on("sessionError", () => duplex.destroy());
     server.on("clientError", () => duplex.destroy());
     server.on("error", () => duplex.destroy());
+    server.on("session", (session) => session.setLocalWindowSize(CONNECTION_WINDOW_SIZE));
 
     const forwardToLoopback = (stream: ServerHttp2Stream, headers: IncomingHttpHeaders): void => {
         const local = h1Request({

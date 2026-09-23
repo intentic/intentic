@@ -3,7 +3,8 @@ import { createServer, type IncomingMessage, request as h1Request, type Server, 
 import type { AddressInfo } from "node:net";
 import { type Duplex, duplexPair } from "node:stream";
 import { test, expect, beforeAll, afterAll } from "bun:test";
-import { openIngressSession, serveIngressSession } from "./ingress-protocol.js";
+import { waitFor } from "@intentic/testing/bun";
+import { INITIAL_WINDOW_SIZE, openIngressSession, serveIngressSession } from "./ingress-protocol.js";
 
 // Drives the full ingress-to-daemon chain (front server, duplex pair, target) through node's real http client, in
 // process, so streaming, half-close and header identity are pinned as bytes, not shapes.
@@ -56,6 +57,8 @@ const floodPressure: Promise<void>[] = [];
 
 // 64KB per write, keeping node's write queue non-empty so a reset lands on an unfinished write.
 const FLOOD_CHUNK = Buffer.alloc(64 * 1024, 7);
+// 1MB per write: 64 of them outrun the socket buffers on both loopback hops.
+const STALL_CHUNK = Buffer.alloc(1024 * 1024, 3);
 
 type Route = (request: IncomingMessage, response: ServerResponse) => void | Promise<void>;
 
@@ -98,6 +101,21 @@ const routes: Record<string, Route> = {
         response.writeHead(200, { "content-type": "text/event-stream" });
         response.write("open");
         response.on("close", () => cancelled.open(response.writableEnded ? "ended" : "aborted"));
+    },
+    // Far more than every buffer between here and a reader that has stopped reading, so the stream's window fills.
+    "/stall": (_request, response) => {
+        response.writeHead(200, { "content-type": "application/octet-stream" });
+        let left = 64;
+        const pump = (): void => {
+            while (left > 0 && response.write(STALL_CHUNK)) {
+                left -= 1;
+            }
+            if (left === 0) {
+                response.end();
+            }
+        };
+        response.on("drain", pump);
+        pump();
     },
     // Large enough that writes are still pending when the client resets mid-stream.
     "/flood": async (_request, response) => {
@@ -275,6 +293,65 @@ test("a response is streamed, not buffered: the client reads chunk one before th
 
     expect(chunks.join("")).toBe("onetwo");
     expect(chunks.length).toBeGreaterThan(1);
+});
+
+test("a reader that stops reading holds its own stream, not the session: a sibling request still answers", async () => {
+    const stalled = await new Promise<IncomingMessage>((resolve, reject) => {
+        const request = h1Request({ host: "127.0.0.1", port: edgePort, path: "/stall", headers: { host: HOST } }, (response) => {
+            // Reads one chunk to prove the stream flows, then stops for good, as a backgrounded tab or a slow link would.
+            response.once("data", () => {
+                response.pause();
+                resolve(response);
+            });
+        });
+        request.on("error", reject);
+        request.end();
+    });
+    try {
+        const answer = await call("/seen");
+        expect(answer.status).toBe(201);
+    } finally {
+        stalled.destroy();
+    }
+});
+
+// Two duplex pairs joined by a relay whose edge-to-daemon half can be held: with nothing coming back, the daemon can
+// send only the window it was granted up front, so the bytes that arrive measure that window without a clock.
+const heldLink = (): { readonly edgeSide: Duplex; readonly daemonSide: Duplex; readonly hold: () => void } => {
+    const [edgeSide, edgeRelay] = duplexPair();
+    const [relayDaemon, daemonSide] = duplexPair();
+    let held = false;
+    edgeRelay.on("data", (chunk: Buffer) => {
+        if (!held) {
+            relayDaemon.write(chunk);
+        }
+    });
+    relayDaemon.on("data", (chunk: Buffer) => void edgeRelay.write(chunk));
+    return { edgeSide, daemonSide, hold: () => void (held = true) };
+};
+
+test("one round trip carries a whole stream window, not the protocol's 64 KB shared by every stream", async () => {
+    const link = heldLink();
+    const daemon = await serveIngressSession(link.daemonSide, { targetPort: await listen(target) });
+    const session = await openIngressSession(link.edgeSide);
+    const server = createServer((request, response) => void session.forwardRequest(request, response).catch(() => response.destroy()));
+    const port = await listen(server);
+    let received = 0;
+    const request = h1Request({ host: "127.0.0.1", port, path: "/stall", headers: { host: HOST } }, (response) => {
+        // From here the request has reached the daemon; every WINDOW_UPDATE the edge sends from now on is swallowed.
+        link.hold();
+        response.on("data", (chunk: Buffer) => void (received += chunk.length));
+    });
+    request.on("error", () => undefined);
+    request.end();
+    try {
+        await waitFor(() => expect(received).toBeGreaterThanOrEqual(INITIAL_WINDOW_SIZE / 2), { timeout: 10_000 });
+    } finally {
+        request.destroy();
+        session.close();
+        daemon.close();
+        server.close();
+    }
 });
 
 test("a request body is streamed: the target reads the first chunk before the client sends the rest", async () => {

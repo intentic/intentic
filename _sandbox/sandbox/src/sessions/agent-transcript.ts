@@ -72,7 +72,7 @@ export const agentTranscriptPage = async (deps: AgentTranscriptDeps, agent: Tran
 
 // The same page, for a caller holding the whole record in memory: the route fakes answer through it, so a test cannot
 // pass a page shape the daemon itself would not serve.
-export const transcriptPageOf = (rows: readonly TranscriptRow[], window: TranscriptWindow = {}): TranscriptPage => windowOf(rows, { ...window, fit: fitRow });
+export const transcriptPageOf = (rows: readonly TranscriptRow[], window: TranscriptWindow = {}): Promise<TranscriptPage> => windowOf(rows, { ...window, fit: fitRow });
 
 // Depth-first, newest row back: a call's id is unique within a conversation, so the first hit is the only one.
 const toolIn = (tools: readonly TranscriptTool[], id: string): TranscriptTool | undefined => {

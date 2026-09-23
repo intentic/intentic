@@ -29,21 +29,21 @@ const indexed = async (dir: string) => {
     const index = openSearchIndex(IN_MEMORY);
     const recent = createRecentSessions(dir);
     for (const session of await recent()) {
-        index.put(session.id, "session", String(session.updatedAt), await readSessionLines(dir, session.id));
+        await index.put(session.id, "session", String(session.updatedAt), await readSessionLines(dir, session.id));
     }
     return { index, recent };
 };
 
 const searchSessions = async (dir: string, query: string, caseSensitive: boolean) => {
     const { index, recent } = await indexed(dir);
-    return searchWorkspaceSessions(recent, query, caseSensitive, async (...args) => index.search(...args));
+    return searchWorkspaceSessions(recent, query, caseSensitive, index.search);
 };
 
 test("a title match reads no session file at all", async () => {
     seed("t", 3);
     const { index, recent } = await indexed(WORKSPACE_ROOT);
     getSessionMessages.mockClear();
-    const hits = await searchWorkspaceSessions(recent, "chat 1", false, async (...args) => index.search(...args));
+    const hits = await searchWorkspaceSessions(recent, "chat 1", false, index.search);
     expect(hits.map((s) => s.id)).toEqual(["t1"]);
     expect(getSessionMessages).not.toHaveBeenCalled();
     expect(hits[0]?.snippet).toBeUndefined();
@@ -61,7 +61,7 @@ test("a prompt match is found and reports the line it hit, and whose it was", as
 test("a snippet from one query never rides along on the next", async () => {
     seed("p", 3);
     const { index, recent } = await indexed(WORKSPACE_ROOT);
-    const said = async (...args: Parameters<typeof index.search>) => index.search(...args);
+    const said = index.search;
 
     const first = await searchWorkspaceSessions(recent, "body p1", false, said);
     expect(first[0]?.snippet).toEqual({ text: "body p1", speaker: "user" });

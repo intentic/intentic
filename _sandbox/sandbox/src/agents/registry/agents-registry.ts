@@ -539,7 +539,15 @@ export const createFleet = (store: FleetStore, standings: LandStandings, presenc
         return causes.length === 0 ? undefined : [...causes];
     };
 
-    const entryOf = (id: string): PersistedAgent | undefined => entries.find((entry) => entry.id === id);
+    // Rebuilt only when `entries` is reassigned, which is how every write lands (nothing mutates the array in place),
+    // so lookups between writes are O(1) instead of a scan of the whole roster, archived agents included.
+    let indexed: { readonly of: readonly PersistedAgent[]; readonly byId: ReadonlyMap<string, PersistedAgent> } | undefined;
+    const entryOf = (id: string): PersistedAgent | undefined => {
+        if (indexed?.of !== entries) {
+            indexed = { of: entries, byId: new Map(entries.map((entry) => [entry.id, entry])) };
+        }
+        return indexed.byId.get(id);
+    };
 
     const replace = (next: PersistedAgent): void => {
         entries = [...entries.filter((entry) => entry.id !== next.id), next];

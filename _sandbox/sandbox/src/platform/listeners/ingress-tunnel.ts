@@ -6,6 +6,7 @@ import {
     type IngressTunnelOptions,
 } from "@intentic/sandbox-contract/ingress-contract";
 import { serveIngressSession, webSocketDuplex, type IngressSessionServer, type TunnelWebSocket } from "@intentic/sandbox-contract/ingress-protocol";
+import { type Heartbeat, type HeartbeatOptions, startHeartbeat } from "@intentic/sandbox-contract/tunnel-heartbeat";
 import { WebSocket } from "ws";
 
 // Reachability is one outbound dial: present the grant already signed into the container's env and serve h2 over the
@@ -38,6 +39,7 @@ export const tunnelUrl = (base: string): string => {
 // client's surface.
 export interface TunnelSocket {
     readonly on: (event: string, listener: (...args: never[]) => void) => unknown;
+    readonly ping: () => void;
     readonly close: (code?: number, reason?: string) => void;
     readonly terminate: () => void;
 }
@@ -49,6 +51,7 @@ export interface IngressTunnelDeps {
     readonly delay?: (ms: number) => Promise<void>;
     readonly now?: () => number;
     readonly random?: () => number;
+    readonly heartbeat?: (options: HeartbeatOptions) => Heartbeat;
 }
 
 const realConnect = (url: string, headers: Record<string, string>): TunnelSocket => new WebSocket(url, { headers }) as unknown as TunnelSocket;
@@ -110,6 +113,7 @@ export const startIngressTunnel = (options: IngressTunnelOptions & IngressTunnel
     const serve = options.serve ?? realServe;
     const delay = options.delay ?? ((ms: number) => sleep(ms, { unref: true }));
     const now = options.now ?? Date.now;
+    const heartbeatOf = options.heartbeat ?? startHeartbeat;
     const ladder = createBackoff({
         floorMs: BACKOFF_MIN_MS,
         capMs: BACKOFF_MAX_MS,
@@ -129,6 +133,7 @@ export const startIngressTunnel = (options: IngressTunnelOptions & IngressTunnel
             let settled = false;
             let server: IngressSessionServer | undefined;
             let openedAt: number | undefined;
+            let beat: Heartbeat | undefined;
 
             const settle = (waitMs: number): void => {
                 if (settled) {
@@ -136,14 +141,28 @@ export const startIngressTunnel = (options: IngressTunnelOptions & IngressTunnel
                 }
                 settled = true;
                 connected = false;
+                beat?.stop();
                 server?.close();
                 resolve(waitMs);
             };
 
             const ws = connect(url, { [INGRESS_GRANT_HEADER]: options.grant });
             socket = ws;
+            // The edge forgets a silent tunnel on its own, but only this end can redial: a socket whose path died
+            // without a FIN (a host that slept, a NAT that expired) reports nothing, so silence is the only evidence.
+            const alive = (): void => beat?.saw();
+            ws.on(`pong`, alive);
+            ws.on(`ping`, alive);
+            ws.on(`message`, alive);
 
             ws.on(`open`, () => {
+                beat = heartbeatOf({
+                    ping: () => ws.ping(),
+                    onDead: () => {
+                        options.log(`the ingress tunnel went silent; redialling`);
+                        ws.terminate();
+                    },
+                });
                 void (async () => {
                     try {
                         server = await serve(ws, options.targetPort);

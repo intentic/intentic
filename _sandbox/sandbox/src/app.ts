@@ -5,6 +5,7 @@ import { ORPCError } from "@orpc/server";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
+import { compressResponses } from "./compress-responses.js";
 import { bearerFrom, ForbiddenError, PasskeyRequiredError } from "./auth/auth.js";
 import { allowedOriginsOf, originAllowedBy } from "./auth/browser-origins.js";
 import { createPasskeyRoutes } from "./auth/passkeys/passkeys.routes.js";
@@ -111,6 +112,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Cross-Origin-Resource-Policy is off: /webchat/widget.js is loaded as a plain <script> from third-party sites,
     // which CORP would block.
     app.use("*", secureHeaders({ crossOriginResourcePolicy: false, crossOriginEmbedderPolicy: false }));
+
+    // Inside the hardening, outside everything that writes an answer, so every JSON body leaves compressed when the
+    // browser accepts it, error bodies included.
+    app.use("*", compressResponses());
 
     // Outermost: times the answer the browser actually waited for, the only number that also covers the boot gate, auth
     // and oRPC validation.

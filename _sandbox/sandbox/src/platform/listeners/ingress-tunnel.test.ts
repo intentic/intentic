@@ -1,5 +1,6 @@
 import { INGRESS_GRANT_HEADER } from "@intentic/sandbox-contract/ingress-contract";
 import type { IngressSessionServer } from "@intentic/sandbox-contract/ingress-protocol";
+import { createHeartbeat, DEAD_AFTER_MS, type Heartbeat } from "@intentic/sandbox-contract/tunnel-heartbeat";
 import { describe, test, expect, mock } from "bun:test";
 import { reachPosture, startIngressTunnel, startIngressTunnelWhenConfigured, tunnelUrl, type TunnelSocket } from "./ingress-tunnel.js";
 
@@ -9,8 +10,10 @@ import { reachPosture, startIngressTunnel, startIngressTunnelWhenConfigured, tun
 // Stand-in for `ws`; records listeners so a test can drive the socket's lifecycle by hand.
 class FakeSocket implements TunnelSocket {
     private readonly listeners = new Map<string, ((...args: never[]) => void)[]>();
+    public readonly ping = mock<() => void>();
     public readonly close = mock<(code?: number, reason?: string) => void>();
-    public readonly terminate = mock<() => void>();
+    // A real socket reports its own teardown as a close, which is what the redial loop waits on.
+    public readonly terminate = mock<() => void>(() => this.emit(`close`, 1006));
 
     public on(event: string, listener: (...args: never[]) => void): this {
         this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener]);
@@ -28,6 +31,8 @@ class FakeSocket implements TunnelSocket {
 // test releases it.
 const harness = (options?: { readonly now?: () => number }) => {
     const sockets: FakeSocket[] = [];
+    // The heartbeat on the injected clock, so a test ticks intervals by hand instead of waiting 15 s of real time.
+    const beats: Heartbeat[] = [];
     const waits: number[] = [];
     const headers: Record<string, string>[] = [];
     let release: (() => void) | undefined;
@@ -53,6 +58,11 @@ const harness = (options?: { readonly now?: () => number }) => {
         },
         // Full jitter with random() === 1 lands exactly on the ceiling, so assertions read the schedule directly.
         random: () => 1,
+        heartbeat: (beat) => {
+            const made = createHeartbeat({ ...beat, ...(options?.now === undefined ? {} : { now: options.now }) });
+            beats.push(made);
+            return made;
+        },
         ...(options?.now === undefined ? {} : { now: options.now }),
     });
 
@@ -64,7 +74,7 @@ const harness = (options?: { readonly now?: () => number }) => {
         }
     };
 
-    return { handle, sockets, waits, headers, served, settle, next: () => release?.() };
+    return { handle, sockets, waits, headers, served, beats, settle, next: () => release?.() };
 };
 
 describe(`tunnelUrl`, () => {
@@ -130,6 +140,32 @@ describe(`startIngressTunnel`, () => {
         world.sockets[1]?.emit(`close`, 1006);
         await world.settle();
         expect(world.waits).toEqual([2_000, 2_000]);
+    });
+
+    test(`pings the edge while it answers, and redials once it has gone silent past the dead window`, async () => {
+        let clock = 0;
+        const world = harness({ now: () => clock });
+        world.sockets[0]?.emit(`open`);
+        await world.settle();
+
+        clock += DEAD_AFTER_MS / 3;
+        world.beats[0]?.tick();
+        expect(world.sockets[0]?.ping).toHaveBeenCalledTimes(1);
+        // Any frame from the edge restarts the window: its own pings count as much as a pong.
+        world.sockets[0]?.emit(`ping`);
+        clock += DEAD_AFTER_MS - 1;
+        world.beats[0]?.tick();
+        expect(world.sockets[0]?.terminate).not.toHaveBeenCalled();
+
+        // Silence past the window, as after a host sleep: nothing arrives and no close is ever reported by the path.
+        clock += 2;
+        world.beats[0]?.tick();
+        expect(world.sockets[0]?.terminate).toHaveBeenCalledTimes(1);
+        await world.settle();
+        expect(world.handle.connected()).toBe(false);
+        world.next();
+        await world.settle();
+        expect(world.sockets).toHaveLength(2);
     });
 
     test(`stops dialling once closed`, async () => {

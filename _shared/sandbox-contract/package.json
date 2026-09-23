@@ -150,6 +150,17 @@
                 "default": "./dist/protocol/ingress-protocol.js"
             }
         },
+        "./tunnel-heartbeat": {
+            "types": "./dist/protocol/tunnel-heartbeat.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/tunnel-heartbeat.ts",
+                "default": "./dist/protocol/tunnel-heartbeat.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/tunnel-heartbeat.ts",
+                "default": "./dist/protocol/tunnel-heartbeat.js"
+            }
+        },
         "./share-paths": {
             "types": "./dist/ids/share-paths.d.ts",
             "import": {

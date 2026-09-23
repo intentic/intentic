@@ -1,6 +1,5 @@
-// Detects a peer TCP won't report as gone: a killed container or dropped NAT mapping leaves a socket that looks open
-// but delivers nothing.
-// Pings every interval; a peer silent (no pong, no frame) for the dead window is declared dead.
+// Detects a tunnel peer TCP won't report as gone (a killed container, a dropped NAT mapping, a host that slept), from
+// both ends: the edge forgets a silent sandbox and the sandbox redials a silent edge, and only each end can do its half.
 // A state machine, not a timer, so `tick` (one interval) can be driven directly by tests.
 
 // Ping every 15s, dead after three missed intervals (45s); one miss alone is ordinary on a congested link.

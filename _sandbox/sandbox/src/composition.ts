@@ -742,7 +742,7 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // What was said, indexed: what the fleet filter and chat-history search answer from, written as turns settle.
     readonly saidIndex: {
         // One query, one round trip; async here only so a test harness can substitute a fake without going synchronous.
-        readonly search: (...args: Parameters<SearchIndex["search"]>) => Promise<ReturnType<SearchIndex["search"]>>;
+        readonly search: SearchIndex["search"];
         // Brings the index level with the stores; detached at boot and after a sweep, a no-op if nothing's behind.
         readonly backfill: (signal?: AbortSignal) => Promise<void>;
         // Whether a backfill is running, whether the answer can still grow; both search routes report it as partial.
@@ -1472,7 +1472,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             readTail: readWorkspaceSessionTail,
             // Bound to this daemon's one index, so the history box and the fleet board answer from the same rows.
             search: (query, caseSensitive) =>
-                searchWorkspaceSessions(recentSessions, query, caseSensitive, async (...args) => saidIndex.search(...args)),
+                searchWorkspaceSessions(recentSessions, query, caseSensitive, saidIndex.search),
             exists: workspaceSessionExists,
         },
         transcripts: {
@@ -1485,7 +1485,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             append: async (agent, messages) => {
                 await transcriptDeps.record.append(agent.id, messages);
                 try {
-                    saidIndex.extend(agent.id, "conversation", (await recordVersion(agent.id)) ?? "none", spokenLinesOf(messages));
+                    await saidIndex.extend(agent.id, "conversation", (await recordVersion(agent.id)) ?? "none", spokenLinesOf(messages));
                 } catch (error) {
                     logger.warn({ err: error, conversationId: agent.id }, "search index: turn not indexed");
                 }
@@ -1495,7 +1495,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             truncate: async (agent, keep) => {
                 const dropped = await transcriptDeps.record.truncate(agent.id, keep);
                 try {
-                    saidIndex.put(agent.id, "conversation", (await recordVersion(agent.id)) ?? "none", await spokenTranscript(transcriptDeps, agent));
+                    await saidIndex.put(agent.id, "conversation", (await recordVersion(agent.id)) ?? "none", await spokenTranscript(transcriptDeps, agent));
                 } catch (error) {
                     logger.warn({ err: error, conversationId: agent.id }, "search index: rewind not reindexed");
                 }
@@ -1503,7 +1503,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             },
         },
         saidIndex: {
-            search: async (needle, kind, caseSensitive) => saidIndex.search(needle, kind, caseSensitive),
+            search: saidIndex.search,
             backfill: backfillSaidIndex,
             indexing: () => backfillingSaid,
         },
@@ -1513,7 +1513,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         purgeConversationState: async (removed, retained) => {
             await purgeConversationState(workspace.root, config.historyRoot, removed, retained);
             for (const entry of removed) {
-                saidIndex.forget(entry.id);
+                await saidIndex.forget(entry.id);
                 // A gone conversation must not leave a live credential release behind it.
                 credentialGrants.forget(entry.id);
             }

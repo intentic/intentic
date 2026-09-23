@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { couldBeOnThisMachine, type Endpoint, probeEndpoint, sandboxIdOf, selectEndpoint, settledEndpoint } from "./endpoint";
+import { couldBeOnThisMachine, type Endpoint, shortcutFailedAlone, sandboxIdOf, selectEndpoint, settledEndpoint } from "./endpoint";
 import { shortcutAnswer, useLocalShortcut } from "../devices/loopback/localShortcut";
 import { setStreamCapacity, setStreamOverflow, setStreamScope, streamPermits } from "../client/streamBudget";
 import { useSandbox } from "../client/useSandbox";
@@ -144,19 +144,19 @@ const demote = (sandboxId: string): void => {
     endpoints.value = rest;
 };
 
-// Probes before demoting: a broken stream does not always mean a broken address, and demoting on every failure
-// flaps the window between two paths to the same busy daemon. Returns whether it demoted, since the caller's retry
-// differs either way.
+// Demotes only when the tunnel answers and the shortcut does not: a broken stream or a missed deadline is as often a
+// busy daemon, which is no faster over the tunnel, and demoting then pins the window to the slow path for the whole
+// backoff. Returns whether it demoted, since the caller's retry differs either way.
 const demoteIfUnreachable = async (sandboxId: string): Promise<boolean> => {
     const endpoint = endpoints.value[sandboxId];
-    const sandbox = active.value;
-    const token = sandbox?.token ?? undefined;
-    if (endpoint === undefined || token === undefined || token === ``) {
-        // No endpoint or token to check against: demotes unconditionally rather than guessing.
+    const token = active.value?.token ?? undefined;
+    const tunnel = daemonUrl.value;
+    if (endpoint === undefined || token === undefined || token === `` || tunnel === undefined || tunnel === ``) {
+        // No endpoint, token or tunnel to check against: demotes unconditionally rather than guessing.
         demote(sandboxId);
         return true;
     }
-    if (await probeEndpoint(endpoint, await sandboxIdOf(token))) {
+    if (!(await shortcutFailedAlone(endpoint, tunnel, await sandboxIdOf(token)))) {
         return false;
     }
     demote(sandboxId);

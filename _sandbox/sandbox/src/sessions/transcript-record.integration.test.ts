@@ -67,6 +67,42 @@ describe("fileTranscriptRecord", () => {
         expect((await record.read("c1")).map((message) => message.text)).toEqual(["whole"]);
     });
 
+    // The row index is kept across calls and extended over the appended tail; every answer must still be what a fresh
+    // read of the file would say.
+    it("counts, pages and finds through appends exactly as a fresh read of the record would", async () => {
+        const root = await dir();
+        const record = fileTranscriptRecord(root);
+        await record.append("c1", [{ role: "user", text: "one" }, said("first")]);
+        expect(await record.count("c1")).toBe(2);
+        await record.append("c1", [{ role: "user", text: "two" }, said("second")]);
+        expect(await record.count("c1")).toBe(4);
+        expect((await record.window("c1", { turns: 1 })).rows.map((message) => message.text)).toEqual(["two", "second"]);
+        expect((await record.findBack("c1", (message) => message.text.startsWith("fir")))?.text).toBe("first");
+        expect(await fileTranscriptRecord(root).count("c1")).toBe(4);
+    });
+
+    it("rejoins a torn last line with what is appended after it, as the raw split would", async () => {
+        const root = await dir();
+        const record = fileTranscriptRecord(root);
+        await record.append("c1", [said("whole")]);
+        await writeFile(transcriptFile(root, "c1"), `${await readFile(transcriptFile(root, "c1"), "utf8")}{"role":"assistant","te`);
+        expect(await record.count("c1")).toBe(2);
+        // The next append completes nothing: the torn prefix and the new row share one line, which parses as neither.
+        await record.append("c1", [said("after")]);
+        expect(await record.count("c1")).toBe(2);
+        expect(await record.count("c1")).toBe(await fileTranscriptRecord(root).count("c1"));
+        expect((await record.read("c1")).map((message) => message.text)).toEqual(["whole"]);
+    });
+
+    it("forgets the index a truncate invalidates: the next count reads the shortened record", async () => {
+        const record = fileTranscriptRecord(await dir());
+        await record.append("c1", [{ role: "user", text: "one" }, said("first"), { role: "user", text: "two" }, said("second")]);
+        expect(await record.count("c1")).toBe(4);
+        expect(await record.truncate("c1", 2)).toBe(2);
+        expect(await record.count("c1")).toBe(2);
+        expect((await record.window("c1", {})).rows.map((message) => message.text)).toEqual(["one", "first"]);
+    });
+
     it("ignores an id that is not filename-safe rather than letting it reach a path", async () => {
         const record = fileTranscriptRecord(await dir());
         await record.append("../escape", [said("nope")]);

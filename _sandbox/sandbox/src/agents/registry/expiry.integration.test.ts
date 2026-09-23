@@ -97,3 +97,17 @@ test("a commit-then-revert keeps the path expired: the door does not swing back"
     // The underlying diff is empty; the tracker still remembers the path as touched.
     expect([...(await tracker.committedSince(dir, "root", heads[3]!, reverted))]).toEqual(["a.ts"]);
 });
+
+test("the reported text weight is the characters the entries hold, through head moves and drops", async () => {
+    const { dir, heads } = await repoWithCommits();
+    const tracker = createExpiryTracker();
+    const early = await tracker.committedSince(dir, "root", heads[0]!, heads[2]!);
+    const late = await tracker.committedSince(dir, "root", heads[1]!, heads[3]!);
+    const held = (): number => [...early, ...late].reduce((total, path) => total + path.length, 0);
+    expect(tracker.metrics()["pathCharacters"]).toBe(held());
+
+    tracker.drop("root", heads[1]!);
+    expect(tracker.metrics()["pathCharacters"]).toBe([...early].reduce((total, path) => total + path.length, 0));
+    tracker.drop("root", heads[0]!);
+    expect(tracker.metrics()["pathCharacters"]).toBe(0);
+});

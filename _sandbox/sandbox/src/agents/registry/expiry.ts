@@ -15,20 +15,61 @@ export interface ExpiryTracker {
     readonly metrics: () => Readonly<Record<string, number>>;
 }
 
-/** Total characters across path lists; this is the text weight used by attribution caches. */
-export const pathWeight = (lists: Iterable<Iterable<string>>): number => {
+// Characters across one path list: the unit every attribution cache reports its text weight in.
+const listWeight = (paths: Iterable<string>): number => {
     let total = 0;
-    for (const paths of lists) {
-        for (const path of paths) {
-            total += path.length;
-        }
+    for (const path of paths) {
+        total += path.length;
     }
     return total;
+};
+
+/** A keyed cache of path lists whose total text weight moves with every write, so reading the weight never walks
+ * the paths: the caches hold tens of millions of characters and are sampled once a minute on the main thread. */
+export interface PathLists {
+    readonly get: (key: string) => readonly string[] | undefined;
+    readonly set: (key: string, paths: readonly string[]) => void;
+    readonly delete: (key: string) => void;
+    readonly size: () => number;
+    readonly weight: () => number;
+}
+
+export const createPathLists = (): PathLists => {
+    const lists = new Map<string, { readonly paths: readonly string[]; readonly weight: number }>();
+    let weight = 0;
+    return {
+        get: (key) => lists.get(key)?.paths,
+        set: (key, paths) => {
+            const own = listWeight(paths);
+            weight += own - (lists.get(key)?.weight ?? 0);
+            lists.set(key, { paths, weight: own });
+        },
+        delete: (key) => {
+            weight -= lists.get(key)?.weight ?? 0;
+            lists.delete(key);
+        },
+        size: () => lists.size,
+        weight: () => weight,
+    };
+};
+
+// Adds each path the set lacks; returns the characters that joined, the only change to its weight.
+const addNew = (paths: Set<string>, incoming: readonly string[]): number => {
+    let added = 0;
+    for (const path of incoming) {
+        if (!paths.has(path)) {
+            paths.add(path);
+            added += path.length;
+        }
+    }
+    return added;
 };
 
 export const createExpiryTracker = (git: GitRunner = defaultGit): ExpiryTracker => {
     // Per-repo head plus accumulated paths per landing; `chain` serializes updates so scans cannot interleave.
     const repos = new Map<string, { head: string; entries: Map<string, Set<string>>; chain: Promise<unknown> }>();
+    // Characters across every entry's paths, moved on each insert and drop; see PathLists for why it is not summed.
+    let pathCharacters = 0;
 
     const diffPaths = async (dir: string, from: string, to: string): Promise<string[]> =>
         materializedPaths((await git(dir, ["diff", "--name-only", "--no-renames", "-z", from, to])).stdout);
@@ -48,9 +89,7 @@ export const createExpiryTracker = (git: GitRunner = defaultGit): ExpiryTracker 
                     if (current.entries.size > 0) {
                         const moved = await diffPaths(dir, current.head, head);
                         for (const paths of current.entries.values()) {
-                            for (const path of moved) {
-                                paths.add(path);
-                            }
+                            pathCharacters += addNew(paths, moved);
                         }
                     }
                     current.head = head;
@@ -62,6 +101,7 @@ export const createExpiryTracker = (git: GitRunner = defaultGit): ExpiryTracker 
                 // First sight of this landing: the full span, once. Later calls ride the increments.
                 const paths = new Set(await diffPaths(dir, landedHead, head));
                 current.entries.set(landedHead, paths);
+                pathCharacters += listWeight(paths);
                 return paths;
             });
             // A failed diff fails only its own caller; nothing is queued behind it.
@@ -69,14 +109,18 @@ export const createExpiryTracker = (git: GitRunner = defaultGit): ExpiryTracker 
             return step;
         },
         drop: (repo, landedHead) => {
-            repos.get(repo)?.entries.delete(landedHead);
+            const entries = repos.get(repo)?.entries;
+            const dropped = entries?.get(landedHead);
+            if (entries === undefined || dropped === undefined) {
+                return;
+            }
+            pathCharacters -= listWeight(dropped);
+            entries.delete(landedHead);
         },
         metrics: () => {
             let entries = 0;
-            let pathCharacters = 0;
             for (const state of repos.values()) {
                 entries += state.entries.size;
-                pathCharacters += pathWeight(state.entries.values());
             }
             return { repos: repos.size, entries, pathCharacters };
         },

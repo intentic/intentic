@@ -105,6 +105,21 @@ export const healthAnswers = async (
 export const probeEndpoint = (endpoint: Endpoint, expectedSandboxId: string, fetchImpl: FetchLike = fetch): Promise<boolean> =>
     healthAnswers(endpoint.base, expectedSandboxId, endpoint.kind === `public` ? TUNNEL_PROBE_TIMEOUT_MS : PROBE_TIMEOUT_MS, fetchImpl);
 
+// A dead shortcut and a busy daemon look alike from the shortcut alone: only the tunnel answering while the shortcut does
+// not puts the fault on the path. Both probes run at once, so the verdict costs the slower budget, not the sum.
+export const shortcutFailedAlone = async (
+    shortcut: Endpoint,
+    tunnelBase: string,
+    expectedSandboxId: string,
+    fetchImpl: FetchLike = fetch,
+): Promise<boolean> => {
+    const [local, tunnel] = await Promise.all([
+        probeEndpoint(shortcut, expectedSandboxId, fetchImpl),
+        healthAnswers(tunnelBase, expectedSandboxId, TUNNEL_PROBE_TIMEOUT_MS, fetchImpl),
+    ]);
+    return !local && tunnel;
+};
+
 // Returns the first candidate that answers; the tunnel is trusted without a probe only when nothing follows it
 // (the registry's own address). Loopback forms are never trusted untested: a port answering there is not proof it is
 // this sandbox.

@@ -7,7 +7,7 @@ import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
 import { HOP_HEADER, type Cluster } from "./cluster.js";
 import { forwardRequest, forwardUpgrade, PeerUnreachable } from "./forward.js";
-import { PING_INTERVAL_MS, startHeartbeat } from "./heartbeat.js";
+import { PING_INTERVAL_MS, startHeartbeat } from "@intentic/sandbox-contract/tunnel-heartbeat";
 import type { PeerDiscovery } from "./peers.js";
 import { createTunnelRegistry, type TunnelRegistry } from "./registry.js";
 import type { Revocation } from "./revocation.js";

@@ -9,6 +9,7 @@ import {
     sandboxIdOf,
     selectEndpoint,
     settledEndpoint,
+    shortcutFailedAlone,
 } from "./endpoint";
 
 const TUNNEL = `https://sandbox-abc.example.com`;
@@ -205,4 +206,22 @@ it(`treats an undated answer as fresh rather than expired`, () => {
 
 it(`has nothing to say about a sandbox with no answer yet: that is the probe's job`, () => {
     expect(settledEndpoint(undefined, undefined, 1_000_000)).toBe(false);
+});
+
+it(`blames the shortcut only when the tunnel answers and the shortcut does not: a busy daemon answers neither`, async () => {
+    const id = await sandboxIdOf(TOKEN);
+    const local = { kind: `local` as const, base: certifiedLoopbackUrl(id, CERT_HOST) as string };
+    // Each lane answers or hangs up on its own base, so the four combinations are one fetch fake apiece.
+    const lanes = (shortcut: boolean, tunnel: boolean) =>
+        mock(async (input: RequestInfo | URL) => {
+            const up = String(input).startsWith(TUNNEL) ? tunnel : shortcut;
+            if (!up) {
+                throw new TypeError(`Failed to fetch`);
+            }
+            return health(id);
+        });
+    expect(await shortcutFailedAlone(local, TUNNEL, id, lanes(false, true))).toBe(true);
+    expect(await shortcutFailedAlone(local, TUNNEL, id, lanes(false, false))).toBe(false);
+    expect(await shortcutFailedAlone(local, TUNNEL, id, lanes(true, true))).toBe(false);
+    expect(await shortcutFailedAlone(local, TUNNEL, id, lanes(true, false))).toBe(false);
 });

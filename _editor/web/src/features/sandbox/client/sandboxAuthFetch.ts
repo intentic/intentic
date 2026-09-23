@@ -5,7 +5,7 @@ import { useEndpoint } from "../secrets/useEndpoint";
 import { useSandbox } from "./useSandbox";
 
 const { getSessionToken, rejectSessionToken } = useSandboxSession();
-const { usingLocal, demote } = useEndpoint();
+const { usingLocal, demoteIfUnreachable } = useEndpoint();
 const { activeSandboxId } = useSandbox();
 
 export class SandboxUnaddressedError extends Error {
@@ -24,7 +24,7 @@ export const DEADLINE_MS = 45_000;
 
 export class SandboxTimeoutError extends Error {
     constructor() {
-        super(`Your sandbox didn't answer in time. Retrying on a different connection.`);
+        super(`Your sandbox didn't answer in time.`);
     }
 }
 
@@ -62,12 +62,12 @@ const authenticated = (request: Request, target: SandboxTarget, token: string): 
     return new Request(request, { headers });
 };
 
-// On the loopback shortcut, a timeout demotes the endpoint since the tunnel next door can still reach the daemon;
-// on the tunnel there's nowhere better to go.
+// On the loopback shortcut, a missed deadline asks whether the tunnel does better before demoting, since the usual
+// cause is a busy daemon; on the tunnel there's nowhere better to go.
 const timedOut = (): SandboxTimeoutError => {
     const id = activeSandboxId.value;
     if (usingLocal.value && id !== undefined) {
-        demote(id);
+        void demoteIfUnreachable(id);
     }
     return new SandboxTimeoutError();
 };

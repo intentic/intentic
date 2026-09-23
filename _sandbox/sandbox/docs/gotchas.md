@@ -362,7 +362,13 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   (`@intentic/scaffold`'s forker), so every `git` costs a fork from ~50 MB. And the search engine runs in its
   own process (`@intentic/iq-engine/host`, logged with its pid at boot) rather than as worker threads sharing
   this address space, because threads move CPU off the loop but leave the models and the index cache resident
-  here. Anything new that is large or forks often belongs on the far side of one of those boundaries.
+  here. Anything new that is large or forks often belongs on the far side of one of those boundaries. What is
+  CPU-bound but small takes a worker thread instead, over one call channel (`src/worker-calls.ts`):
+  the phrase index's SQLite (`src/sessions/search-index-worker.ts`), whose cold query took 2.2 s, and the tokenizer
+  behind code counts (`src/git/changes/code-counts-worker.ts`), over a second on a large file. The daemon's own
+  processes stay off the host's swap too: the entrypoint gives it a cgroup with `memory.swap.max` 0 and moves what it
+  starts into a `workload` sibling (`src/platform/resources/workload-priority.ts`), since faulting a swapped heap back
+  in froze the loop for seconds.
 - Built on Hono, zod, and provider-native runtimes. Claude uses the Agent SDK; Codex uses app-server, whose
   runner seam is injectable so co-located tests run without a provider process or network.
 - There is more than one workspace, and a path alone does not say which. Every isolated conversation has its own checkout, so the same path names a different file in each, which is why the workspace read routes take an optional conversation and resolve the root in one place (`src/workspace/layout/workspace-scope.ts`). A checkout is **not** a superset of `/work` (a mirrored dir is a bare mount point from outside the namespace of a turn that enters one, a symlink into the main tree for a conversation whose runtime does not, and untracked workspace content was never in it either way), so a scoped read falls back to the shared tree and reports which one answered. Search is the stated exception: the iq index is built over `/work` and stays there.

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,10 +19,9 @@ describe(`entrypoint memory sizing`, () => {
         writeFileSync(join(dir, "memory.max"), `${memoryMax}\n`);
         writeFileSync(join(dir, "memory.high"), "max\n");
         writeFileSync(join(dir, "meminfo"), `MemTotal:       ${engineKib} kB\nMemFree:          812344 kB\n`);
-        const script = sizing
-            .replaceAll("/sys/fs/cgroup/memory.max", join(dir, "memory.max"))
-            .replaceAll("/sys/fs/cgroup/memory.high", join(dir, "memory.high"))
-            .replaceAll("/proc/meminfo", join(dir, "meminfo"));
+        // The whole cgroup root is staged, never only the files named: the slice also holds the daemon's own cgroup
+        // setup, which run against the real root would move this machine's processes.
+        const script = sizing.replaceAll("/sys/fs/cgroup", dir).replaceAll("/proc/meminfo", join(dir, "meminfo"));
         const run = spawnSync("sh", ["-ec", `${script}\necho "$heap_mb"`], { encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } });
         return { heapMb: Number(run.stdout.trim()), high: readFileSync(join(dir, "memory.high"), "utf8").trim() };
     };
@@ -41,5 +40,41 @@ describe(`entrypoint memory sizing`, () => {
 
     it(`leaves an uncapped box on the middle heap and unbraked`, () => {
         expect(size("max", GUEST_KIB)).toEqual({ heapMb: 1536, high: "max" });
+    });
+});
+
+/* The daemon's own cgroup, run against a staged root: every process of the root moves to `workload` first, controllers
+   open for the children, and the daemon's leaf keeps its memory resident at a larger cpu and io weight. */
+describe(`entrypoint daemon cgroup`, () => {
+    const setup = entrypoint.slice(entrypoint.indexOf("cgroup_root=/sys/fs/cgroup"), entrypoint.indexOf("# UV_THREADPOOL_SIZE"));
+    const stage = (controllers: string): string => {
+        const root = mkdtempSync(join(tmpdir(), "entrypoint-cgroup-"));
+        writeFileSync(join(root, "cgroup.controllers"), `${controllers}\n`);
+        writeFileSync(join(root, "cgroup.subtree_control"), "");
+        writeFileSync(join(root, "cgroup.procs"), "1\n7\n");
+        return root;
+    };
+    const run = (root: string): void => {
+        const script = setup.replaceAll("/sys/fs/cgroup", root);
+        spawnSync("sh", ["-ec", script], { encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } });
+    };
+    const read = (path: string): string => readFileSync(path, "utf8").trim();
+
+    it(`keeps the daemon resident and weighted above its workload, once the root is emptied into a leaf`, () => {
+        const root = stage("cpuset cpu io memory pids");
+        run(root);
+        expect(read(join(root, "workload", "cgroup.procs"))).toBe("7");
+        expect(read(join(root, "cgroup.subtree_control"))).toBe("+memory");
+        expect(read(join(root, "daemon", "memory.swap.max"))).toBe("0");
+        expect(read(join(root, "daemon", "cpu.weight"))).toBe("1000");
+        expect(read(join(root, "daemon", "io.weight"))).toBe("default 1000");
+    });
+
+    it(`touches nothing where cgroup2 offers no memory controller`, () => {
+        const root = stage("cpuset cpu pids");
+        mkdirSync(join(root, "daemon"));
+        run(root);
+        expect(() => read(join(root, "daemon", "memory.swap.max"))).toThrow();
+        expect(read(join(root, "cgroup.subtree_control"))).toBe("");
     });
 });

@@ -22,7 +22,7 @@ test("indexes what is behind, and skips what is already current", async () => {
         logger,
     );
     expect(first).toMatchObject({ indexed: 2, skipped: 0, failed: 0 });
-    expect(index.search("login", "conversation", false).has("c1")).toBe(true);
+    expect((await index.search("login", "conversation", false)).has("c1")).toBe(true);
 
     const second = await backfillSearchIndex(
         index,
@@ -48,15 +48,15 @@ test("a moved version re-reads the source and replaces its lines", async () => {
     await backfillSearchIndex(index, { kind: "conversation", prune: false, sources: [source("c1", "10", "first words")] }, logger);
     await backfillSearchIndex(index, { kind: "conversation", prune: false, sources: [source("c1", "20", "replaced words")] }, logger);
 
-    expect(index.search("replaced words", "conversation", false).has("c1")).toBe(true);
-    expect(index.search("first words", "conversation", false).has("c1")).toBe(false);
+    expect((await index.search("replaced words", "conversation", false)).has("c1")).toBe(true);
+    expect((await index.search("first words", "conversation", false)).has("c1")).toBe(false);
 });
 
 // Pins an empty source as version "none" so it counts as seen and is not re-read every pass.
 test("a source with nothing stored is recorded as seen", async () => {
     const index = openSearchIndex(IN_MEMORY);
     await backfillSearchIndex(index, { kind: "conversation", prune: false, sources: [source("c1", undefined, "")] }, logger);
-    expect(index.versions("conversation").get("c1")).toBe("none");
+    expect((await index.versions("conversation")).get("c1")).toBe("none");
 
     const again = await backfillSearchIndex(index, { kind: "conversation", prune: false, sources: [source("c1", undefined, "")] }, logger);
     expect(again).toMatchObject({ indexed: 0, skipped: 1 });
@@ -80,8 +80,8 @@ test("a source that throws is skipped and the pass continues", async () => {
     );
 
     expect(outcome).toMatchObject({ indexed: 1, failed: 1 });
-    expect(index.search("still indexed", "conversation", false).has("good")).toBe(true);
-    expect(index.versions("conversation").has("bad")).toBe(false);
+    expect((await index.search("still indexed", "conversation", false)).has("good")).toBe(true);
+    expect((await index.versions("conversation")).has("bad")).toBe(false);
 });
 
 // Sessions prune because the history list is a window (an out-of-window session's rows are dead weight); conversations
@@ -96,8 +96,8 @@ test("pruning drops unlisted sources for sessions and never for conversations", 
     const pruned = await backfillSearchIndex(index, { kind: "session", prune: true, sources: [source("s2", "1", "new chat")] }, logger);
 
     expect(pruned).toMatchObject({ forgotten: 1 });
-    expect(index.search("old chat", "session", false).size).toBe(0);
-    expect(index.search("new chat", "session", false).has("s2")).toBe(true);
+    expect((await index.search("old chat", "session", false)).size).toBe(0);
+    expect((await index.search("new chat", "session", false)).has("s2")).toBe(true);
 
     await backfillSearchIndex(
         index,
@@ -106,7 +106,7 @@ test("pruning drops unlisted sources for sessions and never for conversations", 
     );
     const held = await backfillSearchIndex(index, { kind: "conversation", prune: false, sources: [source("c1", "1", "kept")] }, logger);
     expect(held).toMatchObject({ forgotten: 0 });
-    expect(index.search("also kept", "conversation", false).has("c2")).toBe(true);
+    expect((await index.search("also kept", "conversation", false)).has("c2")).toBe(true);
 });
 
 // Detached from any single boot, so it must honor abort rather than hold shutdown open mid-sweep.
@@ -126,5 +126,5 @@ test("an aborted pass stops where it is", async () => {
     );
 
     expect(outcome.indexed).toBe(1);
-    expect(index.search("never reached", "conversation", false).size).toBe(0);
+    expect((await index.search("never reached", "conversation", false)).size).toBe(0);
 });

@@ -591,7 +591,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                     for (const id of merged.agents.ids()) {
                         const entry = merged.agents.entry(id);
                         if (entry !== undefined) {
-                            testSaid.put(id, "conversation", "test", spokenLinesOf(await merged.transcripts.read(entry)));
+                            await testSaid.put(id, "conversation", "test", spokenLinesOf(await merged.transcripts.read(entry)));
                         }
                     }
                 }

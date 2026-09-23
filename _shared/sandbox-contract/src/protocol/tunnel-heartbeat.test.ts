@@ -1,5 +1,5 @@
 import { describe, test, expect, mock } from "bun:test";
-import { createHeartbeat, DEAD_AFTER_MS } from "./heartbeat.js";
+import { createHeartbeat, DEAD_AFTER_MS } from "./tunnel-heartbeat.js";
 
 // The clock is injected, so these read as "what happens after N seconds of silence" rather than as timer
 // plumbing — which is the only question the heartbeat answers.

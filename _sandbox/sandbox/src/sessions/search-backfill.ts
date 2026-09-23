@@ -46,7 +46,7 @@ export const backfillSearchIndex = async (
     logger: Logger,
     signal?: AbortSignal,
 ): Promise<BackfillOutcome> => {
-    const known = index.versions(request.kind);
+    const known = await index.versions(request.kind);
     const listed = new Set(request.sources.map((source) => source.key));
     let indexed = 0;
     let skipped = 0;
@@ -64,7 +64,7 @@ export const backfillSearchIndex = async (
                 skipped += 1;
                 continue;
             }
-            index.put(source.key, request.kind, version, await source.lines());
+            await index.put(source.key, request.kind, version, await source.lines());
             indexed += 1;
             // Logs only once real work has happened, then at a human cadence, so quiet reading doesn't look silent.
             if (Date.now() - announcedAt > LOG_MS) {
@@ -82,7 +82,7 @@ export const backfillSearchIndex = async (
     if (request.prune) {
         for (const key of known.keys()) {
             if (!listed.has(key)) {
-                index.forget(key);
+                await index.forget(key);
                 forgotten += 1;
             }
         }
