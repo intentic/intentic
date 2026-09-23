@@ -142,11 +142,17 @@ const measure = (): void => {
     const style = getComputedStyle(grid);
     // The gap rides in the band height: bands are placed at an offset, so nothing else would space them apart.
     const gap = Number.parseFloat(style.rowGap) || 0;
-    probed.value = {
+    const next = {
         columns: style.gridTemplateColumns.split(` `).filter((track) => track !== ``).length,
         tileHeight: tile.offsetHeight + gap,
         labelHeight: probeLabel.value?.offsetHeight ?? 0,
     };
+    const was = probed.value;
+    // A pane drag fires this every frame, and a new object would re-lay the whole folder out even when nothing moved.
+    if (next.columns === was.columns && next.tileHeight === was.tileHeight && next.labelHeight === was.labelHeight) {
+        return;
+    }
+    probed.value = next;
 };
 let probeSize: ResizeObserver | undefined;
 onMounted(() => {
@@ -159,7 +165,8 @@ onMounted(() => {
 onBeforeUnmount(() => probeSize?.disconnect());
 
 const gridLayout = computed(() => homeLayout(groups.value, showLabels.value, probed.value));
-const bands = useRowWindow(scroller, () => variableRows(gridLayout.value.heights));
+// A band is a whole row of tiles, so the list default of eight would keep two screens of hidden tiles mounted.
+const bands = useRowWindow(scroller, () => variableRows(gridLayout.value.heights), { overscan: 2 });
 // What to draw, each band carrying where it sits: they are placed, not stacked, so the ones left out cost no height.
 const painted = computed(() =>
     gridLayout.value.bands
@@ -574,8 +581,9 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             </div>
         </nav>
 
-        <!-- The tiles scroll under the breadcrumb rather than with it, so the window measures this element alone. -->
-        <div ref="scroller" class="relative min-h-0 flex-1 overflow-auto" @scroll.passive="bands.onScroll(); closePeek()">
+        <!-- The tiles scroll under the breadcrumb rather than with it, so the window measures this element alone. Never
+             sideways: the folder transition slides the tiles past the edge, which would flash a horizontal scrollbar. -->
+        <div ref="scroller" class="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto" @scroll.passive="bands.onScroll(); closePeek()">
             <!-- The measure: one tile and one label wearing the real classes, laid out but not painted. Outside the
                  Transition, so a folder change cannot swap the element out from under the observer, and the column count
                  and band heights stay the stylesheet's to decide rather than constants kept in the script. -->
