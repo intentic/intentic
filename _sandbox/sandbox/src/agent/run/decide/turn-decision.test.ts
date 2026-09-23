@@ -1,4 +1,4 @@
-import { type Capability, type CredentialGate, type Persona, PersonaPowersSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type Capability, type CredentialGate, type Persona, PersonaPowersSchema, type Rule, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test } from "bun:test";
 import { createMemoryWarnings, type MemoryHeadroom, type TurnAdmission } from "../../../platform/resources/memory-admission.js";
@@ -235,9 +235,14 @@ test.each([
 
 // the automatic checks: named on the opening message, and again on the turn after a compaction
 
-const CHECKED = SandboxSettingsSchema.parse({
-    rules: [{ id: "pre-land", label: "Verify before you finish", moment: "turn.ending", action: { kind: "command", command: "pnpm verify" } }],
-});
+// A repository's turn check as repo-checks.ts compiles it; settings refuse a command, so it arrives as a declared check.
+const TURN_CHECK: Rule = {
+    id: "repo-check-root-1",
+    label: "Verify before you finish",
+    moment: "turn.ending",
+    action: { kind: "command", command: "pnpm verify", timeoutMs: 900_000 },
+    enabled: true,
+};
 
 test.each([
     ["a conversation's opening message", undefined, undefined, true],
@@ -247,22 +252,18 @@ test.each([
     ["a fork taken right after a compaction", conversationAfter(4, { compactedTurn: 3 }), FORK, true],
     ["a turn three past the compaction", conversationAfter(6, { compactedTurn: 3 }), undefined, false],
 ] as const)("the checks note on %s", (_case, entry, forkOf, sent) => {
-    const decision = decided({ ...FACTS, settings: CHECKED, entry }, turn({ conversationId: "c-checks", forkOf }));
+    const decision = decided({ ...FACTS, repoChecks: [TURN_CHECK], entry }, turn({ conversationId: "c-checks", forkOf }));
 
     expect(titles(decision).includes(TURN_ENDING_NOTE_TITLE)).toBe(sent);
 });
 
 test("a check a repository declares joins the owner's rules, and the turn is told it will run", () => {
-    const declared = {
-        id: "repo-verify",
-        label: "Repository checks",
-        moment: "turn.ending" as const,
-        action: { kind: "command" as const, command: "pnpm verify:turn" },
-    };
+    const look = { id: "verify-ui-edits", label: "Look at what it changed", moment: "turn.ending", action: { kind: "builtin", name: "verify-ui-edits" } };
+    const declared: Rule = { ...TURN_CHECK, id: "repo-verify", label: "Repository checks", action: { kind: "command", command: "pnpm verify:turn", timeoutMs: 900_000 } };
 
-    const decision = decided({ ...FACTS, settings: CHECKED, repoChecks: [...SandboxSettingsSchema.parse({ rules: [declared] }).rules] });
+    const decision = decided({ ...FACTS, settings: SandboxSettingsSchema.parse({ rules: [look] }), repoChecks: [declared] });
 
-    expect(decision.context.settings?.rules.map((rule) => rule.id)).toEqual(["pre-land", "repo-verify"]);
+    expect(decision.context.settings?.rules.map((rule) => rule.id)).toEqual(["verify-ui-edits", "repo-verify"]);
     expect(decision.context.base.spec.notes?.find((note) => note.title === TURN_ENDING_NOTE_TITLE)?.text).toContain(
         "**Repository checks:** `pnpm verify:turn`",
     );
