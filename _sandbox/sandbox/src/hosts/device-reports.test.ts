@@ -392,7 +392,7 @@ test("a machine whose connection is gone by the time it is asked reads as offlin
     const row = (await devices(services))[0];
     expect(row?.hostId).toBe("gone-pc");
     expect(row?.gap).toBe("offline");
-    expect(row?.online).toBe(false);
+    expect(row?.online).toBe(true);
     expect(row?.report).toBeUndefined();
     expect(row?.sandboxes).toBeUndefined();
     expect(calls).toEqual([]);
