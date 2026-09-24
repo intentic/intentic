@@ -38,11 +38,13 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #   tmux                    the agent's shell-busy probe reads one tmux behaviour and nothing else (a window
 #                           whose command exited stays listed as a DEAD pane), so agent-terminals.integration
 #                           runs against a REAL private tmux server — stub it and the test asserts the stub
+#   procps                  the self-kill guard rewrites pkill/pgrep patterns, and agent-terminals.integration
+#                           proves the rewrite with a real pgrep; the sandbox runtime installs the same package
 #   docker-ce-cli + buildx  the images/release jobs drive the dind service and export a mode=max registry cache
 # The docker apt repo is added the same way the sandbox's docker feature pack adds it
 # (_sandbox/sandbox/image-packs/docker.Dockerfile); resolved once, here, instead of in three jobs at runtime.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux zip unzip \
+    && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux zip unzip procps \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod a+r /etc/apt/keyrings/docker.asc \

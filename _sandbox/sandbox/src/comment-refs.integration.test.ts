@@ -1,7 +1,8 @@
-import { readdir, readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 
 // Every file a comment names still exists under that name; a reference is recognized by shape (a known stem, a long or
 // hyphenated/camelCase stem, or a PascalCase component name), not a list of known-bad names.
@@ -38,24 +39,22 @@ const NOT_OURS = new Set([
 ]);
 
 // The only file allowed to quote dead names; its header is evidence, not a pointer.
-const SELF = "_sandbox/sandbox/src/comment-refs.test.ts";
+const SELF = "_sandbox/sandbox/src/comment-refs.integration.test.ts";
 
-const walk = async (dir: string): Promise<string[]> => {
-    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-    const found = await Promise.all(
-        entries.map(async (entry) => {
-            if (entry.isDirectory()) {
-                // target is cargo's build tree; nothing of ours lives there, and it wastes stats on a dirty checkout.
-                return entry.name.startsWith(".") || entry.name === "target" || IGNORED_DIRS.has(entry.name) ? [] : walk(join(dir, entry.name));
-            }
-            return SCANNED.has(entry.name.slice(entry.name.lastIndexOf("."))) ? [join(dir, entry.name)] : [];
-        }),
-    );
-    return found.flat();
-};
+// The checkout as git sees it: gitignored output (a stale `pnpm deploy` tree on a reused runner) is not this tree.
+const listFiles = (): string[] =>
+    execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--deduplicate"], {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        maxBuffer: 256 * 1024 * 1024,
+    })
+        .split("\0")
+        .filter((path) => path.length > 0 && SCANNED.has(path.slice(path.lastIndexOf("."))))
+        .map((path) => join(REPO_ROOT, path))
+        .filter((file) => existsSync(file));
 
 test("every module a comment names still exists under that name", async () => {
-    const files = await walk(REPO_ROOT);
+    const files = listFiles();
     const basenames = new Set(files.map((file) => file.slice(file.lastIndexOf("/") + 1)));
     const stems = new Set([...basenames].map((name) => name.slice(0, name.indexOf("."))));
 
