@@ -100,7 +100,12 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
     // Usually already in the cache, from the view the click came from; a cold daemon re-lists instead.
     const run: PipelineRun | undefined =
         (services.ciRuns.sweep() ?? []).find((candidate) => candidate.repo === project.repo && candidate.runId === runId) ??
-        (await client.listRuns(project, RUNS_PER_PROJECT).catch(() => [])).find((candidate) => candidate.runId === runId);
+        (
+            await client.listRuns(project, RUNS_PER_PROJECT).catch((error: unknown) => {
+                services.logger.warn({ err: error, repo: project.repo, runId }, "ci fix: the project's runs could not be listed");
+                return [];
+            })
+        ).find((candidate) => candidate.runId === runId);
     const where = run !== undefined ? `on branch ${run.branch} (${run.url})` : `(run ${runId})`;
     // What a CONTINUED attempt is told: the failure is still open, the evidence is already in the conversation.
     const nudge = [

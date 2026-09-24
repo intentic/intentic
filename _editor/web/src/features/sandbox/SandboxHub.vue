@@ -2,6 +2,7 @@
 import type { ViewBadge } from "@intentic/extension-api";
 import type { NavGroup } from "@intentic/ui";
 import { computed } from "vue";
+import { useRoute } from "vue-router";
 import { GUEST_SECTION, sandboxBuiltInSlugs, SANDBOX_DEFAULT_SECTION, sandboxSectionGroups } from "./sandboxNav";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { useExtensions } from "../extensions/useExtensions";
@@ -38,6 +39,10 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const DEFAULT = SANDBOX_DEFAULT_SECTION;
+// A persona a link names (`?open=<id>`, the chat rail's Edit persona), handed to its page to land on open.
+const route = useRoute();
+const openPersona = computed(() => (typeof route.query[`open`] === `string` ? route.query[`open`] : undefined));
+
 // The route these sections live on, and half of the address their long-running work reports under.
 const HUB = `sandbox`;
 
@@ -128,7 +133,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxSecrets v-else-if="slug === `secrets`" />
             <SandboxEnvironment v-else-if="slug === `environment`" />
             <SandboxAccess v-else-if="slug === `access`" />
-            <SandboxPersonas v-else-if="slug === `personas`" />
+            <SandboxPersonas v-else-if="slug === `personas`" :open="openPersona" />
             <SandboxAreas v-else-if="slug === `areas`" />
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />

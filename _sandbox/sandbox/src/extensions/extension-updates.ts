@@ -161,7 +161,8 @@ export const previousVersionOf = async (
     }
     try {
         return { ref: await services.git.fullHead(dir), version: manifest.version };
-    } catch {
+    } catch (error) {
+        services.logger.warn({ err: error, extension: id }, "extension update: the previous version's commit could not be read");
         return undefined;
     }
 };

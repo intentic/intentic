@@ -349,7 +349,7 @@ const assignAgent = ({ id, to }: SandboxHandlerInput<`agents`, `assign`>): Agent
     return agentAnswer(patchAgent(id, { owner: { email: address, ...(name === undefined ? {} : { name }), since: Date.now() } }));
 };
 
-const archiveAgents = ({ ids = [] }: SandboxHandlerInput<`agents`, `archive`>): { moved: AgentSummary[]; failed: []; rev: number } => {
+const archiveAgents = ({ ids }: SandboxHandlerInput<`agents`, `archive`>): { moved: AgentSummary[]; failed: []; rev: number } => {
     const archivedAt = Date.now();
     const archived: AgentSummary[] = [];
     for (const agent of roster.agents) {

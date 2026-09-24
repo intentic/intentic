@@ -76,6 +76,7 @@ const APP_WIDE = new Map<string, string>([
     [`features/agents/board/useAgentFilter.ts: matchCase = ref(…)`, PREFERENCE],
     [`features/agents/fleet/synthesizeSessions.ts: synthesizing = ref(…)`, `the reentrancy guard of one press, cleared by that press's own finally`],
     [`features/agents/fleet/useAgents-archive.ts: archivedFlash = ref(…)`, EVENT],
+    [`features/agents/fleet/useAgents-fleet.ts: tidyClock = ref(…)`, `the wall clock the rail's tidy reads, the same in every sandbox`],
     [`features/auth/useAuth.ts: user = ref(…)`, `the signed-in account, above every sandbox`],
     [`features/auth/useGoogleIdentity.ts: needsSignIn = ref(…)`, GOOGLE],
     [`features/auth/useGoogleIdentity.ts: signedInEmail = ref(…)`, GOOGLE],

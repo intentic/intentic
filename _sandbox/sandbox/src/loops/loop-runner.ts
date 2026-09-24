@@ -128,7 +128,9 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
     loops.hold(conversationId, conversationId, { abort });
     const tree = treeOf(services, record);
     // Creates the loop directory upfront so a `fresh` iteration isn't wasting its first move on mkdir.
-    await mkdir(loopDirIn(services.workspace.root, conversationId), { recursive: true }).catch(() => undefined);
+    await mkdir(loopDirIn(services.workspace.root, conversationId), { recursive: true }).catch((error: unknown) =>
+        services.logger.warn({ err: error, conversationId }, "loop: its directory could not be made ahead of the first iteration"),
+    );
 
     let iteration = record.iterations.length;
     let spentUsd = record.iterations.reduce((total, entry) => total + (entry.costUsd ?? 0), 0);

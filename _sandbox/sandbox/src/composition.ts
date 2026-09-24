@@ -1095,7 +1095,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         if (signal?.aborted === true) {
             return;
         }
-        const listed = await recentSessions().catch(() => []);
+        const listed = await recentSessions().catch((error: unknown) => {
+            logger.warn({ err: error }, "search backfill: recent sessions could not be read");
+            return [];
+        });
         await backfillSearchIndex(
             saidIndex,
             {

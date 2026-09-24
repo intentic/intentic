@@ -96,10 +96,10 @@ const account = (id: string, platform: string): BrowserAccount => ({ id, platfor
 
 let app: App | undefined;
 // Icon is registered app-wide in the real app; a stand-in keeps this off the whole UI plugin.
-const mount = (): HTMLElement => {
+const mount = (props: { open?: string } = {}): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    app = createApp({ render: () => h(SandboxPersonas) });
+    app = createApp({ render: () => h(SandboxPersonas, props) });
     // Carries the icon name through as an attribute, so a test can assert which glyph a row wears, not just that it
     // wears one.
     app.component(`Icon`, IconStub);
@@ -390,6 +390,23 @@ it(`opens a persona by clicking its row, and closes it by clicking again`, async
     await openPersona(el, `work`);
     expect(text(el)).toContain(`Speaks through`);
     rowFor(el, `work`).click();
+    await nextTick();
+    expect(text(el)).not.toContain(`Speaks through`);
+});
+
+// The chat rail's Edit persona links here naming one; the reader lands on it open, and closing it stays closed.
+it(`lands on the persona a link names already open, once`, async () => {
+    personas.value = [
+        { id: `work`, capabilities: [`reddit-work`] },
+        { id: `home`, capabilities: [] },
+    ];
+    const el = mount({ open: `work` });
+    await nextTick();
+    expect(text(el)).toContain(`Speaks through`);
+
+    rowFor(el, `work`).click();
+    await nextTick();
+    personas.value = [...personas.value];
     await nextTick();
     expect(text(el)).not.toContain(`Speaks through`);
 });

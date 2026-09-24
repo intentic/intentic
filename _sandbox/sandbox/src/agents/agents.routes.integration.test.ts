@@ -486,7 +486,7 @@ test("archiving names what it takes and asks nothing of the rest of the fleet", 
 
     await client.agents.archive({ ids: ["conv2"] });
 
-    expect(probe).not.toHaveBeenCalled();
+    expect(probe).toHaveBeenCalledTimes(0);
     expect((await client.agents.archived()).agents.map((agent) => agent.id)).toEqual(["conv2", "conv1"]);
 });
 

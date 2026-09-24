@@ -817,6 +817,7 @@ export const createFleet = (store: FleetStore, standings: LandStandings, presenc
                         broadcast();
                     }
                 })
+                // silent-catch: reprobe never throws; a broadcast that does leaves the next change to carry the standings.
                 .catch(() => undefined);
         },
         adopted: (ids) => {

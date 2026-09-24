@@ -1,4 +1,5 @@
 import { rm, writeFile } from "node:fs/promises";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { join } from "node:path";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 
@@ -959,7 +960,7 @@ test("a turn that proved its edits is recorded as verified, naming the check tha
         createApp(
             services({
                 async *agent() {
-                    yield editFrame("1", "/work/src/parser.ts");
+                    yield editFrame("1", `${WORKSPACE_ROOT}/src/parser.ts`);
                     yield checkFrame("2", "pnpm test src/parser.test.ts");
                     yield checkResult("2", "2 passed\n--- [exit 0, 3s]");
                     yield { kind: "usage", costUsd: 0.2 };
@@ -990,7 +991,7 @@ test("a turn that stopped talking is recorded as such: unproven edits, its own c
                             { content: "test it", status: "pending" },
                         ],
                     };
-                    yield editFrame("1", "/work/src/parser.ts");
+                    yield editFrame("1", `${WORKSPACE_ROOT}/src/parser.ts`);
                     yield { kind: "compact", trigger: "auto", preTokens: 180_000, postTokens: 40_000 };
                     yield { kind: "context_usage", tokens: 148_000, contextWindow: 200_000 };
                     yield { kind: "usage", costUsd: 0.2 };
@@ -1025,8 +1026,8 @@ test("a turn that ends with nothing to show for it is reported as a failure, not
         createApp(
             services({
                 async *agent() {
-                    yield readFrame("1", "/work/src/parser.ts");
-                    yield readFrame("2", "/work/src/lexer.ts");
+                    yield readFrame("1", `${WORKSPACE_ROOT}/src/parser.ts`);
+                    yield readFrame("2", `${WORKSPACE_ROOT}/src/lexer.ts`);
                     yield { kind: "usage", costUsd: 0.2 };
                     yield { kind: "done" };
                 },

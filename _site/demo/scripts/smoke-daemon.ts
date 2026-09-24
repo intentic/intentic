@@ -186,7 +186,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
             keepWarm: { id: fleet.AWAITING_AGENT_ID, until: null },
             land: { id: fleet.REVIEW_AGENT_ID },
             discard: { id: fleet.CONFLICT_AGENT_ID },
-            archive: {},
+            archive: { ids: [fleet.CONFLICT_AGENT_ID] },
             unarchive: { ids: [fleet.CONFLICT_AGENT_ID] },
         },
         agent: {

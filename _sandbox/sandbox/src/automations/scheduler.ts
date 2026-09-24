@@ -592,6 +592,7 @@ export const nextRunOf = (automation: AutomationRecord, sandbox: Zone): number |
     try {
         return new Cron(automation.trigger.cron, cronOptions(zoneOf(automation.trigger, sandbox))).nextRun()?.getTime();
     } catch {
+        // silent-catch: a cron that doesn't parse has no next run.
         return undefined;
     }
 };
@@ -668,6 +669,7 @@ const fireIfDue = async (services: Services, automation: AutomationRecord, windo
     try {
         due = new Cron(automation.trigger.cron, cronOptions(zoneOf(automation.trigger, sandbox))).nextRun(new Date(windowStart));
     } catch {
+        // silent-catch: an invalid cron silences only its own automation, never the tick.
         return;
     }
     if (due === null || due.getTime() > now) {

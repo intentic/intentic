@@ -20,7 +20,6 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { useRoute } from "vue-router";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
@@ -35,6 +34,11 @@ import { useT } from "@intentic/ui/i18n";
 // property of the box; under "Reach", not "Configuration", since it's who acts, not what pays.
 
 const t = useT();
+
+const props = defineProps<{
+    // A persona to land on open, named by the link that brought the reader here.
+    open?: string;
+}>();
 
 const { personas, connected, isConnected, error, isLoading, save, remove } = usePersonas();
 const outline = useSandboxOutline(isLoading);
@@ -103,11 +107,10 @@ const toggleOpen = (persona: Persona): void => {
     });
 };
 
-// A link naming a persona (`?open=<id>`, the chat rail's Edit persona) lands on it open, once the list has it.
-const route = useRoute();
-let landedOn: unknown;
+// The persona a link named (SandboxHub's `open`) lands open once the list holds it, and only once.
+let landedOn: string | undefined;
 watch(
-    [() => route.query[`open`], personas],
+    [() => props.open, personas],
     ([asked]) => {
         const persona = personas.value.find((candidate) => candidate.id === asked);
         if (persona === undefined || landedOn === asked) {

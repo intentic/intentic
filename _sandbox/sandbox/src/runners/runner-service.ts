@@ -27,6 +27,7 @@ import type { RunnerIdentity } from "./runner-identity.js";
 
 // freeDiskMb is read where the workspace lives, which is the disk a turn actually fills.
 const facts = async (workspaceRoot: string): Promise<RunnerFacts> => {
+    // silent-catch: a disk that can't be read reports nothing free, the answer a host should plan around.
     const disk = await statfs(workspaceRoot).catch(() => undefined);
     return {
         cpus: cpus().length,
