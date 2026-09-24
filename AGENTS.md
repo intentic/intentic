@@ -1,19 +1,3 @@
-- No legacy support – make clean breaking changes; update all usages.
-- No re-exports or aliases – import from the true source; use original names.
-- No redundant assignments/coercions – avoid renaming, ?? null, or key renames without purpose.
-- Let errors propagate – do not wrap/rethrow unchanged errors.
-- No trivial wrappers – call signals, setters, and properties directly.
-- Prefer undefined – use it consistently; avoid mixing with null.
-- No migration logic – assume fresh state; remove compatibility layers.
-- Use early returns – handle edge cases first.
-- Fix the pattern, not the instance – trace a bug to its root cause; when the same knowledge lives in N
-  places, extract one source of truth and make every consumer import it (or execute what it emits).
-- Guard invariants by discovery, not enumeration – a test that recognizes violations by their SHAPE anywhere
-  in the repo; a hardcoded file list repeats the miss it exists to prevent.
-- Comments state what the code cannot – an invariant, a unit, a rule that would tempt a "fix". One line for a
-  member or statement, two for a function or type, three for a module header. No history, no restating the
-  code, no rhetoric; the reasoning behind a decision goes in the commit message, not in the file.
-
 ## Documentation
 
 **A package is documented by its own `README.md`, and that README is updated in the same commit as the change
