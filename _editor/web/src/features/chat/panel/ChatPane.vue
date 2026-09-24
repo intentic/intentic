@@ -22,6 +22,7 @@ import { paneSurface } from "./pane/paneSurface";
 import { CHAT_SURFACE } from "../tools/chatToolSurface";
 import ChatPaneTurns from "./pane/ChatPaneTurns.vue";
 import ChatEditNotice from "./pane/ChatEditNotice.vue";
+import ChatPaneEmpty from "./pane/ChatPaneEmpty.vue";
 import { useComposerSize } from "./pane/composerSize";
 import { useComposerControls } from "./pane/composerControls";
 import { usePanePersona } from "./pane/panePersona";
@@ -305,16 +306,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                 <!-- Bare: the turns are the one part withheld, so no message component mounts and the scroller shrinks to the composer. -->
                 <ChatPaneTurns v-if="!bare">
                     <template #empty>
-                        <!-- Names the provider except for the trial, or for a chat with nothing that could answer, where the line below says the rest. -->
-                        <p class="m-auto max-w-[80%] text-center text-xs text-muted">
-                            {{
-                                modelReading.unset
-                                    ? t(`chat.chatPane.startConversationAny`)
-                                    : onTrial
-                                      ? t(`chat.chatPane.askAnythingChatFree`)
-                                      : t(`chat.chatPane.startConversation`, { providerName })
-                            }}
-                        </p>
+                        <ChatPaneEmpty :unset="modelReading.unset" :on-trial="onTrial" :provider-name="providerName" />
                     </template>
                 </ChatPaneTurns>
 

@@ -1,0 +1,630 @@
+---
+import os from "node:os";
+import "../styles/global.css";
+
+// Read on every request while the dev server runs, so these are the machine answering right now.
+const cores = os.availableParallelism();
+const memory = Math.round(os.totalmem() / 1024 ** 3);
+
+const legend = [
+    {
+        symbol: "branch",
+        term: "Its own branch",
+        text: "Every chat is an agent working in its own git worktree, so several can run side by side without touching each other's files.",
+    },
+    {
+        symbol: "steps",
+        term: "Work in progress",
+        text: "Reading, editing, running tests. All of it happens on the branch; your files stay as they were.",
+    },
+    {
+        symbol: "ready",
+        term: "Ready to land",
+        text: "Finished work waits for you. Read the diff, then land it or throw it away. Nothing lands on its own unless you switch that on.",
+    },
+    {
+        symbol: "landed",
+        term: "Landed",
+        text: "The changes arrive in your workspace as uncommitted edits, so your own commit is the final review.",
+    },
+    {
+        symbol: "running",
+        term: "Keeps running",
+        text: "Close this tab and the agents carry on. Come back from any browser, your phone included.",
+    },
+];
+
+// Tailwind only builds classes it can read whole, so the lane colours are spelled out rather than assembled.
+const dots = ["bg-line-1", "bg-line-2", "bg-line-3", "bg-line-4"];
+
+const prompts = [
+    "Turn this page into a pomodoro timer, with a tomato that ripens while I focus.",
+    "Make this a notepad that saves to localStorage, with a live markdown preview beside it.",
+    "Replace the map with a playable Snake game. Arrow keys to steer, and keep a high score.",
+    "Rebuild this page as my homepage: my name, two lines about me, and links to my work.",
+    "Tell me how this repository is laid out, then add an /about page that explains it.",
+];
+---
+
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <title>You're on the landing page</title>
+        <meta name="description" content="A first page for your intentic sandbox: run a few pretend agents, then ask a real one to rewrite this page." />
+    </head>
+    <body class="min-h-dvh bg-coal font-sans text-paper antialiased selection:bg-line-1/40">
+        <header class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 pt-6 sm:px-8">
+            <a href="https://intentic.dev" class="flex items-center gap-2 rounded-md text-sm font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-line-1">
+                <img src="/favicon.svg" alt="" width="22" height="22" />
+                intentic
+            </a>
+            <p class="text-xs text-dust">
+                <span class="mr-1.5 inline-block size-1.5 translate-y-[-1px] rounded-full bg-line-2" aria-hidden="true"></span>
+                Served live by your sandbox: {cores} cores, {memory} GB of memory
+            </p>
+        </header>
+
+        <main class="mx-auto max-w-6xl px-5 sm:px-8">
+            <section class="pt-16 pb-10 sm:pt-24">
+                <h1 class="text-5xl leading-[0.95] font-extrabold tracking-[-0.035em] text-balance sm:text-6xl lg:text-7xl">
+                    <span class="block">You're on the landing page.</span>
+                    <span class="block">Let's land something.</span>
+                </h1>
+                <p class="mt-7 max-w-2xl text-lg leading-relaxed text-pretty text-dust">
+                    In intentic, every chat is an agent working on its own branch, and nothing reaches your files until you land it. Start a few
+                    below to get the feel of it, then try the real thing in the chat.
+                </p>
+            </section>
+
+            <section aria-labelledby="map-title" class="rounded-3xl border border-rule bg-soot">
+                <h2 id="map-title" class="sr-only">A pretend run of agents</h2>
+                <div id="map" class="relative overflow-hidden rounded-t-3xl">
+                    <svg id="rail" class="block h-[300px] w-full" aria-hidden="true">
+                        <line id="now" y1="14" class="stroke-rule" stroke-width="1"></line>
+                        <text id="now-label" y="10" text-anchor="middle" class="fill-dust font-mono text-[10px]">now</text>
+                        <line id="trunk-past" x1="0" class="stroke-paper" stroke-width="5" stroke-linecap="round"></line>
+                        <line id="trunk-future" class="stroke-paper/35" stroke-width="5" stroke-linecap="round" stroke-dasharray="0.1 12"></line>
+                        <text id="main-label" text-anchor="end" class="fill-paper font-mono text-[11px] font-semibold">main</text>
+                        <g id="world"></g>
+                    </svg>
+                    <div id="chips"></div>
+                </div>
+
+                <form id="start" class="flex flex-wrap items-center gap-2 border-t border-rule p-3 sm:p-4">
+                    <label for="task" class="sr-only">What should the agent do?</label>
+                    <input
+                        id="task"
+                        name="task"
+                        maxlength="40"
+                        autocomplete="off"
+                        placeholder="Give it a task, like “add a dark mode”"
+                        class="h-10 min-w-0 flex-1 basis-56 rounded-full border border-rule bg-coal px-4 text-sm text-paper placeholder:text-dust/70 focus-visible:border-line-1 focus-visible:outline-none"
+                    />
+                    <button
+                        id="suggest"
+                        type="button"
+                        class="h-10 cursor-pointer rounded-full border border-rule px-4 text-sm text-dust transition-colors hover:border-dust hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-line-1"
+                    >
+                        Suggest one
+                    </button>
+                    <button
+                        id="go"
+                        type="submit"
+                        class="h-10 cursor-pointer rounded-full bg-paper px-5 text-sm font-semibold text-coal transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-line-1 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        Start an agent
+                    </button>
+                </form>
+                <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-rule px-4 py-3 text-sm sm:px-5">
+                    <p id="narrator" aria-live="polite" class="min-h-5 text-paper">Watch the first one go. When it's done, it's yours to land.</p>
+                    <p id="tally" class="font-mono text-xs text-dust">0 landed</p>
+                </div>
+            </section>
+
+            <section aria-labelledby="legend-title" class="py-20">
+                <h2 id="legend-title" class="text-2xl font-bold tracking-tight">Reading the map</h2>
+                <ul class="mt-8 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+                    {
+                        legend.map((entry) => (
+                            <li class="flex gap-4">
+                                <svg width="56" height="32" viewBox="0 0 56 32" class="mt-0.5 shrink-0" aria-hidden="true">
+                                    {entry.symbol === "branch" && (
+                                        <>
+                                            <path d="M2 27 H14 C26 27 20 7 34 7 H54" class="stroke-line-1" stroke-width="4" fill="none" stroke-linecap="round" />
+                                            <path d="M2 27 H54" class="stroke-paper" stroke-width="4" fill="none" stroke-linecap="round" opacity=".35" />
+                                        </>
+                                    )}
+                                    {entry.symbol === "steps" && (
+                                        <>
+                                            <path d="M2 16 H54" class="stroke-line-2" stroke-width="4" stroke-linecap="round" />
+                                            <circle cx="18" cy="16" r="4.5" class="fill-soot stroke-line-2" stroke-width="2.5" />
+                                            <circle cx="38" cy="16" r="4.5" class="fill-soot stroke-line-2" stroke-width="2.5" />
+                                        </>
+                                    )}
+                                    {entry.symbol === "ready" && (
+                                        <>
+                                            <path d="M2 16 H22" class="stroke-line-3" stroke-width="4" stroke-linecap="round" />
+                                            <path d="M28 16 H42" class="stroke-line-3" stroke-width="4" stroke-dasharray="3 5" />
+                                            <circle cx="48" cy="16" r="6" class="fill-line-3" />
+                                            <circle cx="48" cy="16" r="10" class="stroke-line-3" stroke-width="1.5" fill="none" opacity=".5" />
+                                        </>
+                                    )}
+                                    {entry.symbol === "landed" && (
+                                        <>
+                                            <path d="M2 7 H18 C30 7 24 27 38 27" class="stroke-line-4" stroke-width="4" fill="none" stroke-linecap="round" />
+                                            <path d="M2 27 H54" class="stroke-paper" stroke-width="4" stroke-linecap="round" />
+                                            <circle cx="40" cy="27" r="5.5" class="fill-paper stroke-line-4" stroke-width="3" />
+                                        </>
+                                    )}
+                                    {entry.symbol === "running" && (
+                                        <>
+                                            <path d="M2 16 H28" class="stroke-paper" stroke-width="4" stroke-linecap="round" />
+                                            <path d="M28 16 H54" class="stroke-paper" stroke-width="4" stroke-linecap="round" stroke-dasharray="0.1 9" opacity=".45" />
+                                        </>
+                                    )}
+                                </svg>
+                                <div>
+                                    <p class="font-semibold">{entry.term}</p>
+                                    <p class="mt-1 text-sm leading-relaxed text-dust">{entry.text}</p>
+                                </div>
+                            </li>
+                        ))
+                    }
+                </ul>
+            </section>
+
+            <section aria-labelledby="try-title" class="border-t border-rule py-20">
+                <h2 id="try-title" class="text-2xl font-bold tracking-tight">Now try it for real</h2>
+                <p class="mt-3 max-w-2xl text-dust">
+                    Copy one into the chat beside this preview. The agent rewrites this page on its own branch, and you land the result when you like
+                    it.
+                </p>
+                <ul class="mt-8 divide-y divide-rule border-y border-rule">
+                    {
+                        prompts.map((prompt, index) => (
+                            <li class="flex items-center gap-4 py-4">
+                                <span class={`size-3 shrink-0 rounded-full ${dots[index % dots.length]}`} aria-hidden="true" />
+                                <p class="prompt min-w-0 flex-1 leading-snug">{prompt}</p>
+                                <button
+                                    type="button"
+                                    data-copy={prompt}
+                                    class="h-9 shrink-0 cursor-pointer rounded-full border border-rule px-4 text-sm text-dust transition-colors hover:border-dust hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-line-1"
+                                >
+                                    Copy
+                                </button>
+                            </li>
+                        ))
+                    }
+                </ul>
+            </section>
+        </main>
+
+        <footer class="mx-auto max-w-6xl px-5 pb-14 text-sm leading-relaxed text-dust sm:px-8">
+            <p class="max-w-3xl text-pretty">
+                This page is <code class="font-mono text-[0.9em] text-paper">site/_apps/landing/src/pages/index.astro</code>. Change a word and save,
+                and the preview reloads. It's here for your first few minutes; delete it whenever you like.
+            </p>
+        </footer>
+
+        <script>
+            // A pretend run of agents: branches leave main, take steps, wait to be landed or discarded, and merge back.
+            type Phase = "working" | "ready" | "landing" | "landed" | "discarded";
+
+            interface Agent {
+                task: string;
+                branch: string;
+                lane: number;
+                // World x (px) where the branch leaves main, where it finished, and where it was landed or dropped.
+                x0: number;
+                readyX: number;
+                endX: number;
+                stepsLeft: number;
+                nextStepAt: number;
+                phase: Phase;
+                group: SVGGElement;
+                solid: SVGPathElement;
+                waiting: SVGPathElement;
+                arrival: SVGPathElement;
+                tip: SVGCircleElement;
+                name: SVGTextElement;
+                note: SVGTextElement;
+                chip: HTMLDivElement | undefined;
+            }
+
+            const SVG = "http://www.w3.org/2000/svg";
+            // World units are pixels; the clock moves the map left at this many per second.
+            const SPEED = 30;
+            const HEIGHT = 300;
+            const TRUNK_Y = 240;
+            const LANE_GAP = 50;
+            const CURVE = 36;
+            // Tailwind only builds classes it can read whole, so each lane's colour is spelled out here, in lane order.
+            const LANES = [
+                { stroke: "stroke-line-1", fill: "fill-line-1", bg: "bg-line-1" },
+                { stroke: "stroke-line-2", fill: "fill-line-2", bg: "bg-line-2" },
+                { stroke: "stroke-line-3", fill: "fill-line-3", bg: "bg-line-3" },
+                { stroke: "stroke-line-4", fill: "fill-line-4", bg: "bg-line-4" },
+            ] as const;
+
+            const TASKS = [
+                "add a dark mode",
+                "fix the typo in the footer",
+                "write tests for the form",
+                "make the logo spin",
+                "translate the page to French",
+                "add a contact form",
+                "speed up the images",
+                "make the buttons bouncier",
+                "add a changelog page",
+                "upgrade Astro",
+                "add a 404 page",
+                "explain the repo layout",
+            ];
+            const STEPS = ["reading the code", "making a plan", "editing index.astro", "running the tests", "fixing a failing test", "checking the preview"];
+
+            const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            const svg = document.querySelector<SVGSVGElement>("#rail")!;
+            const world = document.querySelector<SVGGElement>("#world")!;
+            const chips = document.querySelector<HTMLDivElement>("#chips")!;
+            const form = document.querySelector<HTMLFormElement>("#start")!;
+            const input = document.querySelector<HTMLInputElement>("#task")!;
+            const go = document.querySelector<HTMLButtonElement>("#go")!;
+            const narrator = document.querySelector<HTMLParagraphElement>("#narrator")!;
+            const tally = document.querySelector<HTMLParagraphElement>("#tally")!;
+
+            const agents: Agent[] = [];
+            const told = new Set<string>();
+            let landed = 0;
+            let discarded = 0;
+            let stations = 0;
+            let clock = 0;
+            let headX = 0;
+
+            const laneY = (lane: number): number => TRUNK_Y - LANE_GAP * (lane + 1);
+            const head = (): number => clock * SPEED;
+            const between = (low: number, high: number): number => low + Math.random() * (high - low);
+            const pick = <T,>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)]!;
+            const slug = (task: string): string =>
+                task
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, "-")
+                    .replace(/^-|-$/g, "")
+                    .slice(0, 28) || "task";
+
+            const draw = <K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<string, string | number>, parent: Element): SVGElementTagNameMap[K] => {
+                const element = document.createElementNS(SVG, tag);
+                for (const [name, value] of Object.entries(attributes)) {
+                    element.setAttribute(name, String(value));
+                }
+                parent.append(element);
+                return element;
+            };
+
+            // Each kind of moment is explained in full the first time, and just named after that; an explanation stays up long
+            // enough to read before a mere name replaces it.
+            let explainedAt = -Infinity;
+            const narrate = (moment: string, first: string, again: string): void => {
+                if (!told.has(moment)) {
+                    told.add(moment);
+                    narrator.textContent = first;
+                    explainedAt = performance.now();
+                } else if (performance.now() - explainedAt > 4500) {
+                    narrator.textContent = again;
+                }
+            };
+
+            const busyLanes = (): Set<number> =>
+                new Set(agents.filter((agent) => agent.phase !== "landed" && agent.phase !== "discarded").map((agent) => agent.lane));
+            const freeLane = (): number | undefined => {
+                const busy = busyLanes();
+                const lane = LANES.findIndex((_, index) => !busy.has(index));
+                return lane < 0 ? undefined : lane;
+            };
+
+            const recount = (): void => {
+                const out = agents.filter((agent) => agent.phase === "working" || agent.phase === "ready").length;
+                tally.textContent = [`${landed} landed`, discarded > 0 ? `${discarded} discarded` : "", out > 0 ? `${out} on branches` : ""]
+                    .filter(Boolean)
+                    .join(", ");
+                go.disabled = freeLane() === undefined;
+            };
+
+            // A landed change becomes a station on main, its task written under it.
+            const station = (x: number, stroke: string, label: string): void => {
+                const group = draw("g", {}, world);
+                draw("circle", { cx: x, cy: TRUNK_Y, r: 7, class: `fill-paper ${stroke}`, "stroke-width": 3 }, group);
+                const text = draw("text", { x, y: TRUNK_Y + (stations % 2 === 0 ? 28 : 44), "text-anchor": "middle", class: "fill-dust font-mono text-[10px]" }, group);
+                text.textContent = label;
+                stations += 1;
+            };
+
+            const start = (task: string): void => {
+                const lane = freeLane();
+                if (lane === undefined) {
+                    return;
+                }
+                const y = laneY(lane);
+                const colour = LANES[lane]!;
+                const group = draw("g", { class: "transition-opacity duration-700" }, world);
+                const agent: Agent = {
+                    task,
+                    branch: `agent/${slug(task)}`,
+                    lane,
+                    // Leaves main a curve's width in the past, so the branch is already level with its lane at "now".
+                    x0: head() - CURVE,
+                    readyX: 0,
+                    endX: 0,
+                    stepsLeft: Math.round(between(3, 6)),
+                    nextStepAt: clock + between(0.9, 1.6),
+                    phase: "working",
+                    group,
+                    solid: draw("path", { class: colour.stroke, "stroke-width": 5, fill: "none", "stroke-linecap": "round" }, group),
+                    waiting: draw("path", { class: colour.stroke, "stroke-width": 5, fill: "none", "stroke-dasharray": "4 7" }, group),
+                    arrival: draw("path", { class: colour.stroke, "stroke-width": 5, fill: "none", "stroke-linecap": "round" }, group),
+                    tip: draw("circle", { r: 6, cy: y, class: colour.fill }, group),
+                    name: draw("text", { y: y - 12, "text-anchor": "end", class: "fill-paper font-mono text-[11px]" }, group),
+                    note: draw("text", { y: y + 22, "text-anchor": "end", class: "fill-dust font-mono text-[10px]" }, group),
+                    chip: undefined,
+                };
+                agent.name.textContent = agent.branch;
+                agent.note.textContent = STEPS[0]!;
+                agents.push(agent);
+                narrate("start", `“${task}” is on its own branch now. Your files don't change while it works.`, `Started ${agent.branch}.`);
+                if (freeLane() === undefined) {
+                    narrate("full", "Four at once, each on its own branch. Land or discard one to free a lane.", "All four lanes are busy.");
+                }
+                recount();
+            };
+
+            const step = (agent: Agent): void => {
+                const x = head();
+                draw("circle", { cx: x, cy: laneY(agent.lane), r: 4.5, class: `fill-soot ${LANES[agent.lane]!.stroke}`, "stroke-width": 2.5 }, agent.group);
+                agent.group.append(agent.tip);
+                agent.stepsLeft -= 1;
+                if (agent.stepsLeft > 0) {
+                    agent.note.textContent = pick(STEPS.slice(1));
+                    agent.nextStepAt = clock + between(0.9, 1.9);
+                    return;
+                }
+                agent.phase = "ready";
+                agent.readyX = x;
+                agent.note.textContent = "";
+                agent.tip.classList.add("waiting");
+                offer(agent);
+                narrate("ready", "Done, and waiting on you. Nothing lands until you say so.", `${agent.branch} is ready to land.`);
+                recount();
+            };
+
+            // The two presses a finished agent waits for, pinned just past the "now" line where its branch ends.
+            const offer = (agent: Agent): void => {
+                const chip = document.createElement("div");
+                chip.className = "absolute flex items-center gap-1";
+                const land = document.createElement("button");
+                land.type = "button";
+                land.textContent = "Land";
+                land.setAttribute("aria-label", `Land ${agent.branch}`);
+                land.className = `h-8 cursor-pointer rounded-full ${LANES[agent.lane]!.bg} px-3 text-xs font-semibold text-coal transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-paper`;
+                land.addEventListener("click", () => settle(agent, "landing"));
+                const drop = document.createElement("button");
+                drop.type = "button";
+                drop.textContent = "Discard";
+                drop.setAttribute("aria-label", `Discard ${agent.branch}`);
+                drop.className =
+                    "h-8 cursor-pointer rounded-full px-2.5 text-xs text-dust transition-colors hover:text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-paper";
+                drop.addEventListener("click", () => settle(agent, "discarded"));
+                chip.append(land, drop);
+                chips.append(chip);
+                agent.chip = chip;
+                place(agent);
+            };
+
+            const place = (agent: Agent): void => {
+                if (agent.chip !== undefined) {
+                    agent.chip.style.left = `${headX + 14}px`;
+                    agent.chip.style.top = `${laneY(agent.lane) - 16}px`;
+                }
+            };
+
+            const settle = (agent: Agent, phase: "landing" | "discarded"): void => {
+                if (agent.phase !== "ready" || agent.chip === undefined) {
+                    return;
+                }
+                // The pressed button is about to vanish; keyboard focus moves on rather than falling to the page.
+                const hadFocus = agent.chip.contains(document.activeElement);
+                agent.chip.remove();
+                agent.chip = undefined;
+                if (hadFocus) {
+                    (chips.querySelector("button") ?? input).focus({ preventScroll: true });
+                }
+                agent.endX = head();
+                agent.phase = phase;
+                agent.tip.classList.remove("waiting");
+                agent.note.textContent = "";
+                const y = laneY(agent.lane);
+                if (phase === "discarded") {
+                    discarded += 1;
+                    agent.group.style.opacity = "0.22";
+                    agent.tip.remove();
+                    draw("path", { d: `M${agent.endX - 5} ${y - 5}l10 10m0-10l-10 10`, class: "stroke-paper", "stroke-width": 2, "stroke-linecap": "round" }, agent.group);
+                    narrate("discarded", "Discarded. Nothing it did ever touched your files.", `Discarded ${agent.branch}.`);
+                } else {
+                    agent.arrival.setAttribute("d", `M${agent.endX} ${y} C${agent.endX + 22} ${y} ${agent.endX + 14} ${TRUNK_Y} ${agent.endX + CURVE} ${TRUNK_Y}`);
+                }
+                recount();
+            };
+
+            const arrive = (agent: Agent): void => {
+                agent.phase = "landed";
+                agent.tip.remove();
+                landed += 1;
+                station(agent.endX + CURVE, LANES[agent.lane]!.stroke, agent.task);
+                narrate(
+                    "landed",
+                    "Landed. In intentic this is when the changes appear in your workspace, uncommitted, for your own commit to review.",
+                    `Landed “${agent.task}”.`,
+                );
+                recount();
+            };
+
+            const render = (): void => {
+                const now = head();
+                world.setAttribute("transform", `translate(${headX - now} 0)`);
+                for (const agent of agents) {
+                    if (agent.phase === "working" && clock >= agent.nextStepAt) {
+                        step(agent);
+                    }
+                    const y = laneY(agent.lane);
+                    const solidEnd = agent.phase === "working" ? now : agent.readyX;
+                    agent.solid.setAttribute(
+                        "d",
+                        `M${agent.x0} ${TRUNK_Y} C${agent.x0 + 22} ${TRUNK_Y} ${agent.x0 + 14} ${y} ${agent.x0 + CURVE} ${y} L${Math.max(solidEnd, agent.x0 + CURVE)} ${y}`,
+                    );
+                    if (agent.phase !== "working") {
+                        agent.waiting.setAttribute("d", `M${agent.readyX} ${y} L${agent.phase === "ready" ? now : agent.endX} ${y}`);
+                    }
+                    if (agent.phase === "working" || agent.phase === "ready") {
+                        agent.tip.setAttribute("cx", String(now));
+                        agent.name.setAttribute("x", String(now - 12));
+                        agent.note.setAttribute("x", String(now - 12));
+                    }
+                    if (agent.phase === "landing") {
+                        // The tip rides the curve down to main as the clock carries it past "now".
+                        const length = agent.arrival.getTotalLength();
+                        const progress = reduceMotion ? 1 : Math.min(1, Math.max(0, (now - agent.endX) / CURVE));
+                        agent.arrival.style.strokeDasharray = `${length}`;
+                        agent.arrival.style.strokeDashoffset = `${length * (1 - progress)}`;
+                        const point = agent.arrival.getPointAtLength(length * progress);
+                        agent.tip.setAttribute("cx", String(point.x));
+                        agent.tip.setAttribute("cy", String(point.y));
+                        if (progress >= 1) {
+                            arrive(agent);
+                        }
+                    }
+                }
+                // Settled branches that have scrolled well off the left edge are dropped for good.
+                for (let index = agents.length - 1; index >= 0; index -= 1) {
+                    const agent = agents[index]!;
+                    if ((agent.phase === "landed" || agent.phase === "discarded") && agent.endX + CURVE < now - headX - 240) {
+                        agent.group.remove();
+                        agents.splice(index, 1);
+                    }
+                }
+            };
+
+            const layout = (): void => {
+                const width = svg.clientWidth;
+                headX = width - (width < 560 ? 136 : 184);
+                svg.setAttribute("viewBox", `0 0 ${width} ${HEIGHT}`);
+                const set = (selector: string, attributes: Record<string, number>): void => {
+                    const element = svg.querySelector(selector)!;
+                    for (const [name, value] of Object.entries(attributes)) {
+                        element.setAttribute(name, String(value));
+                    }
+                };
+                set("#now", { x1: headX, x2: headX, y2: TRUNK_Y + 10 });
+                set("#now-label", { x: headX });
+                set("#trunk-past", { y1: TRUNK_Y, x2: headX, y2: TRUNK_Y });
+                set("#trunk-future", { x1: headX, y1: TRUNK_Y, x2: width - 4, y2: TRUNK_Y });
+                set("#main-label", { x: width - 6, y: TRUNK_Y - 14 });
+                agents.forEach(place);
+                render();
+            };
+
+            let last = performance.now();
+            const frame = (time: number): void => {
+                // A hidden tab hands back one long frame; capping it keeps the map from lurching on return.
+                const elapsed = Math.min((time - last) / 1000, 0.1);
+                last = time;
+                // With reduced motion the map holds still unless something on it is actually moving.
+                if (!reduceMotion || agents.some((agent) => agent.phase === "working" || agent.phase === "landing")) {
+                    clock += elapsed;
+                }
+                render();
+                requestAnimationFrame(frame);
+            };
+
+            form.addEventListener("submit", (event) => {
+                event.preventDefault();
+                start(input.value.trim() || pick(TASKS));
+                input.value = "";
+            });
+            document.querySelector("#suggest")!.addEventListener("click", () => {
+                input.value = pick(TASKS.filter((task) => task !== input.value));
+                input.focus();
+            });
+
+            // Falls back to a hidden textarea: the editor frames this preview, and a frame may be refused the clipboard API.
+            const copy = async (text: string): Promise<boolean> => {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                } catch {
+                    const area = document.createElement("textarea");
+                    area.value = text;
+                    area.setAttribute("readonly", "");
+                    area.style.position = "fixed";
+                    area.style.opacity = "0";
+                    document.body.append(area);
+                    area.select();
+                    const copied = document.execCommand("copy");
+                    area.remove();
+                    return copied;
+                }
+            };
+            for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
+                button.addEventListener("click", async () => {
+                    const copied = await copy(button.dataset.copy ?? "");
+                    button.textContent = copied ? "Copied" : "Press Ctrl+C";
+                    const prompt = button.parentElement?.querySelector(".prompt");
+                    if (!copied && prompt) {
+                        window.getSelection()?.selectAllChildren(prompt);
+                    }
+                    window.setTimeout(() => (button.textContent = "Copy"), 2000);
+                });
+            }
+
+            new ResizeObserver(layout).observe(svg);
+            layout();
+            // The one change main had before you arrived: the commit that put this page here.
+            station(-Math.max(headX * 0.55, 120), "stroke-paper", "starter site");
+            recount();
+            window.setTimeout(() => start("say hello"), 700);
+            window.setTimeout(() => start("add a dark mode"), 3400);
+            requestAnimationFrame(frame);
+        </script>
+
+        <style is:global>
+            /* Branches fade in and out at the map's left edge instead of being cut off by it. */
+            #rail {
+                mask-image: linear-gradient(to right, transparent, black 56px);
+            }
+            #chips {
+                position: absolute;
+                inset: 0;
+                pointer-events: none;
+            }
+            #chips > * {
+                pointer-events: auto;
+            }
+            .waiting {
+                transform-box: fill-box;
+                transform-origin: center;
+                animation: waiting 1.6s ease-in-out infinite;
+            }
+            @keyframes waiting {
+                50% {
+                    transform: scale(1.45);
+                    opacity: 0.55;
+                }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .waiting {
+                    animation: none;
+                }
+            }
+        </style>
+    </body>
+</html>

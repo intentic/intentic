@@ -2,11 +2,9 @@
 import { ui } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { isTrialProvider, PROVIDER_VENDOR } from "@intentic/sandbox-contract";
-import { accessKnown, providerReady, trialExhausted } from "../session/access";
-import { connectIntroDismissed } from "../../connect/connectIntro";
-import { CONNECT_LANES } from "../../connect/connectLanes";
-import { endpointProviders, providerDisplayLabel, trialStatus } from "./providerCatalog";
+import { PROVIDER_VENDOR } from "@intentic/sandbox-contract";
+import { accessKnown, trialExhausted } from "../session/access";
+import { providerDisplayLabel } from "./providerCatalog";
 import { turnDefaults } from "../run/turnDefaults";
 import { useChat } from "../run/useChat";
 import { usePaneView } from "../panel/useChat-view";
@@ -38,23 +36,6 @@ const live = computed(() => nativeConnectFlow.value ?? translatorConnectFlow.val
 // particular vendor is missing from a sandbox where they never asked for one — the app is not any vendor's.
 const chosen = computed(() => turnDefaults.provider.value === provider.value);
 const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof typeof PROVIDER_VENDOR] ?? providerDisplayLabel(provider.value));
-
-// Said once, early, on a sandbox running on nothing but the trial: the alternative was meeting the question for the
-// first time at the moment the allowance ran out, mid-task, which is the worst possible moment to be asked to choose a
-// provider. Dismissed for good on the first press, and never shown to a sandbox that has a real connection — it is an
-// offer, not a nag, and the trial strip below already handles the running-low half.
-const localReady = computed(() => endpointProviders.value.some((endpoint) => endpoint.kind === `localmodel`));
-const showIntro = computed(
-    () =>
-        accessKnown.value &&
-        !connectIntroDismissed.value &&
-        isTrialProvider(provider.value) &&
-        trialStatus.value.available &&
-        // Only while there is still plenty left: past halfway the trial strip takes over and says the same thing louder.
-        trialStatus.value.remaining > trialStatus.value.allowance / 2 &&
-        !localReady.value &&
-        !CONNECT_LANES.some((lane) => lane.providers.some(providerReady)),
-);
 </script>
 
 <template>
@@ -84,21 +65,5 @@ const showIntro = computed(
         <RouterLink to="/connect" :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)">
             {{ t(`shared.connectAModel`) }}
         </RouterLink>
-    </div>
-
-    <!-- The early, quiet version of the question the spent trial asks loudly. Dismissible, because a reader happy on the
-         trial has answered it. -->
-    <div
-        v-else-if="showIntro"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-card px-4 py-3 text-2xs text-muted"
-    >
-        <Icon name="sparkles" class="shrink-0 text-link" />
-        <span class="min-w-[14rem] flex-1 text-left">{{ t(`chat.chatAccountPanel.introOffer`) }}</span>
-        <RouterLink to="/connect" :class="ui.linkButton(`shrink-0 text-2xs`)">
-            {{ t(`shared.connectAModel`) }}
-        </RouterLink>
-        <button type="button" :class="ui.textAction(`shrink-0 text-2xs text-subtle`)" @click="connectIntroDismissed = true">
-            {{ t(`ui.action.dismiss`) }}
-        </button>
     </div>
 </template>

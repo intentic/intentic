@@ -16,7 +16,7 @@ import { rememberPick } from "../chat/run/turnDefaults";
 import { useChat } from "../chat/run/useChat";
 import ConnectFlow from "../sandbox/secrets/ConnectFlow.vue";
 import EstatePicker from "../sandbox/secrets/EstatePicker.vue";
-import { localPrefetchStopped } from "./connectIntro";
+import { localPrefetchStopped } from "./localPrefetch";
 import { connectLane, type ConnectLaneKey, firstUnmetLane, laneOfProvider, laneProviders } from "./connectLanes";
 import ConnectLane from "./ConnectLane.vue";
 import LocalModelLane from "./LocalModelLane.vue";

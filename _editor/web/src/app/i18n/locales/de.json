@@ -897,6 +897,8 @@
             "shiftEnterNewLine": "Shift+Enter für eine neue Zeile",
             "startConversation": "Beginnen Sie eine Unterhaltung mit {providerName}.",
             "talkHandsFree": "Freihändig sprechen",
+            "uncappedLink": "Verbinden Sie es, und das Tageslimit entfällt",
+            "uncappedQuestion": "Zahlen Sie schon für ein KI-Abo, oder läuft ein Modell auf diesem Rechner?",
             "upForPreviousMessage": "↑ für die vorherige Nachricht",
             "writingAgent": "Als Agent schreiben",
             "writingAgentSendPlaces": "Als Agent schreiben: Senden legt die Worte ins Transkript, keine Antwort. Drücken, um wieder als Sie selbst zu schreiben"

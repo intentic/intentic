@@ -908,6 +908,8 @@
             "shiftEnterNewLine": "Shift+Enter – nowa linia",
             "startConversation": "Zacznij rozmowę z {providerName}.",
             "talkHandsFree": "Mów bez rąk",
+            "uncappedLink": "Podłącz go i pozbądź się dziennego limitu",
+            "uncappedQuestion": "Płacisz już za plan AI albo masz model na tym komputerze?",
             "upForPreviousMessage": "↑ – poprzednia wiadomość",
             "writingAgent": "Piszesz jako agent",
             "writingAgentSendPlaces": "Piszesz jako agent: Wyślij wkłada słowa do zapisu rozmowy, bez odpowiedzi. Naciśnij, żeby znowu pisać jako Ty"

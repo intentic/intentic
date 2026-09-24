@@ -752,7 +752,6 @@
         },
         "chatAccountPanel": {
             "finishSignIn": "Finish sign-in",
-            "introOffer": "Running on the free trial. An account you already pay for, or a model on this machine, runs without a daily cap.",
             "isntConnectedInSandbox": "{providerName} isn't connected in this sandbox.",
             "noModelYet": "No model is connected in this sandbox yet.",
             "signInWaiting": "Signing in to {provider} — it is waiting for you."
@@ -946,6 +945,8 @@
             "startConversation": "Start a conversation with {providerName}.",
             "startConversationAny": "Start a conversation.",
             "talkHandsFree": "Talk hands-free",
+            "uncappedLink": "Connect it to lift the daily cap",
+            "uncappedQuestion": "Already pay for an AI plan, or run a model on this machine?",
             "upForPreviousMessage": "↑ for previous message",
             "writingAgent": "Writing as the agent",
             "writingAgentSendPlaces": "Writing as the agent: Send places the words into the transcript, no reply. Press to write as yourself again"

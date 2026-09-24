@@ -339,10 +339,14 @@ RUN chmod +x /opt/intentic-cli/dist/cli.js \
 # The CLI takes the template's source ARCHIVE, not a clone, for the reason the oh-my-zsh layer above spells out:
 # an unauthenticated `git-upload-pack` from this egress is answered with a Basic-auth challenge git turns into a
 # username prompt no build can answer, and this layer is where that took the `images` job down.
+#
+# Only the page differs from a hand-added landing app: starter-site/ lays intentic's own first page (and its
+# fonts) over the template's src/ and public/, leaving its package, config and install untouched.
 ARG STARTER_TEMPLATE_REF=main
 RUN intentic scaffold monorepo --dir /opt --name starter --ref "$STARTER_TEMPLATE_REF" \
     && intentic scaffold add-app --dir /opt/starter --apps landing --ref "$STARTER_TEMPLATE_REF" \
     && rm -rf /opt/starter/.git
+COPY _sandbox/sandbox/starter-site/ /opt/starter/_apps/landing/
 # `tsx` as a shim over node's own type stripping. Agents reach for tsx to run a one-off .ts script because that
 # is what the ecosystem taught them, and a project that lists it in devDependencies resolves its own — but a
 # scratch script outside any package hit `tsx: not found` and the agent went looking for workarounds. Node 24

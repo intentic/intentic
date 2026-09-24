@@ -35,6 +35,8 @@ const IMAGE_ONLY_PATHS = [
     // Copied to /usr/local/bin and /root/.claude/skills, outside any mounted dist.
     join(REPO_ROOT, "_sandbox/sandbox/bin"),
     join(REPO_ROOT, "_sandbox/sandbox/seed-skills"),
+    // Laid over the baked starter at /opt/starter.
+    join(REPO_ROOT, "_sandbox/sandbox/starter-site"),
 ];
 
 // A dependency change touches node_modules, which is never mounted; only an image rebuild can install it.

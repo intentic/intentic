@@ -899,6 +899,8 @@
             "shiftEnterNewLine": "Maj+Entrée pour une nouvelle ligne",
             "startConversation": "Commencez une conversation avec {providerName}.",
             "talkHandsFree": "Parler sans les mains",
+            "uncappedLink": "Connectez-le pour lever la limite quotidienne",
+            "uncappedQuestion": "Vous payez déjà un abonnement IA, ou un modèle tourne sur cette machine ?",
             "upForPreviousMessage": "↑ pour le message précédent",
             "writingAgent": "Écrire en tant qu'agent",
             "writingAgentSendPlaces": "Écriture en tant qu'agent : Envoyer place les mots dans la transcription, sans réponse. Appuyez pour réécrire en votre nom"

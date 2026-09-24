@@ -905,6 +905,8 @@
             "shiftEnterNewLine": "Shift+Enter para una nueva línea",
             "startConversation": "Empieza una conversación con {providerName}.",
             "talkHandsFree": "Habla con las manos libres",
+            "uncappedLink": "Conéctalo para quitar el límite diario",
+            "uncappedQuestion": "¿Ya pagas un plan de IA o tienes un modelo en esta máquina?",
             "upForPreviousMessage": "↑ para el mensaje anterior",
             "writingAgent": "Escribiendo como el agente",
             "writingAgentSendPlaces": "Escribiendo como el agente: Enviar coloca las palabras en la transcripción, sin respuesta. Pulsa para volver a escribir como tú"

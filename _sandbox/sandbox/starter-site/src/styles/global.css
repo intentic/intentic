@@ -1,0 +1,17 @@
+@import "tailwindcss";
+@import "./faces.css";
+
+/* Every colour and face on the page; line-1..4 are the map's four lanes, in lane order. */
+@theme {
+    --color-coal: #1a1714;
+    --color-soot: #221e1a;
+    --color-rule: #3a332c;
+    --color-paper: #f1e9dd;
+    --color-dust: #a39a8e;
+    --color-line-1: #e07b27;
+    --color-line-2: #35b5a2;
+    --color-line-3: #7ea4f5;
+    --color-line-4: #ee7390;
+    --font-sans: "Public Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}

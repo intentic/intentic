@@ -59,6 +59,13 @@ const TARGETS = [
         // The launcher wears the entry skin but draws no carved headline, so it needs no display serif.
         families: ["public-sans", "baloo-2", "jetbrains-mono"],
     },
+    {
+        label: "starter",
+        fonts: "_sandbox/sandbox/starter-site/public/fonts",
+        css: "_sandbox/sandbox/starter-site/src/styles/faces.css",
+        url: "/fonts",
+        families: ["public-sans", "jetbrains-mono"],
+    },
 ];
 
 const field = (body, name) => new RegExp(`${name}:\\s*([^;]+);`, "u").exec(body)?.[1]?.trim();

@@ -71,7 +71,6 @@ const { modelRequest, settleModelPick } = await import("../models/host/hostModel
 const { endpointProviders, trialStatus } = await import("./providerCatalog");
 // The stored pick itself, unmocked: whether a vendor may be named at all is exactly "did the owner name one".
 const { turnDefaults } = await import("../run/turnDefaults");
-const { connectIntroDismissed } = await import("../../connect/connectIntro");
 const { default: ChatAccountPanel } = await import("./ChatAccountPanel.vue");
 
 let app: App | undefined;
@@ -100,9 +99,6 @@ beforeEach(() => {
     turnDefaults.provider.value = undefined;
     trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
     endpointProviders.value = [];
-    // Persisted across mounts by design, so a suite that never reset it would let the dismiss test silence every one
-    // after it.
-    connectIntroDismissed.value = false;
     nativeConnectFlow.value = undefined;
     selectModel.mockClear();
     startConnect.mockClear();
@@ -235,43 +231,6 @@ it(`still speaks when the trial is absent rather than spent`, () => {
     const element = mount();
     expect(element.textContent).toContain(`Free trial isn't connected in this sandbox`);
     expect(buttonNamed(element, `Connect`)).toBeUndefined();
-});
-
-// Said early and quietly, on a sandbox running on nothing but the trial. The alternative was meeting the question for
-// the first time at the moment the allowance ran out, mid-task.
-it(`offers the way off the trial while there is still plenty of it left`, async () => {
-    provider.value = TRIAL_PROVIDER;
-    connected.value = true;
-    trialStatus.value = { available: true, allowance: 10, used: 1, remaining: 9, health: `healthy` };
-
-    const element = mount();
-    expect(element.textContent).toContain(`Running on the free trial`);
-    expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/connect`);
-
-    // Answered once, gone for good: a reader happy on the trial has made their choice.
-    buttonNamed(element, `Dismiss`)!.click();
-    await nextTick();
-    expect(element.textContent).toBe(``);
-});
-
-// Past halfway the trial strip takes over with the same offer and a count; two rows saying it at once is the crowding
-// this view was built to end.
-it(`stands down once the trial strip starts saying it`, () => {
-    provider.value = TRIAL_PROVIDER;
-    connected.value = true;
-    trialStatus.value = { available: true, allowance: 10, used: 6, remaining: 4, health: `healthy` };
-
-    expect(mount().textContent).toBe(``);
-});
-
-// An offer, not a nag: a sandbox with a real account connected has answered it, whatever this one chat points at.
-it(`says nothing once anything real is connected`, () => {
-    provider.value = TRIAL_PROVIDER;
-    connected.value = true;
-    trialStatus.value = { available: true, allowance: 10, used: 1, remaining: 9, health: `healthy` };
-    endpointProviders.value = [{ id: `endpoint/box`, label: `Qwen`, kind: `localmodel` }];
-
-    expect(mount().textContent).toBe(``);
 });
 
 it(`goes on its own the moment this chat can send`, async () => {
