@@ -2965,6 +2965,11 @@
                 "reason": "Dane git i checkouty repozytoriów usuniętych z przestrzeni roboczej.",
                 "warning": "Mogą zawierać commity nigdy nigdzie niewypchnięte. Po wyczyszczeniu nie da się ich odzyskać."
             },
+            "backups": {
+                "label": "Kopie zapasowe transkrypcji",
+                "reason": "Transkrypcja każdej rozmowy w postaci sprzed przekonwertowania jej przez ten sandbox do obecnego formatu.",
+                "warning": "Nic ich nie czyta: przekonwertowane transkrypcje zawierają te same rozmowy. Po wyczyszczeniu oryginałów nie da się odzyskać."
+            },
             "workspace": {
                 "label": "Pliki przestrzeni roboczej",
                 "reason": "Twoje repozytoria, ich zależności i wszystko inne w przestrzeni roboczej. Usuń to, czego już nie potrzebujesz, w Plikach albo w terminalu."

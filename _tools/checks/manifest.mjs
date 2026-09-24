@@ -39,7 +39,7 @@ export const CHECKS = [
         file: "daemon-boundaries.mjs",
         needs: "checkout",
         gate: "code",
-        about: "no new whole-Services taker, no new value import closing a cycle between subsystems, of any length (ratcheted)",
+        about: "no new whole-Services taker, no new value import closing a cycle between subsystems, of any length (ratcheted), no SDK value around its loader",
     },
     {
         id: "shared-boundary",

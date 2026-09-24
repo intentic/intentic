@@ -79,7 +79,7 @@ const followEntry = async (dirent: Dirent, dirAbs: string, realDir: string, real
 };
 
 // Dirs before files, then alphabetical, on the followed kind.
-const byKind = (a: Entry, b: Entry): number => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1);
+export const byKind = (a: Entry, b: Entry): number => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1);
 
 // The size comes back with the entry rather than being stat'd again one at a time by the callers: on a workspace of a
 // few thousand files that is the difference between a listing the browser waits a second for and one it waits a moment

@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { defaultGit, gitSpawnStats, politeGit } from "./exec.js";
+import { defaultGit, gitSpawnStats, observeGitCommands, politeGit, settleIndex } from "./exec.js";
 
 // Pins defaultGit's two additions over execFile against a real repo: a larger output buffer and a retry on index.lock
 // contention.
@@ -95,6 +95,63 @@ test("the reads a person is waiting on are never queued, however many agents are
     expect(gitSpawnStats()).toMatchObject({ activeBulk: 0, queuedBulk: 0 });
 });
 
+// A checkout whose every entry is racily clean, the state `worktree add` leaves: its index file stamped with the second
+// its files were written in, so no status can trust their stat data. Answers the checkout.
+const racyCheckout = async (files: number, bytes = 64): Promise<string> => {
+    const dir = await tempRepo();
+    await Promise.all(Array.from({ length: files }, (_, index) => writeFile(join(dir, `f${String(index)}.txt`), `${String(index)}`.padEnd(bytes, "x"))));
+    await defaultGit(dir, ["add", "-A"]);
+    await defaultGit(dir, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "files"]);
+    const index = join(dir, ".git", "index");
+    const { mtime } = await stat(join(dir, "f0.txt"));
+    await utimes(index, mtime, mtime);
+    return dir;
+};
+
+// Entries git must re-read on every status: recorded mtime at or past the index file's own second.
+const racyEntries = async (dir: string): Promise<number> => {
+    const indexSecond = Math.floor((await stat(join(dir, ".git", "index"))).mtimeMs / 1000);
+    const { stdout } = await exec("git", ["-C", dir, "ls-files", "--debug"]);
+    return [...stdout.matchAll(/^\s+mtime: (\d+):/gm)].filter((match) => Number(match[1]) >= indexSecond).length;
+};
+
+test("settleIndex leaves a checkout with nothing a status must re-read", async () => {
+    const dir = await racyCheckout(50);
+    expect(await racyEntries(dir)).toBe(50);
+    expect(await settleIndex(dir)).toBe(true);
+    expect(await racyEntries(dir)).toBe(0);
+});
+
+test("settleIndex runs nothing in a checkout the daemon's own git is busy in", async () => {
+    const dir = await racyCheckout(5);
+    // Outlasts the settle's wait for the next second.
+    const busy = defaultGit(dir, ["-c", "alias.nap=!sleep 1.5", "nap"]);
+    expect(await settleIndex(dir)).toBe(false);
+    await busy;
+    expect(await racyEntries(dir)).toBe(5);
+});
+
+// A settle holds index.lock for its write; the daemon's own git in that checkout starts only once it is done, so a
+// multi-step command (a rebase) never meets the lock halfway through.
+test("the daemon's git in a checkout waits out a settle running there", async () => {
+    // Enough racy content that the settle's status takes a measurable while to re-read it.
+    const dir = await racyCheckout(400, 16_384);
+    const seen: { readonly args: readonly string[]; readonly end: number; readonly ms: number }[] = [];
+    observeGitCommands(({ dir: at, args, ms }) => {
+        if (at === dir) {
+            seen.push({ args, end: performance.now(), ms });
+        }
+    });
+    const settled = settleIndex(dir);
+    // Issued just after the settle's status starts: the next second boundary plus its margin.
+    await new Promise((resolve) => setTimeout(resolve, 1000 - (Date.now() % 1000) + 60));
+    await defaultGit(dir, ["add", "-A"]);
+    expect(await settled).toBe(true);
+    const settle = seen.find(({ args }) => args[0] === "status");
+    const add = seen.find(({ args }) => args[0] === "add");
+    expect(add!.end - add!.ms).toBeGreaterThanOrEqual(settle!.end - 1);
+});
+
 // Exercises the built dist/exec.js fallback path, the daemon's actual runtime; skipped when this package has no dist
 // yet.
 const built = new URL("../dist/exec.js", import.meta.url);
@@ -154,4 +211,31 @@ test.skipIf(!existsSync(built))("the forker passes git's output, env and failure
     expect(result.failure.code).toBe(128);
     expect(result.failure.stderr).toMatch(/fatal/);
     expect(result.failure.message).toBe("string");
+});
+
+// A tmux poll or a status probe from the daemon must fork from the resident child as git does, carrying its directory,
+// environment and time limit, or the daemon's own page tables are copied on every call.
+test.skipIf(!existsSync(built))("forkedExec runs any command from the forker, with its directory, env and time limit", async () => {
+    const dir = await tempRepo();
+    const probe = `
+        const { forkedExec } = await import(${JSON.stringify(built.href)});
+        const ran = await forkedExec("sh", ["-c", 'echo "$PPID $(pwd -P) $PROBE"'], { cwd: ${JSON.stringify(dir)}, env: { PROBE: "carried" } });
+        const from = Date.now();
+        let limited = false;
+        try {
+            await forkedExec("sleep", ["5"], { timeout: 100 });
+        } catch {
+            limited = true;
+        }
+        process.stdout.write(JSON.stringify({ pid: process.pid, ran: ran.stdout.trim(), limited, limitedMs: Date.now() - from }));
+    `;
+    const { stdout } = await exec("node", ["--input-type=module", "-e", probe]);
+    const result = JSON.parse(stdout) as { pid: number; ran: string; limited: boolean; limitedMs: number };
+    const [parent, cwd, carried] = result.ran.split(" ");
+    // The command's parent is the forker, never the process that asked.
+    expect(Number(parent)).not.toBe(result.pid);
+    expect(cwd).toBe((await exec("sh", ["-c", "pwd -P"], { cwd: dir })).stdout.trim());
+    expect(carried).toBe("carried");
+    expect(result.limited).toBe(true);
+    expect(result.limitedMs).toBeLessThan(3000);
 });

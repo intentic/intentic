@@ -3,13 +3,16 @@ import { errorMessage } from "@intentic/base/errors";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import { WebglAddon } from "@xterm/addon-webgl";
-import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
+import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract/front-wire";
 import { clipboardOf, parseLoopbackLink, useDevice } from "@intentic/ui";
 import { boundCommand } from "../../shell/commands/useCommands";
 import { isApplePlatform } from "../../shell/commands/keybindings";
 import { toScreenPx } from "../../shell/window/uiScale";
 import { acquireStreamSlot } from "../sandbox/client/streamBudget";
-import { socketUrl as wsSocketUrl } from "../sandbox/session/wsTicket";
+import { transportFor } from "./channel/webTransport";
+import { useEndpoint } from "../sandbox/secrets/useEndpoint";
+import { socketAddress } from "../sandbox/session/wsTicket";
+import { type ChannelEvents, type TerminalChannel, streamChannel, webSocketChannel } from "./channel/terminalChannel";
 import { editKeyBytes } from "./terminalEditKeys";
 import { registerFilePathLinks } from "./terminalFileLinks";
 import { registerUrlLinks } from "./terminalUrlLinks";
@@ -17,9 +20,10 @@ import { terminalPaint } from "./terminalTheme";
 import { openLoopbackPreview } from "./portPreview";
 import "@xterm/xterm/css/xterm.css";
 
-// One xterm bound to one tmux session over the daemon's /system/terminal WebSocket. Raw frames from tmux control-mode
-// give xterm real scrollback and search locally; every attach replays the pane's history and screen. Each session owns
-// a persistent host, reconnects with backoff, and pings to catch a half-open socket.
+// One xterm bound to one tmux session over /system/terminal: a WebTransport stream where the editor reaches the edge, else
+// a WebSocket. Raw frames from tmux control-mode give xterm real scrollback and search locally; every attach replays the
+// pane's history and screen. Each session owns a persistent host, reconnects with backoff, and pings to catch a
+// half-open channel.
 
 const PING_MS = 30_000;
 const RETRY_MS = 1000;
@@ -30,6 +34,10 @@ const RESIZE_SETTLE_MS = 120;
 const STABLE_MS = 5000;
 // Silence this long past a healthy ping cadence means half-open; close() reconnects normally.
 const STALE_MS = 90_000;
+
+const TERMINAL_PATH = `/system/terminal`;
+
+const { usingLocal } = useEndpoint();
 
 export type TerminalSession = {
     // Single-member on purpose: the agent's browser view is a separate, simpler kind of cache entry.
@@ -50,13 +58,13 @@ export type TerminalSession = {
     mountedDocument: Document;
     // Session-over handoff (exit frame or dispose), called once; rebound per tabs instance on cache hit.
     onExit: (name: string) => void;
-    socket?: WebSocket;
+    channel?: TerminalChannel;
     reconnect?: number;
     // Pending resize-settle timer id (scheduleResizeFrame).
     resizeSettle?: number;
     // Reconnect ladder, uptime-keyed: a connection past STABLE_MS drops back to a 1s retry.
     backoff: Backoff;
-    // Set by dispose or the exit frame so the socket's close handler stops reconnecting.
+    // Set by dispose or the exit frame so the channel's close handler stops reconnecting.
     closing: boolean;
     // True while the connection is known down; gates the disconnect banner to once per outage.
     down: boolean;
@@ -77,9 +85,7 @@ const openLink = (event: MouseEvent, uri: string): void => {
 };
 
 const send = (s: TerminalSession, message: TerminalClientMessage): void => {
-    if (s.socket?.readyState === WebSocket.OPEN) {
-        s.socket.send(JSON.stringify(message));
-    }
+    s.channel?.send(message);
 };
 
 // Releases the GPU context; xterm's DOM renderer takes back over, so a detached session keeps painting.
@@ -104,30 +110,39 @@ const attachRenderer = (s: TerminalSession): void => {
     }
 };
 
-// Authenticated wss URL for one session, or undefined if unreachable or signed out. A one-shot ticket keeps the bearer
-// off the query string, and the endpoint picker prefers loopback on a same-machine sandbox.
-const socketUrl = (s: TerminalSession): Promise<string | undefined> =>
-    wsSocketUrl(`/system/terminal`, {
-        session: s.name,
-        cols: String(s.term.cols),
-        rows: String(s.term.rows),
-        ...(s.cwd === undefined ? {} : { cwd: s.cwd }),
-    });
+// What the daemon plans the attach from: the session, its grid and its directory.
+const terminalParams = (s: TerminalSession): Record<string, string> => ({
+    session: s.name,
+    cols: String(s.term.cols),
+    rows: String(s.term.rows),
+    ...(s.cwd === undefined ? {} : { cwd: s.cwd }),
+});
+
+// A stream of the edge's WebTransport session where one has proven itself, else a WebSocket. Only the edge answers a
+// session; a loopback shortcut is one machine away, where no lost packet has a stream to stall.
+const openChannel = async (base: string, query: string, events: ChannelEvents): Promise<TerminalChannel> => {
+    const transport = usingLocal.value ? undefined : await transportFor(base);
+    if (transport === undefined) {
+        return webSocketChannel(`${base.replace(/^http/, `ws`)}${TERMINAL_PATH}?${query}`, events);
+    }
+    const { origin, host } = new URL(base);
+    return streamChannel(transport, { origin, host, path: TERMINAL_PATH, query }, events);
+};
 
 const scheduleRetry = (s: TerminalSession, uptimeMs = 0): void => {
     s.reconnect = window.setTimeout(() => void connectSocket(s), s.backoff.next(uptimeMs));
 };
 
-// Opens or reopens a session's socket; the daemon's replay repaints the pane on reconnect, so a reset never touches
-// running processes. Runs regardless of whether the host is mounted.
+// Opens or reopens a session's channel; the daemon's replay repaints the pane on reconnect, so a reset never touches
+// running processes. Runs regardless of whether the host is mounted. A one-shot ticket keeps the bearer off the query.
 const connectSocket = async (s: TerminalSession): Promise<void> => {
     window.clearTimeout(s.reconnect);
     if (s.closing) {
         return;
     }
-    let url: string | undefined;
+    let address: Awaited<ReturnType<typeof socketAddress>>;
     try {
-        url = await socketUrl(s);
+        address = await socketAddress(terminalParams(s));
     } catch (error) {
         // A session that couldn't be minted (sandbox restarting, network down) retries like a drop; nothing else would.
         console.warn(`terminal ${s.name}: authorizing the socket failed`, error);
@@ -141,11 +156,11 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
         scheduleRetry(s);
         return;
     }
-    // Disposed during the token fetch; don't resurrect a socket for a dead session.
+    // Disposed during the token fetch; don't resurrect a channel for a dead session.
     if (s.closing) {
         return;
     }
-    if (url === undefined) {
+    if (address === undefined) {
         // Usually a transient startup state; retries on the normal backoff instead of parking the session forever.
         if (!s.down) {
             s.down = true;
@@ -156,75 +171,76 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
     }
     // Counted against the shared `attach` stream budget; over budget it still connects, via a multiplexed transport.
     const release = await acquireStreamSlot(`attach`);
-    // Disposed while queuing for the permit: hand it back rather than open a socket for a dead session.
+    // Disposed while queuing for the permit: hand it back rather than open a channel for a dead session.
     if (s.closing) {
         release?.();
         return;
     }
-    const ws = new WebSocket(url);
-    // Binary frames arrive as ArrayBuffers, straight to xterm with no Blob copy.
-    ws.binaryType = `arraybuffer`;
-    // Supersedes any straggler socket; its close handler sees a mismatched `s.socket` and stays silent.
-    s.socket?.close();
-    s.socket = ws;
-    // Socket-scoped state lives in this closure, so each close event clears only its own ping interval.
+    // Channel-scoped state lives in this closure, so each close clears only its own ping interval; `mine` is filled once
+    // the channel exists, before anything on it can be heard.
+    const mine: { channel?: TerminalChannel } = {};
     let ping: number | undefined;
     let openedAt = 0;
     let lastFrameAt = 0;
-    ws.addEventListener(`open`, () => {
-        if (s.closing || s.socket !== ws) {
-            ws.close();
-            return;
-        }
-        s.down = false;
-        openedAt = Date.now();
-        lastFrameAt = openedAt;
-        // send() drops frames while CONNECTING; push the live grid now so a mid-handshake resize isn't lost.
-        send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
-        ping = window.setInterval(() => {
-            if (Date.now() - lastFrameAt > STALE_MS) {
-                ws.close();
+    const events: ChannelEvents = {
+        open: () => {
+            if (s.closing || s.channel !== mine.channel) {
+                mine.channel?.close();
                 return;
             }
-            send(s, { type: `ping` });
-        }, PING_MS);
-    });
-    ws.addEventListener(`message`, (event) => {
+            s.down = false;
+            openedAt = Date.now();
+            lastFrameAt = openedAt;
+            // send() drops messages until open; push the live grid now so a mid-handshake resize isn't lost.
+            send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
+            ping = window.setInterval(() => {
+                if (Date.now() - lastFrameAt > STALE_MS) {
+                    mine.channel?.close();
+                    return;
+                }
+                send(s, { type: `ping` });
+            }, PING_MS);
+        },
         // Any bytes from the server prove liveness, parseable or not.
-        lastFrameAt = Date.now();
-        // Binary frame is raw pane bytes; xterm decodes it, keeping a UTF-8 char split across frames whole.
-        if (event.data instanceof ArrayBuffer) {
-            s.term.write(new Uint8Array(event.data));
-            return;
-        }
-        let message: TerminalServerMessage;
-        try {
-            message = JSON.parse(String(event.data)) as TerminalServerMessage;
-        } catch {
-            return;
-        }
-        if (message.type === `exit`) {
-            // Session ended; never reconnects, since `-A` would recreate it and a missing session would fail-loop.
-            s.closing = true;
-            s.onExit(s.name);
-        }
-    });
-    ws.addEventListener(`close`, (event) => {
-        window.clearInterval(ping);
-        // Runs before the identity guard, so every socket, including a superseded straggler, releases its permit once.
-        release?.();
-        if (s.socket !== ws || s.closing) {
-            return;
-        }
-        // Disconnect banner once per outage; retries stay silent, and a reattach replays over it.
-        if (!s.down) {
-            s.down = true;
-            s.term.writeln(`\r\n\x1b[90m[disconnected (${event.code}${event.reason === `` ? `` : `: ${event.reason}`})]\x1b[0m`);
-            s.term.writeln(`\x1b[90m[reconnecting…]\x1b[0m`);
-        }
-        // Uptime-keyed: a stable connection's drop retries at 1s; one that died young keeps the escalated delay.
-        scheduleRetry(s, openedAt === 0 ? 0 : Date.now() - openedAt);
-    });
+        heard: () => {
+            lastFrameAt = Date.now();
+        },
+        // Raw pane bytes; xterm decodes them, keeping a UTF-8 char split across frames whole.
+        pane: (bytes) => s.term.write(bytes),
+        message: (message: TerminalServerMessage) => {
+            if (message.type === `exit`) {
+                // Session ended; never reconnects, since `-A` would recreate it and a missing session would fail-loop.
+                s.closing = true;
+                s.onExit(s.name);
+            }
+        },
+        closed: (code, reason) => {
+            window.clearInterval(ping);
+            // Runs before the identity guard, so every channel, including a superseded straggler, releases its permit once.
+            release?.();
+            if (s.channel !== mine.channel || s.closing) {
+                return;
+            }
+            // Disconnect banner once per outage; retries stay silent, and a reattach replays over it.
+            if (!s.down) {
+                s.down = true;
+                s.term.writeln(`\r\n\x1b[90m[disconnected (${code}${reason === `` ? `` : `: ${reason}`})]\x1b[0m`);
+                s.term.writeln(`\x1b[90m[reconnecting…]\x1b[0m`);
+            }
+            // Uptime-keyed: a stable connection's drop retries at 1s; one that died young keeps the escalated delay.
+            scheduleRetry(s, openedAt === 0 ? 0 : Date.now() - openedAt);
+        },
+    };
+    const opened = await openChannel(address.base, address.query, events);
+    // Disposed while the session opened; its close still arrives and hands the permit back.
+    if (s.closing) {
+        opened.close();
+        return;
+    }
+    mine.channel = opened;
+    // Supersedes any straggler channel; its close handler sees a mismatched `s.channel` and stays silent.
+    s.channel?.close();
+    s.channel = opened;
 };
 
 // Private cell metrics the fit reads, since xterm exposes no public API for them; read-only, never used to mutate the
@@ -337,7 +353,7 @@ export const pasteIntoTerminal = (s: TerminalSession): void => {
         .catch(() => {});
 };
 
-// Builds one session's xterm, host, and socket; the host stays out of the DOM until mountTerminalSession. `readOnly`
+// Builds one session's xterm, host, and channel; the host stays out of the DOM until mountTerminalSession. `readOnly`
 // makes it a log view with no stdin; `spawnWithin` sizes the attach grid.
 export const createTerminalSession = (
     name: string,
@@ -428,7 +444,7 @@ export const createTerminalSession = (
         down: false,
     };
     observeHost(s);
-    // Wires input/resize to the pane once; send() always targets the current socket, so this survives reconnects.
+    // Wires input/resize to the pane once; send() always targets the current channel, so this survives reconnects.
     if (!readOnly) {
         term.onData((data) => send(s, { type: `input`, data }));
     }
@@ -508,7 +524,7 @@ export const disposeTerminalSession = (s: TerminalSession): void => {
     window.clearTimeout(s.reconnect);
     window.clearTimeout(s.resizeSettle);
     s.unobserve?.();
-    s.socket?.close();
+    s.channel?.close();
     detachRenderer(s);
     s.term.dispose();
     s.host.remove();

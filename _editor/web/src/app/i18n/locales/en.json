@@ -3142,6 +3142,11 @@
                 "reason": "Git data and checkouts of repositories that were deleted from the workspace.",
                 "warning": "They may hold commits that were never pushed anywhere. Once cleaned, they cannot be brought back."
             },
+            "backups": {
+                "label": "Transcript backups",
+                "reason": "Each conversation's transcript as it was before this sandbox converted it to its current format.",
+                "warning": "Nothing reads them: the converted transcripts hold the same conversations. Once cleaned, the originals cannot be brought back."
+            },
             "exports": {
                 "label": "Exported bundles",
                 "reason": "Copies of this sandbox packed for download.",

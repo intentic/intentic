@@ -2963,6 +2963,11 @@
                 "reason": "Datos git y checkouts de repositorios que se eliminaron del espacio de trabajo.",
                 "warning": "Pueden contener commits que nunca se enviaron a ninguna parte. Una vez limpiados, no se pueden recuperar."
             },
+            "backups": {
+                "label": "Copias de transcripciones",
+                "reason": "La transcripción de cada conversación tal como era antes de que este sandbox la convirtiera a su formato actual.",
+                "warning": "Nada las lee: las transcripciones convertidas contienen las mismas conversaciones. Una vez limpiadas, los originales no se pueden recuperar."
+            },
             "workspace": {
                 "label": "Archivos del espacio de trabajo",
                 "reason": "Tus repositorios, sus dependencias y todo lo demás del espacio de trabajo. Quita lo que ya no necesites desde Archivos o una terminal."

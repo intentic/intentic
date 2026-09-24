@@ -1,8 +1,7 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
 import { type Capability, capabilitiesContract, CapabilitySchema, collidesWithReservedServer, isVaulted } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
+import { forkedExec } from "@intentic/scaffold";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -379,13 +378,12 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 throw new ORPCError("CONFLICT", { message: "no visible terminal in this environment, run the login command manually" });
             }
             const session = capabilityJobSession(input.id);
-            const run = promisify(execFile);
             // Attach-or-create keeps prior scrollback; the trailing ":" targets the active pane, a bare `=name`
             // doesn't.
-            await run("tmux", ["new-session", "-A", "-d", "-s", session, "-c", services.workspace.root]);
-            await run("tmux", ["new-window", "-t", `=${session}:`, "-n", "login", "-c", services.workspace.root]);
-            await run("tmux", ["send-keys", "-t", `=${session}:`, "-l", loginCommand]);
-            await run("tmux", ["send-keys", "-t", `=${session}:`, "Enter"]);
+            await forkedExec("tmux", ["new-session", "-A", "-d", "-s", session, "-c", services.workspace.root]);
+            await forkedExec("tmux", ["new-window", "-t", `=${session}:`, "-n", "login", "-c", services.workspace.root]);
+            await forkedExec("tmux", ["send-keys", "-t", `=${session}:`, "-l", loginCommand]);
+            await forkedExec("tmux", ["send-keys", "-t", `=${session}:`, "Enter"]);
             return { session };
         }),
         // Mints one TOTP code from the stored seed so the seed itself never crosses the wire; this is the only

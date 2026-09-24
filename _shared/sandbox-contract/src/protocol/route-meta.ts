@@ -33,6 +33,10 @@ export interface RouteMeta {
     // Withheld from the panel token, which reaches every other route: it puts a stored credential in motion.
     readonly panel?: false;
     readonly control?: ControlReach;
+    // Rides the tunnel's bulk lane: a transfer, kept off the connection every keystroke and call waits on.
+    readonly lane?: "bulk";
+    // Served by intentic-front itself (_sandbox/front, term/): the daemon only answers the front's question about it.
+    readonly front?: true;
 }
 
 // The builder every sandbox procedure starts from, so each carries a RouteMeta and whatever it leaves out defaults.

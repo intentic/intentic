@@ -15,15 +15,10 @@ describe(`tunnelUrl`, () => {
 });
 
 describe(`reachPosture`, () => {
-    const base = { url: `https://ingress.example.test`, grant: `ig1.a.b`, frontDoor: true, vm: false };
+    const base = { url: `https://ingress.example.test`, grant: `ig1.a.b`, frontDoor: true };
 
     test(`is the tunnel when every piece is there`, () => {
         expect(reachPosture(base)).toEqual({ by: `tunnel` });
-    });
-
-    test(`is direct on a Fly machine, whatever else is configured`, () => {
-        expect(reachPosture({ ...base, vm: true }).by).toBe(`direct`);
-        expect(reachPosture({ ...base, vm: true, grant: `` }).by).toBe(`direct`);
     });
 
     test(`is loopback with the reason when a tunnel's piece is missing`, () => {

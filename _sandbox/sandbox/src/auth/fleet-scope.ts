@@ -1,4 +1,12 @@
-import { type Fence, fenceAllows, fenceReaches, type SandboxMetrics, type SystemEvent } from "@intentic/sandbox-contract";
+import {
+    type Fence,
+    fenceAllows,
+    fenceReaches,
+    type PresenceUser,
+    type SandboxMetrics,
+    type SystemEvent,
+    type TreeChanged,
+} from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import type { Caller } from "./auth.js";
@@ -97,19 +105,60 @@ const framedPaths = <T extends { readonly paths: readonly string[] }>(fence: Fen
 const framedRepos = <T extends { readonly repos: readonly string[] }>(fence: Fence, event: T): T =>
     fence === undefined ? event : { ...event, repos: event.repos.filter((repo) => fenceReaches(fence, repo)) };
 
-// What a narrowed caller's event stream carries: the roster cut to the conversations they may see, and no path or
-// repository they may not. Undefined drops the frame.
+// The tree's changes cut as the tree route cuts the tree itself (workspace-fence.ts): a folder the fence admits keeps
+// every entry, one on the way down keeps only the entries leading somewhere, and any other folder is not news.
+const framedTree = (fence: Fence, event: TreeChanged): TreeChanged => {
+    if (fence === undefined) {
+        return event;
+    }
+    const dirs = event.dirs.flatMap((dir) => {
+        if (dir.path !== "" && fenceAllows(fence, dir.path)) {
+            return [dir];
+        }
+        if (dir.path !== "" && !fenceReaches(fence, dir.path)) {
+            return [];
+        }
+        return [{ ...dir, entries: dir.entries.filter((entry) => fenceReaches(fence, entry.path)) }];
+    });
+    return { ...event, dirs, ...(event.barren === undefined ? {} : { barren: event.barren.filter((path) => fenceReaches(fence, path)) }) };
+};
+
+// Who is online is every member's to see; where each tab is (the file it has open, the conversation on its screen) is
+// cut like everything else, since a place outside the reader's fence is a reading of the work behind it.
+const framedPresence = (caller: Caller, fence: Fence, user: PresenceUser, agentOf: (id: string) => Provenance | undefined): PresenceUser => {
+    const { path, sessionId, ...shown } = user;
+    const conversation = sessionId === undefined ? undefined : agentOf(sessionId);
+    return {
+        ...shown,
+        ...(path !== undefined && (fence === undefined || fenceAllows(fence, path)) ? { path } : {}),
+        ...(sessionId !== undefined && conversation !== undefined && visibleTo(caller, conversation) ? { sessionId } : {}),
+    };
+};
+
+// What a narrowed caller's event stream carries: the roster cut to the conversations they may see, and no path,
+// repository or tab's place they may not. Undefined drops the frame.
 // `fence` is the caller's own, resolved once when the stream opens — an area edit revokes the connection, so a frame
 // is never filtered against a fence its reader no longer has.
 // One rule for every tier including a guest: a guest is always fenced (auth.ts MemberSchema) and reads its own area's
 // files, so cutting its frames to that fence is what keeps its tree from going stale behind it.
-export const framedEvent = (caller: Caller | undefined, fence: Fence, event: SystemEvent): SystemEvent | undefined => {
+export const framedEvent = (
+    caller: Caller | undefined,
+    fence: Fence,
+    event: SystemEvent,
+    agentOf: (id: string) => Provenance | undefined,
+): SystemEvent | undefined => {
     if (caller === undefined) {
         return event;
     }
     switch (event.kind) {
         case "agents": {
             return { ...event, agents: event.agents.filter((agent) => visibleTo(caller, agent)) };
+        }
+        case "presence": {
+            return { ...event, users: event.users.map((user) => framedPresence(caller, fence, user, agentOf)) };
+        }
+        case "treeChanged": {
+            return framedTree(fence, event);
         }
         case "workspaceChanged":
         case "derivedChanged": {

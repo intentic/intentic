@@ -5,9 +5,9 @@
 # image that bakes this pack it composes nothing at all, and there is no second pin to keep in step. It was a
 # byte-identical fragment until then, which had a standard image compile whisper.cpp once at publish and again
 # in every overlay rebuild, for the same binary.
-# Only cmake is purged after: g++ and make are baked into the sandbox image on purpose (node-pty ships no
-# linux prebuild, so any in-sandbox `pnpm install` compiles it from source), and purging them here left this
-# pack silently breaking native installs in /work. git stays for the same reason. libgomp1 is whisper's
+# Only cmake is purged after: g++ and make are baked into the sandbox image on purpose (an in-sandbox `pnpm install`
+# compiles a native dep with no prebuild from source), and purging them here left this pack silently breaking
+# native installs in /work. git stays for the same reason. libgomp1 is whisper's
 # OpenMP runtime, installed explicitly so it survives.
 # Keep the build bounded by the same memory/CPU rule as the CUDA pack. Whisper is smaller, but bare `-j` still
 # means unlimited jobs under GNU Make and image fragments must not make host survival depend on project size.

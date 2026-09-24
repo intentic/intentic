@@ -230,7 +230,6 @@ export * from "./state/arrival.js";
 export * from "./state/definition.js";
 export * from "./policy/search-globs.js";
 export * from "./state/starter.js";
-export * from "./protocol/terminal-protocol.js";
 export * from "./text/title.js";
 export * from "./state/versions.js";
 export * from "./text/model-answer.js";

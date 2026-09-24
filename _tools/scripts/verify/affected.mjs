@@ -75,7 +75,7 @@ for (const name of imagePayload) {
 note(`image payload (${imagePayload.size}): ${[...imagePayload].sort().join(", ")}`);
 
 // ic two Rust crates (_sandbox/ic, _devices/win-launcher), not workspace packages.
-// front the sandbox's front crate, not a workspace package, with the contract files it generates or reads.
+// front the tunnel's two Rust ends (_sandbox/front, _platform/ingress), with the contract files they generate or read.
 // shims _site/site/public/scripts holds the connect/recreate one-liners bundled into the installer.
 // recipes Dockerfiles and feature packs: the image's own contents, invisible to pnpm.
 // assembly the shell scripts that build, verify and publish the artifacts.
@@ -88,9 +88,9 @@ const LOOSE = {
     desktop:
         /^(_sandbox\/ic\/|_site\/site\/public\/scripts\/|_tools\/ci-desktop\/|_tools\/scripts\/(desktop\/|build\/build-ic\.sh|lib\/desktop-artifacts\.sh)|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|nightly|release|windows-smoke)\.yml))/,
     ic: /^(_sandbox\/ic\/|_devices\/win-launcher\/|_site\/site\/public\/scripts\/)/,
-    front: /^(_sandbox\/front\/|_shared\/sandbox-contract\/src\/(front\/|ids\/hostnames\.fixture\.json)|\.github\/workflows\/ci\.yml)/,
+    front: /^(_sandbox\/front\/|_platform\/ingress\/|_shared\/sandbox-contract\/src\/(front\/|ids\/hostnames\.fixture\.json|protocol\/(ingress-contract\.(fixture\.json|ts)|tunnel-lanes\.json))|\.github\/workflows\/ci\.yml)/,
     images: /^(_sandbox\/sandbox\/(Dockerfile|packs\/)|_sandbox\/front\/|_tools\/scripts\/image\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
-    platform: /^(_tools\/scripts\/platform\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
+    platform: /^(_tools\/scripts\/platform\/|_sandbox\/front\/crates\/tunnel\/|_shared\/sandbox-contract\/src\/protocol\/tunnel-lanes\.json|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     "perf-instr": /^\.github\/workflows\/ci\.yml/,
     "perf-browser": /^\.github\/workflows\/ci\.yml/,
     "ci-base-changed": /^_tools\/ci-base\//,

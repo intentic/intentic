@@ -17,13 +17,15 @@ import { startPlatformPresence } from "./bootstrap/platform-presence.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
 import { startWorkspaceApps } from "./bootstrap/workspace-apps.js";
 import { createServices } from "./composition.js";
+import { logsRoot } from "./logs/log-files.js";
 import { loadConfig } from "./env.config.js";
 import { claimContainer } from "./platform/boot/container-owner.js";
 import { finishPrewarm } from "./platform/boot/prewarm.js";
 import { listenHost, profileTraits, requireLocalContract } from "./platform/boot/profile.js";
 import { checks as containerChecks, owner as containerOwner } from "./platform/invariant.js";
 import { readCgroup } from "./platform/resources/cgroup.js";
-import { startLoopWatchdog } from "./platform/resources/loop-watchdog.js";
+import { startBootProfile } from "./platform/resources/loop/boot-profile.js";
+import { startLoopWatchdog } from "./platform/resources/loop/loop-watchdog.js";
 import { oomScoreResolver } from "./platform/resources/oom-priority.js";
 import { startOomScorer } from "./platform/resources/oom-scorer.js";
 import { spawnDepthOf } from "./agent/subagents/children.js";
@@ -53,6 +55,9 @@ const main = async (): Promise<void> => {
     // Stall detector: logs the lag and the machine's pressure numbers when the event loop freezes.
     const loopWatchdog = startLoopWatchdog(logger);
     shutdown.push(() => loopWatchdog.stop());
+    // Names the function behind a boot stall, which the watchdog can only time: kept under logs/ when one happened.
+    const bootProfile = startBootProfile(logger, logsRoot(config.historyRoot));
+    shutdown.push(() => bootProfile.stop());
     const services = createServices(config, logger);
     // Ranks the daemon's children for the OOM killer by role and spawn depth; the front renices them.
     const oomScorer = startOomScorer(oomScoreResolver((owner) => spawnDepthOf(services.conversations, owner)));

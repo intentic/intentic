@@ -1,3 +1,4 @@
+import { LETS_ENCRYPT_DIRECTORY } from "@intentic/base/acme";
 import { FREE_TIER } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { type ConfigDefinition, cliArgs, env, envFile, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
@@ -73,6 +74,10 @@ export const configSchema = z.object({
             url: z.url().default(`https://ingress.sbx.intentic.dev`),
             // The platform's Ed25519 private signing key; the ingress holds only the matching public key.
             signingKey: z.string().default(``).meta({ secret: true }),
+            // What an edge machine presents to fetch the zone's certificate (edge-certificate.ts); unset issues none.
+            platformToken: z.string().default(``).meta({ secret: true }),
+            // Where that certificate is ordered; the CA's staging directory tries the whole path without its limits.
+            acmeDirectory: z.string().default(LETS_ENCRYPT_DIRECTORY),
         })
         .prefault({}),
     // Intentic's own Fly credential; a platform breach can reach hosted machines, unlike every other lane.
@@ -251,6 +256,7 @@ export const CONFIG_SECRETS = [
     `email.apiKey`,
     `intenticCloudflare.apiToken`,
     `ingress.signingKey`,
+    `ingress.platformToken`,
     `hosted.flyApiToken`,
     `trial.keys`,
     `hostedPlan.stripeSecretKey`,

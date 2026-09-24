@@ -5,7 +5,7 @@ import { demoMode } from "./mode";
 import { DEMO_SANDBOX, DEMO_USER, platform } from "./platform";
 import { installSwitcher } from "./switcher";
 import { terminalSession } from "./terminal";
-import { installFetch, installWebSocket, installXhr } from "./transport";
+import { installFetch, installWebSocket, installWebTransport, installXhr } from "./transport";
 
 // Everything that must be true before the real app's entry runs. Transports and credentials must be in place first,
 // hence the dynamic import at the bottom. Credentials are seeded into the real localStorage `sandboxSession` reads,
@@ -51,6 +51,7 @@ const openOnFleet = (): void => {
 installFetch({ platform, daemon });
 installXhr({ platform, daemon });
 installWebSocket((url) => SOCKETS[url.pathname]);
+installWebTransport();
 seedCredentials();
 seedOpenChats();
 openOnFleet();

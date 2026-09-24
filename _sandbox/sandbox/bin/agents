@@ -350,7 +350,7 @@ const writeRecall = (agent) => {
     if (quiet > 0) {
         process.stdout.write(`  ${interesting.length === 0 ? "repos:" : "      "} ${quiet} more, unchanged\n`);
     }
-    process.stdout.write(`  record ${agent.record} · ${agent.digest.messages} messages${agent.sessionId === undefined ? "" : ` · session ${agent.sessionId}`}\n`);
+    process.stdout.write(`  record ${agent.record} (zstdcat) · ${agent.digest.messages} messages${agent.sessionId === undefined ? "" : ` · session ${agent.sessionId}`}\n`);
     for (const [index, asked] of agent.digest.asked.entries()) {
         process.stdout.write(`${index === 0 ? "asked:\n" : ""}  ${index + 1}. ${asked}\n`);
     }

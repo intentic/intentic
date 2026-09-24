@@ -2949,6 +2949,11 @@
                 "reason": "Git-Daten und Checkouts von Repositories, die aus dem Workspace gelöscht wurden.",
                 "warning": "Sie können Commits enthalten, die nie irgendwohin gepusht wurden. Einmal bereinigt, lassen sie sich nicht zurückholen."
             },
+            "backups": {
+                "label": "Transkript-Sicherungen",
+                "reason": "Das Transkript jeder Unterhaltung, wie es war, bevor diese Sandbox es in ihr aktuelles Format umgewandelt hat.",
+                "warning": "Nichts liest sie: Die umgewandelten Transkripte enthalten dieselben Unterhaltungen. Einmal bereinigt, lassen sich die Originale nicht zurückholen."
+            },
             "workspace": {
                 "label": "Workspace-Dateien",
                 "reason": "Ihre Repositories, ihre Abhängigkeiten und alles andere im Workspace. Entfernen Sie, was Sie nicht mehr brauchen, unter Dateien oder in einem Terminal."

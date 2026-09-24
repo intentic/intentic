@@ -1,9 +1,10 @@
-import type { SidecarStatus } from "@intentic/sandbox-contract";
+import type { SidecarStatus, WorkspaceTree, WorkspaceTreeDelta } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../../lib/throttleTrailing";
 import { rpcPrefix } from "../../../../lib/queryKeys";
+import { patchedTree } from "../../explorer/tree/treeDelta";
 
 // Live workspace-change state fed from the daemon's SSE stream; consumed by the tree, the review lists' module
 // grouping, the file viewer, and the tree's row flash. Module singleton so invalidation can't die with an unmounting
@@ -16,8 +17,33 @@ const TREE_REFRESH_MS = 1000;
 // Same window as the tree refresh; a manifest write rides the same write batches.
 const MODULES_REFRESH_MS = 1000;
 
-// The whole prefix, not the key on screen: the tree's scope is in its key, so only the wide match reaches every variant.
-const refreshTree = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) }), TREE_REFRESH_MS);
+// A tree with a generation is the daemon's resident copy, kept current by `treeChanged`; only a walked checkout, which
+// carries none, is fetched again when the watcher reports a batch. The whole prefix, since the scope is in the key.
+const walkedTree = (data: unknown): boolean => (data as WorkspaceTree | undefined)?.generation === undefined;
+const refreshTree = throttleTrailing(() => {
+    for (const query of queryClient.getQueryCache().findAll({ queryKey: rpcPrefix(`workspace.tree`) })) {
+        if (walkedTree(query.state.data)) {
+            void queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true });
+        }
+    }
+}, TREE_REFRESH_MS);
+
+/* WHAT MOVED IN THE SHARED TREE: every cached tree holding the generation the change counts from is patched in place;
+   one holding another is fetched afresh, which is how a missed change heals. */
+export const applyTreeChanged = (delta: WorkspaceTreeDelta): void => {
+    for (const query of queryClient.getQueryCache().findAll({ queryKey: rpcPrefix(`workspace.tree`) })) {
+        const tree = query.state.data as WorkspaceTree | undefined;
+        if (tree === undefined || walkedTree(tree)) {
+            continue;
+        }
+        const patched = patchedTree(tree, delta);
+        if (patched === undefined) {
+            void queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true });
+            continue;
+        }
+        queryClient.setQueryData(query.queryKey, patched);
+    }
+};
 const refreshModules = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: rpcPrefix(`workspace.modules`) }), MODULES_REFRESH_MS);
 
 // True only when a manifest could exist among the paths (or the batch is empty — the daemon's own "too many

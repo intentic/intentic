@@ -1,6 +1,5 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { Logger } from "pino";
+import { forkedExec } from "@intentic/scaffold";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
 import { connectedCount } from "./presence.js";
 
@@ -10,12 +9,10 @@ import { connectedCount } from "./presence.js";
 //   one-time wake is due before this machine could plausibly be back
 // - quiet is a streak, not a snapshot: any busy answer resets the clock
 
-const exec = promisify(execFile);
-
 // Freshest tmux session_activity across all panes, in ms; 0 when tmux has no server. A listing that failed throws, so
 // the check skips its pass instead of reading a terminal it could not see as idle and stopping the machine under it.
 const lastTerminalActivity = async (): Promise<number> => {
-    const listed = await exec("tmux", ["list-panes", "-a", "-F", "#{session_activity}"]).catch((error: unknown) => {
+    const listed = await forkedExec("tmux", ["list-panes", "-a", "-F", "#{session_activity}"]).catch((error: unknown) => {
         if (isNoTmuxServer(error)) {
             return undefined;
         }

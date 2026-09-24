@@ -72,8 +72,33 @@ export const WorkspaceTreeSchema = z.object({
         .describe(
             "Folders whose whole contents are empty folders, and nothing else. Complete for the workspace, however much of the tree above was listed, and ordered like the tree, so a parent comes before the branch below it.",
         ),
+    generation: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe(
+            "Which state of the shared tree this is; the changes that follow count from it. Absent for a conversation's own checkout, which is listed when asked and followed by no changes.",
+        ),
 });
 export type WorkspaceTree = z.infer<typeof WorkspaceTreeSchema>;
+// What moved in the shared tree between two generations: every folder whose own entries changed, parents first.
+export const WorkspaceTreeDeltaSchema = z.object({
+    from: z.number().int().nonnegative().describe("The generation this applies on top of. A reader holding any other fetches the tree afresh instead."),
+    generation: z.number().int().nonnegative().describe("The generation it leaves the tree at."),
+    dirs: z
+        .array(
+            z.object({
+                path: z.string().describe("The folder, as a workspace path; empty for the workspace root."),
+                entries: z
+                    .array(WorkspaceTreeEntrySchema)
+                    .describe("Its entries now, without their contents: a folder whose own entries also changed comes as an item of its own."),
+            }),
+        )
+        .describe("Each folder that changed, parents before the folders inside them."),
+    barren: z.array(z.string()).optional().describe("The barren folders now, present only when that list moved."),
+});
+export type WorkspaceTreeDelta = z.infer<typeof WorkspaceTreeDeltaSchema>;
 // Lazy-loads one directory's children past the tree walk's budget; depth reads several levels into one flat `entries`
 // list instead of one request per directory.
 export const WorkspaceChildrenQuerySchema = WorkspaceScopeSchema.extend({

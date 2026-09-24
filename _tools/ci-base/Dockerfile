@@ -5,8 +5,8 @@
 #
 # The base is the SAME digest-pinned image the sandbox runtime uses (_sandbox/sandbox/Dockerfile) — deliberately,
 # not coincidentally. prepare-image-trees.sh runs `pnpm deploy` in THIS image and the resulting node_modules is
-# COPY'd into THAT one, so sharing a base makes the compiled native (node-pty) and the manylinux
-# prebuilts (sharp, onnxruntime, ast-grep, davey, mediaplex) glibc-identical by construction. It also rules out
+# COPY'd into THAT one, so sharing a base makes the manylinux prebuilts (sharp, onnxruntime, ast-grep, davey,
+# mediaplex) glibc-identical by construction. It also rules out
 # the tempting shortcut of a docker-cli-alpine base with node bolted on: under musl, pnpm resolves musl builds
 # of those prebuilts and the glibc sandbox cannot load them.
 #
@@ -29,8 +29,7 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # but costs ~1.2GB more for a pile of toolchains no job invokes.
 #   ca-certificates + curl  fetch the docker apt key below; curl also backs assorted script steps
 #   git                     turbo hashes inputs through `git ls-files`, and semantic-release drives git directly
-#   python3 make g++        the node-gyp toolchain: node-pty ships no linux prebuild, so `pnpm install` ALWAYS
-#                           compiles it from source
+#   python3 make g++        the node-gyp toolchain, for a native dep that ships no prebuild for this platform
 #   ripgrep                 the iq engine's lexical tier shells into `rg --json`, so the iq suites need it
 #   openssh-client          sandbox git access generates its ed25519 key with ssh-keygen, so that suite needs it
 #   zip + unzip             the workspace's Extract route spawns unzip, and its suite builds the fixtures with
@@ -79,7 +78,7 @@ COPY --from=oven/bun:canary-slim@sha256:6285dc2ad21f26e6b57f6887905cccccc62f151a
 # What the second copy cost: corepack reads a version directory as "installed" and execs the pnpm.mjs inside it
 # without looking first, so a HALF-WRITTEN cache was fatal and sticky — every job landing on that runner died
 # on a MODULE_NOT_FOUND until someone cleared it by hand, once for 15 minutes. The chmod beside it repaired an
-# exec bit corepack itself stripped off its bundled node-gyp, which node-pty (no linux prebuild) invokes
+# exec bit corepack itself stripped off its bundled node-gyp, which a source-built native dep invokes
 # directly. Neither failure mode has a path to reach any more, and .pnpm-setup's copies of both are gone with
 # them.
 # ponytail: bump together with package.json's packageManager field.

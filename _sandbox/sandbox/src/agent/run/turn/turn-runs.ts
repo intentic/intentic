@@ -1,7 +1,7 @@
 import { type AgentEvent, isTurnFact, type ParkedRequest, type TranscriptPatch, type TranscriptRow, type TurnFact } from "@intentic/sandbox-contract";
 import { TranscriptFold, type TurnEnding } from "@intentic/sandbox-contract/transcript-fold";
 import type { ConversationActors } from "../../../agents/actor/conversation-actors.js";
-import { type AttachEntry, type AttachHead, type LiveRun, RUN_RETAINED_MS, RUNS } from "../../../agents/actor/conversation-holdings.js";
+import { type AttachedRun, type AttachEntry, type AttachHead, type LiveRun, RUN_RETAINED_MS, RUNS } from "../../../agents/actor/conversation-holdings.js";
 import type { BeginRefusal } from "../../../agents/actor/conversation-decide.js";
 import type { AwaitingKind, DomainEvents } from "../../../seams/domain-events.js";
 import type { SentTurn, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
@@ -23,17 +23,21 @@ export interface TurnObserver {
 }
 
 // One subscriber's queue; a follower holds only what it has not yet read, so a stalled reader's backlog never reaches
-// the others. A bounded one is cut past frame-backlog's bound instead of growing: its reader re-attaches for a fresh head.
+// the others. A bounded one is cut past frame-backlog's bound, its reader ending with the error it was given so it
+// re-attaches for a fresh head; the daemon's own readers are unbounded, reading as they are fed.
 class Mailbox<T> {
     private readonly queue: FrameBacklog<T>;
     private wake: (() => void) | undefined;
     private closed = false;
+    private failure: Error | undefined;
 
-    constructor(replay: readonly T[], bounded: { readonly onCut: () => void } | undefined) {
+    constructor(replay: readonly T[], bounded: { readonly failure: () => Error; readonly onCut: () => void } | undefined) {
         this.queue = frameBacklog<T>(
             () => {
-                this.close();
-                bounded?.onCut();
+                if (bounded !== undefined) {
+                    this.cut(bounded.failure());
+                    bounded.onCut();
+                }
             },
             bounded === undefined ? { frames: Infinity, waitMs: Infinity } : {},
         );
@@ -43,6 +47,9 @@ class Mailbox<T> {
     }
 
     push(item: T): void {
+        if (this.closed) {
+            return;
+        }
         this.queue.push(item);
         this.wake?.();
     }
@@ -52,13 +59,28 @@ class Mailbox<T> {
         this.wake?.();
     }
 
-    // Everything pushed, in order, until closed and drained. `released` runs however the reader leaves, including early
-    // exit, so the queue never leaks.
+    // Ends the reader with `error` as soon as it next reads; nothing queued is delivered after the cut.
+    cut(error: Error): void {
+        if (this.failure !== undefined) {
+            return;
+        }
+        this.failure = error;
+        this.closed = true;
+        this.wake?.();
+    }
+
+    // Everything pushed, in order, until closed and drained, or until cut. `released` runs however the reader leaves,
+    // including early exit, so the queue never leaks.
     async *drain(released: () => void): AsyncGenerator<T> {
         try {
             for (;;) {
-                for (let next = this.queue.shift(); next !== undefined; next = this.queue.shift()) {
+                if (this.failure !== undefined) {
+                    throw this.failure;
+                }
+                const next = this.queue.shift();
+                if (next !== undefined) {
                     yield next.frame;
+                    continue;
                 }
                 if (this.closed) {
                     return;
@@ -179,9 +201,9 @@ export class TurnRun implements LiveRun {
 
     // Attach: rows and facts so far on the head, then everything that lands from this instant on. Head and subscription
     // are taken in one synchronous step, so nothing lands between the snapshot and the first live entry. A follower whose
-    // connection aborts, or who stops reading, is let go at once rather than holding every later entry until the turn ends.
-    attach(signal?: AbortSignal): { readonly head: AttachHead; readonly entries: AsyncGenerator<AttachEntry> } {
-        const mailbox: Mailbox<AttachEntry> = new Mailbox<AttachEntry>(this.facts, { onCut: () => this.followers.delete(mailbox) });
+    // connection aborts is let go at once; one that falls behind ends with `fellBehind`'s error, and `cut` with the caller's.
+    attach(fellBehind: () => Error, signal?: AbortSignal): AttachedRun {
+        const mailbox: Mailbox<AttachEntry> = new Mailbox<AttachEntry>(this.facts, { failure: fellBehind, onCut: () => this.followers.delete(mailbox) });
         const abandon = (): void => {
             this.followers.delete(mailbox);
             mailbox.close();
@@ -205,6 +227,7 @@ export class TurnRun implements LiveRun {
                 this.followers.delete(mailbox);
                 signal?.removeEventListener("abort", abandon);
             }),
+            cut: (error) => mailbox.cut(error),
         };
     }
 

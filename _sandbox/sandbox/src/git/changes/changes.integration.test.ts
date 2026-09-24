@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { changedFiles, changesAgainstBase, changesBetweenRefs, dirtyPathsAcross } from "./changes.js";
+import { changedFiles, changesAgainstBase, changesBetweenRefs, dirtyPathsAcross, statusPaths } from "./changes.js";
 import {
     checkoutRef,
     cherryPick,
@@ -953,6 +953,32 @@ test("dirtyPathsAcross names every changed path of the root and its nested repos
 
     const paths = await dirtyPathsAcross(root, ["intentic"]);
     expect(paths.sort()).toEqual(["a.txt", "intentic/new.ts", "intentic/x.ts"]);
+});
+
+// Read around every shell command a turn runs, so its cost is one spawn per repo: the same paths `changedFiles` names,
+// both names of a rename included, without the two line-count passes that reader also spends.
+test("statusPaths names what changedFiles names in one git run, where changedFiles takes three", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "kept.txt"), "one\n");
+    await writeFile(join(dir, "old.txt"), "moves\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base");
+    await sh(dir, "mv", "old.txt", "new.txt");
+    await writeFile(join(dir, "kept.txt"), "two\n");
+    await writeFile(join(dir, "fresh.txt"), "untracked\n");
+    const runs: string[] = [];
+    const counted: GitRunner = async (at, args, env) => {
+        runs.push(args.join(" "));
+        return defaultGit(at, args, env);
+    };
+
+    const paths = await statusPaths(dir, counted);
+    expect(runs).toHaveLength(1);
+    const { conflicted, staged, unstaged } = await changedFiles(dir, counted);
+    expect(runs).toHaveLength(4);
+    const named = [...conflicted, ...staged, ...unstaged].flatMap((change) => (change.from === undefined ? [change.path] : [change.path, change.from]));
+    expect(paths.toSorted()).toEqual([...new Set(named)].toSorted());
+    expect(paths.toSorted()).toEqual(["fresh.txt", "kept.txt", "new.txt", "old.txt"]);
 });
 
 test("commitOnly records exactly the named paths from the worktree, whatever else is staged, and leaves that staging alone", async () => {

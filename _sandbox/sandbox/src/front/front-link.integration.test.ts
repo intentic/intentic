@@ -79,3 +79,29 @@ test("a throwing answer goes back as a refusal carrying its message", async () =
     expect(await refused).toEqual({ kind: "refused", id: 7, message: "no such panel" });
     link.close();
 });
+
+// The same JSON the front's lane test pins (front-wire, `a_sync_answer_reads_as_node_parses_it`).
+const RUST_SYNCED_JSON = `{"kind":"synced","id":7,"generations":[3,null]}`;
+
+test("a sync is answered by its id, and answers null for every checkout when the lane closes first", async () => {
+    const link = await connectFront({
+        path: join(dir, "front.sock"),
+        answer: () => Promise.resolve({ answer: "preview", route: { to: "node" } }),
+        onTunnel: () => undefined,
+        onClose: () => undefined,
+    });
+    const socket = await front;
+    const asked = nextMessage(socket);
+    const answer = link.sync(["/a", "/b"]);
+    const sent = await asked;
+    expect(sent).toMatchObject({ kind: "sync", dirs: ["/a", "/b"] });
+    const golden = JSON.parse(RUST_SYNCED_JSON) as Extract<ToNode, { kind: "synced" }>;
+    socket.write(toNode({ ...golden, id: (sent as Extract<FromNode, { kind: "sync" }>).id }));
+    expect(await answer).toEqual([3, null]);
+
+    const unanswered = nextMessage(socket);
+    const pending = link.sync(["/c"]);
+    await unanswered;
+    socket.destroy();
+    expect(await pending).toEqual([null]);
+});

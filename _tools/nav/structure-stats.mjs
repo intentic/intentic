@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 // Measures what FINDING a symbol costs, from transcripts; bench.mjs measures opening one instead.
-// Reads HISTORY_ROOT/conversations/<id>/transcript.jsonl and conversations.db, read-only. Definitions must not drift
-// pre/post-run:
+// Reads HISTORY_ROOT/conversations/<id>/transcript.jsonl.zst (through zstdcat), the delegations' calls it keeps in
+// HISTORY_ROOT/blobs, and conversations.db, read-only. A tool output longer than 16 KiB is kept as its first 8,000
+// characters, past every threshold below. Definitions must not drift pre/post-run:
 // - work session: 3+ reads+searches; chat and one-shot commands aren't work.
 // - listing: Bash/exec starting ls/tree/find/fd/rg --files/exa/eza, matched on the command text, not the tool name.
 // - big listing: a listing whose result exceeds 4,000 characters.
 // - failed read: a Read with failed status, or a result saying the path doesn't exist.
 // - stale name: a mention of a name in STALE; extend STALE at every rename.
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { zstdDecompressSync } from "node:zlib";
 import { DatabaseSync } from "node:sqlite";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { arg } from "./lib/args.mjs";
@@ -24,7 +27,22 @@ const meta = new Map(
 );
 fleet.close();
 const dir = path.join(HISTORY_ROOT, "conversations");
-const ids = fs.readdirSync(dir).filter((id) => fs.existsSync(path.join(dir, id, "transcript.jsonl")));
+const RECORD = "transcript.jsonl.zst";
+
+// A delegation's calls, inline or kept out of line as the JSON in the blob it names.
+const callsOf = (t) => {
+    if (t.calls === undefined) {
+        return t.children || [];
+    }
+    const blob = path.join(HISTORY_ROOT, "blobs", t.calls.blob.slice(0, 2), `${t.calls.blob}.zst`);
+    try {
+        return JSON.parse(zstdDecompressSync(fs.readFileSync(blob)).toString("utf8"));
+    } catch {
+        // silent-catch: a blob swept with the conversation that alone named it reads as no rows.
+        return [];
+    }
+};
+const ids = fs.readdirSync(dir).filter((id) => fs.existsSync(path.join(dir, id, RECORD)));
 
 // Names this repo no longer has; extend at every rename, until a name's count stays at zero.
 const STALE = ["_apps", "_libs", "_computers", "intentic-app/", "intentic-dev/", "packages/"];
@@ -147,7 +165,7 @@ for (const id of ids) {
     }
     let txt;
     try {
-        txt = fs.readFileSync(path.join(dir, id, "transcript.jsonl"), "utf8");
+        txt = execFileSync("zstdcat", [path.join(dir, id, RECORD)], { encoding: "utf8", maxBuffer: 2 ** 30 });
     } catch {
         continue; // a transcript rotated away between readdir and here
     }
@@ -164,7 +182,7 @@ for (const id of ids) {
         }
         for (const t of o.tools || []) {
             tools.push(t);
-            for (const c of t.children || []) {
+            for (const c of callsOf(t)) {
                 tools.push(c);
             }
         }

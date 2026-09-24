@@ -38,9 +38,8 @@ describe(`containerDrift`, () => {
         expect(containerDrift({ SANDBOX_PUBLIC_URL: `` })).toEqual([]);
     });
 
-    // A hosted Fly microVM has no grant by design, so this reports nothing on it.
-    it(`stays quiet on a hosted machine, which serves its address without dialling out`, () => {
-        expect(containerDrift({ SANDBOX_PUBLIC_URL: CURRENT.SANDBOX_PUBLIC_URL, SANDBOX_VM: `1` })).toEqual([]);
+    it(`holds a hosted machine to the same grant, since it dials the edge like any sandbox`, () => {
+        expect(containerDrift({ SANDBOX_PUBLIC_URL: CURRENT.SANDBOX_PUBLIC_URL, SANDBOX_VM: `1` }).map((gap) => gap.key)).toEqual([`reachability`]);
     });
 });
 

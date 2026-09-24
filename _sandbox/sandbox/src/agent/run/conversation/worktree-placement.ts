@@ -1,6 +1,8 @@
 import type { AgentEvent, RepoBase, SnapshotTurn } from "@intentic/sandbox-contract";
+import { settleIndex } from "@intentic/scaffold";
 import { type RepoSync, syncConversation } from "../../../agents/land/sync.js";
-import { worktreeOf } from "../../../agents/registry/agents-store.js";
+import { agentRepoReview } from "../../../agents/land/agent-changes.js";
+import { isIsolated, worktreeOf } from "../../../agents/registry/agents-store.js";
 import type { ConversationWorktree } from "../../../agents/worktrees/worktrees.js";
 import type { Services } from "../../../composition.js";
 import { forkWorktreeBase } from "../../checkpoints/checkpoint-worktree.js";
@@ -84,6 +86,20 @@ const rebaser =
         return synced;
     };
 
+// Every row of the conversation's review counted in the background once a turn settles, so opening the review after it
+// reads each code count from cache instead of waiting on a tokenizer.
+const warmReview = (deps: Pick<Services, "agents" | "agentWorktrees" | "logger">, conversationId: string): void => {
+    const entry = deps.agents.entry(conversationId);
+    if (entry === undefined || !isIsolated(entry)) {
+        return;
+    }
+    for (const composed of entry.placement.repos) {
+        agentRepoReview(deps.agentWorktrees, entry, composed).catch((error: unknown) =>
+            deps.logger.debug({ err: error, id: conversationId, repo: composed.repo }, "agents: counting the review ahead failed"),
+        );
+    }
+};
+
 export interface WorktreeSteps extends LandingHooks {
     // Creates the conversation's worktree on its first turn or repairs its composition, with the repos it carries
     // decided once and handed back on every later turn.
@@ -128,6 +144,12 @@ export const worktreePlacement = (
             yield worktreeFrame(worktree, onto, enforced, synced);
             // Recorded after the rebase: "before this message" means the branch the agent is about to read.
             yield* anchorIsolatedTurn(deps, conversationId, worktree.repos, turn.snapshot);
+            // A fresh checkout, the rebase and the anchor leave racy entries; settled, statuses stop re-reading them.
+            for (const { repo } of worktree.repos) {
+                settleIndex(deps.agentWorktrees.worktreeDir(conversationId, repo)).catch((error: unknown) =>
+                    deps.logger.debug({ err: error, id: conversationId, repo }, "agents: settling a checkout's index failed"),
+                );
+            }
             // Only a question's picks or an approved plan resync, never a permission card, whose tool call was already
             // computed against the old tree. Must never cost the user their answer: best-effort and logged.
             const resync = async (): Promise<AgentEvent | undefined> => {
@@ -168,6 +190,7 @@ export const worktreePlacement = (
                 outcome: failed ? "error" : (books.outcome ?? "idle"),
                 repos: books.span,
             });
+            warmReview(deps, conversationId);
         },
         thrown: "agent turn failed",
     };

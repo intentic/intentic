@@ -1,20 +1,11 @@
 import { INGRESS_TUNNEL_PATH } from "@intentic/sandbox-contract/ingress-contract";
 
-// How the world reaches this sandbox, decided once from config: a tunnel the front dials, direct (a Fly machine the
-// edge replays to), or loopback only. `reason` names the deciding piece, since postures are fixed in different places.
+// How the world reaches this sandbox, decided once from config: a tunnel the front dials, a hosted machine's included, or
+// loopback only. `reason` names the deciding piece, since postures are fixed in different places.
 
-export type ReachPosture =
-    { readonly by: "tunnel" } | { readonly by: "direct"; readonly reason: string } | { readonly by: "loopback"; readonly reason: string };
+export type ReachPosture = { readonly by: "tunnel" } | { readonly by: "loopback"; readonly reason: string };
 
-export const reachPosture = (options: {
-    readonly url: string;
-    readonly grant: string;
-    readonly frontDoor: boolean;
-    readonly vm: boolean;
-}): ReachPosture => {
-    if (options.vm) {
-        return { by: `direct`, reason: `this machine is a Fly app the platform's edge replays requests to, so there is no tunnel to dial` };
-    }
+export const reachPosture = (options: { readonly url: string; readonly grant: string; readonly frontDoor: boolean }): ReachPosture => {
     if (!options.frontDoor) {
         return { by: `loopback`, reason: `this profile serves no front door for a tunnel to reach` };
     }

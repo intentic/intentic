@@ -48,7 +48,7 @@ const depsOver = (entries: readonly PersistedAgent[], messages: Record<string, T
             sessionIdOf: (id: string) => entries.find((entry) => entry.id === id)?.sessionId,
         },
         agentWorktrees: { conversationDir: (id: string) => `/history/worktrees/${id}` },
-        transcripts: { read: async (agent: { id: string }) => messages[agent.id] ?? [] },
+        transcripts: { rows: async (agent: { id: string }) => messages[agent.id] ?? [] },
         saidIndex: { search: async () => new Map(), indexing: () => false },
     }) as unknown as FleetRecallDeps;
 
@@ -124,7 +124,7 @@ test("the digest keeps the opening prompts, the last word and the last notice, e
     expect(recall.digest.lastSaid?.length).toBe(240);
     expect(recall.digest.lastNotice).toBe("Claude usage limit reached.");
     expect(recall.worktree).toBe(`${HISTORY_ROOT}/worktrees/fair-sage-ey2r`);
-    expect(recall.record).toBe(`${HISTORY_ROOT}/conversations/fair-sage-ey2r/transcript.jsonl`);
+    expect(recall.record).toBe(`${HISTORY_ROOT}/conversations/fair-sage-ey2r/transcript.jsonl.zst`);
     // `diff: false` skips the git counts; only the registry's landed fact is used.
     expect(recall.repoStates).toEqual([{ repo: "root", base: "a".repeat(40), landed: false }]);
 });

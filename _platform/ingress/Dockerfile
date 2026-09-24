@@ -1,53 +1,55 @@
-# The intentic ingress image (ghcr.io/intentic/ingress): the edge every sandbox is reached through. Bun
-# executes the TypeScript source directly — like the api, this is never compiled.
+# syntax=docker/dockerfile:1
+# The intentic ingress image (ghcr.io/intentic/ingress): the edge every sandbox is reached through, a Rust binary
+# compiled here in a BuildKit stage on the Debian release it then runs on, so it links the glibc it carries and no
+# job needs a toolchain. docker-release.sh passes the two sibling trees it compiles from as named contexts: `tunnel`
+# (_sandbox/front/crates/tunnel, the wire both ends of a tunnel speak) and `contract`
+# (_shared/sandbox-contract/src/protocol, whose lane table the binary embeds), so the context stays this directory.
 #
-# Deliberately a pure COPY wrapper, the same shape as _platform/api/Dockerfile: the tree is built and pruned
-# OUTSIDE Docker by the `docker:release` turbo task (dependsOn build → workspace deps' dist exist, warm cache;
-# then `pnpm deploy --prod ./deploy` flattens this app + its deps — see _tools/scripts/platform/docker-release.sh). The
-# pruned tree IS the build context, so there is no .dockerignore and nothing else can leak in.
+# THERE IS NO BOOT CHAIN HERE: no migrations to apply, no schema to prove, no database to reach. The process holds
+# live connections and nothing else, so "started" and "ready" are the same moment, which is also what makes it safe
+# to redeploy at any time. A restart closes every tunnel with 1001 and every container redials at once.
 #
-# THERE IS NO BOOT CHAIN HERE, and the contrast with the api's is the point: no migrations to apply, no schema
-# to prove, no database to reach. The process holds live connections and nothing else, so "started" and "ready"
-# are the same moment — which is also what makes it safe to redeploy at any time. A restart drops every
-# registration; every container redials inside its own backoff. Several of these behind one address find
-# each other and hand requests to whichever holds the tunnel (src/cluster.ts), so "add another machine" is
-# the scaling story and needs nothing set on Fly, where the app's own DNS lists the machines.
-#
-# Runtime config (see src/config.ts) is injected by the deployment, never baked:
-#   INGRESS_PUBLIC_KEY      the platform's Ed25519 PUBLIC key (SPKI PEM). Required — the process exits without it.
-#   PLATFORM_URL            where to ask whether a sandbox still exists. Unset ⇒ that check is off.
+# Runtime config (src/config.rs) is injected by the deployment, never baked:
+#   INGRESS_PUBLIC_KEY      the platform's Ed25519 PUBLIC key (SPKI PEM). Required: the process exits without it.
+#   PLATFORM_URL            where to ask whether a sandbox still exists. Unset: that check is off.
 #   INGRESS_PORT/HOST       defaults 8080 / 0.0.0.0.
 #   INGRESS_INTERNAL_PORT   the cluster's own listener, default 8081, bound to the private address (FLY_PRIVATE_IP
 #                           when present, else INGRESS_INTERNAL_HOST, else every interface). Never publish it.
 #   INGRESS_PEERS           off Fly only: the other machines, `host[:port[:internalPort]]` comma-separated, with
 #                           INGRESS_ADVERTISE_HOST naming this one as they reach it. On Fly both are derived.
 #   INGRESS_INSTANCE_ID     this machine's name in logs and on /health; defaults to FLY_MACHINE_ID.
-# The ONE value that is baked rather than injected, because a deployment must not be able to claim a build it
-# is not running: BUILD_ID becomes INGRESS_BUILD, which /health reports and deploy-ingress.sh asserts against
-# the tag it just pushed. Left at `unreleased` by a hand-run `docker build`.
-# The private half NEVER appears here: this image can verify grants and can never mint one, which is the whole
-# of why a compromised edge cannot make anything reachable.
-# BUN CANARY, PINNED BY DIGEST, AND THE ONE REASON IT IS NOT A RELEASED TAG: the edge asks the platform
-# whether a sandbox still exists BEFORE it upgrades the WebSocket (that round trip is the whole of
-# revocation), so `handleUpgrade` always runs a tick or more after the `upgrade` event. Every RELEASED bun
-# — 1.4.0 is the newest, 2026-08-20 — aborts that handshake and then dies inside its own abort path
-# (`abortHandshake` reads STATUS_CODES off an http shim that does not have it), so the first sandbox to
-# register a tunnel killed this process and it restarted into the same crash on the retry. Measured: an
-# upgrade 0ms after the event succeeds, 5ms crashes, and node does it at any delay.
-#
-# Bun's main fixed it (the runtime smoke in scripts/ passes on 1.4.1 and fails on 1.4.0), so this rides
-# canary rather than moving the edge off bun. The digest pin is what keeps that reproducible — `canary` is a
-# moving tag and an unpinned one would silently change the runtime under a process that holds every
-# sandbox's tunnel. MOVE THIS TO `1.4.1-slim` (and the bun devDependency in package.json with it) as soon as
-# 1.4.1 is released; both exist only to wait that release out.
-FROM oven/bun:canary-slim@sha256:6285dc2ad21f26e6b57f6887905cccccc62f151a6e4b4334faa009a500594b71
+#   HOSTED_APP_PREFIX       hosted sandboxes' Fly app prefix; unset replays nothing.
+#   INGRESS_TLS_PORT        where the edge terminates TLS itself; unset leaves TLS to whatever is in front of it. The
+#                           certificate is a PEM pair on disk (INGRESS_TLS_CERT_FILE, INGRESS_TLS_KEY_FILE) or the one
+#                           the platform issued (INGRESS_PLATFORM_TOKEN with PLATFORM_URL), reloaded in place.
+#   INGRESS_PROXY_PROTOCOL  the TLS port sits behind a TCP passthrough that names the browser in a PROXY header.
+#   INGRESS_QUIC_PORT       the UDP door, on the same certificate: a front's QUIC tunnel and a browser's HTTP/3.
+#   INGRESS_QUIC_HOST       the address it binds, else INGRESS_HOST; on Fly, `fly-global-services`, the only one UDP
+#                           reaches.
+#   INGRESS_ALT_SVC         what TCP answers advertise HTTP/3 with, naming the PUBLIC UDP port: h3=":443"; ma=86400.
+#   LOG_LEVEL, LOG_PRETTY   a tracing filter (default info) and human lines instead of JSON.
+# The ONE value baked rather than injected, because a deployment must not be able to claim a build it is not
+# running: BUILD_ID becomes INGRESS_BUILD, which /health reports and deploy-ingress.sh asserts against the tag it just
+# pushed. Left at `unreleased` by a hand-run `docker build`.
+# The private half of the key NEVER appears here: this image can verify grants and can never mint one, which is the
+# whole of why a compromised edge cannot make anything reachable.
+FROM rust:1.98.1-slim-trixie@sha256:f47a8de237dcbb0b0ce1099901e60a89728e3d51f24e664b40e947171538ade7 AS build
+COPY --from=tunnel . /src/_sandbox/front/crates/tunnel
+COPY --from=contract tunnel-lanes.json ingress-contract.fixture.json /src/_shared/sandbox-contract/src/protocol/
+WORKDIR /src/_platform/ingress
+COPY . .
+# Cache mounts keep the registry and the incremental build across runs on the same builder.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/_platform/ingress/target \
+    cargo build --release --locked --bin intentic-ingress \
+    && cp target/release/intentic-ingress /intentic-ingress
+
+FROM debian:trixie-20260803-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
-WORKDIR /app
-COPY . /app
-# Declared AFTER the FROM it applies to, and defaulted so a hand build needs no argument. docker-release.sh
-# passes the content-addressed tag it pushes, so identical content always bakes an identical value and the
-# registry-side retag skip stays correct.
+COPY --from=build /intentic-ingress /usr/local/bin/intentic-ingress
+# Declared after the FROM it applies to, and defaulted so a hand build needs no argument. docker-release.sh passes the
+# content-addressed tag it pushes, so identical content always bakes an identical value.
 ARG BUILD_ID=unreleased
-ENV NODE_ENV=production INGRESS_HOST=0.0.0.0 INGRESS_PORT=8080 INGRESS_BUILD=$BUILD_ID
+ENV INGRESS_HOST=0.0.0.0 INGRESS_PORT=8080 INGRESS_BUILD=$BUILD_ID
 EXPOSE 8080
-CMD ["bun", "src/main.ts"]
+CMD ["intentic-ingress"]

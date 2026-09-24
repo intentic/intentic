@@ -1,7 +1,8 @@
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import * as baked from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
-import { CLAUDE_SDK_EXPORTS } from "./engine-descriptors.js";
+import { CLAUDE_SDK_EXPORTS, claudeBinaryNames } from "./engine-descriptors.js";
 import { resolveEngine } from "./engine-resolve.js";
 import { quarantineVersion } from "./engine-store.js";
 
@@ -11,16 +12,43 @@ import { quarantineVersion } from "./engine-store.js";
 
 export type ClaudeSdk = typeof baked;
 
-let current: ClaudeSdk = baked;
+// The image copy's binary, found from the SDK's own directory the way the SDK finds it; undefined where the image
+// carries no variant this platform runs, which leaves the pick to the SDK.
+const findImageBinary = (): string | undefined => {
+    const fromSdk = createRequire(import.meta.resolve("@anthropic-ai/claude-agent-sdk"));
+    for (const name of claudeBinaryNames()) {
+        try {
+            return fromSdk.resolve(name);
+        } catch {
+            // silent-catch: a variant this install does not carry does not resolve, and the next one is tried.
+        }
+    }
+    return undefined;
+};
+
+// Every session a copy opens names its binary: the SDK's own pick calls process.report.getReport(), which waits for
+// each worker thread to answer and held the loop 8 s at boot while one sat in a SQLite statement.
+const namingBinary = (loaded: ClaudeSdk, binary: string | undefined): ClaudeSdk => {
+    if (binary === undefined) {
+        return loaded;
+    }
+    const query: ClaudeSdk["query"] = (params) => loaded.query({ ...params, options: { ...params.options, pathToClaudeCodeExecutable: binary } });
+    // A proxy, not a copy: every other export stays the module's live binding, which a mocked module rebinds.
+    return new Proxy(loaded, { get: (target, key) => (key === "query" ? query : Reflect.get(target, key)) });
+};
+
+const imageBinary = findImageBinary();
+const image = namingBinary(baked, imageBinary);
+
+let current: ClaudeSdk = image;
 // Store version actually imported by this process, not derived live; decides whether a refresh has work to do.
 let loadedVersion: string | undefined;
-let cliPath: string | undefined;
+let cliPath: string | undefined = imageBinary;
 
 // Every SDK value the daemon calls, read through here rather than via a direct import.
 export const sdk = (): ClaudeSdk => current;
 
-// Binary the loaded SDK should spawn (pathToClaudeCodeExecutable). Absent for the image copy, whose own resolution is
-// already correct; present for a store copy, so the path is chosen and logged, not inferred.
+// The binary every session of the loaded copy spawns.
 export const claudeCliPath = (): string | undefined => cliPath;
 
 export interface ClaudeSdkStatus {
@@ -31,9 +59,9 @@ export interface ClaudeSdkStatus {
 const claudeSdkStatus = (): ClaudeSdkStatus => (loadedVersion === undefined ? { source: "image" } : { source: "store", version: loadedVersion });
 
 const useBaked = (): ClaudeSdkStatus => {
-    current = baked;
+    current = image;
     loadedVersion = undefined;
-    cliPath = undefined;
+    cliPath = imageBinary;
     return { source: "image" };
 };
 
@@ -54,7 +82,7 @@ export const refreshClaudeSdk = async (): Promise<ClaudeSdkStatus> => {
         if (missing.length > 0) {
             throw new Error(`does not export ${missing.join(", ")}`);
         }
-        current = loaded;
+        current = namingBinary(loaded, resolved.paths.binPath);
         loadedVersion = resolved.version;
         cliPath = resolved.paths.binPath;
         return claudeSdkStatus();

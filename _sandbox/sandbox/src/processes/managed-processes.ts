@@ -1,8 +1,7 @@
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import { forkedExec } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { SHELL } from "../terminal/pane-state.js";
@@ -10,8 +9,6 @@ import { watchPromptSignals } from "../terminal/prompt-signal.js";
 import { PANEL_SESSION_PREFIX } from "../terminal/terminal-session.js";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
 import { freePort } from "./free-port.js";
-
-const execFileAsync = promisify(execFile);
 
 export interface ProcessSpec {
     // Runs in a detached tmux session in `cwd`, with PORT (manager-assigned) and `env` set.
@@ -71,9 +68,9 @@ const defaultRunner: ProcessRunner = {
         const envFlags = Object.entries(launchEnv(spec, process.env["PATH"] ?? "")).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
         // A lingering same-name session is a previous run's leftover, clear it before creating fresh.
         // `=` forces an exact target match (a bare `-t panel-x` would prefix-match `panel-x--api`).
-        await execFileAsync("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
+        await forkedExec("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
         // Sent via send-keys so Ctrl+C/↑ still work; trailing `:` is required for tmux to resolve the pane.
-        await execFileAsync("tmux", [
+        await forkedExec("tmux", [
             "new-session",
             "-d",
             "-s",
@@ -95,13 +92,13 @@ const defaultRunner: ProcessRunner = {
         ]);
     },
     kill: async (session) => {
-        await execFileAsync("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
+        await forkedExec("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
     },
     // One call for all sessions; pane_current_command at the prompt is how a oneShot's completion is seen. A shell exit
     // destroys the session, reporting as absence; no tmux server means no sessions.
     states: async () => {
         const states = new Map<string, string>();
-        const listed = await execFileAsync("tmux", ["list-panes", "-a", "-F", "#{session_name}\t#{pane_current_command}"]).catch((error: unknown) => {
+        const listed = await forkedExec("tmux", ["list-panes", "-a", "-F", "#{session_name}\t#{pane_current_command}"]).catch((error: unknown) => {
             if (isNoTmuxServer(error)) {
                 return undefined;
             }
@@ -121,7 +118,7 @@ const defaultRunner: ProcessRunner = {
 // restart' holds. `exempt` spares a session the boot chain re-adopted instead of truncating.
 export const killStaleManagedSessions = async (exempt: readonly string[] = []): Promise<void> => {
     try {
-        const { stdout } = await execFileAsync("tmux", ["list-sessions", "-F", "#{session_name}"]);
+        const { stdout } = await forkedExec("tmux", ["list-sessions", "-F", "#{session_name}"]);
         const stale = stdout
             .split("\n")
             .filter(
@@ -129,7 +126,7 @@ export const killStaleManagedSessions = async (exempt: readonly string[] = []): 
                     (name.startsWith(PANEL_SESSION_PREFIX) || name.startsWith(AGENT_SESSION_PREFIX) || name.startsWith(JOB_SESSION_PREFIX)) &&
                     !exempt.includes(name),
             );
-        await Promise.all(stale.map((name) => execFileAsync("tmux", ["kill-session", "-t", `=${name}`]).catch(() => undefined)));
+        await Promise.all(stale.map((name) => forkedExec("tmux", ["kill-session", "-t", `=${name}`]).catch(() => undefined)));
     } catch {
         // no tmux server ⇒ nothing stale
     }

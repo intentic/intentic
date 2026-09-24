@@ -7,8 +7,6 @@ export interface ContainerRequirement {
     readonly requires: readonly string[];
     // Absent `given` evidence means this sandbox never had the capability: not a fault, just unconfigured.
     readonly given: readonly string[];
-    // Row stays silent if any `unless` key is present: an alternate mechanism already satisfies the evidence.
-    readonly unless?: readonly string[];
     readonly enables: string;
     readonly lost: string;
     readonly repair: string;
@@ -25,8 +23,6 @@ export const CONTAINER_REQUIREMENTS: readonly ContainerRequirement[] = [
         key: "reachability",
         requires: ["SANDBOX_GRANT", "INGRESS_URL"],
         given: ["SANDBOX_PUBLIC_URL"],
-        // A Fly microVM's edge replays directly to it, so it holds no grant by design.
-        unless: ["SANDBOX_VM"],
         enables: "reaching this sandbox at its public address, from anywhere",
         lost:
             "Its public address answers 502 to everyone, including this browser when it is not on the same machine as the sandbox. " +
@@ -45,9 +41,7 @@ export interface ContainerGap {
 
 /** Empty means every requirement is met or not applicable; non-empty always means a setup rerun is needed. */
 export const containerDrift = (env: ContainerEnv): readonly ContainerGap[] =>
-    CONTAINER_REQUIREMENTS.filter(
-        (requirement) => requirement.given.every((name) => present(env, name)) && !(requirement.unless ?? []).some((name) => present(env, name)),
-    )
+    CONTAINER_REQUIREMENTS.filter((requirement) => requirement.given.every((name) => present(env, name)))
         .map((requirement) => ({
             key: requirement.key,
             missing: requirement.requires.filter((name) => !present(env, name)),

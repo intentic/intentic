@@ -18,18 +18,26 @@ flowchart LR
 - `route.rs` picks the target from the listener a request arrived on and the leftmost DNS label of its Host. On the
   preview port and the tunnel, `sandbox-<id>` is Node and every other label is a preview. The label rules are held to
   the contract's shared `hostnames.fixture.json`.
-- Reachability is one outbound WebSocket (`tunnel.rs`) that presents the sandbox's grant and then serves HTTP/2 over
-  it. It never gives up, because it is the only way in.
+- Reachability is the front's own dial (`tunnel.rs`): two WebSocket lanes, `interactive` and `bulk`, each presenting
+  the sandbox's grant and then serving HTTP/2, and a QUIC connection beside them wherever UDP reaches the edge
+  (`quic.rs`), each request a stream of its own. The edge picks the lane per request, so a transfer never queues a
+  keystroke. It never gives up, because it is the only way in.
+- Terminals are the front's own: `GET /system/terminal` never reaches Node's HTTP. Node answers once what a socket may
+  open, and the front serves it with one `tmux -C` client per session shared by every viewer; one that falls behind
+  gets a snapshot instead of a backlog. The same route answers the `intentic-terminal` upgrade a browser's
+  WebTransport stream arrives as, its messages framed by length (`term/frames.rs`).
+- The change feed: the front keeps a generation per checkout Node reads git in, moved by one inotify instance on
+  whatever a `git status` there reads, so Node answers an untouched checkout from memory.
 - Node drives the front over the control lane: length-prefixed JSON frames on a Unix socket that push listen config
   and certificates. [crates/front-wire](crates/front-wire) defines the frames, and its tests write the TypeScript the
   daemon's `front-link.ts` imports from `@intentic/sandbox-contract`.
 
 ## Key files
 
-- [crates/front/src/main.rs](crates/front/src/main.rs) — startup: run directory, sockets, listeners, tunnel, supervisor.
 - [crates/front/src/route.rs](crates/front/src/route.rs) — which side answers a request.
 - [crates/front/src/supervise.rs](crates/front/src/supervise.rs) — runs Node, restarts it, reaps orphans as PID 1.
-- [crates/front/src/tunnel.rs](crates/front/src/tunnel.rs) — the ingress tunnel: grant, then HTTP/2 over a WebSocket.
+- [crates/front/src/tunnel.rs](crates/front/src/tunnel.rs) — the ingress tunnel: grant, then HTTP/2 over each lane.
+- [crates/front/src/term/mod.rs](crates/front/src/term/mod.rs) — a terminal socket from Node's plan to its close.
 - [crates/front-wire/src/lib.rs](crates/front-wire/src/lib.rs) — the control-lane frame types, the lane's only definition.
 - [crates/front/tests/routes.rs](crates/front/tests/routes.rs) — the real binary on real ports: routing, preview relay, TLS, upgrades.
 

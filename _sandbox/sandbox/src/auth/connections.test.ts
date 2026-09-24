@@ -32,3 +32,14 @@ test("unregistering is idempotent and sandbox-wide revocation closes everything 
     connections.revoke();
     expect(live).toHaveBeenCalledTimes(1);
 });
+
+test("every revocation is heard, lowercased, by each listener until it stops listening", () => {
+    const connections = createAuthConnections();
+    const heard: (string | undefined)[] = [];
+    const stop = connections.onRevoke((email) => heard.push(email));
+    connections.revoke("Member@Example.com");
+    connections.revoke();
+    stop();
+    connections.revoke("later@example.com");
+    expect(heard).toEqual(["member@example.com", undefined]);
+});

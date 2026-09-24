@@ -5,6 +5,8 @@ import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { OrpcContext } from "../../context.js";
 import type { Config } from "../../config.js";
 import { sandboxRoutes } from "../sandbox.routes.js";
+import { verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
+import { publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, startAfterUpdate, wakeHosted } from "./hosted.js";
 import { HostedAlreadyProvisioned } from "./hosted-cleanup.js";
@@ -302,10 +304,12 @@ describe(`provisionHosted`, () => {
         });
         expect(machine.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
         expect(machine.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://${hostnameOf(`t0k3n`)}`);
-        // Hosted machines are reached via the edge replaying to their app; no tunnel grant or edge to dial.
-        expect(machine.config.env[`SANDBOX_GRANT`]).toBeUndefined();
-        expect(machine.config.env[`INGRESS_URL`]).toBeUndefined();
-        // Front door is declared instead, checked under the replay hostname.
+        // Hosted machines dial the edge's tunnel like every sandbox, presenting a grant for their own id.
+        expect(verifyReachabilityGrant(publicKeyPemOf(testIngressConfig.signingKey), machine.config.env[`SANDBOX_GRANT`] ?? ``)?.sandboxId).toBe(
+            sandboxIdFromToken(`t0k3n`),
+        );
+        expect(machine.config.env[`INGRESS_URL`]).toBe(testIngressConfig.url);
+        // The front door stays, checked under the replay hostname, for as long as the edge sits behind Fly's proxy.
         expect(machine.config.services.map((service) => service.internal_port)).toEqual([5173]);
         expect(machine.config.checks[`front-door`]?.headers).toEqual([{ name: `Host`, values: [hostnameOf(`t0k3n`)] }]);
         expect(machine.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);

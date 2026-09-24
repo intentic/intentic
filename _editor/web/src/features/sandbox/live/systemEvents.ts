@@ -13,7 +13,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { setPresenceUsers } from "../../../shell/presence/usePresence";
 import { landingNow } from "../../workspace/changes/landing";
-import { markDerivedChanged, markWorkspaceChanged, worktreeMovedRecently } from "../../workspace/changes/live/useWorkspaceLive";
+import { applyTreeChanged, markDerivedChanged, markWorkspaceChanged, worktreeMovedRecently } from "../../workspace/changes/live/useWorkspaceLive";
 import { emitRuntimeChanged } from "./runtimeEvents";
 import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 import { setDaemonBoot } from "../overview/useDaemonBoot";
@@ -180,6 +180,9 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             return;
         case `workspaceChanged`:
             applyWorkspaceChanged(event);
+            return;
+        case `treeChanged`:
+            applyTreeChanged(event);
             return;
     }
 };

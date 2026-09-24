@@ -844,12 +844,25 @@ export const createAgentRoutes = (services: Services) => {
             if (run === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no live or recent turn for that conversation" });
             }
-            const { head, entries } = run.attach(signal);
-            yield head;
-            for await (const entry of entries) {
-                yield entry;
+            const { head, entries, cut } = run.attach(
+                () => new ORPCError("TIMEOUT", { message: "fell behind the run; attach again for its rows as they stand" }),
+                signal,
+            );
+            // Registered like /events: a member removed, re-graded or re-fenced stops reading the run now, not at their
+            // next attach.
+            const unregister =
+                context.identity === undefined
+                    ? undefined
+                    : services.auth?.connections.register(context.identity, () => cut(new ORPCError("FORBIDDEN", { message: "authorization revoked" })));
+            try {
+                yield head;
+                for await (const entry of entries) {
+                    yield entry;
+                }
+                yield { kind: "end" as const };
+            } finally {
+                unregister?.();
             }
-            yield { kind: "end" as const };
         }),
         // Un-parks a turn waiting on a card (plan/question/permission) by requestId; NOT_FOUND freezes it as stale. A
         // dismissed question ends the turn here, synchronously, so the board never shows it running again.

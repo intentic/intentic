@@ -54,7 +54,6 @@ import {
 } from "./runners/runner-credentials.routes.js";
 import { createRunnerGitRefsRoute, createRunnerGitRpcRoute } from "./runners/runner-git.routes.js";
 import { createBrowserViewRoute } from "./browser/cast/browser-view.js";
-import { createTerminalRoute } from "./terminal/terminal.js";
 import { createWebchatRoutes } from "./webchat/webchat.routes.js";
 import { createWidgetRoute } from "./webchat/webchat-widget.js";
 import { createIntakeRoutes } from "./issues/intake.routes.js";
@@ -251,12 +250,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             announce: services.announcer.status(),
             // Whether this sandbox's public address answers, probed by the box itself.
             reach: services.reach.status(),
-            // How the world reaches here: a dialed tunnel, direct (a Fly machine, no process on path), or loopback.
+            // How the world reaches here: a dialed tunnel, or loopback only.
             reachedBy: reachPosture({
                 url: services.config.ingress.url,
                 grant: services.config.sandbox.grant,
                 frontDoor: profileTraits(services.config).extraListeners,
-                vm: services.config.sandbox.vm,
             }).by,
         }),
     );
@@ -280,9 +278,6 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Browser credentials: the one-shot ticket the WebSocket upgrades redeem, minted over HTTP so auth can bind it.
     const access = createAccessRoutes(services);
     serve("POST /system/ws-ticket", access.wsTicket);
-
-    // Interactive PTY over a WebSocket, paired with the `ws` server in bootstrap/front-door.ts; matched before the oRPC catch-all.
-    serve("GET /system/terminal", createTerminalRoute(services));
 
     // Desktop sync's transport: this container's sshd as a byte stream, authorized via the ordinary grant table.
     serve("GET /system/sync/ssh", createSyncSshRoute(services));

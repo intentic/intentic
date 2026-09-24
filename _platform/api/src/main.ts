@@ -7,6 +7,7 @@ import { createLogger } from "./logger.js";
 import { createPrisma } from "./prisma.js";
 import { startHostedAbuse } from "./sandbox/hosted/abuse/hosted-abuse.js";
 import { startHostedBuilds } from "./sandbox/hosted/build/hosted-build.js";
+import { startEdgeCertificate } from "./sandbox/edge-certificate.js";
 import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
 import { startHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";
 import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
@@ -57,6 +58,8 @@ startHostedAbuse(prisma, config, logger);
 startHostedHealth(prisma, config, logger);
 // Provisions a sandbox end to end and waits for its daemon, off unless HOSTED_CANARY_MINUTES is set.
 startHostedCanary(prisma, config, logger);
+// Orders and renews the edge's certificate, off unless INGRESS_PLATFORM_TOKEN is set (edge-certificate.ts).
+startEdgeCertificate(prisma, config, logger);
 const { app } = createApp(config, prisma, logger);
 
 // Falls back to the pair pnpm install mints for this user (their own data directory) when the config knobs are unset.

@@ -36,6 +36,7 @@ _site/site/public/desktop
 # ic (the host-side CLI), the sandbox front and the Windows launcher stub: their Rust build trees.
 _sandbox/ic/target
 _sandbox/front/target
+_platform/ingress/target
 _devices/win-launcher/target
 /tmp
 **/tmp

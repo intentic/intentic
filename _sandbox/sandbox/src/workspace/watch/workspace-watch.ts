@@ -1,11 +1,12 @@
-import { Worker } from "node:worker_threads";
 import { realpathSync } from "node:fs";
 import { Coalescer } from "@intentic/base/async";
 import { STATE_DIR } from "@intentic/constants";
+import type { WorkspaceTree, WorkspaceTreeDelta } from "@intentic/sandbox-contract";
 import { type AsyncSubscription, subscribe } from "@parcel/watcher";
 import type { Logger } from "pino";
 import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath, REFERENCE_DIR, toRelPath } from "@intentic/workspace-ignore";
 import { stateRelPath } from "../../state-paths.js";
+import { siblingModule, workerCalls } from "../../workers/worker-calls.js";
 
 // Live file-change push: the agent edits /work out-of-band, so nothing else tells the browser its view is stale. One
 // watcher on the workspace root batches changed paths and forwards them over /events, debounced into one frame per
@@ -86,41 +87,64 @@ export interface WorkspaceWatch {
     close(): Promise<void>;
 }
 
-interface WorkerMessage {
-    readonly kind: "paths" | "error";
-    readonly paths?: string[];
-    readonly message?: string;
+// A watch whose own handle is armed once `ready` settles: a change made after it is one the watch sees.
+interface ArmedWorkspaceWatch extends WorkspaceWatch {
+    readonly ready: Promise<void>;
 }
 
-// Isolates the watcher in its own thread; the original reason (thousands of per-directory libuv handles) is gone now
-// that the native backend holds one handle for the whole tree. Kept anyway so a crash lands here, not on the daemon,
-// and so retiring it can be its own deliberate change.
-const createIsolatedWorkspaceWatch = (root: string, logger: Logger): WorkspaceWatch => {
+// What the watch's thread answers when asked: the resident tree's view, or that its first listing is done.
+export type WatchAsk = { readonly kind: "view" } | { readonly kind: "ready" };
+
+// What the watch's thread says unasked: a batch of changed paths, what that batch moved in the tree, or a failure.
+export type WatchNews =
+    | { readonly kind: "paths"; readonly paths: string[] }
+    | { readonly kind: "tree"; readonly delta: WorkspaceTreeDelta }
+    | { readonly kind: "error"; readonly message: string };
+
+// The watcher in a thread of its own, holding the shared tree beside it (files/resident-tree.ts): a crash lands there,
+// not on the daemon, and every batch is re-listed off the daemon's loop.
+interface IsolatedWorkspaceWatch extends WorkspaceWatch {
+    // The tree as it stands after every batch that arrived before the ask.
+    readonly view: () => Promise<WorkspaceTree>;
+    readonly subscribeTree: (listener: (delta: WorkspaceTreeDelta) => void) => () => void;
+}
+
+const createIsolatedWorkspaceWatch = (root: string, logger: Logger): IsolatedWorkspaceWatch => {
     const listeners = new Set<(paths: string[]) => void>();
-    const worker = new Worker(new URL("./workspace-watch-worker.js", import.meta.url), { workerData: { root } });
-    worker.on("message", (message: WorkerMessage) => {
-        if (message.kind === "error") {
-            logger.warn({ err: new Error(message.message ?? "workspace watcher failed") }, "workspace watcher error");
-            return;
-        }
-        const paths = message.paths ?? [];
-        for (const listener of listeners) {
-            listener(paths);
+    const treeListeners = new Set<(delta: WorkspaceTreeDelta) => void>();
+    const calls = workerCalls<WatchAsk, WatchNews>(siblingModule(import.meta, "workspace-watch-worker"), { root }, (news) => {
+        switch (news.kind) {
+            case "error":
+                logger.warn({ err: new Error(news.message) }, "workspace watcher error");
+                return;
+            case "paths":
+                for (const listener of listeners) {
+                    listener(news.paths);
+                }
+                return;
+            case "tree":
+                for (const listener of treeListeners) {
+                    listener(news.delta);
+                }
         }
     });
-    worker.on("error", (err) => logger.warn({ err }, "workspace watcher worker error"));
+    // The first ask spawns the thread, whose watcher starts watching at once; no reader waits for this one.
+    calls.call({ kind: "ready" }).catch((err: unknown) => logger.warn({ err }, "workspace watcher failed to list the tree"));
     return {
         subscribe(listener) {
             listeners.add(listener);
             return () => listeners.delete(listener);
         },
-        close: async () => {
-            await worker.terminate();
+        subscribeTree(listener) {
+            treeListeners.add(listener);
+            return () => treeListeners.delete(listener);
         },
+        view: () => calls.call<WorkspaceTree>({ kind: "view" }),
+        close: () => calls.close(),
     };
 };
 
-export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWatch => {
+export const createWorkspaceWatch = (root: string, logger?: Logger): ArmedWorkspaceWatch => {
     // @parcel/watcher refuses a symlink root; resolved only for the backend, paths stay relative to the given root.
     const watchedRoot = realpathSync(root);
     const listeners = new Set<(paths: string[]) => void>();
@@ -162,6 +186,7 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWa
         .catch((err: unknown) => logger?.warn({ err }, "workspace watcher failed to start"));
 
     return {
+        ready: started,
         subscribe(listener) {
             listeners.add(listener);
             return () => listeners.delete(listener);
@@ -181,16 +206,33 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWa
 // Boot-time singleton the /events handler subscribes to, kept a plain factory so tests can drive their own. Subscribers
 // register into a set that outlives the start, so one taken before the watcher spins up still gets fanned out to.
 const subscribers = new Set<(paths: string[]) => void>();
-let instance: WorkspaceWatch | undefined;
+const treeSubscribers = new Set<(delta: WorkspaceTreeDelta) => void>();
+let instance: { readonly root: string; readonly watch: IsolatedWorkspaceWatch } | undefined;
 export const startWorkspaceWatch = (root: string, logger: Logger): void => {
     if (instance === undefined) {
-        instance = createIsolatedWorkspaceWatch(root, logger);
-        instance.subscribe((paths) => {
+        instance = { root, watch: createIsolatedWorkspaceWatch(root, logger) };
+        instance.watch.subscribe((paths) => {
             for (const listener of subscribers) {
                 listener(paths);
             }
         });
+        instance.watch.subscribeTree((delta) => {
+            for (const listener of treeSubscribers) {
+                listener(delta);
+            }
+        });
     }
+};
+
+// The watched root's tree, held in memory; undefined for any other root, and before the watcher has started, when the
+// only answer is a walk.
+export const residentWorkspaceTree = (root: string): Promise<WorkspaceTree> | undefined =>
+    instance !== undefined && instance.root === root ? instance.watch.view() : undefined;
+
+// What moved in the watched root's tree, once the resident tree has re-listed each batch.
+export const subscribeTreeChanges = (listener: (delta: WorkspaceTreeDelta) => void): (() => void) => {
+    treeSubscribers.add(listener);
+    return () => treeSubscribers.delete(listener);
 };
 export const subscribeWorkspaceChanges = (listener: (paths: string[]) => void): (() => void) => {
     subscribers.add(listener);

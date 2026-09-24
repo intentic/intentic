@@ -1,5 +1,6 @@
-import type { CodeAnalysis } from "./analysis.js";
+import { keepsAny, sameStrip, STRIP_START, stripLines } from "./analysis.js";
 import { highlightLangFor } from "./lang-for-path.js";
+import { type Grammars, tokenWalk } from "./tokens.js";
 
 // Added/removed line counts with comments stripped, for the review row shown by default; computed from the same code
 // analysis the diff pane renders so the two cannot disagree. Cached per text+language.
@@ -39,9 +40,10 @@ const commonLength = (before: readonly string[], after: readonly string[]): numb
 };
 
 /** Added/removed line counts between two texts, or undefined when they're too dissimilar to be worth diffing. */
-export const lineStat = (before: string, after: string): LineStat | undefined => {
-    const old = splitLines(before);
-    const now = splitLines(after);
+export const lineStat = (before: string, after: string): LineStat | undefined => lineStatOf(splitLines(before), splitLines(after));
+
+// The same counts over lines already split.
+const lineStatOf = (old: readonly string[], now: readonly string[]): LineStat | undefined => {
     // Trim the matching head and tail first so only the differing middle reaches the table.
     let start = 0;
     while (start < old.length && start < now.length && old[start] === now[start]) {
@@ -62,47 +64,64 @@ export const lineStat = (before: string, after: string): LineStat | undefined =>
     return { additions: added.length - common, deletions: removed.length - common };
 };
 
-/** Reads one side with comments stripped; the app runs this in a worker, the daemon in-process. */
-export type Analyze = (text: string, lang: string | undefined) => Promise<CodeAnalysis | undefined>;
+// What `lineStat` reads a side's kept lines as once they are joined: a last empty line is the file's final newline.
+const ended = (lines: readonly string[]): readonly string[] => (lines.at(-1) === `` ? lines.slice(0, -1) : lines);
+
+/** What a count came to: its numbers, or two sides too far apart to be worth diffing (as `lineStat` finds them). */
+export type CodeCount = { readonly stat: LineStat } | { readonly dissimilar: true };
+
+// Too far apart is a property of the two texts, never of the moment: one reading of it holds for good.
+const countOf = (stat: LineStat | undefined): CodeCount => (stat === undefined ? { dissimilar: true } : { stat });
 
 /**
- * `analyze` with its answers kept by text, oldest dropped once the kept texts pass `budget` characters. A file saved
- * again is counted against a side that has not moved, so a recount tokenizes only the side that did.
+ * Same counts with every comment stripped from both sides, or undefined when the file can't be stripped (no grammar,
+ * or a walk abandoned): exactly what `lineStat` answers for the two sides `analyzeCode` strips, with each unchanged
+ * stretch tokenized once. The lines both sides open with read alike, so they are walked once; the lines both end with
+ * read alike too when the walks reach them in the same state, and then only whether any of them keeps code matters,
+ * since kept they are a common tail.
  */
-export const rememberAnalyses = (analyze: Analyze, budget: number): Analyze => {
-    const kept = new Map<string, { readonly lang: string | undefined; readonly analysis: Promise<CodeAnalysis | undefined> }>();
-    let held = 0;
-    const forget = (text: string): void => {
-        if (kept.delete(text)) {
-            held -= text.length;
-        }
-    };
-    return (text, lang) => {
-        const hit = kept.get(text);
-        forget(text);
-        const analysis = hit !== undefined && hit.lang === lang ? hit.analysis : analyze(text, lang);
-        kept.set(text, { lang, analysis });
-        held += text.length;
-        for (const oldest of kept.keys()) {
-            if (held <= budget || oldest === text) {
-                break;
-            }
-            forget(oldest);
-        }
-        // A failed reading is not an answer: the next ask tries again.
-        void analysis.catch(() => forget(text));
-        return analysis;
-    };
-};
-
-/** Same counts with every comment stripped from both sides, or undefined when the file can't be stripped. */
-export const codeLineStat = async (before: string, after: string, path: string, analyze: Analyze): Promise<LineStat | undefined> => {
+export const codeLineStat = async (before: string, after: string, path: string, grammars: Grammars): Promise<CodeCount | undefined> => {
     // Resolved exactly as the diff pane resolves it; none above the highlight cap, where it shows the file whole.
     const lang = highlightLangFor(path, Math.max(before.length, after.length), after === `` ? before : after);
-    const [old, now] = await Promise.all([analyze(before, lang), analyze(after, lang)]);
+    const grammar = lang === undefined ? undefined : await grammars(lang);
     // Undefined mirrors the pane's own fallback (verbatim render); the caller then trusts git's counts.
-    if (old === undefined || now === undefined) {
+    if (grammar === undefined) {
         return undefined;
     }
-    return lineStat(old.code.text, now.code.text);
+    const walk = tokenWalk(grammar);
+    const old = before.split(`\n`);
+    const now = after.split(`\n`);
+    let head = 0;
+    while (head < old.length && head < now.length && old[head] === now[head]) {
+        head++;
+    }
+    let tail = 0;
+    while (tail < old.length - head && tail < now.length - head && old[old.length - 1 - tail] === now[now.length - 1 - tail]) {
+        tail++;
+    }
+    const shared = stripLines(walk, old.slice(0, head), STRIP_START);
+    const oldMiddle = shared === undefined ? undefined : stripLines(walk, old.slice(head, old.length - tail), shared.state);
+    const nowMiddle = shared === undefined ? undefined : stripLines(walk, now.slice(head, now.length - tail), shared.state);
+    if (shared === undefined || oldMiddle === undefined || nowMiddle === undefined) {
+        return undefined;
+    }
+    if (tail > 0 && sameStrip(oldMiddle.state, nowMiddle.state)) {
+        const kept = keepsAny(walk, old.slice(old.length - tail), oldMiddle.state);
+        if (kept === undefined) {
+            return undefined;
+        }
+        // A tail that keeps code is a suffix both sides share, so the middles alone decide; one that keeps none leaves
+        // the file's end, and its final newline, to them.
+        return countOf(
+            kept
+                ? lineStatOf(oldMiddle.kept, nowMiddle.kept)
+                : lineStatOf(ended([...shared.kept, ...oldMiddle.kept]), ended([...shared.kept, ...nowMiddle.kept])),
+        );
+    }
+    const oldTail = stripLines(walk, old.slice(old.length - tail), oldMiddle.state);
+    const nowTail = stripLines(walk, now.slice(now.length - tail), nowMiddle.state);
+    if (oldTail === undefined || nowTail === undefined) {
+        return undefined;
+    }
+    return countOf(lineStatOf(ended([...shared.kept, ...oldMiddle.kept, ...oldTail.kept]), ended([...shared.kept, ...nowMiddle.kept, ...nowTail.kept])));
 };

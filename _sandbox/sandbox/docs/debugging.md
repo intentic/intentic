@@ -34,6 +34,7 @@ owns the layout and prunes by size, age and count.
 | `filter-stats.jsonl` | One row per agent shell command through the output filter |
 | `terminals/`, `services/`, `intentic-runs/` | tmux pane captures, supervised service processes, `intentic` CLI runs |
 | `daemon-exit.json` | Whether the previous run exited cleanly or was killed |
+| `boot-*.cpuprofile` | The CPU profile of a start whose event loop stalled, the newest three (`platform/resources/loop/boot-profile.ts`) |
 
 Node's fatal-error reports (`report.*.json`) land in the same directory. `LOG_LEVEL` sets the level; `LOG_PRETTY=1`
 pretty-prints to stdout instead of writing `daemon.log`.
@@ -50,5 +51,9 @@ pretty-prints to stdout instead of writing `daemon.log`.
 
 - `/history`: `conversations.db` (the conversation registry), `conversations/` (one directory per conversation),
   `worktrees/`, `gits/` (every repository's git dir), `scopes/` (workspace history snapshots), `engines/`.
+- A conversation's transcript is a zstd log, one frame per settled turn behind a skippable frame naming its length,
+  rows and CRC (`src/sessions/record/record-log.ts`): read it with `zstdcat` or frame by frame, never with one
+  `zstdDecompressSync`, which stops at that first skippable frame and answers nothing. A tool output of 16 KiB or more
+  lives once by content under `/history/blobs/`, shared by forks and swept once no record names it.
 - `/work/.intentic`: `config/` (settings, capabilities, automations, safety policy), `records/` and `secrets/`. The
   table of which file backs which view is `state/workspace-state.ts` in `@intentic/sandbox-contract`.

@@ -1,19 +1,16 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import { forkedExec } from "@intentic/scaffold";
 import { isNoTmuxServer } from "./tmux-server.js";
 
 // Tmux session-name charset for the WebSocket route and control-plane list/kill routes: alnum, underscore, dash only,
 // first char not `-` (tmux reads it as a flag). Prefixes are contract vocabulary from session-names.ts.
 
-const execFileAsync = promisify(execFile);
-
 // A panel's session (processes/managed-processes.ts). Wire data: session names reach the browser and are string-built
 // there; never rename this prefix.
 export const PANEL_SESSION_PREFIX = "panel-";
 
-// A supervised service's (processes/service-processes.ts): its own prefix so terminal.ts knows to tail its log, not
-// attach a tmux session; none exists for it.
+// A supervised service's (processes/service-processes.ts): its own prefix so its terminal tails the service's log
+// (terminal-plan.ts) instead of attaching a tmux session; none exists for it.
 export const SERVICE_SESSION_PREFIX = "svc-";
 
 // Ids are manifest-unique and already match the session-name charset, so no sanitizing here.
@@ -38,7 +35,7 @@ const SESSION_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 
 export const isValidSessionName = (name: string): boolean => SESSION_NAME.test(name);
 
-// 100k lines can be tens of MB; execFile's 1MB default would silently truncate mid-line.
+// 100k lines can be tens of MB, past the default cap on a command's output.
 const CAPTURE_MAX_BYTES = 64 * 1_048_576;
 
 // No `-e`: colour escapes would ride into a copied selection. `truncated` is inferred from count >= requested;
@@ -47,7 +44,7 @@ export const captureScrollback = async (session: string, lines: number): Promise
     let stdout: string;
     try {
         // `=<name>:` exact-matches the session; a bare name would prefix-match `name-suffix` once `name` is gone.
-        ({ stdout } = await execFileAsync("tmux", ["capture-pane", "-p", "-J", "-S", `-${lines}`, "-t", `=${session}:`], {
+        ({ stdout } = await forkedExec("tmux", ["capture-pane", "-p", "-J", "-S", `-${lines}`, "-t", `=${session}:`], {
             maxBuffer: CAPTURE_MAX_BYTES,
         }));
     } catch {
@@ -133,7 +130,7 @@ export const panePidSessions = (stdout: string): Map<number, string> => {
 // Every live pane's root pid to its session name; empty when there is no tmux server, and a failed listing throws, since
 // the reaper spares exactly the processes under these pids.
 export const panePids = async (): Promise<Map<number, string>> => {
-    const listed = await execFileAsync("tmux", ["list-panes", "-a", "-F", "#{session_name} #{pane_pid}"]).catch((error: unknown) => {
+    const listed = await forkedExec("tmux", ["list-panes", "-a", "-F", "#{session_name} #{pane_pid}"]).catch((error: unknown) => {
         if (isNoTmuxServer(error)) {
             return undefined;
         }
@@ -145,12 +142,12 @@ export const panePids = async (): Promise<Map<number, string>> => {
 export const reapFinishedSessions = async (policy: ReapPolicy): Promise<void> => {
     let stdout: string;
     try {
-        ({ stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", SWEEP_FORMAT]));
+        ({ stdout } = await forkedExec("tmux", ["list-panes", "-a", "-F", SWEEP_FORMAT]));
     } catch {
         // no tmux server ⇒ nothing to reap
         return;
     }
     await Promise.all(
-        reapableSessions(stdout, Date.now(), policy).map((name) => execFileAsync("tmux", ["kill-session", "-t", `=${name}`]).catch(() => undefined)),
+        reapableSessions(stdout, Date.now(), policy).map((name) => forkedExec("tmux", ["kill-session", "-t", `=${name}`]).catch(() => undefined)),
     );
 };

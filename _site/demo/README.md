@@ -5,7 +5,7 @@ The interactive demo at intentic.dev/demo/: the real editor built from `@intenti
 ```mermaid
 flowchart LR
     visitor["Visitor at /demo/"] --> app["Real editor<br/>@intentic/web"]
-    app -->|"fetch · XHR · WebSocket"| demo(["demo<br/>transports"])
+    app -->|"fetch · XHR · WebSocket · WebTransport"| demo(["demo<br/>transports"])
     demo --> platform["platform.ts<br/>account, sandbox row"]
     demo --> daemon["daemon.ts<br/>contract-typed fixture"]
     demo --> recorded["terminal.ts · browser.ts<br/>recorded sockets"]
@@ -13,7 +13,7 @@ flowchart LR
     daemon --> turn["turn.ts<br/>scripted agent turn"]
 ```
 
-- Runs entirely in the visitor's browser. `main.ts` swaps `fetch`, `XMLHttpRequest` and `WebSocket` for handlers bound to `*.demo.invalid` origins, seeds a session and open chat tabs into the storage keys the app already reads, then imports the app's own `main.ts`. No app module knows the demo exists, and a request that escapes the handlers dies on the reserved `.invalid` TLD.
+- Runs entirely in the visitor's browser. `main.ts` swaps `fetch`, `XMLHttpRequest` and `WebSocket` for handlers bound to `*.demo.invalid` origins, and answers a `WebTransport` session there as one that never opens, so terminals take the socket shim, seeds a session and open chat tabs into the storage keys the app already reads, then imports the app's own `main.ts`. No app module knows the demo exists, and a request that escapes the handlers dies on the reserved `.invalid` TLD.
 - The fixture daemon is typed by `@intentic/sandbox-contract`. `router.ts` resolves a request with the contract's own route matcher and parses its input, so a contract change breaks this package's typecheck before it breaks the landing page. Anything unserved answers 404, and the console boot line reports how many procedures are covered.
 - The switcher chrome picks a mode: `Minimal`, `Curated`, `Everything` or `Desk`, a documents-instead-of-code workspace (`?mode=minimal|default|full|desk`). `?as=maintainer|collaborator|viewer|guest` shows the app as a lesser grant. Both stick per tab, and switching reloads.
 - `vite.config.ts` reuses the app's `vite.shared.ts` and builds into `_site/site/public/demo/` (gitignored), so the demo ships same-origin with the site. The marketing screenshots (`_tools/e2e/shots/capture.mts`) and the promo recording (`_tools/e2e/promo/record.mjs`) are taken from the demo.

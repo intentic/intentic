@@ -1,6 +1,6 @@
 import type { GitChange, MatchSnippet, SessionOwner, TranscriptRow } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import { agentRepoReview } from "../land/agent-changes.js";
+import { agentRepoChanges } from "../land/agent-changes.js";
 import { transcriptFile } from "../../sessions/transcript-record.js";
 import { type Ending, endingStatus, isIsolated, type PersistedAgent, reposOf } from "../registry/agents-store.js";
 
@@ -214,7 +214,8 @@ const repoStates = async (deps: FleetRecallDeps, entry: PersistedAgent, diff: bo
                 return landed;
             }
             try {
-                return { ...landed, ...statOf((await agentRepoReview(deps.agentWorktrees, entry, composed)).changes) };
+                // Git's own totals: a recall shows sums, which never needed the review's per-row code counts.
+                return { ...landed, ...statOf(await agentRepoChanges(deps.agentWorktrees, entry, composed, "cumulative")) };
             } catch (error) {
                 return { ...landed, unavailable: error instanceof Error ? error.message : String(error) };
             }
@@ -296,7 +297,7 @@ export const fleetRecall = async (
 ): Promise<FleetRecall> => {
     const [repos, messages] = await Promise.all([
         repoStates(deps, entry, options.diff !== false),
-        deps.transcripts.read(entry).catch((): TranscriptRow[] => []),
+        deps.transcripts.rows(entry).catch((): TranscriptRow[] => []),
     ]);
     const { placement, totals } = entry;
     return {
@@ -347,7 +348,7 @@ export const fleetMessages = async (
     entry: PersistedAgent,
     options: TranscriptOptions = {},
 ): Promise<{ readonly total: number; readonly messages: readonly FleetMessage[] }> => {
-    const rows = await deps.transcripts.read(entry).catch((): TranscriptRow[] => []);
+    const rows = await deps.transcripts.rows(entry).catch((): TranscriptRow[] => []);
     const spoken = rows.flatMap((row, at): FleetMessage[] => {
         const text = collapse(row.text);
         return text === "" ? [] : [{ role: row.role, text: clamp(text, MESSAGE_CHARS), at, ...present({ sentAt: row.sentAt }) }];

@@ -8,26 +8,26 @@ import { runnerTranslatorPath } from "./runner-protocol.js";
 export const RAW_ROUTES = {
     // The "is a daemon there" probe every flow uses; it names the sandbox and says whether it is still converging.
     "GET /health": { auth: "door", beforeBoot: true },
-    "GET /diff/raw": {},
+    "GET /diff/raw": { lane: "bulk" },
     // Arming the dictation model is a read any tier makes; dictating is writing a message, the collaborator's grant.
     "GET /speech/status": { guest: true },
     "POST /speech/transcribe": { floor: "collaborator", guest: true },
     // The bytes behind the workspace reads; each applies the caller's fence itself.
-    "GET /workspace/raw": { guest: true },
+    "GET /workspace/raw": { guest: true, lane: "bulk" },
     // No door, unlike media: the page fetches a thumbnail itself, so the request carries the header.
     "GET /workspace/thumb": { guest: true },
     // Fetched by a <video>/<audio> tag, which sends no header: its scoped ticket is checked in the handler.
-    "GET /workspace/media": { auth: "door", guest: true },
+    "GET /workspace/media": { auth: "door", guest: true, lane: "bulk" },
     // An attachment is part of the message it rides with; any other target edits the shared tree.
-    "POST /workspace/upload": { floor: "writer", attachmentFloor: "collaborator" },
+    "POST /workspace/upload": { floor: "writer", attachmentFloor: "collaborator", lane: "bulk" },
     "POST /workspace/upload-diff": {},
-    "POST /workspace/upload-archive": {},
+    "POST /workspace/upload-archive": { lane: "bulk" },
     // Minting is cheap: each WebSocket upgrade floors its own redemption.
     "POST /system/ws-ticket": { beforeBoot: true, floor: "collaborator", control: "never" },
     // A WebSocket upgrade carries no Authorization header; the terminal and both browser wires check a query ticket.
-    "GET /system/terminal": { auth: "door", beforeBoot: true, control: "never" },
+    "GET /system/terminal": { auth: "door", beforeBoot: true, control: "never", front: true },
     // Desktop sync's byte pipe, guarded again by sshd's own key check against the same enrollment.
-    "GET /system/sync/ssh": { sync: "pipe", control: "never" },
+    "GET /system/sync/ssh": { sync: "pipe", control: "never", lane: "bulk" },
     "GET /system/browser-profile": { auth: "door", beforeBoot: true, control: "never" },
     "GET /system/browser-view": { auth: "door", beforeBoot: true, control: "never" },
     // Deploy-target enrollment, gated by the connect token.
@@ -68,7 +68,7 @@ export const RAW_ROUTES = {
     "DELETE /bundles": { control: "never" },
     "POST /bundles/ticket": { control: "never" },
     // Navigated to by the browser, so no header: its ticket is checked in the handler.
-    "GET /bundles/download": { auth: "door", control: "never" },
+    "GET /bundles/download": { auth: "door", control: "never", lane: "bulk" },
     "GET /definition": {},
     "POST /definition/diff": {},
     "GET /definition/workspace": {},
@@ -78,7 +78,7 @@ export const RAW_ROUTES = {
     "POST /arrivals/scan": {},
     "POST /arrivals/apply": {},
     "DELETE /arrivals": {},
-    "GET /extensions/{id}/bundle": {},
+    "GET /extensions/{id}/bundle": { lane: "bulk" },
     // An extension backend's own namespace, proxied verbatim.
     "ALL /x/*": {},
     // The `capabilities` CLI: discovery by name, and the ask that parks on an owner-decided card.
@@ -142,9 +142,9 @@ export const RAW_ROUTES = {
     "POST /system/webext/lend": { auth: "door", control: "never" },
     "POST /system/runners/{id}/definition/sync": { control: "never" },
     // A runner's git door and credential doors, each on the runner's own bearer.
-    "GET /system/runners/git/{repo}/info/refs": { auth: "door", control: "never" },
-    "POST /system/runners/git/{repo}/git-upload-pack": { auth: "door", control: "never" },
-    "POST /system/runners/git/{repo}/git-receive-pack": { auth: "door", control: "never" },
+    "GET /system/runners/git/{repo}/info/refs": { auth: "door", control: "never", lane: "bulk" },
+    "POST /system/runners/git/{repo}/git-upload-pack": { auth: "door", control: "never", lane: "bulk" },
+    "POST /system/runners/git/{repo}/git-receive-pack": { auth: "door", control: "never", lane: "bulk" },
     "POST /system/runners/credentials": { auth: "door", control: "never" },
     "POST /system/runners/credentials/refresh": { auth: "door", control: "never" },
     [`ALL ${runnerTranslatorPath}/*` as const]: { auth: "door", control: "never" },

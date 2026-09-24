@@ -1,9 +1,10 @@
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import type { LineStat } from "@intentic/code-read";
 import type { GitChange } from "@intentic/sandbox-contract";
-import { gitBytes } from "@intentic/scaffold";
 import { readWorkspaceFile, statWorkspaceSizeMtime } from "../../workspace/files/workspace-files.js";
-import { siblingModule, workerCalls } from "../../workers/worker-calls.js";
+import { siblingModule, type WorkerCalls, workerPool } from "../../workers/worker-calls.js";
+import { readObject } from "./blob-reader.js";
 import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
 
 // The code-only +/- a diff row shows, computed here (not per-render) so counts never change after they're drawn; uses
@@ -87,8 +88,10 @@ export const refAgainstRef =
 // Past this many files, rows keep git's raw numbers only (same fallback as a binary file).
 const MAX_COUNTED = 400;
 
-// Concurrent file walks; the reads overlap, the tokenizing queues on the one counting thread.
-const LANES = 4;
+// Counting threads: tokenizing is CPU-bound per file and independent across files, and a review waits on the lot.
+const THREADS = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 4)));
+// Concurrent file walks: twice the threads, so a thread finishing one count finds the next file already read.
+const LANES = THREADS * 2;
 
 // One count's inputs, the question the counting thread answers.
 export interface CodeCountAsk {
@@ -97,8 +100,24 @@ export interface CodeCountAsk {
     readonly path: string;
 }
 
-// The counting thread (code-counts-worker.ts), spawned on the first count.
-const counter = workerCalls<CodeCountAsk>(siblingModule(import.meta, "code-counts-worker"), undefined);
+// What each counting thread is started with: where counts are kept across restarts, or nowhere.
+export interface CodeCountThread {
+    readonly cachePath?: string;
+}
+
+let thread: CodeCountThread = {};
+let counter: WorkerCalls<CodeCountAsk> | undefined;
+
+// Keeps counts on disk at `cachePath` from here on; the daemon names it at boot, a test leaves counts in memory.
+export const keepCodeCounts = (cachePath: string): void => {
+    thread = { cachePath };
+};
+
+// The counting threads (code-counts-worker.ts), started on the first count.
+const counting = (): WorkerCalls<CodeCountAsk> => {
+    counter ??= workerPool<CodeCountAsk>(siblingModule(import.meta, "code-counts-worker"), thread, THREADS);
+    return counter;
+};
 
 // Counts cached by side-identity pair, FIFO-evicted past the limit; `undefined` is a cached answer too.
 const CACHE_LIMIT = 4_000;
@@ -131,8 +150,8 @@ const identify = async (side: Side): Promise<string | undefined> => {
     return stat === undefined ? undefined : `f:${stat.size}:${stat.mtimeMs}`;
 };
 
-// One side as text, or undefined if unreadable. Shares the diff body's size cap (MAX_FILE_DIFF_BYTES); a blob read is
-// bounded to one spawn, and treated as unreadable past the cap.
+// One side as text, or undefined if unreadable. Shares the diff body's size cap (MAX_FILE_DIFF_BYTES); a blob past it
+// is refused on its size, before any of it is read.
 const textOf = async (dir: string, side: Side): Promise<string | undefined> => {
     if (side.kind === "absent") {
         return "";
@@ -146,7 +165,8 @@ const textOf = async (dir: string, side: Side): Promise<string | undefined> => {
         const content = await readWorkspaceFile(side.abs).catch(() => undefined);
         return content === undefined || content.includes("\0") ? undefined : content;
     }
-    const bytes = await gitBytes(dir, ["cat-file", "-p", side.spec], MAX_FILE_DIFF_BYTES).catch(() => undefined);
+    // By blob id where status named one: an id never moves, so the repository's resident reader may answer it.
+    const bytes = await readObject(dir, side.id, MAX_FILE_DIFF_BYTES);
     if (bytes === undefined || bytes.includes(0)) {
         return undefined;
     }
@@ -154,18 +174,36 @@ const textOf = async (dir: string, side: Side): Promise<string | undefined> => {
     return bytes.toString("utf8");
 };
 
+// Counts being taken, by key: a review opened while a warm-up is counting the same rows waits for those counts.
+const underway = new Map<string, Promise<LineStat | undefined>>();
+
 const countOne = async (dir: string, path: string, sides: Sides): Promise<LineStat | undefined> => {
     const [before, after] = await Promise.all([identify(sides.before), identify(sides.after)]);
     const key = before === undefined || after === undefined ? undefined : `${dir}\u0000${path}\u0000${before}\u0000${after}`;
-    if (key !== undefined && counted.has(key)) {
+    if (key === undefined) {
+        return countFresh(dir, path, sides, undefined);
+    }
+    if (counted.has(key)) {
         return counted.get(key);
     }
+    const taking = underway.get(key);
+    if (taking !== undefined) {
+        return taking;
+    }
+    const taken = countFresh(dir, path, sides, key).finally(() => underway.delete(key));
+    underway.set(key, taken);
+    return taken;
+};
+
+const countFresh = async (dir: string, path: string, sides: Sides, key: string | undefined): Promise<LineStat | undefined> => {
     const [beforeText, afterText] = await Promise.all([textOf(dir, sides.before), textOf(dir, sides.after)]);
     if (beforeText === undefined || afterText === undefined) {
         return key === undefined ? undefined : remember(key, undefined);
     }
     // Undefined when no grammar ships for the path, or the thread failed; cached like an unreadable side.
-    const stat = await counter.call<LineStat | undefined>({ before: beforeText, after: afterText, path }).catch(() => undefined);
+    const stat = await counting()
+        .call<LineStat | undefined>({ before: beforeText, after: afterText, path })
+        .catch(() => undefined);
     return key === undefined ? stat : remember(key, stat);
 };
 

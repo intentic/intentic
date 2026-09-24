@@ -1,11 +1,12 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
+import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { conversationEntry } from "../testing.js";
 import { purgeConversationState, type PurgeConversation } from "./conversation-purge.js";
 import { claudeStoreOf } from "./session-store.js";
-import { transcriptFile } from "./transcript-record.js";
+import { fileTranscriptRecord, transcriptFile } from "./transcript-record.js";
 
 const roots: string[] = [];
 
@@ -16,11 +17,7 @@ afterEach(async () => {
 const conversation = (id: string, sessionId: string, areas?: string[]): PurgeConversation =>
     conversationEntry({ id, sessionId, ...(areas === undefined ? {} : { identity: { areas } }) });
 
-const writeTranscript = async (history: string, id: string, rows: readonly object[]): Promise<void> => {
-    const path = transcriptFile(history, id);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, rows.map((row) => `${JSON.stringify(row)}\n`).join(""));
-};
+const writeTranscript = (history: string, id: string, rows: readonly TranscriptRow[]): Promise<void> => fileTranscriptRecord(history).append(id, rows);
 
 test("purge removes unshared attachments and the shared store's Claude session sidecars, reading each unit's transcript", async () => {
     const root = await mkdtemp(join(tmpdir(), "conversation-purge-"));
@@ -48,7 +45,7 @@ test("purge removes unshared attachments and the shared store's Claude session s
         writeFile(join(attachments, "shared", "b.png"), "kept"),
     ]);
 
-    await purgeConversationState(workspace, history, [conversation("removed", "removed-session")], [conversation("kept", "kept-session")]);
+    await purgeConversationState(workspace, history, fileTranscriptRecord(history).stored, [conversation("removed", "removed-session")], [conversation("kept", "kept-session")]);
 
     await expect(readFile(join(attachments, "only-removed", "a.png"), "utf8")).rejects.toThrow();
     expect(await readFile(join(attachments, "shared", "b.png"), "utf8")).toBe("kept");
@@ -56,7 +53,7 @@ test("purge removes unshared attachments and the shared store's Claude session s
     await expect(readFile(join(projects, "removed-session", "tool.json"), "utf8")).rejects.toThrow();
     expect(await readFile(join(projects, "kept-session.jsonl"), "utf8")).toBe("kept");
     // The transcript is the unit's, and goes with the unit when the conversation is disposed, not here.
-    expect(await readFile(transcriptFile(history, "removed"), "utf8")).toContain("only-removed");
+    expect((await fileTranscriptRecord(history).stored("removed")).join("\n")).toContain("only-removed");
 });
 
 test("a fenced conversation's session files are its unit's to take: the shared store is never reached into for it", async () => {
@@ -74,7 +71,7 @@ test("a fenced conversation's session files are its unit's to take: the shared s
         writeFile(join(shared, "projects", "-work", "removed-session.jsonl"), "someone else's"),
     ]);
 
-    await purgeConversationState(workspace, history, [conversation("removed", "removed-session", ["finance"])], []);
+    await purgeConversationState(workspace, history, fileTranscriptRecord(history).stored, [conversation("removed", "removed-session", ["finance"])], []);
 
     expect(await readFile(join(shared, "projects", "-work", "removed-session.jsonl"), "utf8")).toBe("someone else's");
     expect(await readFile(join(mine, "projects", "removed-session.jsonl"), "utf8")).toBe("removed");
@@ -92,7 +89,9 @@ test("a retained transcript that cannot be read stops the purge before any uploa
     // Exists but reads as EISDIR: nothing here says which uploads the retained conversation still names.
     await mkdir(transcriptFile(history, "kept"), { recursive: true });
 
-    await expect(purgeConversationState(workspace, history, [conversation("removed", "removed-session")], [conversation("kept", "kept-session")])).rejects.toThrow(
+    await expect(
+        purgeConversationState(workspace, history, fileTranscriptRecord(history).stored, [conversation("removed", "removed-session")], [conversation("kept", "kept-session")]),
+    ).rejects.toThrow(
         /EISDIR/,
     );
 

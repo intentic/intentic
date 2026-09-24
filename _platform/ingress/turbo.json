@@ -1,0 +1,10 @@
+{
+    "$schema": "https://turborepo.com/schema.json",
+    "extends": ["//"],
+    "tasks": {
+        // The binary compiles from two trees outside this package, and the release is content-addressed by this hash.
+        "docker:release": {
+            "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/_sandbox/front/crates/tunnel/**", "$TURBO_ROOT$/_shared/sandbox-contract/src/protocol/tunnel-lanes.json"]
+        }
+    }
+}

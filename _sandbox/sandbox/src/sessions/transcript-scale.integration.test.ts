@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint, TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
-import { agentToolChildren, type AgentTranscriptDeps, agentTranscriptPage, PAGE_TEXT_CAP } from "./agent-transcript.js";
+import { agentToolChildren, type AgentTranscriptDeps, agentTranscriptPage } from "./agent-transcript.js";
+import { PAGE_TEXT_CAP } from "./record/record-rows.js";
 import { fileTranscriptRecord, MAX_WINDOW_BYTES, transcriptFile } from "./transcript-record.js";
 
 // Pins that a window's cost scales with the window, not the conversation's length. Assertions are on byte and row
@@ -313,7 +314,7 @@ describe("what a page carries of a heavy turn", () => {
 
         const page = await agentTranscriptPage(deps, agentOf("c-dumps"));
 
-        expect((await stat(transcriptFile(root, "c-dumps"))).size).toBeGreaterThan(9_000_000);
+        expect(JSON.stringify(await fileTranscriptRecord(root).read("c-dumps")).length).toBeGreaterThan(9_000_000);
         expect(page.rows.filter((row) => row.role === "user").length).toBe(20);
         expect(servedBytes(page)).toBeLessThan(MAX_WINDOW_BYTES);
     });

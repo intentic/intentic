@@ -532,7 +532,15 @@ export interface FleetStore {
     readonly units: Pick<ConversationUnits, "remove">;
 }
 
-export const createFleet = (store: FleetStore, standings: LandStandings, presences: LandedPresences): Fleet => {
+// Milliseconds between two sends of the roster, however many changes land between them.
+export const ROSTER_WINDOW_MS = 100;
+
+export const createFleet = (
+    store: FleetStore,
+    standings: LandStandings,
+    presences: LandedPresences,
+    { rosterWindowMs = ROSTER_WINDOW_MS }: { readonly rosterWindowMs?: number } = {},
+): Fleet => {
     let entries: PersistedAgent[] = [];
     // Entries changed since the last write, and the journal row of each turn opened since, which goes down with its
     // opening entry; both drained only once the write commits, so a failed one is retried by the next.
@@ -544,6 +552,9 @@ export const createFleet = (store: FleetStore, standings: LandStandings, presenc
     const listeners = new Set<(agents: AgentSummary[], rev: number) => void>();
     // Bumped by `broadcast()`, once per published change; see `revision` on the interface.
     let revision = 0;
+    // When the roster last went out, and the send a burst is waiting on.
+    let sentAt = Number.NEGATIVE_INFINITY;
+    let sending: ReturnType<typeof setTimeout> | undefined;
 
     // Who can clear what is still refusing, from the same live probe the verdict came from. Only while the card is
     // actually refusing: a list left on a landed card would offer a press about nothing.
@@ -616,13 +627,36 @@ export const createFleet = (store: FleetStore, standings: LandStandings, presenc
 
     // Two independent, best-effort readings (standing, landed presence) run together rather than chained, and must
     // never throw: a settle waits on this. `allSettled`, so a failing half costs only its own reading.
-    const reprobe = async (): Promise<boolean> => {
+    const probeFleet = async (): Promise<boolean> => {
         const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
         stale = false;
         probedInputs = landingInputs(live);
         const probes = await Promise.allSettled([standings.refresh(live), presences.refresh(live)]);
         stale ||= probes.some((probe) => probe.status === "rejected");
         return probes.some((probe) => probe.status === "fulfilled" && probe.value);
+    };
+    // One probe at a time, shared: a caller arriving mid-probe may be asking after a change that probe began too early
+    // to see (a land's moved tips), so one more follows it, shared in turn by everyone who asked meanwhile.
+    let probing: Promise<boolean> | undefined;
+    let following: Promise<boolean> | undefined;
+    const reprobe = (): Promise<boolean> => {
+        if (probing === undefined) {
+            probing = probeFleet().finally(() => {
+                probing = undefined;
+            });
+            return probing;
+        }
+        following ??= probing.then(
+            () => {
+                following = undefined;
+                return reprobe();
+            },
+            () => {
+                following = undefined;
+                return reprobe();
+            },
+        );
+        return following;
     };
 
     const books: ConversationBooks = {
@@ -700,8 +734,9 @@ export const createFleet = (store: FleetStore, standings: LandStandings, presenc
         },
         persist,
         reprobe,
-        // A closure, since the roster it publishes reads the actors built from these very books.
+        // Closures, since the roster they publish reads the actors built from these very books.
         broadcast: () => broadcast(),
+        progress: () => progress(),
         // The actors' own half, watch timers included, went first, in dispose. Rows before the directories: a directory
         // left behind by a failed removal is one the boot sweep finds unowned.
         remove: async (ids) => {
@@ -782,14 +817,39 @@ export const createFleet = (store: FleetStore, standings: LandStandings, presenc
 
     const list = (): AgentSummary[] => entries.filter((entry) => entry.archivedAt === undefined).map(summaryOf);
 
-    // Bumped once per broadcast, before the fan-out, so every listener sees the same revision and a route reading
-    // `revision()` right after gets the one its own change produced.
-    const broadcast = (): void => {
+    const send = (): void => {
+        sending = undefined;
+        sentAt = Date.now();
+        if (listeners.size === 0) {
+            return;
+        }
         const agents = list();
-        revision += 1;
         for (const listener of listeners) {
             listener(agents, revision);
         }
+    };
+
+    // A change someone made goes out at once, carrying whatever progress was waiting. The revision is bumped at the
+    // change, not the send, so a route reading `revision()` right after gets the one its own change produced.
+    const broadcast = (): void => {
+        revision += 1;
+        clearTimeout(sending);
+        send();
+    };
+
+    // Every running turn's tool calls, usage and todos land here and each send is the whole live roster, so progress goes
+    // out at most once a window: after a quiet spell at once, the rest of a burst together at the window's end.
+    const progress = (): void => {
+        revision += 1;
+        if (sending !== undefined) {
+            return;
+        }
+        const wait = sentAt + rosterWindowMs - Date.now();
+        if (wait <= 0) {
+            send();
+            return;
+        }
+        sending = setTimeout(send, wait);
     };
 
     // Applies `change` to the entry and writes it, answering the summary it left; undefined for an unknown id.

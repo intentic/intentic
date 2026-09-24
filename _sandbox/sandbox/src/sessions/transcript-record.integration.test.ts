@@ -1,13 +1,19 @@
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, stat, truncate, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentEvent, type AgentHarness, type AgentProvider, PROVIDERS, HARNESSES, type TranscriptRow } from "@intentic/sandbox-contract";
 import { foldTurn } from "@intentic/sandbox-contract/transcript-fold";
-import { fileTranscriptRecord, transcriptFile } from "./transcript-record.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { blobsRoot } from "./record/record-blobs.js";
+import { backupFile } from "./record/record-convert.js";
+import { BLOB_GRACE_MS, fileTranscriptRecord, legacyTranscriptFile, transcriptFile } from "./transcript-record.js";
 import { openingRows } from "./turn-transcript.js";
 
 const dir = (): Promise<string> => mkdtemp(join(tmpdir(), "transcript-record-"));
+
+const exec = promisify(execFile);
 
 const said = (text: string): TranscriptRow => ({ role: "assistant", text });
 
@@ -52,7 +58,7 @@ describe("fileTranscriptRecord", () => {
         expect(await record.truncate("c1", 2)).toBe(2);
         expect((await record.read("c1")).map((message) => message.text)).toEqual(["one", "first"]);
         expect(await record.truncate("c1", 2)).toBe(0);
-        expect(await readdir(dirname(transcriptFile(root, "c1")))).toEqual(["transcript.jsonl"]);
+        expect(await readdir(dirname(transcriptFile(root, "c1")))).toEqual(["transcript.jsonl.zst"]);
     });
 
     it("leaves an already-opened branch alone, so a repeated origin cannot re-copy over its turns", async () => {
@@ -65,13 +71,14 @@ describe("fileTranscriptRecord", () => {
         expect((await record.read("c2")).map((message) => message.text)).toEqual(["source", "branch's own"]);
     });
 
-    it("costs a torn final line its own row, not the conversation above it", async () => {
+    it("costs a torn final turn its own rows, not the conversation above it", async () => {
         const root = await dir();
         const record = fileTranscriptRecord(root);
         await record.append("c1", [said("whole")]);
+        await record.append("c1", [said("torn")]);
         // A write the daemon was killed in the middle of.
-        await writeFile(transcriptFile(root, "c1"), `${await readFile(transcriptFile(root, "c1"), "utf8")}{"role":"assistant","te`);
-        expect((await record.read("c1")).map((message) => message.text)).toEqual(["whole"]);
+        await truncate(transcriptFile(root, "c1"), (await stat(transcriptFile(root, "c1"))).size - 5);
+        expect((await fileTranscriptRecord(root).read("c1")).map((message) => message.text)).toEqual(["whole"]);
     });
 
     // The row index is kept across calls and extended over the appended tail; every answer must still be what a fresh
@@ -88,17 +95,18 @@ describe("fileTranscriptRecord", () => {
         expect(await fileTranscriptRecord(root).count("c1")).toBe(4);
     });
 
-    it("rejoins a torn last line with what is appended after it, as the raw split would", async () => {
+    it("cuts a torn last turn away, so the next append lands whole instead of joining it", async () => {
         const root = await dir();
         const record = fileTranscriptRecord(root);
         await record.append("c1", [said("whole")]);
-        await writeFile(transcriptFile(root, "c1"), `${await readFile(transcriptFile(root, "c1"), "utf8")}{"role":"assistant","te`);
-        expect(await record.count("c1")).toBe(2);
-        // The next append completes nothing: the torn prefix and the new row share one line, which parses as neither.
-        await record.append("c1", [said("after")]);
-        expect(await record.count("c1")).toBe(2);
-        expect(await record.count("c1")).toBe(await fileTranscriptRecord(root).count("c1"));
-        expect((await record.read("c1")).map((message) => message.text)).toEqual(["whole"]);
+        await record.append("c1", [said("torn")]);
+        await truncate(transcriptFile(root, "c1"), (await stat(transcriptFile(root, "c1"))).size - 5);
+        const reopened = fileTranscriptRecord(root);
+        expect(await reopened.count("c1")).toBe(1);
+        await reopened.append("c1", [said("after")]);
+        expect(await reopened.count("c1")).toBe(2);
+        expect(await fileTranscriptRecord(root).count("c1")).toBe(2);
+        expect((await reopened.read("c1")).map((message) => message.text)).toEqual(["whole", "after"]);
     });
 
     it("forgets the index a truncate invalidates: the next count reads the shortened record", async () => {
@@ -108,6 +116,62 @@ describe("fileTranscriptRecord", () => {
         expect(await record.truncate("c1", 2)).toBe(2);
         expect(await record.count("c1")).toBe(2);
         expect((await record.window("c1", {})).rows.map((message) => message.text)).toEqual(["one", "first"]);
+    });
+
+    it("reads a record from before the log as it stands, and converts it, backed up, before its first change", async () => {
+        const root = await dir();
+        const legacy = legacyTranscriptFile(root, "c1");
+        await mkdir(dirname(legacy), { recursive: true });
+        const rows = [{ role: "user", text: "one" }, said("first")];
+        await writeFile(legacy, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+        const record = fileTranscriptRecord(root);
+        expect((await record.read("c1")).map((message) => message.text)).toEqual(["one", "first"]);
+        expect((await record.window("c1", {})).rows.map((message) => message.text)).toEqual(["one", "first"]);
+        await record.append("c1", [said("second")]);
+        expect((await record.read("c1")).map((message) => message.text)).toEqual(["one", "first", "second"]);
+        expect(await readdir(dirname(legacy))).toEqual(["transcript.jsonl.zst"]);
+        expect((await exec("zstdcat", [backupFile(root, "c1")])).stdout).toBe(`${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+    });
+
+    it("keeps a long output whole through a fork, stored once for both conversations", async () => {
+        const root = await dir();
+        const record = fileTranscriptRecord(root);
+        const dump = "0123456789".repeat(5_000);
+        const tooled: TranscriptRow = {
+            role: "assistant",
+            text: "ran it",
+            tools: [{ id: "t1", name: "Bash", category: "execute", status: "completed", target: "cat big", content: [{ type: "text", text: dump }] }],
+        };
+        await record.append("c1", [{ role: "user", text: "go" }, tooled]);
+        await record.fork("c2", "c1", 2);
+        for (const id of ["c1", "c2"]) {
+            expect((await record.read(id))[1]?.tools?.[0]?.content).toEqual([{ type: "text", text: dump }]);
+        }
+        const shards = await readdir(blobsRoot(root));
+        expect((await Promise.all(shards.map((shard) => readdir(join(blobsRoot(root), shard))))).flat()).toHaveLength(1);
+    });
+
+    it("sweeps the blobs only a gone record named, and every output another record names stays whole", async () => {
+        const root = await dir();
+        const record = fileTranscriptRecord(root);
+        const ran = (dump: string): TranscriptRow => ({
+            role: "assistant",
+            text: "ran it",
+            tools: [{ id: "t1", name: "Bash", category: "execute", status: "completed", target: "cat", content: [{ type: "text", text: dump }] }],
+        });
+        const shared = "s".repeat(20_000);
+        const kept = [ran(shared), ran("k".repeat(20_000))];
+        await record.append("gone-1", [ran(shared), ran("g".repeat(20_000))]);
+        await record.append("kept-1", kept);
+        const blobs = async (): Promise<string[]> => (await readdir(blobsRoot(root), { recursive: true })).filter((name) => name.endsWith(".zst"));
+        // Named within the grace, so nothing is judged yet.
+        expect(await record.sweep(new Set(["gone-1"]))).toBe(0);
+        const past = new Date(Date.now() - 2 * BLOB_GRACE_MS);
+        await Promise.all((await blobs()).map((name) => utimes(join(blobsRoot(root), name), past, past)));
+
+        expect(await record.sweep(new Set(["gone-1"]))).toBe(1);
+        expect(await blobs()).toHaveLength(2);
+        expect(await record.read("kept-1")).toEqual(kept);
     });
 
     it("ignores an id that is not filename-safe rather than letting it reach a path", async () => {

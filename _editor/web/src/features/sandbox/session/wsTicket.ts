@@ -31,10 +31,10 @@ const params = async (target: SandboxTarget): Promise<URLSearchParams | undefine
     return new URLSearchParams({ token: bearer.token, ...(connect === undefined ? {} : { connect }) });
 };
 
-// Full ws(s):// URL for `path` with auth params and `extra` merged in; undefined when the sandbox isn't
-// reachable or the sign-in gate was dismissed.
-export const socketUrl = async (path: string, extra: Record<string, string> = {}): Promise<string | undefined> => {
-    // Captured here and carried down so the URL is built from the same sandbox the ticket was minted against.
+// The daemon's base and the query an upgrade presents there, auth params and `extra` merged in; undefined when the
+// sandbox isn't reachable or the sign-in gate was dismissed.
+export const socketAddress = async (extra: Record<string, string> = {}): Promise<{ base: string; query: string } | undefined> => {
+    // Captured here and carried down so the address is the same sandbox's the ticket was minted against.
     const target = currentSandboxTarget();
     if (target === undefined) {
         return undefined;
@@ -46,5 +46,11 @@ export const socketUrl = async (path: string, extra: Record<string, string> = {}
     for (const [key, value] of Object.entries(extra)) {
         auth.set(key, value);
     }
-    return `${target.base.replace(/^http/, `ws`)}${path}?${auth.toString()}`;
+    return { base: target.base, query: auth.toString() };
+};
+
+// Full ws(s):// URL for `path` at `socketAddress`.
+export const socketUrl = async (path: string, extra: Record<string, string> = {}): Promise<string | undefined> => {
+    const address = await socketAddress(extra);
+    return address === undefined ? undefined : `${address.base.replace(/^http/, `ws`)}${path}?${address.query}`;
 };

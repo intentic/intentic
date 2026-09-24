@@ -8,19 +8,20 @@ Nothing is re-implemented for marketing.
 Run it with `pnpm -C _site/demo dev` (http://localhost:47146/demo/). The app's own dev server is untouched.
 
 The finding that shapes everything below: **the app does not need to be decoupled from its logic for this.**
-It needs its two transports pointed somewhere else. Component-level decoupling (props/events instead of
+It needs its transports pointed somewhere else. Component-level decoupling (props/events instead of
 composable singletons) would touch 19 of the 25 chat/agents components and add exactly the wrapper indirection
-`AGENTS.md` forbids: while the transports are two well-commented modules that already resolve their global
+`AGENTS.md` forbids: while the transports are well-commented modules that already resolve their global
 per call, on purpose.
 
 ## The seam
 
-Every browser→outside call in the web app goes through one of two globals, resolved at call time:
+Every browser→outside call in the web app goes through one of these globals, resolved at call time:
 
 | Transport | Where | Reaches |
 | --- | --- | --- |
 | `globalThis.fetch` | `features/sandbox/client/sandboxAuthFetch.ts` (every daemon call, the typed `sandboxRpc` and the raw `sandboxClient` alike), `lib/useApi.ts` (platform), better-auth's client | the daemon's `OpenAPIHandler` and its raw routes, and the platform's `/rpc` + `/api/auth/*` |
-| `globalThis.WebSocket` | `features/terminal/terminalSession.ts`, `features/browsers/useBrowserView.ts` | `/system/terminal`, `/system/browser-view` |
+| `globalThis.WebSocket` | `features/terminal/channel/terminalChannel.ts`, `features/browsers/useBrowserView.ts` | `/system/terminal`, `/system/browser-view` |
+| `globalThis.WebTransport` | `features/terminal/channel/webTransport.ts` | `/system/transport`, the session a terminal's stream rides; the demo answers it as one that never opens, so the terminal takes its WebSocket |
 
 `features/sandbox/client/sandboxRpc.ts` already documents why its fetch is resolved per request rather than
 captured: *"so a fetch replaced later (a test stub, instrumentation) still applies"*. The demo is that

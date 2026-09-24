@@ -1,5 +1,3 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import {
     type SystemEvent,
     type TerminalsList,
@@ -10,6 +8,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { implement, ORPCError } from "@orpc/server";
+import { forkedExec } from "@intentic/scaffold";
 import type { Caller } from "../auth/auth.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
@@ -24,7 +23,7 @@ import { serviceSession } from "../processes/service-processes.js";
 import { foreground, PANE_FORMAT, paneStates, SHELL } from "../terminal/pane-state.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { subscribeRefChanges } from "../git/remote/ref-watch.js";
-import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+import { subscribeTreeChanges, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { subscribeDerived } from "../derived/sidecar-service.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { subscribeRuntimeChanges } from "./runtime-watch.js";
@@ -49,8 +48,6 @@ import { workspaceIdentity } from "./workspace-identity.js";
 import { framedEvent, framedMetrics } from "../auth/fleet-scope.js";
 import { frameBacklog } from "../seams/frame-backlog.js";
 import { callerFence } from "../areas/area-scope.js";
-
-const execFileAsync = promisify(execFile);
 
 // Long-lived /events stream: heartbeats every ~2s interleaved with workspaceChanged batches and presence snapshots.
 // `member` joins the roster for this connection's lifetime; undefined observes without joining.
@@ -103,11 +100,13 @@ async function* systemEvents(
     // editing an area revokes the connection, so this can never outlive the grant it was read from.
     const fence = callerFence(await services.areas.list(), identity);
     const enqueue = (event: SystemEvent): void => {
-        const framed = framedEvent(identity, fence, event);
+        const framed = framedEvent(identity, fence, event, services.agents.get);
         if (framed !== undefined) {
             backlog.push(framed);
         }
     };
+    // The roster revision this connection was last handed, what its heartbeat vouches for.
+    let sentRev = 0;
     // Resolves the current idle wait immediately on a change or abort, instead of stalling for the next heartbeat.
     let wake: (() => void) | undefined;
     const onWake = (): void => {
@@ -124,8 +123,9 @@ async function* systemEvents(
             enqueue({ kind: "presence", users });
             onWake();
         }),
-        // Fleet roster: snapshot-not-diff, an immediate frame on subscribe then a re-frame on every registry change.
+        // Fleet roster: snapshot-not-diff, an immediate frame on subscribe then a re-frame on every registry send.
         services.agents.subscribe((agents, rev) => {
+            sentRev = rev;
             enqueue({ kind: "agents", agents, rev });
             onWake();
         }),
@@ -136,6 +136,11 @@ async function* systemEvents(
         }),
         subscribeWorkspaceChanges((paths) => {
             enqueue({ kind: "workspaceChanged", paths });
+            onWake();
+        }),
+        // What each batch moved in the shared tree, so a tab patches the tree it holds instead of fetching it again.
+        subscribeTreeChanges((delta) => {
+            enqueue({ kind: "treeChanged", ...delta });
             onWake();
         }),
         // The unnamed batch for a write the watcher could not see: a check's build rewrites tracked files under `dist/`,
@@ -209,9 +214,9 @@ async function* systemEvents(
                 };
             });
             if (!abort.aborted && timedOut) {
-                // Carries the fleet revision honestly only because the queue is empty here; a mismatch means a missed
-                // snapshot.
-                yield { kind: "heartbeat", rev: services.agents.revision() };
+                // The revision this connection was last sent, all of it taken since the queue is empty here; a
+                // mismatch means the browser missed that snapshot, never that one is still on its way.
+                yield { kind: "heartbeat", rev: sentRev };
             }
         }
     } finally {
@@ -366,7 +371,7 @@ export const createSystemRoutes = (services: Services) => {
                 ...extensionProcesses.get(service.key),
             }));
             // No tmux server is no sessions; any other failed listing is the route's error, not an empty panel.
-            const listed = await execFileAsync("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]).catch((error: unknown) => {
+            const listed = await forkedExec("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]).catch((error: unknown) => {
                 if (isNoTmuxServer(error)) {
                     return undefined;
                 }
@@ -466,7 +471,7 @@ export const createSystemRoutes = (services: Services) => {
                 return { ok: true };
             }
             // `=` forces an exact target match, a bare `-t web-a` would prefix-match `web-ab` once `web-a` is gone.
-            await execFileAsync("tmux", ["kill-session", "-t", `=${input.name}`]).catch(() => undefined);
+            await forkedExec("tmux", ["kill-session", "-t", `=${input.name}`]).catch(() => undefined);
             // An agent parked on a prompt is waiting on a person; killing the session must tell it the terminal is
             // gone.
             settleTerminalHelpFor(input.name);

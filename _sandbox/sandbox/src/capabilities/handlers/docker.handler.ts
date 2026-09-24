@@ -1,8 +1,7 @@
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { promisify } from "node:util";
 import { pollUntil } from "@intentic/base/async";
+import { forkedExec } from "@intentic/scaffold";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { CapabilityStatus, DockerConfig, IntenticLine } from "@intentic/sandbox-contract";
 import { packFragment } from "../../environment/packs.js";
@@ -11,8 +10,6 @@ import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 // In-sandbox Docker Engine, dormant and unprivileged until this capability is added. Its fragment is a single
 // `--privileged` runtime directive; `apply` starts dockerd as the panel-docker session once privileged, restored on
 // boot. No remove: de-privileging live engine state is too destructive to do silently.
-
-const exec = promisify(execFile);
 
 // Panel key for the dockerd session; must match what the boot chain's adopt uses.
 export const DOCKER_PANEL_KEY = "docker";
@@ -96,14 +93,14 @@ const readDaemonJson = async (): Promise<Record<string, unknown>> => {
 
 // `docker info` succeeds only when dockerd is up and answering requests.
 const dockerUp = async (): Promise<boolean> =>
-    exec("docker", ["info"]).then(
+    forkedExec("docker", ["info"]).then(
         () => true,
         () => false,
     );
 
 // A bare dev run (`tsx watch` outside the image) may carry no docker CLI, a soft outcome, not an error.
 const cliMissing = async (): Promise<boolean> =>
-    exec("docker", ["--version"]).then(
+    forkedExec("docker", ["--version"]).then(
         () => false,
         (error) => (error as NodeJS.ErrnoException).code === "ENOENT",
     );
@@ -156,7 +153,7 @@ const gpuState = (): string | undefined => process.env["SANDBOX_GPU"];
 // `nvidia-smi -L` lists the GPUs the toolkit injects; it fails exactly when passthrough didn't really happen (a host
 // driver/toolkit mismatch, the case every earlier check missed).
 const gpuVisible = async (): Promise<boolean> =>
-    exec("nvidia-smi", ["-L"]).then(
+    forkedExec("nvidia-smi", ["-L"]).then(
         () => true,
         () => false,
     );

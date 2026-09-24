@@ -1,6 +1,7 @@
 import type { ToolCallContent, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint, TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
 import { type SpokenLine, spokenLinesOf } from "./transcript-search.js";
+import { PAGE_TEXT_CAP } from "./record/record-rows.js";
 import { type TranscriptPage, type TranscriptRecord, type TranscriptWindow, windowOf } from "./transcript-record.js";
 
 // Which conversation to answer about: its record is keyed by the conversation alone, so a mid-conversation provider
@@ -40,10 +41,6 @@ const stampAnchors = (messages: readonly TranscriptRow[], anchors: ReadonlyMap<n
 export const agentTranscript = async (deps: AgentTranscriptDeps, agent: TranscriptAgent): Promise<TranscriptRow[]> =>
     stampAnchors(await deps.record.read(agent.id), await deps.turnCheckpoints.all(agent.id), 0);
 
-// What a page carries of one tool call's output. The pane truncates text at 4000 characters of its own accord
-// (toolPresentation.ts TEXT_CAP), so twice that leaves room to raise that cap without a second round trip, and drops the
-// megabyte command dumps that make up most of a long conversation's bytes.
-export const PAGE_TEXT_CAP = 8_000;
 
 const fitContent = (entry: ToolCallContent): ToolCallContent =>
     entry.type === "text" && entry.text.length > PAGE_TEXT_CAP ? { ...entry, text: entry.text.slice(0, PAGE_TEXT_CAP) } : entry;
@@ -117,4 +114,4 @@ export const agentToolChildren = async (deps: AgentTranscriptDeps, agent: Transc
 // What a conversation said, for the search index (backfill and rewind, never a live query). Reads the whole record, not
 // a window, and skips agentTranscript to avoid stamping every row with a checkpoint search never uses.
 export const spokenTranscript = async (deps: AgentTranscriptDeps, agent: TranscriptAgent): Promise<readonly SpokenLine[]> =>
-    spokenLinesOf(await deps.record.read(agent.id));
+    spokenLinesOf(await deps.record.rows(agent.id));

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Daemon boundary drift, held to a backlog that may shrink and never grow, read by pattern since this runs pre-install:
-// a module that binds the whole Services and hands it to nothing (NARROW_TAKERS), and a value import between subsystems
-// whose target already reaches back to its source, a cycle of any length (the standing ones: baselines/daemon-cycles.json).
+// Daemon boundary drift, read by pattern since this runs pre-install: a module binding the whole Services it hands to
+// nothing (NARROW_TAKERS), a value import between subsystems closing a cycle of any length (baselined, may only shrink:
+// baselines/daemon-cycles.json), and a Claude Agent SDK value taken around its loader or a diagnostic report asked for.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
@@ -82,7 +82,30 @@ for (const path of NARROW_TAKERS) {
     }
 }
 
-/* ---- 2. cycles between subsystems ------------------------------------------------------------------------ */
+/* ---- 2. the Claude Agent SDK's one door --------------------------------------------------------------------- */
+
+// The loader names the CLI binary on every session; the SDK's own pick calls process.report.getReport(), which waits for
+// every worker thread to answer and so holds the loop for as long as one sits in a SQLite statement.
+const SDK_PACKAGE = "@anthropic-ai/claude-agent-sdk";
+const SDK_DOOR = "engines/claude-sdk.ts";
+const REPORT_CALL = /(?<![\w$])process\.report\.getReport\s*\(/;
+// A comment may name the call; only code makes it.
+const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*)/;
+
+const sdkBypasses = sources.flatMap(({ file, text }) =>
+    relPath(file) === SDK_DOOR
+        ? []
+        : importsOf(text)
+              .filter(({ specifier, typeOnly }) => specifier === SDK_PACKAGE && !typeOnly)
+              .map(({ line }) => `${relPath(file)}:${line} imports a value from ${SDK_PACKAGE}`),
+);
+const reportCalls = sources.flatMap(({ file, text }) =>
+    text
+        .split("\n")
+        .flatMap((line, at) => (!COMMENT_LINE.test(line) && REPORT_CALL.test(line) ? [`${relPath(file)}:${at + 1} calls process.report.getReport()`] : [])),
+);
+
+/* ---- 3. cycles between subsystems ------------------------------------------------------------------------ */
 
 // from -> to -> every `file:line` that makes the edge: value imports only, root files excluded on both ends.
 const edges = new Map();
@@ -176,6 +199,10 @@ finish(
         [
             `A value import between daemon subsystems closes a cycle ${BASELINE_PATH} does not hold (paths under _sandbox/sandbox/src/). Reach one way through a type-only port, an event, or a module above both`,
             addedCycles,
+        ],
+        [
+            `Claude Agent SDK code reached around engines/claude-sdk.ts, or a diagnostic report asked for (paths under _sandbox/sandbox/src/). Read the SDK through sdk(), which names the CLI binary on every session: a report waits for every worker thread, and held the loop 8 s at boot`,
+            [...sdkBypasses, ...reportCalls],
         ],
     ],
     [

@@ -1,4 +1,4 @@
-import { isBlank, leadToken, scopedAs, type Grammars, type Token, walkTokens } from "./tokens.js";
+import { isBlank, leadToken, type RuleStack, sameStack, scopedAs, type Grammars, type Token, type TokenWalk, walkLines, walkTokens } from "./tokens.js";
 
 // The two structural readings a review needs from one TextMate walk: the comment-free source, and the lines an import
 // may span. Kept together since tokenizing dominates the cost; a second answer from the same walk is nearly free.
@@ -75,12 +75,64 @@ const openedBy = (line: string, tokens: readonly Token[] | undefined): number =>
     return depth;
 };
 
+// Where stripping stands between two lines: everything the next line's reading depends on. Two strips in equal states
+// read the same following lines the same way.
+export interface StripState {
+    readonly stack: RuleStack;
+    // Whether the line before was removed, which is what lets a blank after it collapse.
+    readonly dropped: boolean;
+    // Whether the last kept line is blank (true before any is kept).
+    readonly blank: boolean;
+}
+
+export const STRIP_START: StripState = { stack: null, dropped: false, blank: true };
+
+export const sameStrip = (a: StripState, b: StripState): boolean => a.dropped === b.dropped && a.blank === b.blank && sameStack(a.stack, b.stack);
+
+// One line's reading: the code it keeps, or undefined when it is removed, and the flags the next line reads.
+const stripStep = (line: string, tokens: readonly Token[] | undefined, from: Pick<StripState, "dropped" | "blank">) => {
+    // An untokenized line has no comment we can see, so it stays whole.
+    const code = tokens === undefined ? line : stripLine(line, tokens);
+    // Collapses a blank after a removed comment into the one already kept, avoiding two blanks in a row.
+    if (code === undefined || (from.dropped && isBlank(code) && from.blank)) {
+        return { code: undefined, dropped: true, blank: from.blank };
+    }
+    return { code, dropped: false, blank: isBlank(code) };
+};
+
+/** The code `lines` keep, read from `from`, and where the reading then stands; undefined if the walk is abandoned. */
+export const stripLines = (walk: TokenWalk, lines: readonly string[], from: StripState): { readonly kept: string[]; readonly state: StripState } | undefined => {
+    const kept: string[] = [];
+    let flags: Pick<StripState, "dropped" | "blank"> = from;
+    const walked = walkLines(walk, lines, from.stack, (line, tokens) => {
+        const step = stripStep(line, tokens, flags);
+        flags = step;
+        if (step.code !== undefined) {
+            kept.push(step.code);
+        }
+    });
+    return walked === undefined ? undefined : { kept, state: { stack: walked.stack, dropped: flags.dropped, blank: flags.blank } };
+};
+
+/** Whether any of `lines`, read from `from`, keeps code; stops at the first that does. Undefined if abandoned. */
+export const keepsAny = (walk: TokenWalk, lines: readonly string[], from: StripState): boolean | undefined => {
+    let flags: Pick<StripState, "dropped" | "blank"> = from;
+    let kept = false;
+    const walked = walkLines(walk, lines, from.stack, (line, tokens) => {
+        const step = stripStep(line, tokens, flags);
+        flags = step;
+        kept = step.code !== undefined;
+        return kept;
+    });
+    return walked === undefined ? undefined : kept;
+};
+
 /** Analyzes `text` in one token walk; undefined if the grammar is unavailable or the walk is abandoned. */
 export const analyzeCode = async (text: string, lang: string | undefined, grammars: Grammars): Promise<CodeAnalysis | undefined> => {
     const kept: string[] = [];
     const lines: number[] = [];
     const imports: number[] = [];
-    let dropped = false;
+    let flags: Pick<StripState, "dropped" | "blank"> = STRIP_START;
     let openImport = 0;
 
     const walked = await walkTokens(text, lang, grammars, (line, tokens, index) => {
@@ -89,17 +141,12 @@ export const analyzeCode = async (text: string, lang: string | undefined, gramma
             imports.push(index + 1);
             openImport = Math.max(0, openImport + openedBy(line, tokens));
         }
-
-        // An untokenized line has no comment we can see, so it stays whole.
-        const code = tokens === undefined ? line : stripLine(line, tokens);
-        // Collapses a blank after a removed comment into the one already kept, avoiding two blanks in a row.
-        if (code === undefined || (dropped && isBlank(code) && isBlank(kept.at(-1) ?? ``))) {
-            dropped = true;
-            return;
+        const step = stripStep(line, tokens, flags);
+        flags = step;
+        if (step.code !== undefined) {
+            kept.push(step.code);
+            lines.push(index + 1);
         }
-        dropped = false;
-        kept.push(code);
-        lines.push(index + 1);
     });
 
     return walked ? { code: { text: kept.join(`\n`), lines }, imports } : undefined;

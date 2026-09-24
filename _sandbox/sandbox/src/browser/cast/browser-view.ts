@@ -111,7 +111,7 @@ export const createBrowserViewRoute = (services: Services) =>
                 const url = new URL(c.req.url);
                 try {
                     // The agent's browser may be signed in as the owner; taking the wheel is operating, not watching.
-                    const caller = redeemTicket(services, url, "maintainer");
+                    const caller = redeemTicket(services, url.searchParams, "maintainer");
                     if (caller !== undefined) {
                         unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
                     }

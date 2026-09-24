@@ -124,10 +124,14 @@ describe(`a sandbox the edge says is not dialled in`, () => {
     });
 
     // It is named sooner than the plain silence below it, because it is established rather than merely elapsed.
-    it(`beats the generic stuck wording on both lanes`, () => {
-        for (const hostedMachine of [true, false]) {
-            expect(notice(detached, { hostedMachine, outageMs: DETACHED_AFTER_MS }).title).toBe(`"laptop" isn't connected`);
-        }
+    it(`beats the generic stuck wording on a sandbox of the reader's own`, () => {
+        expect(notice(detached, { hostedMachine: false, outageMs: DETACHED_AFTER_MS }).title).toBe(`"laptop" isn't connected`);
+    });
+
+    // A machine the platform runs holds no tunnel while it sleeps, and the wake reflex is already starting it.
+    it(`is a wait on a machine the platform runs, then the machine's own words once that wait outlasts one`, () => {
+        expect(notice(detached, { hostedMachine: true, outageMs: DETACHED_AFTER_MS }).waiting).toBe(true);
+        expect(notice(detached, { hostedMachine: true, outageMs: HOSTED_STUCK_AFTER_MS }).action).toEqual({ kind: `setup`, label: `Check the machine` });
     });
 });
 

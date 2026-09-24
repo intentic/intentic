@@ -1,10 +1,7 @@
-import { execFile } from "node:child_process";
 import { readlink } from "node:fs/promises";
-import { promisify } from "node:util";
 import { errnoCode } from "@intentic/base/errors";
 import type { Logger } from "pino";
-
-const execFileAsync = promisify(execFile);
+import { forkedExec } from "@intentic/scaffold";
 
 // tmux's answer for "no sessions exist": no binary, no socket, or nothing listening on it. Any other failure left the
 // question unanswered and must not read as "nothing is running".
@@ -26,9 +23,9 @@ const HOLDER_SESSION = "intentic-server-pin";
 export const pinTmuxServer = async (logger: Logger): Promise<void> => {
     try {
         // `-d` forks; `-A` attaches rather than erroring if a server already exists (daemon restart).
-        await execFileAsync("tmux", ["new-session", "-A", "-d", "-s", HOLDER_SESSION], { timeout: 10_000 });
-        await execFileAsync("tmux", ["set-option", "-g", "exit-empty", "off"], { timeout: 10_000 });
-        await execFileAsync("tmux", ["kill-session", "-t", `=${HOLDER_SESSION}`], { timeout: 10_000 }).catch(() => undefined);
+        await forkedExec("tmux", ["new-session", "-A", "-d", "-s", HOLDER_SESSION], { timeout: 10_000 });
+        await forkedExec("tmux", ["set-option", "-g", "exit-empty", "off"], { timeout: 10_000 });
+        await forkedExec("tmux", ["kill-session", "-t", `=${HOLDER_SESSION}`], { timeout: 10_000 }).catch(() => undefined);
         logger.info({ session: HOLDER_SESSION }, "tmux: server pinned to the daemon's namespace");
     } catch (err) {
         logger.warn({ err }, "tmux: could not pin the server; terminals fall back to fork-on-demand");
@@ -39,7 +36,7 @@ export const pinTmuxServer = async (logger: Logger): Promise<void> => {
 // predating this daemon, is a finding.
 export const tmuxServerLeaked = async (): Promise<{ server: string; daemon: string } | undefined> => {
     try {
-        const { stdout } = await execFileAsync("tmux", ["display", "-p", "#{pid}"], { timeout: 10_000 });
+        const { stdout } = await forkedExec("tmux", ["display", "-p", "#{pid}"], { timeout: 10_000 });
         const pid = Number(stdout.trim());
         if (!Number.isInteger(pid) || pid <= 0) {
             return undefined;

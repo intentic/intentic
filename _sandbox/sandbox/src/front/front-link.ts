@@ -15,6 +15,9 @@ export const HTTP_SOCKET_ENV = "INTENTIC_NODE_SOCKET";
 export interface FrontLink {
     // Sends one message; the lane keeps order, so the front applies them as sent.
     readonly tell: (message: FromNode) => void;
+    // Each checkout's change count, in the order asked: null for one the front does not count, and for every one when
+    // the lane closes first.
+    readonly sync: (dirs: readonly string[]) => Promise<(number | null)[]>;
     readonly tunnelConnected: () => boolean;
     readonly close: () => void;
 }
@@ -58,13 +61,30 @@ export const connectFront = async (options: FrontLinkOptions): Promise<FrontLink
     });
     let tunnel = false;
     let buffered = Buffer.alloc(0);
+    let nextSync = 0;
+    const syncing = new Map<number, { readonly dirs: number; readonly resolve: (generations: (number | null)[]) => void }>();
     const tell = (message: FromNode): void => {
         socket.write(frameOf(message));
     };
+    const sync = (dirs: readonly string[]): Promise<(number | null)[]> =>
+        new Promise((resolve) => {
+            if (socket.destroyed) {
+                resolve(dirs.map(() => null));
+                return;
+            }
+            nextSync = (nextSync + 1) % 2 ** 32;
+            syncing.set(nextSync, { dirs: dirs.length, resolve });
+            tell({ kind: "sync", id: nextSync, dirs: [...dirs] });
+        });
     const receive = (message: ToNode): void => {
         if (message.kind === "tunnel") {
             tunnel = message.connected;
             options.onTunnel(message.connected);
+            return;
+        }
+        if (message.kind === "synced") {
+            syncing.get(message.id)?.resolve(message.generations);
+            syncing.delete(message.id);
             return;
         }
         const { id, question } = message;
@@ -82,7 +102,13 @@ export const connectFront = async (options: FrontLinkOptions): Promise<FrontLink
         }
     });
     // The front is this process's parent: its lane closing means the sandbox is going down around it.
-    socket.on("close", options.onClose);
+    socket.on("close", () => {
+        for (const waiting of syncing.values()) {
+            waiting.resolve(Array.from({ length: waiting.dirs }, () => null));
+        }
+        syncing.clear();
+        options.onClose();
+    });
     socket.on("error", () => socket.destroy());
-    return { tell, tunnelConnected: () => tunnel, close: () => socket.end() };
+    return { tell, sync, tunnelConnected: () => tunnel, close: () => socket.end() };
 };

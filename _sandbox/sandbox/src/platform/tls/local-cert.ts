@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Logger } from "pino";
 import type { Config } from "../../env.config.js";
-import { LETS_ENCRYPT_DIRECTORY, obtainCertificate } from "./acme.js";
+import { LETS_ENCRYPT_DIRECTORY, obtainCertificate } from "@intentic/base/acme";
 import { postToPlatform } from "../platform-client.js";
 
 // Loopback certificate: lets a browser on this machine reach the daemon over HTTPS without Cloudflare, using

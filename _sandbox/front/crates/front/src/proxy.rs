@@ -5,7 +5,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use front_wire::{Answer, FrontHeader, ListenConfig, PreviewRoute, Question, Scheme, Upstream};
+use front_wire::{
+    Answer, FrontHeader, ListenConfig, PreviewRoute, Question, Scheme, TerminalPlan, Upstream,
+};
 use http::header::{self, HeaderMap, HeaderName, HeaderValue};
 use http::request::Parts;
 use http::{Method, Request, Response, StatusCode, Uri, Version};
@@ -21,6 +23,7 @@ use crate::body::{self, Body};
 use crate::connect::{self, Io, NodeConnector, Pool, UpstreamConnector};
 use crate::link::Link;
 use crate::route::{self, Lane, Target};
+use crate::term::{self, Terminals};
 
 // A restarting Node is waited for this long before a request is answered 503; its sockets stay open meanwhile.
 const NODE_PATIENCE: Duration = Duration::from_secs(30);
@@ -36,6 +39,8 @@ const PREVIEW_ROUTE_STALE: Duration = Duration::from_secs(60);
 const PREVIEW_ROUTE_ROOM: usize = 256;
 
 const ASK_PATIENCE: Duration = Duration::from_secs(5);
+
+const TERMINAL_UPGRADES: &str = "a terminal opens as a WebSocket or an intentic-terminal upgrade";
 
 // Never cross a hop: HTTP/1.1 connection management, and h2 refuses to carry them at all.
 const HOP_BY_HOP: [&str; 9] = [
@@ -53,10 +58,6 @@ const HOP_BY_HOP: [&str; 9] = [
 // A declined upgrade's answer is re-framed onto the tunnel stream: its body is already de-chunked and ends at close.
 const DECLINED_UPGRADE_DROP: [&str; 3] = ["connection", "keep-alive", "transfer-encoding"];
 
-const UPGRADE_METHOD_HEADER: &str = "x-ingress-method";
-const UPGRADE_PATH_HEADER: &str = "x-ingress-path";
-const UPGRADE_HEADER_PREFIX: &str = "x-ingress-h-";
-
 pub struct Front {
     link: &'static Link,
     node: Pool<NodeConnector>,
@@ -66,6 +67,7 @@ pub struct Front {
     config: watch::Receiver<Option<Arc<ListenConfig>>>,
     previews: Mutex<HashMap<String, (Instant, Upstream)>>,
     refreshing: Mutex<HashSet<String>>,
+    terminals: Arc<Terminals>,
 }
 
 enum Destination {
@@ -87,6 +89,7 @@ impl Front {
         link: &'static Link,
         node_socket: std::path::PathBuf,
         config: watch::Receiver<Option<Arc<ListenConfig>>>,
+        terminals: Arc<Terminals>,
     ) -> Self {
         let node_connector = NodeConnector::new(node_socket);
         let upstream_connector = UpstreamConnector::new();
@@ -99,6 +102,7 @@ impl Front {
             config,
             previews: Mutex::new(HashMap::new()),
             refreshing: Mutex::new(HashSet::new()),
+            terminals,
         }
     }
 
@@ -112,6 +116,9 @@ impl Front {
         let destination = self.destination(lane, &host, request.uri().path()).await;
         if matches!(destination, Destination::Unavailable) {
             return unavailable();
+        }
+        if is_front_route(&destination, request.method(), request.uri().path()) {
+            return self.terminal(request).await;
         }
         let upgrade = is_upgrade(request.headers(), request.version());
         let client = upgrade.then(|| hyper::upgrade::on(&mut request));
@@ -139,7 +146,7 @@ impl Front {
             ) => from_far_side(answer, upstream.frameable.then_some(&ancestors)),
             (Ok(answer), _) => from_far_side(answer, None),
             (Err(error), Destination::Upstream { upstream, host, .. }) => {
-                tracing::debug!(%error, port = upstream.port, "a preview upstream did not answer");
+                tracing::debug!(error = %causes(&error), port = upstream.port, "a preview upstream did not answer");
                 self.previews
                     .lock()
                     .expect("preview cache poisoned")
@@ -147,7 +154,7 @@ impl Front {
                 self.unreachable(&host, upstream.port).await
             }
             (Err(error), _) => {
-                tracing::warn!(%error, "the daemon did not answer a forwarded request");
+                tracing::warn!(error = %causes(&error), "the daemon did not answer a forwarded request");
                 bad_gateway("the daemon did not answer")
             }
         }
@@ -173,6 +180,11 @@ impl Front {
             .await;
         if matches!(destination, Destination::Unavailable) {
             return unavailable();
+        }
+        if is_front_route(&destination, inner.method(), inner.uri().path()) {
+            let framing = term::Framing::of(inner.headers());
+            let query = inner.uri().query().unwrap_or_default().to_owned();
+            return self.tunnel_terminal(stream, framing, query).await;
         }
         let (mut parts, empty) = inner.into_parts();
         outbound(&destination, &mut parts, true);
@@ -215,6 +227,93 @@ impl Front {
             }
         });
         Response::new(body::empty())
+    }
+
+    async fn terminal(self: &Arc<Self>, mut request: Request<Incoming>) -> Response<Body> {
+        let framing = match request.version() {
+            Version::HTTP_11 => term::Framing::of(request.headers()),
+            _ => None,
+        };
+        let Some(framing) = framing else {
+            return plain(StatusCode::UPGRADE_REQUIRED, TERMINAL_UPGRADES);
+        };
+        let query = request.uri().query().unwrap_or_default().to_owned();
+        let (plan, member) = match self.terminal_plan(&query).await {
+            Ok(planned) => planned,
+            Err(refusal) => return *refusal,
+        };
+        let upgrade = hyper::upgrade::on(&mut request);
+        let terminals = self.terminals.clone();
+        let switching = framing.switching();
+        tokio::spawn(async move {
+            if let Ok(upgraded) = upgrade.await {
+                terminals
+                    .serve(TokioIo::new(upgraded), &framing, plan, member, &query)
+                    .await;
+            }
+        });
+        switching
+    }
+
+    // The CONNECT stream is answered 200 at once; the 101 the browser reads then travels on it as raw h1.
+    async fn tunnel_terminal(
+        self: &Arc<Self>,
+        stream: OnUpgrade,
+        framing: Option<term::Framing>,
+        query: String,
+    ) -> Response<Body> {
+        let Some(framing) = framing else {
+            return bad_request(TERMINAL_UPGRADES);
+        };
+        let (plan, member) = match self.terminal_plan(&query).await {
+            Ok(planned) => planned,
+            Err(refusal) => return *refusal,
+        };
+        let terminals = self.terminals.clone();
+        tokio::spawn(async move {
+            let Ok(stream) = stream.await else {
+                return;
+            };
+            let mut stream = TokioIo::new(stream);
+            if stream.write_all(&framing.switching_head()).await.is_ok() {
+                terminals
+                    .serve(stream, &framing, plan, member, &query)
+                    .await;
+            }
+        });
+        Response::new(body::empty())
+    }
+
+    // Asked before the socket opens, so a daemon that cannot answer fails the upgrade and the browser retries.
+    async fn terminal_plan(
+        &self,
+        query: &str,
+    ) -> Result<(TerminalPlan, Option<String>), Box<Response<Body>>> {
+        let asked = self
+            .link
+            .ask(
+                Question::Terminal {
+                    query: query.to_owned(),
+                },
+                ASK_PATIENCE,
+            )
+            .await;
+        match asked {
+            Ok(Answer::Terminal { plan, member }) => Ok((plan, member)),
+            Ok(other) => {
+                tracing::error!(
+                    ?other,
+                    "the daemon answered a terminal's question with another"
+                );
+                Err(Box::new(bad_gateway(
+                    "the daemon could not plan the terminal",
+                )))
+            }
+            Err(error) => {
+                tracing::warn!(%error, "the daemon did not plan a terminal");
+                Err(Box::new(unavailable()))
+            }
+        }
     }
 
     async fn destination(self: &Arc<Self>, lane: Lane, host: &str, path: &str) -> Destination {
@@ -320,7 +419,7 @@ impl Front {
         if !self.link.ready(NODE_PATIENCE).await {
             anyhow::bail!("the daemon is not up to resolve {host}");
         }
-        let Answer::Preview { route } = self
+        let answer = self
             .link
             .ask(
                 Question::Preview {
@@ -329,6 +428,9 @@ impl Front {
                 ASK_PATIENCE,
             )
             .await?;
+        let Answer::Preview { route } = answer else {
+            anyhow::bail!("the daemon answered {host}'s route with {answer:?}");
+        };
         let mut previews = self.previews.lock().expect("preview cache poisoned");
         match route {
             PreviewRoute::Upstream { upstream } => {
@@ -380,6 +482,11 @@ impl Front {
             Err(_) => bad_gateway(&format!("nothing is answering on port {port}")),
         }
     }
+}
+
+// A route the front answers itself is the daemon's own: a preview's app may have a path of the same name.
+fn is_front_route(destination: &Destination, method: &Method, path: &str) -> bool {
+    matches!(destination, Destination::Node { mark: None, .. }) && term::serves(method, path)
 }
 
 fn host_of<B>(request: &Request<B>) -> String {
@@ -588,22 +695,7 @@ fn relay_upgrade(mut answer: Response<Incoming>, client: OnUpgrade) -> Response<
 }
 
 fn unwrap_envelope(headers: &HeaderMap) -> Option<Request<Body>> {
-    let text = |name: &str| headers.get(name).and_then(|value| value.to_str().ok());
-    let method =
-        Method::from_bytes(text(UPGRADE_METHOD_HEADER).unwrap_or("GET").as_bytes()).ok()?;
-    let mut request = Request::builder()
-        .method(method)
-        .uri(text(UPGRADE_PATH_HEADER).unwrap_or("/"))
-        .body(body::empty())
-        .ok()?;
-    for (name, value) in headers {
-        if let Some(original) = name.as_str().strip_prefix(UPGRADE_HEADER_PREFIX) {
-            request.headers_mut().append(
-                HeaderName::from_bytes(original.as_bytes()).ok()?,
-                value.clone(),
-            );
-        }
-    }
+    let mut request = tunnel::unwrap_envelope(headers)?.map(|()| body::empty());
     strip_front_headers(request.headers_mut());
     Some(request)
 }
@@ -631,6 +723,18 @@ fn serialize_head(answer: &Response<Incoming>, switching: bool) -> Vec<u8> {
     }
     head.extend_from_slice(b"\r\n");
     head
+}
+
+// hyper-util's error names only the stage it failed in ("client error (SendRequest)"); the cause is its sources.
+fn causes(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut text = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        text.push_str(": ");
+        text.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    text
 }
 
 fn plain(status: StatusCode, message: &str) -> Response<Body> {
@@ -663,6 +767,30 @@ fn bad_request(message: &str) -> Response<Body> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_forwarding_failure_is_logged_with_what_caused_it() {
+        #[derive(Debug)]
+        struct Stage(std::io::Error);
+        impl std::fmt::Display for Stage {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("client error (SendRequest)")
+            }
+        }
+        impl std::error::Error for Stage {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                Some(&self.0)
+            }
+        }
+        let reset = std::io::Error::new(
+            std::io::ErrorKind::ConnectionReset,
+            "connection reset by peer",
+        );
+        assert_eq!(
+            causes(&Stage(reset)),
+            "client error (SendRequest): connection reset by peer"
+        );
+    }
 
     #[test]
     fn an_ipv6_upstream_is_bracketed_in_its_uri() {
@@ -718,9 +846,9 @@ mod tests {
     #[test]
     fn an_envelope_rebuilds_the_h1_head_it_carried() {
         let mut headers = HeaderMap::new();
-        headers.insert(UPGRADE_METHOD_HEADER, HeaderValue::from_static("GET"));
+        headers.insert("x-ingress-method", HeaderValue::from_static("GET"));
         headers.insert(
-            UPGRADE_PATH_HEADER,
+            "x-ingress-path",
             HeaderValue::from_static("/system/terminal?ticket=t"),
         );
         headers.insert(

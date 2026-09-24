@@ -1,6 +1,4 @@
-import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
-import { promisify } from "node:util";
 import {
     LOCAL_MODEL_KV_BYTES_PER_TOKEN,
     LOCAL_MODEL_WINDOW_DEFAULT,
@@ -11,13 +9,12 @@ import {
     type LocalModelGpu,
     type LocalModelPrefetch,
 } from "@intentic/sandbox-contract";
+import { forkedExec } from "@intentic/scaffold";
 import { localModelWeightsPath } from "./local-model.js";
 
 // What this machine can actually run, measured rather than assumed. The same arithmetic gates a start
 // (localmodel.handler's admission check) and sizes the connect view's recommendation, from here, so the view cannot
 // offer a model the daemon will then refuse — which is the failure this module exists to make impossible.
-
-const exec = promisify(execFile);
 
 // Deliberately conservative; the real per-device authority is llama.cpp's own fitter. The runtime floor is what the
 // server costs before a single token: weights mapped, context buffers, the graph. Binary, like every other figure this
@@ -60,7 +57,7 @@ export const gpuMemory = async (): Promise<number> => {
     if (localModelGpu() !== "granted") {
         return 0;
     }
-    const result = await exec("nvidia-smi", ["--query-gpu=memory.total", "--format=csv,noheader,nounits"]).catch(() => undefined);
+    const result = await forkedExec("nvidia-smi", ["--query-gpu=memory.total", "--format=csv,noheader,nounits"]).catch(() => undefined);
     // Unreadable answer reads as 0 GPU memory, never a throw: that already means "size against host memory alone".
     const devices = (result?.stdout ?? "")
         .split("\n")
@@ -71,7 +68,7 @@ export const gpuMemory = async (): Promise<number> => {
 
 // A bare dev run has no llama-server; the local lane then costs a rebuild before it can serve anything.
 export const llamaServerMissing = async (): Promise<boolean> =>
-    exec("llama-server", ["--version"]).then(
+    forkedExec("llama-server", ["--version"]).then(
         () => false,
         (error) => (error as NodeJS.ErrnoException).code === "ENOENT",
     );

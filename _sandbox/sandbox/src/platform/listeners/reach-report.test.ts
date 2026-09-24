@@ -62,18 +62,6 @@ describe("probeSelf", () => {
         expect(verdict.ok === false && verdict.detail).toContain("502");
     });
 
-    /* A HOSTED SANDBOX HAS NO TUNNEL, so it must not be told about one. */
-    it("blames the edge, not a tunnel, for a hosted sandbox's 502", async () => {
-        stubGlobal("fetch", async () => new Response("not connected right now", { status: 502 }));
-        const verdict = await probeSelf(PUBLIC_URL, "abc", "direct");
-        expect(verdict.ok).toBe(false);
-        if (verdict.ok === false) {
-            expect(verdict.detail).toContain("502");
-            expect(verdict.detail).toContain("edge");
-            expect(verdict.detail).not.toContain("tunnel");
-        }
-    });
-
     it("names an address that cannot be reached at all", async () => {
         stubGlobal("fetch", async () => {
             throw new TypeError("fetch failed");

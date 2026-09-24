@@ -2,7 +2,7 @@ import { createResidentEngine, type ResidentEngine } from "../index.js";
 import type { EngineAnswer, EngineEvent, EngineMetricsSnapshot, EngineRequest } from "./protocol.js";
 
 // The engine's own process: the SQLite index, the two ML models, the indexer worker and the cached sweep all live here;
-// the daemon keeps none of it. Opposite of git-forker.ts, which stays import-free to fork cheaply.
+// the daemon keeps none of it. Opposite of scaffold's forker.ts, which stays import-free to fork cheaply.
 
 const send = process.send?.bind(process);
 if (send === undefined) {

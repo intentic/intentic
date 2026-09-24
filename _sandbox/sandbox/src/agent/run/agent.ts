@@ -10,7 +10,7 @@ import type {
     SpawnedProcess,
     SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-import { claudeCliPath, refreshClaudeSdk, sdk } from "../../engines/claude-sdk.js";
+import { refreshClaudeSdk, sdk } from "../../engines/claude-sdk.js";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -325,8 +325,6 @@ const baseOptions = (
     }
     return {
         cwd: request.spec.cwd,
-        // Named for a store copy so the CLI spawned is the one this daemon chose; absent on the image's copy.
-        ...opt("pathToClaudeCodeExecutable", claudeCliPath()),
         // Only for a native Claude turn on a sandbox credential; other endpoints have no refresh token to mint from.
         ...opt("getOAuthToken", request.credential.kind === "claude-oauth" ? request.credential.refresh : undefined),
         includePartialMessages: true,

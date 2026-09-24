@@ -73,31 +73,12 @@ export const INGRESS_GRANT_HEADER = "x-intentic-grant";
 export const ENV_INGRESS_URL = "INGRESS_URL";
 export const ENV_SANDBOX_GRANT = "SANDBOX_GRANT";
 
-// The daemon-side surface
-
-// Daemon-side tunnel behavior this contract requires: dial, register, forward to the loopback listener, and reconnect
-// forever with backoff, never giving up. `close()` is for shutdown and tests.
-export interface IngressTunnelOptions {
-    // e.g. https://ingress.<zone>; the daemon derives the wss:// door itself via INGRESS_TUNNEL_PATH.
-    readonly url: string;
-    readonly grant: string;
-    // The daemon's own loopback listener; every h2 stream lands there as a plain HTTP/1.1 request or upgrade.
-    readonly targetPort: number;
-    readonly log: (message: string, error?: unknown) => void;
-}
-
-export interface IngressTunnelHandle {
-    readonly close: () => Promise<void>;
-    // For /health and the boot log: whether the tunnel currently holds a registered session.
-    readonly connected: () => boolean;
-}
-
-export type StartIngressTunnel = (options: IngressTunnelOptions) => IngressTunnelHandle;
-
-// What the ingress side must also honor, enforced by ingress-protocol tests:
+// What the edge (_platform/ingress, Rust) must also honor, held by its suites and by ingress-contract.fixture.json:
 // - Register: verify the grant offline; if PLATFORM_URL is set, check the sandbox exists (GET /api/reachability/<id>)
 //   and cache the answer, failing open if the platform doesn't respond. A 404 refuses the tunnel.
 // - Displacement: a new tunnel for an id closes the old session (code 4001) and takes the registration.
+// - Lanes: a tunnel naming the bulk lane (tunnel-lanes.ts) is held beside the interactive one and displaces only its
+//   own kind; only the interactive lane is the sandbox's home in the cluster.
 // - Liveness: WebSocket ping every 15s; a peer silent for 45s is unregistered.
 // - Routing: host maps via hostOwnerId to a registered tunnel; no tunnel answers 502 naming the sandbox label, with
 //   the verdict header and CORS of edge-verdict.ts, and admits the preflight of the request it is about to refuse.

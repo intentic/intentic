@@ -4,14 +4,17 @@ import { createServer as createHttpServer, type RequestListener } from "node:htt
 import { createAdaptorServer, type WebSocketServerLike } from "@hono/node-server";
 import type { Answer, FromNode, ListenConfig, Question } from "@intentic/sandbox-contract/front-wire";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import type { Logger } from "pino";
 import { WebSocketServer } from "ws";
 import { createApp } from "../app.js";
 import { CONTROL_SOCKET_ENV, connectFront, HTTP_SOCKET_ENV, type FrontLink } from "../front/front-link.js";
+import { frontCheckoutFeed, useCheckoutFeed } from "../git/feed/checkout-feed.js";
 import { answerPreview, isHandedBackPreview, PREVIEW_PROBE_PATH, type PreviewDeps, previewRoute } from "../panels/preview-routes.js";
 import { type ReachPosture, reachPosture, tunnelUrl } from "../platform/listeners/reach-posture.js";
 import { type LocalCertificate, readLocalCertificate, startLocalCertificateRenewal } from "../platform/tls/local-cert.js";
 import { publicRoot } from "../public/public-files.js";
 import { createPublicHandler } from "../public/public-serve.js";
+import { planTerminal, type TerminalPlanDeps } from "../terminal/terminal-plan.js";
 import { buildId } from "../version.js";
 import type { BootPhase } from "./boot-phase.js";
 
@@ -26,6 +29,14 @@ const previewDepsOf = ({ config, services }: BootPhase): PreviewDeps => ({
         config.connectToken === ""
             ? undefined
             : { slot: publicSlotFromToken(config.connectToken), serve: createPublicHandler(publicRoot(config.workspaceRoot)) },
+});
+
+const terminalDepsOf = ({ logger, services }: BootPhase): TerminalPlanDeps => ({
+    auth: services.auth,
+    wsTickets: services.wsTickets,
+    root: services.workspace.root,
+    logPathOf: services.serviceProcesses.logPathOf,
+    warn: (fields, message) => logger.warn(fields, message),
 });
 
 const listenConfigOf = ({ config, traits }: BootPhase, host: string): ListenConfig => {
@@ -66,17 +77,40 @@ const handCertificate = (phase: BootPhase, link: FrontLink): void => {
 };
 
 const handTunnel = ({ config, logger, traits }: BootPhase, link: FrontLink): ReachPosture => {
-    const reach = reachPosture({ url: config.ingress.url, grant: config.sandbox.grant, frontDoor: traits.extraListeners, vm: config.sandbox.vm });
+    const reach = reachPosture({ url: config.ingress.url, grant: config.sandbox.grant, frontDoor: traits.extraListeners });
     if (reach.by === "tunnel") {
         link.tell({ kind: "tunnel", tunnel: { url: tunnelUrl(config.ingress.url), grant: config.sandbox.grant } });
         return reach;
     }
     link.tell({ kind: "tunnel" });
-    logger.info(reach.by === "direct" ? `reachable directly: ${reach.reason}` : `reachable over loopback only: ${reach.reason}`);
+    logger.info(`reachable over loopback only: ${reach.reason}`);
     return reach;
 };
 
 // Returns the reach posture once, since the platform's reachability probe needs the same answer the tunnel was given.
+// Node's HTTP server on the front's socket. Previews the front hands back skip the app: they answer for a preview host,
+// which the app's routes never see.
+export const frontDoorServer =
+    (preview: PreviewDeps, logger: Pick<Logger, "warn">): typeof createHttpServer =>
+    ((options: object, listener: RequestListener) => {
+        const server = createHttpServer(options, (request, response) => {
+            if (isHandedBackPreview(request)) {
+                answerPreview(request, response, preview).catch((error: unknown) => {
+                    logger.warn({ err: error, host: request.headers.host }, "front door: a handed-back preview could not be answered");
+                    response.destroy();
+                });
+                return;
+            }
+            listener(request, response);
+        });
+        // The front is the only client and drops idle sockets itself; this timer, due after a stall, would close one
+        // whose next request already sits unread in it.
+        server.keepAliveTimeout = 0;
+        // An upload reaches this socket at the uploader's pace, which the front and the edge police, not a 5-minute cap.
+        server.requestTimeout = 0;
+        return server;
+    }) as typeof createHttpServer;
+
 export const startFrontDoor = async (phase: BootPhase, host: string): Promise<ReachPosture> => {
     const { logger, services, shutdown } = phase;
     const controlPath = process.env[CONTROL_SOCKET_ENV];
@@ -90,12 +124,20 @@ export const startFrontDoor = async (phase: BootPhase, host: string): Promise<Re
         process.exit(78); // EX_CONFIG
     }
     const preview = previewDepsOf(phase);
+    const terminal = terminalDepsOf(phase);
     let stopping = false;
     // The front repeats where the tunnel stands to every Node that says hello; only a change is news.
     let tunnelUp = false;
     const link = await connectFront({
         path: controlPath,
-        answer: async (question: Question): Promise<Answer> => ({ answer: "preview", route: await previewRoute(question.host, preview) }),
+        answer: async (question: Question): Promise<Answer> => {
+            switch (question.question) {
+                case "preview":
+                    return { answer: "preview", route: await previewRoute(question.host, preview) };
+                case "terminal":
+                    return planTerminal(terminal, question.query);
+            }
+        },
         onTunnel: (connected) => {
             if (connected !== tunnelUp) {
                 logger.info(connected ? "reachable: the ingress tunnel is registered" : "the ingress tunnel dropped");
@@ -114,23 +156,17 @@ export const startFrontDoor = async (phase: BootPhase, host: string): Promise<Re
         stopping = true;
         link.close();
     });
+    // Status reads keyed on the front's change counts from here on (git/feed/checkout-feed.ts).
+    useCheckoutFeed(frontCheckoutFeed(link));
+    shutdown.push(() => useCheckoutFeed(undefined));
+    // The front's terminals never register here: every revocation is relayed, and the front matches it by member.
+    const unrelay = services.auth?.connections.onRevoke((member) => link.tell({ kind: "revoke", ...(member === undefined ? {} : { member }) }));
+    shutdown.push(() => unrelay?.());
 
     const app = createApp(services);
     // The cast bridges ws's `boolean | undefined` and node-server's plain-boolean option; the shapes match at runtime.
     const sockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
-    // Previews the front hands back skip the app: they answer for a preview host, which the app's routes never see.
-    const createServer = ((options: object, listener: RequestListener) =>
-        createHttpServer(options, (request, response) => {
-            if (isHandedBackPreview(request)) {
-                answerPreview(request, response, preview).catch((error: unknown) => {
-                    logger.warn({ err: error, host: request.headers.host }, "front door: a handed-back preview could not be answered");
-                    response.destroy();
-                });
-                return;
-            }
-            listener(request, response);
-        })) as typeof createHttpServer;
-    const server = createAdaptorServer({ fetch: app.fetch, websocket: { server: sockets }, createServer });
+    const server = createAdaptorServer({ fetch: app.fetch, websocket: { server: sockets }, createServer: frontDoorServer(preview, logger) });
     rmSync(httpPath, { force: true });
     server.listen(httpPath);
     await once(server, "listening");

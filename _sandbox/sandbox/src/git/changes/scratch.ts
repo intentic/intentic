@@ -6,6 +6,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { currentRepos } from "../../workspace/watch/repo-watch.js";
 import { materializedPaths } from "./changes-porcelain.js";
+import { readOnFeed } from "../feed/checkout-feed.js";
 
 // What a stage-everything leaves out: untracked paths shaped like scratch, judged by shape since the names scratch
 // arrives under are invented fresh each time. Only untracked paths are judged; the index is somebody's decision.
@@ -155,7 +156,10 @@ const judgeInside = async (dir: string, open: readonly string[], scope: ScratchS
 };
 
 // The untracked paths of the checkout at `dir` that no capture stages, one entry per scratch tree, sorted by path.
-export const scratchOf = async (dir: string, scope: ScratchScope, git: GitRunner = defaultGit): Promise<ScratchPath[]> => {
+export const scratchOf = (dir: string, scope: ScratchScope, git: GitRunner = defaultGit): Promise<ScratchPath[]> =>
+    readOnFeed(`scratch\u0000${String(scope.root)}\u0000${String(scope.container)}`, dir, git, () => readScratch(dir, scope, git));
+
+const readScratch = async (dir: string, scope: ScratchScope, git: GitRunner): Promise<ScratchPath[]> => {
     // Collapsed: a wholly new directory is one row however much it holds, so this stays small over any scratch tree.
     const outer = await untracked(dir, ["--directory", "--no-empty-directory"], git);
     if (outer.length === 0) {

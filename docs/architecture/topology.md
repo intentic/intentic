@@ -13,7 +13,7 @@ flowchart LR
     fly["Hosted machine<br/>on Fly"]
     browser -->|"sign-in · sandbox list"| api
     browser -->|"HTTPS by hostname"| ingress
-    front -->|"outbound WSS tunnel"| ingress
+    front -->|"outbound tunnel<br/>WSS lanes · QUIC"| ingress
     front --- daemon
     daemon -->|"announce · boot report"| api
     device -->|"outbound WebSocket"| ingress
@@ -25,9 +25,9 @@ flowchart LR
 
 - **The editor** ([`_editor/web`](../../_editor/web)) is a static Vue app served from `app.intentic.dev`. The desktop app ([`_editor/desktop-app`](../../_editor/desktop-app)) and the phone apps load the same URL in a webview. It reads the sandbox list from the platform, then talks to each sandbox's daemon directly.
 - **The platform** ([`_platform/api`](../../_platform/api), Postgres through [`_platform/prisma`](../../_platform/prisma)) is sign-in, the sandbox registry and the hosted plan. See [platform.md](platform.md).
-- **The ingress** ([`_platform/ingress`](../../_platform/ingress)) is a reverse proxy on Fly. A sandbox opens a WebSocket tunnel to it, and it routes each browser request to the tunnel registered for that request's `Host` (`sandbox-<id>.sbx.intentic.dev`, plus `preview-`, `port-` and `public-` hostnames from [`hostnames.ts`](../../_shared/sandbox-contract/src/ids/hostnames.ts)).
+- **The ingress** ([`_platform/ingress`](../../_platform/ingress)) is a reverse proxy on Fly. A sandbox dials it, a WebSocket per lane and a QUIC connection beside them wherever UDP reaches it, and it routes each browser request to the tunnel registered for that request's `Host` (`sandbox-<id>.sbx.intentic.dev`, plus `preview-`, `port-` and `public-` hostnames from [`hostnames.ts`](../../_shared/sandbox-contract/src/ids/hostnames.ts)).
 - **A sandbox** is one Docker container plus two volumes. Inside it, [`intentic-front`](../../_sandbox/front) (Rust) owns every port and the ingress tunnel and supervises the Node daemon ([`_sandbox/sandbox`](../../_sandbox/sandbox)) over a Unix socket, so connections stay open across a daemon restart. See [sandbox.md](sandbox.md).
-- **Where a sandbox runs**: on the user's own computer or server (started by the setup command, the desktop app or the [`ic`](../../_sandbox/ic) CLI), or on a hosted machine: one Fly app, machine and volume per sandbox. A hosted sandbox opens no tunnel; the ingress answers with `fly-replay` and Fly's edge delivers the request.
+- **Where a sandbox runs**: on the user's own computer or server (started by the setup command, the desktop app or the [`ic`](../../_sandbox/ic) CLI), or on a hosted machine: one Fly app, machine and volume per sandbox. A hosted sandbox dials the same tunnel, with a grant the platform puts in its machine's config; one that has not dialled in yet is answered with `fly-replay`, and Fly's edge delivers the request.
 - **Your devices** ([`_devices/machine`](../../_devices/machine), the browser extension [`_devices/webext`](../../_devices/webext)) dial the sandbox's own hostname over one WebSocket each, or its loopback address when they share a machine.
 
 ## Which way connections go

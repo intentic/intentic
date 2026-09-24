@@ -2,31 +2,8 @@
     "name": "@intentic/ingress",
     "version": "0.0.0",
     "private": true,
-    "type": "module",
-    "main": "src/main.ts",
+    "description": "The edge every sandbox is reached through: a Rust crate; this manifest only gives turbo its release task",
     "scripts": {
-        "dev": "bun --watch --env-file=../../.env ./src/main.ts",
-        "start": "bun ./src/main.ts",
-        "typecheck": "tsgo --noEmit",
-        "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh ingress --prune",
-        "test": "suites && bun scripts/runtime-smoke.ts"
-    },
-    "dependencies": {
-        "@intentic/constants": "workspace:*",
-        "@intentic/sandbox-contract": "workspace:*",
-        "@puristic/env": "catalog:",
-        "pino": "catalog:",
-        "pino-pretty": "catalog:",
-        "tslib": "catalog:",
-        "ws": "catalog:",
-        "zod": "catalog:"
-    },
-    "devDependencies": {
-        "@intentic/testing": "workspace:*",
-        "@intentic/tsconfig": "workspace:*",
-        "@types/bun": "catalog:",
-        "@types/ws": "catalog:",
-        "@typescript/native-preview": "catalog:",
-        "bun": "catalog:"
+        "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh ingress --build-context tunnel=../../_sandbox/front/crates/tunnel --build-context contract=../../_shared/sandbox-contract/src/protocol"
     }
 }

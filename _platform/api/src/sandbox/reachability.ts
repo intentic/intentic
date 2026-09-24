@@ -27,14 +27,17 @@ export interface Reachability {
     readonly ingressUrl: string;
 }
 
-// Idempotent for free: the grant signs the sandbox's own id, so every call makes the same claim (bytes differ only in a
-// meaningless `iat`). Synchronous and prisma-free; `token` is the encrypted column, decrypted here.
+// The grant a sandbox presents on the tunnel upgrade. Idempotent for free: it signs the sandbox's own id, so every call
+// makes the same claim (bytes differ only in a meaningless `iat`). `?? ''`, not the row's cuid, which isn't a tunnel id;
+// the contract itself refuses an empty string.
+export const grantFor = (config: Config, connectToken: string): string =>
+    mintReachabilityGrant(config.ingress.signingKey, sandboxIdFromToken(connectToken) ?? ``, Date.now());
+
+// Synchronous and prisma-free; `token` is the encrypted column, decrypted here.
 export const ensureReachability = (config: Config, sandbox: { id: string; token: string }): Reachability => {
     const connectToken = decryptSecret(config, sandbox.token);
-    // `?? ''`, not `sandbox.id`: the cuid key isn't a tunnel id; the contract itself refuses an empty string.
-    const sandboxId = sandboxIdFromToken(connectToken) ?? ``;
     return {
-        grant: mintReachabilityGrant(config.ingress.signingKey, sandboxId, Date.now()),
+        grant: grantFor(config, connectToken),
         hostname: sandboxHostname(config.ingress.zone, connectToken),
         ingressUrl: config.ingress.url,
     };

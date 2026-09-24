@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Dev bind-mounts so a running sandbox container reads compiled JS from the working tree, not the baked image layer.
 // Only existing host paths are printed; a missing dist falls back to the baked copy. Mounts compiled output only, never
-// node_modules: native builds (e.g. node-pty) are built against the image's own ABI.
+// node_modules: native modules are built against the image's own ABI.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 

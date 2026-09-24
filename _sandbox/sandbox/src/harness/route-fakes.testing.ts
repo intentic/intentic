@@ -106,7 +106,7 @@ export const fakeFiles = (overrides: Partial<Services["files"]> = {}): Services[
         readWindow: async () => undefined,
         write: async () => {},
         writeStream: async () => {},
-        readBytes: async () => undefined,
+        open: async () => undefined,
         size: async () => undefined,
         mkdir: async () => {},
         remove: async () => {},

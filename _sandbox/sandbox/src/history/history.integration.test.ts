@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createLogger } from "../logger.js";
 import { workspacePaths } from "../workspace/workspace.js";
+import { useCheckoutFeed } from "../git/feed/checkout-feed.js";
 import { createWorkspaceHistory, type HistoryGitRunner } from "./history.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
 
@@ -101,6 +102,7 @@ const fakeHistory = async () => {
     return {
         history,
         calls,
+        work,
         setTree: (next: string) => (tree = next),
         failHeadRead: () => (headReadFails = true),
         head: () => head,
@@ -125,6 +127,30 @@ test("snapshot commits parentless first, skips an unchanged tree, then parents o
     expect(await history.snapshot("interval")).toEqual(expect.any(String));
     expect(commitCalls()).toHaveLength(2);
     expect(commitCalls()[1]?.join(" ")).toContain("-p c1");
+});
+
+// The interval sweep reads the front's change count first: an untouched checkout costs it no `git add -A` walk, while a
+// turn's or a person's snapshot always runs.
+test("an interval sweep skips a checkout whose change count has not moved since its last snapshot", async () => {
+    const { history, calls, setTree, work } = await fakeHistory();
+    const generations = new Map([[work, 1]]);
+    useCheckoutFeed({ generation: async (dir) => generations.get(dir) });
+    try {
+        const adds = () => calls.filter((call) => subcommand(call) === "add").length;
+        await history.snapshot("interval");
+        expect(adds()).toBe(1);
+        setTree("tree-2");
+        expect(await history.snapshot("interval")).toBeUndefined();
+        expect(adds()).toBe(1);
+        expect(await history.snapshot("turn")).toEqual(expect.any(String));
+        expect(adds()).toBe(2);
+        generations.set(work, 2);
+        setTree("tree-3");
+        expect(await history.snapshot("interval")).toEqual(expect.any(String));
+        expect(adds()).toBe(3);
+    } finally {
+        useCheckoutFeed(undefined);
+    }
 });
 
 test("a head ref git could not read leaves the timeline standing rather than restarting it parentless", async () => {

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AgentSummarySchema } from "../schemas/agents.js";
 import { AccountUsageSchema, ProviderRefusalSchema } from "../schemas/providers/plan-limits.js";
 import { MemberRoleSchema } from "../schemas/shared.js";
-import { SidecarStatusSchema } from "../schemas/workspace/workspace-tree.js";
+import { SidecarStatusSchema, WorkspaceTreeDeltaSchema } from "../schemas/workspace/workspace-tree.js";
 
 // Frames about the sandbox rather than a turn: liveness, boot progress, what moved (repos, refs, running processes,
 // presence, the fleet), and account headroom. One stream carries them all.
@@ -128,13 +128,19 @@ export type AccountUsageChanged = z.infer<typeof AccountUsageChangedSchema>;
 export const ProviderRefusalChangedSchema = z.object({ kind: z.literal("providerRefusal"), provider: z.string(), refusal: ProviderRefusalSchema.optional() });
 export type ProviderRefusalChanged = z.infer<typeof ProviderRefusalChangedSchema>;
 
-// The /events stream union: hello, heartbeats, boot progress, workspace/repo/ref/runtime/shadow changes, presence and
-// fleet rosters, account headroom and refusal changes. oRPC validates every frame against this.
+// What moved in the shared tree, once the daemon's resident copy re-listed a batch: a tab holding the generation it
+// counts from patches its tree, and one holding any other fetches it afresh.
+export const TreeChangedSchema = WorkspaceTreeDeltaSchema.extend({ kind: z.literal("treeChanged") });
+export type TreeChanged = z.infer<typeof TreeChangedSchema>;
+
+// The /events stream union: hello, heartbeats, boot progress, workspace/repo/ref/runtime/shadow/tree changes, presence
+// and fleet rosters, account headroom and refusal changes. oRPC validates every frame against this.
 export const SystemEventSchema = z.discriminatedUnion("kind", [
     HelloSchema,
     HeartbeatSchema,
     BootSchema,
     WorkspaceChangedSchema,
+    TreeChangedSchema,
     DerivedChangedSchema,
     ReposChangedSchema,
     RefsChangedSchema,

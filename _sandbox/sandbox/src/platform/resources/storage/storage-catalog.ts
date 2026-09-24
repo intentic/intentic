@@ -41,6 +41,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const REMOVALS: Readonly<Record<CleanableCategory, StorageRemoval>> = {
     // Nothing reads the trash again, so nothing in it is too recent; the confirm names what it costs.
     trash: { unit: "entry" },
+    backups: { unit: "entry" },
     exports: { unit: "entry" },
     artifacts: { unit: "entry", keepRecentMs: DAY_MS },
     browserCaptures: { unit: "entry", keepRecentMs: DAY_MS },
@@ -91,6 +92,8 @@ const PATH_RULES: readonly StoragePathRule[] = [
     { root: "history", prefix: "overlays/", category: "checkouts", depth: 1, protected: true },
     { root: "history", prefix: "conversations.db", category: "conversations", depth: 0, protected: true },
     { root: "history", prefix: "conversations/", category: "conversations", depth: 0, protected: true },
+    { root: "history", prefix: "blobs/", category: "conversations", depth: 0, protected: true },
+    { root: "history", prefix: "backups/", category: "backups", depth: 1 },
     { root: "history", prefix: "said-index/", category: "indexes", depth: 0 },
     { root: "history", prefix: "engines/", category: "engines", depth: 1 },
     // pnpm keeps a store at the top of whichever mount an install runs on; worktree installs land here.

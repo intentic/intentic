@@ -1,8 +1,7 @@
-import { execFile } from "node:child_process";
 import { type FileHandle, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import { promisify } from "node:util";
 import type { LogFileEntry } from "@intentic/sandbox-contract";
+import { forkedExec } from "@intentic/scaffold";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 
 // Daemon-owned debug logs under historyRoot/logs: terminal captures (terminals/), intentic CLI runs (intentic-runs/),
@@ -130,6 +129,6 @@ const tmuxLogHooks = (historyRoot: string): string[][] => {
 // Best-effort no-op when tmux is absent (local dev, tests).
 export const applyTmuxLogHooks = async (historyRoot: string): Promise<void> => {
     for (const args of tmuxLogHooks(historyRoot)) {
-        await promisify(execFile)("tmux", args).catch(() => undefined);
+        await forkedExec("tmux", args).catch(() => undefined);
     }
 };

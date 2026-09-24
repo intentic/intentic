@@ -51,9 +51,9 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean \
 # set into the `whisper` feature pack (composer voice input needs it on every standard image); Discord's
 # connector NAMES that pack rather than shipping its own copy of the build, so a standard image composes
 # nothing for it (see the pack's own header).
-# python3 + make + g++ are the node-gyp toolchain: runtime `pnpm install` (ensure-intent.ts, scaffold
-# inject-template.ts, or a dev in /work) compiles native deps from source — node-pty ships no linux
-# prebuild, so it ALWAYS builds here. Uncommon toolchains (cmake, -dev headers) stay an overlay concern.
+# python3 + make + g++ are the node-gyp toolchain: a runtime `pnpm install` (ensure-intent.ts, scaffold
+# inject-template.ts, or a dev in /work) compiles any native dep that ships no prebuild for this platform.
+# Uncommon toolchains (cmake, -dev headers) stay an overlay concern.
 # ripgrep backs the iq search CLI's lexical engine (iq-engine shells into `rg --json`).
 # python3-pip + python3-venv: python3 was already here for node-gyp, but with no way to INSTALL anything an
 # agent reaching for ordinary Python tooling (Pillow to inspect a screenshot, a one-off script's dependency)
@@ -183,8 +183,8 @@ RUN mkdir -p /root/.oh-my-zsh /root/.oh-my-zsh/custom/plugins/zsh-autosuggestion
         'add-zsh-hook preexec _intentic_prompt_signal' \
         'add-zsh-hook precmd _intentic_prompt_signal' \
         > /root/.zshrc
-# tmux backs each terminal tab (terminal/terminal.ts attaches one session per tab), as a PERSISTENCE layer only:
-# the browser's client is a CONTROL-MODE client (`tmux -C`, terminal/tmux-control.ts), which gets every pane's
+# tmux backs each terminal tab (one session per tab, attached by intentic-front: _sandbox/front's term/), as a
+# PERSISTENCE layer only: the browser's client is a CONTROL-MODE client (`tmux -C`), which gets every pane's
 # raw bytes as text notifications instead of a drawn screen, and xterm in the browser is the terminal that
 # interprets them. So nothing here is about how a pane LOOKS — no status bar (the web UI draws the tab bar), no
 # mouse (the browser's wheel scrolls xterm's own scrollback, a drag is a native selection, and a program that
@@ -192,8 +192,8 @@ RUN mkdir -p /root/.oh-my-zsh /root/.oh-my-zsh/custom/plugins/zsh-autosuggestion
 # program reaches xterm raw), and nothing bound to the prefix key (keystrokes are injected straight into the
 # pane, tmux never sees them as its own). default-command launches the oh-my-zsh zsh above (not /bin/sh);
 # destroy-unattached off keeps a session alive when its web client detaches on reload/drop — the whole point of
-# tmux-backed persistence; history-limit is how far back a fresh attach can replay (tmux-control.ts captures it
-# to seed xterm's scrollback), matched by the shell's HISTSIZE above.
+# tmux-backed persistence; history-limit is how far back a fresh attach can replay (the front's term/hub.rs
+# captures it to seed xterm's scrollback), matched by the shell's HISTSIZE above.
 # The set-hook pipe-pane trio logs every pane (web tabs, panels, agent-run tmux, windows, splits) to
 # /history/logs/terminals — the crashed-session post-mortem the /logs routes serve (logs/log-files.ts keeps
 # the same hooks for re-arming a server that outlived a daemon restart). The stream is replayed through
@@ -226,10 +226,8 @@ ENV PATH=$PNPM_HOME/bin:$PATH
 RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.4.1 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
-# node-gyp on PATH, for the native rebuild that runs after the tree COPYs below (node-pty) and
-# for an agent compiling a native dep by hand. Installed HERE, above those COPYs, because it used to share the
-# rebuild's RUN — where every source change re-downloaded it, unpinned, before any compiling started. Pinned
-# like every other tool in this image so a bad upstream release fails a deliberate bump, not the next pipeline.
+# node-gyp on PATH, for an agent compiling a native dep by hand. Pinned like every other tool in this image so a
+# bad upstream release fails a deliberate bump, not the next pipeline.
 # ponytail: bump alongside the node base image — node-gyp tracks the headers it compiles against.
 #
 # EVERY `npm install` IN THIS FILE MOUNTS ~/.npm AS A BUILD CACHE. npm keeps the downloaded tarball in
@@ -370,14 +368,6 @@ COPY --from=trees sandbox /opt/sandbox
 # The front the entrypoint execs: every port, the ingress tunnel, and the daemon's supervision (_sandbox/front). Built
 # on this image's Debian release by build-front.sh, so it links against the glibc this layer carries.
 COPY --from=trees front /opt/sandbox/front
-# node-pty ships no linux prebuild, so it gets source-compiled by whatever host ran pnpm deploy — linked
-# against THAT host's glibc. Rebuild it against this image's glibc with the baked toolchain (python3/make/g++
-# above; the node image ships its own headers, so node-gyp compiles offline). Without this, a tree deployed on
-# a newer-glibc dev box ships a binary this runtime can't load. Driven directly, not via `npm rebuild`:
-# node-pty's npm install script wants tsc (its lib/ is already compiled in the tarball — only the .node needs
-# building). The registry-prebuilt natives (sharp, ast-grep, onnxruntime, davey) are manylinux — safe as copied.
-RUN cd /opt/sandbox/node_modules/.pnpm/node-pty@*/node_modules/node-pty \
-    && node-gyp rebuild --nodedir=/usr/local
 # The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
 # daemon writes/removes its skill at /work/.claude/skills/lsp). It runs the native TypeScript compiler (its
 # bundled @typescript/native-preview binary) over whatever tsconfig project the agent points it at in /work.

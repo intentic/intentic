@@ -140,6 +140,8 @@ export const STORAGE_CLEANABILITY = {
     other: "none",
     // Git data and checkouts of repositories deleted from the workspace; nothing reads it again, but it may hold commits never pushed.
     trash: "confirm",
+    // Transcripts as they were before the sandbox converted them to its current format; nothing reads them again.
+    backups: "confirm",
     // Copies of the sandbox packed for download.
     exports: "confirm",
     // Files agents produced: generated images, reports, harness output.

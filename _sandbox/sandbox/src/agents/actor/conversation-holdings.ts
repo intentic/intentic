@@ -176,6 +176,13 @@ export const RUN_RETAINED_MS = 60_000;
 export type AttachEntry = Extract<AttachFrame, { kind: "patch" | "fact" }>;
 export type AttachHead = Extract<AttachFrame, { kind: "attached" }>;
 
+// One follower of a run: its head, what lands after it, and the way to end its reading from outside.
+export interface AttachedRun {
+    readonly head: AttachHead;
+    readonly entries: AsyncGenerator<AttachEntry>;
+    readonly cut: (error: Error) => void;
+}
+
 // A conversation's detached run (agent/run/turn/turn-runs.ts), as whoever holds only the conversation reads it.
 export interface LiveRun {
     readonly id: string;
@@ -196,7 +203,7 @@ export interface LiveRun {
     // Resolves once the run has fully unwound.
     readonly waitUntilFinished: () => Promise<void>;
     // `signal` is the follower's connection: its abort lets the follower go.
-    readonly attach: (signal?: AbortSignal) => { readonly head: AttachHead; readonly entries: AsyncGenerator<AttachEntry> };
+    readonly attach: (fellBehind: () => Error, signal?: AbortSignal) => AttachedRun;
     // Raw frames from this instant on.
     readonly frames: () => AsyncGenerator<AgentEvent>;
 }

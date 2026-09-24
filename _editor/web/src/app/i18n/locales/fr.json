@@ -2946,6 +2946,11 @@
                 "reason": "Données git et checkouts de dépôts supprimés de l'espace de travail.",
                 "warning": "Ils peuvent contenir des commits jamais poussés nulle part. Une fois nettoyés, ils ne peuvent pas être récupérés."
             },
+            "backups": {
+                "label": "Sauvegardes des transcriptions",
+                "reason": "La transcription de chaque conversation telle qu'elle était avant que ce sandbox la convertisse à son format actuel.",
+                "warning": "Rien ne les lit : les transcriptions converties contiennent les mêmes conversations. Une fois nettoyées, les originaux ne peuvent pas être récupérés."
+            },
             "workspace": {
                 "label": "Fichiers de l'espace de travail",
                 "reason": "Vos dépôts, leurs dépendances et tout le reste de l'espace de travail. Supprimez ce dont vous n'avez plus besoin depuis Fichiers ou un terminal."

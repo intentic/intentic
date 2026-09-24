@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { type GitChange, isScratch, type ScratchPath } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { EMPTY_TREE } from "../../workspace/layout/git-layout.js";
+import { readOnFeed } from "../feed/checkout-feed.js";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../../workspace/files/workspace-files.js";
 import { parseNameStatusZ, parseNumstatZ, parseStatusV2 } from "./changes-porcelain.js";
 import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
@@ -84,10 +85,7 @@ const withUntrackedLineStats = async (dir: string, untracked: readonly string[],
 // Staged and unstaged stay separate: a path can hold both with different statuses (a staged rename, then edited).
 // Conflicts are their own list, never staged: an unmerged path has no stage 0, and git refuses to commit one.
 // Three spawns, not seven: --no-optional-locks (skip index.lock), -uall (untracked dirs), --find-renames (renames).
-export const changedFiles = async (
-    dir: string,
-    git: GitRunner = defaultGit,
-): Promise<{
+export interface ChangedFiles {
     branch?: string;
     head?: string;
     conflicted: GitChange[];
@@ -95,7 +93,13 @@ export const changedFiles = async (
     unstaged: GitChange[];
     // Each side's blob name, for the caller counting code (code-counts.ts); free here, a spawn per file elsewhere.
     blobs: Map<string, { head?: string; index?: string }>;
-}> => {
+}
+
+// Read once per change the front counted in the checkout (git/feed): an untouched one answers from memory.
+export const changedFiles = (dir: string, git: GitRunner = defaultGit): Promise<ChangedFiles> =>
+    readOnFeed("changed-files", dir, git, () => readChangedFiles(dir, git));
+
+const readChangedFiles = async (dir: string, git: GitRunner): Promise<ChangedFiles> => {
     const { stdout } = await git(dir, ["--no-optional-locks", "status", "--porcelain=v2", "-z", "--branch", "-uall", "--find-renames"]);
     const { branch, head, conflicted, staged: stagedNames, unstaged: unstagedNames, untracked, blobs } = parseStatusV2(stdout);
     // On an unborn HEAD the empty tree stands in for a commit, so a first commit in progress reports staged files.
@@ -116,7 +120,12 @@ export const changedFiles = async (
 // Cumulative delta vs a fixed base sha: committed work since base, plus staged/unstaged, merged with untracked files.
 // The agents review reads a conversation worktree with this; `base` is where the worktree branched from.
 // `scratch` (scratch.ts) is untracked and no capture will commit it, so it is no change of this checkout's.
-export const changesAgainstBase = async (dir: string, base: string, scratch: readonly ScratchPath[] = [], git: GitRunner = defaultGit): Promise<GitChange[]> => {
+export const changesAgainstBase = (dir: string, base: string, scratch: readonly ScratchPath[] = [], git: GitRunner = defaultGit): Promise<GitChange[]> =>
+    readOnFeed(`against-base\u0000${base}\u0000${scratch.map((entry) => entry.path).join("\u0000")}`, dir, git, () =>
+        readChangesAgainstBase(dir, base, scratch, git),
+    );
+
+const readChangesAgainstBase = async (dir: string, base: string, scratch: readonly ScratchPath[], git: GitRunner): Promise<GitChange[]> => {
     // --find-renames on both passes, or a rename splits into delete+add that numstat can only answer half of.
     const { stdout } = await git(dir, ["diff", "--name-status", "-z", "--find-renames", base]);
     const changes = new Map(parseNameStatusZ(stdout).map((change) => [change.path, change]));
@@ -176,6 +185,17 @@ export const turnPathsAcross = async (root: string, repos: readonly string[], gi
     return [...new Set([...committed, ...(await dirtyPathsAcross(root, repos, git))])];
 };
 
+// Every path one repo's status names, both names of a rename: the dirty set alone, one spawn, without the two numstat
+// passes `changedFiles` spends on line counts. What the shell-edit tracker reads around every command a turn runs.
+export const statusPaths = (dir: string, git: GitRunner = defaultGit): Promise<string[]> =>
+    readOnFeed("status-paths", dir, git, () => readStatusPaths(dir, git));
+
+const readStatusPaths = async (dir: string, git: GitRunner): Promise<string[]> => {
+    const { stdout } = await git(dir, ["--no-optional-locks", "status", "--porcelain=v2", "-z", "-uall", "--find-renames"]);
+    const { conflicted, staged, unstaged, untracked } = parseStatusV2(stdout);
+    return [...[...conflicted, ...staged, ...unstaged].flatMap((change) => (change.from === undefined ? [change.path] : [change.path, change.from])), ...untracked];
+};
+
 // Every path the working trees under `root` have changed, root-relative, across the root repo and each nested one.
 // A nested repo shows as one untracked entry in the root's own status; dropped here since it answers for itself.
 // One status per repo and nothing else: paths only, so no line counts and no untracked file is read.
@@ -183,11 +203,8 @@ export const dirtyPathsAcross = async (root: string, repos: readonly string[], g
     const nested = new Set(repos.flatMap((repo) => [repo, `${repo}/`]));
     const paths = new Set<string>();
     const collect = async (dir: string, prefix: string): Promise<void> => {
-        const { stdout } = await git(dir, ["--no-optional-locks", "status", "--porcelain=v2", "-z", "-uall", "--find-renames"]).catch(() => ({ stdout: "" }));
-        const { conflicted, staged, unstaged, untracked } = parseStatusV2(stdout);
-        const named = [...conflicted, ...staged, ...unstaged].flatMap((change) => [change.path, change.from]);
-        for (const path of [...named, ...untracked]) {
-            if (path !== undefined && !(prefix === "" && nested.has(path))) {
+        for (const path of await statusPaths(dir, git).catch((): string[] => [])) {
+            if (!(prefix === "" && nested.has(path))) {
                 paths.add(prefix === "" ? path : `${prefix}/${path}`);
             }
         }

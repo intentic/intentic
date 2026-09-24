@@ -1,6 +1,5 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { forkedExec } from "@intentic/scaffold";
 import { sdk } from "../engines/claude-sdk.js";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
@@ -14,8 +13,6 @@ import type { ParkedCards } from "../agents/actor/parked-cards.js";
 // Hands the terminal back to the person, the browser handover's twin: every Bash command runs in a tmux window the
 // owner can type into, so a prompt is one keystroke from being answered. Parks only on a command already waiting; the
 // hand-back carries the pane's own recent output, bounded to a screenful.
-
-const execFileAsync = promisify(execFile);
 
 // How much of the pane rides back: enough for an install's tail, not so much it turns into a log dump.
 const HANDBACK_LINES = 200;
@@ -39,7 +36,7 @@ const asks = new Map<string, { readonly help: TerminalHelp; readonly abandon: (n
 export const liveWindow = async (session: string): Promise<{ id: string; name: string } | undefined> => {
     let stdout: string;
     try {
-        ({ stdout } = await execFileAsync("tmux", [
+        ({ stdout } = await forkedExec("tmux", [
             "list-panes",
             "-s",
             "-t",
@@ -69,7 +66,7 @@ export const liveWindow = async (session: string): Promise<{ id: string; name: s
 // An attaching client opens on the session's current window, so this puts the owner on the right one instead of
 // whatever ran last. Best-effort: a vanished window is a race the banner survives.
 export const selectWindow = async (id: string): Promise<void> => {
-    await execFileAsync("tmux", ["select-window", "-t", id]).catch(() => undefined);
+    await forkedExec("tmux", ["select-window", "-t", id]).catch(() => undefined);
 };
 
 // Raise the ask against a session, the state half the terminals list renders from.

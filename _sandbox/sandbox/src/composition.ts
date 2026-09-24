@@ -192,6 +192,7 @@ import {
 } from "./git/changes/changes-commits.js";
 import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./git/changes/changes-diff.js";
 import { commitIndex, discardPaths, stageAll, stagePaths, unstagePaths } from "./git/changes/changes-index.js";
+import { keepCodeCounts } from "./git/changes/code-counts.js";
 import { scratchOf, type ScratchScope } from "./git/changes/scratch.js";
 import { collectRepoDiff, type CommitScope, type RepoDiff } from "./git/ops/commit-message.js";
 import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./git/ops/branches.js";
@@ -245,7 +246,8 @@ import {
     spokenTranscript,
     type TranscriptAgent,
 } from "./sessions/agent-transcript.js";
-import { fileTranscriptRecord, type TranscriptPage, type TranscriptWindow } from "./sessions/transcript-record.js";
+import { BLOB_GRACE_MS, fileTranscriptRecord, type TranscriptPage, type TranscriptWindow } from "./sessions/transcript-record.js";
+import { migrateOnThreads } from "./sessions/record/record-migration.js";
 import { fileShareStore, type ShareStore } from "./share/share-store.js";
 import { createSpeech, type Speech } from "./speech/transcribe.js";
 import { purgeConversationState } from "./sessions/conversation-purge.js";
@@ -293,7 +295,8 @@ import {
     makeWorkspaceDir,
     moveWorkspacePath,
     readWorkspaceFile,
-    readWorkspaceFileBytes,
+    type OpenedWorkspaceFile,
+    openWorkspaceFile,
     readWorkspaceFileWindow,
     removeWorkspacePath,
     setWorkspaceMtime,
@@ -302,6 +305,7 @@ import {
     writeWorkspaceFile,
 } from "./workspace/files/workspace-files.js";
 import { coalescingWorkspaceTree } from "./workspace/files/workspace-tree-coalesce.js";
+import { residentWorkspaceTree } from "./workspace/watch/workspace-watch.js";
 import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/files/workspace-tree.js";
 import { heldDirReads } from "./workspace/files/dir-reads.js";
 
@@ -692,7 +696,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly write: (absPath: string, content: string | Uint8Array) => Promise<void>;
         readonly writeStream: (absPath: string, body: ReadableStream<Uint8Array>, limit: number, offset?: number) => Promise<void>;
         readonly setMtime: (absPath: string, mtimeMs: number) => Promise<void>;
-        readonly readBytes: (absPath: string) => Promise<Buffer | undefined>;
+        // A file to stream, with its size and validator; its bytes are opened only when asked for.
+        readonly open: (absPath: string) => Promise<OpenedWorkspaceFile | undefined>;
         readonly size: (absPath: string) => Promise<number | undefined>;
         readonly mkdir: (absPath: string) => Promise<void>;
         readonly remove: (absPath: string) => Promise<void>;
@@ -731,6 +736,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly transcripts: {
         // The whole record, for readers that cannot take a piece: a share, a runtime handoff, a subagent, self-recall.
         readonly read: (agent: TranscriptAgent) => Promise<TranscriptRow[]>;
+        // Every row as a page reads it: for a reader of what was said (a digest, a subject line), which the out-of-line
+        // outputs would only slow.
+        readonly rows: (agent: TranscriptAgent) => Promise<TranscriptRow[]>;
         // One page, newest turns by default, window walking back; what a chat tab opening asks for.
         readonly page: (agent: TranscriptAgent, window?: TranscriptWindow) => Promise<TranscriptPage>;
         // The calls under one tool card, which a page counts rather than carries; read on the press that opens it.
@@ -744,6 +752,10 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly count: (agent: TranscriptAgent) => Promise<number>;
         // Drops everything after the message a rewind returned to; returns how many went.
         readonly truncate: (agent: TranscriptAgent, keep: number) => Promise<number>;
+        // Converts every record still in the plain format (record/record-migration.ts); the root role's pass behind boot.
+        readonly migrate: (signal?: AbortSignal) => Promise<void>;
+        // Removes the blobs no record names but those of `gone`, once the migration has ended; never throws.
+        readonly sweep: (gone: ReadonlySet<string>) => Promise<void>;
     };
     // What was said, indexed: what the fleet filter and chat-history search answer from, written as turns settle.
     readonly saidIndex: {
@@ -812,6 +824,10 @@ const createPasskeySlice = (
 export const createServices = (config: Config, logger: Logger): Services => {
     const workspace = workspacePaths(config.workspaceRoot);
     const treeReads = heldDirReads(workspace.root);
+    // Shared by every caller that walks at once; one walk per checkout serves them all.
+    const walkedWorkspaceTree = coalescingWorkspaceTree((root: string) =>
+        walkWorkspaceTree(root, resolve(root) === resolve(workspace.root) ? { reads: treeReads } : {}),
+    );
     // AI-provider credential root; AGENT_AUTH_DIR shares it across dev sandboxes so subscription OAuth survives.
     const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/secrets/auth/");
     // Hoisted: the turn stream and the translator client both read and record into this same file.
@@ -1059,9 +1075,29 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
     // Bound once against the same registry, whose sessionIdOf reads live turn state as well as the persisted entry.
     const turnCheckpoints = sqliteTurnCheckpoints(conversationsDb);
-    const transcriptDeps: AgentTranscriptDeps = {
-        record: fileTranscriptRecord(config.historyRoot),
-        turnCheckpoints,
+    const transcriptRecord = fileTranscriptRecord(config.historyRoot);
+    const transcriptDeps: AgentTranscriptDeps = { record: transcriptRecord, turnCheckpoints };
+    // The boot's record migration while it runs: its threads write blobs no sweep may judge before it ends.
+    let migrating: Promise<unknown> = Promise.resolve();
+    const sweepBlobsNow = async (gone: ReadonlySet<string>): Promise<void> => {
+        await migrating;
+        const removed = await transcriptRecord.sweep(gone).catch((error: unknown) => {
+            logger.warn({ err: error }, "records: blob sweep failed");
+            return 0;
+        });
+        if (removed > 0) {
+            logger.info({ removed }, "records: removed blobs no record names");
+        }
+    };
+    let sweepAgain: ReturnType<typeof setTimeout> | undefined;
+    // Again once the grace has passed, for what was named too recently to judge: a record purged right after its turn.
+    const sweepRecordBlobs = async (gone: ReadonlySet<string>): Promise<void> => {
+        sweepAgain ??= setTimeout(() => {
+            sweepAgain = undefined;
+            void sweepBlobsNow(new Set());
+        }, BLOB_GRACE_MS);
+        sweepAgain.unref();
+        await sweepBlobsNow(gone);
     };
     // Phrase index on the history volume, daemon-private; a pure cache, deleted and rebuilt on a schema bump.
     const saidIndex = openSearchIndex(join(config.historyRoot, "said-index"));
@@ -1128,6 +1164,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
             backfillingSaid = false;
         }
     };
+    // A review's code-only counts outlive the process: a restart reopening every review tab reads them back.
+    keepCodeCounts(statePath(workspace.root, ".intentic/local/cache/", "code-counts.db"));
     // A full embeddings rebuild is slow; logged at a human cadence so the load has a name while it runs.
     const BACKLOG_LOG_MS = 30_000;
     // 2.5 GiB: under the child's inherited 3 GiB heap cap, so a runaway is replaced before V8 makes it a fatal error.
@@ -1472,7 +1510,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             write: writeWorkspaceFile,
             writeStream: writeWorkspaceFileStream,
             setMtime: setWorkspaceMtime,
-            readBytes: readWorkspaceFileBytes,
+            open: openWorkspaceFile,
             size: statWorkspaceFileSize,
             mkdir: makeWorkspaceDir,
             remove: removeWorkspacePath,
@@ -1486,7 +1524,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
             deriveBytes,
             status: sidecarStatus,
         },
-        workspaceTree: coalescingWorkspaceTree((root) => walkWorkspaceTree(root, resolve(root) === resolve(workspace.root) ? { reads: treeReads } : {})),
+        // The watched workspace answers from the tree its watcher holds; the walk behind it reads the workspace through
+        // what that watcher keeps current, and a conversation's own checkout straight from disk.
+        workspaceTree: (root: string) => residentWorkspaceTree(root) ?? walkedWorkspaceTree(root),
         workspaceTreeChanged: treeReads.changed,
         workspaceChildren: listWorkspaceChildren,
         iq,
@@ -1501,6 +1541,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         },
         transcripts: {
             read: (agent) => agentTranscript(transcriptDeps, agent),
+            rows: (agent) => transcriptDeps.record.rows(agent.id),
             page: (agent, window) => agentTranscriptPage(transcriptDeps, agent, window),
             toolChildren: (agent, toolId) => agentToolChildren(transcriptDeps, agent, toolId),
             lastSaid: async (agent) => (await transcriptDeps.record.findBack(agent.id, (row) => row.role === "assistant"))?.text,
@@ -1526,6 +1567,22 @@ export const createServices = (config: Config, logger: Logger): Services => {
                 }
                 return dropped;
             },
+            migrate: async (signal) => {
+                const pass = migrateOnThreads(
+                    {
+                        historyRoot: config.historyRoot,
+                        adopt: transcriptRecord.adopt,
+                        indexed: () => saidIndex.versions("conversation"),
+                        repin: (id, pinned) => saidIndex.extend(id, "conversation", pinned, []),
+                        logger,
+                    },
+                    signal,
+                );
+                // silent-catch: this pass's caller has its rejection from `await pass`; `migrating` only lets a later one wait it out.
+                migrating = pass.catch(() => undefined);
+                await pass;
+            },
+            sweep: sweepRecordBlobs,
         },
         saidIndex: {
             search: saidIndex.search,
@@ -1536,12 +1593,14 @@ export const createServices = (config: Config, logger: Logger): Services => {
         speech: createSpeech({ workspaceRoot: workspace.root, log: (message) => logger.info(`speech: ${message}`) }),
         // The index goes with the state; a purged conversation's rows would otherwise still be findable by phrase.
         purgeConversationState: async (removed, retained) => {
-            await purgeConversationState(workspace.root, config.historyRoot, removed, retained);
+            await purgeConversationState(workspace.root, config.historyRoot, transcriptRecord.stored, removed, retained);
             for (const entry of removed) {
                 await saidIndex.forget(entry.id);
                 // A gone conversation must not leave a live credential release behind it.
                 credentialGrants.forget(entry.id);
             }
+            // Detached: what the removed records alone named goes with them, never what a purge waits on.
+            void sweepRecordBlobs(new Set(removed.map((entry) => entry.id)));
         },
         // Reads live sockets through the shared scan rather than the assigned port, since a monorepo can pin its own.
         panelUpstreamOf: createPanelUpstreamResolver({

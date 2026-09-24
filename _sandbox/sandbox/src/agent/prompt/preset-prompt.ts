@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { type ClaudeSdk, claudeCliPath, sdk } from "../../engines/claude-sdk.js";
+import { type ClaudeSdk, sdk } from "../../engines/claude-sdk.js";
 import { opt } from "../../opt.js";
 import type { BuiltinPromptText } from "@intentic/sandbox-contract";
 
@@ -87,8 +87,6 @@ const capture = async (copy: ClaudeSdk, cwd: string, model: string | undefined):
         prompt: "hi",
         options: {
             cwd,
-            // The binary this copy's turns spawn, so the text captured is the text those turns get.
-            ...opt("pathToClaudeCodeExecutable", claudeCliPath()),
             ...opt("model", model),
             abortController: abort,
             // Bare Claude Code only: no memory files, skills, or tools leaking into Claude's default.

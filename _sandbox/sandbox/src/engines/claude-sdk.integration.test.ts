@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CLAUDE_SDK_EXPORTS } from "./engine-descriptors.js";
@@ -9,6 +10,16 @@ import { claudeCliPath, forgetClaudeSdk, refreshClaudeSdk, sdk } from "./claude-
 // The loader decides which SDK copy every turn runs on. A store copy is taken whole (JS + CLI binary from one prefix);
 // a bad copy (missing an export the daemon calls) is refused permanently rather than failing mid-turn.
 
+// What a stand-in store copy's `query` answers: its version, and the binary it was told to spawn.
+interface StandInSdk {
+    readonly query: (params: { readonly prompt: string }) => { readonly version: string; readonly binary: string | undefined };
+}
+
+// The image's own binary as the SDK itself resolves it from its directory, on a host whose libc is this platform's default.
+const imageBinary = createRequire(import.meta.resolve("@anthropic-ai/claude-agent-sdk")).resolve(
+    `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/claude`,
+);
+
 const writeStoreSdk = (version: string, exports: readonly string[]): void => {
     const pkgDir = join(engineVersionDir("claude", version), "node_modules", "@anthropic-ai", "claude-agent-sdk");
     const binDir = join(engineVersionDir("claude", version), "node_modules", "@anthropic-ai", `claude-agent-sdk-${process.platform}-${process.arch}`);
@@ -16,10 +27,13 @@ const writeStoreSdk = (version: string, exports: readonly string[]): void => {
     mkdirSync(binDir, { recursive: true });
     writeFileSync(join(binDir, "claude"), "#!/bin/sh\necho fixture\n", { mode: 0o755 });
     // A stand-in module; tests the loader's contract with a version, not the SDK's own behavior.
-    writeFileSync(
-        join(pkgDir, "sdk.mjs"),
-        `${exports.map((name) => `export const ${name} = ${name === "USAGE_LIMIT_ERROR_PREFIXES" ? `["fixture"]` : `() => "${version}"`};`).join("\n")}\n`,
-    );
+    const valueOf = (name: string): string => {
+        if (name === "USAGE_LIMIT_ERROR_PREFIXES") {
+            return `["fixture"]`;
+        }
+        return name === "query" ? `(params) => ({ version: "${version}", binary: params.options.pathToClaudeCodeExecutable })` : `() => "${version}"`;
+    };
+    writeFileSync(join(pkgDir, "sdk.mjs"), `${exports.map((name) => `export const ${name} = ${valueOf(name)};`).join("\n")}\n`);
 };
 
 beforeEach(() => {
@@ -29,9 +43,9 @@ beforeEach(() => {
     forgetClaudeSdk();
 });
 
-test("with an empty store the image's own copy answers, and no path is named for it", async () => {
+test("with an empty store the image's own copy answers, naming the binary installed beside it", async () => {
     expect(await refreshClaudeSdk()).toEqual({ source: "image" });
-    expect(claudeCliPath()).toBeUndefined();
+    expect(claudeCliPath()).toBe(imageBinary);
     expect(sdk().query).toBeTypeOf("function");
 });
 
@@ -41,7 +55,6 @@ test("an active store version supplies both halves from the one prefix", async (
     forgetEngineResolution();
 
     expect(await refreshClaudeSdk()).toEqual({ source: "store", version: "0.3.999" });
-    expect((sdk() as unknown as { query: () => string }).query()).toBe("0.3.999");
     expect(claudeCliPath()).toBe(
         join(
             engineVersionDir("claude", "0.3.999"),
@@ -51,6 +64,8 @@ test("an active store version supplies both halves from the one prefix", async (
             "claude",
         ),
     );
+    // Named on every session, so the SDK never runs its own pick, whose diagnostic report waits on every worker thread.
+    expect((sdk() as unknown as StandInSdk).query({ prompt: "hi" })).toEqual({ version: "0.3.999", binary: claudeCliPath() });
 });
 
 // Quarantined rather than skipped, or the same failed import would be paid and logged once per turn forever, since the
@@ -83,5 +98,5 @@ test("dropping the store's version returns the process to the image's copy", asy
     forgetEngineResolution();
 
     expect(await refreshClaudeSdk()).toEqual({ source: "image" });
-    expect(claudeCliPath()).toBeUndefined();
+    expect(claudeCliPath()).toBe(imageBinary);
 });

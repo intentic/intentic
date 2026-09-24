@@ -540,7 +540,11 @@ export class TranscriptFold {
         if (place === undefined || parent === undefined) {
             return [];
         }
+        // Only the new words travel: the card whole, children and all, would go out again for every token.
         if (event.kind === "thinking") {
+            if (event.text.length === 0) {
+                return [];
+            }
             place.tool.thinking = `${place.tool.thinking ?? ""}${event.text}`;
             return [{ op: "toolThinking", index: place.row, id: parent, text: event.text }];
         }

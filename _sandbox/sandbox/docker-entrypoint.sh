@@ -169,11 +169,14 @@ fi
 # 90% because the measured peak on a 16 GiB box was 14.45 GiB: the brake engages at the top of normal, not inside it.
 # Never overrides a value an operator already set, and every failure is silent — a cgroup that refuses the write
 # leaves a sandbox running exactly as it did before, which is the only acceptable outcome for a tuning knob.
+# Silent on refusal: stderr leaves before the write, so a file this kernel lacks (io.weight, no iocost) says nothing.
+cgroup_set() { { echo "$2" > "$1"; } 2>/dev/null || true; }
+
 memory_high_percent="${INTENTIC_MEMORY_HIGH_PERCENT:-90}"
 case "$memory_high_percent" in '' | *[!0-9]*) memory_high_percent=0 ;; esac
 if [ "$memory_high_percent" -gt 0 ] && [ "$cgroup_max" != "max" ] && [ -n "$cgroup_max" ]; then
     if [ "$(cat /sys/fs/cgroup/memory.high 2>/dev/null || echo max)" = "max" ]; then
-        echo $((cgroup_max / 100 * memory_high_percent)) > /sys/fs/cgroup/memory.high 2>/dev/null || true
+        cgroup_set /sys/fs/cgroup/memory.high $((cgroup_max / 100 * memory_high_percent))
     fi
 fi
 
@@ -188,17 +191,17 @@ if [ -w "$cgroup_root/cgroup.subtree_control" ] && grep -qw memory "$cgroup_root
     mkdir -p "$cgroup_root/daemon" "$cgroup_root/workload" 2>/dev/null || true
     # A cgroup whose children get controllers may hold no process itself, so every process here moves to a leaf first.
     while read -r pid; do
-        echo "$pid" > "$cgroup_root/workload/cgroup.procs" 2>/dev/null || true
+        cgroup_set "$cgroup_root/workload/cgroup.procs" "$pid"
     done < "$cgroup_root/cgroup.procs"
     for controller in cpu io memory; do
         if grep -qw "$controller" "$cgroup_root/cgroup.controllers"; then
-            echo "+$controller" > "$cgroup_root/cgroup.subtree_control" 2>/dev/null || true
+            cgroup_set "$cgroup_root/cgroup.subtree_control" "+$controller"
         fi
     done
-    echo $$ > "$cgroup_root/daemon/cgroup.procs" 2>/dev/null || true
-    echo 0 > "$cgroup_root/daemon/memory.swap.max" 2>/dev/null || true
-    echo 1000 > "$cgroup_root/daemon/cpu.weight" 2>/dev/null || true
-    echo "default 1000" > "$cgroup_root/daemon/io.weight" 2>/dev/null || true
+    cgroup_set "$cgroup_root/daemon/cgroup.procs" $$
+    cgroup_set "$cgroup_root/daemon/memory.swap.max" 0
+    cgroup_set "$cgroup_root/daemon/cpu.weight" 1000
+    cgroup_set "$cgroup_root/daemon/io.weight" "default 1000"
 fi
 
 # UV_THREADPOOL_SIZE: every fs, dns and zlib call the daemon makes shares libuv's pool, four threads by default, so a

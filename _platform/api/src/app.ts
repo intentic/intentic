@@ -10,6 +10,7 @@ import { type Auth, createAuth } from "./auth.js";
 import { adminUpstreamRoutes } from "./admin/admin-upstream.routes.js";
 import { localHostname } from "@intentic/sandbox-contract";
 import { CloudflareTokenError, ensureLocalDnsRecord, setAcmeChallenge } from "./sandbox/cloudflare.js";
+import { edgeCertificateFor } from "./sandbox/edge-certificate.js";
 import { ingressEnabled, sandboxHostname } from "./sandbox/reachability.js";
 import type { Config } from "./config.js";
 import { buildOrpcContext, type OrpcContext } from "./context.js";
@@ -330,6 +331,13 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             return c.json({ error: `unknown sandbox` }, 404);
         }
         return c.json(sandbox.hosted === null ? { ok: true, lane: `tunnel` } : { ok: true, lane: `hosted`, app: sandbox.hosted.appName });
+    });
+
+    // The edge's certificate, to an edge machine presenting the platform token (edge-certificate.ts).
+    app.get(`/api/ingress/certificate`, async (c) => {
+        const answer = await edgeCertificateFor(prisma, config, c.req.header(`authorization`));
+        c.header(`cache-control`, `no-store`);
+        return answer.status === 200 ? c.json(answer.body) : c.json({ error: answer.error }, answer.status);
     });
 
     // The loopback certificate's DNS relay: a same-machine sandbox still needs a real cert for 127.0.0.1.

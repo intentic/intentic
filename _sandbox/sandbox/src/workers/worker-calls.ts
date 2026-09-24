@@ -79,6 +79,57 @@ export const workerCalls = <Ask extends object, News = never>(url: URL, workerDa
     };
 };
 
+// Up to `size` threads answering one kind of call, for CPU-bound calls that are independent of each other. A call goes to
+// the thread with the fewest in flight; a thread is added only when every one is busy, so a quiet pool stays one thread.
+// A thread past the first is let go once it has sat idle `idleMs`, since each holds its own loaded state.
+export const workerPool = <Ask extends object>(url: URL, workerData: unknown, size: number, idleMs = 30_000): WorkerCalls<Ask> => {
+    interface Thread {
+        readonly calls: WorkerCalls<Ask>;
+        busy: number;
+        idle?: ReturnType<typeof setTimeout>;
+    }
+    const threads: Thread[] = [];
+    const pick = (): Thread => {
+        const least = threads.reduce<Thread | undefined>((best, thread) => (best === undefined || thread.busy < best.busy ? thread : best), undefined);
+        if (least !== undefined && (least.busy === 0 || threads.length >= size)) {
+            return least;
+        }
+        const added: Thread = { calls: workerCalls<Ask>(url, workerData), busy: 0 };
+        threads.push(added);
+        return added;
+    };
+    const rest = (thread: Thread): void => {
+        if (thread.busy > 0 || thread === threads[0]) {
+            return;
+        }
+        thread.idle = setTimeout(() => {
+            threads.splice(threads.indexOf(thread), 1);
+            void thread.calls.close();
+        }, idleMs);
+        // An idle thread's timer must never be what keeps the process alive.
+        thread.idle.unref();
+    };
+    return {
+        call: async <T>(ask: Ask): Promise<T> => {
+            const thread = pick();
+            clearTimeout(thread.idle);
+            thread.busy += 1;
+            try {
+                return await thread.calls.call<T>(ask);
+            } finally {
+                thread.busy -= 1;
+                rest(thread);
+            }
+        },
+        close: async () => {
+            for (const thread of threads) {
+                clearTimeout(thread.idle);
+            }
+            await Promise.all(threads.splice(0).map((thread) => thread.calls.close()));
+        },
+    };
+};
+
 // The worker side for a thread that answers calls as they arrive, one after another.
 export const serveCalls = <Ask extends { readonly id: number }>(port: MessagePort, answer: (ask: Ask) => Promise<unknown>): void => {
     port.on("message", (ask: Ask) => {

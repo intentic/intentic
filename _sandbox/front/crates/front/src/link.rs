@@ -26,6 +26,15 @@ pub enum Pushed {
     Tunnel(Option<front_wire::TunnelConfig>),
     /// A new Node said hello: anything the front reports must be told again.
     Hello,
+    /// Close the member's terminals, or every member's.
+    Revoke(Option<String>),
+    Watch(front_wire::WatchedCheckout),
+    Unwatch(String),
+    /// Answer with each checkout's generation, as `ToNode::Synced` carrying this id.
+    Sync {
+        id: u32,
+        dirs: Vec<String>,
+    },
 }
 
 type Pending = HashMap<u32, oneshot::Sender<Result<Answer, String>>>;
@@ -174,6 +183,18 @@ impl Link {
             }
             FromNode::Tunnel { tunnel } => {
                 let _ = self.pushed.send(Pushed::Tunnel(tunnel));
+            }
+            FromNode::Revoke { member } => {
+                let _ = self.pushed.send(Pushed::Revoke(member));
+            }
+            FromNode::Watch { checkout } => {
+                let _ = self.pushed.send(Pushed::Watch(checkout));
+            }
+            FromNode::Unwatch { dir } => {
+                let _ = self.pushed.send(Pushed::Unwatch(dir));
+            }
+            FromNode::Sync { id, dirs } => {
+                let _ = self.pushed.send(Pushed::Sync { id, dirs });
             }
             FromNode::Answer { id, answer } => self.settle(id, Ok(answer)),
             FromNode::Refused { id, message } => self.settle(id, Err(message)),

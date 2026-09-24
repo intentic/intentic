@@ -161,26 +161,15 @@
                 "default": "./dist/front/generated/wire.js"
             }
         },
-        "./ingress-protocol": {
-            "types": "./dist/protocol/ingress-protocol.d.ts",
+        "./terminal-frames": {
+            "types": "./dist/front/terminal-frames.d.ts",
             "import": {
-                "@intentic/src": "./src/protocol/ingress-protocol.ts",
-                "default": "./dist/protocol/ingress-protocol.js"
+                "@intentic/src": "./src/front/terminal-frames.ts",
+                "default": "./dist/front/terminal-frames.js"
             },
             "require": {
-                "@intentic/src": "./src/protocol/ingress-protocol.ts",
-                "default": "./dist/protocol/ingress-protocol.js"
-            }
-        },
-        "./tunnel-heartbeat": {
-            "types": "./dist/protocol/tunnel-heartbeat.d.ts",
-            "import": {
-                "@intentic/src": "./src/protocol/tunnel-heartbeat.ts",
-                "default": "./dist/protocol/tunnel-heartbeat.js"
-            },
-            "require": {
-                "@intentic/src": "./src/protocol/tunnel-heartbeat.ts",
-                "default": "./dist/protocol/tunnel-heartbeat.js"
+                "@intentic/src": "./src/front/terminal-frames.ts",
+                "default": "./dist/front/terminal-frames.js"
             }
         },
         "./share-paths": {
@@ -256,7 +245,8 @@
         "watch": "tsgo --build --watch",
         "test": "suites",
         "test:watch": "suites --watch",
-        "lock": "tsgo -b && node scripts/write-lock.mjs"
+        "lock": "tsgo -b && node scripts/write-lock.mjs",
+        "lanes": "tsgo -b && node scripts/write-lanes.mjs"
     },
     "dependencies": {
         "@intentic/base": "workspace:*",

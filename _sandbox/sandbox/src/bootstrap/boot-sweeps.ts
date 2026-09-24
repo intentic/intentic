@@ -46,6 +46,8 @@ const sweepOrphanUnits = async ({ logger, services }: BootPhase): Promise<void> 
     const swept = await services.conversationUnits.sweep(Date.now());
     if (swept.length > 0) {
         logger.info({ count: swept.length }, "conversations: swept directories no conversation owns");
+        // Their records went with them, and with those the only names some blobs had.
+        await services.transcripts.sweep(new Set());
     }
 };
 
@@ -120,6 +122,16 @@ const startContainerSweeps = (phase: BootPhase): void => {
     shutdown.push(() => clearInterval(unloadIdle));
 };
 
+// Root-scoped like the sweeps: a guest sharing the history root converts nothing.
+const migrateRecords = ({ logger, role, services, shutdown }: BootPhase): Promise<void> => {
+    if (!role.roots) {
+        return Promise.resolve();
+    }
+    const stop = new AbortController();
+    shutdown.push(() => stop.abort());
+    return services.transcripts.migrate(stop.signal).catch((error: unknown) => logger.warn({ err: error }, "records: migration failed"));
+};
+
 export const startBootSweeps = (phase: BootPhase): void => {
     const { logger, services, shutdown } = phase;
     // Detached, so a check can't cause the outage it diagnoses; after the gate, which establishes the state checked.
@@ -132,7 +144,8 @@ export const startBootSweeps = (phase: BootPhase): void => {
     const backfillSaid = (): void => {
         void services.saidIndex.backfill().catch((error: unknown) => logger.warn({ err: error }, "search index backfill failed"));
     };
-    backfillSaid();
+    // After the migration, whose every conversion moves the size the index pins a record to.
+    void migrateRecords(phase).then(backfillSaid);
     const saidSweep = setInterval(backfillSaid, 600_000);
     saidSweep.unref();
     shutdown.push(() => clearInterval(saidSweep));

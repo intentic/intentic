@@ -1,7 +1,6 @@
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { promisify } from "node:util";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { forkedExec } from "@intentic/scaffold";
 import { nsenterPrefix, type TurnPlacement } from "../../agents/worktrees/isolation.js";
 import { AGENT_SESSION_ENV } from "../../platform/boot/container-owner.js";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
@@ -26,8 +25,6 @@ import { guardSelfMatch, selfKillRefusal } from "./self-kill-guard.js";
 // Off when the wrapper isn't baked into the image (local dev, tests) or the operator opts out.
 export const tmuxRunEnabled = (): boolean => process.env["INTENTIC_AGENT_TMUX"] !== "0" && existsSync(TMUX_RUN_BIN);
 
-const execFileAsync = promisify(execFile);
-
 // A live (non-dead) pane means a command has not returned: a background job, a lingering build, or the user typing. No
 // session or no tmux server means not busy; both are `list-panes` exiting non-zero.
 export const agentShellBusy = async (sessionId: string): Promise<boolean> => {
@@ -36,7 +33,7 @@ export const agentShellBusy = async (sessionId: string): Promise<boolean> => {
         return false;
     }
     try {
-        const { stdout } = await execFileAsync("tmux", ["list-panes", "-t", `=${session}`, "-F", "#{pane_dead}"]);
+        const { stdout } = await forkedExec("tmux", ["list-panes", "-t", `=${session}`, "-F", "#{pane_dead}"]);
         return stdout.split("\n").some((pane) => pane.trim() === "0");
     } catch {
         return false;

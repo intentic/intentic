@@ -186,6 +186,8 @@ export type ConversationEvent =
 export type ConversationEffect =
     // Publishes the whole roster; readers take the state as it is by then.
     | { readonly kind: "broadcast" }
+    // The same, for a running turn's own progress, which may ride the next send a moment later instead.
+    | { readonly kind: "progress" }
     // Writes the entries to disk; what an awaited send waits on.
     | { readonly kind: "persist" }
     // Re-derives every land standing; a settled card must go out with the standing its turn left.
@@ -281,10 +283,12 @@ const withQueue = <R>(state: ConversationState, queue: TurnQueue, reply: R): Dec
         ? unchanged(state, reply)
         : { state: { ...state, queue }, effects: [...queueWrites(state.queue, queue), ...BROADCAST], reply };
 
+const PROGRESS: readonly ConversationEffect[] = [{ kind: "progress" }];
+
 // A frame that changes only the turn's runtime, and is card-visible.
 const shown = (state: ConversationState, turn: TurnRuntime): Decision<undefined> => ({
     state: { ...state, turn },
-    effects: BROADCAST,
+    effects: PROGRESS,
     reply: undefined,
 });
 

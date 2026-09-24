@@ -156,8 +156,10 @@ const suspendedNotice = (input: ConnectionNoticeInput, name: string): Connection
 };
 
 /* THE EDGE'S OWN VERDICT, which is the only thing in this file that can tell a browser's broken network from a sandbox that is simply not there. */
+// A machine the platform runs is not dialled in while it sleeps, and the wake reflex is already starting it: that is a
+// wait, with the machine's own words once it outlasts one.
 const detachedNotice = (input: ConnectionNoticeInput, name: string): ConnectionNotice | undefined =>
-    input.failure?.kind === `detached` && input.outageMs >= DETACHED_AFTER_MS
+    input.failure?.kind === `detached` && !input.hostedMachine && input.outageMs >= DETACHED_AFTER_MS
         ? {
               title: t(`sandbox.connectionNotice.isntConnected`, { name }),
               body: t(`sandbox.connectionNotice.intenticAnsweredAddressSandbox`),

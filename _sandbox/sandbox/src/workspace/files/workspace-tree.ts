@@ -13,7 +13,7 @@ import { realPathOf, realWithin, resolveWithin } from "./workspace-files-paths.j
 // Symlinks are listed as what they point at.
 
 // The eager walk's budget, spent across the WHOLE workspace and re-spent on every refetch, so it stays tight.
-const MAX_ENTRIES = 5000;
+export const MAX_ENTRIES = 5000;
 
 // One folder's own budget, for the lazy listing. Far larger than the walk's: this is one directory, asked for once when
 // someone opens it, and the views that draw it window their rows, so the count no longer decides what rendering costs.
@@ -22,7 +22,7 @@ const MAX_CHILDREN = 50_000;
 
 // Whether this entry may be descended into: a link that goes nowhere or leaves the workspace has nothing to serve.
 // A link whose target is this dir or an ancestor is a cycle; two links to the same subtree are not, both are listed.
-const descendable = (entry: Entry, realDir: string): boolean =>
+export const descendable = (entry: Entry, realDir: string): boolean =>
     entry.link === undefined || (entry.link.state === undefined && realDir !== entry.real && !realDir.startsWith(entry.real + sep));
 
 // Breadth-first, bounded by an entry budget: shallow levels complete; a dir that won't fit defers whole, not

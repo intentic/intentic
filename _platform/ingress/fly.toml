@@ -1,12 +1,12 @@
 # THE EDGE'S DEPLOYMENT, and the reason it is tracked here rather than living in somebody's shell history:
 # every value below is load-bearing, and three of them are the difference between "the workspace is quick" and
 # "the workspace hangs". The app name has to match the deployed app, because Fly injects FLY_APP_NAME and
-# src/peers.ts asks `<app>.internal` who the other machines are — that is the whole of peer discovery.
+# src/peers.rs asks `<app>.internal` who the other machines are — that is the whole of peer discovery.
 #
 # ONE MACHINE PER REGION A TUNNEL-LANE SANDBOX'S OWNER IS LIKELY TO BE IN. A sandbox on somebody's own machine
 # dials this app and is served through it, so for those the placement rule from before still holds: anycast
 # puts a browser on the machine nearest IT and a tunnel on the machine nearest the sandbox, and when the two
-# differ src/cluster.ts hands the request across. Hosted sandboxes no longer care where this app is: they are
+# differ src/cluster.rs hands the request across. Hosted sandboxes no longer care where this app is: they are
 # reached by a replay Fly's proxy carries from whichever edge answered straight to the machine, and this
 # process is consulted once per hostname per cache TTL (below). Fly's own advice for a router is "close to
 # the user", which argues for more cheap machines here, not fewer.
@@ -36,7 +36,7 @@ primary_region = "iad"
   min_machines_running = 1
 
   # THE REPLAY CACHE, and the reason a hosted sandbox's traffic does not come through this process at all.
-  # For a sandbox the platform runs on Fly, src/server.ts answers a request with `fly-replay: app=<its app>`
+  # For a sandbox the platform runs on Fly, src/edge.rs answers a request with `fly-replay: app=<its app>`
   # rather than carrying it down a tunnel, and Fly's proxy delivers the request there. This rule lets the
   # proxy REMEMBER that decision per hostname (the Host header is the key, so one sandbox's route can never
   # apply to another's name) for the TTL the response names (fly-replay-cache-ttl-secs, REPLAY_CACHE_TTL_SECS),
@@ -62,7 +62,7 @@ primary_region = "iad"
     hard_limit = 10000
 
   [[http_service.checks]]
-    # /health is answered by the process itself (src/server.ts) with no tunnel, no platform call and no disk,
+    # /health is answered by the process itself (src/edge.rs) with no tunnel, no platform call and no disk,
     # so it proves exactly what a load balancer needs to know and nothing that could fail for someone else's
     # reason. Deliberately NOT strict about tunnel count: a machine holding zero tunnels is a machine that was
     # just deployed, not a broken one.
@@ -74,8 +74,9 @@ primary_region = "iad"
 
 [[vm]]
   # The edge carries bytes and holds sockets; it parses nothing bigger than a header and stores nothing at
-  # all. Memory is the resource that matters (h2 sessions cap at MAX_SESSION_MEMORY_MB=128 each, a ceiling
-  # rather than an allocation), CPU is not — which is the opposite of the sandbox machines it serves.
+  # all. Memory is the resource that matters, bounded per tunnel by what flow control lets it buffer (the h2
+  # windows, 1 MiB a stream and 2 MiB a session, and 256 KiB in the pump), a ceiling rather than an
+  # allocation; CPU is not, which is the opposite of the sandbox machines it serves.
   size = "shared-cpu-2x"
   memory = "2gb"
 

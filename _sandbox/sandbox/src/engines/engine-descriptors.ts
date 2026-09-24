@@ -100,15 +100,17 @@ const missingExports = async (entry: string, names: readonly string[]): Promise<
     return missing.length === 0 ? undefined : `${entry} does not export ${missing.join(", ")}`;
 };
 
-// Path to the Claude CLI binary inside an installed prefix, computed rather than resolved through the loaded module so
-// the daemon can name it directly. Musl and glibc variants are both listed, so an Alpine-based image needs no change
-// here.
-const claudeBinCandidates = (prefix: string): string[] => {
+// The Claude CLI binary as a package path, one per variant this platform can run, glibc before musl; an install carries
+// the variant its libc runs, so an Alpine-based image needs no change here. Names the binary of either SDK copy.
+export const claudeBinaryNames = (): string[] => {
     const target = `${platform()}-${arch()}`;
     const suffix = platform() === "win32" ? ".exe" : "";
     const names = platform() === "linux" ? [target, `${target}-musl`] : [target];
-    return names.map((name) => join(prefix, "node_modules", "@anthropic-ai", `claude-agent-sdk-${name}`, `claude${suffix}`));
+    return names.map((name) => `@anthropic-ai/claude-agent-sdk-${name}/claude${suffix}`);
 };
+
+// Computed rather than resolved through the loaded module, so the daemon can name the binary of a store copy directly.
+const claudeBinCandidates = (prefix: string): string[] => claudeBinaryNames().map((name) => join(prefix, "node_modules", name));
 
 const claudeBin = async (prefix: string): Promise<string | undefined> => {
     for (const candidate of claudeBinCandidates(prefix)) {

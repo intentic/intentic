@@ -391,18 +391,17 @@ test("workspace.search round-trips the WorkspaceSearchResult from the resident e
 test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s escape, 413s oversize", async () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     const env = Buffer.from("SECRET=1");
+    const opened = (bytes: Buffer, size = bytes.byteLength) => ({ size, tag: `W/"${String(size)}"`, body: () => new Blob([new Uint8Array(bytes)]).stream() });
     const app = createApp(
         services({
             files: fakeFiles({
-                readBytes: async (absPath) =>
-                    absPath === `${WORKSPACE_ROOT}/app/logo.png` ? png : absPath === `${WORKSPACE_ROOT}/desired-state/.env` ? env : undefined,
-                size: async (absPath) =>
+                open: async (absPath) =>
                     absPath === `${WORKSPACE_ROOT}/app/logo.png`
-                        ? png.byteLength
+                        ? opened(png)
                         : absPath === `${WORKSPACE_ROOT}/app/huge.png`
-                          ? MAX_RAW_BYTES + 1
+                          ? opened(png, MAX_RAW_BYTES + 1)
                           : absPath === `${WORKSPACE_ROOT}/desired-state/.env`
-                            ? env.byteLength
+                            ? opened(env)
                             : undefined,
             }),
         }),
@@ -411,6 +410,12 @@ test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s e
     expect(ok.status).toBe(200);
     expect(ok.headers.get("content-type")).toBe("image/png");
     expect(new Uint8Array(await ok.arrayBuffer())).toEqual(new Uint8Array(png));
+    // Kept and revalidated: the validator it was sent with answers a re-read with a 304 and no bytes.
+    expect(ok.headers.get("cache-control")).toBe("private, no-cache");
+    const again = await app.request("/workspace/raw?path=app/logo.png", { headers: { "if-none-match": ok.headers.get("etag") ?? "" } });
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe("");
+    expect((await app.request("/workspace/raw?path=app/logo.png", { headers: { "if-none-match": `W/"stale"` } })).status).toBe(200);
     // No security floor: a former-secret file streams through like any other contained file.
     expect((await app.request("/workspace/raw?path=desired-state/.env")).status).toBe(200);
     // Oversize is refused on the size check, before the bytes are loaded.
@@ -578,8 +583,7 @@ test("the daemon's control plane is unreachable through the generic file API; it
                 writeStream: async (absPath) => {
                     writes.push(absPath);
                 },
-                size: async () => 4,
-                readBytes: async () => Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+                open: async () => ({ size: 4, tag: `W/"4"`, body: () => new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])]).stream() }),
             }),
         }),
     );
@@ -861,10 +865,12 @@ test("GET /diff/raw streams a diff side's bytes: blob for the index side, disk f
         const app = createApp(
             services({
                 workspace: workspacePaths(root),
-                // The worktree side reads through the same file service /workspace/raw uses.
+                // The worktree side opens through the same file service /workspace/raw uses.
                 files: fakeFiles({
-                    readBytes: async (absPath) => (absPath === join(root, "logo.png") ? edited : undefined),
-                    size: async (absPath) => (absPath === join(root, "logo.png") ? edited.byteLength : undefined),
+                    open: async (absPath) =>
+                        absPath === join(root, "logo.png")
+                            ? { size: edited.byteLength, tag: `W/"edited"`, body: () => new Blob([new Uint8Array(edited)]).stream() }
+                            : undefined,
                 }),
             }),
         );

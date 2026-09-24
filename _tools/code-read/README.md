@@ -11,8 +11,9 @@ flowchart LR
     walk --> web["Web app<br/>diff view, review stat"]
 ```
 
-- A review row's added and removed counts skip comments, and the diff pane beside it hides them. Both come from
-  `analyzeCode`, so the two numbers cannot disagree.
+- A review row's added and removed counts skip comments, and the diff pane beside it hides them. Both come from the
+  same walk, `analyzeCode` for the pane and `codeLineStat` for the count, which a property test holds to walking
+  both sides whole (`stat.properties.test.ts`), so the two numbers cannot disagree.
 - The app passes the grammars its own renderer already loaded. `./grammars` is for a process with no screen: it
   builds its own Shiki core on the JavaScript RegExp engine (no WASM asset) and loads each grammar once.
 - `langs.ts` is the one table of grammars the app ships, and `_editor/web`'s Vite config derives its dependency
@@ -26,7 +27,7 @@ flowchart LR
 - [src/langs.ts](src/langs.ts) — `LANGS`, the Shiki grammars the app ships, imported lazily.
 - [src/lang-for-path.ts](src/lang-for-path.ts) — which grammar a path, extension or shebang resolves to.
 - [src/analysis.ts](src/analysis.ts) — the comment-free text and import spans from one walk.
-- [src/stat.ts](src/stat.ts) — code-only added and removed counts; `rememberAnalyses` re-tokenizes only the side that moved.
+- [src/stat.ts](src/stat.ts) — code-only added and removed counts; the lines both sides share are walked once.
 - [src/grammars.ts](src/grammars.ts) — the daemon's own lazily loaded tokenizer.
 
 ## Commands

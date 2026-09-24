@@ -39,6 +39,8 @@ const QUESTION: AgentEvent = { kind: "question", requestId: "q-1", questions: []
 const PLAN: AgentEvent = { kind: "plan", requestId: "p-1", text: "# Ship the parser\n1. go" };
 const FAILED: AgentEvent = { kind: "error", message: "  the runtime\n died  " };
 const BROADCAST: ConversationEffect[] = [{ kind: "broadcast" }];
+// What a running turn's own progress raises: a broadcast that may ride the next send.
+const PROGRESS: ConversationEffect[] = [{ kind: "progress" }];
 const JOB: AgentJob = { id: "j-1", label: "pnpm build", session: "agent-c1", startedAt: 1_000 };
 const WATCH: AgentWatch = { id: "watch-k3f9", note: "CI green", intervalSeconds: 60, deadlineAt: 9_000 };
 // A person's message waiting for the next turn, and the queue holding it.
@@ -324,28 +326,28 @@ const rows: readonly Row[] = [
         from: running({}, { usage: { ...NO_USAGE, costUsd: 0.5, inputTokens: 10 } }),
         event: frame({ kind: "usage", costUsd: 0.25, inputTokens: 5, outputTokens: 7 }),
         to: running({}, { lastAt: NOW, usage: { ...NO_USAGE, costUsd: 0.75, inputTokens: 15, outputTokens: 7 } }),
-        effects: BROADCAST,
+        effects: PROGRESS,
     },
     {
         name: "half a cache pair names no deadline, so the last one stands",
         from: running({}, { promptCache: { at: 1, ttlMs: 300_000 } }),
         event: frame({ kind: "context_usage", tokens: 9_000, contextWindow: 200_000, cachedAt: 7 }),
         to: running({}, { lastAt: NOW, contextTokens: 9_000, contextWindow: 200_000, promptCache: { at: 1, ttlMs: 300_000 } }),
-        effects: BROADCAST,
+        effects: PROGRESS,
     },
     {
         name: "a whole cache pair replaces the deadline",
         from: running(),
         event: frame({ kind: "context_usage", tokens: 9_000, contextWindow: 200_000, cachedAt: 7, cacheTtlMs: 3_600_000 }),
         to: running({}, { lastAt: NOW, contextTokens: 9_000, contextWindow: 200_000, promptCache: { at: 7, ttlMs: 3_600_000 } }),
-        effects: BROADCAST,
+        effects: PROGRESS,
     },
     {
         name: "a tool call counts, and keeps the checklist step the card is showing",
         from: running({}, { activity: { tool: "Read", todo: "write tests" } }),
         event: frame({ kind: "tool_call", id: "t", name: "Edit", category: "edit", status: "in_progress", target: "src/a.ts" }),
         to: running({}, { lastAt: NOW, activity: { tool: "Edit", target: "src/a.ts", todo: "write tests" }, usage: { ...NO_USAGE, toolUses: 1 } }),
-        effects: BROADCAST,
+        effects: PROGRESS,
     },
     {
         name: "a checklist frame is the whole list, and names the step in progress",
@@ -368,21 +370,21 @@ const rows: readonly Row[] = [
                 ],
             },
         ),
-        effects: BROADCAST,
+        effects: PROGRESS,
     },
     {
         name: "a checklist with nothing in progress still leaves an activity, empty",
         from: running(),
         event: frame({ kind: "todos", items: [] }),
         to: running({}, { lastAt: NOW, activity: {}, checklist: [] }),
-        effects: BROADCAST,
+        effects: PROGRESS,
     },
     {
         name: "a child's birth is counted",
         from: running(),
         event: frame({ kind: "subagent", id: "k", subagentKind: "spawned" }),
         to: running({}, { lastAt: NOW, usage: { ...NO_USAGE, subagents: 1 } }),
-        effects: BROADCAST,
+        effects: PROGRESS,
     },
     {
         name: "a child's progress publishes nothing",
@@ -396,7 +398,7 @@ const rows: readonly Row[] = [
         from: running(),
         event: frame({ kind: "subagent_update", id: "k", status: "completed" }),
         to: running({}, { lastAt: NOW }),
-        effects: BROADCAST,
+        effects: PROGRESS,
     },
     {
         name: "a compaction is filed, not published",
@@ -430,7 +432,7 @@ const rows: readonly Row[] = [
                 failure: { kind: "limited", failure: "spent", resetsAt: 99, held: true, scheduled: true, moving: "acct-2" },
             },
         ),
-        effects: BROADCAST,
+        effects: PROGRESS,
     },
     {
         name: "an uncoded failure keeps one bounded line of its sentence",
@@ -443,7 +445,7 @@ const rows: readonly Row[] = [
                 failure: { kind: "failed", failure: "the runtime died" },
             },
         ),
-        effects: BROADCAST,
+        effects: PROGRESS,
     },
     {
         name: "a delta moves only the card's recency",

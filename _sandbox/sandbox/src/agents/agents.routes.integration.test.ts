@@ -62,6 +62,39 @@ test("an isolated turn runs in the conversation worktree, leads with the worktre
     expect(await client.agents.conflicts({ id: "conv1" })).toEqual(review.conflicts === undefined ? {} : { conflicts: review.conflicts });
 });
 
+test("readers asking for one conversation's review at once share one reading of it", async () => {
+    const base = services({
+        async *agent() {
+            yield { kind: "done" };
+        },
+    });
+    let readings = 0;
+    const counted: Services = {
+        ...base,
+        agentWorktrees: {
+            ...base.agentWorktrees,
+            // Slow enough that the second request lands while the first reading is still under way.
+            attached: async (id, repo) => {
+                await new Promise((resolve) => setTimeout(resolve, 50));
+                return base.agentWorktrees.attached(id, repo);
+            },
+            // Asked once per reading, and by nothing else a turn leaves running.
+            elsewhere: async (id, repos) => {
+                readings += 1;
+                return base.agentWorktrees.elsewhere(id, repos);
+            },
+        },
+    };
+    const client = clientFor(createApp(counted));
+    await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
+    const [first, second] = await Promise.all([client.agents.diff({ id: "conv1" }), client.agents.diff({ id: "conv1" })]);
+    expect(second).toEqual(first);
+    expect(readings).toBe(1);
+    // A reading asked after the last one finished is a reading of its own.
+    await client.agents.diff({ id: "conv1" });
+    expect(readings).toBe(2);
+});
+
 test("a workspace turn follows the same registry lifecycle without inventing a branch", async () => {
     let cwd: string | undefined;
     const snapshots: string[] = [];
@@ -365,6 +398,7 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
             // Native Codex has no Claude SDK session; the daemon transcript is the provider-neutral search source here.
             transcripts: {
                 read: async (agent) => codexSearchTranscript(agent.id),
+                rows: async (agent) => codexSearchTranscript(agent.id),
                 fork: async () => {},
                 append: async () => {},
                 // Derived from the same record `read` returns, so the fake cannot disagree with itself.
@@ -373,6 +407,8 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
                 lastSaid: async (agent) => (codexSearchTranscript(agent.id)).findLast((row) => row.role === "assistant")?.text,
                 count: async (agent) => codexSearchTranscript(agent.id).length,
                 truncate: async (agent, keep) => Math.max(0, codexSearchTranscript(agent.id).length - keep),
+                migrate: async () => {},
+                sweep: async () => {},
             },
             sessions: {
                 list: async () => [],
@@ -536,6 +572,7 @@ test("agents.place appends the user's words as the agent's, retires the session,
                 },
                 transcripts: {
                     read: async (agent) => records.get(agent.id) ?? [],
+                    rows: async (agent) => records.get(agent.id) ?? [],
                     fork: async () => {},
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
                     // Uses production's own window rule, so this test cannot pass a shape the daemon later disagrees
@@ -545,6 +582,8 @@ test("agents.place appends the user's words as the agent's, retires the session,
                     lastSaid: async (agent) => (records.get(agent.id) ?? []).findLast((row) => row.role === "assistant")?.text,
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
+                    migrate: async () => {},
+                    sweep: async () => {},
                 },
             }),
         ),
@@ -589,6 +628,7 @@ test("agents.toolChildren hands back the calls the transcript page left counted"
                 },
                 transcripts: {
                     read: async (agent) => records.get(agent.id) ?? [],
+                    rows: async (agent) => records.get(agent.id) ?? [],
                     fork: async () => {},
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
                     page: async (agent, window = {}) => transcriptPageOf(records.get(agent.id) ?? [], window),
@@ -596,6 +636,8 @@ test("agents.toolChildren hands back the calls the transcript page left counted"
                     lastSaid: async (agent) => (records.get(agent.id) ?? []).findLast((row) => row.role === "assistant")?.text,
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
+                    migrate: async () => {},
+                    sweep: async () => {},
                 },
             }),
         ),
@@ -635,6 +677,7 @@ const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]
                 },
                 transcripts: {
                     read: async (agent) => records.get(agent.id) ?? [],
+                    rows: async (agent) => records.get(agent.id) ?? [],
                     fork: async () => {},
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
                     // Uses production's own window rule, so this test cannot pass a shape the daemon later disagrees
@@ -644,6 +687,8 @@ const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]
                     lastSaid: async (agent) => (records.get(agent.id) ?? []).findLast((row) => row.role === "assistant")?.text,
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
+                    migrate: async () => {},
+                    sweep: async () => {},
                 },
                 serviceProcesses: fakeServiceProcesses(ports),
                 ...(activity !== undefined
@@ -789,6 +834,7 @@ test("agents.transcript serves the newest turns by default and walks back throug
             },
             transcripts: {
                 read: async () => record,
+                rows: async () => record,
                 fork: async () => {},
                 append: async () => {},
                 page: async (_agent, window = {}) => transcriptPageOf(record, window),
@@ -796,6 +842,8 @@ test("agents.transcript serves the newest turns by default and walks back throug
                 lastSaid: async () => record.findLast((row) => row.role === "assistant")?.text,
                 count: async () => record.length,
                 truncate: async () => 0,
+                migrate: async () => {},
+                sweep: async () => {},
             },
         }),
     );

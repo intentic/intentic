@@ -88,7 +88,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                 const url = new URL(c.req.url);
                 try {
                     // Signing in adds a credential: requires the operating tier.
-                    const caller = redeemTicket(services, url, "maintainer");
+                    const caller = redeemTicket(services, url.searchParams, "maintainer");
                     if (caller !== undefined) {
                         unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
                     }

@@ -7,6 +7,7 @@ import { defaultGit } from "@intentic/scaffold";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { MAX_FILE_DIFF_BYTES, partialDiff } from "../git/changes/diff-partial.js";
+import { checkoutGeneration } from "../git/feed/checkout-feed.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { COMMON_EXCLUDES, EMPTY_TREE, repoGitDir, syncRootExcludes } from "../workspace/layout/git-layout.js";
@@ -423,6 +424,9 @@ export const createWorkspaceHistory = (
         return next;
     };
 
+    // Each scope's change count when its last interval sweep ran: a sweep over a checkout nothing touched since is skipped.
+    const sweptAt = new Map<string, number>();
+
     const snapshotAll = async (trigger: SnapshotTrigger, label?: string): Promise<string | undefined> => {
         await mkdir(scopesRoot, { recursive: true });
         // Heal, discover, sync excludes, then snapshot, so excludes are never staler than this cycle's repo set.
@@ -436,8 +440,16 @@ export const createWorkspaceHistory = (
         let changed = false;
         for (const scope of [rootScope, ...repoIds.map(scopeOf)]) {
             try {
+                // Read before the snapshot, so a change landing during it moves the count past what is recorded.
+                const generation = await checkoutGeneration(scope.worktree);
+                if (trigger === "interval" && generation !== undefined && sweptAt.get(scope.name) === generation) {
+                    continue;
+                }
                 if ((await snapshotScope(scope, id, trigger, cleanLabel)) !== undefined) {
                     changed = true;
+                }
+                if (generation !== undefined) {
+                    sweptAt.set(scope.name, generation);
                 }
             } catch (error) {
                 logger.warn({ err: error, scope: scope.name }, "history: scope snapshot failed");

@@ -763,3 +763,16 @@ model PushDevice {
     @@index([userId])
     @@map("push_device")
 }
+
+/* The edge's wildcard certificate for one ingress zone: ordered and renewed here over DNS-01, so no two edge machines
+ * ask the CA for the same names, and fetched by every one of them with the platform token. Both keys are encrypted. */
+model EdgeCertificate {
+    zone        String   @id
+    certificate String
+    privateKey  String
+    accountKey  String
+    notAfter    DateTime
+    issuedAt    DateTime @default(now())
+
+    @@map("edge_certificate")
+}

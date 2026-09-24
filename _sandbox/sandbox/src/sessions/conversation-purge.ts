@@ -1,10 +1,10 @@
-import { readdir, readFile, rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { capabilitiesOf, isConversationId } from "@intentic/sandbox-contract";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import { claudeStoreOf } from "./session-store.js";
-import { transcriptFile } from "./transcript-record.js";
+import type { FileTranscriptRecord } from "./transcript-record.js";
 import { statePath } from "../state-paths.js";
 import { conversationsRoot } from "../store/conversation-units.js";
 
@@ -17,11 +17,15 @@ export type PurgeConversation = Pick<PersistedAgent, "id" | "profile" | "session
 
 const ATTACHMENT_DIR = /\.intentic\/records\/artifacts\/attachments\/([a-zA-Z0-9_-]+)\//g;
 
-// Only absence reads as naming nothing: a retained transcript that could not be read would orphan every upload it names.
-const rawTranscript = async (path: string): Promise<string> => (await readFile(path, "utf8").catch(undefinedIfMissing)) ?? "";
+// A record's lines as stored: an upload is named where it was attached, never only deep inside a long tool output.
+type Stored = FileTranscriptRecord["stored"];
 
-const attachmentDirs = (raw: string): Set<string> =>
-    new Set([...raw.matchAll(ATTACHMENT_DIR)].flatMap((match) => (match[1] === undefined ? [] : [match[1]])));
+const attachmentDirs = (lines: readonly string[]): Set<string> =>
+    new Set(
+        lines.flatMap((line) =>
+            line.includes("/attachments/") ? [...line.matchAll(ATTACHMENT_DIR)].flatMap((match) => (match[1] === undefined ? [] : [match[1]])) : [],
+        ),
+    );
 
 const purgeClaudeSession = async (store: string, sessionId: string): Promise<void> => {
     if (!isConversationId(sessionId)) {
@@ -40,26 +44,28 @@ const purgeClaudeSession = async (store: string, sessionId: string): Promise<voi
 };
 
 // Uploads the removed conversations' transcripts name and no other conversation's does.
-const orphanedAttachments = async (historyRoot: string, removed: readonly PurgeConversation[]): Promise<Set<string>> => {
+const orphanedAttachments = async (historyRoot: string, stored: Stored, removed: readonly PurgeConversation[]): Promise<Set<string>> => {
     const removedIds = new Set(removed.map((entry) => entry.id));
     const units = (await readdir(conversationsRoot(historyRoot), { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
-    const retainedRaw = await Promise.all(
-        units
-            .filter((unit) => unit.isDirectory() && isConversationId(unit.name) && !removedIds.has(unit.name))
-            .map((unit) => rawTranscript(transcriptFile(historyRoot, unit.name))),
-    );
-    const retained = new Set(retainedRaw.flatMap((raw) => [...attachmentDirs(raw)]));
-    const removedRaw = await Promise.all(removed.map((entry) => rawTranscript(transcriptFile(historyRoot, entry.id))));
-    return new Set(removedRaw.flatMap((raw) => [...attachmentDirs(raw)]).filter((id) => !retained.has(id)));
+    const retained = new Set<string>();
+    for (const unit of units.filter((entry) => entry.isDirectory() && isConversationId(entry.name) && !removedIds.has(entry.name))) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one record at a time, so only one is ever held in memory.
+        for (const id of attachmentDirs(await stored(unit.name))) {
+            retained.add(id);
+        }
+    }
+    const named = await Promise.all(removed.map(async (entry) => [...attachmentDirs(await stored(entry.id))]));
+    return new Set(named.flat().filter((id) => !retained.has(id)));
 };
 
 export const purgeConversationState = async (
     workspaceRoot: string,
     historyRoot: string,
+    stored: Stored,
     removed: readonly PurgeConversation[],
     retained: readonly PurgeConversation[],
 ): Promise<void> => {
-    const orphaned = await orphanedAttachments(historyRoot, removed);
+    const orphaned = await orphanedAttachments(historyRoot, stored, removed);
     const retainedSessions = new Set(retained.flatMap((entry) => (entry.sessionId === undefined ? [] : [entry.sessionId])));
     // A fenced conversation keeps its store in its own unit, which goes whole with it; only the shared store is reached
     // into, session by session.

@@ -472,6 +472,18 @@ describe("patches", () => {
         ]);
     });
 
+    // A subagent thinks a token at a time; sending the spawning card whole each time would resend every child it holds.
+    it("sends a subagent's reasoning as its words alone, onto the card that spawned it", () => {
+        const fold = new TranscriptFold(openingOf("go"));
+        fold.apply({ kind: "tool_call", id: "task-1", name: "Agent", category: "other", status: "in_progress" });
+        fold.apply({ kind: "tool_call", id: "t2", name: "Read", category: "read", status: "completed", parentToolUseId: "task-1" });
+        expect(fold.apply({ kind: "thinking", text: "the handler", parentToolUseId: "task-1" })).toEqual([
+            { op: "toolThinking", index: 1, id: "task-1", text: "the handler" },
+        ]);
+        expect(fold.apply({ kind: "thinking", text: "", parentToolUseId: "task-1" })).toEqual([]);
+        expect(fold.rows[1]?.tools?.[0]?.thinking).toBe("the handler");
+    });
+
     it("send a delegation's card without its subtree or thinking, and a client keeps the ones it has", () => {
         const events: AgentEvent[] = [
             { kind: "tool_call", id: "task-1", name: "Agent", category: "other", status: "in_progress" },

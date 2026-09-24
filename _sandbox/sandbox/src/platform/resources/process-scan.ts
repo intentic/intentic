@@ -148,7 +148,7 @@ const TRANSLATOR = /cli-proxy-api|endpoint-translator|translator-proxy/u;
 const EXTENSION = /extension-backend|extension-host|backend-host-main|backend-supervisor/u;
 const GIT = /git.*fork.*broker|(^|[ /])git([ /]|$)/u;
 const AGENT_RUNTIME = /(^|[ /])(claude|codex|opencode|gemini|kimi)([ /]|$)|agent-runtime/u;
-const TERMINAL = /(^|[ /])(tmux|bash|zsh|fish|sshd)([ :/]|$)|node-pty/u;
+const TERMINAL = /(^|[ /])(tmux|bash|zsh|fish|sshd)([ :/]|$)/u;
 
 // Order matters: an engine before what it runs, a one-shot tsgo before the language server it can also be.
 const ROLE_RULES: readonly (readonly [ProcessRole, (value: string) => boolean])[] = [

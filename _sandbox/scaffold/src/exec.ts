@@ -2,13 +2,15 @@ import { type ChildProcess, execFile, fork } from "node:child_process";
 import { existsSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { promisify } from "node:util";
-import type { ForkRequest, ForkResponse } from "./git-forker.js";
+import type { ForkRequest, ForkResponse } from "./forker.js";
 
 // Import this rather than re-wrapping execFile elsewhere.
 export const exec = promisify(execFile);
 
-// core.fileMode=false ignores upload-flattened permissions; --no-optional-locks keeps status off index.lock.
-export const GIT_GLOBAL_ARGS = ["--no-optional-locks", "-c", "core.fileMode=false"] as const;
+// core.fileMode=false ignores upload-flattened permissions.
+const GIT_CONFIG_ARGS = ["-c", "core.fileMode=false"] as const;
+// --no-optional-locks keeps status off index.lock.
+export const GIT_GLOBAL_ARGS = ["--no-optional-locks", ...GIT_CONFIG_ARGS] as const;
 
 // Filenames after the last `--` get a `:(literal)` prefix so glob characters in real names (`[slug]`) cannot match
 // siblings; PLUMBING_PATHS verbs take literal filenames already and are excluded.
@@ -50,11 +52,11 @@ export const gitBytes = async (dir: string, args: readonly string[], maxBytes: n
     return stdout;
 };
 
-// A resident child is forked once at startup; every later git forks from it instead of this process, whose fork cost
-// scales with its own resident size. Falls back to exec'ing git directly if the child is unavailable or dies.
-type GitOutput = { readonly stdout: string; readonly stderr: string };
+// A resident child is forked once at startup; every later git and tmux forks from it instead of this process, whose
+// fork cost scales with its own resident size. Falls back to exec'ing directly if the child is unavailable or dies.
+type ForkedOutput = { readonly stdout: string; readonly stderr: string };
 // Cost of one invocation, not what the caller waited; internal only, GitRunner exposes just stdout/stderr.
-type GitRun = GitOutput & { readonly execMs: number };
+type GitRun = ForkedOutput & { readonly execMs: number };
 const inFlight = new Map<number, { readonly resolve: (value: GitRun) => void; readonly reject: (error: unknown) => void }>();
 let forker: ChildProcess | undefined;
 let forkerUnavailable = false;
@@ -84,10 +86,10 @@ const failedExecMs = (error: unknown): number => {
     return typeof reported === "number" ? reported : 0;
 };
 
-// May not exist under the `src` export condition; checked once so a dead child isn't forked on every git call.
-const forkerModule = new URL("./git-forker.js", import.meta.url);
+// May not exist under the `src` export condition; checked once so a dead child isn't forked on every call.
+const forkerModule = new URL("./forker.js", import.meta.url);
 
-const gitForker = (): ChildProcess | undefined => {
+const residentForker = (): ChildProcess | undefined => {
     if (forker !== undefined || forkerUnavailable) {
         return forker;
     }
@@ -116,10 +118,10 @@ const gitForker = (): ChildProcess | undefined => {
         const orphaned = [...inFlight.values()];
         inFlight.clear();
         for (const waiting of orphaned) {
-            waiting.reject(new Error("git forker exited"));
+            waiting.reject(new Error("the forker exited"));
         }
     });
-    // A fork that cannot start is not a git failure; every call falls back to exec'ing git directly.
+    // A fork that cannot start is not the command's failure; every call falls back to exec'ing directly.
     started.on("error", () => {
         forkerUnavailable = true;
     });
@@ -127,6 +129,13 @@ const gitForker = (): ChildProcess | undefined => {
     started.channel?.unref();
     forker = started;
     return forker;
+};
+
+// Any other command run on a timer (tmux, a status probe), forked from the same child as git and for the same reason;
+// resolves and rejects in execFile's shapes.
+export const forkedExec = async (command: string, args: readonly string[], options: Partial<ForkedOptions> = {}): Promise<ForkedOutput> => {
+    const { stdout, stderr } = await runForked(command, args, { ...options, maxBuffer: options.maxBuffer ?? MAX_GIT_OUTPUT });
+    return { stdout, stderr };
 };
 
 // Bulk-only memory cap, not a scheduling one; interactive git is never queued, so agents can't slow the panel.
@@ -185,15 +194,29 @@ export const gitSpawnStats = (): { readonly activeBulk: number; readonly queuedB
     bulkSlots: BULK_SLOTS,
 });
 
-const runGit = async (command: string, args: readonly string[], env: Readonly<Record<string, string>> | undefined): Promise<GitRun> => {
+interface ForkedOptions {
+    readonly maxBuffer: number;
+    // Milliseconds before the command is killed; absent is no limit.
+    readonly timeout?: number;
+    readonly cwd?: string;
+    // Merged over the process's own environment, never in place of it.
+    readonly env?: Readonly<Record<string, string>>;
+}
+
+const runForked = async (command: string, args: readonly string[], options: ForkedOptions): Promise<GitRun> => {
     // Merged, not replaced: execFile's `env` replaces the whole environment, and git needs PATH/HOME too.
-    const resolved = env === undefined ? undefined : { ...process.env, ...env };
-    const channel = gitForker();
+    const resolved = options.env === undefined ? undefined : { ...process.env, ...options.env };
+    const limits = {
+        maxBuffer: options.maxBuffer,
+        ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
+        ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+    };
+    const channel = residentForker();
     if (channel === undefined) {
-        // No forker: this process execs git directly, so there is one clock, not the two the forked path needs.
+        // No forker: this process execs directly, so there is one clock, not the two the forked path needs.
         const from = process.hrtime.bigint();
         try {
-            const output = await exec(command, [...args], { maxBuffer: MAX_GIT_OUTPUT, ...(resolved !== undefined ? { env: resolved } : {}) });
+            const output = await exec(command, [...args], { ...limits, ...(resolved !== undefined ? { env: resolved } : {}) });
             return { ...output, execMs: Number(process.hrtime.bigint() - from) / 1e6 };
         } catch (error) {
             // Guards a non-object throw, which is rethrown untouched instead of being boxed.
@@ -205,7 +228,7 @@ const runGit = async (command: string, args: readonly string[], env: Readonly<Re
     }
     const id = nextRequestId;
     nextRequestId += 1;
-    const request: ForkRequest = { id, command, args, maxBuffer: MAX_GIT_OUTPUT, ...(resolved !== undefined ? { env: resolved } : {}) };
+    const request: ForkRequest = { id, command, args, ...limits, ...(resolved !== undefined ? { env: resolved } : {}) };
     return await new Promise<GitRun>((resolve, reject) => {
         inFlight.set(id, { resolve, reject });
         channel.channel?.ref();
@@ -228,12 +251,13 @@ const runGitSlotted = async (
     bulk: boolean,
     unbounded: boolean,
 ): Promise<GitRun> => {
+    const options = { maxBuffer: MAX_GIT_OUTPUT, ...(env !== undefined ? { env } : {}) };
     if (!bulk || unbounded) {
-        return await runGit(command, args, env);
+        return await runForked(command, args, options);
     }
     await acquireBulk();
     try {
-        return await runGit(command, args, env);
+        return await runForked(command, args, options);
     } finally {
         releaseBulk();
     }
@@ -265,51 +289,122 @@ export const observeGitCommands = (observer: (observation: GitObservation) => vo
     gitObserver = observer;
 };
 
+// A settle's status in flight, per checkout: the daemon's own git there waits it out rather than meeting its index.lock.
+const settling = new Map<string, Promise<unknown>>();
+// The daemon's own git running per checkout; a settle never starts over it.
+const runningIn = new Map<string, number>();
+// Every git this process ran since it started, by subcommand: the rate a resident git service is measured against.
+const runsBySubcommand = new Map<string, number>();
+
+export const gitRunCounts = (): Readonly<Record<string, number>> => Object.fromEntries(runsBySubcommand);
+
+interface RunnerShape {
+    readonly bulk: boolean;
+    readonly globals: readonly string[];
+    // Whether a run waits out a settle in its checkout; the settle's own run is the one that must not.
+    readonly gated: boolean;
+}
+
 const gitRunnerVia =
-    (argv: readonly string[], bulk: boolean): GitRunner =>
+    (argv: readonly string[], { bulk, globals, gated }: RunnerShape): GitRunner =>
     async (dir, args, env) => {
-        const [command, ...rest] = argv;
-        // Classified from the caller's args, not the full command: politeGit's nice/ionice prefix isn't a verb.
-        const unbounded = UNBOUNDED.has(subcommandOf(args) ?? "");
-        const from = process.hrtime.bigint();
-        // Summed across attempts, not overwritten by the last one; each retry is a real git run.
-        let execMs = 0;
-        // Called on success and on throw; a failing git's duration matters as much as a succeeding one's.
-        const observe = (attempts: number, failed: boolean): void => {
-            gitObserver?.({
-                dir,
-                args,
-                ms: Number(process.hrtime.bigint() - from) / 1e6,
-                execMs,
-                attempts,
-                failed,
-                forked: forker !== undefined,
-                queueDepth: waitingBulk.length,
-            });
-        };
-        for (let attempt = 1; ; attempt += 1) {
-            try {
-                const output = await runGitSlotted(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...literalPathspecs(args)], env, bulk, unbounded);
-                execMs += output.execMs;
-                observe(attempt, false);
-                return { stdout: output.stdout, stderr: output.stderr };
-            } catch (error) {
-                execMs += failedExecMs(error);
-                if (attempt >= RETRY_ATTEMPTS || !isLockContention(error)) {
-                    observe(attempt, true);
-                    throw error;
-                }
-                // Outside the bulk slot (already released); a caller backing off index.lock isn't using the machine.
-                await new Promise((resolve) => setTimeout(resolve, attempt * attempt * 50));
+        const pending = gated ? settling.get(dir) : undefined;
+        if (pending !== undefined) {
+            await pending;
+        }
+        runningIn.set(dir, (runningIn.get(dir) ?? 0) + 1);
+        const subcommand = subcommandOf(args) ?? "?";
+        runsBySubcommand.set(subcommand, (runsBySubcommand.get(subcommand) ?? 0) + 1);
+        try {
+            return await runGit(argv, bulk, globals, dir, args, env);
+        } finally {
+            const left = (runningIn.get(dir) ?? 1) - 1;
+            if (left === 0) {
+                runningIn.delete(dir);
+            } else {
+                runningIn.set(dir, left);
             }
         }
     };
 
-export const defaultGit: GitRunner = gitRunnerVia(["git"], false);
+const runGit = async (
+    argv: readonly string[],
+    bulk: boolean,
+    globals: readonly string[],
+    dir: string,
+    args: readonly string[],
+    env: Readonly<Record<string, string>> | undefined,
+): Promise<{ readonly stdout: string; readonly stderr: string }> => {
+    const [command, ...rest] = argv;
+    // Classified from the caller's args, not the full command: politeGit's nice/ionice prefix isn't a verb.
+    const unbounded = UNBOUNDED.has(subcommandOf(args) ?? "");
+    const from = process.hrtime.bigint();
+    // Summed across attempts, not overwritten by the last one; each retry is a real git run.
+    let execMs = 0;
+    // Called on success and on throw; a failing git's duration matters as much as a succeeding one's.
+    const observe = (attempts: number, failed: boolean): void => {
+        gitObserver?.({
+            dir,
+            args,
+            ms: Number(process.hrtime.bigint() - from) / 1e6,
+            execMs,
+            attempts,
+            failed,
+            forked: forker !== undefined,
+            queueDepth: waitingBulk.length,
+        });
+    };
+    for (let attempt = 1; ; attempt += 1) {
+        try {
+            const output = await runGitSlotted(command!, [...rest, ...globals, "-C", dir, ...literalPathspecs(args)], env, bulk, unbounded);
+            execMs += output.execMs;
+            observe(attempt, false);
+            return { stdout: output.stdout, stderr: output.stderr };
+        } catch (error) {
+            execMs += failedExecMs(error);
+            if (attempt >= RETRY_ATTEMPTS || !isLockContention(error)) {
+                observe(attempt, true);
+                throw error;
+            }
+            // Outside the bulk slot (already released); a caller backing off index.lock isn't using the machine.
+            await new Promise((resolve) => setTimeout(resolve, attempt * attempt * 50));
+        }
+    }
+};
+
+export const defaultGit: GitRunner = gitRunnerVia(["git"], { bulk: false, globals: GIT_GLOBAL_ARGS, gated: true });
 
 // CPU/IO demoted (nice +10, ionice best-effort) for bulk agent work; its ENOENT fallback is bulk-classed too.
-const nicedGit: GitRunner = gitRunnerVia(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7", "git"], true);
-const plainBulkGit: GitRunner = gitRunnerVia(["git"], true);
+const nicedGit: GitRunner = gitRunnerVia(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7", "git"], { bulk: true, globals: GIT_GLOBAL_ARGS, gated: true });
+const plainBulkGit: GitRunner = gitRunnerVia(["git"], { bulk: true, globals: GIT_GLOBAL_ARGS, gated: true });
+
+// A status that may write back the index it refreshed, as a plain `git status` does, holding index.lock for the write.
+const settlingGit: GitRunner = gitRunnerVia(["git"], { bulk: false, globals: GIT_CONFIG_ARGS, gated: false });
+
+// Past the second boundary, for the kernel's coarse file clock.
+const SETTLE_MARGIN_MS = 50;
+
+/**
+ * Git compares an entry's mtime with its index file's own in whole seconds: a file written in the second its index
+ * was is "racily clean", and every status re-reads it until the index is written again from a later second. A fresh
+ * checkout holds thousands (1,824 in this repository: 357 ms a status, against 34 ms settled), and the daemon's own
+ * `--no-optional-locks` statuses never write. This is one status that may, run once the current second is over; it
+ * answers false, running nothing, when the daemon's own git is busy in that checkout.
+ */
+export const settleIndex = async (dir: string): Promise<boolean> => {
+    await new Promise((resolve) => setTimeout(resolve, 1000 - (Date.now() % 1000) + SETTLE_MARGIN_MS));
+    if (runningIn.has(dir) || settling.has(dir)) {
+        return false;
+    }
+    const run = settlingGit(dir, ["status", "--porcelain", "-uno"]);
+    const done = run.then(
+        () => settling.delete(dir),
+        () => settling.delete(dir),
+    );
+    settling.set(dir, done);
+    await run;
+    return true;
+};
 
 // Falls back to plain bulk git if nice/ionice are missing (e.g. macOS dev); failing to start is worse than competing.
 export const politeGit: GitRunner = async (dir, args, env) => {

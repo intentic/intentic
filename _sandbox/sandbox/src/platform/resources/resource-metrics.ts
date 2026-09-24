@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { monitorEventLoopDelay, performance, PerformanceObserver } from "node:perf_hooks";
 import { getHeapSpaceStatistics, getHeapStatistics } from "node:v8";
 import { PROCESS_ROLES, type ProcessRole } from "@intentic/sandbox-contract";
-import { gitSpawnStats } from "@intentic/scaffold";
+import { gitRunCounts, gitSpawnStats } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { logsRoot } from "../../logs/log-files.js";
 import { flatKeyed, readCgroup, readText } from "./cgroup.js";
@@ -324,6 +324,8 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
                 handles: { openFds, threads: selfStatus?.threads, activeResources: activeResources() },
                 // queuedBulk > 0 means checkouts are queued, not slow; byRole.git only counts running processes.
                 gitSpawn: gitSpawnStats(),
+                // Cumulative since boot, by subcommand; a rate is the difference between two samples.
+                gitRuns: gitRunCounts(),
             },
             system,
             processes: { total: processes.total, descendants: processes.descendants, byRole: processes.byRole, top: processes.top },

@@ -1,6 +1,6 @@
-// Two globals every browser call resolves at call time: `fetch` covers the platform, the daemon and the typed client;
-// `WebSocket` covers the terminal and browser view. No app module knows the demo exists. Both demo origins sit under
-// the reserved `.invalid` TLD, so an escaped request dies rather than reaching a real host.
+// Globals every browser call resolves at call time: `fetch` covers the platform, the daemon and the typed client;
+// `WebSocket` the terminal and browser view, `WebTransport` the terminal's session. No app module knows the demo exists.
+// Both demo origins sit under the reserved `.invalid` TLD, so an escaped request dies rather than reaching a real host.
 
 // Platform origin; useApi appends /rpc, better-auth appends /api/auth.
 const DEMO_API_ORIGIN = `https://api.demo.invalid`;
@@ -161,6 +161,23 @@ export const installWebSocket = (session: (url: URL) => DemoSession | undefined)
             const url = urlOf(args[0]);
             const replay = url?.origin === wsOrigin ? session(url) : undefined;
             return replay === undefined ? new target(...args) : new DemoSocket(String(args[0]), replay);
+        },
+    });
+};
+
+/** Claims the demo daemon's WebTransport sessions as ones that never open, so its terminals take the socket above. */
+export const installWebTransport = (): void => {
+    const Native = globalThis.WebTransport;
+    if (Native === undefined) {
+        return;
+    }
+    globalThis.WebTransport = new Proxy(Native, {
+        construct: (target, args: [string | URL, WebTransportOptions?]) => {
+            if (urlOf(args[0])?.hostname.endsWith(`demo.invalid`) !== true) {
+                return new target(...args);
+            }
+            const never = Promise.reject(new Error(`the demo serves terminals over its socket shim`));
+            return { ready: never, closed: never, close: () => undefined };
         },
     });
 };

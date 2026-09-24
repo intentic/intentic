@@ -20,6 +20,8 @@ export const JOB_HOSTED_METER = 7;
 export const JOB_HOSTED_ABUSE = 8;
 // Destroys the half-built machines and volumes a dead migration left; two replicas would race each other's deletes.
 export const JOB_HOSTED_MIGRATE = 9;
+// Orders the edge's certificate; two replicas would place two orders against the CA's weekly duplicate limit.
+export const JOB_EDGE_CERTIFICATE = 10;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
     const client = new Client({ connectionString: config.database.url });

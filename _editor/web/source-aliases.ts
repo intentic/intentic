@@ -162,6 +162,9 @@ export const sourceAliases = (): Record<string, string> => ({
     // projections (the usage window's day arithmetic, the automations clock) whose unit tests run without a DOM, and
     // because the app's very first sandbox call — offering this browser's zone — must not wait on the whole contract.
     "@intentic/sandbox-contract/time": fromRoot("_shared/sandbox-contract/src/time/zone.ts"),
+    // The terminal channel's binary frame codec and its upgrade paths, shared with the daemon's end of the socket; off
+    // the barrel so the terminal's unit tests read the codec without the whole contract.
+    "@intentic/sandbox-contract/terminal-frames": fromRoot("_shared/sandbox-contract/src/front/terminal-frames.ts"),
     "@intentic/sandbox-contract": fromRoot("_shared/sandbox-contract/src/index.ts"),
     // Extension-registry file format, imported by the wire contract's schemas.ts; without this alias the dev server
     // resolves to a `dist/` that may not exist yet.

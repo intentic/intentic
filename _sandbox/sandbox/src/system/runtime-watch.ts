@@ -1,13 +1,10 @@
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import type { RuntimeDomain } from "@intentic/sandbox-contract";
+import { forkedExec } from "@intentic/scaffold";
 import { onRuntimeChange, publishRuntimeChange } from "../seams/runtime-feed.js";
 import { foreground, PANE_FORMAT, paneStates } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
-
-const execFileAsync = promisify(execFile);
 
 // Push feed for state with no file on disk: tmux sessions, panel servers, sockets, browsers, child turns.
 // - announced: the daemon calls publishRuntimeChange itself when it changes something (seams/runtime-feed.ts)
@@ -49,7 +46,7 @@ export const paneFingerprint = (stdout: string): string =>
 // One exec for the whole tmux server. No server yet means no sessions, which is a fingerprint like any other.
 const tmuxFingerprint = async (): Promise<string> => {
     try {
-        const { stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]);
+        const { stdout } = await forkedExec("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]);
         return paneFingerprint(stdout);
     } catch {
         return "";

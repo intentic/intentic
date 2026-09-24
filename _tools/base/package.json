@@ -50,6 +50,17 @@
                 "default": "./dist/outside-text.js"
             }
         },
+        "./acme": {
+            "types": "./dist/acme.d.ts",
+            "import": {
+                "@intentic/src": "./src/acme.ts",
+                "default": "./dist/acme.js"
+            },
+            "require": {
+                "@intentic/src": "./src/acme.ts",
+                "default": "./dist/acme.js"
+            }
+        },
         "./async": {
             "types": "./dist/async.d.ts",
             "import": {

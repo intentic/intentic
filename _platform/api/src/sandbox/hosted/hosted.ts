@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { FREE_TIER, type HostedShape, type HostedTierId } from "@intentic/constants";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
+import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT } from "@intentic/sandbox-contract/ingress-contract";
 import { ENV_PLATFORM_PUBLIC_KEY, publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
@@ -10,7 +11,7 @@ import type { Config } from "../../config.js";
 import { decryptSecret } from "../../crypto.js";
 import { connectTokenIdentity } from "../mint-sandbox.js";
 import { definitionSeedFor, ENV_DEFINITION_SEED } from "../profiles/profiles.js";
-import { ingressEnabled, sandboxHostname } from "../reachability.js";
+import { grantFor, ingressEnabled, sandboxHostname } from "../reachability.js";
 import {
     createApp,
     createMachine,
@@ -119,9 +120,9 @@ export interface HostedProvisionArgs {
     readonly profile?: string | undefined;
 }
 
-// Single composer for both cold-provision and pool-claim configs, so the two origins cannot drift; a hosted machine's
-// env carries no tunnel grant or edge address. Overlay is the only thing that varies; `null` on both means the stock
-// image.
+// Single composer for both cold-provision and pool-claim configs, so the two origins cannot drift. A hosted machine
+// dials the edge's tunnel like every sandbox, and keeps the front door a replay lands on for as long as the edge sits
+// behind Fly's HTTP proxy. Overlay is the only thing that varies; `null` on both means the stock image.
 export interface HostedOverlay {
     readonly image: string | null;
     readonly environmentHash: string | null;
@@ -155,6 +156,8 @@ export const hostedMachineConfig = (
                 [`OWNER_EMAIL`, args.ownerEmail],
                 [`WEB_ORIGIN`, config.webOrigin],
                 [`SANDBOX_PUBLIC_URL`, `https://${hostname}`],
+                [ENV_INGRESS_URL, config.ingress.url],
+                [ENV_SANDBOX_GRANT, grantFor(config, args.connectToken)],
                 [`PLATFORM_URL`, config.api.url],
                 // Public signing key: lets this machine's daemon accept the platform's owner ticket without a second
                 // sign-in.

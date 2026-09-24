@@ -92,19 +92,21 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
             return c.json({ error: scoped.error }, scoped.status);
         }
         const target = scoped.target;
-        const size = await services.files.size(target);
-        if (size === undefined) {
+        const file = await services.files.open(target);
+        if (file === undefined) {
             return c.json({ error: "not found" }, 404);
         }
-        if (size > MAX_RAW_BYTES) {
+        if (file.size > MAX_RAW_BYTES) {
             return c.json({ error: "file too large" }, 413);
         }
-        const bytes = await services.files.readBytes(target);
-        if (bytes === undefined) {
-            return c.json({ error: "not found" }, 404);
+        // Kept and revalidated: a file read again unchanged costs a 304, not its bytes over the tunnel a second time.
+        const headers = { "Content-Type": contentTypeForPath(target), ETag: file.tag, "Cache-Control": "private, no-cache" };
+        const held = (c.req.header("if-none-match") ?? "").split(",").map((tag) => tag.trim());
+        if (held.includes(file.tag)) {
+            return c.body(null, 304, headers);
         }
-        // Buffer's backing is ArrayBufferLike, which Hono's body type rejects; copy is cheap under MAX_RAW_BYTES.
-        return c.body(new Uint8Array(bytes), 200, { "Content-Type": contentTypeForPath(target), "Content-Length": String(bytes.byteLength) });
+        // Streamed off disk rather than read whole first: the first bytes leave at once, and no copy sits on the heap.
+        return c.body(file.body(), 200, { ...headers, "Content-Length": String(file.size) });
     },
 
     // GET /workspace/thumb: a picture re-encoded for how it is drawn (`size`: tile, strip or view), never the original. The

@@ -64,8 +64,8 @@ const daemonOn = async () => {
         // Neither path under test reaches a checkout: a workspace conversation owns none.
         agentWorktrees: { remove: async () => undefined } as unknown as AgentWorktrees,
         logger,
-        purgeConversationState: (removed: Parameters<typeof purgeConversationState>[2], retained: Parameters<typeof purgeConversationState>[3]) =>
-            purgeConversationState(workspaceRoot, historyRoot, removed, retained),
+        purgeConversationState: (removed: Parameters<typeof purgeConversationState>[3], retained: Parameters<typeof purgeConversationState>[4]) =>
+            purgeConversationState(workspaceRoot, historyRoot, fileTranscriptRecord(historyRoot).stored, removed, retained),
     };
     return { historyRoot, db, agents, conversations, deps };
 };
@@ -119,7 +119,7 @@ test("a discarded conversation leaves nothing on the history volume and no row n
         "conversations/kept-1/sessions/projects",
         "conversations/kept-1/sessions/projects/session.jsonl",
         "conversations/kept-1/system-prompt.json",
-        "conversations/kept-1/transcript.jsonl",
+        "conversations/kept-1/transcript.jsonl.zst",
     ]);
     expect((await sqliteTurnJournal(daemon.db).list()).map((row) => (row.kind === "turn" ? row.turn.conversationId : row.automationId))).toEqual([
         "kept-1",

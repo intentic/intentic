@@ -45,7 +45,8 @@ describe(`entrypoint memory sizing`, () => {
 /* The daemon's own cgroup, run against a staged root: every process of the root moves to `workload` first, controllers
    open for the children, and the daemon's leaf keeps its memory resident at a larger cpu and io weight. */
 describe(`entrypoint daemon cgroup`, () => {
-    const setup = entrypoint.slice(entrypoint.indexOf("cgroup_root=/sys/fs/cgroup"), entrypoint.indexOf("# UV_THREADPOOL_SIZE"));
+    const helper = entrypoint.match(/^cgroup_set\(\) .*$/m)?.[0] ?? "";
+    const setup = `${helper}\n${entrypoint.slice(entrypoint.indexOf("cgroup_root=/sys/fs/cgroup"), entrypoint.indexOf("# UV_THREADPOOL_SIZE"))}`;
     const stage = (controllers: string): string => {
         const root = mkdtempSync(join(tmpdir(), "entrypoint-cgroup-"));
         writeFileSync(join(root, "cgroup.controllers"), `${controllers}\n`);
@@ -53,9 +54,10 @@ describe(`entrypoint daemon cgroup`, () => {
         writeFileSync(join(root, "cgroup.procs"), "1\n7\n");
         return root;
     };
-    const run = (root: string): void => {
+    // Answers what the setup printed: the container log it would land in.
+    const run = (root: string): string => {
         const script = setup.replaceAll("/sys/fs/cgroup", root);
-        spawnSync("sh", ["-ec", script], { encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } });
+        return spawnSync("sh", ["-ec", script], { encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } }).stderr;
     };
     const read = (path: string): string => readFileSync(path, "utf8").trim();
 
@@ -67,6 +69,15 @@ describe(`entrypoint daemon cgroup`, () => {
         expect(read(join(root, "daemon", "memory.swap.max"))).toBe("0");
         expect(read(join(root, "daemon", "cpu.weight"))).toBe("1000");
         expect(read(join(root, "daemon", "io.weight"))).toBe("default 1000");
+    });
+
+    // A kernel without iocost has no io.weight: the daemon keeps every other knob, and the log hears nothing of it.
+    it(`keeps the other knobs, silently, where the kernel lacks one`, () => {
+        const root = stage("cpuset cpu io memory pids");
+        mkdirSync(join(root, "daemon", "io.weight"), { recursive: true });
+        expect(run(root)).toBe("");
+        expect(read(join(root, "daemon", "memory.swap.max"))).toBe("0");
+        expect(read(join(root, "daemon", "cpu.weight"))).toBe("1000");
     });
 
     it(`touches nothing where cgroup2 offers no memory controller`, () => {

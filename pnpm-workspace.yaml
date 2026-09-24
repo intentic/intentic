@@ -211,7 +211,6 @@ allowBuilds:
   esbuild: true
   lmdb: false
   msgpackr-extract: false
-  node-pty: true
   onnxruntime-node: false
   prisma: true
   protobufjs: false
@@ -373,7 +372,6 @@ catalog:
   mediaplex: 1.0.0
   mermaid: 11.16.1
   monaco-editor-core: 0.55.1
-  node-pty: 1.1.0
   oxlint: 1.76.0
   # Cyclomatic AND cognitive complexity as one rule. Cognitive is the metric worth having: it charges nothing
   # for flat dispatch, compounds for nesting, and names the lines that cost the most, which is what makes the

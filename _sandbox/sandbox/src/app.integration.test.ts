@@ -36,7 +36,9 @@ test("the app registers exactly the declared raw routes, in declaration order, a
     const registered = createApp(services()).routes.map((route) => `${route.method} ${route.path}`);
     // Everything before the first route is middleware, registered on `*`.
     const routes = registered.slice(registered.findIndex((route) => route !== "ALL /*"));
-    expect(routes).toEqual([...RAW_ROUTE_LIST.map((route) => `${route.method} ${route.path.replaceAll(/\{([^}]+)\}/gu, ":$1")}`), "ALL /*"]);
+    // A route the front serves itself (RouteMeta `front`) never reaches the daemon, so the daemon registers none.
+    const daemonServed = RAW_ROUTE_LIST.filter((route) => route.meta.front !== true);
+    expect(routes).toEqual([...daemonServed.map((route) => `${route.method} ${route.path.replaceAll(/\{([^}]+)\}/gu, ":$1")}`), "ALL /*"]);
 });
 
 test("GET /health reports ok, and names the sandbox so a loopback probe can tell WHICH daemon answered", async () => {
@@ -1022,6 +1024,7 @@ test("agent.run reopens a conversation whose session the sandbox never stored, s
                 },
                 transcripts: {
                     read: async () => recorded,
+                    rows: async () => recorded,
                     fork: async () => {},
                     append: async () => {},
                     page: async (_agent, window = {}) => transcriptPageOf(recorded, window),
@@ -1029,6 +1032,8 @@ test("agent.run reopens a conversation whose session the sandbox never stored, s
                     lastSaid: async () => recorded.findLast((row) => row.role === "assistant")?.text,
                     count: async () => recorded.length,
                     truncate: async () => 0,
+                    migrate: async () => {},
+                    sweep: async () => {},
                 },
             }),
         ),
@@ -1059,6 +1064,7 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
                 },
                 transcripts: {
                     read: async () => recorded,
+                    rows: async () => recorded,
                     fork: async () => {},
                     append: async () => {},
                     page: async (_agent, window = {}) => transcriptPageOf(recorded, window),
@@ -1066,6 +1072,8 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
                     lastSaid: async () => recorded.findLast((row) => row.role === "assistant")?.text,
                     count: async () => recorded.length,
                     truncate: async () => 0,
+                    migrate: async () => {},
+                    sweep: async () => {},
                 },
             }),
         ),
@@ -1096,6 +1104,7 @@ test("agent.resume sends a turn the door turned away without seeding its refused
         },
         transcripts: {
             read: async () => recorded,
+            rows: async () => recorded,
             fork: async () => {},
             append: async () => {},
             page: async (_agent, window = {}) => transcriptPageOf(recorded, window),
@@ -1103,6 +1112,8 @@ test("agent.resume sends a turn the door turned away without seeding its refused
             lastSaid: async () => recorded.findLast((row) => row.role === "assistant")?.text,
             count: async () => recorded.length,
             truncate: async () => 0,
+            migrate: async () => {},
+            sweep: async () => {},
         },
     });
     const client = clientFor(createApp(svc));

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { cp, mkdir, open, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { openWorkspaceFileRange } from "./workspace-files-download.js";
 import { errnoCode, isMissing } from "@intentic/base/errors";
 
 // A workspace file's text whole, for callers that bound their own read size; undefined only when missing or a
@@ -123,20 +124,35 @@ export const copyWorkspacePath = async (fromAbs: string, toAbs: string): Promise
     await cp(fromAbs, toAbs, { recursive: true });
 };
 
-// Reads raw bytes verbatim for binary previews via /workspace/raw, which the utf8 text read would corrupt; undefined
-// when absent.
-export const readWorkspaceFileBytes = async (absPath: string): Promise<Buffer | undefined> => {
+// File size, used to refuse an oversized raw read before loading it; undefined when absent.
+export const statWorkspaceFileSize = async (absPath: string): Promise<number | undefined> => {
     try {
-        return await readFile(absPath);
+        return (await stat(absPath)).size;
     } catch {
         return undefined;
     }
 };
 
-// File size, used to refuse an oversized raw read before loading it; undefined when absent.
-export const statWorkspaceFileSize = async (absPath: string): Promise<number | undefined> => {
+// A file opened for streaming: its size, a validator that moves whenever its bytes may have (a replacing rename moves the
+// inode, a write the size or mtime), and its bytes, opened only when asked for; undefined when absent or not a file.
+export interface OpenedWorkspaceFile {
+    readonly size: number;
+    readonly tag: string;
+    readonly body: () => ReadableStream<Uint8Array>;
+}
+
+export const openWorkspaceFile = async (absPath: string): Promise<OpenedWorkspaceFile | undefined> => {
     try {
-        return (await stat(absPath)).size;
+        const stats = await stat(absPath);
+        if (!stats.isFile()) {
+            return undefined;
+        }
+        const tag = `W/"${[stats.ino, stats.size, Math.round(stats.mtimeMs * 1000)].map((part) => part.toString(36)).join("-")}"`;
+        return {
+            size: stats.size,
+            tag,
+            body: () => (stats.size === 0 ? new Blob([]).stream() : openWorkspaceFileRange(absPath, 0, stats.size - 1)),
+        };
     } catch {
         return undefined;
     }

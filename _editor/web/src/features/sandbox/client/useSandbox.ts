@@ -159,8 +159,10 @@ watch(
         if (id === undefined || !hosted || state.failure === undefined) {
             return;
         }
-        // Network-shaped causes only; a 403 or a missing address is not a sleeping machine.
-        if (state.failure.kind !== `network` && state.failure.kind !== `timeout` && state.failure.kind !== `closed`) {
+        // A sleeping machine's causes: silence, or the edge saying it holds no tunnel for it. A 403 or a missing address
+        // is not a sleeping machine.
+        const asleep = [`network`, `timeout`, `closed`, `detached`] as const;
+        if (!(asleep as readonly string[]).includes(state.failure.kind)) {
             return;
         }
         const last = wokeAt.get(id) ?? 0;

@@ -1,58 +1,64 @@
-//! Reachability as one outbound dial: present the grant, then serve HTTP/2 straight over the WebSocket, each stream
-//! routed like any listener's request. It never gives up: the tunnel is this sandbox's reachability.
+//! Reachability as outbound dials: present the grant, then serve HTTP/2 straight over each WebSocket, every stream
+//! routed like any listener's request. Two lanes, so a transfer never queues a keystroke behind it on one TCP
+//! connection; neither ever gives up, since the tunnel is this sandbox's reachability.
 
 use std::convert::Infallible;
+use std::os::fd::AsRawFd;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use bytes::Bytes;
 use front_wire::{ToNode, TunnelConfig};
-use futures_util::{SinkExt, StreamExt};
 use http::HeaderValue;
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioExecutor, TokioIo};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use rustls::pki_types::CertificateDer;
+use rustls::pki_types::pem::PemObject;
+use tokio::net::TcpStream;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::tungstenite::protocol::CloseFrame;
-use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
-use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
-use tokio_tungstenite::{Connector, connect_async_tls_with_config};
+use tokio_tungstenite::{Connector, MaybeTlsStream, connect_async_tls_with_config};
+use tunnel::{
+    CONNECTION_WINDOW, Close, DISPLACED_CODE, Ended, GRANT_HEADER, LANE_HEADER, Lane, MAX_STREAMS,
+    STREAM_WINDOW,
+};
 
 use crate::link::Link;
 use crate::proxy::Front;
 
-// The contract's `ingress-contract.ts` names the header; the edge verifies it before registering anything.
-const GRANT_HEADER: &str = "x-intentic-grant";
-
-// The edge's registry closes a tunnel with this when a newer one took its id.
-const DISPLACED_CODE: u16 = 4001;
-
 // Redialling at once into a live holder would flap the two tunnels forever.
-const DISPLACED_WAIT: Duration = Duration::from_secs(60);
+pub const DISPLACED_WAIT: Duration = Duration::from_secs(60);
 
-const BACKOFF_FLOOR: Duration = Duration::from_secs(1);
-const BACKOFF_CAP: Duration = Duration::from_secs(30);
-const STABLE_AFTER: Duration = Duration::from_secs(60);
+const TUNNEL_CA_ENV: &str = "INTENTIC_TUNNEL_CA";
 
-// Matches the edge's heartbeat (tunnel-heartbeat.ts): a path that died without a FIN reports nothing but silence.
-const PING_EVERY: Duration = Duration::from_secs(15);
-const DEAD_AFTER: Duration = Duration::from_secs(45);
+pub const BACKOFF_FLOOR: Duration = Duration::from_secs(1);
+pub const BACKOFF_CAP: Duration = Duration::from_secs(30);
+pub const STABLE_AFTER: Duration = Duration::from_secs(60);
 
-// Per-stream and session windows as the edge's client sizes them (ingress-protocol.ts).
-const STREAM_WINDOW: u32 = 1024 * 1024;
-const CONNECTION_WINDOW: u32 = 2 * STREAM_WINDOW;
+// Unsent bytes the kernel holds for the interactive lane: past this the session stops writing, so a keystroke is never
+// queued behind a deep send buffer the way a transfer's bytes may be.
+const INTERACTIVE_NOTSENT_LOWAT: libc::c_int = 16 * 1024;
 
-// Bytes in flight between the WebSocket and the h2 session, each way; past it the reader simply waits.
-const PIPE_BYTES: usize = 256 * 1024;
+// What both lanes send the edge when the sandbox stops, so it forgets them at once instead of after the dead window.
+const SHUTTING_DOWN: Close = Close {
+    code: 1001,
+    reason: std::borrow::Cow::Borrowed("sandbox shutting down"),
+};
+
+// The config both lanes dial, their tasks, and what asks them to close.
+type Running = (
+    TunnelConfig,
+    Vec<JoinHandle<()>>,
+    watch::Sender<Option<Close>>,
+);
 
 pub struct Tunnel {
     front: Arc<Front>,
     link: &'static Link,
+    // The interactive lane's state: the one Node is told about, since every request can ride it.
     connected: Arc<AtomicBool>,
-    running: Option<(TunnelConfig, JoinHandle<()>, watch::Sender<bool>)>,
+    running: Option<Running>,
 }
 
 impl Tunnel {
@@ -65,27 +71,44 @@ impl Tunnel {
         }
     }
 
-    /// Dials the new door, or stops dialling; the same config again changes nothing.
+    /// Dials the new door on both lanes, or stops dialling; the same config again changes nothing.
     pub fn configure(&mut self, wanted: Option<TunnelConfig>) {
         if self.running.as_ref().map(|(config, _, _)| config) == wanted.as_ref() {
             return;
         }
         if let Some((_, dialling, closing)) = self.running.take() {
-            closing.send_replace(true);
-            dialling.abort();
-            self.report(false);
+            closing.send_replace(Some(SHUTTING_DOWN));
+            for lane in dialling {
+                lane.abort();
+            }
+            self.connected.store(false, Ordering::Relaxed);
+            let _ = self.link.tell(&ToNode::Tunnel { connected: false });
         }
         let Some(config) = wanted else {
             return;
         };
-        let (closing, closed) = watch::channel(false);
-        let dialling = tokio::spawn(run(
-            self.front.clone(),
-            self.link,
-            config.clone(),
-            self.connected.clone(),
-            closed,
-        ));
+        let (closing, closed) = watch::channel(None);
+        let mut dialling: Vec<JoinHandle<()>> = Lane::ALL
+            .into_iter()
+            .map(|lane| {
+                tokio::spawn(run(
+                    self.front.clone(),
+                    self.link,
+                    config.clone(),
+                    lane,
+                    self.connected.clone(),
+                    closed.clone(),
+                ))
+            })
+            .collect();
+        // QUIC is TLS or nothing, so a plaintext edge is left to the lanes.
+        if config.url.starts_with("wss://") {
+            dialling.push(tokio::spawn(crate::quic::run(
+                self.front.clone(),
+                config.clone(),
+                closed.clone(),
+            )));
+        }
         self.running = Some((config, dialling, closing));
     }
 
@@ -96,16 +119,13 @@ impl Tunnel {
         });
     }
 
-    fn report(&self, connected: bool) {
-        self.connected.store(connected, Ordering::Relaxed);
-        let _ = self.link.tell(&ToNode::Tunnel { connected });
-    }
-
-    /// Closes the tunnel with 1001 so the edge forgets it at once, and waits briefly for the close to leave.
+    /// Closes both lanes with 1001 so the edge forgets them at once, and waits briefly for the closes to leave.
     pub async fn shut(&mut self) {
         if let Some((_, dialling, closing)) = self.running.take() {
-            closing.send_replace(true);
-            let _ = tokio::time::timeout(Duration::from_secs(2), dialling).await;
+            closing.send_replace(Some(SHUTTING_DOWN));
+            for lane in dialling {
+                let _ = tokio::time::timeout(Duration::from_secs(2), lane).await;
+            }
         }
     }
 }
@@ -114,25 +134,36 @@ async fn run(
     front: Arc<Front>,
     link: &'static Link,
     config: TunnelConfig,
+    lane: Lane,
     connected: Arc<AtomicBool>,
-    closed: watch::Receiver<bool>,
+    closed: watch::Receiver<Option<Close>>,
 ) {
+    let reports = lane == Lane::Interactive;
     let mut rung = BACKOFF_FLOOR;
     loop {
         let started = Instant::now();
-        let ended = dial_once(&front, link, &config, &connected, closed.clone()).await;
-        connected.store(false, Ordering::Relaxed);
-        let _ = link.tell(&ToNode::Tunnel { connected: false });
-        if *closed.borrow() {
+        let ended = dial_once(&front, link, &config, lane, &connected, closed.clone()).await;
+        if reports {
+            connected.store(false, Ordering::Relaxed);
+            let _ = link.tell(&ToNode::Tunnel { connected: false });
+        }
+        if closed.borrow().is_some() {
             return;
         }
         let wait = match ended {
-            Ended::Displaced => {
-                tracing::warn!("another tunnel took this sandbox's address; standing back");
+            Ended::Closed(Some(DISPLACED_CODE)) => {
+                tracing::warn!(
+                    lane = lane.name(),
+                    "another tunnel took this sandbox's lane; standing back"
+                );
                 DISPLACED_WAIT
             }
-            Ended::Dropped(why) => {
-                tracing::warn!(%why, "the ingress tunnel dropped");
+            Ended::Closed(_) | Ended::Dropped(_) => {
+                let why = match ended {
+                    Ended::Dropped(why) => why,
+                    Ended::Closed(_) => "the edge closed the tunnel".into(),
+                };
+                tracing::warn!(lane = lane.name(), %why, "the ingress tunnel dropped");
                 if started.elapsed() >= STABLE_AFTER {
                     rung = BACKOFF_FLOOR;
                 }
@@ -146,17 +177,13 @@ async fn run(
     }
 }
 
-enum Ended {
-    Displaced,
-    Dropped(String),
-}
-
 async fn dial_once(
     front: &Arc<Front>,
     link: &'static Link,
     config: &TunnelConfig,
+    lane: Lane,
     connected: &AtomicBool,
-    mut closed: watch::Receiver<bool>,
+    closed: watch::Receiver<Option<Close>>,
 ) -> Ended {
     let mut request = match config.url.as_str().into_client_request() {
         Ok(request) => request,
@@ -166,9 +193,12 @@ async fn dial_once(
         Ok(grant) => request.headers_mut().insert(GRANT_HEADER, grant),
         Err(error) => return Ended::Dropped(format!("the grant is not a header value: {error}")),
     };
+    request
+        .headers_mut()
+        .insert(LANE_HEADER, HeaderValue::from_static(lane.name()));
     let (socket, _) = match connect_async_tls_with_config(
         request,
-        None,
+        Some(tunnel::socket_config()),
         true,
         Some(Connector::Rustls(client_tls())),
     )
@@ -177,70 +207,12 @@ async fn dial_once(
         Ok(opened) => opened,
         Err(error) => return Ended::Dropped(format!("could not dial the edge: {error}")),
     };
-    let (mut sink, mut frames) = socket.split();
-    let (session_side, pump_side) = tokio::io::duplex(PIPE_BYTES);
-    let (mut from_session, mut into_session) = tokio::io::split(pump_side);
-    let heard = Arc::new(AtomicU64::new(0));
-    let epoch = Instant::now();
-
-    let hearing = heard.clone();
-    let mut inbound = tokio::spawn(async move {
-        while let Some(frame) = frames.next().await {
-            hearing.store(epoch.elapsed().as_millis() as u64, Ordering::Relaxed);
-            let bytes = match frame {
-                Ok(Message::Binary(bytes)) => bytes,
-                // A stray text frame is coerced rather than dropped, as the TypeScript duplex did.
-                Ok(Message::Text(text)) => Bytes::from(text.as_str().to_owned()),
-                Ok(Message::Close(frame)) => {
-                    let displaced =
-                        frame.is_some_and(|frame| u16::from(frame.code) == DISPLACED_CODE);
-                    return if displaced {
-                        Ended::Displaced
-                    } else {
-                        Ended::Dropped("the edge closed the tunnel".into())
-                    };
-                }
-                Ok(_) => continue,
-                Err(error) => return Ended::Dropped(error.to_string()),
-            };
-            if into_session.write_all(&bytes).await.is_err() {
-                return Ended::Dropped("the session stopped reading".into());
-            }
-        }
-        Ended::Dropped("the tunnel socket ended".into())
-    });
-
-    let mut outbound = tokio::spawn(async move {
-        let mut buffer = vec![0_u8; 64 * 1024];
-        let mut ping = tokio::time::interval(PING_EVERY);
-        ping.tick().await;
-        loop {
-            tokio::select! {
-                read = from_session.read(&mut buffer) => match read {
-                    Ok(0) | Err(_) => return Ended::Dropped("the session ended".into()),
-                    Ok(read) => {
-                        if sink.send(Message::Binary(Bytes::copy_from_slice(&buffer[..read]))).await.is_err() {
-                            return Ended::Dropped("the tunnel socket refused a write".into());
-                        }
-                    }
-                },
-                _ = ping.tick() => {
-                    let silent = epoch.elapsed().saturating_sub(Duration::from_millis(heard.load(Ordering::Relaxed)));
-                    if silent > DEAD_AFTER {
-                        return Ended::Dropped(format!("no frame from the edge in {silent:?}"));
-                    }
-                    if sink.send(Message::Ping(Bytes::new())).await.is_err() {
-                        return Ended::Dropped("the tunnel socket refused a ping".into());
-                    }
-                }
-                () = raised(&mut closed) => {
-                    let close = CloseFrame { code: CloseCode::Away, reason: Utf8Bytes::from_static("sandbox shutting down") };
-                    let _ = sink.send(Message::Close(Some(close))).await;
-                    return Ended::Dropped("the sandbox is shutting down".into());
-                }
-            }
-        }
-    });
+    if lane == Lane::Interactive
+        && let Some(tcp) = tcp_of(socket.get_ref())
+    {
+        notsent_lowat(tcp, INTERACTIVE_NOTSENT_LOWAT);
+    }
+    let (session_side, mut pumping) = tunnel::pump(socket, closed);
 
     let serving = front.clone();
     let service = service_fn(move |request| {
@@ -251,35 +223,54 @@ async fn dial_once(
         hyper::server::conn::http2::Builder::new(TokioExecutor::new())
             .initial_stream_window_size(STREAM_WINDOW)
             .initial_connection_window_size(CONNECTION_WINDOW)
-            .max_concurrent_streams(1024)
+            .max_concurrent_streams(MAX_STREAMS)
             .serve_connection(TokioIo::new(session_side), service),
     );
-    connected.store(true, Ordering::Relaxed);
-    let _ = link.tell(&ToNode::Tunnel { connected: true });
-    tracing::info!("reachable: the ingress tunnel is registered");
+    if lane == Lane::Interactive {
+        connected.store(true, Ordering::Relaxed);
+        let _ = link.tell(&ToNode::Tunnel { connected: true });
+    }
+    tracing::info!(
+        lane = lane.name(),
+        "reachable: the ingress tunnel is registered"
+    );
 
     let ended = tokio::select! {
-        ended = &mut inbound => ended.unwrap_or_else(|error| Ended::Dropped(error.to_string())),
-        ended = &mut outbound => ended.unwrap_or_else(|error| Ended::Dropped(error.to_string())),
+        ended = pumping.ended() => ended,
         served = &mut session => Ended::Dropped(match served {
             Ok(Ok(())) => "the h2 session ended".into(),
             Ok(Err(error)) => format!("the h2 session failed: {error}"),
             Err(error) => error.to_string(),
         }),
     };
-    inbound.abort();
-    outbound.abort();
     session.abort();
     ended
 }
 
-// The guard `wait_for` hands back must not live across the await that follows it in a spawned task.
-async fn raised(flag: &mut watch::Receiver<bool>) {
-    let _ = flag.wait_for(|raised| *raised).await;
+fn tcp_of(stream: &MaybeTlsStream<TcpStream>) -> Option<&TcpStream> {
+    match stream {
+        MaybeTlsStream::Plain(tcp) => Some(tcp),
+        MaybeTlsStream::Rustls(tls) => Some(tls.get_ref().0),
+        _ => None,
+    }
+}
+
+// Best effort: a kernel without TCP_NOTSENT_LOWAT keeps its default and the lane still works.
+fn notsent_lowat(tcp: &TcpStream, bytes: libc::c_int) {
+    // SAFETY: setsockopt on a socket this process owns, with a correctly sized int option.
+    unsafe {
+        libc::setsockopt(
+            tcp.as_raw_fd(),
+            libc::IPPROTO_TCP,
+            libc::TCP_NOTSENT_LOWAT,
+            (&raw const bytes).cast(),
+            std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+        );
+    }
 }
 
 // Spreads redials so a fleet dropped by one edge deploy does not return in lockstep; unpredictability is not needed.
-fn jitter() -> f64 {
+pub fn jitter() -> f64 {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |since| since.subsec_nanos());
@@ -287,16 +278,32 @@ fn jitter() -> f64 {
 }
 
 fn client_tls() -> Arc<rustls::ClientConfig> {
-    let roots = rustls::RootCertStore {
-        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-    };
     Arc::new(
         rustls::ClientConfig::builder_with_provider(Arc::new(
             rustls::crypto::ring::default_provider(),
         ))
         .with_safe_default_protocol_versions()
         .expect("ring supports the default protocol versions")
-        .with_root_certificates(roots)
+        .with_root_certificates(trusted())
         .with_no_client_auth(),
     )
+}
+
+/// The web's roots, and any a PEM file at `INTENTIC_TUNNEL_CA` names: a self-hosted edge on a private CA.
+pub fn trusted() -> rustls::RootCertStore {
+    let mut roots = rustls::RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+    };
+    let Some(path) = std::env::var_os(TUNNEL_CA_ENV) else {
+        return roots;
+    };
+    match std::fs::read(&path) {
+        Ok(pem) => {
+            for certificate in CertificateDer::pem_slice_iter(&pem).flatten() {
+                let _ = roots.add(certificate);
+            }
+        }
+        Err(error) => tracing::warn!(%error, path = ?path, "the tunnel's extra CA did not read"),
+    }
+    roots
 }

@@ -1,5 +1,14 @@
 import { generateKeyPairSync } from "node:crypto";
-import { hostOwnerId, mintReachabilityGrant, verifyReachabilityGrant } from "./ingress-contract.js";
+import { readFileSync } from "node:fs";
+import { hostOwnerId, type ReachabilityGrant, mintReachabilityGrant, verifyReachabilityGrant } from "./ingress-contract.js";
+
+// The edge's rules as both implementations must answer them; the Rust edge reads the same file. Its grants were minted
+// by a throwaway pair whose private half was never kept, so a new grant case takes a new pair and every token again.
+const FIXTURE = JSON.parse(readFileSync(new URL("./ingress-contract.fixture.json", import.meta.url), "utf8")) as {
+    readonly publicKey: string;
+    readonly grants: readonly { readonly token: string; readonly claim: ReachabilityGrant | null }[];
+    readonly owners: readonly { readonly host: string; readonly owner: string | null }[];
+};
 
 const pemPair = (): { privateKey: string; publicKey: string } => {
     const { privateKey, publicKey } = generateKeyPairSync("ed25519");
@@ -31,10 +40,11 @@ describe("reachability grant", () => {
         expect(verifyReachabilityGrant(keys.publicKey, `${prefix}.${forged}.${signature}`)).toBeUndefined();
     });
 
-    it("answers undefined for garbage rather than throwing", () => {
-        const keys = pemPair();
-        for (const junk of ["", "ig1", "ig1..", "nonsense.a.b", "ig2.a.b", "ig1.%%%.%%%"]) {
-            expect(verifyReachabilityGrant(keys.publicKey, junk)).toBeUndefined();
+    it("answers every grant in the shared fixture as it states, and garbage with undefined rather than a throw", () => {
+        // Both verdicts, so the loop below can never pass by holding only one kind of case.
+        expect(new Set(FIXTURE.grants.map(({ claim }) => (claim === null ? "refused" : "accepted")))).toEqual(new Set(["accepted", "refused"]));
+        for (const { token, claim } of FIXTURE.grants) {
+            expect({ token, claim: verifyReachabilityGrant(FIXTURE.publicKey, token) ?? null }).toEqual({ token, claim });
         }
     });
 
@@ -44,27 +54,9 @@ describe("reachability grant", () => {
 });
 
 describe("hostOwnerId", () => {
-    it("owns the daemon's own name and every labelled name", () => {
-        expect(hostOwnerId(`sandbox-${SANDBOX_ID}.sbx.example.dev`)).toBe(SANDBOX_ID);
-        expect(hostOwnerId(`preview-operator-${SANDBOX_ID}.sbx.example.dev`)).toBe(SANDBOX_ID);
-        expect(hostOwnerId(`port-0f0f0f0f0f0f-${SANDBOX_ID}.sbx.example.dev`)).toBe(SANDBOX_ID);
-        expect(hostOwnerId(`public-1a2b3c4d5e6f-${SANDBOX_ID}.sbx.example.dev`)).toBe(SANDBOX_ID);
-    });
-
-    it("ignores a port suffix", () => {
-        expect(hostOwnerId(`sandbox-${SANDBOX_ID}.sbx.example.dev:443`)).toBe(SANDBOX_ID);
-    });
-
-    it("owns nothing that does not end in a 12-hex tail", () => {
-        // The ingress's own door, the zone apex, the loopback name's bare-id label, and a near-miss tail.
-        for (const host of [
-            "ingress.sbx.example.dev",
-            "sbx.example.dev",
-            `${SANDBOX_ID}.local.sbx.example.dev`,
-            "sandbox-abc123def45.sbx.example.dev",
-            "",
-        ]) {
-            expect(hostOwnerId(host)).toBeUndefined();
+    it("owns every host in the shared fixture as it states, port or not", () => {
+        for (const { host, owner } of FIXTURE.owners) {
+            expect({ host, owner: hostOwnerId(host) ?? null }).toEqual({ host, owner });
         }
     });
 });

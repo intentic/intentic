@@ -1,3 +1,4 @@
+import { waitFor } from "@intentic/testing/bun";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent, AgentSummary, LandConflictReason } from "@intentic/sandbox-contract";
 import { noteSubagentTask, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../../agent/subagents/subagents.js";
@@ -65,6 +66,35 @@ const turn = (overrides: Partial<BeginTurn> = {}): BeginTurn => ({
 });
 
 describe("agents registry", () => {
+    // Every tab asks at once after a restart, and a probe's cost is its git reads, so one runs at a time. A caller that
+    // arrives mid-probe gets the one after it, which cannot have started before whatever that caller changed.
+    it("shares one standings probe among the boards asking at once, and follows it with one more for the late ones", async () => {
+        let started = 0;
+        const releases: (() => void)[] = [];
+        const gated = {
+            ...standings(),
+            refresh: async () => {
+                started += 1;
+                await new Promise<void>((resolve) => releases.push(resolve));
+                return false;
+            },
+        };
+        const { agents: registry } = createFleet(memoryStore(), gated, presences());
+        // Loading probes once on its own; this is the probe the boards below arrive in the middle of.
+        await registry.init();
+        expect(started).toBe(1);
+        const boards = Promise.all([registry.refreshStandings(), registry.refreshStandings(), registry.refreshStandings()]);
+        releases.shift()?.();
+        await waitFor(() => expect(releases).toHaveLength(1));
+        releases.shift()?.();
+        await boards;
+        expect(started).toBe(2);
+        const later = registry.refreshStandings();
+        await waitFor(() => expect(releases).toHaveLength(1));
+        releases.shift()?.();
+        await later;
+    });
+
     it("once a change feed is watched, a roster read re-derives standings only after a reported change", async () => {
         let probes = 0;
         const counted = {
@@ -415,7 +445,8 @@ describe("agents registry", () => {
     // Counts come from the roster the fleet's own actors hold, via `summaryOf`; this only pins the publish. Runs against
     // the real registry, not a stub, since the projection is what's under test, so the roster's doors are lent it.
     it("publishes the fleet when a child is born and when it settles, but not for its progress", async () => {
-        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        // No window, so every send is read the moment it happens; the window itself is pinned on its own below.
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences(), { rosterWindowMs: 0 });
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
         // The turn's handle on the fleet whose actors hold its children, which is what the card counts.
@@ -1684,6 +1715,33 @@ describe("agents registry", () => {
                 expect(Object.keys(registry.get("c1") ?? {})).not.toContain("checklist");
             });
         });
+    });
+
+    // Each send is the whole live roster, so a burst of tool calls from running turns must not send it once per call.
+    it("sends a burst of turn progress once, at the window's end, and a change someone made at once", async () => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences(), { rosterWindowMs: 60 });
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        const sends: { readonly rev: number; readonly tool: string | undefined }[] = [];
+        const unsubscribe = registry.subscribe((agents, rev) => sends.push({ rev, tool: agents[0]?.activity?.tool }));
+        const opened = sends.length;
+        for (const name of ["Read", "Grep", "Edit"]) {
+            conversations.send("c1", { kind: "frame", frame: { kind: "tool_call", id: name, name, category: "edit", status: "in_progress" } });
+        }
+        // Bumped at every change, so a route reads its own; the roster carrying them waits for the window.
+        expect(registry.revision()).toBe(sends[opened - 1]!.rev + 3);
+        expect(sends).toHaveLength(opened);
+        await waitFor(() => expect(sends).toHaveLength(opened + 1));
+        expect(sends.at(-1)).toEqual({ rev: registry.revision(), tool: "Edit" });
+
+        // Progress waiting behind a window rides the next change anyone makes, at once, and is not sent twice.
+        conversations.send("c1", { kind: "frame", frame: { kind: "tool_call", id: "Bash", name: "Bash", category: "execute", status: "in_progress" } });
+        await registry.markSeen("c1", 2_000);
+        expect(sends.at(-1)).toEqual({ rev: registry.revision(), tool: "Bash" });
+        const settled = sends.length;
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        expect(sends).toHaveLength(settled);
+        unsubscribe();
     });
 
     it("subscribe delivers an immediate snapshot and change broadcasts", async () => {

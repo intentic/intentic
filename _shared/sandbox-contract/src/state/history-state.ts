@@ -22,6 +22,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // conversation's own runtime session store (what `.intentic/records/sessions/claude/` holds for every other).
     // Carried whole, like the conversation it is.
     { path: "conversations/", portability: "carry" },
+    // The long tool outputs those transcripts name rather than hold, stored once by content for every record naming
+    // them; a transcript without them keeps only each output's start.
+    { path: "blobs/", portability: "carry" },
     // Index of published-page conversations; the pages travel with /work anyway, this makes one withdrawable.
     { path: "shares.json", portability: "carry" },
     { path: "activity.jsonl", portability: "carry" },
@@ -67,6 +70,8 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: ".isolation-probe", portability: "derived" },
     // Finished bundles, excluded so an export doesn't pack every prior export in; kept off /work, unwatched.
     { path: "exports/", portability: "derived" },
+    // Each transcript as it was before this format converted it, zstd-compressed: a local way back, never read here.
+    { path: "backups/", portability: "derived" },
     // Bundles being taken in, mid-review; excluded as someone else's. Deleted on apply/abandon, swept after a crash.
     { path: "arrivals/", portability: "derived" },
 

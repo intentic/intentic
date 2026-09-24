@@ -4,11 +4,14 @@
 mod body;
 mod cgroup;
 mod connect;
+mod feed;
 mod link;
 mod listen;
 mod proxy;
+mod quic;
 mod route;
 mod supervise;
+mod term;
 mod tls;
 mod tunnel;
 
@@ -22,10 +25,12 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::{Mutex, mpsc, watch};
 use tracing_subscriber::EnvFilter;
 
+use crate::feed::Feed;
 use crate::link::{Link, Pushed};
 use crate::listen::Listeners;
 use crate::proxy::Front;
 use crate::supervise::NodeCommand;
+use crate::term::{Hubs, Terminals, Tmux};
 use crate::tls::CertificateSlot;
 use crate::tunnel::Tunnel;
 
@@ -91,7 +96,8 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
     });
 
     let (config_sender, config) = watch::channel(None);
-    let front = Arc::new(Front::new(link, http.clone(), config));
+    let terminals = Terminals::new(Hubs::new(Tmux::default()));
+    let front = Arc::new(Front::new(link, http.clone(), config, terminals.clone()));
     let certificates = Arc::new(CertificateSlot::default());
     let mut listeners = Listeners::new(front.clone(), certificates.clone());
     let tunnel = Arc::new(Mutex::new(Tunnel::new(front, link)));
@@ -101,6 +107,15 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
         tokio::spawn(supervise::reap_orphans(node_pids.clone()));
     }
     tokio::spawn(cgroup::govern(node_pids));
+
+    // Unavailable (no inotify) is a feed that knows nothing: every sync answers null and Node reads git itself.
+    let feed = match Feed::start(run_dir.join("feed")) {
+        Ok(feed) => Some(feed),
+        Err(error) => {
+            tracing::error!(%error, "the change feed could not start");
+            None
+        }
+    };
 
     let applying = tunnel.clone();
     tokio::spawn(async move {
@@ -116,7 +131,33 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
                     }
                 }
                 Pushed::Tunnel(wanted) => applying.lock().await.configure(wanted),
-                Pushed::Hello => applying.lock().await.report_again(),
+                Pushed::Hello => {
+                    applying.lock().await.report_again();
+                    if let Some(feed) = &feed {
+                        feed.reset();
+                    }
+                }
+                Pushed::Revoke(member) => terminals.revoke(member.as_deref()),
+                Pushed::Watch(checkout) => {
+                    if let Some(feed) = feed.clone() {
+                        tokio::task::spawn_blocking(move || feed.watch(&checkout));
+                    }
+                }
+                Pushed::Unwatch(dir) => {
+                    if let Some(feed) = &feed {
+                        feed.unwatch(&dir);
+                    }
+                }
+                Pushed::Sync { id, dirs } => {
+                    let feed = feed.clone();
+                    tokio::spawn(async move {
+                        let generations = match feed {
+                            Some(feed) => feed.sync(&dirs).await,
+                            None => vec![None; dirs.len()],
+                        };
+                        link.tell(&front_wire::ToNode::Synced { id, generations });
+                    });
+                }
             }
         }
     });

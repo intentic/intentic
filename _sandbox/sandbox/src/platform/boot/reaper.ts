@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { AGENT_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import type { Logger } from "pino";
 import {
@@ -11,14 +9,13 @@ import {
     idleBrowserSessionNames,
     runningBrowserOwners,
 } from "../../browser/sessions/browser-sessions.js";
+import { forkedExec } from "@intentic/scaffold";
 import { createProcessScanner } from "../resources/process-scan.js";
 import { type Leftover, leftoverProcesses, ownProcessGroup, signalFor } from "./leftovers.js";
 
 // Reclaims everything a conversation holds (processes, tmux terminals, browser records, scratch /tmp state) once the
 // turn registry reports it stopped, on one clock instead of one policy per resource kind. Archive and discard bypass
 // the grace and reap immediately, attached terminals included.
-
-const execFileAsync = promisify(execFile);
 
 // tmux user option carrying the owning conversation id; set once by bin/tmux-run, read back by the sweep.
 const TMUX_OWNER_OPTION = "@intentic_owner";
@@ -145,12 +142,12 @@ export interface ResourceReaper {
 }
 
 const killSession = async (name: string): Promise<void> => {
-    await execFileAsync("tmux", ["kill-session", "-t", `=${name}`]).catch(() => undefined);
+    await forkedExec("tmux", ["kill-session", "-t", `=${name}`]).catch(() => undefined);
 };
 
 const listAgentSessions = async (now: number): Promise<AgentSessionState[]> => {
     try {
-        const { stdout } = await execFileAsync("tmux", ["list-sessions", "-F", SESSION_FORMAT]);
+        const { stdout } = await forkedExec("tmux", ["list-sessions", "-F", SESSION_FORMAT]);
         return parseAgentSessions(stdout, now);
     } catch {
         // No tmux server: nothing of ours runs in a terminal.

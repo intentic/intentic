@@ -570,6 +570,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                         : undefined;
                 return sessionId === undefined ? [] : merged.sessions.read(merged.workspace.root, sessionId);
             },
+            // The fake keeps no out-of-line bytes, so what a page reads of each row is the row.
+            rows: async (agent) => merged.transcripts.read(agent),
             // Derived from `read` via production's own window rule, so a route test can't disagree with the daemon.
             page: async (agent, window = {}) => transcriptPageOf(await merged.transcripts.read(agent), window),
             // Same door, same source: a route test asking for a delegation's calls gets what the record-backed route would.
@@ -584,6 +586,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             count: async (agent) => (await merged.transcripts.read(agent)).length,
             // Inert, but answers what a real truncate would have dropped, so a rewind test can assert on the count.
             truncate: async (agent, keep) => Math.max(0, (await merged.transcripts.read(agent)).length - keep),
+            migrate: async () => {},
+            sweep: async () => {},
         },
         // The real index, in memory: a fake here would mean no suite ever runs the actual query, folding or ordering.
         // `search` syncs from `transcripts.read` first, since `append` is inert.

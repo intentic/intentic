@@ -23,13 +23,13 @@ export interface WsTickets {
 // socket needs a different tier, so the check runs at redemption against the role the ticket was minted under.
 export const redeemTicket = (
     services: { readonly auth: unknown; readonly wsTickets: WsTickets },
-    url: URL,
+    query: URLSearchParams,
     floor: MemberRole,
 ): Caller | undefined => {
     if (services.auth === undefined) {
         return undefined;
     }
-    const caller = services.wsTickets.redeem(url.searchParams.get("ticket") ?? "");
+    const caller = services.wsTickets.redeem(query.get("ticket") ?? "");
     if (caller === undefined) {
         throw new Error("invalid or expired websocket ticket");
     }

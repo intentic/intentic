@@ -1,4 +1,5 @@
 import type { LandConflictReason } from "@intentic/sandbox-contract";
+import { mapPool } from "@intentic/base/async";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../../git/changes/changes.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
@@ -142,6 +143,9 @@ const deltaOf = async (worktrees: AgentWorktrees, repos: readonly RepoShas[], gi
     return { outstanding, produced };
 };
 
+// Agents probed at once: each is a handful of short git reads, and a board after a restart probes every live one.
+const PROBES = 8;
+
 export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = defaultGit): LandStandings => {
     const cache = new Map<string, { key: string; standing: LandStanding; causes: readonly LandConflictReason[] }>();
     return {
@@ -155,7 +159,7 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
         refresh: async (entries) => {
             const { headOf, tipOf, dirtyAt } = passReaders(worktrees, git);
             let moved = false;
-            for (const entry of entries) {
+            await mapPool(entries, PROBES, async (entry) => {
                 // Ref reads run in the main repo either way: the shared object store covers a retired worktree too.
                 const shas = await Promise.all(
                     entry.placement.repos.map(async (composed) => ({
@@ -168,7 +172,7 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                 const key = keyOf(refusal, shas);
                 const cached = cache.get(entry.id);
                 if (cached?.key === key) {
-                    continue;
+                    return;
                 }
                 const { outstanding, produced } = await deltaOf(worktrees, shas, git);
                 // The report explains a refusal, it does not create one: nothing outstanding, nothing to be about.
@@ -177,7 +181,7 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                 const causes = standing === "conflict" ? refusal.causes : [];
                 moved ||= cached?.standing !== standing || cached.causes.join("+") !== causes.join("+");
                 cache.set(entry.id, { key, standing, causes });
-            }
+            });
             return moved;
         },
     };

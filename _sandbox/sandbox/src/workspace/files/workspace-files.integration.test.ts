@@ -1,7 +1,7 @@
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MAX_TEXT_BYTES, readWorkspaceFile, readWorkspaceFileWindow } from "./workspace-files.js";
+import { MAX_TEXT_BYTES, openWorkspaceFile, readWorkspaceFile, readWorkspaceFileWindow } from "./workspace-files.js";
 
 // A temp file holding `content`, and the dir to clean up after.
 const fileWith = async (name: string, content: string | Uint8Array): Promise<{ dir: string; path: string }> => {
@@ -83,6 +83,31 @@ test("readWorkspaceFileWindow past the end serves nothing, and a missing file is
     expect(await readWorkspaceFileWindow(path, 999)).toEqual({ content: "", size: 3, offset: 3, bytes: 0 });
     expect(await readWorkspaceFileWindow(join(dir, "nope.ts"))).toBeUndefined();
     await rm(dir, { recursive: true, force: true });
+});
+
+// The raw route's validator: it must move whenever the bytes may have, or a browser keeps a stale picture forever.
+test("an opened file's validator moves when it is rewritten, grows or is replaced, and its bytes stream whole", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-file-"));
+    try {
+        const path = join(dir, "a.bin");
+        await writeFile(path, "one");
+        const first = await openWorkspaceFile(path);
+        expect(first?.size).toBe(3);
+        expect(await new Response(first?.body()).text()).toBe("one");
+        expect((await openWorkspaceFile(path))?.tag).toBe(first?.tag);
+        await writeFile(path, "two!");
+        const grown = await openWorkspaceFile(path);
+        expect(grown?.tag).not.toBe(first?.tag);
+        await writeFile(join(dir, "b.bin"), "two!");
+        await rename(join(dir, "b.bin"), path);
+        expect((await openWorkspaceFile(path))?.tag).not.toBe(grown?.tag);
+        await writeFile(join(dir, "empty"), "");
+        expect(await new Response((await openWorkspaceFile(join(dir, "empty")))?.body()).text()).toBe("");
+        expect(await openWorkspaceFile(dir)).toBeUndefined();
+        expect(await openWorkspaceFile(join(dir, "missing"))).toBeUndefined();
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
 });
 
 // A caller that reads, merges and writes back (the imported memory file, the workspace identity) must never be handed

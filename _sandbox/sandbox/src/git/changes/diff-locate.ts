@@ -64,20 +64,17 @@ export interface DiffLocator {
 }
 
 export const createDiffLocator = (services: DiffLocatorDeps): DiffLocator => {
-    // The worktree side, via the same file service /workspace/raw reads; a deleted file 404s honestly.
+    // The worktree side, opened the way /workspace/raw opens a file and read whole, since the other side is a whole
+    // blob; a deleted file 404s honestly.
     const readWorktreeFile = async (file: string): Promise<Buffer> => {
-        const size = await services.files.size(file);
-        if (size === undefined) {
+        const opened = await services.files.open(file);
+        if (opened === undefined) {
             throw new DiffLocateError(404, "not found");
         }
-        if (size > MAX_RAW_BYTES) {
+        if (opened.size > MAX_RAW_BYTES) {
             throw new DiffLocateError(413, "file too large");
         }
-        const bytes = await services.files.readBytes(file);
-        if (bytes === undefined) {
-            throw new DiffLocateError(404, "not found");
-        }
-        return bytes;
+        return Buffer.from(await new Response(opened.body()).arrayBuffer());
     };
 
     // Not the git routes' `repoDir`: that one heals the --separate-git-dir pointer (a write), and these routes only ever

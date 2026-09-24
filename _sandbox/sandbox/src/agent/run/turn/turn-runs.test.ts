@@ -67,7 +67,7 @@ const collect = async (
     conversationId: string,
     conversations: typeof deps.conversations = deps.conversations,
 ): Promise<{ head: AttachHead; entries: AttachEntry[] }> => {
-    const { head, entries } = turnRunOf(conversations, conversationId)!.attach();
+    const { head, entries } = turnRunOf(conversations, conversationId)!.attach(() => new Error(`fell behind`));
     const drained: AttachEntry[] = [];
     for await (const entry of entries) {
         drained.push(entry);
@@ -131,6 +131,34 @@ describe(`turn runs`, () => {
         ]);
     });
 
+    it(`ends a follower that stopped reading, and only that one, with the error the attach named, while the run goes on`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        startTurnRun(deps, turnFn, turn(`c-behind`), { opening });
+        const stalled = turnRunOf(deps.conversations, `c-behind`)!.attach(() => new Error(`fell behind`));
+        const reading = collect(`c-behind`);
+        for (let index = 0; index <= MAX_BACKLOG_FRAMES; index += 1) {
+            push({ kind: `delta`, text: `x` });
+        }
+        await waitFor(() => expect(turnRunOf(deps.conversations, `c-behind`)!.rows[1]?.text).toHaveLength(MAX_BACKLOG_FRAMES + 1));
+        expect(turnRunOf(deps.conversations, `c-behind`)!.done).toBe(false);
+        close();
+        // Everything reached the reader; the stalled one holds nothing past the cut, and learns why when it reads.
+        expect((await reading).entries).toHaveLength(MAX_BACKLOG_FRAMES + 2);
+        await expect(stalled.entries.next()).rejects.toThrow(`fell behind`);
+    });
+
+    it(`ends a follower when it is cut from outside, whatever it had queued`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        startTurnRun(deps, turnFn, turn(`c-cut`), { opening });
+        const followed = turnRunOf(deps.conversations, `c-cut`)!.attach(() => new Error(`fell behind`));
+        push({ kind: `delta`, text: `a` });
+        await waitFor(() => expect(turnRunOf(deps.conversations, `c-cut`)!.rows[1]?.text).toBe(`a`));
+        followed.cut(new Error(`authorization revoked`));
+        await expect(followed.entries.next()).rejects.toThrow(`authorization revoked`);
+        expect(turnRunOf(deps.conversations, `c-cut`)!.metrics().followers).toBe(0);
+        close();
+    });
+
     it(`serves several concurrent followers: each gets every change from its own head on`, async () => {
         const { turnFn, push, close } = crankedTurn();
         startTurnRun(deps, turnFn, turn(`c-multi`), { opening });
@@ -152,7 +180,7 @@ describe(`turn runs`, () => {
         const { turnFn, push, close } = crankedTurn();
         startTurnRun(deps, turnFn, turn(`c-abort`), { opening });
         const connection = new AbortController();
-        const { entries } = turnRunOf(deps.conversations, `c-abort`)!.attach(connection.signal);
+        const { entries } = turnRunOf(deps.conversations, `c-abort`)!.attach(() => new Error(`fell behind`), connection.signal);
         push({ kind: `delta`, text: `a` });
         await waitFor(() => expect(turnRunOf(deps.conversations, `c-abort`)!.rows).toHaveLength(2));
         connection.abort();
@@ -162,24 +190,6 @@ describe(`turn runs`, () => {
         }
         expect(drained.map((entry) => entry.seq)).toEqual([1, 2]);
         expect(turnRunOf(deps.conversations, `c-abort`)!.done).toBe(false);
-        close();
-    });
-
-    it(`cuts a follower that stops reading instead of holding every later change for it`, async () => {
-        const { turnFn, push, close } = crankedTurn();
-        startTurnRun(deps, turnFn, turn(`c-stalled`), { opening });
-        const { entries } = turnRunOf(deps.conversations, `c-stalled`)!.attach();
-        const changes = MAX_BACKLOG_FRAMES + 1;
-        for (let index = 0; index < changes; index += 1) {
-            push({ kind: `delta`, text: `x` });
-        }
-        await waitFor(() => expect(turnRunOf(deps.conversations, `c-stalled`)!.rows[1]?.text).toHaveLength(changes));
-        const drained: AttachEntry[] = [];
-        for await (const entry of entries) {
-            drained.push(entry);
-        }
-        expect(drained).toEqual([]);
-        expect(turnRunOf(deps.conversations, `c-stalled`)!.done).toBe(false);
         close();
     });
 
