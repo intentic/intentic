@@ -1,6 +1,6 @@
 import type { AgentHarness, AgentProvider, SandboxHandlerOutput, TranscriptRow } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
-import { MAKER_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE } from "./maker";
+import { DESK_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE } from "./desk";
 import { REVIEW_AGENT_ID, SOFT_DELETES_JOBS, SOFT_E2E_JOB, SOFT_TYPECHECK_JOB } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 
@@ -240,10 +240,10 @@ const PRIYA_PAYOUTS: AgentTranscript = {
     ],
 };
 
-// The maker recording's finished draft: a document moved into a template, the same edit the review page draws as
+// The desk recording's finished draft: a document moved into a template, the same edit the review page draws as
 // tracked changes. Reads the template first, so the plan is the template's and not the assistant's.
 const SEPTEMBER_TEMPLATE: AgentTranscript = {
-    sessionId: `ses_maker_september`,
+    sessionId: `ses_desk_september`,
     provider: `claude`,
     harness: `claude-code`,
     account: `acc_claude_demo`,
@@ -297,7 +297,7 @@ const SEPTEMBER_TEMPLATE: AgentTranscript = {
 
 const TRANSCRIPTS: Record<string, AgentTranscript> = {
     [REVIEW_AGENT_ID]: SOFT_DELETES,
-    [MAKER_REVIEW_ID]: SEPTEMBER_TEMPLATE,
+    [DESK_REVIEW_ID]: SEPTEMBER_TEMPLATE,
     [MAYA_CHAT_ID]: MAYA_SUPPORT,
     [OWEN_CHAT_ID]: OWEN_LAUNCH,
     [PRIYA_CHAT_ID]: PRIYA_PAYOUTS,

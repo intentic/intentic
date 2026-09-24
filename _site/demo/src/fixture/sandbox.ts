@@ -9,9 +9,9 @@ import type {
     UsageRollupRow,
 } from "@intentic/sandbox-contract";
 import { LOCAL_MODEL_KV_BYTES_PER_TOKEN, LOCAL_MODEL_WINDOWS, LOCAL_MODELS } from "@intentic/sandbox-contract";
-import { makerEdition, enabledExtensions } from "../mode";
+import { deskEdition, enabledExtensions } from "../mode";
 import pins from "../../vendor/extensions.json";
-import { MAKER_REPOS } from "./maker";
+import { DESK_REPOS } from "./desk";
 
 // acme-shop's workspace furniture: what it's made of, what it's wired to, the extensions supplying that wiring, and the
 // Usage tab's spend ledger. Connector entries copy the real `_extensions/connectors` and `_extensions/discord`
@@ -21,10 +21,10 @@ const day = (now: number, back: number): string => new Date(now - back * 86_400_
 
 // Facts every extension's `detect()` runs over, deciding which rail tiles show. `running` is false for both: nothing
 // runs in a recording.
-export const demoPanels = (): PanelSummary[] => (makerEdition ? MAKER_REPOS.map((repo) => ({ ...NO_PANEL, repo })) : CODE_PANELS);
+export const demoPanels = (): PanelSummary[] => (deskEdition ? DESK_REPOS.map((repo) => ({ ...NO_PANEL, repo })) : CODE_PANELS);
 
 // A folder of documents: nothing to run, nothing to publish, no stories and no docs set. Every tile that keys on these
-// stays off the maker's rail.
+// stays off the desk's rail.
 const NO_PANEL: Omit<PanelSummary, "repo"> = {
     hasPanel: false,
     running: false,

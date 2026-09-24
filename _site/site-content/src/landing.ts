@@ -1,7 +1,7 @@
 import type { ProviderBrand } from "@intentic/constants";
 
 import { productHref } from "./product";
-import { DEMO_PATH, MAKER_PATH } from "./site";
+import { DEMO_PATH, DESK_PATH } from "./site";
 
 export interface LandingFact {
     title: string;
@@ -279,25 +279,25 @@ export const landingContent: LandingContent = {
             note: "It runs the same command for you: Docker if the machine needs it, then the sandbox, then your workspace.",
         },
     },
-    crossLink: { lead: "Not a programmer?", label: "intentic maker, the same assistant for your documents", href: MAKER_PATH },
+    crossLink: { lead: "Not a programmer?", label: "intentic desk, the same assistant for your documents", href: DESK_PATH },
 };
 
-/** A picture in the light set: a shot of the maker recording (`capture.mts --maker`), or a default shot's light twin. */
-export interface MakerShot {
+/** A picture in the light set: a shot of the desk recording (`capture.mts --desk`), or a default shot's light twin. */
+export interface DeskShot {
     name: string;
     alt: string;
 }
 
-/** One row of the maker page's tour. Links to the shared feature page; a row with no shot draws the Automations figure. */
-export interface MakerTourItem {
+/** One row of the desk page's tour. Links to the shared feature page; a row with no shot draws the Automations figure. */
+export interface DeskTourItem {
     label: string;
     href: string;
     line: string;
-    shot?: MakerShot & { label: string };
+    shot?: DeskShot & { label: string };
     figure?: "automate";
 }
 
-export interface MakerFaqItem {
+export interface DeskFaqItem {
     /** Anchor id, its own namespace so it can never collide with the developer page's questions. */
     id: string;
     question: string;
@@ -305,24 +305,24 @@ export interface MakerFaqItem {
     more?: { label: string; href: string };
 }
 
-// INTENTIC MAKER: the same assistant sold to the reader who does not write code, as a product page of its own at
-// /maker/ (site pages/maker.astro, MakerLanding.astro). Its own words from the first line to the last question, its
-// own pictures (the maker recording, _site/demo/src/fixture/maker.ts), its own title and description, its own place in
+// INTENTIC DESK: the same assistant sold to the reader who does not write code, as a product page of its own at
+// /desk/ (site pages/desk.astro, DeskLanding.astro). Its own words from the first line to the last question, its
+// own pictures (the desk recording, _site/demo/src/fixture/desk.ts), its own title and description, its own place in
 // the sitemap. What it shares with the developer page is the shell and the parts that are true of both products —
 // the nav and footer, the cost band's account list, the trust band — never a paragraph of copy, so search never
 // meets the same page twice under two addresses. Nothing here names git, a repository or a terminal.
-export interface MakerLandingContent {
+export interface DeskLandingContent {
     meta: { title: string; description: string };
     hero: {
         headlineLines: string[];
         subhead: string;
-        screens: { app: (MakerShot & { frameLabel: string })[]; plan: MakerShot; chat: MakerShot & { frameLabel: string } };
-        /** Where the frame's press goes: the maker recording, not the code one. */
+        screens: { app: (DeskShot & { frameLabel: string })[]; plan: DeskShot; chat: DeskShot & { frameLabel: string } };
+        /** Where the frame's press goes: the desk recording, not the code one. */
         demoHref: string;
         /** The two doors: browser first for this reader; download stays for Windows and Linux. */
         actions: { download: string; browser: string };
     };
-    tour: { eyebrow: string; items: MakerTourItem[]; cta: string };
+    tour: { eyebrow: string; items: DeskTourItem[]; cta: string };
     workspace: LandingSectionIntro & { comparison: WorkspaceComparison; cta: { label: string; href: string } };
     /** The account list is shared with the developer page (landingContent.economics.accounts): the plans are the same plans. */
     economics: LandingSectionIntro & { flatLabel: string; points: string[] };
@@ -333,13 +333,13 @@ export interface MakerLandingContent {
         appSteps: LandingFact[];
         browser: { lead: string; note: string; cta: string };
     };
-    faq: { eyebrow: string; heading: string; lede: string; items: MakerFaqItem[] };
+    faq: { eyebrow: string; heading: string; lede: string; items: DeskFaqItem[] };
     crossLink: CrossLink;
 }
 
-export const makerLanding: MakerLandingContent = {
+export const deskLanding: DeskLandingContent = {
     meta: {
-        title: "intentic maker · An assistant for your documents",
+        title: "intentic desk · An assistant for your documents",
         description:
             "An assistant that writes, edits and files your documents on your own computer. Every change is saved, so you can always go back. Free.",
     },
@@ -349,27 +349,27 @@ export const makerLanding: MakerLandingContent = {
         screens: {
             app: [
                 {
-                    name: "maker-hero-agents",
-                    alt: "The intentic board on a maker of documents: an Attention lane holding an assistant waiting on a question about a supplier letter, an Active lane where one is rewriting the October newsletter, and a Finished lane with a draft of the September newsletter to read and a receipts sort already accepted.",
-                    frameLabel: "my-maker · Assistants",
+                    name: "desk-hero-agents",
+                    alt: "The intentic board on a desk of documents: an Attention lane holding an assistant waiting on a question about a supplier letter, an Active lane where one is rewriting the October newsletter, and a Finished lane with a draft of the September newsletter to read and a receipts sort already accepted.",
+                    frameLabel: "my-desk · Assistants",
                 },
                 {
-                    name: "maker-hero-files",
-                    alt: "The maker's files with the newsletter folder open: August's, September's and October's drafts, the template, the subscriber list and a folder of pictures, drawn as documents rather than as a code tree.",
-                    frameLabel: "my-maker · Files",
+                    name: "desk-hero-files",
+                    alt: "The desk's files with the newsletter folder open: August's, September's and October's drafts, the template, the subscriber list and a folder of pictures, drawn as documents rather than as a code tree.",
+                    frameLabel: "my-desk · Files",
                 },
             ],
             plan: {
-                name: "maker-hero-plan",
-                alt: "The chat beside the maker, holding the plan the assistant wrote for rewriting the October newsletter around the sale, with Approve and No, keep planning under it.",
+                name: "desk-hero-plan",
+                alt: "The chat beside the desk, holding the plan the assistant wrote for rewriting the October newsletter around the sale, with Approve and No, keep planning under it.",
             },
             chat: {
-                name: "maker-hero-chat",
+                name: "desk-hero-chat",
                 alt: "The chat in its own window: the plan the assistant wrote for rewriting the October newsletter around the sale, with Approve and No, keep planning under it.",
                 frameLabel: "Chat · Newsletter",
             },
         },
-        demoHref: `${DEMO_PATH}agents?mode=maker`,
+        demoHref: `${DEMO_PATH}agents?mode=desk`,
         actions: { download: "Download the app", browser: "Use it in the browser" },
     },
     tour: {
@@ -380,9 +380,9 @@ export const makerLanding: MakerLandingContent = {
                 href: productHref("run"),
                 line: "One board shows everything you have asked for, and puts the one that needs you first.",
                 shot: {
-                    name: "maker-stage-run",
+                    name: "desk-stage-run",
                     alt: "The intentic workspace on the board: one assistant rewriting the October newsletter, one waiting on a question about a letter to the supplier, a finished draft of the September newsletter, and the docked chat holding the plan with Approve under it.",
-                    label: "my-maker · Assistants",
+                    label: "my-desk · Assistants",
                 },
             },
             {
@@ -392,7 +392,7 @@ export const makerLanding: MakerLandingContent = {
                 shot: {
                     name: "stage-connect",
                     alt: "The connections catalogue, grouped by what each one is for: GitHub, a database, Discord, Stripe, Obsidian, Outline and a server among them, seven already connected, and a row at the foot for anything of your own.",
-                    label: "my-maker · Connections",
+                    label: "my-desk · Connections",
                 },
             },
             {
@@ -406,9 +406,9 @@ export const makerLanding: MakerLandingContent = {
                 href: productHref("review"),
                 line: "It writes a plan first and waits for your yes. Every change is saved as a version, so you can always go back.",
                 shot: {
-                    name: "maker-stage-review",
+                    name: "desk-stage-review",
                     alt: "A finished draft, read as what changed: the September newsletter moved into the new template, with the assistant's own account of the work beside it.",
-                    label: "my-maker · What changed",
+                    label: "my-desk · What changed",
                 },
             },
             {
@@ -418,7 +418,7 @@ export const makerLanding: MakerLandingContent = {
                 shot: {
                     name: "stage-host",
                     alt: "The workspace's Access page: the owner, a field to invite someone by email, the browsers currently signed in, and under Here now a collaborator looking at the board.",
-                    label: "my-maker · Access",
+                    label: "my-desk · Access",
                 },
             },
         ],
@@ -492,7 +492,7 @@ export const makerLanding: MakerLandingContent = {
         lede: "What it costs, where your files stay, and what is not built yet.",
         items: [
             {
-                id: "maker-what-do-i-need",
+                id: "desk-what-do-i-need",
                 question: "What do I need to run it?",
                 answer: [
                     "A Windows or Linux computer and a Google account to sign in with. The app installs everything else it needs, and asks before it does.",
@@ -501,7 +501,7 @@ export const makerLanding: MakerLandingContent = {
                 more: { label: "Download the app", href: "/download/" },
             },
             {
-                id: "maker-where-are-my-files",
+                id: "desk-where-are-my-files",
                 question: "Where do my files live?",
                 answer: [
                     "On your own computer, in an ordinary folder you can open with anything else. Nothing is uploaded to us.",
@@ -509,14 +509,14 @@ export const makerLanding: MakerLandingContent = {
                 ],
             },
             {
-                id: "maker-what-does-it-cost",
+                id: "desk-what-does-it-cost",
                 question: "What does it cost?",
                 answer: [
                     "Nothing. intentic is free and open source. The assistant runs on the AI plan you bring, and we never meter or mark up what it uses.",
                 ],
             },
             {
-                id: "maker-can-it-read-my-mail",
+                id: "desk-can-it-read-my-mail",
                 question: "Can it read my mail or my calendar?",
                 answer: [
                     "Only if you connect them, and you can disconnect them at any time. Your passwords stay on your computer; the assistant is handed what it needs for one task at a time, and every connection is listed where you can see it.",
@@ -524,7 +524,7 @@ export const makerLanding: MakerLandingContent = {
                 more: { label: "What it can connect to", href: productHref("connect") },
             },
             {
-                id: "maker-do-i-need-to-learn-anything",
+                id: "desk-do-i-need-to-learn-anything",
                 question: "Do I need to learn anything technical?",
                 answer: [
                     "No. You type what you want in your own words, read the plan it writes back, and say yes or no. The words on screen are plain ones: a draft, a version, what changed.",
@@ -533,7 +533,7 @@ export const makerLanding: MakerLandingContent = {
                 more: { label: "The developer edition", href: "/?variant=default" },
             },
             {
-                id: "maker-is-there-a-mac-version",
+                id: "desk-is-there-a-mac-version",
                 question: "Is there a Mac version?",
                 answer: [
                     "Not yet. On a Mac, use it in the browser: sign in at app.intentic.dev and it walks you through the setup, one command included.",

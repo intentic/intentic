@@ -49,11 +49,11 @@ export const intenticWarm = {
     ],
 };
 
-// The maker skin's half of the pair. Same scopes in the same order, same idea — one brand-orange signal on keywords,
+// The desk skin's half of the pair. Same scopes in the same order, same idea — one brand-orange signal on keywords,
 // warm neutrals for everything else — inverted for paper: prominence here is depth, not brightness. Every colour
 // clears 4.5:1 on the light code ground (#f7f4ef, the app's own light terminal), so a snippet is readable and not
 // merely tinted. Shipped alongside the dark theme rather than instead of it: `<Code>` emits both, the dark one
-// inline and this one as `--shiki-light`, and maker.css switches between them.
+// inline and this one as `--shiki-light`, and desk.css switches between them.
 export const intenticPaper = {
     name: "intentic-paper",
     type: "light" as const,

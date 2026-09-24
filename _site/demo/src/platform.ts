@@ -1,8 +1,8 @@
 import type { HostedPlanState, SandboxSummary, TrashedSandbox, User } from "@intentic/api-contract";
 import { FREE_TIER, hostedTier } from "@intentic/constants";
 import { inviteRecords } from "./fixture/access";
-import { MAKER_SANDBOX_NAME } from "./fixture/maker";
-import { makerEdition, demoTier } from "./mode";
+import { DESK_SANDBOX_NAME } from "./fixture/desk";
+import { deskEdition, demoTier } from "./mode";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
 
 // Fetch handler for the three router gates before the workspace renders:
@@ -15,7 +15,7 @@ export const DEMO_USER: User = { id: `demo-user`, email: `ada@acme.dev`, name: `
 
 export const DEMO_SANDBOX: SandboxSummary = {
     id: `demo`,
-    name: makerEdition ? MAKER_SANDBOX_NAME : `acme-shop`,
+    name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`,
     image: null,
     daemonUrl: DEMO_DAEMON_ORIGIN,
     lastSeenAt: new Date().toISOString(),

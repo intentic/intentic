@@ -24,7 +24,7 @@ import TrustCards from "./TrustCards.astro";
 import Window from "./Window.astro";
 import "../styles/home.css";
 
-/* THE DEVELOPER PAGE. intentic maker, the other product, is MakerLanding.astro at /maker/: its own words and pictures
+/* THE DEVELOPER PAGE. intentic desk, the other product, is DeskLanding.astro at /desk/: its own words and pictures
    over the same shell, never a second edition of this document. */
 interface Props {
     noindex?: boolean;
@@ -101,7 +101,7 @@ const machineStep = content.connect.steps.at(-1)!;
                             <a class="btn btn-secondary" href={APP_URL}>Create your workspace</a>
                         </div>
 
-                        {/* The other product, for the reader who is in the wrong place: /maker/ is its own page. */}
+                        {/* The other product, for the reader who is in the wrong place: /desk/ is its own page. */}
                         <p class="hero-cross">
                             {content.crossLink.lead}{" "}
                             <a href={content.crossLink.href} class="link">{content.crossLink.label} →</a>

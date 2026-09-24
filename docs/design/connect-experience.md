@@ -155,6 +155,6 @@ exactly 1, 2, 4 and 8 GB.
   `v-if`.
 - **A second free plan.** The design assumes exactly one free provider because the spec table currently has one. Two
   would make the lane a list, which it already renders as.
-- **Where a maker lands.** A member who may drive a turn but not read `/accounts` sees lanes derived from
+- **Where a guest lands.** A member who may drive a turn but not read `/accounts` sees lanes derived from
   `nativeReady`; whether such a reader should be offered a sign-in at all is a permissions question this view inherits
   rather than answers.

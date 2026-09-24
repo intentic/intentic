@@ -41,7 +41,7 @@
                 var PROFILE_KEYS = ["ui-color-scheme", "ui-skin", "ui-audience"];
                 var PROFILES = {
                     default: { "ui-color-scheme": "system", "ui-skin": "system" },
-                    maker: { "ui-color-scheme": "light", "ui-skin": "none", "ui-audience": "maker" },
+                    desk: { "ui-color-scheme": "light", "ui-skin": "none", "ui-audience": "maker" },
                 };
                 var owns = Object.prototype.hasOwnProperty;
                 var url = new URL(window.location.href);
@@ -49,11 +49,11 @@
                 var linked = asked !== null;
                 // A reader who came by no link at all — the address typed, or the desktop app's sign-in page opening
                 // in this browser after an installer taken from intentic.dev — is still one the site has met: its
-                // edition cookie is set on the domain both origins share. `maker` is that profile; any other value is
+                // edition cookie is set on the domain both origins share. `desk` is that profile; any other value is
                 // the site's way out, which is the default one; no cookie is no opinion.
                 if (!linked) {
                     var jar = /(?:^|; )variant=([^;]*)/.exec(document.cookie);
-                    if (jar !== null) asked = decodeURIComponent(jar[1]) === "maker" ? "maker" : "default";
+                    if (jar !== null) asked = decodeURIComponent(jar[1]) === "desk" ? "desk" : "default";
                 }
                 if (asked !== null && owns.call(PROFILES, asked)) {
                     var next = PROFILES[asked];

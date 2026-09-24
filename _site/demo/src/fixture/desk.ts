@@ -1,36 +1,36 @@
 import type { AgentRepoChanges, AgentSummary, FileDiff, RepoChanges, SessionSummary } from "@intentic/sandbox-contract";
 import { buildDocx } from "./document";
 
-// THE MAKER RECORDING: the same app on a workspace of documents rather than code, for the reader who came from
-// intentic.dev/maker. One person, Ada, who runs a small ceramics studio: a newsletter, the shop's website, letters and
-// receipts. Served in place of acme-shop when the demo's mode is `maker` (mode.ts); every seam that reads a fixture
+// THE DESK RECORDING: the same app on a workspace of documents rather than code, for the reader who came from
+// intentic.dev/desk. One person, Ada, who runs a small ceramics studio: a newsletter, the shop's website, letters and
+// receipts. Served in place of acme-shop when the demo's mode is `desk` (mode.ts); every seam that reads a fixture
 // picks this one there, so nothing here is applied by rewriting the code fixtures.
 
-export const MAKER_SANDBOX_NAME = `my-maker`;
+export const DESK_SANDBOX_NAME = `my-desk`;
 
 // One project per folder: the Projects dashboard draws a tile for each, and the maker never hears the word repository.
-export const MAKER_REPOS: readonly string[] = [`newsletter`, `shop-site`, `letters`, `receipts`];
+export const DESK_REPOS: readonly string[] = [`newsletter`, `shop-site`, `letters`, `receipts`];
 
 // The featured run: the plan card and the question the chat shots are pictures of.
-export const MAKER_FEATURED_ID = `cnv_maker_newsletter`;
+export const DESK_FEATURED_ID = `cnv_desk_newsletter`;
 // Parked on a question: the attention lane's reason to exist.
-export const MAKER_AWAITING_ID = `cnv_maker_supplier`;
+export const DESK_AWAITING_ID = `cnv_desk_supplier`;
 // Holding a finished draft: what the review page opens on, and the one prose diff the recording carries whole.
-export const MAKER_REVIEW_ID = `cnv_maker_september`;
-const MAKER_RECEIPTS_ID = `cnv_maker_receipts`;
+export const DESK_REVIEW_ID = `cnv_desk_september`;
+const DESK_RECEIPTS_ID = `cnv_desk_receipts`;
 
-export const MAKER_FEATURED_TITLE = `Rewrite the October newsletter for the autumn sale`;
-export const MAKER_FEATURED_SESSION = `ses_maker_october`;
+export const DESK_FEATURED_TITLE = `Rewrite the October newsletter for the autumn sale`;
+export const DESK_FEATURED_SESSION = `ses_desk_october`;
 
 const minutes = (count: number): number => count * 60_000;
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false } as const;
 
-export const makerRoster = (now: number): AgentSummary[] => [
+export const deskRoster = (now: number): AgentSummary[] => [
     {
-        id: MAKER_FEATURED_ID,
+        id: DESK_FEATURED_ID,
         startIn: `newsletter`,
-        sessionId: MAKER_FEATURED_SESSION,
-        title: MAKER_FEATURED_TITLE,
+        sessionId: DESK_FEATURED_SESSION,
+        title: DESK_FEATURED_TITLE,
         status: `running`,
         provider: `claude`,
         harness: `claude-code`,
@@ -55,9 +55,9 @@ export const makerRoster = (now: number): AgentSummary[] => [
         diff: { files: 1, insertions: 9, deletions: 12 },
     },
     {
-        id: MAKER_AWAITING_ID,
+        id: DESK_AWAITING_ID,
         startIn: `letters`,
-        sessionId: `ses_maker_supplier`,
+        sessionId: `ses_desk_supplier`,
         title: `Reply to the supplier about the delayed delivery`,
         status: `awaiting`,
         provider: `claude`,
@@ -80,9 +80,9 @@ export const makerRoster = (now: number): AgentSummary[] => [
         toolUses: 3,
     },
     {
-        id: MAKER_REVIEW_ID,
+        id: DESK_REVIEW_ID,
         startIn: `newsletter`,
-        sessionId: `ses_maker_september`,
+        sessionId: `ses_desk_september`,
         title: `Move the September newsletter into the new template`,
         status: `ready`,
         provider: `claude`,
@@ -105,9 +105,9 @@ export const makerRoster = (now: number): AgentSummary[] => [
         diff: { files: 1, insertions: 14, deletions: 17 },
     },
     {
-        id: MAKER_RECEIPTS_ID,
+        id: DESK_RECEIPTS_ID,
         startIn: `receipts`,
-        sessionId: `ses_maker_receipts`,
+        sessionId: `ses_desk_receipts`,
         title: `Sort September's receipts into folders by month and supplier`,
         status: `landed`,
         provider: `claude`,
@@ -258,9 +258,9 @@ Saturday: 10 to 4
 Sunday: closed
 `;
 
-const README = `# my-maker
+const README = `# my-desk
 
-Ada's maker: the studio newsletter, the shop's website, letters and receipts.
+Ada's desk: the studio newsletter, the shop's website, letters and receipts.
 
 This workspace is a **recording**. Every panel around it is the real intentic UI, wired to a fixture
 instead of an assistant, so you can open anything, but nothing here runs.
@@ -268,7 +268,7 @@ instead of an assistant, so you can open anything, but nothing here runs.
 Install the app on your own computer and the same screens work on your documents.
 `;
 
-/** A letter as the Word document it would be on a maker, drawn by the viewer from its real bytes. */
+/** A letter as the Word document it would be on a desk, drawn by the viewer from its real bytes. */
 export const SUPPLIER_LETTER_PATH = `letters/supplier-delay.docx`;
 export const SUPPLIER_LETTER_DOCX = buildDocx(`Re: order 2318, delivery date`, [
     `Dear Mr Hendriks,`,
@@ -279,8 +279,8 @@ export const SUPPLIER_LETTER_DOCX = buildDocx(`Re: order 2318, delivery date`, [
     `Ada Lovelace`,
 ]);
 
-/** Every document on the maker, in the shape workspace.ts's table takes: a body, or a size for one it does not carry. */
-export const MAKER_SOURCES: readonly [string, string | number][] = [
+/** Every document on the desk, in the shape workspace.ts's table takes: a body, or a size for one it does not carry. */
+export const DESK_SOURCES: readonly [string, string | number][] = [
     [`README.md`, README],
 
     [`newsletter/october.md`, OCTOBER_BEFORE],
@@ -316,7 +316,7 @@ export const MAKER_SOURCES: readonly [string, string | number][] = [
 ];
 
 // The main tree's own uncommitted work: one edit the owner made by hand.
-export const MAKER_CHANGES: RepoChanges[] = [
+export const DESK_CHANGES: RepoChanges[] = [
     {
         repo: `shop-site`,
         branch: `main`,
@@ -326,13 +326,13 @@ export const MAKER_CHANGES: RepoChanges[] = [
     },
 ];
 
-export const MAKER_ORIGIN_AGENTS: Record<string, { title: string; provider: string }> = {
-    [MAKER_REVIEW_ID]: { title: `Move the September newsletter into the new template`, provider: `claude` },
+export const DESK_ORIGIN_AGENTS: Record<string, { title: string; provider: string }> = {
+    [DESK_REVIEW_ID]: { title: `Move the September newsletter into the new template`, provider: `claude` },
 };
 
 // The finished draft, and the sorting that already landed. No `modules`: a folder of documents declares no package.
-export const MAKER_AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
-    [MAKER_REVIEW_ID]: [
+export const DESK_AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
+    [DESK_REVIEW_ID]: [
         {
             repo: `newsletter`,
             branch: `agent/september-template`,
@@ -340,7 +340,7 @@ export const MAKER_AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
             modules: [],
         },
     ],
-    [MAKER_RECEIPTS_ID]: [
+    [DESK_RECEIPTS_ID]: [
         {
             repo: `receipts`,
             branch: `agent/sort-receipts`,
@@ -356,22 +356,22 @@ export const MAKER_AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
 };
 
 // Keyed `repo/path`, like workspace.ts's own table; a prose file's diff reads as tracked changes for a maker.
-export const MAKER_DIFFS: Record<string, FileDiff> = {
+export const DESK_DIFFS: Record<string, FileDiff> = {
     "newsletter/september.md": { before: SEPTEMBER_BEFORE, after: SEPTEMBER_AFTER },
     "newsletter/october.md": { before: OCTOBER_BEFORE, after: OCTOBER_AFTER },
     "shop-site/opening-hours.md": { before: HOURS_BEFORE, after: HOURS_AFTER },
 };
 
-export const makerSessions = (now: number): SessionSummary[] => {
+export const deskSessions = (now: number): SessionSummary[] => {
     const hour = 3_600_000;
     return [
-        { id: MAKER_FEATURED_SESSION, title: MAKER_FEATURED_TITLE, updatedAt: now - 60_000 },
-        { id: `ses_maker_supplier`, title: `Reply to the supplier about the delayed delivery`, updatedAt: now - 2 * 60_000 },
-        { id: `ses_maker_september`, title: `Move the September newsletter into the new template`, updatedAt: now - 14 * 60_000 },
-        { id: `ses_maker_receipts`, title: `Sort September's receipts into folders by month and supplier`, updatedAt: now - 41 * 60_000 },
-        { id: `ses_maker_hours`, title: `Update the opening hours on the website`, updatedAt: now - 5 * hour },
-        { id: `ses_maker_landlord`, title: `Draft the notice to the landlord about the leak`, updatedAt: now - 26 * hour },
-        { id: `ses_maker_market`, title: `Fill in the Harbour Market application`, updatedAt: now - 3 * 24 * hour },
-        { id: `ses_maker_august`, title: `Write the August newsletter`, updatedAt: now - 33 * 24 * hour },
+        { id: DESK_FEATURED_SESSION, title: DESK_FEATURED_TITLE, updatedAt: now - 60_000 },
+        { id: `ses_desk_supplier`, title: `Reply to the supplier about the delayed delivery`, updatedAt: now - 2 * 60_000 },
+        { id: `ses_desk_september`, title: `Move the September newsletter into the new template`, updatedAt: now - 14 * 60_000 },
+        { id: `ses_desk_receipts`, title: `Sort September's receipts into folders by month and supplier`, updatedAt: now - 41 * 60_000 },
+        { id: `ses_desk_hours`, title: `Update the opening hours on the website`, updatedAt: now - 5 * hour },
+        { id: `ses_desk_landlord`, title: `Draft the notice to the landlord about the leak`, updatedAt: now - 26 * hour },
+        { id: `ses_desk_market`, title: `Fill in the Harbour Market application`, updatedAt: now - 3 * 24 * hour },
+        { id: `ses_desk_august`, title: `Write the August newsletter`, updatedAt: now - 33 * 24 * hour },
     ];
 };

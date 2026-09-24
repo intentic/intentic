@@ -1,8 +1,8 @@
 ---
 /* The bar starts transparent and lifts after the page scrolls. */
-import { makerLanding } from "@intentic/site-content/landing";
+import { deskLanding } from "@intentic/site-content/landing";
 import { navEntries } from "@intentic/site-content/nav";
-import { APP_URL, MAKER_PATH, discordUrl, githubUrl } from "@intentic/site-content/site";
+import { APP_URL, DESK_PATH, discordUrl, githubUrl } from "@intentic/site-content/site";
 import { GITHUB_MARK } from "../lib/marks";
 import { isCurrentRow, isCurrentSection } from "../lib/navCurrent";
 import { NAV_ICONS } from "../lib/navIcons";
@@ -13,17 +13,17 @@ import Lotus from "./Lotus.astro";
 import MobileNav from "./MobileNav.astro";
 
 // Which product's page this bar sits on. The mark leads home to that product, and the bar's one action is that
-// product's door: the install for a developer, the app for the maker. A shared page (docs, pricing) is the
-// developer's by default; the pre-paint script (lib/variant.ts) points a maker reader's mark at /maker/ instead.
+// product's door: the install for a developer, the app for the desk. A shared page (docs, pricing) is the
+// developer's by default; the pre-paint script (lib/variant.ts) points a desk reader's mark at /desk/ instead.
 interface Props {
-    product?: "default" | "maker";
+    product?: "default" | "desk";
     /** The page carries the same action above the fold. The bar's copy starts hidden and the page's script reveals it
      * once the page's own has scrolled away — rendered here rather than set on load, or the button flashes once. */
     ctaManaged?: boolean;
 }
 
 const { product = "default", ctaManaged = false } = Astro.props;
-const home = product === "maker" ? MAKER_PATH : "/";
+const home = product === "desk" ? DESK_PATH : "/";
 const currentPath = Astro.url.pathname;
 ---
 
@@ -140,9 +140,9 @@ const currentPath = Astro.url.pathname;
                 <DiscordIcon size={17} />
             </a>
             {
-                product === "maker" ? (
+                product === "desk" ? (
                     <a href={APP_URL} class="btn btn-primary btn-sm bar-cta">
-                        {makerLanding.hero.actions.browser}
+                        {deskLanding.hero.actions.browser}
                     </a>
                 ) : (
                     <DownloadCta primary class="btn-sm bar-cta" icon={false} />

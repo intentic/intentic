@@ -47,7 +47,7 @@ parent's, and `context.repos` naming the repositories the guest is for.
 
 `useRole` reads `isGuest`, and `canDrive` is true for a guest (it drives its own chats) while `canReview` (review, ask
 for a landing) and `canShip` are not. The shell keeps a guest to the screens the daemon answers it on
-(`shell/guestFence.ts`): the rail is Chat and Agents (`core-views/registry.ts` `makerRailGroups`), the sandbox hub is
+(`shell/guestFence.ts`): the rail is Chat and Agents (`core-views/registry.ts` `guestRailGroups`), the sandbox hub is
 the Access section alone, the home redirect is the chat, and a guest standing anywhere else is sent there. The persona
 picker offers a guest its personas and neither "Anyone" nor the personas page; a new chat wears the first held persona from
 its first word; the router that reads a first message for a persona is never asked for a guest; the composer's file

@@ -9,7 +9,7 @@
         "deploy": "wrangler deploy && node scripts/submit-indexnow.mjs",
         "preview": "astro preview",
         "check": "astro check",
-        "test": "node scripts/check-maker-palette.mjs && node scripts/check-alignment.mjs",
+        "test": "node scripts/check-desk-palette.mjs && node scripts/check-alignment.mjs",
         "astro": "astro",
         "sync:registry": "node scripts/sync-registry.mjs"
     },

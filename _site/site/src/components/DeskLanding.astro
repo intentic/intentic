@@ -1,16 +1,16 @@
 ---
-/* INTENTIC MAKER, the product page at /maker/: the same assistant for the reader who does not write code. Its own
-   words and pictures from the first line to the last question (site-content landing.ts `makerLanding`); the shell,
+/* INTENTIC DESK, the product page at /desk/: the same assistant for the reader who does not write code. Its own
+   words and pictures from the first line to the last question (site-content landing.ts `deskLanding`); the shell,
    the frames, the marks, the cost band's account list and the trust band are the parts it shares with the developer
    page (Landing.astro). Never a paragraph of that page's copy, so search never meets the same page twice. */
 import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic/site-content/about";
-import { makerLanding, landingContent } from "@intentic/site-content/landing";
+import { deskLanding, landingContent } from "@intentic/site-content/landing";
 import { APP_URL, githubUrl } from "@intentic/site-content/site";
-import { buildMakerAppSchema } from "@intentic/site-content/structured-data";
+import { buildDeskAppSchema } from "@intentic/site-content/structured-data";
 // Provider marks match the session icons used by the app.
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import MakerShot from "./MakerShot.astro";
+import DeskShot from "./DeskShot.astro";
 import AutomateFigure from "./figures/AutomateFigure.astro";
 import Bullet from "./Bullet.astro";
 import Corners from "./Corners.astro";
@@ -24,7 +24,7 @@ import TrustCards from "./TrustCards.astro";
 import Window from "./Window.astro";
 import "../styles/home.css";
 
-const content = makerLanding;
+const content = deskLanding;
 // The plans are the same plans: one list, the developer page's, drawn under this page's own heading.
 const accounts = landingContent.economics.accounts;
 
@@ -45,9 +45,9 @@ const planSizes = "(min-width: 64rem) 29vw, (min-width: 48rem) 35vw, 40vw";
 const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 624px), (min-width: 48rem) calc(100vw - 3rem), 275vw";
 ---
 
-<BaseLayout faq={faq} extraJsonLd={[buildMakerAppSchema()]} backdrop={false}>
+<BaseLayout faq={faq} extraJsonLd={[buildDeskAppSchema()]} backdrop={false}>
     <div class="home flex flex-1 flex-col">
-        <Nav product="maker" ctaManaged />
+        <Nav product="desk" ctaManaged />
 
         <main class="flex-1">
             <section class="hero" id="hero">
@@ -92,7 +92,7 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
                         <div class="hero-stack">
                             <Window class="window-plan" aria-hidden="true">
                                 <div class="window-crop window-crop-plan">
-                                    <MakerShot name={content.hero.screens.plan.name} alt="The plan sidebar where the assistant proposes changes before editing documents" sizes={planSizes} class="screen screen-plan" />
+                                    <DeskShot name={content.hero.screens.plan.name} alt="The plan sidebar where the assistant proposes changes before editing documents" sizes={planSizes} class="screen screen-plan" />
                                 </div>
                             </Window>
 
@@ -100,7 +100,7 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
                                 <div class="window-crop window-crop-app">
                                     {
                                         content.hero.screens.app.map((screen, index) => (
-                                            <MakerShot
+                                            <DeskShot
                                                 name={screen.name}
                                                 alt={screen.alt}
                                                 sizes={appSizes}
@@ -113,7 +113,7 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
                                     }
                                 </div>
 
-                                {/* The press opens the maker recording: the same app on documents, not the code one. */}
+                                {/* The press opens the desk recording: the same app on documents, not the code one. */}
                                 <a class="play" href={content.hero.demoHref}>
                                     <span class="btn btn-sm">
                                         <svg viewBox="0 0 24 24" class="btn-icon" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
@@ -124,7 +124,7 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
 
                             <Window class="window-chat" aria-hidden="true">
                                 <div class="window-crop window-crop-chat">
-                                    <MakerShot name={content.hero.screens.chat.name} alt="A conversation with the assistant about a document task" sizes={chatSizes} class="screen screen-chat" />
+                                    <DeskShot name={content.hero.screens.chat.name} alt="A conversation with the assistant about a document task" sizes={chatSizes} class="screen screen-chat" />
                                 </div>
                             </Window>
                         </div>
@@ -155,7 +155,7 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
                             {item.shot !== undefined && (
                                 <Window class="stage-frame" finial label={item.shot.label}>
                                     <div class="stage-crop">
-                                        <MakerShot name={item.shot.name} alt={item.shot.alt} sizes={STAGE_SIZES} class="stage-shot" />
+                                        <DeskShot name={item.shot.name} alt={item.shot.alt} sizes={STAGE_SIZES} class="stage-shot" />
                                     </div>
                                 </Window>
                             )}
@@ -339,11 +339,11 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
                     <p class="lede">{content.faq.lede}</p>
 
                     <div class="faq faq-single">
-                        <div class="faq-group" id="maker-questions">
+                        <div class="faq-group" id="desk-questions">
                             <div class="faq-list">
                                 {
                                     content.faq.items.map((item) => (
-                                        <details id={item.id} name="maker-questions" class="faq-item scroll-mt-28">
+                                        <details id={item.id} name="desk-questions" class="faq-item scroll-mt-28">
                                             <summary>
                                                 <Bullet mark="lozenge" markClass="faq-mark" />
                                                 <span>{item.question}</span>

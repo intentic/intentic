@@ -1,5 +1,5 @@
 ---
-import { makerLanding } from "@intentic/site-content/landing";
+import { deskLanding } from "@intentic/site-content/landing";
 import { navEntries } from "@intentic/site-content/nav";
 import { APP_URL, discordUrl, githubUrl } from "@intentic/site-content/site";
 import DownloadCta from "./DownloadCta.astro";
@@ -11,7 +11,7 @@ import ExternalIcon from "./ExternalIcon.astro";
 
 // Which product's page this is on (Nav.astro decides and passes it): the sheet's one action is that product's door.
 interface Props {
-    product?: "default" | "maker";
+    product?: "default" | "desk";
 }
 
 const { product = "default" } = Astro.props;
@@ -139,9 +139,9 @@ const currentPath = Astro.url.pathname;
         </ul>
 
         {
-            product === "maker" ? (
+            product === "desk" ? (
                 <a class="btn btn-primary mobile-cta" href={APP_URL}>
-                    {makerLanding.hero.actions.browser}
+                    {deskLanding.hero.actions.browser}
                 </a>
             ) : (
                 <DownloadCta primary class="mobile-cta" icon={false} />

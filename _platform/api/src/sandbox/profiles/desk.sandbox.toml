@@ -1,5 +1,5 @@
-# The MAKER profile's sandbox, as a definition (see _sandbox/sandbox/src/portability/definition.ts). A reader who came
-# from intentic.dev/maker gets this applied once, at their sandbox's first boot, on an empty workspace — the daemon's own
+# The DESK profile's sandbox, as a definition (see _sandbox/sandbox/src/portability/definition.ts). A reader who came
+# from intentic.dev/desk gets this applied once, at their sandbox's first boot, on an empty workspace — the daemon's own
 # `definitionSeed` step, which refuses to run over work that already exists.
 #
 # The profile answers the look and the audience in the browser (@intentic/constants profile.ts); this file is the half

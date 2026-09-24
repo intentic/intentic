@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentReply, AttachFrame, TranscriptRow } from "@intentic/sandbox-contract";
 import { isTurnFact } from "@intentic/sandbox-contract";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
-import { MAKER_FEATURED_ID, OCTOBER_AFTER, OCTOBER_BEFORE } from "./fixture/maker";
+import { DESK_FEATURED_ID, OCTOBER_AFTER, OCTOBER_BEFORE } from "./fixture/desk";
 import { CHECKOUT_LIB_AFTER, CHECKOUT_LIB_BEFORE, CHECKOUT_ROUTE } from "./fixture/workspace";
 import type { StreamSink } from "./sse";
 
@@ -184,18 +184,18 @@ Prices come from the existing \`STRIPE_PRICE_*\` env vars, so nothing new needs 
     { after: 200, event: { kind: `done` } },
 ];
 
-const MAKER_TODOS = [`Read the October draft`, `Put the sale first and cut the opening`, `Keep the hours and the workshops`, `Check the length`];
+const DESK_TODOS = [`Read the October draft`, `Put the sale first and cut the opening`, `Keep the hours and the workshops`, `Check the length`];
 
 const homeTodos = (done: number, running: number): AgentEvent => ({
     kind: `todos`,
-    items: MAKER_TODOS.map((content, index) =>
+    items: DESK_TODOS.map((content, index) =>
         index === running ? { content, status: `in_progress`, activeForm: content } : { content, status: index < done ? `completed` : `pending` },
     ),
 });
 
-// The maker's featured run: the same shape as the code one (a plan card, work through the list, a question at the end),
+// The desk's featured run: the same shape as the code one (a plan card, work through the list, a question at the end),
 // on a newsletter rather than a checkout, in the words a maker reads. No terminal beat: nothing here is run.
-const MAKER_FEATURED: Beat[] = [
+const DESK_FEATURED: Beat[] = [
     { after: 300, event: { kind: `init`, model: `claude-sonnet-5` } },
     { after: 200, event: { kind: `mode`, mode: `plan` } },
     {
@@ -472,10 +472,10 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
     };
 };
 
-// Which script a featured conversation plays is the conversation's own: the maker's id names the maker's run.
+// Which script a featured conversation plays is the conversation's own: the desk's id names the desk's run.
 export const featuredRun = (conversationId: string, now: number): Run =>
-    conversationId === MAKER_FEATURED_ID
-        ? createRun(conversationId, `Rewrite the October newsletter for the autumn sale. Shorter, and the 20% off has to be the first thing people read.`, MAKER_FEATURED, now)
+    conversationId === DESK_FEATURED_ID
+        ? createRun(conversationId, `Rewrite the October newsletter for the autumn sale. Shorter, and the 20% off has to be the first thing people read.`, DESK_FEATURED, now)
         : createRun(conversationId, `Add Stripe checkout to the pricing page: the CTA is already there, it just throws.`, FEATURED, now);
 
 export const visitorRun = (conversationId: string, prompt: string, now: number): Run => createRun(conversationId, prompt, replyScript(prompt), now);

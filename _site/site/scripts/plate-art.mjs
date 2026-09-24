@@ -10,12 +10,12 @@ const here = import.meta.dirname;
 const OUT_DIR = join(here, "../public/assets/plate");
 
 // One plate per skin, and they are different pictures rather than one picture lit twice. The dark skin's is a
-// photograph of a temple wall, dark enough that cream type sits on it. The maker skin's is drawn: cream parchment,
+// photograph of a temple wall, dark enough that cream type sits on it. The desk skin's is drawn: cream parchment,
 // the same apsaras and spires, a gold cartouche border, and an empty middle for the headline. Washing the
 // photograph out to paper was tried first and is not the same thing — it reads as a faded photo, not as a page.
 const PLATES = [
     { master: "temple-master.png", prefix: "temple" },
-    { master: "temple-maker-master.png", prefix: "temple-maker" },
+    { master: "temple-desk-master.png", prefix: "temple-desk" },
 ];
 
 // Pinned to 16:9, matching global.css's frame math; quality drops as width grows (artefacts shrink angularly).

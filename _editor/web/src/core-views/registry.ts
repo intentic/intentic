@@ -135,7 +135,7 @@ export const railGroupsFor = (audience: Audience): readonly RailGroup[] => railG
 
 // A guest's rail: the chat it drives and the board of its own conversations, whichever audience it answered. Every
 // other tile opens on a read the daemon refuses a guest, and a tile that only ever shows a refusal is not a tile.
-export const makerRailGroups = (): readonly RailGroup[] => [
+export const guestRailGroups = (): readonly RailGroup[] => [
     { id: `work`, label: t(`views.registry.work`), items: [always(`chat`), always(`agents`)] },
 ];
 
@@ -150,7 +150,7 @@ export const sectionReachable = (to: string): boolean => !useRole().isGuest.valu
 export const railGroups = (): readonly RailGroup[] => railGroupsByAudience().developer;
 
 // The table for whoever is looking; reactive when read inside a computed, like everything below that reads it.
-const activeGroups = (): readonly RailGroup[] => (useRole().isGuest.value ? makerRailGroups() : railGroupsFor(useAudience().audience.value));
+const activeGroups = (): readonly RailGroup[] => (useRole().isGuest.value ? guestRailGroups() : railGroupsFor(useAudience().audience.value));
 
 const isRegistered = (id: string): boolean => views.value.some((entry) => entry.registration.id === id);
 

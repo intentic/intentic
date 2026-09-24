@@ -10,11 +10,11 @@ const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 // The site ships two skins, so it needs two sets of these. `--light` drives the app in its light scheme and writes
 // the twin set; the site pairs them by filename (see _site/site/src/lib/shots.ts).
 //
-// `--maker` is a third run over the light set: the maker recording (_site/demo/src/fixture/maker.ts, documents rather
-// than code, read as a maker) shot for the maker edition of the landing page. Those shots have no dark twin — the maker
-// edition is only ever light — so they frame themselves, and are named `maker-*` in the same directory.
-const MAKER = process.argv.includes("--maker");
-const LIGHT = process.argv.includes("--light") || MAKER;
+// `--desk` is a third run over the light set: the desk recording (_site/demo/src/fixture/desk.ts, documents rather
+// than code, read as a maker) shot for the desk edition of the landing page. Those shots have no dark twin — the desk
+// edition is only ever light — so they frame themselves, and are named `desk-*` in the same directory.
+const DESK = process.argv.includes("--desk");
+const LIGHT = process.argv.includes("--light") || DESK;
 const OUT_DIR = join(repoRoot(import.meta.url), `_site/site/src/assets/${LIGHT ? "product-light" : "product"}`);
 const PORT = 47_147;
 const ORIGIN = `http://localhost:${PORT}`;
@@ -49,9 +49,9 @@ const COMPOSER = 'textarea[name="draft"]';
 /* Match the platform-independent start of the chat popout label. */
 const POPOUT_BUTTON = 'button[aria-label^="Move chat into new window"]';
 
-// The maker recording's two special conversations (_site/demo/src/fixture/maker.ts): the scripted run, and the finished draft.
-const MAKER_FEATURED = "cnv_maker_newsletter";
-const MAKER_REVIEW = "cnv_maker_september";
+// The desk recording's two special conversations (_site/demo/src/fixture/desk.ts): the scripted run, and the finished draft.
+const DESK_FEATURED = "cnv_desk_newsletter";
+const DESK_REVIEW = "cnv_desk_september";
 
 /* Keep popped-out chat readable within the landing frame. */
 const POPOUT_WINDOW = { width: 800, height: 660 } as const;
@@ -78,8 +78,8 @@ interface Shot {
     clip?: "area" | "chat";
     /* Stop trimming at this content-specific editorial floor. */
     stopAt?: number;
-    /* Select the demo fixture density used for this shot; `maker` is the documents recording rather than a density. */
-    mode?: "minimal" | "default" | "full" | "maker";
+    /* Select the demo fixture density used for this shot; `desk` is the documents recording rather than a density. */
+    mode?: "minimal" | "default" | "full" | "desk";
     /**
      * Which extensions are switched on, overriding the density's own list.
      *
@@ -361,82 +361,82 @@ const SHOTS: Shot[] = [
     },
 ];
 
-// THE MAKER EDITION'S SHOTS: the same surfaces the landing page shows a developer, on the maker recording. Every one
-// runs in `maker` mode, whose own two extensions (the Projects home and the viewers) stay on: a maker's rail is those and
+// THE DESK EDITION'S SHOTS: the same surfaces the landing page shows a developer, on the desk recording. Every one
+// runs in `desk` mode, whose own two extensions (the Projects home and the viewers) stay on: a maker's rail is those and
 // the core, and the shot should be of what they see.
-const MAKER_SHOTS: Shot[] = [
+const DESK_SHOTS: Shot[] = [
     // The board, as the hero's first frame: one assistant working on the newsletter, one waiting on a question about a
     // letter, one finished draft to read, one sorting job already accepted.
     {
-        name: "maker-hero-agents",
+        name: "desk-hero-agents",
         path: "/agents",
-        openFirst: `/agents/${MAKER_FEATURED}`,
+        openFirst: `/agents/${DESK_FEATURED}`,
         waitFor: "text=ATTENTION",
         settleMs: 1400,
         clip: "area",
         viewport: HERO_WINDOW,
         fullHeight: true,
-        mode: "maker",
+        mode: "desk",
     },
-    // The maker's files with the newsletter folder open: the drafts, the template, the list and the pictures. Exact
+    // The desk's files with the newsletter folder open: the drafts, the template, the list and the pictures. Exact
     // matches, since the open chat's title carries the word "newsletter" too and a substring match lands on it first.
     {
-        name: "maker-hero-files",
+        name: "desk-hero-files",
         path: "/workspace",
-        openFirst: `/agents/${MAKER_FEATURED}`,
+        openFirst: `/agents/${DESK_FEATURED}`,
         waitFor: 'text="newsletter"',
         click: ['text="newsletter"'],
         settleMs: 1400,
         clip: "area",
         viewport: HERO_WINDOW,
         fullHeight: true,
-        mode: "maker",
+        mode: "desk",
     },
     // The docked chat on the plan card, cropped to the chat: the hero's left wing.
     {
-        name: "maker-hero-plan",
+        name: "desk-hero-plan",
         path: "/workspace",
-        openFirst: `/agents/${MAKER_FEATURED}`,
+        openFirst: `/agents/${DESK_FEATURED}`,
         waitFor: "text=No, keep planning",
         settleMs: 3200,
         clip: "chat",
         dpr: DENSE_DPR,
         stopAt: 640,
-        mode: "maker",
+        mode: "desk",
     },
     // The chat in its own window, on the plan the assistant wrote for the newsletter, Approve under it. The plan card
     // lands three seconds into the run and the popped-out window starts its own copy of it, so it waits longer than
     // the code demo's twin.
     {
-        name: "maker-hero-chat",
-        path: `/agents/${MAKER_FEATURED}`,
-        openFirst: `/agents/${MAKER_FEATURED}`,
+        name: "desk-hero-chat",
+        path: `/agents/${DESK_FEATURED}`,
+        openFirst: `/agents/${DESK_FEATURED}`,
         waitFor: POPOUT_BUTTON,
         settleMs: 3200,
         popout: { ...POPOUT_WINDOW, settleMs: 4_500 },
         dpr: DENSE_DPR,
-        mode: "maker",
+        mode: "desk",
     },
     {
-        name: "maker-stage-run",
+        name: "desk-stage-run",
         path: "/agents",
-        openFirst: `/agents/${MAKER_FEATURED}`,
+        openFirst: `/agents/${DESK_FEATURED}`,
         waitFor: "text=ATTENTION",
         settleMs: 3200,
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
-        mode: "maker",
+        mode: "desk",
     },
     // A finished draft, read as what changed in the document: the September newsletter moved into the template.
     {
-        name: "maker-stage-review",
-        path: `/agents/${MAKER_REVIEW}`,
-        openFirst: `/agents/${MAKER_FEATURED}`,
+        name: "desk-stage-review",
+        path: `/agents/${DESK_REVIEW}`,
+        openFirst: `/agents/${DESK_FEATURED}`,
         waitFor: "text=september.md",
         settleMs: 3200,
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
-        mode: "maker",
+        mode: "desk",
     },
 ];
 
@@ -823,11 +823,11 @@ const contextOptions = (shot: Shot): Parameters<Browser["newContext"]>[0] => ({
 });
 
 // A bare rail unless the shot asks otherwise. `full` is only ever chosen because the extensions ARE the subject — the
-// capability catalogue is built from them — and `maker` because its two are the maker's home and viewers; those keep the
+// capability catalogue is built from them — and `desk` because its two are the maker's home and viewers; those keep the
 // mode's own list. Everything else is a shot of some other surface, and the extension icons beside it are chrome the
 // reader has to look past.
 const pinnedExtensions = (shot: Shot): readonly string[] | undefined =>
-    shot.extensions ?? (shot.mode === "full" || shot.mode === "maker" ? undefined : []);
+    shot.extensions ?? (shot.mode === "full" || shot.mode === "desk" ? undefined : []);
 
 /** A browser context with everything the app reads before it boots already in place: look, audience, mode, rail. */
 const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext> => {
@@ -836,7 +836,7 @@ const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext
     //
     // `ui-skin` is the bigger of the two. Sanctum is the site's own carved design worn by the app, and it is DARK BY
     // CONSTRUCTION — its README says turning it on forces the dark scheme — so the light set is the app with no skin,
-    // which is exactly the light theme the maker pages are built from. The dark set keeps Sanctum, which is why those
+    // which is exactly the light theme the desk pages are built from. The dark set keeps Sanctum, which is why those
     // shots sit so well on the carved pages.
     //
     // Both are written before the app boots, and the app applies them itself: `definePreference` reads storage at
@@ -851,8 +851,8 @@ const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext
         },
         LIGHT ? { scheme: `light`, skin: `none` } : { scheme: `dark`, skin: `sanctum` },
     );
-    // The maker is read as a maker: the third key the maker profile seeds, and the one that changes the words on screen.
-    if (shot.mode === "maker") {
+    // The desk is read as a maker: the third key the desk profile seeds, and the one that changes the words on screen.
+    if (shot.mode === "desk") {
         await context.addInitScript(() => window.localStorage.setItem(`ui-audience`, `maker`));
     }
     // Before first paint, and in every window the context opens. `raw` shots get it too: the visitor page carries
@@ -930,7 +930,7 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
 
 const run = async (): Promise<void> => {
     const only = process.argv.slice(2).filter((argument) => !argument.startsWith(`--`));
-    const catalogue = MAKER ? MAKER_SHOTS : SHOTS;
+    const catalogue = DESK ? DESK_SHOTS : SHOTS;
     const wanted = only.length === 0 ? catalogue : catalogue.filter((shot) => only.includes(shot.name));
     if (wanted.length === 0) {
         throw new Error(`No shot matches ${only.join(", ")} — known: ${catalogue.map((shot) => shot.name).join(", ")}`);
@@ -956,7 +956,7 @@ const run = async (): Promise<void> => {
         await browser.close();
         server.close();
     }
-    console.log(`${wanted.length - failed}/${wanted.length} ${MAKER ? `maker` : LIGHT ? `light` : `dark`} shots written to ${OUT_DIR}`);
+    console.log(`${wanted.length - failed}/${wanted.length} ${DESK ? `desk` : LIGHT ? `light` : `dark`} shots written to ${OUT_DIR}`);
 };
 
 await run();

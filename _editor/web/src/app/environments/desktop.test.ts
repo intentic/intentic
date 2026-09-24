@@ -78,7 +78,7 @@ test("the auth handoff carries the profile when the browser has one", async () =
     expect(bare.searchParams.get(`handoff`)).toBe(`row+1`);
     expect(bare.searchParams.get(`state`)).toBe(`nonce`);
     expect(bare.searchParams.get(`profile`)).toBeNull();
-    expect(new URL(desktopAuthLink(`row`, `nonce`, `maker`)).searchParams.get(`profile`)).toBe(`maker`);
+    expect(new URL(desktopAuthLink(`row`, `nonce`, `desk`)).searchParams.get(`profile`)).toBe(`desk`);
 });
 
 test("the scheme is announced only inside the app", async () => {

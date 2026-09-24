@@ -5,7 +5,7 @@
 //
 // The card wears the site's LIGHT skin, not the dark one the site defaults to. A social feed and a directory listing
 // are both mostly white, and a near-black card reads there as a hole rather than a product. The colours below are the
-// maker palette's oklch tokens resolved to sRGB (scripts/check-maker-palette.mjs owns the tokens themselves).
+// desk palette's oklch tokens resolved to sRGB (scripts/check-desk-palette.mjs owns the tokens themselves).
 
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -16,7 +16,7 @@ const BOLD = fileURLToPath(new URL("./fonts/Inter-Bold.ttf", import.meta.url));
 const BOARD = fileURLToPath(new URL("./og/board-light.png", import.meta.url));
 const MARK = fileURLToPath(new URL("./og/mark.png", import.meta.url));
 
-// The maker skin, resolved. `CANVAS` is the same value BaseLayout ships as the light `theme-color`.
+// The desk skin, resolved. `CANVAS` is the same value BaseLayout ships as the light `theme-color`.
 const CANVAS = "#f5ede7";
 const LINE = "#e9dfd8";
 const INK = "#29201a";
@@ -96,7 +96,7 @@ function eyebrowFor(pathname) {
 }
 
 /** The two routes that render the landing page. Both get the brand line instead of the page title; see `ogCard`. */
-const LANDING = new Set(["", "maker"]);
+const LANDING = new Set(["", "desk"]);
 
 /**
  * One satori element. This is the shape JSX compiles to and what satori consumes, so the card describes itself

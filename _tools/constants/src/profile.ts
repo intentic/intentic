@@ -15,8 +15,8 @@ export const PROFILE_STORAGE_KEY = "ui-profile";
 
 // THE COOKIE IS THE SECOND WAY A PROFILE REACHES THE APP, and the only one that survives an installer. The site
 // writes it on the registrable domain both origins share (sharedCookieDomain), so app.intentic.dev reads it too: a
-// reader who took the desktop app from intentic.dev/maker never clicked a link into the app, and the sign-in page the
-// app opens in their browser is the first thing on the app's origin they meet. `maker` means the maker profile; any
+// reader who took the desktop app from intentic.dev/desk never clicked a link into the app, and the sign-in page the
+// app opens in their browser is the first thing on the app's origin they meet. `desk` means the desk profile; any
 // other value is the site's way out, which is the default profile; absent is no opinion.
 /** The site's edition cookie, readable by the app. */
 export const PROFILE_COOKIE = "variant";
@@ -41,7 +41,7 @@ export const sharedCookieDomain = (originA: string, originB: string): string | u
 };
 
 /** Every profile there is, as a tuple so a schema can take it and the type below cannot drift from the list. */
-export const PROFILE_IDS = ["default", "maker"] as const;
+export const PROFILE_IDS = ["default", "desk"] as const;
 
 export type Profile = (typeof PROFILE_IDS)[number];
 
@@ -69,10 +69,10 @@ export interface ProfileLook {
 }
 
 // `default` is listed, not implied, because it is also the way back: a profile may overwrite what the last profile
-// wrote, so `?profile=default` undoes a maker link for anyone who has not since chosen for themselves.
+// wrote, so `?profile=default` undoes a desk link for anyone who has not since chosen for themselves.
 export const PROFILES: Record<Profile, ProfileLook> = {
     default: { scheme: "system", skin: "system" },
-    maker: { scheme: "light", skin: "none", audience: "maker" },
+    desk: { scheme: "light", skin: "none", audience: "maker" },
 };
 
 export const DEFAULT_PROFILE: Profile = "default";

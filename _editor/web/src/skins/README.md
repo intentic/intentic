@@ -165,11 +165,11 @@ route-element backdrop above, which the skin excludes by name.
 
 That sheet has **two** dresses now, and the second is keyed on the colour scheme rather than on any skin:
 `html:not([data-mode="dark"]) .entry` is the marketing site's *light* design, the one intentic.dev serves at
-`/maker`. It exists because a reader sent a link to the light site used to cross into a near-black sign-in
-screen, and it is keyed on the scheme because that is the fact that stays true — someone who arrived on `/maker`
+`/desk`. It exists because a reader sent a link to the light site used to cross into a near-black sign-in
+screen, and it is keyed on the scheme because that is the fact that stays true — someone who arrived on `/desk`
 and then chose Sanctum is a dark reader, whatever brought them. A profile
 ([`@intentic/constants` profile.ts](../../../../_tools/constants/src/profile.ts)) is what sets the scheme on
-arrival; after that it has no say in this. `_site/site/scripts/check-maker-palette.mjs` pins the house materials
+arrival; after that it has no say in this. `_site/site/scripts/check-desk-palette.mjs` pins the house materials
 in that block to the site's own.
 
 Each stylesheet overrides three tiers and then names a handful of components:

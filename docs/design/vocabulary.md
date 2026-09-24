@@ -80,18 +80,20 @@ The shell's top-level destinations behind the icon rail become **sections**. `Ar
 
 ### desk
 
-Five meanings, and the repository already owns better words for four of them.
+Five meanings, and the repository already owns better words for four of them. The fifth, the product, keeps the word.
 
 | today | becomes | why |
 | --- | --- | --- |
-| the site variant and the app profile | **maker** | the profile already seeds `audience=maker`, and [maker-audience-design.md](maker-audience-design.md) is already written in that word |
+| the site variant and the app profile | **desk**, kept | it is the public product name, **intentic desk**. The profile seeds `audience=maker`, and that is two ideas, not one: the product is desk, the person it is for is a maker. Once the other four meanings moved out, desk names one thing |
 | the access grant that only talks to assistants | **guest** | "A desk is not granted until it holds one" describes nothing a reader can picture. `guest` over "chat-only" because the ladder's other five rungs are single words, and a role called `chat` would collide with the surface of that name |
 | "Show desk" | **Show home** | it opens the home screen |
 | "Front Desk", the visitor widget | **Visitor chat** | owner's call: this one is a public product name, not internal vocabulary |
 | `desktop`, `desktopSync` | unchanged | a different word for a different thing |
 
-`desk-edition.md` becomes [maker-edition.md](maker-edition.md) and `desk-members.md` becomes
-[guest-members.md](guest-members.md), since each document's whole subject is one of the words.
+`desk-members.md` becomes [guest-members.md](guest-members.md), since its whole subject is the role;
+[desk-edition.md](desk-edition.md) keeps its name. `maker` is the audience and nothing else
+([maker-audience-design.md](maker-audience-design.md)): a product spelling of it (`MakerLanding`, `/maker/`,
+`?profile=maker`) is refused by the `maker-product` entry.
 
 ### lane, tier, slot
 
@@ -185,7 +187,7 @@ contradiction that is live today, so it goes first regardless of what else is pi
 `personaCard.ts` became `personaRules.ts` and `reachableCards` became `reachablePersonas`. No wire change.
 
 **Stage 2. The collisions a user can see. MOSTLY DONE.** `area` to `section` in the shell, `desk` to guest,
-maker, home and visitor chat, and the `card` split across the wire types, the capability catalog and the
+home and visitor chat (the product keeps desk), and the `card` split across the wire types, the capability catalog and the
 user-facing copy. What is left of this stage is `lane`: the billing sense is done ("free plan"), the agents
 board's columns and the rail's lanes are not, and they are 328 files of internal UI vocabulary.
 

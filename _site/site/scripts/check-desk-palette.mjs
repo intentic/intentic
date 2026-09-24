@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// Pins the maker skin's palette to the app's light theme.
+// Pins the desk skin's palette to the app's light theme.
 //
-// styles/maker.css claims to BE the app's light scheme rather than a second light design that resembles it. Nothing in
+// styles/desk.css claims to BE the app's light scheme rather than a second light design that resembles it. Nothing in
 // the build enforces that: the two live in different packages, behind different Tailwind themes, and a change to the
 // app's ramp or its light recipes would leave the site quietly a shade off — the kind of drift nobody sees in a diff
 // and everybody sees in a screenshot six months later. This reads both files and fails if they have parted.
 //
 // It checks four things:
-//   1. every ramp step maker copies still has the app's value,
-//   2. every role maker rebuilds still uses the app's recipe, mix for mix,
+//   1. every ramp step desk copies still has the app's value,
+//   2. every role desk rebuilds still uses the app's recipe, mix for mix,
 //   3. the one place a colour had to be hardcoded (the plate's scrim, which needs a bare RGB triple) still equals the
 //      canvas it claims to be,
 //   4. the light shadow tint and the terminal ground are the app's.
@@ -20,11 +20,11 @@ const app = resolve(root, "../../_editor/ui/src/styles");
 
 const primitives = readFileSync(resolve(app, "primitive-colors.css"), "utf8");
 const semantics = readFileSync(resolve(app, "semantic-colors.css"), "utf8");
-const maker = readFileSync(resolve(root, "src/styles/maker.css"), "utf8");
+const desk = readFileSync(resolve(root, "src/styles/desk.css"), "utf8");
 const entry = readFileSync(resolve(root, "../../_shared/entry-css/entry.css"), "utf8");
 
 const failures = [];
-const fail = (what, expected, actual) => failures.push(`${what}\n    app  : ${expected}\n    maker : ${actual}`);
+const fail = (what, expected, actual) => failures.push(`${what}\n    app  : ${expected}\n    desk : ${actual}`);
 
 /** Collapses the cosmetic differences between two hand-formatted stylesheets: run-together spaces, trailing zeros. */
 const normalise = (value) =>
@@ -45,38 +45,38 @@ const decl = (css, name, scope) => {
 // The app's light scheme is its `:root`; its dark scheme is the `[data-mode="dark"]` block below it.
 const appLight = semantics.slice(0, semantics.indexOf('[data-mode="dark"]'));
 const appLightRole = (name) => decl(appLight, name);
-const homeDecl = (name) => decl(maker, name);
+const homeDecl = (name) => decl(desk, name);
 
 // ── 1. ramp steps ────────────────────────────────────────────────────────────────────────────────────────────────
-// Maker copies these under its own prefix so the site's `--color-*: initial` reset cannot reach them.
+// Desk copies these under its own prefix so the site's `--color-*: initial` reset cannot reach them.
 const RAMP = { neutral: [0, 50, 100, 200, 300, 500, 600, 900], brand: [300, 500, 600, 700, 800, 900, 950], green: [700], amber: [800], red: [700] };
 for (const [family, steps] of Object.entries(RAMP)) {
     for (const step of steps) {
         const expected = decl(primitives, `--color-${family}-${step}`);
-        const actual = homeDecl(`--maker-${family}-${step}`);
+        const actual = homeDecl(`--desk-${family}-${step}`);
         if (expected === undefined) {
             fail(`--color-${family}-${step} is gone from the app's ramp`, "(missing)", actual ?? "(missing)");
         } else if (expected !== actual) {
-            fail(`ramp step --maker-${family}-${step}`, expected, actual ?? "(missing)");
+            fail(`ramp step --desk-${family}-${step}`, expected, actual ?? "(missing)");
         }
     }
 }
 
 // ── 2. roles ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // The app spells its recipes in its own vocabulary: `surface` aliases neutral, `primary` aliases brand, and the light
-// scheme stirs everything with `--paper-tint`. Rewriting those into maker's names is what makes the two comparable.
+// scheme stirs everything with `--paper-tint`. Rewriting those into desk's names is what makes the two comparable.
 const toGuestNames = (value) =>
     value
-        .replace(/var\(--paper-tint\)/gu, "var(--maker-brand-300)")
-        .replace(/var\(--color-surface-(\d+)\)/gu, "var(--maker-neutral-$1)")
-        .replace(/var\(--color-(?:brand|primary)-(\d+)\)/gu, "var(--maker-brand-$1)")
-        .replace(/var\(--color-danger-(\d+)\)/gu, "var(--maker-red-$1)")
-        .replace(/var\(--color-success-(\d+)\)/gu, "var(--maker-green-$1)")
-        .replace(/var\(--color-warning-(\d+)\)/gu, "var(--maker-amber-$1)")
+        .replace(/var\(--paper-tint\)/gu, "var(--desk-brand-300)")
+        .replace(/var\(--color-surface-(\d+)\)/gu, "var(--desk-neutral-$1)")
+        .replace(/var\(--color-(?:brand|primary)-(\d+)\)/gu, "var(--desk-brand-$1)")
+        .replace(/var\(--color-danger-(\d+)\)/gu, "var(--desk-red-$1)")
+        .replace(/var\(--color-success-(\d+)\)/gu, "var(--desk-green-$1)")
+        .replace(/var\(--color-warning-(\d+)\)/gu, "var(--desk-amber-$1)")
         .replace(/var\(--color-white\)/gu, "#fff")
-        .replace(/var\(--ui-shadow-tint\)/gu, "var(--maker-shadow-tint)");
+        .replace(/var\(--ui-shadow-tint\)/gu, "var(--desk-shadow-tint)");
 
-// Left: the app's light role. Right: what maker.css calls the same thing. The names differ because the site's token
+// Left: the app's light role. Right: what desk.css calls the same thing. The names differ because the site's token
 // vocabulary is its own — it has gold and a bronze button where the app has a link and a filled control.
 const ROLES = [
     ["--role-canvas", "--color-canvas"],
@@ -98,24 +98,24 @@ const ROLES = [
     // A terminal is paper on both, and the same paper.
     ["--role-terminal", "--role-code-fill"],
     ["--role-terminal", "--role-figure-terminal"],
-    ["--ui-shadow-tint", "--maker-shadow-tint"],
-    ["--ui-shadow-1", "--maker-shadow-1"],
-    ["--ui-shadow-2", "--maker-shadow-2"],
-    ["--ui-shadow-3", "--maker-shadow-3"],
+    ["--ui-shadow-tint", "--desk-shadow-tint"],
+    ["--ui-shadow-1", "--desk-shadow-1"],
+    ["--ui-shadow-2", "--desk-shadow-2"],
+    ["--ui-shadow-3", "--desk-shadow-3"],
 ];
-for (const [appName, makerName] of ROLES) {
+for (const [appName, deskName] of ROLES) {
     const expected = appLightRole(appName);
-    const actual = homeDecl(makerName);
+    const actual = homeDecl(deskName);
     if (expected === undefined) {
         fail(`${appName} is gone from the app's light scheme`, "(missing)", actual ?? "(missing)");
     } else if (normalise(toGuestNames(expected)) !== actual) {
-        fail(`${makerName} no longer matches the app's ${appName}`, normalise(toGuestNames(expected)), actual ?? "(missing)");
+        fail(`${deskName} no longer matches the app's ${appName}`, normalise(toGuestNames(expected)), actual ?? "(missing)");
     }
 }
 
 // ── 3. the hardcoded scrim ───────────────────────────────────────────────────────────────────────────────────────
 // The plate's gradients set their own alpha per stop, so the paper they wash toward has to be a bare `R G B` triple
-// that `rgb()` can take a slash-alpha on. That is the one colour in maker.css a browser resolves and this file cannot,
+// that `rgb()` can take a slash-alpha on. That is the one colour in desk.css a browser resolves and this file cannot,
 // so it is resolved here: OKLCh through OKLab to sRGB, the same arithmetic the browser does for `color-mix`.
 const oklch = (value) => {
     const m = /^oklch\(\s*([\d.]+)%\s+([\d.]+)\s+([\d.]+)\s*\)$/u.exec(value);
@@ -134,7 +134,7 @@ const toSrgb = ([L, a, b]) => {
     ].map((c) => Math.round(Math.min(1, Math.max(0, c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055)) * 255));
 };
 
-const canvasRecipe = /color-mix\(in oklab, var\((--maker-[\w-]+)\) (\d+)%, var\((--maker-[\w-]+)\)\)/u.exec(homeDecl("--color-canvas") ?? "");
+const canvasRecipe = /color-mix\(in oklab, var\((--desk-[\w-]+)\) (\d+)%, var\((--desk-[\w-]+)\)\)/u.exec(homeDecl("--color-canvas") ?? "");
 if (canvasRecipe === null) {
     fail("--color-canvas is no longer a two-part oklab mix, so the scrim cannot be checked against it", "color-mix(...)", homeDecl("--color-canvas") ?? "(missing)");
 } else {
@@ -154,24 +154,24 @@ if (canvasRecipe === null) {
 }
 
 // ── 4. the entry screens ─────────────────────────────────────────────────────────────────────────────────────────
-// /login and /setup are the site's design worn by the app, so a reader arriving from /maker meets them in the light
+// /login and /setup are the site's design worn by the app, so a reader arriving from /desk meets them in the light
 // skin too — and they carry their own copy of the house materials, in a third package, behind a third selector. Only
 // the house metals are copied: everything else in that block hands the app's own light roles back, which cannot drift
-// from the app by construction. maker.css spells its bevels with `--maker-shadow-*`, which do not exist over there, so
+// from the app by construction. desk.css spells its bevels with `--desk-shadow-*`, which do not exist over there, so
 // they are expanded before the two are compared.
 const entryBlock = /html:not\(\[data-mode="dark"\]\) \.entry \{([^}]*)\}/u.exec(entry)?.[1];
 if (entryBlock === undefined) {
-    fail("entry.css has no light block, so /login and /setup arrive dark for a reader who came from /maker", 'html:not([data-mode="dark"]) .entry { … }', "(missing)");
+    fail("entry.css has no light block, so /login and /setup arrive dark for a reader who came from /desk", 'html:not([data-mode="dark"]) .entry { … }', "(missing)");
 } else {
     const expandShadows = (value) =>
         normalise(
             value
-                .replace(/var\((--maker-shadow-[123])\)/gu, (_, name) => homeDecl(name) ?? _)
-                .replace(/var\(--maker-shadow-tint\)/gu, homeDecl("--maker-shadow-tint") ?? "var(--maker-shadow-tint)"),
+                .replace(/var\((--desk-shadow-[123])\)/gu, (_, name) => homeDecl(name) ?? _)
+                .replace(/var\(--desk-shadow-tint\)/gu, homeDecl("--desk-shadow-tint") ?? "var(--desk-shadow-tint)"),
         );
     // Only the ones the entry screens actually paint with: the site has marks the app has no counterpart for, and a
     // value copied across for a selector that does not exist here would be a line nobody could ever check by looking.
-    const houseNames = [...maker.matchAll(/^\s*(--house-[\w-]+)\s*:/gmu)].map((m) => m[1]).filter((name) => entry.includes(`var(${name})`));
+    const houseNames = [...desk.matchAll(/^\s*(--house-[\w-]+)\s*:/gmu)].map((m) => m[1]).filter((name) => entry.includes(`var(${name})`));
     for (const name of houseNames) {
         const expected = expandShadows(homeDecl(name) ?? "");
         const actual = decl(entryBlock, name);
@@ -185,16 +185,16 @@ if (entryBlock === undefined) {
     }
     // A frame's drop is the deepest of the three, and the site names it rather than writing it out.
     const frame = /html:not\(\[data-mode="dark"\]\) \.entry-frame \{([^}]*)\}/u.exec(entry)?.[1] ?? "";
-    if (decl(frame, "box-shadow") !== expandShadows("var(--maker-shadow-3)")) {
-        fail("the entry frame's drop shadow", expandShadows("var(--maker-shadow-3)"), decl(frame, "box-shadow") ?? "(missing)");
+    if (decl(frame, "box-shadow") !== expandShadows("var(--desk-shadow-3)")) {
+        fail("the entry frame's drop shadow", expandShadows("var(--desk-shadow-3)"), decl(frame, "box-shadow") ?? "(missing)");
     }
 }
 
 if (failures.length > 0) {
     console.error(
-        `maker palette has drifted from the app's light theme (${failures.length} ${failures.length === 1 ? "difference" : "differences"}).\n` +
+        `desk palette has drifted from the app's light theme (${failures.length} ${failures.length === 1 ? "difference" : "differences"}).\n` +
             `  app   : _editor/ui/src/styles/{primitive,semantic}-colors.css\n` +
-            `  maker  : _site/site/src/styles/maker.css\n` +
+            `  desk  : _site/site/src/styles/desk.css\n` +
             `  entry : _shared/entry-css/entry.css (its light-scheme blocks)\n\n` +
             `${failures.join("\n\n")}\n\n` +
             `Copy the app's values across, or if the app moved on purpose, move the other two with it.`,
@@ -202,5 +202,5 @@ if (failures.length > 0) {
     process.exit(1);
 }
 console.log(
-    `maker palette matches the app's light theme: ${Object.values(RAMP).flat().length} ramp steps, ${ROLES.length} roles, the plate's scrim, and the entry screens' house materials.`,
+    `desk palette matches the app's light theme: ${Object.values(RAMP).flat().length} ramp steps, ${ROLES.length} roles, the plate's scrim, and the entry screens' house materials.`,
 );

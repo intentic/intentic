@@ -26,10 +26,12 @@ export const RETIRED = [
         since: "2026-09-21",
     },
     {
-        id: "desk-profile",
-        pattern: /\b(DESK_VARIANT|DeskLanding|DeskShot|deskLanding|deskEdition|buildDeskAppSchema|DESK_SHOTS)\b/,
-        became: "maker",
-        since: "2026-09-21",
+        // `maker` stays the AUDIENCE (`audience: "maker"`, useAudience().maker); only the product's spellings are refused.
+        id: "maker-product",
+        pattern:
+            /\b(MAKER_VARIANT|MAKER_PATH|MAKER_SHOTS|MAKER_REPOS|MakerLanding|MakerShot|makerLanding|makerEdition|buildMakerAppSchema|makerRoster|makerSessions)\b|[Ii]ntentic [Mm]aker|profile=maker|mode=maker|data-variant="maker"|temple-maker/,
+        became: "desk (intentic desk is the product; the audience it serves keeps `maker`)",
+        since: "2026-09-24",
     },
     {
         id: "front-desk",

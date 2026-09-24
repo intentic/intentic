@@ -32,7 +32,7 @@ import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
-import { MAKER_AWAITING_ID, MAKER_FEATURED_ID, MAKER_SANDBOX_NAME, makerRoster, SUPPLIER_LETTER_DOCX, SUPPLIER_LETTER_PATH } from "./fixture/maker";
+import { DESK_AWAITING_ID, DESK_FEATURED_ID, DESK_SANDBOX_NAME, deskRoster, SUPPLIER_LETTER_DOCX, SUPPLIER_LETTER_PATH } from "./fixture/desk";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster } from "./fixture/fleet";
 import {
     deleteKnowledgeNote,
@@ -76,7 +76,7 @@ import {
     workspaceTree,
     writeFile,
 } from "./fixture/workspace";
-import { demoMode, makerEdition } from "./mode";
+import { demoMode, deskEdition } from "./mode";
 import { coverageOf, type FixtureRouter, Frames, type RawContext, type RawRoutes, refuse, serve } from "./router";
 import { featuredRun, type Run, visitorRun } from "./turn";
 import { json } from "./transport";
@@ -88,17 +88,17 @@ import { json } from "./transport";
 const STARTED_AT = Date.now();
 
 // Which recording's two special cards this page serves: the run with a script behind it, and the one parked on a question.
-const FEATURED_ID = makerEdition ? MAKER_FEATURED_ID : FEATURED_AGENT_ID;
-const AWAITING_ID = makerEdition ? MAKER_AWAITING_ID : AWAITING_AGENT_ID;
+const FEATURED_ID = deskEdition ? DESK_FEATURED_ID : FEATURED_AGENT_ID;
+const AWAITING_ID = deskEdition ? DESK_AWAITING_ID : AWAITING_AGENT_ID;
 
 // Live state; every write bumps `rev` and re-broadcasts (snapshot-not-diff, newest rev wins).
 const roster = {
-    agents: makerEdition ? makerRoster(STARTED_AT) : fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true),
+    agents: deskEdition ? deskRoster(STARTED_AT) : fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true),
     rev: 1,
 };
 
-// Held automation approvals project onto the board's attention lane; a maker runs no automations.
-const heldApprovals = () => (makerEdition ? [] : automationApprovals(Date.now()));
+// Held automation approvals project onto the board's attention lane; a desk runs no automations.
+const heldApprovals = () => (deskEdition ? [] : automationApprovals(Date.now()));
 const listeners = new Set<(event: SystemEvent) => void>();
 const runs = new Map<string, Run>();
 
@@ -394,7 +394,7 @@ const savePersona = (card: Persona): void => {
 // The named parts of the workspace, upserted like the personas above: two, so a picker shows both the fence and
 // what it leaves out.
 const demoAreas: Area[] = [
-    { id: `support`, label: `Support maker`, brief: `Tickets, replies and the help centre.`, folders: [`web/support`] },
+    { id: `support`, label: `Support desk`, brief: `Tickets, replies and the help centre.`, folders: [`web/support`] },
     { id: `site`, label: `Marketing site`, folders: [`web/site`] },
 ];
 const saveArea = (area: Area): void => {
@@ -413,7 +413,7 @@ const removeArea = (id: string): void => {
     }
 };
 
-const info: Info = { name: makerEdition ? MAKER_SANDBOX_NAME : `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
+const info: Info = { name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
 
 // The handshake `state` a routed sign-in issues; ConnectFlow only accepts a pasted address carrying this one.
 const DEMO_CONNECT_STATE = `demo-connect-state`;
@@ -698,7 +698,7 @@ const workspaceRaw = (path: string): Response => {
 // Every picture in this fixture is already small, so a tile is the file itself; only SVG is refused, as the daemon does.
 const workspaceThumb = (path: string): Response => (path.endsWith(`.svg`) ? refuse(`not a picture this can draw`, 415) : workspaceRaw(path));
 
-// The refusals the real daemon makes on the spot (auth/members/members.routes.ts): a writer and a maker each need a
+// The refusals the real daemon makes on the spot (auth/members/members.routes.ts): a writer and a guest each need a
 // fence, since for both the areas are the tier rather than a narrowing of it, and a maintainer cannot carry one at
 // all, since it holds the owner's operating authority and a folder fence over it would enforce nothing.
 const grantMember = async ({ request }: RawContext): Promise<Response> => {
@@ -762,7 +762,7 @@ const raw: RawRoutes = {
     // The listed extensions' bundles, served as a daemon serves an installed checkout's `entry`; the loader blob-imports
     // them, so the demo runs the published bytes rather than a compiled-in copy.
     "GET /extensions/{id}/bundle": ({ param }) => vendoredBundle(param(`id`)),
-    // The enforced roster, mutable: the Access tab pushes its grant here first, and a maker's chips come back from it.
+    // The enforced roster, mutable: the Access tab pushes its grant here first, and a guest's chips come back from it.
     "GET /members": () => json({ members: grants() }),
     "POST /members": grantMember,
     "DELETE /members": revokeMember,

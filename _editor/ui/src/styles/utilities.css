@@ -355,7 +355,7 @@
     }
 }
 
-/* THE MAKER'S TWO MOVES: a folder change slides the tiles a step in the direction travelled, and the quick-look card
+/* THE HOME VIEW'S TWO MOVES: a folder change slides the tiles a step in the direction travelled, and the quick-look card
    glides to the tile under the pointer. One property list, so the reduced-motion answer beside it stills both. */
 @layer components {
     .ui-home-move {
