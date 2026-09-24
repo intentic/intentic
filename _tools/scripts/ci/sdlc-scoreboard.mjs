@@ -2,8 +2,8 @@
 // One page for the whole chain, per day: turns and how many ended unproven, follow-ups and what they bought, held work,
 // refused pushes, land verdicts, commits and the fix-shaped ones among them, and CI's green rate and wall clock. Reads
 // the daemon's own records (`<history>/activity.jsonl`, `<history>/usage.jsonl`), this repository's git log, and the
-// GitHub API (anonymously, or with GITHUB_TOKEN/GH_TOKEN). The numbers the three audits under docs/audits computed by
-// hand, computed the same way every time, so a drift between two of them is seen the week it happens.
+// GitHub API (anonymously, or with GITHUB_TOKEN/GH_TOKEN). Computed the same way every time, so a drift between two of
+// them is seen the week it happens.
 //   node _tools/scripts/ci/sdlc-scoreboard.mjs [--days 7] [--history /history] [--repo intentic/intentic] [--no-github] [--json]
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";

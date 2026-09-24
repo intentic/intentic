@@ -3,7 +3,7 @@
 // read by shape, not a list, so a new job is held to it for free.
 // 1. the fork boundary: self-hosted, non-ephemeral runners share a cache and the host docker socket, so a job reachable
 //    from a fork's pull request must gate on `head.repo.full_name == github.repository` (or a safe parent) — see
-//    docs/ci-runner.md
+//    docs/ops/ci-runner.md
 // 2. a called reusable workflow can never hold a permission its caller doesn't grant; Actions fails this before any job
 //    starts
 // 3. a job publishing with npm provenance must run on a GitHub-hosted runner, since npm's registry accepts only that
@@ -166,7 +166,7 @@ for (const file of workflowFiles()) {
 
 finish(
     [
-        ["Self-hosted CI is reachable from a fork's pull request (docs/ci-runner.md, 'The fork boundary')", exposed],
+        ["Self-hosted CI is reachable from a fork's pull request (docs/ops/ci-runner.md, 'The fork boundary')", exposed],
         ["A called workflow asks for more than its caller grants: Actions fails this before any job starts", overreach],
         ["A publish with provenance is on a runner npm's registry will not attest", unattestable],
         ["A workflow is triggered by a tag push GitHub will never deliver (dispatch it instead)", tagTriggered],

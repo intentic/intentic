@@ -1,56 +1,37 @@
-# @intentic/acp-bridge
+# acp-bridge
 
-Drive the agents in your [intentic](https://intentic.dev) sandbox from your own editor.
+A stdio bridge that lets Zed, JetBrains or any Agent Client Protocol editor drive the agents in an intentic sandbox.
 
-Claude, Codex, Grok or any installed ACP agent, reached from Zed, JetBrains, or anything else speaking the
-[Agent Client Protocol](https://agentclientprotocol.com). The bridge is a thin stdio adapter the editor
-spawns locally; the agent itself runs remotely in your sandbox, and your
-[synced folder](https://intentic.dev/docs/your-machine/#desktop-sync) mirrors its edits back so diffs and jump-to-file
-line up in the editor.
-
-## Setup
-
-1. In the intentic app: **Sandbox → Devices → Editor bridge (ACP) → Mint token** (or **Sandbox → Access → API tokens**, at `editor` scope). Copy the token (shown once)
-   or the generated snippet.
-2. Zed `settings.json` (JetBrains takes the same command + env):
-
-```json
-{
-    "agent_servers": {
-        "intentic": {
-            "type": "custom",
-            "command": "npx",
-            "args": ["@intentic/acp-bridge"],
-            "env": {
-                "INTENTIC_SANDBOX_URL": "https://sandbox-….intentic.dev",
-                "INTENTIC_CONTROL_TOKEN": "ict_…"
-            }
-        }
-    }
-}
+```mermaid
+flowchart LR
+    editor["Editor<br/>Zed · JetBrains"] -->|"ACP on stdio"| bridge(["intentic-acp"])
+    bridge -->|"POST /agent<br/>/agent/attach"| daemon["Sandbox daemon"]
+    daemon --> agents["Claude · Codex · Grok<br/>ACP agents"]
+    bridge --> home["~/.intentic/acp<br/>config · sessions"]
 ```
 
-Alternatively run `npx @intentic/acp-bridge login` once: credentials persist in `~/.intentic/acp/`.
-
-3. Open your synced sandbox folder as the editor project, pick the **intentic** agent in the agent panel,
-   and chat. Switch the agent with `INTENTIC_AGENT` (`claude` default, `codex`, `grok`, or an installed ACP
-   capability id); pin a model with `INTENTIC_MODEL`.
-
-## What maps how
-
-- Tool calls stream with kinds, statuses, file locations, and inline diffs (paths joined onto your project
-  root: open the synced folder for exact alignment).
-- The **Plan** mode proposes first: approval rides the editor's permission prompt ("Approve plan" / "Keep
-  planning"). Clarifying questions arrive the same way, one prompt per question.
-- The sandbox does all file/terminal I/O remotely; the bridge deliberately declines the editor's fs and
-  terminal capabilities (your synced folder is the local mirror).
-- Cancel stops the stream (soft: the sandbox turn may finish server-side). Revoking the token in the app
-  cuts the bridge off immediately.
+- Runs on the user's machine: the editor launches `npx @intentic/acp-bridge` (bin `intentic-acp`) and talks ACP over
+  stdin and stdout, so nothing else may write to stdout.
+- One ACP session is one daemon conversation. `POST /agent` starts a turn, `/agent/attach` streams it back, and
+  `translate.ts` turns each frame into a `session/update`, rewriting `/work` paths onto the editor's cwd. Open the
+  synced folder as the project so those paths line up.
+- A plan card and each `AskUserQuestion` become ACP permission requests. The `code` and `plan` modes map to the
+  daemon's per-turn permission mode.
+- Credentials come from `INTENTIC_SANDBOX_URL` and `INTENTIC_CONTROL_TOKEN`, or from `intentic-acp login`. The token
+  is an editor-scoped control token minted in the sandbox app; a 401 reaches the editor as ACP `auth_required`.
+- [agent-registry/agent.json](agent-registry/agent.json) is the listing for ACP agent registries.
 
 ## Key files
 
-- [src/bridge.ts](src/bridge.ts), the adapter itself: editor on stdio, sandbox over the wire.
-- [src/translate.ts](src/translate.ts): ACP messages to and from the daemon's own shapes.
-- [src/daemon-client.ts](src/daemon-client.ts): the remote half of the connection.
-- [src/login.ts](src/login.ts) / [src/config.ts](src/config.ts): pairing an editor with a sandbox, and remembering it.
-- [src/cli.ts](src/cli.ts): what the editor actually spawns.
+- [src/cli.ts](src/cli.ts) — entry point: `login`, or serve ACP on stdio.
+- [src/bridge.ts](src/bridge.ts) — `bridgeAgentApp`: sessions, modes, and plans and questions as permission requests.
+- [src/translate.ts](src/translate.ts) — attach frames to `session/update`, sandbox paths to editor paths.
+- [src/daemon-client.ts](src/daemon-client.ts) — the daemon routes the bridge calls, with the control-token header.
+- [src/config.ts](src/config.ts) — environment-then-file config and the ACP session to conversation map.
+- [src/bridge.integration.test.ts](src/bridge.integration.test.ts) — the whole bridge against a fake daemon.
+
+## Commands
+
+```sh
+pnpm --filter @intentic/acp-bridge test
+```

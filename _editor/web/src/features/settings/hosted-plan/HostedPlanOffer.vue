@@ -5,7 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 
 // The only thing this product charges for: a free hosted sandbox sleeps on an hour ceiling and gets removed after weeks
-// unopened; the plan keeps it always on and never collected, changing nothing else (docs/design/pricing-model.md).
+// unopened; the plan keeps it always on and never collected, changing nothing else.
 // Price comes from the plan state, not hardcoded, so a platform that charges differently is described correctly.
 
 const t = useT();

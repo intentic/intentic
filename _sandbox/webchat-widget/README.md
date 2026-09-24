@@ -1,57 +1,39 @@
-# @intentic/webchat-widget
+# webchat-widget
 
-**Visitor chat**: the embeddable chat bubble a website loads to talk to a sandbox agent. One IIFE bundle
-(8.1 kB gzipped), no framework, served by the daemon at `/webchat/widget.js`.
+The Visitor chat widget: one script a website loads so its visitors can talk to a sandbox agent in a floating chat panel.
 
-```html
-<script src="https://sandbox-<id>.<zone>/webchat/widget.js" data-automation="support" defer></script>
+```mermaid
+flowchart LR
+    daemon["Sandbox daemon"] -->|"serves /webchat/widget.js"| page["Customer page<br/>one script tag"]
+    page --> widget(["intentic-visitor-chat"])
+    widget -->|"config · challenge"| door["/webchat door<br/>origin allowlist"]
+    widget -->|"message, reply as SSE"| door
+    door --> agent["Visitor chat automation<br/>agent answers"]
 ```
 
-`data-automation` is the automation id and the only thing the snippet carries. The daemon to talk to is the
-origin the script itself came from: the one thing a copy-pasted snippet cannot get wrong. `data-base`
-overrides it for a site that fronts the sandbox behind its own proxy.
+- Runs in a visitor's browser on the customer's site. The build is a single IIFE file (`vite.config.ts`) that finds
+  its own `<script data-automation>` tag, fetches the chat's config and mounts `<intentic-visitor-chat>`. A sleeping
+  sandbox or a disallowed origin renders nothing.
+- The launcher and panel live in a shadow root so the host's CSS and the widget's never mix. Google sign-in and
+  Cloudflare Turnstile are the exception: third-party iframes need the light DOM, projected through a `<slot>`.
+- A visitor is a thread id kept in `localStorage` per automation, or a Google ID token the daemon verifies. A typed
+  name is display only. The first message of a thread spends a proof-of-work or Turnstile challenge.
+- Replies stream back as SSE over a `POST`. Answers written later (an approval-gated reply, a human writing as the
+  agent) arrive by polling, which backs off while the sandbox is unreachable.
+- The daemon serves the built file itself (`_sandbox/sandbox/src/webchat/`), so the widget and its routes always ship
+  together. Build this package before the daemon can serve it.
 
-## Gotchas worth knowing before you edit this
+## Key files
 
-- **`all: initial` on the host in `styles.ts` is load-bearing.** A shadow root blocks the page's *selectors*
-  but not inherited properties: without that line the widget wears the host site's font and colour.
-- **The gate container is light DOM on purpose.** Google's sign-in button and Turnstile's checkbox are
-  third-party iframes that want a document-connected container, so they are created as children of the element
-  and slotted into the panel. Do not "tidy" them into the shadow root.
-- **The reply is SSE over POST**, which `EventSource` cannot do: hence the hand-rolled reader in
-  `transport.ts`. Hono splits a payload on newlines into one `data:` line each, so rejoining with `\n` is what
-  restores an agent's multi-line text.
-- **A live reply is streamed; a later one is polled.** An approval-gated guest closes the stream on a `pending`
-  notice, and a human writing as the agent has no stream at all, so both land in the daemon's outbox and the
-  widget collects them from `/webchat/<id>/messages` against a cursor it keeps in `localStorage`. The two paths
-  never both carry one reply: the live SSE does not write to the outbox, which is why a reload after a live
-  answer shows nothing rather than repeating it.
-- **The poll is gated on the thread having spoken.** `storedSpoke` is what keeps a visitor who only ever reads
-  the page from making a request a minute forever; nothing can be queued for a thread that never wrote. The
-  cadence is slower with the panel shut, and every failure doubles the wait, because an unreachable sandbox is
-  this widget's ordinary weather.
-- **Types come from `@intentic/sandbox-contract`, imported as types only**, and the one VALUE import is the
-  contract's `embed` entry, which has no imports of its own (the three calls every embed makes, the proof-of-work
-  solver, the localStorage id, the script-tag boot). That is why the contract is a *devDependency*: everything
-  is bundled in or erased, so zod never reaches a visitor's browser. Keep it that way: a value import from the
-  contract's barrel would multiply the bundle size.
-- **`crypto.subtle` needs a secure context.** The proof-of-work check cannot run on an `http://` site, and says
-  so rather than hanging.
+- [src/main.ts](src/main.ts) — embed entry: find the script tag, fetch config, mount the element.
+- [src/element.ts](src/element.ts) — `VisitorChatElement`: launcher, panel, sending and reply polling.
+- [src/transport.ts](src/transport.ts) — the `/webchat` calls and the SSE reader.
+- [src/identity.ts](src/identity.ts) — thread ids, display names and Google sign-in, per automation.
+- [src/challenge.ts](src/challenge.ts) — the Turnstile bot check.
 
 ## Commands
 
 ```sh
-./node_modules/.bin/vite build     # → dist/widget.js (watch the gzip line in the output)
-pnpm test
+pnpm --filter @intentic/webchat-widget build
+pnpm --filter @intentic/webchat-widget test
 ```
-
-The daemon takes this package as a **prod dependency** and resolves `dist/widget.js` through its export, so
-`pnpm --filter @intentic/sandbox deploy --prod` carries the built bundle into the image with no Dockerfile
-change. The other half of the wire is `_sandbox/sandbox/src/webchat/`.
-
-## Key files
-
-- [src/element.ts](src/element.ts): the custom element a site embeds.
-- [src/transport.ts](src/transport.ts): the reply, SSE over POST, and the poll that collects one written after it closed; the config and challenge calls are the contract's embed helpers.
-- [src/identity.ts](src/identity.ts) / [src/challenge.ts](src/challenge.ts): who a visitor is, and the Turnstile half of the abuse gate (the proof of work is every embed's, in the contract).
-- [src/main.ts](src/main.ts): the entry the script tag loads.

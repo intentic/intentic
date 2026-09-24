@@ -1,61 +1,38 @@
-# @intentic/lsp
+# lsp
 
-An agent-native CLI over the native TypeScript compiler: project-wide rename, and diagnostics.
+The `lsp` CLI, which renames a TypeScript symbol across its project and reports compiler diagnostics by running the native TypeScript compiler once per question.
 
-`lsp rename <file> <symbol> <newName>` and `lsp diag <file...>`. Despite the name it is **not** a language-server
-host: every question is answered by a fresh run of the native compiler (`@typescript/native-preview`, the Go
-port of TypeScript), which parses the file's tsconfig project, answers, and exits. TypeScript and JavaScript only.
-A test file's project is the `tsconfig.test.json` beside its `tsconfig.json` when one exists: an emitting package's
-build config excludes `*.test.ts`, and a test checked against that config is in no program and comes back clean
-whatever is in it, which is how a test file that did not compile reached main past a green per-edit check.
+```mermaid
+flowchart LR
+    agent["Agent<br/>lsp rename · lsp diag"] --> lsp(["lsp"])
+    hook["Sandbox daemon<br/>post-edit hook"] -- "diagnose()" --> lsp
+    lsp -- "nearest tsconfig.json" --> tsgo["tsgo<br/>native compiler"]
+    tsgo -- "edits or diagnostics" --> lsp
+```
 
-**Nothing stays resident.** This package used to keep a warm JS-compiler daemon per view of the tree: ~1 GB of
-LanguageService held through a 15-minute idle window, times one per concurrent agent worktree, which made it the
-largest steady memory cost on a busy box. The native compiler checks a package-sized project cold in 0.1–2s: at
-or below what the daemon answered in warm through its socket: so the daemon, its unix-socket protocol, and its
-cold-start races are simply gone. What bursts of edits still need is not residency but restraint: the client
-single-flights concurrent asks per project and pools every ask that arrives mid-run into ONE trailing rerun
-(the rerun is mandatory: a queued ask exists because an edit just landed, so the in-flight answer is stale for
-it by construction).
+- Nothing stays resident. `lsp diag` runs `tsgo` over the file's project and exits; `lsp rename` holds one short language-server conversation with `tsgo --lsp` and applies the same edit an editor would.
+- The CLI takes a symbol name. The first matching declaration in the file's outline anchors the rename; failing that, word-boundary occurrences are offered to the server in order.
+- A project that cannot load cleanly (a broken config, missing type foundations) is reported as unavailable instead of producing false errors, and so is a compiler that crashes, is killed, or reports errors this reader cannot parse. A rename refuses in that state, since it could miss usages.
+- A `*.test.ts` file is checked against a sibling `tsconfig.test.json` when one exists. `.vue` imports are left unchecked.
+- The daemon's post-edit hook imports `./client`, where concurrent asks for one project pool into a single compiler run. In the sandbox the CLI is on `PATH` and the `lspTools` setting decides whether agents get its skill.
 
-**It refuses rather than guesses.** A tsconfig whose `extends` chain cannot be resolved, or a program whose type
-foundations (@types, global types) did not load, makes the compiler report phantom errors on healthy code:
-confident, specific, and wrong. Every surface here treats that as *unanswerable*: the check returns the file as
-`unavailable` with the reason, the CLI prints `unavailable: <reason>` and exits 2, and rename declines instead of
-renaming the subset of usages a blind program can see. One refusal is native-era new: the native compiler does
-not auto-include @types from PARENT node_modules directories the way the JS one does, so a program tripping over
-missing node globals while an ancestor `node_modules/@types` exists is refused: the caller's own toolchain
-would have loaded them, and relaying the errors would gaslight it. A compiler that crashes, is killed, or exits
-saying errors exist without one this reader can parse is refused the same way: none of that is a verdict, and
-reading it as an empty list would call every file clean. "Checked, and clean" and "could not check" are never
-conflated.
+## Usage
 
-**.vue imports go unchecked, not falsely broken.** Resolving `.vue` modules is the Vue toolchain's job
-(vue-tsc); the checker drops the module-shape errors those imports produce and keeps every other diagnostic in
-the file real: the same silence the old engine bought by shimming them to `any`, without writing into anyone's
-tree.
-
-**A caller can run the check where it could not stand itself.** An isolated turn's node_modules are empty mount
-points on disk with the installed tree bound in only inside the turn's namespace, so a checker outside resolves
-nothing at all. The caller supplies a placement (`CheckPlacement` in [src/checker.ts](src/checker.ts)) that
-wraps the compiler's argv (an `nsenter` into the turn) and the check runs in the namespace's own names,
-answering in the paths the agent uses. The sandbox's post-edit hook is the caller that needs it.
-
-Rename is the one question the batch compiler cannot answer, so it holds one short conversation with the native
-compiler's language server (`tsgo --lsp`), anchors the symbol by name via the server's own document outline
-(falling back to a lexical scan the server vets position by position), applies the returned workspace edit, and
-tears the server down.
-
-**The CLI is a dependency island**, baked onto the sandbox image's PATH
-([_sandbox/sandbox/Dockerfile](../../_sandbox/sandbox/Dockerfile)) and advertised to the coding agent through a
-gated skill file ([settings/skills](../../_sandbox/sandbox/src/settings)). The one library surface is
-`@intentic/lsp/client` (node builtins only: the compiler runs in the spawned process, never in the importer's
-heap), which the sandbox daemon uses for post-edit diagnostics feedback.
+```sh
+lsp rename src/app.ts createServer startServer
+lsp diag src/app.ts src/routes.ts
+```
 
 ## Key files
 
-- [src/checker.ts](src/checker.ts): one compiler run over one project; refusal and .vue semantics live here.
-- [src/client.ts](src/client.ts), the asking side: grouping by project, single-flight, the trailing rerun.
-- [src/rename.ts](src/rename.ts): project-wide rename over one short `tsgo --lsp` conversation.
-- [src/report.ts](src/report.ts): what a check can say, and the parser that reads the compiler's output.
-- [src/cli.ts](src/cli.ts): the entry point.
+- [src/cli.ts](src/cli.ts) — the two verbs and their exit codes.
+- [src/rename.ts](src/rename.ts) — symbol anchoring and the language-server rename.
+- [src/checker.ts](src/checker.ts) — one compiler run per project, and when it refuses.
+- [src/client.ts](src/client.ts) — `diagnose`, the pooled entry point the sandbox hook uses.
+- [src/report.ts](src/report.ts) — parsing compiler output into diagnostics and refusals.
+
+## Commands
+
+```sh
+pnpm --filter @intentic/lsp test
+```

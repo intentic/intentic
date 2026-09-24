@@ -1,36 +1,26 @@
-# Native icon integrations
+# patches
 
-Versioned patches keep third-party controls and diagrams on native SVG without installing icon packages.
+The pnpm patches that make PrimeVue, Mermaid and Monaco draw their icons from the design system's own SVG glyphs instead of bundled icon packages and fonts.
 
-## PrimeVue
+```mermaid
+flowchart LR
+    glyphs["ui src/icons<br/>native SVG glyphs"] --> patches(["patches"])
+    patches --> primevue["primevue<br/>controls render Icon"]
+    patches --> mermaid["mermaid<br/>local SVG icon registry"]
+    patches --> monaco["monaco-editor-core<br/>codicons as CSS masks"]
+```
 
-The patch replaces fallback icon imports in PrimeVue's ESM modules and Vue sources with local components
-that resolve the app's globally registered `Icon`. Drawings remain in `src/icons/`; the patch contains no
-artwork. `installUi` must run before mounting controls. Existing icon slots, input semantics, focus behavior
-and control events remain PrimeVue's responsibility. The `primevue>@primevue/icons` override removes its
-unused dependency. Tests that stand up these controls register `Icon` or the shared `IconStub`.
-
-## Mermaid
-
-The core and ESM icon modules use a native SVG registry. It accepts Mermaid's icon data and loaders, sizes
-and transforms their drawings, isolates fragment IDs and passes the result through Mermaid's sanitizer.
-The declarations use local SVG types. The `mermaid>@iconify/utils` override removes its unused dependency.
-The UI registers its own drawings under `intentic` for diagram references such as `intentic:server`.
-
-## Monaco
-
-The editor's icon stylesheet resolves component names to their semantic defaults and uses the app's SVG
-masks. Its base stylesheet no longer loads Codicon's font. The hover-to-cancel progress control keeps its
-close mark. The web app installs the masks once in `features/workspace/files/monacoIcons.ts`; code symbols
-and search toggles share the kit's paths. A discovery test checks every icon referenced by Monaco's installed
-modules, so a library upgrade cannot silently add an unmapped control.
-
-## Updating
-
-After upgrading a library, use `pnpm patch <package>@<version>`, carry the integration into its new
-sources, and run `pnpm patch-commit <edit-directory> --patches-dir _editor/ui/patches` from the repo root.
-Review changed import paths and public declarations; regenerate the lockfile and run the native icon,
-control and Mermaid tests under `_editor/web/src/design-system` and `_editor/web/src/components/Icon.test.ts`.
-Run `monacoIcons.integration.test.ts` and a web production build after changing Monaco; the bundle should
-contain no Codicon font asset.
-The overrides must never remove a dependency while executable imports of it remain in an app entry point.
+- **How they apply.** `patchedDependencies` in the root `pnpm-workspace.yaml` names each file, and pnpm applies it on
+  install to that exact package version. A version bump needs the patch regenerated with `pnpm patch` and
+  `pnpm patch-commit`.
+- **primevue.** Every `@primevue/icons/*` import is rewritten to an added `intentic-icons.mjs`, which renders the
+  globally registered `Icon` under the kit's glyph names. `installUi` must run before any PrimeVue control renders.
+- **mermaid.** The patch swaps its `@iconify/utils` icon code for a local `rendering-util/svgIcons.mjs` registry.
+  `mermaidRender.ts` registers the kit's glyphs as a pack, and icon markup still passes Mermaid's sanitizer.
+- **monaco-editor-core.** The codicon font is dropped. Each codicon draws a CSS mask named by an
+  `--intentic-icon-*` variable, which the editor fills from the kit's glyphs in
+  `_editor/web/src/features/workspace/files/monacoIcons.ts`.
+- **Guards.** The `overrides` in `pnpm-workspace.yaml` remove `@primevue/icons` and `@iconify/utils` from the
+  install. Suites in `_editor/web` (`iconDependencies.integration.test.ts`, `nativeControlIcons.test.ts`,
+  `diagramIcons.test.ts`, `monacoIcons.integration.test.ts`) fail when an icon package reaches the lockfile or a
+  patched surface stops drawing native glyphs.

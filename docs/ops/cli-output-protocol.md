@@ -1,220 +1,59 @@
 # The CLI output protocol
 
-What every intentic command-line tool writes, and what may be read from it. This is a **contract**: three
-programs in two languages emit it and two parsers depend on it, so the shapes below are not house style, they
-are load-bearing.
+The rules intentic's command-line tools share for choosing how to render, when to prompt, which words settle a verdict, and what a program reading their output may parse.
 
-Implementations:
+```mermaid
+flowchart LR
+    ic["ic"] --> proto(["output protocol"])
+    agents["intentic-machine<br/>device.sh · sync.sh"] --> proto
+    cli["intentic<br/>deploy CLI"] --> proto
+    proto --> person["a person<br/>rich terminal"]
+    proto --> desktop["desktop app<br/>reads the markers"]
+    proto --> daemon["sandbox daemon<br/>reads ndjson"]
+```
 
-| Emits | Where |
+Two renderers implement it: [`_sandbox/ic/src/ui.rs`](../../_sandbox/ic/src/ui.rs) for `ic` and [`_devices/local-agent/src/ui.ts`](../../_devices/local-agent/src/ui.ts) for the machine agents. The `intentic` deploy CLI adds structured output ([`_deploy/cli/src/lib/output.ts`](../../_deploy/cli/src/lib/output.ts)).
+
+## Choosing a mode
+
+A tool picks its mode once, at start:
+
+| `INTENTIC_UI` | Mode |
 | --- | --- |
-| `ic` (Rust) | `_sandbox/ic/src/ui.rs` |
-| `intentic-machine` (TypeScript) | `_devices/local-agent/src/ui.ts` |
-| the served bootstrap shims (sh, PowerShell) | `_site/site/public/scripts/connect.{sh,ps1}` |
+| `rich` | checklist, colour, one repainting status line |
+| `plain` | the marker stream below, nothing repainted |
+| `nested` | lines folded under a parent's running step |
+| unset | `INTENTIC_PLAIN=1` means plain; otherwise rich when stdout is a terminal, plain when it is not |
 
-Parsers:
+`NO_COLOR` turns colour off and `FORCE_COLOR` turns it back on. ASCII glyphs replace Unicode where the console cannot draw them. `ic` sets `nested` on an agent installer it spawns only while it is drawing a checklist itself; a piped run hands the child the same pipe, and the child's own terminal test picks plain.
 
-| Reads | Where |
-| --- | --- |
-| the desktop app's progress bar | `_editor/desktop-app/src/desktop.ts`, `src/setupPlan.ts` |
-| the platform's setup wizard | via `SetupReportSchema.stage`, posted by `ic`'s reporter |
+## Prompts
 
----
+Questions go to the controlling terminal (`/dev/tty`, or `CONIN$` on Windows), never stdin, so `curl … | sh` can still ask. `INTENTIC_NO_PROMPT=1` (exactly `1`) says nobody is there: every prompt returns no answer, and a consent question reads that as no. The desktop app sets it on every flow it runs.
 
-## 1. The line
+## The plain marker stream
 
-```
-intentic: [<phase>] <message>
-```
+Line by line, for a reader with no screen:
 
-`<phase>` matches `[a-z-]+`. Everything else a tool prints: narration, a downloader's output, a diagnosis:
-carries no phase and is **detail under whichever phase is currently running**, never a step of its own.
+- `intentic: [<phase>] <sentence>` on stdout is a step. The desktop app moves its checklist cursor on these.
+- `intentic: <text>` is narration under the running step; an indented line is a progress reading.
+- `intentic-requirement: {json}` and `intentic-requirement-state: {json}` come from `ic`'s Windows setup. The different prefix keeps a requirement from reading as a phase.
+- Warnings go to stderr with the `intentic: ` prefix. A stopped run ends with `error: <message>` on stderr.
 
-The id exists so a reader never has to recognise the sentence. Prose is reworded whenever it reads better, and
-a progress bar that moves when somebody fixes a typo is worse than no progress bar.
+## Verdict words
 
-### Rules
+A row settles as `ok`, `warn`, `FAIL` or `skip` in one aligned column. Only the failure is upper case, so it is what the eye finds in a long log. A command built on stricli that throws prints `FAILED: <message>` (`intentic`, `intentic-machine`), and the repository's live probes (`check-install-urls.mjs`, `check-demo-live.mjs`) use the same `ok`/`FAIL` column.
 
-1. **A phase is announced once, when it starts.** There is no "phase ended" line; the next phase ending it is
-   what ends it, and the process exiting ends the last one.
-2. **The cursor only moves forward.** A phase already passed is narration, not a step. Parsers must not rewind.
-3. **An unknown phase is narration.** A parser that does not carry a phase in its own plan shows the line as
-   detail under the running step rather than guessing. This is what lets a tool add a phase without breaking
-   anything that reads it.
-4. **Ordering is the emitting tool's.** Nothing may assume a fixed sequence: `ic` reorders its first two steps
-   on Windows, and skips whole phases that do not apply to a machine.
+## Structured output
 
----
+The `intentic` deploy CLI reads `INTENTIC_OUTPUT`:
 
-## 2. The three rendering modes
+- `text` (the default, and the fallback for any unknown value): prose and live apply progress.
+- `json`: silent during the run, then one document.
+- `ndjson`: one JSON object per line, each with a `kind` and a `t` stamp in epoch milliseconds, ending with `kind: "result"`.
 
-One question decides the mode: **is stdout a terminal**. That single test is why a redrawing renderer is safe
-to have at all: a parser can never reach one.
+Every mode passes through a redactor that masks known secret values. The sandbox daemon always runs it with `ndjson` and parses each line as `IntenticLine` from `@intentic/sandbox-contract`.
 
-| Mode | When | What it writes |
-| --- | --- | --- |
-| `plain` | stdout is not a terminal | Section 1's lines, and nothing else. No colour, no escapes, no repaints. |
-| `rich` | stdout is a terminal | A banner, a numbered checklist with durations, one repainting status line, a ranked ending. |
-| `nested` | forced by a parent tool | Indented detail only. No banner, no checklist, no ending block. |
+## Exit codes
 
-### `plain` is a frozen shape
-
-The desktop app spawns installs with redirected stdio and CI redirects them into logs. **Changing what `plain`
-writes is a breaking change** and must be verified against the parsers above, not assumed. `ic`'s piped output
-was proved byte-identical across the redesign by building the previous binary in a throwaway worktree and
-diffing three real flows: that is the bar.
-
-### `nested` is what makes an install read as one program
-
-`ic sandbox connect` runs the sync and computer installers in the middle of its own checklist. Left alone each
-would see a terminal, decide it owned the screen, and open a second banner with a second plan inside somebody
-else's setup. So the parent sets `INTENTIC_UI=nested` and the child renders as detail under the parent's
-running step.
-
-A parent in `plain` sets nothing: the child inherits the pipe and reaches the same conclusion by itself.
-
-### Overrides
-
-| Variable | Effect |
-| --- | --- |
-| `INTENTIC_UI` | `plain` \| `rich` \| `nested`, forces the mode. Anything else is ignored. `nested` is a **child's** mode: `ic` sets it on the agents it spawns and never reads it for itself. |
-| `INTENTIC_PLAIN=1` | Forces `plain`. The older spelling; both renderers honour it. |
-| `INTENTIC_NO_PROMPT=1` | **There is nobody to ask.** Every prompt reads as "no answer", which each caller already treats as a refusal. See below. |
-| `NO_COLOR` | Colour off, layout unchanged. |
-| `FORCE_COLOR` | Colour on even when `NO_COLOR` is set. |
-
-### `INTENTIC_NO_PROMPT`: the caller saying it outright
-
-A flow asks a question when it believes a person is there, and it works that out by probing for a controlling
-terminal: `/dev/tty` on Unix, `CONOUT$` on Windows. Those probes are good and they stay. This is the belt to
-their braces, for the one caller that already knows the answer for certain.
-
-The desktop app spawns these flows from a GUI process with no window, no console and closed stdin. If a probe
-is ever wrong there, the cost is not a bad guess: it is an install that never ends, in front of somebody
-watching a spinner. So the app says so outright rather than being inferred about.
-
-Exactly `1`. An unset variable, an empty one and a `0` all leave the probes in charge, because the one thing
-this must never do is silence a question a real person is sitting in front of.
-
-It also decides what the two parked endings of `ic docker prepare` (§2c, code `4`) say about what happens
-next. With nobody at a terminal there is nobody to paste *run this again* to, and the caller that set the flag
-is the thing that parks the setup and brings it back: so those endings say the setup resumes on its own, and
-the command to paste is printed only for a person.
-
----
-
-## 2b. Machine-readable side channels
-
-`plain` carries two markers that are **not** phases and must never be parsed as one. Both are emitted only
-when stdout is a pipe: in a terminal the same information is already prose, and JSON in the middle of a
-checklist is unreadable.
-
-```
-intentic-requirement: {"id":…,"title":…,"problem":…,"remedy":…,"action":…,"detail":…}
-intentic-requirement-state: {"id":…,"state":"running"|"done"|"failed","detail":…}
-```
-
-- **`intentic-requirement:`**: one per thing standing between this machine and a running sandbox. `action`
-  is a closed set (`fix`, `fixElevated`, `restart`, `firmware`, `hostVm`, `user`, `signOut`, `unsupported`)
-  and decides what the reader can offer: a button, a restart, or a walkthrough.
-- **`intentic-requirement-state:`**: how one of them is going, while it is going. Without it a reader can
-  draw a single spinner for the ten minutes it takes to switch WSL2 on, download 600 MB, run an installer and
-  wait for an engine. `detail` carries the changing measurement.
-
-The prefixes are deliberately one hyphen apart from each other and unrelated to `intentic: [phase]`. A parser
-that took a requirement for a phase would slide its cursor to a step that does not exist.
-
-## 2c. Exit codes
-
-`ic docker prepare` has two outcomes that are **not failures**, and a caller must be able to tell them from
-one without reading prose:
-
-| Code | Meaning |
-| --- | --- |
-| `0` | Ready. |
-| `1` | Something went wrong. |
-| `3` | Requirements were reported and **nothing was changed**: come back with `-y` (or `INSTALL_DOCKER=1`). |
-| `4` | Windows has to restart first. Everything that could be done has been. |
-
-Every Windows install that needs anything at all ends its first pass on `3`, by design: the flow reports what
-it would change and stops, because there may be no terminal to ask the one question on. A reader that treats
-that as a crash is calling the design broken: and a reader with nothing else to say then shows the user
-`connect.ps1 exited with status 3` and no diagnosis at all.
-
-The shims pass the code through unread (`exit $LASTEXITCODE`), so it reaches whatever started them.
-
----
-
-## 3. Handing over the terminal
-
-In `rich` the last line on screen is repainted with a carriage return. Anything that writes to the same stdout
-**without going through the renderer**: a spawned child, a downloader's own output, an interactive question:
-must be bracketed:
-
-```
-ui.suspend();   // erase the live line, stop repainting
-…child writes freely…
-ui.resume();
-```
-
-Skipping this does not corrupt data; it corrupts the screen, which is worse than it sounds during an install
-somebody is deciding whether to trust.
-
----
-
-## 4. Row and ending vocabulary
-
-Settled verdicts about one thing (a preflight check, a reachability link, a Windows requirement) share one
-vocabulary across every tool, because a user meeting two checklists in one install should not have to learn
-two.
-
-```
-  ok    <name>
-  warn  <name> — <note>
-  FAIL  <name>
-  skip  <name> — <note>
-```
-
-The separator appears only when there is a note. A failing row carries no detail on purpose: the composed
-summary that ends the run names every failure **with its fix**, and saying it twice buries the copy that is
-actionable.
-
-A finished run ends with exactly one address and one instruction, then footnotes. The old ending gave seven
-lines equal weight, which put *go back to your browser* third.
-
-### Counts
-
-`plural(n, "resource")` — [`@intentic/base/format`](../../_tools/base/src/format.ts) for the TypeScript tools,
-`util::plural` for `ic` — never `resource(s)`. The parenthesis is not a number a person reads, and the place it
-appeared most was `ic`'s permanent-delete confirmation, where the difference between one sandbox and all of them
-is the whole decision.
-
-An action covering every row is `12 resources, all to create`, not `12 resources: 12 to create`: the total and
-that action's count are the same number said twice.
-
-### Rows of data
-
-A table is space-aligned to its own widest cell
-([`columns`](../../_deploy/cli/src/lib/output.ts)), with an uppercase header row, and no column is printed when
-nothing fills it. A tab is not alignment: it puts each row's next cell on whichever 8-column stop the cell
-before it happened to cross, so `plan`'s resource ids used to land in three different places down one screen.
-
-### Empty is a sentence, not a zero
-
-A section header over nothing is a question the output raises and does not answer: `Ports (0):` reads as a fault
-on a machine nobody asked to mirror ports. An empty section is absent, and one sentence says what the tool
-found and what to do about it (`intentic-machine status` on an unconnected machine, `secrets gates` with nothing
-gated). A count of zero is for `--json`, which has a reader that wants the shape.
-
----
-
-## 5. Adding a phase
-
-1. Add it to the emitting tool.
-2. If a progress bar should advance on it, add it to `setupPlan.ts` with a weight in seconds. If not, do
-   nothing: rule 3 covers it.
-3. Do not rename an existing phase. The id is the stable part; the sentence beside it is not.
-
-Weights are guesses and are only ever compared, never shown. They exist so an estimate is about **time** left
-rather than **steps** left: "8 of 9" on the near side of a four-minute download is a lie a step counter tells
-and a weighted estimate does not.
+`0` means done. `ic`'s Windows setup also stops without an error on `3` (requirements listed, nothing changed; run again with consent) and `4` (sign out or restart, then it resumes). Any other non-zero code is a failure.

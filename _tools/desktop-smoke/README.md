@@ -1,79 +1,40 @@
-# @intentic/desktop-smoke
+# desktop-smoke
 
-The image that meets a desktop installer the way a user's machine does.
+A bare Debian image that installs a built Linux desktop artifact, launches it under Xvfb and fires a real `intentic://` deep link at it.
 
-A bare Debian with a virtual display and **no GUI libraries pre-installed**, driven by
-`_tools/scripts/desktop/verify-desktop-install.sh`.
-
-```sh
-pnpm --filter @intentic/desktop-app stage:downloads          # build the artifacts
-bash _tools/scripts/desktop/verify-desktop-bundle.sh                 # what is INSIDE them (seconds, no Docker)
-bash _tools/scripts/desktop/verify-desktop-install.sh                # that they INSTALL and RUN (needs Docker)
+```mermaid
+flowchart LR
+    build["build-desktop.sh<br/>.deb · AppImage"] --> verify["verify-desktop-install.sh<br/>CI · release"]
+    verify --> img(["desktop-smoke<br/>bare Debian + Xvfb"])
+    img --> install["Install<br/>from the deb's own Depends"]
+    install --> launch["Launch<br/>workspace window maps"]
+    launch --> link["xdg-open intentic://<br/>running and not running"]
+    nightly["verify-desktop-update.sh<br/>nightly"] --> img
 ```
 
-## What the bare image is for
-
-`apt-get install ./Intentic-<version>-amd64.deb` has to resolve `libwebkit2gtk`, `libgtk-3` and the rest from the package's own
-`Depends` field. The Tauri bundler generates that field, nothing else in the pipeline reads it, and the machine
-that built the package necessarily already has those libraries: so an incomplete `Depends` is green all the
-way to a user's first launch, where it is a linker error they cannot act on. Pre-seeding the libraries here
-would hide exactly the bug this exists to catch. The AppImage is the mirror case: it vendors its libraries, so
-anything it failed to vendor is missing on this host too.
-
-One line is drawn explicitly, in `smoke.sh` and only for the AppImage tier: `linuxdeploy` applies the AppImage
-project's **excludelist**, which by design does not bundle the libraries every graphical Linux install already
-carries (`libfribidi`, `libharfbuzz`, `libasound`, `libEGL`, `libgbm`, `libgpg-error`, `libcom_err`). An
-AppImage is self-contained above that line and host-dependent below it; a host with no graphical stack at all
-is below it, so those are installed for that tier: never in the image, which has to stay bare for the deb's
-`Depends`. The set is (excludelist ∩ what the binary's libraries need) minus what the image already carries,
-so it moves when the build base does — the last two arrived with trixie's webkit, and until they did the
-AppImage tier died in the loader on a bundle that was correct.
-
-## What one run asserts
-
-| | |
-| --- | --- |
-| install | apt resolves every declared dependency on a host that has none of them |
-| on disk | the executable, the `.desktop` entry, and the bundled `scripts/` the app spawns |
-| registration | `xdg-mime query default x-scheme-handler/intentic` resolves: the AppImage's is checked *after* launch, since it has no installer and registers itself at runtime |
-| launch | the process survives startup and maps its workspace window |
-| deep link, app running | a real `xdg-open intentic://setup?code=…` reaches the instance that was already running, which **asks first**: everything xdg-open delivers is an external link, and the app does not run one of those unasked. Answering it puts the setup screen up |
-| one window | …**in the workspace's place**, not beside it: once the setup screen is up, exactly one mapped window, and it is that screen. The app has three screens and one frame (`_editor/desktop-app/src-tauri/src/windows.rs`), and a setup that opened as a second window would satisfy every other row here — which is what shipped for three releases, and what onboarding users reported as "two Intentic windows" |
-| deep link, app not running | the same link **starts** the app, which asks the same question and then lands on that screen: fired at the deb *before its first launch*, so the package's own entry is the handler, and at the AppImage *after it has been run and quit*, since nothing installs an AppImage's entry and it registers itself at runtime |
-
-The two deep-link rows share the link and nothing else. A running app is reached by starting a second copy whose
-argv the single-instance plugin forwards over DBus; a stopped one is reached by the OS starting it *with* the
-link in argv, which the app has to notice at startup. The second is the state a machine is in when someone
-installs the app and clicks "set up": and it was broken in both halves (a shipped `Exec` with no `%u`, and a
-startup that never read the url back) for as long as only the first row was asserted.
-
-When the app is found dead, the failure names the signal that killed it (`wait` yields the status, 128+n is a
-signal) and prints the container's cgroup memory counters: an OOM kill and a segfault are otherwise the same
-empty log.
-
-Assertions read **window titles** through `xdotool`, not a test hook: the app has none and should not grow
-one. The window appearing is the behaviour a user is promised, so it is the thing worth asserting. Since the
-app shows one window and swaps two screens through it, the title is what says which screen is up: and it has
-to be the title rather than a window count, because the failure the cold rows exist to catch is a link that is
-*won and then dropped*: the app starts, sees no url, and opens on the workspace. A window appears either way.
-Two host properties that costs: `LANG=C.UTF-8` (X transcodes window names into the client's locale, and these
-titles have an em dash in them), and `XDG_CURRENT_DESKTOP` (so `xdg-open` delegates the handler lookup to `gio`,
-as it does on every desktop this app ships to, instead of falling back to a shell reimplementation that cannot
-resolve a quoted `Exec=`: which is what the deep-link plugin writes when it registers the scheme at runtime).
-
-## Not covered here
-
-The Windows NSIS installer: running it needs Windows. Its *contents* are checked by
-`verify-desktop-bundle.sh` (7z reads the NSIS archive), and its install, launch, deep link and uninstall are
-[`@intentic/desktop-smoke-windows`](../desktop-smoke-windows), which asserts this same journey on a real
-Windows session. The two files are deliberately the same shape; the day they disagree about what the setup
-screen is called, one of them is silently testing nothing.
-
-The hosted SPA does not load here either: `INTENTIC_APP_URL` points at a stub baked into the image, which keeps
-this tier hermetic. Whether the real app renders in WebKitGTK is the nightly tier's job
-(`_editor/desktop-app/src/../../..` → `nightly.yml`'s `e2e`).
+- The image carries no GUI libraries, so the `.deb` must pull everything it links against through the `Depends`
+  field Tauri's bundler writes, which nothing else in the pipeline reads. The AppImage meets the same bare host,
+  plus only the libraries its excludelist leaves to the host.
+- Assertions read window titles with `xdotool`; the app has no test hook. The deep link is fired at a running
+  app (the single-instance plugin forwards it) and at one that is not running (the link arrives in argv).
+- Hermetic: `INTENTIC_APP_URL` points at a stub page baked into the image and `INTENTIC_DISABLE_UPDATE_CHECK=1`
+  keeps the updater off.
+- `update.sh`, reached by overriding the entrypoint, runs two AppImages built with a throwaway signing key and a
+  loopback release endpoint, and asserts the app replaces itself with the newer release and still starts.
+- The `FROM` tracks `_tools/ci-base`'s Debian release, because the binary needs at least the glibc it is built
+  with. Bump the two together.
 
 ## Key files
 
-- [Dockerfile](Dockerfile): the bare Debian image, deliberately missing the GUI libraries.
-- [smoke.sh](smoke.sh): what the installer is put through once the image is up.
+- [Dockerfile](Dockerfile) — the bare host and why each package on it is there.
+- [smoke.sh](smoke.sh) — the install, launch and deep-link assertions, per artifact kind.
+- [update.sh](update.sh) — the self-update drill.
+
+## Commands
+
+Both need only Docker; the install tier reads `_editor/desktop-app/dist-bin` unless given a directory.
+
+```sh
+bash _tools/scripts/desktop/verify-desktop-install.sh
+bash _tools/scripts/desktop/verify-desktop-update.sh
+```

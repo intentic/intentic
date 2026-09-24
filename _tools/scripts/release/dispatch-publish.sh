@@ -45,7 +45,7 @@ gh_require_token "it is the only thing that can start the publish workflows"
 # THE TAG HAS TO BE THERE, and saying so here is the difference between a diagnosis and a puzzle. A dispatch
 # at a ref that does not exist is a 422 with an empty body, which `curl --fail` reports as the bare line
 # `curl: (22) The requested URL returned error: 422` — three of the ten most recent red pipelines ended on
-# exactly that and nothing else (docs/ci-failure-audit.md, class D). release.yml no longer calls this script
+# exactly that and nothing else. release.yml no longer calls this script
 # when semantic-release declined to release, so reaching here without the tag now means something worse than
 # the old race, and it should read that way.
 if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1 \

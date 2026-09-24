@@ -9,7 +9,7 @@ import type { ConversationWorktree } from "../agents/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { forgetRemoteRequest, forgetRemoteRequestsOf, noteRemoteRequest } from "./runner-requests.js";
 
-// One turn executed on a runner, the parent's side of the dispatch (docs/remote-runners-plan.md §5): mirrors the
+// One turn executed on a runner, the parent's side of the dispatch: mirrors the
 // isolated arm's local shape, station for station.
 // sync pull: the runner brings its mirror of each repo and the conversation's branch up to date.
 // runTurn: re-yields the frames a local turn would have produced, persisted and published the same way.

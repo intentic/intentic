@@ -1,11 +1,8 @@
 #!/usr/bin/env node
-// A word this repository retired may not be spelled again. The measurement behind the list is
-// docs/audits/vocabulary-audit.md: `_apps/` and `_libs/` were still being typed 89 times a month after removal, and
-// "card" survived its own rename inside the persona screens for exactly as long as nothing read for it.
+// A word this repository retired may not be spelled again; `_tools/constants/src/vocabulary.mjs` holds each retired word
+// and what replaced it.
 //
-// Exemptions are by REASON, not by path list. `docs/audits/` describes the tree a measurement ran against, so a
-// retired word inside one is the record working; docs/design/vocabulary.md is the decision that names what each word
-// became and cannot state it without spelling it; `_tools/nav/baselines/` holds recorded measurements of older trees.
+// Exemptions are by REASON, not by path list: `_tools/nav/baselines/` holds recorded measurements of older trees.
 // Everything else in the checkout is read.
 
 import { readFileSync } from "node:fs";
@@ -18,8 +15,6 @@ import { root, subjectFiles } from "./lib/repo.mjs";
 // Text this check can read; a binary or a lockfile carries no prose to fix.
 const READABLE = /\.(ts|tsx|mts|cts|js|mjs|cjs|vue|astro|css|md|json|toml|yml|yaml|rs|sh|html)$/;
 const EXEMPT = [
-    { test: (path) => path.startsWith("docs/audits/"), why: "an audit describes the tree it ran against" },
-    { test: (path) => path === "docs/design/vocabulary.md", why: "the decision that names what each word became" },
     { test: (path) => path.startsWith("_tools/nav/baselines/"), why: "recorded measurements of trees that had those names" },
     { test: (path) => path === "_tools/constants/src/vocabulary.mjs", why: "the table itself" },
     { test: (path) => path === "_tools/checks/vocabulary.mjs", why: "this file" },
@@ -46,6 +41,6 @@ const problems = grown.flatMap(({ key }) =>
 );
 
 finish(
-    [["a word this repository retired, spelled again (docs/design/vocabulary.md says what each became)", problems]],
+    [["a word this repository retired, spelled again (_tools/constants/src/vocabulary.mjs says what each became)", problems]],
     [`${RETIRED.length} retired words, ${files.length} files read: none of them spelled again`],
 );

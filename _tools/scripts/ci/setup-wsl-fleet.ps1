@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Make the Linux CI fleet come back on its own. Companion to docs/ci-runner.md, which describes the six runner
+  Make the Linux CI fleet come back on its own. Companion to docs/ops/ci-runner.md, which describes the six runner
   processes; this script is the one thing about them that is a WINDOWS fact, because on this host the fleet
   lives inside a WSL2 distribution.
 
@@ -177,14 +177,13 @@ if ($installed -notcontains $Distro) {
 }
 
 # -- the units, read off the distro rather than counted from the docs -----------------------------------------
-# docs/ci-runner.md says six, and it says to re-derive that number rather than trust it. The same applies here
-# Start the distro before checking its runner units.
+# The unit count is read off the distro, never taken from docs/ops/ci-runner.md; this also starts the distro.
 Step "asking $Distro which runner units it carries..."
 $unitList = & wsl.exe -d $Distro -e systemctl list-unit-files $UnitPattern --no-pager --plain --no-legend 2>$null
 $units = @($unitList | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ } |
     ForEach-Object { ($_ -split '\s+')[0] })
 if (-not $units) {
-    Die "no units matching '$UnitPattern' in $Distro. Register the runners first -- docs/ci-runner.md has the config.sh and svc.sh commands -- then run this."
+    Die "no units matching '$UnitPattern' in $Distro. Register the runners first -- docs/ops/ci-runner.md has the config.sh and svc.sh commands -- then run this."
 }
 Step "found $($units.Count): $($units -join ', ')"
 
@@ -204,7 +203,7 @@ if ($disabled -and -not $Check) {
 # generator, not a cosmetic problem.
 #
 # `powershell -WindowStyle Hidden` DOES NOT HOLD on a current Windows 11, and _devices/win-launcher/README.md
-# has the measurement: with Windows Terminal as the default console host, the hidden flag hides the console the
+# says why: with Windows Terminal as the default console host, the hidden flag hides the console the
 # PowerShell host owns while the window on the desktop belongs to WindowsTerminal.exe, which never gets the
 # hint. Only a GUI-subsystem parent starting the child with CREATE_NO_WINDOW maps nothing, which is what
 # intentic-launch.exe is.
@@ -462,7 +461,7 @@ if (-not `$dockerExe) { Say 'no docker CLI on this host -- skipping the engine c
 #
 # The build cache is the half CI creates and nothing evicted. publish-images.sh stands up a `docker-container`
 # buildx builder named intentic-cache, and its BuildKit state grows with every image build for the life of the
-# machine -- docs/ci-runner.md's "Keeping it bounded" covered turbo, pnpm, cargo, xwin and playwright, and not
+# machine -- docs/ops/ci-runner.md's "Keeping it bounded" covered turbo, pnpm, cargo, xwin and playwright, and not
 # this. That builder lives in the DISTRO's buildx state rather than this host's, so the prune is issued through
 # wsl.exe as the distro's default user, whose builder it is; root would prune its own empty default builder and
 # report success.

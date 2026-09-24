@@ -1,139 +1,46 @@
-# @intentic/e2e
+# e2e
 
-The browser smoke tier: Playwright against the whole stack, including the published daemon image.
+Playwright harnesses that drive the real web app in Chromium: the local-stack browser tier, the post-deploy sign-in smoke, the mobile geometry gate, the site's screenshots and the promo take.
 
-It drives the real Vue SPA, the https API, Postgres, and the **published sandbox daemon**
-(`ghcr.io/intentic/sandbox:stable`) in loopback (no-auth) mode: the same image a user's browser meets, so a
-hand-mirrored `api-contract` schema that drifts from the daemon fails here.
-
-## What it proves
-
-- **Auth-adjacent plumbing without Google**: a Prisma-seeded user + session with a self-signed Better Auth
-  cookie (verified against `/api/auth/get-session` before any spec runs), and a cached fake Google ID token in
-  `localStorage` so the app's daemon clients (`sandboxRpc` and the raw byte-route client) reach the daemon (the loopback
-  daemon ignores the bearer).
-- **Workspace upload journey**: picker → upload-diff → XHR upload → tree refetch → daemon disk read-back.
-- **Automations journey**: create-dialog form → daemon manifest → listed back (the mirrored-schema drift guard).
-- **Desktop-sync journey**: Enable → `/system/sync/pair` → the agent one-liner renders.
-- **Billing journey** ([hosted-plan-billing.spec.ts](specs/hosted-plan-billing.spec.ts)): Subscribe → the
-  api's real Stripe client mints a checkout on a **Stripe stand-in** this run starts
-  ([_tools/testing/src/stripe-fake.ts](../testing/src/stripe-fake.ts), pointed at by
-  `HOSTED_PLAN_STRIPE_API_URL`) → Pay → back on `/settings/billing?plan=welcome` before the signed webhook
-  lands → the page polls into "always on"; then the avatar row, a cancel in the portal said as "ends" rather
-  than "renews", a failed charge asking for a card, and an ended plan offering a resubscription. It stands down
-  on a reused dev API (only a stack global-setup booted has the stand-in behind it); the same stand-in drives
-  the api's hermetic tier ([docs/architecture/testing.md](../../docs/architecture/testing.md)).
-
-## Run
-
-```sh
-pnpm e2e:browser    # from the repo root: builds libs, then runs this package's playwright suite
+```mermaid
+flowchart LR
+    setup(["e2e<br/>global-setup.ts"]) --> pg["Postgres<br/>compose :5440"]
+    setup --> daemon["Published sandbox image<br/>:18787"]
+    setup --> api["Platform api + fake Stripe<br/>https :6480"]
+    setup --> web["Web app dev server<br/>https :47145"]
+    setup --> state["Storage state<br/>session cookie, Google ID token"]
+    state --> specs["specs/<br/>Chromium, one worker"]
+    specs --> web
 ```
 
-Requirements: Docker (compose Postgres + the daemon image), Bun, and Playwright's Chromium
-(`pnpm --filter @intentic/e2e exec playwright install chromium`). Everything already running (dev machine)
-is reused; whatever the setup started is torn down, including the seeded rows. `SANDBOX_E2E_IMAGE` overrides
-the daemon image (e.g. a source build).
-
-**In a sandbox that browser is already there and no install is wanted.** The image bakes chromium and deletes
-Playwright's separate headless shell on purpose, so every launch here names `channel: chromium` — the full
-browser, run headless — and finds it on disk. A bare `chromium.launch()` asks for the shell instead, fails on a
-missing executable, and the obvious repair (`playwright install chromium-headless-shell`) writes ~90 MB into
-`/root/.cache`, which no container recreate keeps. It was run twice that way before the channel was named;
-`playwright.config.ts` has the long version.
-
-**A dev-machine tier, not a CI one**, and that is what the separate task name records (turbo.json says it at
-length): every server above is addressed on `localhost`, and every CI job here drives a docker-in-docker
-*service* that publishes ports on its own namespace instead: `pnpm e2e` in the nightly used to include this
-suite and could only ever fail it on `P1001` against `localhost:5440`. The tiers CI does run are
-`pnpm e2e` (gated real-infra) and `pnpm e2e:hermetic` (no secrets, every MR).
-
-Those tiers each declare the credentials they need with `e2eTier` (`_tools/testing/src/e2e.ts`) and stand down
-naming what was missing, which is what lets CI ask for all of them at once. This suite declares nothing:
-its requirement is a whole local stack, which no environment variable can announce.
-
-## The mobile geometry gate: `e2e:mobile`
-
-```sh
-pnpm e2e:mobile     # from the repo root: builds the demo, then walks every mobile route at 390×844, touch
-```
-
-A phone-shaped Chromium over [every mobile surface](mobile/audit.mts), asserting three things that no other
-check in this repo can see, because all three are **geometry** rather than structure:
-
-- **BLANK**, a route whose primary list renders at zero height. This shipped: the mobile Files tab wrapped its
-  listing in a directive-less `<template>`, which Vue passes through as a real `<template>` element, so every
-  file row was in the DOM with the right text and `display: none` above it. Typecheck, lint and a mounted
-  "the row exists" test all pass that.
-- **OFFSCREEN**, anything drawn past the viewport with no scrollable ancestor. Also shipped: the mobile menu's
-  Pipelines row rendered its own name at zero width because a badge carrying a *sentence* was `shrink-0` beside
-  it, and the sentence ran 130px off the edge.
-- **TARGETS**: interactive elements under the WCAG 2.2 SC 2.5.8 floor of 24px, honouring that criterion's
-  inline exception (a link set in running prose cannot be 24px tall without the prose being 24px tall).
-  44px (Apple's and Material's floor) is reported as a warning rather than failing, because reaching it is a
-  design conversation per surface and a gate that failed on it would be switched off within a week.
-
-**Hermetic, like the shots harness**, and for the same reason: it drives the demo build of the real SPA, so
-there is no postgres, no platform API and no seeded session between a CI job and an answer. That is what makes
-it cheap enough for every merge request: which is the only way a rule about target size survives contact with
-a codebase whose dense controls are correctly dense for a mouse.
-
-Its counterpart is [`_editor/web/src/shell/deadTemplate.test.ts`](../../_editor/web/src/shell/deadTemplate.test.ts),
-which catches the *cause* of the blank-screen case across every view in the app at compile level, with no
-browser at all. The pair is deliberate: the unit test proves nobody can reintroduce the mistake, the gate proves
-the app actually draws.
-
-Requires Playwright's Chromium (`pnpm --filter @intentic/e2e exec playwright install chromium`; a sandbox
-has it baked, see Run above). Unlike `e2e:browser` above it needs no stack on localhost, so it runs anywhere.
-
-## The one thing here that runs against production: `smoke:signin`
-
-```sh
-pnpm --filter @intentic/e2e smoke:signin https://app.intentic.dev
-```
-
-Everything above stubs Google out, and rightly so: a hermetic suite cannot depend on someone else's console.
-The consequence was a blind spot with nothing behind it: whether Google still *accepts the deployed origin*
-for our OAuth client is state that lives outside this repo, and when it stopped being true every Google button
-on the site went dead while the entire pipeline stayed green. This is the check that goes red for that. It
-loads the real login page in a real browser and asserts three things: the `Content-Security-Policy` still
-admits secure preview frames, Google's button reaches a pressable size (a refused one still exists, at 0×0),
-and the fallback link that bypasses Google's frame is present.
-
-All three read the app out of the navigation response, so the status comes first: anything but a 200 is
-retried and then reported as one line about the **origin**, never as faults in the page. A page that was never
-served has no CSP to be wrong and no button to be missing, and reporting it as though it did sent a reader to
-two files that were both correct in git.
-
-It runs in the **platform deploy job**, after [deploy-platform.sh](../scripts/platform/deploy-platform.sh) has
-seen the public origin report the build that job pushed, so a deploy that shuts the front door fails the job
-that rolled it. It is not part of `e2e:browser`: it needs the internet and a live deployment, which is the
-opposite of what that suite is for.
-
-Why a browser rather than a curl, given a browser costs a install step in a deploy job: the identical request
-is answered **200 to curl and 400 to Chromium**: with matching origin, referer, user-agent, fetch-metadata
-headers and the page's own `cas` value. An HTTP probe would have stayed green for the whole outage, which is
-worse than no check at all. [smoke-signin.mjs](smoke-signin.mjs) carries the evidence.
-
-## Not covered here (by design)
-
-Real Google OAuth beyond the origin check above, and invites: platform unit tests cover their logic. Everything that needs
-real infrastructure or real Discord lives in the gated tiers beside this one: `_deploy/cli/src/cli.e2e.test.ts`
-(Cloudflare), `_sandbox/sandbox/src/discord.e2e.test.ts` (Discord + Whisper), and
-`_deploy/cli/src/hermetic.e2e.test.ts` (the secret-free control-plane run). `ARCHITECTURE.md` → *What each tier
-needs* is the table.
+- The browser tier (`playwright.config.ts`, `specs/`) tests the browser-daemon contract. Its stack lives on
+  localhost, where a CI job cannot reach it, so it runs on a developer machine. `global-setup.ts` reuses anything
+  already running and `global-teardown.ts` stops only what it started.
+- Sign-in is seeded: the setup writes a signed Better Auth session cookie and a fake Google ID token in
+  `localStorage` into Playwright's storage state, and the daemon runs with `SANDBOX_ALLOW_UNAUTHENTICATED=1`.
+- `smoke-signin.mjs` is the one gate that meets Google's real origin check: after each platform deploy, CI opens
+  `/login` on app.intentic.dev and asserts the Google button renders.
+- `mobile/audit.mts` walks the hermetic demo build at a phone viewport and fails on blank routes, overflow, small
+  targets and scrollers that do not move. `shots/capture.mts` photographs the same build into
+  `_site/site/src/assets/product/` (and `product-light/`). Both need only Chromium.
+- `window-sync/` runs the app's floating-window hand-off modules in a bare page; [promo](promo) records the
+  product video.
 
 ## Key files
 
-The [window synchronization suite](window-sync/window-sync.spec.ts) runs the production floating-window and
-chat projection modules in separate Chromium pages, with real BroadcastChannels and Web Locks. Only sandbox
-selection and the tab-state input are fixtures; it needs no platform, daemon or sign-in. Run it with
-`pnpm --filter @intentic/e2e exec playwright test --config window-sync/window-sync.playwright.config.ts`.
-It covers startup order, lost state messages, reload, suspension, competing windows and sandbox switches.
+- [stack.ts](stack.ts) — origins, ports, seeded rows and the Better Auth cookie recipe.
+- [global-setup.ts](global-setup.ts) — boots the stack in order and writes the storage state.
+- [playwright.config.ts](playwright.config.ts) — the browser tier: serial, one retry, seeded session.
+- [smoke-signin.mjs](smoke-signin.mjs) — the post-deploy check against Google's real origin check.
+- [mobile/audit.mts](mobile/audit.mts) — the phone geometry gate.
+- [shots/capture.mts](shots/capture.mts) — the site's screenshots, dark and `--light`, plus `--desk`.
 
-- [specs](specs): the browser journeys themselves.
-- [smoke-signin.mjs](smoke-signin.mjs): the post-deploy front-door check, the only thing here that meets real Google.
-- [stack.ts](stack.ts): bringing the whole stack up, including the published daemon image.
-- [playwright.config.ts](playwright.config.ts): projects, retries, and what runs where.
-- [global-setup.ts](global-setup.ts): what must exist before any spec runs.
-- [fixtures](fixtures): the data the journeys rest on.
+## Commands
+
+```sh
+pnpm e2e:browser                                  # SANDBOX_E2E_IMAGE picks the daemon image
+pnpm e2e:mobile                                   # builds the demo first
+node --experimental-strip-types _tools/e2e/shots/capture.mts [--light | --desk] [shot names]
+pnpm --filter @intentic/e2e smoke:signin https://app.intentic.dev
+cd _tools/e2e && pnpm exec playwright test -c window-sync/window-sync.playwright.config.ts
+```

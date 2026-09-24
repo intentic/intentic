@@ -12,7 +12,7 @@ import { contextPct } from "../../agents/fleet/agentStatus";
 
 // The parked chat's home: a pill over the bottom of the area that grows into the focused chat's own composer (the panel
 // teleports into `slot`), with that pane's own transcript unfolding above it on request (chatBarPeek). Hover borrows the
-// box and a press keeps it until the reader dismisses it; docs/design/chat-quick-bar.md has the rules and their reasons.
+// box and a press keeps it until the reader dismisses it.
 
 // The section's area the bar floats over: a press there is the one gesture that means the reader went back to the page.
 const { page } = defineProps<{ page: HTMLElement | undefined }>();

@@ -1,57 +1,42 @@
 # Compatibility
 
-What "breaking" means in this repository, in one place: for contributors, for CI, and for the site page that
-says it to users ([intentic.dev/docs/updates](https://intentic.dev/docs/updates/)). The user-facing promises
-are the contract; everything here is the machinery that keeps them true.
+Which versions of intentic's pieces must match each other, and what every release promises the installs already running.
 
-## The promises (the circle)
+```mermaid
+flowchart LR
+    main["main<br/>green pipeline"] --> rel(["release<br/>one version stamp"])
+    rel --> pointers["moving pointers<br/>:stable · latest Release · stable tag"]
+    pointers --> users["connect scripts · download links<br/>update cards"]
+    rel --> kept["versioned tags<br/>stay published"]
+    rollback["rollback-stable.sh"] -.-> pointers
+```
 
-1. **The user's files are never touched by an update.** `/work` and `/history` survive update, rollback, and
-   rebuild. Drilled nightly against real published images: `_tools/scripts/image/verify-update-survival.sh`.
-2. **Updates are offered, never forced.** The update card (`/info`'s `latest`/`updateAvailable`) is
-   non-blocking; nothing recreates a sandbox without the owner acting.
-3. **The worst outcome of an update is the sandbox the user already had.** The recreate engine parks the old
-   container, health-gates the new one, and restores on failure (`_sandbox/ic/src/sandbox/recreate.rs`);
-   rollback stays one command. Also drilled nightly.
-4. **Breaking changes arrive declared.** A change that removes or alters something users rely on lands as a
-   `type!:` commit carrying a `Breaking-Note: <what stops working and what to do instead>` trailer. That
-   sentence travels to the Release's `## Breaking changes` section, the changelog's Breaking badge, and the
-   update card's warning: which withholds the update command until the user acknowledges it.
-5. **A bad release can be un-shipped.** A release ships the moment its pipeline goes green: the `stable`
-   images (`release-images.sh`) and the GitHub "latest" flag every download link follows (`ship-stable.sh`)
-   move inside that same publish, so what CI proved is what users get. Putting stable back onto an earlier
-   version is one command, `rollback-stable.sh` (the Rollback workflow); the rolled-back release stays
-   published, so anything pinned to that exact version keeps working.
+## One release, one version
 
-## The surfaces the promises cover
+- `set-versions.sh` stamps the release version on every first-party package before anything builds; git keeps `0.0.0`. Every artifact of a release, from npm packages and binaries to installers and images, comes from one commit with one stamp, and `release-prepare.sh` refuses one stamped otherwise.
+- Node and pnpm are pinned in `package.json` (`engines`, `packageManager`), and the `ci-base` image bakes the same pins.
 
-- **The wire contract**: every schema `@intentic/sandbox-contract` exports, snapshotted in its
-  `contract.lock.json`. The lock regenerates with `pnpm --filter @intentic/sandbox-contract lock` and must be
-  committed with the change (its test fails otherwise); the `contract-shrink` check (`_tools/checks/`) refuses a push whose lock **lost or
-  changed** an existing surface with no declared break in the range, and prints the exact declaring commit to
-  paste. Additions pass freely: every persisted reader parses loosely. Declarations normally never reach the
-  push gate at all: the landing drafter detects a shrinking lock mechanically
-  (`_sandbox/sandbox/src/git/changes/contract-shrink.ts`) and forces the `!` marker and a `Breaking-Note:` into the
-  drafted message the commit box files.
-- **User-persisted state under `.intentic/`**: never read strictly, never migrated. An unreadable file falls
-  back, is reported (`manifest-problems.ts`), and after a rollback is explained as "written by a newer
-  intentic" via the forward-only stamp (`store/newest-run.ts`) rather than as damage. Per the repo's own rules:
-  recognition, no migration logic.
-- **The release-body headings**, `## Breaking changes` and `## What's new` are parsed, not prose: written by
-  `publish-github.sh`, read back by the daemon's update card and the site's changelog. Prepass invariant 5
-  keeps the three spellings in step.
-- **Download links**: `releases/latest/download/*` and the site's links follow the GitHub "latest" flag,
-  which only promotion moves. The agent installers resolve that same flag first — `releases/latest` redirects
-  to `…/tag/vX.Y.Z` — and then fetch `releases/download/v<tag>/*`, so a part file can only ever be resumed
-  against the release it started from. Both URL shapes are load-bearing, and the redirect is what joins them.
+## A green pipeline is the ship
 
-## What is deliberately outside the circle
+There is one release lane. A release that passes the whole pipeline becomes what everyone gets in the same run: `release-images.sh` moves the sandbox's `stable` and `core-stable` tags and dind-host's `stable`, then `ship-stable.sh` moves the git `stable` tag and marks the GitHub Release as latest. Connect scripts, the deploy engine's image references, download links and every sandbox's update check follow those pointers as unpinned tags, never digests, so nothing else changes when a release ships.
 
-UI layout, internal behavior, defaults for unset settings, the deploy engine's own config surface (the engine
-is not the product: its runtime story is `guarded-update.ts`), and anything additive. Change these freely;
-give them a `Release-Note:` when a user would notice.
+Un-shipping is `rollback-stable.sh <version>`, which moves the same pointers back, the latest flag first. The bad release stays published under its version, so anything pinned to it keeps running.
 
-## The moment of flip
+## Across versions
 
-Until real users exist, breaking freely is policy (see AGENTS.md): but *declared* breaking, so the habit,
-the tooling, and the user-facing warning path all exist on day one of the first real user.
+Sandboxes update when their owner accepts the update card, so the hosted editor talks to daemons of several versions at once.
+
+- The wire contract is [`@intentic/sandbox-contract`](_shared/sandbox-contract). Its `contract.lock.json` records every exported schema. Additions pass; a push that removes or narrows one is refused unless a commit declares it with a `type!:` subject or a `Breaking-Note:` trailer.
+- A `Breaking-Note:` becomes the release's `## Breaking changes` section, and the update card turns into a warning that names what stops working before anyone takes the update.
+- The daemon lists its routes and their shape fingerprints on the `/events` hello frame. The editor hides a feature an older daemon lacks instead of calling a route that is not there.
+- Extensions declare `engines.intentic`, a semver range matched against `extensionApiVersion` in [`_shared/extension-api/src/version.ts`](_shared/extension-api/src/version.ts): a minor bump for an addition, a major one for a break. That package is the one exception to the repository's no-legacy rule.
+
+## Agent engines
+
+[`engines.json`](engines.json) names the `blessed` version of each agent program. Sandboxes on the `blessed` channel read it from `main` every hour, so a new blessing reaches them without a release. `_tools/checks/engines-blessed.mjs` requires each blessed version to be one this repository's suite pins and runs, and `engines.yml` moves those pins daily through an auto-merging pull request. An owner can put an engine on `latest` or pin a version instead.
+
+## What every update keeps
+
+- The owner's files in `/work` and `/history` survive an update, a rollback and a failed update; `verify-update-survival.sh` drills all three nightly.
+- An update that cannot come up healthy puts the previous sandbox back.
+- Only the surfaces above carry a promise. Workspace packages, including the published `@intentic/*` ones, change their APIs without shims under the no-legacy rule in [AGENTS.md](AGENTS.md).

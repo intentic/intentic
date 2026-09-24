@@ -1,144 +1,43 @@
 # ic
 
-The host-side CLI: the flows that must run on the machine that runs a sandbox, connect, prepare, update,
-rebuild, rollback, reshape, remove, and enrolling the machine as a deploy target.
+The host-side CLI that starts, updates, diagnoses and removes intentic sandbox containers on the machine that runs them, and gets Docker there first.
 
-A sandbox is a container, and it deliberately holds no host Docker socket, so it can never recreate itself.
-Every one of these flows therefore runs *outside*, on the user's machine. They used to be ~3,600 lines of
-POSIX sh and PowerShell served from intentic.dev, written twice and kept in step by review; now the served
-scripts are bootstrap shims (get Docker on, fetch this binary, hand over) and the flow itself is written
-once, here, in Rust: a single static binary with no runtime to ship.
+```mermaid
+flowchart LR
+    shim["connect.sh · connect.ps1<br/>setup one-liner"] --> ic(["ic"])
+    desktop["Desktop app"] --> ic
+    machine["Machine agent<br/>sandbox tools"] --> ic
+    hosted["Platform<br/>hosted overlay builds"] --> ic
+    ic --> docker["Docker<br/>sandbox containers"]
+    ic --> image["Sandbox image<br/>run contract"]
+    ic --> claim["Platform<br/>setup-code claim"]
+```
 
-## Responsibilities
-
-- `ic sandbox connect`, the setup one-liner's flow: preflight the machine (every prerequisite checked
-  read-only, every failure reported at once with its fix), claim the setup code (which carries the sandbox's
-  reachability grant: the box enables with it and dials the tunnel hub itself), launch the sandbox, verify the
-  whole reachability chain end to end, bootstrap desktop sync, and
-  connect this machine as a **computer** so its sandboxes are manageable from the browser. Each stage: and
-  any failure, with its fix: is also POSTed to the platform's `/setup/report` (authenticated by the setup
-  code), so the browser's setup wizard names why a setup failed instead of guessing from elapsed time.
-- `ic sandbox doctor`: the same reachability chain as a read-only diagnosis of an existing sandbox:
-  container → daemon → platform registration → the sandbox's own tunnel agent → DNS → public URL, every
-  broken link named with its fix, exit 1 when anything is broken.
-- `ic sandbox update / rebuild / rollback / dev`: swap the container onto a different image, preserving
-  /work, /history, the tunnel and every setting; the channel + rollback record makes a bad update reversible.
-  A swap that cannot read the approved environment out of a sandbox built from one stops there: dropping an
-  environment is never a side effect of asking for a newer image. `update` refuses a sandbox running the
-  dogfood image (`intentic-sandbox:dev`), because a pull would replace what a checkout built rather than
-  refresh it: rebuild it from that checkout (`pnpm rebuild:sandbox <slug>`), or pass `--force` to mean it.
-- `ic sandbox prepare`, the same flow stopped before the container is touched: pull the next image, rebuild
-  the approved environment on it, record what was built, and leave the sandbox running what it was running.
-  A later `update` recognises the staged build and swaps straight onto it, which is what turns an update from
-  an unbounded wait into a restart of seconds. Safe to run at any moment, and free to abandon. `--auto` is
-  the machine agent's background tick speaking (`@intentic/machine` runs it on a timer): same flow, with the
-  judgement calls a timer must not make softened into skips — a pinned or locally-built sandbox is left
-  alone, low disk means "not now" instead of a warning scrolled past, and a container parked by an
-  interrupted recreate is never un-parked unattended.
-- `ic sandbox reshape <slug> --memory 12g|default --cpus 4|default --privileged on|off --gpus on|off`: the
-  same image with a different share of this machine. It is a recreate that pulls nothing and builds nothing:
-  the asks ride to the image's probe as seeds (`SANDBOX_MEMORY`, `SANDBOX_CPUS`, `SANDBOX_RUNTIME`; an empty
-  value means back to the default), the image's run contract validates and bounds them, and because they live
-  on the container as replayed env they survive every later update, rollback and rebuild. The two switches edit
-  only the owner's own directive list; a privilege the approved environment demands stays in force. At least
-  one flag, always a named slug (this changes a container's privileges). It is the flow behind the Resources…
-  verb on the Devices tab and in the desktop app, and the machine agent's `reshape_sandbox` tool.
-- `ic sandbox list / remove`: what is on this machine, and its careful removal (named volumes included).
-- `ic runner up / list / remove`, RUNNERS: sandbox-image containers that belong to a parent sandbox instead
-  of a person, executing turns it dispatches. `up` is `sandbox connect` minus the platform — the same
-  image-spoken run contract with the runner seed (parent URL + single-use pairing) in the env, no setup
-  code, no tunnel, no local publish; removal IS sandbox removal under the `runner-` slug prefix. `up` may
-  also carry the parent's shape: `--overlay-file` + `--environment-hash` build the parent's approved overlay
-  BEFORE boot under the rebuild flow's byte-exact hash check (the parent's owner approved those bytes; a
-  runner has no owner to re-approve them), and `--definition-file` rides in as `SANDBOX_DEFINITION_SEED` for
-  the daemon to seed itself from on first boot. Design: `docs/remote-runners-plan.md` in the workspace the
-  sandbox serves.
-- `ic machine enroll / remove`, a Linux server as a deploy target: service user, sshd, its own tunnel, the
-  POST /enroll self-registration: and the full teardown.
+- Runs on the host: a laptop, a server or a hosted machine, never inside a sandbox, which cannot see its siblings.
+  The bootstrap shims download a fresh static binary on every run; the desktop app and the machine agent call the
+  installed one. An agent reaches it through a connected device's sandbox tools.
+- `ic sandbox connect <code>` redeems the setup code from the platform and brings a sandbox up. `update`, `prepare`,
+  `rollback`, `rebuild` and `reshape` swap or restart the container while keeping `/work` and `/history`; `remove`
+  moves the data to a trash that `restore` brings back and `purge` empties early.
+- `ic sandbox doctor` walks the reachability chain (machine, container, daemon, platform, edge) and names the broken
+  link with its fix.
+- The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of
+  writing one, so a flag change ships with the image.
+- `ic docker prepare` checks and, with consent, installs what Docker needs; `ic machine enroll` makes the host a deploy
+  target; `ic runner up` starts a runner container for a parent sandbox.
 
 ## Key files
 
-- [src/main.rs](src/main.rs): the command tree, and the map from every env var the shell flows honored.
-- [src/contract.rs](src/contract.rs), the boundary that matters: ic never states the container's run shape,
-  it executes what the image's own `intentic sandbox run-command` answers.
-- [src/checks.rs](src/checks.rs), the check engine: checks run to outcomes instead of bailing, the summary
-  names every failure with its fix, and `docker::require_daemon` reads the same classification so the
-  all-at-once preflight and the hard gates can never drift apart.
-- [src/sandbox/doctor.rs](src/sandbox/doctor.rs), the reachability chain (postflight + `doctor`): patient
-  during connect (fresh DNS propagating is ordinary), instant as a diagnosis.
-- [src/sandbox/connect.rs](src/sandbox/connect.rs): the setup flow.
-- [src/sandbox/recreate.rs](src/sandbox/recreate.rs): the five modes (rebuild, update, rollback, dev, and
-  reshape, the one that keeps the image and changes the container's share), the rollback record, and the seam
-  `prepare` stops at (everything above it builds an image; everything below it moves the sandbox onto one).
-- [src/sandbox/staged.rs](src/sandbox/staged.rs): telling the sandbox an update is downloaded and waiting.
-  The daemon has no host Docker socket and cannot see the host's images or its records, so the fact is written
-  into the container's /history volume, which is daemon-owned and outside the agent's reach.
-- [src/record.rs](src/record.rs), the host-side channel record: what this sandbox follows, what it can roll
-  back to, and what is built and waiting for it. Host-side is the point: it is outside every volume the agent
-  can write, which is why the fast update path is allowed to trust it.
-- [src/sandbox/remove.rs](src/sandbox/remove.rs): removal; keep in lockstep with cleanup.sh (below). It **posts a
-  farewell to the platform before deleting anything** (`/sandbox/farewell`, over the CONNECT_TOKEN read out of the
-  container's own env): a removed container answers no questions, and at the edge a deleted sandbox, a stopped one and
-  a sleeping laptop are one silence — so the browser either waits forever or accuses the wrong one. Best-effort and
-  silent; a platform that cannot be reached costs the old behaviour, never the removal.
-- [src/selfhost.rs](src/selfhost.rs): the root-side machine mutations connect's SELF_HOST and machine
-  enrolment share.
+- [src/main.rs](src/main.rs) — every command and flag, with its help text.
+- [src/sandbox/connect.rs](src/sandbox/connect.rs) — the setup one-liner's flow after Docker: claim, launch, reachability.
+- [src/sandbox/recreate.rs](src/sandbox/recreate.rs) — every image swap (update, prepare, rollback, rebuild, reshape) as one flow.
+- [src/contract.rs](src/contract.rs) — asks the image for its `docker run` command.
+- [src/sandbox/doctor.rs](src/sandbox/doctor.rs) — the reachability chain and its findings.
+- [src/prepare/mod.rs](src/prepare/mod.rs) — `ic docker prepare`: facts, plan, fixes.
 
-## How it fits
+## Commands
 
-The served scripts in `_site/site/public/scripts/` fetch this binary from the GitHub release and forward to
-it; the desktop app spawns those same scripts, so all three doors: pasted one-liner, desktop button,
-hand-typed `ic`: run this one implementation. How a sandbox container is run is still owned by
-`@intentic/sandbox-run` and spoken by the image itself; ic is a caller of that contract, never an author, so
-a stale ic still runs a new image correctly.
-
-## Conventions & gotchas
-
-- Every flag doubles as the env var the shims forward (`SETUP_CODE`, `CF_TOKEN`, `SANDBOX_IMAGE`,
-  `INTENTIC_SET_ENV`, …): the one-liners the platform ever handed out keep working.
-- **Two agents are bootstrapped after health, not one.** Desktop sync is gated on `SYNC_DIR` (there is no
-  sensible default for which folder to mirror); the computer agent is not, because it asks nothing of the user
-  and arrives permitted to touch only this machine's sandboxes. Both go through one code path, run as the
-  invoking user under sudo, and neither can fail the setup. `HOST_PAIR_TOKEN` rides the claim like
-  `SYNC_PAIR_TOKEN`; `HOST_PLATFORM` and `HOST_LABEL` ride the container's env because the daemon cannot read
-  either for itself: it is in a container with its own hostname, on Linux however this machine is spelled.
-- **A setup code is what makes the platform part of a run**, and both platform-facing gates say so. The
-  preflight probes the platform's origin only when there is a code to redeem against it, and the postflight's
-  broken links fail the setup only then too: that is the run someone is watching from a browser, on a
-  workspace they will open over the tunnel. A codeless run carries its tokens in the env: nothing calls the
-  platform, the outward links belong to whoever wrote the script, and the sandbox it was asked to start is
-  started, so the chain is printed as a diagnosis (`ic sandbox doctor` re-runs it) instead of a verdict.
-- `cleanup.sh` and `cleanup-host.sh` stay full scripts on purpose: removal is the flow you reach for when
-  things are broken, and it must not depend on a binary that might itself be what is broken. `ic sandbox
-  remove` / `ic machine remove` are their CLI twins: change one, change both.
-- `connect-host.ps1` (Windows deploy targets) is still script-only: its flow is genuinely different (a
-  Docker-in-Docker target with a netns-shared cloudflared publishing its sshd on the user's own zone), not a
-  dialect of the Linux one.
-- Interactive questions read from the controlling terminal, never stdin: the shims pipe this binary's flows
-  from `curl … | sh`, where stdin is the script. A failed read is a refusal, never a default. **`INTENTIC_NO_PROMPT=1`
-  turns every one of them off**, which is what the desktop app sets: it spawns these flows from a GUI process
-  with no window, no console and closed stdin, and a probe that is wrong there does not produce a bad guess:
-  it produces an install that never ends. The probes stay; this is the caller saying so outright.
-- **`ic docker prepare` has two exit codes that are not failures.** `3` means requirements were reported and
-  nothing was changed (come back with `-y` / `INSTALL_DOCKER=1`); `4` means Windows has to restart first.
-  Every Windows install that needs anything ends its first pass on `3` by design, and a caller that reads
-  that as a crash shows the user `exited with status 3` instead of the diagnosis it just printed. See
-  `docs/cli-output-protocol.md` §2c, and §2b for the two `intentic-requirement…:` markers the desktop app
-  draws its checklist from.
-- **`ic docker prepare` judges Docker's permission by Docker's own answer.** The login token (`whoami /groups`)
-  is read, but it never sends anybody to sign out on its own: an engine that answered this account has settled
-  the question, and one that refused with *Access is denied* (`docker_denied`) is a running engine asking for a
-  sign-in — never one to start. Only a stopped engine consults the group's roster, and then only to grant a
-  membership that is plainly missing. The same probe asks every way an install can say where Docker Desktop
-  went (Docker's registry key, both Uninstall keys, `LOCALAPPDATA`, the `docker.exe` on PATH, the Start-menu
-  shortcut), and starting it falls back to that shortcut. Every requirement's title, problem and remedy is
-  written for the person on the desktop app's card, not for a terminal: commands and group names belong in the
-  log. Under `INTENTIC_NO_PROMPT=1` the restart and sign-out endings say the setup resumes on its own instead
-  of printing a command to paste — the app that set the flag is the thing that resumes it.
-- **Decisions are split from the IO that acts on them**, and that split is what the tests hook into: the argv
-  that asks the image for its run command, the overlay's base check, the rollback record's arithmetic, the
-  image-reference classification. Each is a pure function beside the function that calls docker, so the
-  logic most likely to be wrong (and least likely to be noticed when it is) is asserted without a daemon.
-  Put new decisions on that side of the line too.
-- `cargo test` needs nothing installed. Nothing here mutates process env (`set_var` is global and the test
-  threads are parallel), so tests that need paths take a tempdir instead of repointing `INTENTIC_HOME`.
+```sh
+cargo test --manifest-path _sandbox/ic/Cargo.toml
+bash _tools/scripts/build/build-ic.sh linux-x64   # release binaries into _sandbox/ic/dist-bin/
+```

@@ -1,27 +1,22 @@
-# @intentic/resources
+# resources
 
-The closed list of things that can be deployed: the resource vocabulary, and the single authority on it.
+The closed vocabulary of resource kinds the deploy tool emits and reconciles, with the outputs each kind produces.
 
-Shared by the state resolver (which emits these kinds), the engine (which reconciles them), and the providers (which implement them). The graph IR treats a node's `type` as an opaque string; this package says which kinds exist and what each produces. Depends only on [`@intentic/graph`](../graph).
+```mermaid
+flowchart LR
+    state["state-resolver<br/>emits ResolvedNode"] --> resources(["resources<br/>ResourceType · OUTPUTS"])
+    engine["engine<br/>checks produced outputs"] --> resources
+    providers["providers<br/>one per kind"] --> resources
+    contract["api-contract<br/>plan schemas"] --> resources
+```
 
-## Responsibilities
-
-- Define `ResourceType`: the closed union of every resource kind intentic understands (`host`, `cloudflare`, `forgejo`, `forgejo-runner`, `komodo`, `tunnel`, `cf-route`, `repo`, `ci`, `deployment`, `app`, `backup`, `workspace`, …).
-- Define `ResolvedNode`: a `RawNode` whose `type` is constrained to a `ResourceType`.
-- Catalog `OUTPUTS`: the output fields each kind produces, so downstream nodes can ref them with confidence.
-- It is a vocabulary only: no resolution logic, no reconciliation, no provider code.
+- `ResourceType` lists every kind, from `host` and `cloudflare` through `deployment`, `forgejo-team` and `garage-bucket`. `ResolvedNode` narrows a graph node's `type` to it, so a resolver emitting an unknown kind fails to compile.
+- `OUTPUTS` is the runtime table of which outputs each kind produces. The engine rejects a provider that returns an undeclared output, and `plan` seeds pending values from it. An entry ending in `:` allows a prefix, for per-app keys like `appWebhook:<app>`.
+- The SDK's handle properties mirror `OUTPUTS`; a test in [sdk](../sdk) fails when the two disagree.
+- Types and one table only: no logic, no tests of its own.
 
 ## Key files
 
-- [src/resource-types.ts](src/resource-types.ts): the `ResourceType` union + `ResolvedNode`.
-- [src/outputs.ts](src/outputs.ts): the `OUTPUTS` map (kind → produced fields).
-- [src/index.ts](src/index.ts): public surface.
-
-## How it fits
-
-Sits just above `graph`. The `state-resolver` emits `ResolvedNode`s of these types; the `engine` keys its `ResourceType → Provider` map on them; `providers` implements one provider per kind. Adding a new resource kind starts here.
-
-## Conventions & gotchas
-
-- The union is **closed**: adding a kind means updating `ResourceType`, its `OUTPUTS` entry, the emitter in `state-resolver`, and a provider in `providers`, together.
-- Keep `OUTPUTS` accurate: refs are validated against it, so a missing/typo'd output surfaces as a resolve-time error. See [ARCHITECTURE.md](../../ARCHITECTURE.md).
+- [src/resource-types.ts](src/resource-types.ts) — `ResourceType` and `ResolvedNode`.
+- [src/outputs.ts](src/outputs.ts) — `OUTPUTS`, keyed exhaustively over `ResourceType`.
+- [src/index.ts](src/index.ts) — the package's two exports.

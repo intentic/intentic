@@ -328,7 +328,7 @@
 /* THE ONE SURFACE ANYTHING OPENED IN THE TRANSCRIPT IS DRAWN ON — a tool's output, a diff, a written document, a
    thought, the sandbox's preamble. `bg-canvas` sits BELOW the panel, so a box drawn on it reads as a hole cut through
    the turn instead of a part of it, and dims its own text by the same step; this is the card option preview's answer
-   (flat-decision-cards.md) spent everywhere else. Opaque rather than an alpha wash, so a sticky gutter inside one can
+   spent everywhere else. Opaque rather than an alpha wash, so a sticky gutter inside one can
    reuse the fill and still hide what scrolls under it. */
 .chat-turns {
     --chat-inset: color-mix(in srgb, var(--color-content) 6%, var(--color-card));

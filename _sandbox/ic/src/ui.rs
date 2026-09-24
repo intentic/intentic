@@ -99,7 +99,7 @@ fn ui() -> MutexGuard<'static, State> {
 impl State {
     fn detect() -> State {
         let terminal = std::io::stdout().is_terminal();
-        // The protocol's override, honoured by both renderers (docs/cli-output-protocol.md). `nested` is a
+        // The protocol's override, honoured by both renderers (docs/ops/cli-output-protocol.md). `nested` is a
         // CHILD's mode — this binary is the one that sets it on the agents it spawns, never the one that runs
         // inside somebody else's checklist — so it is not a value this reads.
         let mode = match std::env::var("INTENTIC_UI").as_deref() {

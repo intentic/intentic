@@ -153,7 +153,7 @@ economics band, the final CTA, the FAQ answer "Is any of it paid?". Do not add a
 `/pricing/` and a bar link exist (2026-09-06): "pricing" is the highest-intent click on a developer-tool
 site, and a visitor who finds no link assumes the price is hidden. Copy in `site-content/src/pricing.ts`,
 figures from `hosted.ts`. The page sells one thing, a hosted sandbox, and says so as "whose machine": the
-free column is your machine, the other is ours (docs/design/pricing-model.md).
+free column is your machine, the other is ours.
 
 ## Glossary (use these words, exactly)
 

@@ -1,42 +1,36 @@
-# @intentic/ext-projects
+# projects
 
-The workspace's repositories as a dashboard of tiles: open one as its own tree, or start a new one in a press.
+The Projects rail view: the workspace's repositories as a dashboard of tiles, one press to open a project or start a new one.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    daemon["Daemon<br/>repository list"] --> ext(["projects<br/>browser"])
+    readme["Each repo's README.md"] -->|"first paragraph"| ext
+    ext -->|"open a tile"| scope["Shell scoped<br/>to the project"]
+    ext -->|"See it running"| preview["Preview area"]
+    ext -->|"New project"| daemon
+```
 
-- Draw one tile per repository under the workspace root: its name, a monogram plate in a palette slot fixed by the
-  id, its README's first paragraph as one plain line, and a link into the Preview area for a repository that runs.
-- Open a tile by making its repository the shell's project scope (`api.workspace.setProject`), which narrows the
-  workspace, the agents board and every repository-keyed view to it, then opening the workspace, which roots itself
-  there. Say on the tile which project is open, and offer All projects.
-- Make a new repository in a press: a free name offered, the daemon's `POST /workspace/repos/new` behind Create,
-  and the new project opened.
+- Runs in the browser, compiled into the editor app as a builtin. It registers one `rail` view that shows even
+  with no repositories, since the New project tile is where an empty workspace starts.
+- A tile's description is the first paragraph of that repository's `README.md`, reduced to one plain line by
+  `summaryOf`. A README that opens with a heading and nothing else gives an empty tile.
+- Opening a tile makes the project the shell's scope, and every other area narrows to it. While a project is open
+  the rail tile wears its two-letter monogram and a badge that names it.
+- New project fills in the first free name in a series and creates the folder through the daemon, which has the
+  last word on valid names.
+- The list is never polled: the host's repository push re-reads it when a clone, scaffold or delete lands.
 
 ## Key files
 
-- [src/projects.ts](src/projects.ts): which repositories are tiles, a README's first paragraph turned into one
-  clamped line of plain text, the palette slot a tile wears, the free name a press offers, and where a tile goes.
-- [src/useProjects.ts](src/useProjects.ts): the daemon reads behind the tiles, and the create call.
-- [src/ProjectsView.vue](src/ProjectsView.vue): the dashboard.
-- [src/extension.ts](src/extension.ts): activation, and why the view exists for an empty workspace.
+- [src/extension.ts](src/extension.ts) — registers the rail view, its monogram and its scope badge.
+- [src/ProjectsView.vue](src/ProjectsView.vue) — the tile grid and the New project field.
+- [src/useProjects.ts](src/useProjects.ts) — the repository list plus one README read per tile.
+- [src/projects.ts](src/projects.ts) — pure helpers: `summaryOf`, `freeProjectName`, `slugOf`, `monogramOf`.
+- [src/projects.test.ts](src/projects.test.ts) — which README paragraph becomes the summary, by example.
 
-## How it fits
+## Commands
 
-**The place the project scope is read and changed.** The tile heads the rail for everyone, above what its scope
-narrows ([docs/design/maker-audience-design.md](../../docs/design/maker-audience-design.md), section 12). The
-scope itself is the shell's (`app/projectScope.ts`): this extension only sets it and says which project is open,
-on its tile's title and the monogram the tile wears in place of its glyph. Nothing here duplicates the Workspace,
-which roots itself at the open project and keeps the project's history in its own Restore points panel.
-
-**A tile's summary is plain text, never rendered markup.** A README's first paragraph arrives as whatever its author
-wrote — HTML tags, badge rows, links, entities, a bold span with an italic inside it — and a tile has two lines for
-it. `summaryOf` reduces that to words and cuts to `SUMMARY_LIMIT`, at a whole sentence where one fits and a whole
-word otherwise. Angle brackets that are a placeholder (`*.<zone>`) are text and survive; a `<h1>` is a heading and is
-skipped like any other.
-
-**It reads and makes repositories, and does nothing else.** `GET /workspace/repos` lists them, `GET /workspace/file`
-reads a README, `POST /workspace/repos/new` makes one. The daemon does the making: a folder, `git init` with its git
-dir on `/history` like a clone's, a README that names it, and one commit so agents have a main line to branch from.
-
-**It is an extension, with the file tree as its stand-in.** Switching it off leaves a maker on the Workspace tile,
-which the rail table hands the seat back to (`registry.ts`, `standIn`), so there is never no home.
+```sh
+pnpm --filter @intentic/ext-projects test
+```

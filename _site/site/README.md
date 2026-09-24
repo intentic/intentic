@@ -1,122 +1,38 @@
-# @intentic/site
+# site
 
-The public website at intentic.dev: an Astro build, all copy imported rather than written in the markup.
+The Astro site behind intentic.dev, prerendered to static pages and served by a Cloudflare Worker that adds redirects, versionless downloads and a live notice.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    content["site-content<br/>words, page trees"] --> build(["site<br/>astro build"])
+    demo["demo build<br/>public/demo/"] --> build
+    build --> dist["dist/<br/>pages, .md mirrors, search.json"]
+    dist --> worker["worker.ts<br/>Cloudflare Worker"]
+    live["content/live.json<br/>read from GitHub"] --> worker
+    worker --> visitor["Visitor"]
+```
 
-- Render the marketing and documentation pages.
-- Ship the interactive demo into its own `public/`, so it is a page of this site at `/demo/`.
-- Emit the machine-readable surface: per-page markdown and `llms.txt`.
+- Pages are `.astro` files under `src/pages/`; their words, navigation and metadata come from `@intentic/site-content`. `/docs`, `/developers` and `/api` share one layout, sidebar and search index (`src/components/docs/`), and `/api` is generated from `@intentic/sandbox-openapi`.
+- Every build also writes a Markdown mirror of each page, `llms.txt`, `search.json`, a sitemap dated from git (all via `@intentic/astro-integrations`) and OpenGraph cards. The cards are skipped when the Inter fonts under `scripts/fonts/` are missing.
+- `worker.ts` runs before static assets (`run_worker_first`). It redirects http and moved paths, serves the install scripts at vanity paths (`INSTALL_SCRIPTS` in `@intentic/constants`) from `public/scripts/`, resolves `/desktop/*` to the latest GitHub release asset, falls back to the demo's shell under `/demo/`, and applies [content/live.json](content/live.json) to every HTML page outside `/demo/`.
+- The `/extensions/` gallery reads the registry repository at build and falls back to `src/lib/registry.fallback.json` when GitHub is unreachable.
+- The Worker name `intentic` in `wrangler.jsonc` is the Worker bound to intentic.dev, so a deploy under any other name never reaches the live site.
 
 ## Key files
 
-- [src/pages/index.astro](src/pages/index.astro): the landing page, whose hero shot links to the demo. It is
-  three lines; the page itself is [src/components/Landing.astro](src/components/Landing.astro), with its own
-  arrangement in [src/styles/home.css](src/styles/home.css).
-- [src/styles/global.css](src/styles/global.css), the design system, and the first file to read: the metals,
-  the three type tiers and the size band each is fenced to, and every shared recipe (`.btn`, `.card`,
-  `.window`, `.frame`, `.eyebrow`, `.display`, the plate). Nothing on this site is rounded and every rule is
-  gold; both are decided here.
-- [src/components/Window.astro](src/components/Window.astro): the one frame every product screenshot on the
-  site sits in, ledge and turned corners included.
-- [src/components/figures/AutomateFigure.astro](src/components/figures/AutomateFigure.astro): the automation
-  machine, drawn —
-  six events feeding one bus, the check that may veto a run, the session it turns into. The one figure both the
-  home page and a feature page carry, so it takes its arrangement from a `@container` query rather than the
-  window: wide in the home page's 1296px plate, stacked in a column half that, from the same markup. Its words
-  are `site-content/automate.ts`; its motion is one gold pulse a beat, and none under `prefers-reduced-motion`.
-- [src/components/figures/WorksiteFigure.astro](src/components/figures/WorksiteFigure.astro): the relief on
-  `/docs/worksite/` — a walled camp, one bay and one worker inside it per sandbox, a board hanging in each bay,
-  buildings going up beyond the wall. Every stone, bay and report line is computed from one course grid and one bay
-  pitch, so a bay added carries its worker, its board, the building it reports to and its label plate with it.
-  Highlighting is `:has()` and nothing else: no script, so a browser without it shows the whole relief at rest
-  instead of a figure that needs JavaScript to be legible, and a tapped plate (`:target`) stands aside for the
-  pointer so only one part is ever lit.
-- [src/components/PageBackdrop.astro](src/components/PageBackdrop.astro): the temple behind every page's
-  first screen. The home page's hero paints its own; every other page gets this one, which is why the bar
-  has the same carved band behind it wherever you are.
-- [src/components/Nav.astro](src/components/Nav.astro): the bar. Transparent on every page, over that
-  backdrop, taking a ground only once the plate has scrolled out from behind it. Its height is
-  `--bar-height` in global.css: a stylesheet value, not a measurement, so it cannot differ by a pixel
-  between one page and the next.
-- [src/components/ornaments.ts](src/components/ornaments.ts): the four drawn shapes (lotus, lozenge, corner,
-  divider) every flourish here is one of, as strings so markup and CSS `background-image` share one definition.
-  `scripts/icons.mjs` reads the lotus out of it to build every favicon, so the mark in the bar and the mark in
-  a browser tab cannot become two drawings.
-- [src/components/Bullet.astro](src/components/Bullet.astro) and
-  [src/components/Point.astro](src/components/Point.astro): a mark on a line of text, and a whole list row. The
-  only way a mark is placed beside words here — see the conventions below.
-- [src/pages/pricing.astro](src/pages/pricing.astro): your machine beside ours, words from
-  `site-content/pricing.ts`, figures from `site-content/hosted.ts`.
-- [src/pages/docs](src/pages/docs): the documentation pages.
-- [src/components/docs/DocsLayout.astro](src/components/docs/DocsLayout.astro): every docs page's shell, and the one place
-  that sees a page's whole rendered body: it anchors the headings, builds the section list, and checks a page's
-  authored index against the headings that actually exist.
-- [src/lib/docs-headings.ts](src/lib/docs-headings.ts): the render pass that gives every prose heading a stable
-  id and an anchor. Derived rather than authored; see the file for why.
-- [src/pages/search.json.ts](src/pages/search.json.ts): the docs search index, section by section.
-- [src/lib/registry.ts](src/lib/registry.ts): the extension registry the marketplace pages read; the public gallery includes only exact sources carrying current deterministic-scan and agent-audit evidence.
-- [content/](content/): the two pieces of this site somebody edits without touching a page — `live.json`
-  (the notice strip and the download / create-workspace kill switches, live at the edge in about thirty
-  seconds, no deploy) and `posts/*.md` (the blog, built like every other page). Its README is the one to read
-  before changing either; [src/lib/live.ts](src/lib/live.ts) is why the first of them is layered the way it
-  is, and [src/lib/posts.ts](src/lib/posts.ts) is the post loader and its frontmatter contract.
-- [src/lib/changelog.ts](src/lib/changelog.ts): the published GitHub Releases `/changelog/` reads, and the
-  parser for the "What's new" section `_tools/scripts/release/publish-github.sh` writes into each release body.
-- [src/lib/desktop-downloads.ts](src/lib/desktop-downloads.ts): the desktop builds, named once, so the download
-  page and the landing page's download button can never point at different files.
-- [src/lib/variant.ts](src/lib/variant.ts): the site's two skins, dark and `desk`, decided in the browser before
-  first paint and carried into the app on every link and on a domain cookie. The skin is the LOOK of the shared
-  pages for a reader who came in through intentic desk; it never switches words. The two products each have a page
-  of their own: `/` ([src/components/Landing.astro](src/components/Landing.astro)) and `/desk/`
-  ([src/components/DeskLanding.astro](src/components/DeskLanding.astro)), sharing the shell and nothing search
-  would read twice. `docs/design/desk-edition.md` has the whole of it.
-- [src/components/DownloadCta.astro](src/components/DownloadCta.astro): the download button, which names the
-  reader's own platform. It renders the general case and narrows it in the browser; see the file for why that
-  order matters.
-- [src/components/VisitorChat.astro](src/components/VisitorChat.astro): our own Visitor chat, the chat bubble in the
-  corner of every page. The same one-line snippet the docs hand a customer, pointed at whichever sandbox
-  answers for us.
-- [astro.config.mjs](astro.config.mjs): where the build-time integrations are wired in.
+- [astro.config.mjs](astro.config.mjs) — integrations, sitemap priorities, llms.txt sections and the dev proxy for `/demo`.
+- [worker.ts](worker.ts) — request-time routing and the live-content rewrite in production.
+- [wrangler.jsonc](wrangler.jsonc) — Worker name, build command (demo first, then Astro) and the asset binding.
+- [src/layouts/BaseLayout.astro](src/layouts/BaseLayout.astro) — the head, JSON-LD, OpenGraph tags and notice strip every page shares.
+- [src/components/Landing.astro](src/components/Landing.astro) — the home page.
+- [src/lib/live.ts](src/lib/live.ts) — the schema, limits and link allowlist for the live document.
 
-## How it fits
+## Commands
 
-Copy comes from `@intentic/site-content` and build-time behaviour from `@intentic/astro-integrations`.
-This package is layout and routing; a wording change should not need to touch it.
-
-## Conventions & gotchas
-
-- **A mark beside text is never placed by hand.** Bullets, the flower on a heading, the tick on a FAQ summary, a
-  provider's logo in a row: all of them go through `<Bullet>` (or `<Point>` for a list row), and `.mark` in
-  global.css puts them on the middle of the first line by making the box one line box tall (`1lh`). Do not add a
-  `mt-*`, a `translate-y`, or a `margin-top` to get a mark to look level — that constant is right only for the
-  type size it was typed at, and this site carried five different ones before the rule existed.
-  `_tools/checks/mark-alignment.mjs` refuses a new one, and `pnpm test` here measures every mark on four pages
-  at two widths in a real browser ([scripts/check-alignment.mjs](scripts/check-alignment.mjs)). The single
-  exception is `.lockup`, the wordmark, which is aligned on the letters rather than the line box.
-- **Docs pages author prose headings BARE**: `<h2>`, not `<h2 class="…">`. That is what marks a heading as a
-  section of the page rather than furniture inside a card, and it is what earns it an anchor and a place in the
-  section list. A heading that needs a class is a component's, and is skipped on purpose.
-- A docs page that writes its own index table passes `requireAnchors` to `DocsLayout`, which fails the build if a
-  row points at a heading that no longer exists. A dead in-page link is invisible in a diff and in a screenshot.
-- The demo is built into this site's `public/` deliberately: it seeds credentials into localStorage before the
-  app boots, so it has to be served from this site's own origin rather than linked to somewhere else.
-- The demo opens as its own full page, never in an overlay: an IDE wants the whole viewport, and every link to
-  it on the site (nav, hero, product and compare CTAs) is a plain `<a>` to `/demo/`.
-- **The worker rewrites every HTML response**, from `content/live.json`. It only ever OVERRIDES what the
-  build already emitted: the notice strip is in the markup of every page with `hidden` on it, and the CTAs are
-  matched by what they are (`a.btn` pointing at the app, `a[data-download-cta]`) rather than by a `data-`
-  attribute somebody has to remember to add. A failed fetch or a malformed document leaves the page untouched.
-  Nothing is ever injected as HTML — see `withLiveContent` in [worker.ts](worker.ts).
-- **The Visitor chat is two environment variables, not a code change.** `PUBLIC_VISITOR_CHAT_ORIGIN` (the
-  sandbox's own public HTTPS origin, no trailing slash) and `PUBLIC_VISITOR_CHAT_AUTOMATION` (the automation id)
-  are read at build time on the Cloudflare project; with either unset the tag is not emitted, which is why a
-  dev server and a preview build carry no bubble. Moving the visitor chat to a different sandbox is a variable and a
-  redeploy. Two things the sandbox side must be true for: the origin has to be **https**, because the widget's
-  proof-of-work check needs `crypto.subtle` and a plain-http page has none; and `https://intentic.dev` has to
-  be on that automation's allowed-origins list, or every call is refused. While the sandbox is off the script
-  404s and no bubble appears, which is the intended behaviour, not a failure to paper over.
-- **Some paths are the worker's, not Astro's**: `/desktop/*`, `/connect` and the other vanity routes are
-  answered by `worker.ts`, which does not run under `astro dev`. `/desktop/*` is stood in for by a dev-only
-  middleware reading the worker's own table, so download links work locally; the script routes are not, and a
-  new vanity path needs the same treatment or it will 404 on every developer's machine and nowhere else.
+```sh
+pnpm -C _site/site dev          # astro dev; /demo proxies to the demo's dev server
+pnpm -C _site/demo dev          # start it alongside to see /demo in dev
+pnpm -C _site/site build
+pnpm -C _site/site test         # desk palette and mark alignment checks
+pnpm -C _site/site run deploy   # wrangler deploy, then IndexNow submission
+```

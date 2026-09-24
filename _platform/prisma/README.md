@@ -1,68 +1,59 @@
-# @intentic/prisma
+# prisma
 
-The **database layer**: the Prisma schema, the generated client, and the migrations. Owns the Postgres data model and exposes the typed `PrismaClient` that [`@intentic/api`](../../_platform/api) imports. Prisma 7 with the `prisma-client` generator (output to `./generated`).
+The platform's Postgres schema, its append-only migration history and the Prisma client generated from them, shared as `@intentic/prisma`.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    schema["schema.prisma"] -- "prisma generate" --> client(["@intentic/prisma<br/>generated client"])
+    client --> api["api"]
+    migrations["migrations/"] -- "migrate deploy<br/>at api boot" --> db[("Postgres")]
+    api --> db
+    ci["CI: check-migrations.sh"] -- "replay and diff" --> migrations
+```
 
-- Define the schema: the Better Auth tables (`User`/`Session`/`Account`/`Verification`), the sandbox registry (`Sandbox`/`SandboxMember`, connection token, the derived 12-hex `tunnelId` the edge looks a sandbox up by, announced `daemonUrl`; no liveness state and no reachability state — a sandbox's grant is signed on demand, never stored), the hosted lane's machine record (`HostedMachine`, the one row that deliberately keeps the way back into a machine: the Fly app the platform created for a hosted sandbox, so it can wake, stop and destroy it, plus the rung it was sold on and the four numbers it actually is, which diverge mid-migration and after any edit to the ladder) and the record of moving one between rungs (`HostedMigration`, what was changed, the snapshot taken before anything was, and the old pair a rollback returns to) and its warm stock (`HostedPoolMachine`, each row holding the identity its app was named after at build, which a claim adopts into the sandbox row), the free-trial meter (`TrialUsage`), the hosted lane's awake-hour meter (`HostedUsage`, keyed by sandbox because the ceiling is the machine's rung's, and carrying the owner besides, whose column outlives the sandbox so releasing a spent machine does not reset the account's month), the free plan's abuse defences (`User.hostedSuspendedAt`, an account's hosted standing; `HostedProvision`, who was handed a machine from which address and domain, for the same-source caps, kept a month; `HostedStrike`, the abuse watch's verdicts off the provider's own meter), and the hosted plan (`HostedPlan`, the Stripe mirror of the one subscription the platform sells: its status, period end, whether it is cancelling, and the Stripe event time that last wrote it, with `HostedPlanItem` beside it holding the slots bought at each rung). Beside those, `AdminDailyStat`: one row per closed UTC day of platform counts (no ids, no emails), written by the api's daily rollup so the admin panel's trend lines survive the retention sweeps that take the raw rows.
-- Generate the client and own the migration history.
-- Provide nothing at runtime beyond the client: no business logic.
+- Tables include Better Auth's users and sessions, sandboxes and their members, the hosted lane (machines, pool,
+  builds, usage, plan), the wallet and admin stats. The comments in `schema.prisma` say what each column means.
+- Migrations are append-only. `_tools/scripts/verify/check-migrations.sh` (CI's `migrations` job) fails when an
+  applied migration changes, when a new one adds a `NOT NULL` column with no `DEFAULT`, or when replaying the history
+  does not produce `schema.prisma`.
+- The api image runs `migrate deploy` and then `migrate diff --exit-code` at boot, and stops if the live database
+  differs from the schema baked into that image.
+- `prisma.config.ts` loads the repo-root `.env` for `DATABASE_URL`; `build` generates with a placeholder URL, so
+  building needs no database.
 
 ## Key files
 
-- [schema.prisma](schema.prisma): the data model (`@@map`ped to snake_case tables).
-- [client.ts](client.ts) (the package entry (re-exports the generated client); `prisma.config.ts`) generator/datasource config.
-- `generated/` (the generated Prisma client (git-ignored, built by `generate`); `migrations/`) ordered SQL + `migration_lock.toml`.
+- [schema.prisma](schema.prisma) — every table, with what each column is for.
+- [prisma.config.ts](prisma.config.ts) — schema and migrations paths, resolved from this file wherever Prisma runs.
+- [client.ts](client.ts) — re-exports the generated client as the package entry.
+- [migrations/20260901190000_tunnel_id_backfill/migration.sql](migrations/20260901190000_tunnel_id_backfill/migration.sql) — a guarded forward fix, the model for the runbook below.
 
-## Workflow
+## Commands
 
-`HostedCleanup` stores app teardown obligations independently of sandbox rows, so cascades and API restarts
-cannot erase unfinished cleanup. Provisioning records an app before contacting its provider and removes the
-record with its successful handoff; cancellation and failed provisions leave it for the cleanup worker.
+```sh
+pnpm db:up                                                   # repo root: local Postgres, migrations applied
+pnpm --filter @intentic/prisma migrate:dev --name <change>   # after editing schema.prisma
+pnpm --filter @intentic/prisma build                         # regenerate the client
+bash _tools/scripts/verify/check-migrations.sh               # the CI migration rules, locally
+```
 
-- `pnpm generate`: regenerate the client after editing `schema.prisma`.
-- `pnpm migrate:dev`: create/apply a dev migration (`prisma migrate dev`).
-- `pnpm migrate:deploy`: apply pending migrations (`prisma migrate deploy`, CI/prod/local startup).
-- `pnpm studio`: Prisma Studio.
-- `pnpm db:up` / `pnpm db:reset` (root): start Postgres (docker compose, dev :5440) / wipe + recreate.
+## Failed migration
 
-## Conventions & gotchas
+`Error: P3009` in the api log means a migration failed against that database once. Prisma then refuses every later
+migration, so the api never boots and no redeploy clears it.
 
-- **A migration that has been applied is never edited.** Not the SQL, not the directory name. Prisma records a
-  migration by NAME, so a database that already ran one never runs it again whatever the file later says: the
-  edit reaches only databases created after it, and the two diverge in silence. `migrate deploy` reports "No
-  pending migrations to apply" either way, because it compares names and does not read a single column. This is
-  not hypothetical: `challenge` was added to `desktop_handoff` by editing its original migration, production
-  never got the column, and every desktop sign-in answered an unhandled 500 for a week while CI: whose
-  databases are all built fresh from the edited file: stayed green throughout. To change a schema, add a
-  migration. Two things now enforce that, and both will fail rather than let it recur:
-  [check-migrations.sh](../../_tools/scripts/verify/check-migrations.sh) in the `migrations` CI job (the history is
-  append-only, every new entry can apply to a database that has rows, and replaying it into an empty database
-  reproduces `schema.prisma` exactly), and the api image, which diffs its own database against this schema at
-  boot and refuses to serve if they disagree ([Dockerfile](../api/Dockerfile)).
-- **A new column is nullable first, or it has a default.** `ADD COLUMN … NOT NULL` with no `DEFAULT` is the one
-  statement Postgres accepts on an empty table and refuses on a used one, so writing it means writing a
-  migration that can only ever apply where there is nothing in the table. `tunnelId` was written that way
-  (`20260831120000_ingress_reachability`, "fresh-state reshape, pre-launch, no users"): green in CI, where every
-  database is built fresh, and dead on the live one — and a FAILED migration is a wall, not a bad night, because
-  `migrate deploy` then refuses every later migration too (P3009), so the api's boot chain stopped at its first
-  step and the platform served nothing until it was repaired. Write the three steps instead: add the column
-  nullable, `UPDATE` it to the value each existing row implies, then `ALTER COLUMN … SET NOT NULL`. A column no
-  existing row implies a value for wants a `DEFAULT`, which fills them for you. Check 2 of the script above
-  fails the pipeline on the shape rather than the deploy on the consequence.
-- **Recovering a migration that failed in production** (`Error: P3009`, which the api container prints on repeat
-  and the deploy job reports as "did not come back healthy"). Prisma rolls the statement back but keeps the
-  failed row, and nothing pending applies until that row is resolved — no redeploy clears it. Fix it forward:
-  write the repair as a NEW migration whose statements are guarded (`IF EXISTS` / `IF NOT EXISTS`, an `UPDATE …
-  WHERE … IS NULL`) so it is a no-op on every database where the original succeeded, then, once that image is
-  built, tell the live database to stop waiting on the name it will never run:
-  `docker compose exec api bun node_modules/prisma/build/index.js migrate resolve --applied <migration_name>
-  --config node_modules/@intentic/prisma/prisma.config.ts`, and redeploy. The name is recorded as done, the
-  repair supplies what the name promised, and the boot-time schema diff is what proves the result before the api
-  serves a request. `20260901190000_tunnel_id_backfill` is the worked example.
-- Run the CI check locally before pushing a schema change: it is the same script:
-  `pnpm db:up && MIGRATION_CHECK_DATABASE_URL=postgresql://app:app@localhost:5440/app bash _tools/scripts/verify/check-migrations.sh`
-  (any empty, disposable Postgres will do; it gets every migration replayed into it).
-- After any schema change, run `migrate:dev` (or at least `generate` when no migration is needed) **and** `pnpm build` before the API runs under `tsx`.
-- One `SandboxConnection` per user (`userId @unique`); its `token` seeds the deterministic tunnel hostname and is the daemon's first-bind secret. `daemonUrl` is the only sandbox state the platform stores: written by the browser, never used for liveness (the browser probes the daemon directly).
-- The connection token is stored **plaintext** for now: encryption is deferred. No infra/Claude secrets live here; those stay in the sandbox.
+1. Find the Postgres error for the failed migration in the api log.
+2. Leave its file alone. Write a new migration that completes the change on a table with rows, each statement
+   guarded (`IF NOT EXISTS`, `WHERE … IS NULL`) so it changes nothing where the original applied. Land it on main.
+3. Record the failed one as applied, from the api image against that database:
+
+   ```sh
+   docker run --rm -e DATABASE_URL ghcr.io/intentic/api:latest \
+       bun node_modules/prisma/build/index.js migrate resolve --applied <failed_migration> \
+       --config node_modules/@intentic/prisma/prisma.config.ts
+   ```
+
+4. Redeploy. The boot applies the new migration, and `migrate diff` confirms the database matches `schema.prisma`.
+
+A boot that stops at `migrate diff` instead means the database has drifted from the migrations; the logged diff says
+where.

@@ -1,28 +1,22 @@
-# @intentic/ext-browsers
+# browsers
 
-The browser families a user can connect their own copy of, as something the agent can work inside.
+A data-only extension that adds the "Your Chrome" and "Your Edge" connection cards, which let the agent work in the owner's own signed-in browser.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    card(["browsers<br/>webext cards"]) --> daemon["Daemon webext handler<br/>one-time code · grants"]
+    ext["Intentic browser extension<br/>owner's Chrome or Edge"] -->|"outbound WebSocket"| daemon
+    daemon --> skill["chrome SKILL.md<br/>per connected browser"]
+    skill --> agent["Agent turn"]
+```
 
-- Declare the `webext` capability cards (Chrome, Edge) and where each family's extension is installed from.
-- Ship the skill that teaches an agent to work in somebody's own browser: which browser to reach for, what
-  Chromium will and will not let it touch, and the etiquette that keeps the connection installed.
+- For sites the sandbox's own browser cannot reach: passkeys, work SSO, a bank, a datacentre-blocked site. Nothing is copied out of the browser; the agent acts in it while the owner can watch.
+- Holds no code. The manifest declares two `webext`-kind cards with their store links and setup steps; the daemon's generic peer handler pairs the browser with a one-time code and writes the skill.
+- The far end is the browser extension in [_devices/webext](../../_devices/webext), which connects out to the sandbox and enforces per-site grants through the browser's own permission prompts.
+- Both cards share [skills/chrome/SKILL.md](skills/chrome/SKILL.md), templated per connected browser; it tells the agent when to use this browser instead of the sandbox's.
 
 ## Key files
 
-- [intentic-extension.json](intentic-extension.json): the cards. This file IS the package; there is no `src/`.
-- [skills/chrome](skills/chrome): one pack, shared by both cards — Edge is Chromium and the extension is the same one.
-
-## How it fits
-
-Purely declarative, like [ext-devices](../devices). The extension that makes this possible lives in
-[`_devices/webext`](../../_devices/webext), the socket and the tool bridge in the daemon's `webext/`, and the
-enforcement in neither of them: per-site permission is the browser's own, granted by the person in the popup.
-
-## Conventions & gotchas
-
-- **A second card is a second browser, not a second product.** Edge points at a different store listing and
-  reuses the Chrome skill, because nothing an agent does differs between them. A family whose behaviour genuinely
-  differs (Firefox's containers, Safari's extension model) gets its own pack when it gets its own card.
-- **`install` is a URL rather than a store id** — the families do not share a store, and an unlisted build is a
-  zip on a page. The connect dialog renders it as the link.
+- [intentic-extension.json](intentic-extension.json) — the two cards, their install links and guides.
+- [skills/chrome/SKILL.md](skills/chrome/SKILL.md) — the agent's instructions for a connected browser.
+- [../../_sandbox/sandbox/src/capabilities/handlers/webext.handler.ts](../../_sandbox/sandbox/src/capabilities/handlers/webext.handler.ts) — pairing, grants and connection status for a `webext` card.

@@ -1,59 +1,41 @@
-# @intentic/ext-whatsapp
+# whatsapp
 
-WhatsApp as a place the agent works: paired to a dedicated number as a linked device, it reads chats and
-groups, replies in them, and wakes when it is addressed.
+Pairs the sandbox to a WhatsApp number as a linked device: a capability card, a gateway process that holds the session and wakes automations, and a `whatsapp` CLI for the agent.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    wa["WhatsApp<br/>linked device"] -->|"messages"| gw(["whatsapp gateway<br/>sandbox process"])
+    gw -->|"dispatch · pairing status"| daemon["Daemon<br/>listener routes"]
+    daemon -->|"state · reply"| gw
+    daemon --> turn["Agent turn"]
+    turn --> cli["whatsapp CLI"]
+    cli -->|"loopback control"| gw
+    gw -->|"send"| wa
+```
 
-- Hold a paired multi-device session per configured number and turn WhatsApp messages into agent turns.
-- Run the pairing ceremony and report WHERE IT STANDS every few seconds: waiting, holding a live code, or
-  refused: until the phone links.
-- Declare the event labels, filters and starter prompt the generic automation editor renders.
-- Give the agent the ability to send text and files and to fetch received media, through the `whatsapp` CLI.
+- The connection is unofficial: the gateway links the way WhatsApp Web does (Baileys), against WhatsApp's terms,
+  and numbers get banned. The card and the skill both ask for a dedicated number.
+- WhatsApp has no API to call, so the gateway holds the only session. The agent's `whatsapp` CLI (`bin/whatsapp`,
+  put on the agent's PATH by `contributes.bin`) forwards `chats`, `send`, `send-file` and `download` to the gateway's
+  loopback control surface, found through a `gateway.url` file under the workspace's runtime directory.
+- Unlike the other messaging gateways it connects as soon as the card exists, because pairing starts then. The card
+  shows a pairing code the owner enters on the phone, refreshed while unpaired.
+- Removing the card or changing its number unlinks the device and wipes the saved session.
+- Chats are end-to-end encrypted with no history to fetch. The agent's context is the recent messages this process
+  saw, and a restart empties it. A reply is sent whole when the turn ends.
+- Built on [connector-runtime](../../_shared/connector-runtime); the runnable gateway ships in the messaging image pack.
 
 ## Key files
 
-- [src/client.ts](src/client.ts): the baileys socket, the session store, pairing, and staying connected.
-- [src/listener.ts](src/listener.ts): which messages become a turn, and which are ignored.
-- [src/gateway.ts](src/gateway.ts): what WhatsApp plugs into the shared connector runtime, its pairing status, and the control surface. Also why the reply is deliberately NOT streamed (sent once, complete, in [src/listener.ts](src/listener.ts)).
-- [bin/whatsapp](bin/whatsapp): the agent's CLI, forwarding to the gateway over loopback.
-- [src/types.ts](src/types.ts): the structural message shapes everything except client.ts works on.
+- [intentic-extension.json](intentic-extension.json) — the card, pairing guide, listener event, gateway process and `bin`.
+- [src/gateway.ts](src/gateway.ts) — the process: one session per card, pairing status, the CLI's control routes.
+- [src/client.ts](src/client.ts) — the only file that imports Baileys: pairing, reconnects, media download.
+- [src/listener.ts](src/listener.ts) — incoming messages to dispatched events, history rings, typing indicator.
+- [bin/whatsapp](bin/whatsapp) — the agent's CLI, a dependency-free forwarder to the gateway.
 
-## How it fits
+## Commands
 
-A **daemon-side** extension: a listener, a process, a bin and capabilities, no views. Same shape as
-`ext-discord`, `ext-slack` and `ext-telegram`, but the credential is a PAIRING, not a token: the capability
-card collects a phone number, the gateway publishes the ceremony's state through the status route, and the card
-stands the reader in front of it (the code set big and copyable) until the phone links. One dependency
-(`baileys`, isolated to client.ts), because WhatsApp's multi-device protocol is Signal-encrypted: this is the
-one connection that cannot be spoken with `fetch`.
-
-Because of that, **this connector is the only one whose "active" cannot be read off a stored config**: a phone
-number is something anybody can type, and whether a phone ever linked is a fact only this process holds. So the
-card's status inverts the usual default: WhatsApp is `pending` until a session reports itself `ready`, and a
-silent gateway counts as pending too. The old rule (pend only while holding a code, active otherwise) made
-every gap in the ceremony: the seconds before the first code, the seconds between a dead code and its
-replacement, a restarting gateway, a number WhatsApp had refused: render as a connected green card, which is
-how an owner could add WhatsApp and never be shown a code at all.
-
-## Conventions & gotchas
-
-- **This connection is unofficial**: the WhatsApp Web protocol, against WhatsApp's terms; numbers get banned.
-  The capability card says so and asks for a dedicated number. The design keeps the number's fingerprint human:
-  replies send once behind a typing indicator (no live-edit painting), and the skill teaches reply-don't-broadcast.
-- **Connects while a connector exists, automations or not**: deliberately unlike the other gateways' hold
-  predicate. Pairing starts the moment the capability is added, the `whatsapp` CLI needs the socket without any
-  automation, and WhatsApp unlinks a device that stays offline for weeks. gateway.ts opens with the reasoning.
-- **There is no history, cryptographically.** The `history` on an event is the per-chat ring of what this
-  process watched go by; a restart starts it empty. Media downloads reach back only as far as the raw-message
-  cache, because decrypting media needs the original envelope.
-- **Pairing codes rotate, and a code dies with the socket that minted it.** WhatsApp closes an unpaired socket
-  after a while and each reconnect mints a fresh one. The card is swapped in place as that happens, and the old
-  code is pulled the moment its socket closes rather than being left up for the minute of backoff before its
-  replacement: a dead code on screen is worse than none, because the owner spends the walk through the phone's
-  menus on it. "Enter the code you see now" is the whole instruction.
-- **An unregistered session dir is wreckage, not a session.** Half-written keys and an ephemeral pairing key
-  belonging to a code nobody used are worthless, and resuming them is how a re-add inherits a dead handshake:
-  so open() keeps a stored session only once `registered` is true and starts clean otherwise.
-- Removing the capability logs the device out and wipes its session, so the phone's Linked-devices list stays
-  clean and a re-add pairs fresh. A phone-number edit is treated the same way (it means a different phone).
+```sh
+pnpm --filter @intentic/ext-whatsapp build   # dist/gateway.js
+pnpm --filter @intentic/ext-whatsapp test
+```

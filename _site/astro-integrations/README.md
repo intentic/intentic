@@ -1,35 +1,27 @@
-# @intentic/astro-integrations
+# astro-integrations
 
-The build-time integrations the public site needs and Astro does not ship.
+Build-time Astro integrations and helpers for intentic.dev that write Markdown mirrors, llms.txt and the docs search index, date the sitemap from git, and fetch the figures its pages quote.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    build["astro build<br/>_site/site"] --> dist["dist/<br/>built HTML"]
+    dist --> integ(["astro-integrations"])
+    integ --> llms["llms.txt, llms-full.txt<br/>page .md mirrors"]
+    integ --> search["dist/search.json"]
+    git["git log"] --> integ
+    apis["GitHub, npm,<br/>OpenSSF Scorecard"] --> integ
+    integ --> figures["sitemap lastmod<br/>page figures"]
+```
 
-- Stamp each page's last-modified date from git rather than from the filesystem.
-- Compute the repository statistics the site displays.
-- Read this repository's published security score, for the same reason.
-- Emit a markdown rendering of each page, and the `llms.txt` that points at them.
+- Runs in Node during the site's build, never in the browser. Plain `.mjs` with JSDoc and `src/index.d.ts` for types, so `build` and `check` only syntax-check.
+- `llmsText` and `docsSearch` read the HTML Astro just wrote to `dist/`, so tables rendered from expressions are indexed as a reader sees them. Pages marked `noindex` stay out of llms.txt. Both use the parser in `html-to-markdown.mjs`, which handles Astro's own well-formed output and nothing wider.
+- `gitStats`, `latestRelease`, `npmDownloads` and `scorecard` return `null` on any failure, so a page leaves a figure out instead of printing a wrong one; the network readers say so in the build log. `gitStats` counts commits authored by `agent@intentic.dev` and needs a full clone.
+- `lastModForUrl` maps a URL back to its source page and returns that file's last commit date. Paths resolve from `process.cwd()`, the site being built.
 
 ## Key files
 
-- [src/index.mjs](src/index.mjs): the integrations, and what each hooks into.
-- [src/git-lastmod.mjs](src/git-lastmod.mjs): real last-modified dates, from history.
-- [src/git-stats.mjs](src/git-stats.mjs): how much of the repository its own agents wrote.
-- [src/scorecard.mjs](src/scorecard.mjs): the OpenSSF Scorecard score, from the public API.
-- [src/llms-text.mjs](src/llms-text.mjs): the machine-readable index of the site.
-- [src/html-to-markdown.mjs](src/html-to-markdown.mjs): the rendering that feeds it.
-
-## How it fits
-
-Used only by `_site/site`. It is a package rather than a directory in the site so the integrations can be tested
-and versioned apart from the pages they process.
-
-## Conventions & gotchas
-
-- **Plain `.mjs`, with a hand-written `index.d.ts`.** Astro integrations are loaded by the Astro config at build
-  time, before any TypeScript build step exists to have compiled them.
-- The last-modified date comes from git, not from `stat`. A checkout gives every file the same mtime, which would
-  make every page look edited today.
-- **Every figure here is measured, and every one fails to `null`.** A shallow clone, a build with no network, an
-  API that moved: each returns nothing rather than a guess, and the page renders its sentence without the
-  number. A trust section showing a wrong figure costs more than one showing none. The network readers say so in
-  the build log when they fall to `null`, so a figure that went missing on every deploy is findable.
+- [src/index.d.ts](src/index.d.ts) — every export with its types and a one-line contract.
+- [src/llms-text.mjs](src/llms-text.mjs) — llms.txt, llms-full.txt and the per-page `.md` mirrors.
+- [src/docs-search.mjs](src/docs-search.mjs) — splits built docs pages into heading-led search blocks.
+- [src/html-to-markdown.mjs](src/html-to-markdown.mjs) — the HTML parser and Markdown writer both integrations share.
+- [src/git-lastmod.mjs](src/git-lastmod.mjs) — URL to source file to last commit date.

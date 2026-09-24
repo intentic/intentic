@@ -335,7 +335,7 @@ try {
     }
 }
 
-out(`\n${`─`.repeat(110)}\nPASTE INTO §4 OF docs/hosted-overlay-rebuild-plan.md\n${`─`.repeat(110)}`);
+out(`\n${`─`.repeat(110)}\nANSWERS\n${`─`.repeat(110)}`);
 for (const [question, value] of [...answers.entries()].toSorted(([left], [right]) => left.localeCompare(right))) {
     out(`\n${question}. ${value}`);
 }

@@ -1,309 +1,51 @@
-# @intentic/machine
+# machine
 
-The one agent that lives on a user's own device: it lets a sandbox's agent work on the machine, and keeps the
-machine's folders and ports mirrored with the sandbox — one binary, one resident agent per OS install, and one version
-across the whole computer.
+`intentic-machine`, the one agent on a user's own computer: it lets a paired sandbox work on the device under scopes enforced locally, and mirrors a sandbox's folder and ports onto it.
 
-It replaces two agents (`@intentic/host` and `@intentic/sync`) that shared everything about *being installed* —
-a resident agent, a pidfile, a login entry, an updater, a ~90 MB compiled binary — and nothing about what they
-did. Merging them halves what a machine downloads and keeps resident, and gives "is this machine's agent
-running" one answer instead of two halves of one.
+```mermaid
+flowchart LR
+    shim["Install one-liner<br/>from a sandbox card"] -->|"device setup, sync setup"| machine(["intentic-machine run"])
+    machine -->|"outbound WebSocket"| daemon["Sandbox daemon"]
+    daemon -->|"MCP tool calls"| policy["Scope check<br/>device/policy.ts"]
+    policy --> local["Shell, files, screen,<br/>browser, local sandboxes"]
+    machine -->|"Mutagen over tunnelled SSH"| daemon
+    machine --> folder["Local folder<br/>and mirrored ports"]
+    machine -->|"Windows only"| distros["Agent in each<br/>WSL distro"]
+```
 
-## Responsibilities
-
-The **device half** (`src/device/`, the machine side of the `host` capability):
-
-- Dial each linked sandbox — one outbound WebSocket, enrollment token in the first frame, oRPC after that; the
-  machine *serves* `deviceContract`, so no port ever opens here. Where it dials is the shared resolver's answer
-  (below), re-asked on every reconnect, so a sandbox on this very machine stays connected with its tunnel down.
-- Expose the tool surface (`run_command`, files, screenshot, `describe`; deliberately no delete — trash is
-  recoverable) as MCP carried verbatim, so a machine can learn a tool without a daemon release. Each tool says what
-  a call can do — only read, change something that can be put back, or lose something — as MCP annotations, so a
-  runtime may run the reads side by side.
-- Enforce the owner's scopes **here**, never in the sandbox, and append every call to an audit log that
-  survives uninstall.
-- **Show the person at the machine when an agent is driving it, and let them pause it** (see **What the person at
-  the machine sees**).
-- Judge every path **where it really leads** ([src/device/policy.ts](src/device/policy.ts)): links and junctions
-  are resolved, on the path and on the roots, before the check, and the tool then acts on the resolved path, so a
-  link inside an allowed folder cannot carry a read or a write out of it. A new file is judged by the folder it would
-  land in. `trash_file` alone judges a link where it sits, because it moves the link and not what it points at.
-- **Change a file only as it was read** ([src/device/tools/files.ts](src/device/tools/files.ts)). `read_file`
-  answers with the file's revision (a hash of its bytes) and takes a line range, saying where to continue;
-  replacing a file with `write_file`, or one exact piece of it with `edit_file`, needs that revision and is refused
-  when the file has changed since. A file keeps its encoding (UTF-8, UTF-8 with a BOM, and UTF-16LE with a BOM,
-  which is what Windows PowerShell 5.1 writes) and its line endings, and is replaced by a rename, never rewritten
-  in place. Binary files are refused; text in a legacy code page is shown but never written back.
-- **A command ends whole** ([src/device/tools/shell.ts](src/device/tools/shell.ts)). `run_command` starts its
-  shell in a process group of its own: at the deadline the group gets SIGTERM and, two seconds later, SIGKILL
-  (Windows has no groups, so `taskkill /T /F` ends the process tree), so nothing it started outlives it. The call
-  returns when the command exits, not when the last process it left in the background lets go of its output: one
-  second's grace, then the pipes are closed and the answer says something is still running. Each stream keeps its
-  first and last 50,000 characters and counts what fell between.
-- Manage this machine's sandboxes for a browser button or a model, under the `sandboxes` switch: list them
-  with their **share of the machine** (one `docker inspect` per listing: memory and CPU caps, privileged, GPU,
-  and who asked for each directive, the approved environment or the owner), start/stop/restart, run the `ic`
-  flows (prepare, update, rebuild, rollback, reshape, remove) narrating their output line by line, and tail
-  their logs. `reshape` changes a sandbox's share or privileges through `ic sandbox reshape` on the same
-  switch as the swaps, because another reshape undoes it; its ask is a closed form (two caps, two switches)
-  spelled into `ic` flags here, so nothing a browser or a model sends reaches docker as text. `describe`
-  reports the docker engine's size beside the OS, which is all those caps can amount to.
-- **Drop the links nothing answers** (`intentic-machine device forget-unreachable`, and the button the sandbox's
-  Devices tab draws for it): a deleted or recreated sandbox leaves its side of the link here, and the agent re-dials
-  that address for as long as the machine runs. Only the resident agent's own live stamp decides what counts as gone
-  (`src/device/config.ts`), so a machine whose agent is stopped drops **nothing** — "I can't reach it" and "I'm not
-  running" are the same sentence from a config file, and only one of them is a reason to delete a link.
-- **Drop a link the sandbox revoked**, at once: the sandbox closes the socket with 1008 after reading its own
-  enrollments, which no redial heals, so the link leaves `device.json` rather than being dialled at every start.
-- Keep each local sandbox's **next update downloaded** (`src/device/auto-prepare.ts`): a background tick
-  runs `ic sandbox prepare <slug> --auto` every few hours, so the web app's update card offers a half-minute
-  restart instead of minutes of pulling. On by default; the switch is `intentic-machine updates --sandboxes off`
-  (kept in `machine.json`, re-read every tick). Only the machine's root runs it (see **One machine**): every
-  environment of a PC talks to the one Docker engine, and two ticks would pull the same image twice. Nothing in any
-  sandbox can start or steer the tick — a sandbox only learns the outcome through the staged marker `ic` writes.
-
-The **sync half** (`src/sync/`, the machine side of desktop sync):
-
-- Enroll an SSH key, then drive Mutagen: bidirectional file sync of a local folder ↔ the sandbox's /work, plus
-  a one-way backup of the sandbox's own state.
-- Serve the SSH transport itself on loopback (the sandbox's sshd reached over its HTTPS surface), mirror every
-  workspace port onto this machine's localhost, and bridge git so commits appear in local clones.
-- Own the **port-mirroring switch** (`sync mirror off|on`, optionally `--sandbox <id>`): mirroring is the one
-  thing here that writes to *this* device's localhost, so the flag lives on this side, survives a restart, and
-  is read every tick. File sync, the state backup and the git bridge are untouched by it — the point is to stop
-  the ports without unpairing the sandbox. The sandbox's Devices tab has a button for it, and that button runs
-  this very command over the `host` capability, so the two can never disagree. The same is true of the other
-  three verbs — `sync pause`, `sync resume` and `sync uninstall --sandbox <id>`.
-
-  **Both scopes are buttons, because both scopes are commands.** With `--sandbox` these act on one pairing, and
-  that is the switch under that pairing's own folder and ports in the tab. Run BARE they act on every sandbox
-  this machine pairs, which is what they mean in a terminal and what "turn this off on this laptop" should mean
-  on screen, so the machine's own row carries a **File syncing** and a **Port mirroring** switch that omit the
-  flag. The tab never sends a bare `sync uninstall`: unpairing is the one verb here that a fresh one-liner is the
-  only way back from, so the button always names the pairing it ends. A machine whose pairings disagree (one
-  mirroring, one not — which the per-pairing switches exist to allow) is drawn as such rather than collapsed to
-  one position, and offered both directions.
-
-  **And one port at a time** (`sync mirror ignore|unignore --sandbox <id> --port <n>`). The switch above is
-  all-or-nothing, and the case it has no answer for is the common one: a single number this machine already uses
-  for something else — a Postgres on 5440 that the sandbox's compose file also publishes — loses the local bind
-  correctly, every tick, forever. That is not a contest that resolves, and turning every port off to be rid of one
-  standing notice is the wrong trade. An ignored port is skipped before the free-check, torn down at once if it was
-  already up, and still REPORTED — as `ignored`, its own state — because the row it appears on is the only place the
-  choice can be reversed. It lives here rather than in the sandbox for the same reason the switch above does: the
-  conflict belongs to one machine's localhost, and the same sandbox goes on mirroring that port everywhere else.
-- **Clear its own build output when it blocks a deletion** ([src/sync/residue.ts](src/sync/residue.ts)). Two-way-safe
-  refuses to delete a directory holding content it never carried, so a `node_modules` this device built is enough to
-  stop a directory the sandbox deleted from ever going away here. Nothing in that standoff is a disagreement — no edit,
-  no second copy, nothing at stake — but it was reported as one ("created on this device"), and in a pnpm monorepo,
-  where every package carries three ignored directories, an agent moving six packages produced six of them at once.
-  The agent now reads Mutagen's own `untracked` kind, and where one side holds NOTHING but ignored content and the
-  other deleted the directory, it removes the residue here and lets the deletion land. It is bounded by the thing it
-  cannot get wrong: it removes only what the live session's own ignore list already excludes, re-read from disk rather
-  than trusted from the report, and a single file sync would have carried takes the whole directory out of the class.
-  `sync clean` does it on demand (the Devices tab's **Clear build output** button runs exactly that); `sync autoheal
-  off` stops the watcher doing it unprompted. A conflict with two real copies is untouched by all of it.
-- Register Mutagen's daemon for login autostart — on Windows through the launcher stub, because Mutagen's own
-  registration flashes a console window at every boot.
-
-**Shared** (`src/`): the one resident agent (`run`), the merged `status` (its `--json` envelope is what the desktop
-app's tray reads, and the sandbox asks the running agent for the same report over the device connection's `report`
-call, behind "Run commands"), the machine-wide `upgrade` with automatic rollback, the `updates` switches, the autostart
-spec, and **where a sandbox's daemon is dialled** ([src/daemon-base.ts](src/daemon-base.ts)). A sandbox usually runs in a container on this very
-machine, which publishes its daemon on `127.0.0.1:<port derived from the sandbox id>`, so every dial either half
-makes — the device socket, both enrollments, the sync transport, the ports poll, the machine report — tries
-that address first and the public URL last. A candidate is adopted only if the daemon's unauthenticated
-`/health` answers with the id we expected: a port is not a sandbox, and a token is what would be presented to
-whoever holds it. For the sync half the shortcut saves a multi-gigabyte Mutagen sync a trip out to the
-reachability edge and back to the same laptop. For the device half it is reachability itself: the socket used
-to dial the public URL and nothing else, so a sandbox whose tunnel was down read "offline" on its own Devices
-tab, with every button there gone, while this same process was polling it over loopback. The watcher re-probes
-a pairing sitting on the public URL each minute, so a container started later is promoted with no restart; the
-socket re-resolves on every reconnect.
-
-## What the person at the machine sees
-
-While an agent is driving this computer's mouse and keyboard, a small notice sits at the top of the display the
-pointer was on ([src/device/indicator.ts](src/device/indicator.ts); the window is `@intentic/desktop-automation`'s
-`notice`):
-
-> Intentic agent is controlling this computer · sandbox-host.example.dev · Ctrl+Alt+Shift+P pauses
-
-- **What counts as driving** is the `device` tool's pointer and keyboard actions. A screenshot or a `wait` moves
-  nothing and shows nothing.
-- **It never gets in the agent's way.** It never takes focus, so typing still lands in the focused window; every
-  click goes through it to what is underneath; and it is left out of screen captures, so no screenshot the model
-  reads has it in it.
-- **It goes** 30 seconds after the last action, at once when the link that drove it disconnects, and with the agent
-  when it exits. The hidden `powershell.exe` behind it is started by the first action and ended with the notice. It
-  fails toward hidden: a helper that dies is not restarted until the links go quiet, one that will not quit is
-  killed, and a notice that cannot be shown costs the notice, never the action.
-- **Ctrl+Alt+Shift+P pauses**, pressed while the notice is on screen. From then on every sandbox's mouse and keyboard
-  actions here are refused with `Refused: paused by the person at this computer: …`, and the notice reads
-  `Intentic agent paused · … · Ctrl+Alt+Shift+P resumes`. The same keys lift it, again while a notice is up: an agent
-  that tries while paused puts one up, which is also how the person learns an agent is waiting on them. Every press
-  and every refusal is in the audit log.
-- **A pause survives a restart.** It is a file (`~/.intentic/machine/paused`), because a sandbox can ask for this
-  agent to restart. `status` prints it, `status --json` carries it as `device.pausedAt`, and the summary the tray
-  shows ends in `mouse and keyboard paused`.
-- **It is not a lock** against an agent that may also run commands here: the capability card's switches are the
-  owner's lever for that. When another program already holds Ctrl+Alt+Shift+P, the notice leaves the keys off and
-  the agent's log says so.
-- **Windows only.** Elsewhere nothing is shown and nothing can be paused.
-
-## The resident agent
-
-`intentic-machine run --foreground` (what systemd, launchd, the Windows logon task and, for a distro, its Windows side
-run) serves everything this environment holds in one process ([src/resident.ts](src/resident.ts)):
-
-- **Configuration is re-read, never restarted for.** Every tick re-reads the links (`device.json`), the sync pairings
-  (`sync.json`) and, on Windows, the distros it keeps running (`machine.json`): a new link is dialled, a removed or
-  re-enrolled one is closed, and a pairing added later starts the sync half in this same process. So `setup`,
-  `uninstall`, `forget-unreachable` and a scope push leave every other sandbox's socket and every sync transport
-  alone; only a new binary or `run` restarts the agent. `device setup` waits for the agent's own stamp to show the new
-  link's socket open before it says "connected".
-- It exits — and takes its login entry with it — only when links, pairings and kept distros are all **readably**
-  empty. A config that exists and will not parse is logged and the agent keeps what it already runs: retiring the login
-  entry is a decision nothing but a fresh install undoes, and one unreadable file must not be able to make it.
-- **One agent per environment.** The pidfile (JSON: pid, the boot it belongs to, the build it runs, who restarts it) is
-  claimed by writing it and re-reading after a settle, so two agents started at the same moment cannot both keep it, and
-  it is re-checked every tick as a lease: an agent that finds another pid there leaves with exit 75.
-- **Every start goes through the supervisor** ([src/supervision.ts](src/supervision.ts)): `schtasks /run` for the logon
-  task, `systemctl --user start`, launchd, or the Windows side for a distro it keeps; a bare detached spawn only where
-  nothing supervises. The running agent settles its own entry once as it starts: it puts back one lost to a tidied Run
-  key or a reset profile, and a distro kept by its Windows side removes its own, so each agent has exactly one starter.
-- On a signal it exits `128+signal`, never 0: a supervisor must restart what it did not stop, and the incident that
-  bought that rule is written out in [src/sync/mirror.ts](src/sync/mirror.ts).
-- It stamps **what each link's socket is doing** into `links.tick` every five seconds: the only process that knows is
-  this one and the only process that is asked is `status`, in another terminal. See **Linked vs connected**.
-- State files are written whole: every write lands beside the file and replaces it by rename, so no reader ever sees a
-  torn `device.json` and mistakes it for an empty one.
-
-## One machine: Windows and its distros
-
-A Windows PC with WSL runs one agent per OS install — Mutagen has to watch a distro's folder from inside that distro —
-but it is one computer, so it has one version and one supervisor tree
-([machines-and-environments.md](../../docs/design/machines-and-environments.md)).
-
-- **The Windows side is the root, and each distro with an agent is its child.** The root holds one `wsl.exe` session
-  per child ([src/environments/children.ts](src/environments/children.ts)): the session boots the distro at sign-in,
-  keeps WSL from shutting the VM down once its last client leaves, and restarts the distro's agent on a ladder from one
-  second to five minutes when it crashes. A child that exits 0 (nothing left to serve), has no agent any more, or is
-  gone from `wsl -l` is taken off the list.
-- **A distro hands itself over.** A distro agent that finds a Windows agent through interop asks it to take over
-  (the hidden `environment attach <distro>`), removes its own systemd entry and is restarted by the root from then on.
-  A Windows `setup` adopts distros already running an agent. A distro whose Windows side has no agent looks after
-  itself, and is the root of its own machine.
-- **One upgrade path** ([src/environments/machine-upgrade.ts](src/environments/machine-upgrade.ts)). `intentic-machine upgrade`, from
-  any side, moves the whole PC to one exact release: the newest of the published one and every side's installed one,
-  never backwards. A distro hands the job to its Windows side; the root upgrades its distros first and itself last,
-  since its own restart ends the stream a sandbox is reading. Each side still downloads the tagged asset, probes it,
-  swaps it in, restarts through its supervisor, checks the build that came up and rolls back when it did not
-  ([src/upgrade.ts](src/upgrade.ts)), under a per-environment lock so two upgrades never share a download. The Windows
-  launcher is pinned to the same release and swapped with the agent.
-- **Automatic updates** ([src/environments/auto-upgrade.ts](src/environments/auto-upgrade.ts)). The root compares its
-  sides every hour and brings a lagging one level, and asks the release channel about every six hours, first a few
-  jittered minutes after it starts. A target that failed is retried after 1, 2, 4… hours, a day at most, and a build
-  from source is never touched. `intentic-machine updates --agent off` stops the release check but not the levelling,
-  since sides on different versions is never a state worth keeping; `--sandboxes off` is the image switch above. Both
-  switches are the root's, and a distro hands the command to it.
-- **Setup lands on the machine's version.** Every `setup` first moves its own side onto the newest version the channel
-  or any side has, re-execs, and once enrolled brings the rest of the PC level in the background.
-- **Uninstall stays per environment**, because links and grants differ per side. The Windows side keeps running while
-  it still keeps a distro, and says so.
-
-### Installed vs running
-
-Two facts, and every surface carries both. `agent.installed` in the machine report is the **file** at
-`bin/intentic-machine` ([src/installed.ts](src/installed.ts)); `agent.build` is the **agent** running from it, as its
-pidfile stamps it. They drift whenever a binary lands without a restart — a copy dropped in, a swap whose restart did
-not take — and a report that carried one version would answer the running build to one reader and the installed build
-to another.
-
-- `intentic-machine status` says which is which, and the summary the tray reads leads with `OLD BUILD RUNNING`.
-- The Devices row says it beside the pid, with the two commands that close it.
-- `intentic-machine upgrade` restarts an agent that is behind the installed binary even when there is nothing to
-  download, and after a swap it checks that the agent which came up **is** the new build rather than that some
-  process is alive — the check the old agent passed just as well as the new one.
-- An agent already on the installed build is never bounced, and one that is stopped is never started by an upgrade:
-  `run --stop` is a thing people do on purpose.
-
-### Linked vs connected
-
-The same gap one level down, on the command whose entire job is to answer "is my machine connected". `device.json`
-records the sandboxes this machine is **meant** to answer to and nothing whatever about whether it reaches any of
-them, so `status` printed `connected as <id>` for every line in it — including, on the machine this was written
-for, a sandbox whose host had been answering 502 for four hours while the agent retried it every 30 seconds and
-said so in a log nobody had been pointed at.
-
-- The agent's stamp is the answer: `status` prints `connected`, `NOT connected (retrying)` or `NOT connected`
-  per link, and the summary the tray reads counts the links that are actually up (`1 of 2 sandboxes connected`).
-- The stamp **ages** on purpose, since it describes sockets held in a process that may be gone. Four ticks past
-  the last write it is no answer at all — which is also what an agent too old to write one leaves behind — and
-  both cases print `linked as <id>` with the reason in words. A link nothing can vouch for must not read like a
-  healthy one; the permissions line beneath it had been hedged as "last pushed by the sandbox" for years for the
-  same reason, and this line had not.
+- One resident process per environment (`resident.ts`) serves both halves and re-reads its state every tick. A login
+  entry from [local-agent](../local-agent) restarts it; inside a WSL distro the Windows side does.
+- **device** (`src/device/`): `device setup` redeems a one-time pairing token, then the agent keeps a WebSocket
+  dialled out to the sandbox and answers MCP tools on it: `run_command`, files, windows and clipboard, `browser_*`
+  through [browser](../browser), `screenshot` and `device` through [desktop-automation](../desktop-automation), and
+  the intentic sandboxes on this machine through the `ic` CLI.
+- **sync** (`src/sync/`): `sync setup` enrolls an SSH key and runs Mutagen against the sandbox's sshd, reached
+  through a loopback port tunnelled over a WebSocket. It keeps a folder two-way synced, forwards every workspace
+  port to the same localhost port, and fast-forwards local git clones from the sandbox.
+- Scopes are enforced here and nowhere else: the sandbox only asks, and a refusal names the switch that is off.
+  Files stay inside the configured roots, writes need their own switch, and every call is appended to
+  `~/.intentic/machine/audit.jsonl`. While an agent drives input on Windows, a notice shows on screen and
+  `PAUSE_HOTKEY` pauses every link.
+- Every connection dials out; the only listeners are on loopback.
+- On Windows the Windows side is the root of the PC (`src/environments/`): it holds one `wsl.exe` session per
+  distro with an agent, and `upgrade` brings every environment to the same release. The root also updates itself
+  on a timer and pre-downloads sandbox updates with `ic sandbox prepare --auto`.
+- The install shims only put a first binary down and run `setup`; `install.ts` decides the rest. `status --json`
+  is what the desktop app's tray reads.
 
 ## Key files
 
-- [src/commands.ts](src/commands.ts) — the CLI surface: `device setup|uninstall|forget-unreachable`, `sync setup|pause|resume|mirror|uninstall|…`, shared `run|status|version|upgrade|updates|uninstall`, and the hidden `environment attach`.
-- [src/install.ts](src/install.ts) — what every `setup` runs first and last: move onto the machine's newest agent (then re-exec), PATH repair, the Windows launcher stub; once enrolled, adopt running distros and level the rest of the PC.
-- [src/release.ts](src/release.ts) — the release channel: tagged asset URLs, what `releases/latest` points at, resumable downloads, the `version` probe, and the sweep of what a finished swap leaves in `bin/`.
-- [src/upgrade.ts](src/upgrade.ts) — one environment to one exact release: download → probe → swap → restart through the supervisor → check, rolling back a build that will not start, and a restart when the file is current but the agent is not.
-- [src/environments/machine-upgrade.ts](src/environments/machine-upgrade.ts) — the machine-wide upgrade: the target rule, the order (distros first, the root last), and the lock.
-- [src/environments/children.ts](src/environments/children.ts) — the root keeping each distro's agent running through a held `wsl.exe` session.
-- [src/environments/auto-upgrade.ts](src/environments/auto-upgrade.ts) — the root's update tick and its backoff.
-- [src/environments/machine.ts](src/environments/machine.ts) — `machine.json` (kept distros, the two update switches, the last failed target) and reaching the Windows side from a distro.
-- [src/environments/crossing.ts](src/environments/crossing.ts) — argv that crosses between Windows and a distro, for `run_command`'s `in:` and for the machine's own calls.
-- [src/supervision.ts](src/supervision.ts) — start, stop and restart through whoever supervises this environment, and which one that is.
-- [src/installed.ts](src/installed.ts) — which build the *file* at `bin/intentic-machine` is, as opposed to the one running: free while the two agree, one probe per swap after they stop.
-- [src/daemon-base.ts](src/daemon-base.ts) — where a sandbox's daemon is dialled, for both halves: loopback first when `/health` proves it is ours, the public URL as the floor.
-- [src/resident.ts](src/resident.ts) — the one agent: its claim and lease, the per-tick reconcile of links, pairings and distros, and its exits.
-- [src/device/auto-prepare.ts](src/device/auto-prepare.ts) — the background update-download tick; the judgement about *what* to download stays in `ic sandbox prepare --auto`, on purpose.
-- [src/status.ts](src/status.ts) — both halves as one answer; `--json` is what the desktop app and tray read.
-- [src/device/router.ts](src/device/router.ts) — the `deviceContract` this machine serves, including `report`, the reading the sandbox's Devices tab is built from.
-- [src/wsl.ts](src/wsl.ts) — whether this is a WSL distro, and which one. WSL hands a distro the Windows machine's own hostname, so without this the sandbox cannot tell a distro from the Windows install hosting it, or one distro from its neighbour; reported at connect (`describe`) as well as in the status report, so it is known even with "Run commands" off.
-- [src/device/tools/shell.ts](src/device/tools/shell.ts) — `run_command`, its process group and bounded output, and its `in:` crossing: `wsl:<distro>` from Windows runs `wsl.exe --exec sh -lc` with the script as one argument, `windows` from a distro runs PowerShell through interop; no quoting through the first shell either way.
-- [src/device/policy.ts](src/device/policy.ts) — what the sandbox is permitted to do here; the security surface.
-- [src/device/tools/sandboxes.ts](src/device/tools/sandboxes.ts) — the fleet: the `docker ps`/`inspect` readers, the docker verbs, and the `ic` flows (swap, reshape, remove, runners) with the pure argv builders beside them.
-- [src/sync/mirror.ts](src/sync/mirror.ts) — the sync tick: ports reconcile, git bridge, revocation handling.
-- [src/sync/mutagen.ts](src/sync/mutagen.ts) — driving the Mutagen binary, sessions and its daemon's autostart, and classifying a conflict as build output or as two real copies.
-- [src/sync/residue.ts](src/sync/residue.ts) — what may be deleted here without asking, and the four separate refusals that keep it to exactly that.
+- [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `run`, `status`, `upgrade`, `uninstall`.
+- [src/resident.ts](src/resident.ts) — the resident process that holds links, pairings and WSL distros.
+- [src/device/mcp.ts](src/device/mcp.ts) — every tool a sandbox can call on this device.
+- [src/device/policy.ts](src/device/policy.ts) — scope checks and the file-root boundary.
+- [src/sync/tunnel.ts](src/sync/tunnel.ts) — the loopback SSH port that fronts the sandbox's sshd.
+- [src/environments/machine.ts](src/environments/machine.ts) — the Windows root and its WSL children.
 
-## How it fits
+## Commands
 
-Runs on the user's machine, not in the sandbox. Installed by `device.{sh,ps1}` / `sync.{sh,ps1}` (both cards
-put the same binary in `~/.intentic/machine/bin`), shipped as a bun-compiled binary per platform, and kept on one
-release across the whole PC by `upgrade` and the root's automatic updates.
-
-Those four installers are **bootstrap shims**: they download an agent onto a machine that has none (pinned to
-the tag `releases/latest` resolves to, resumable, probed by running `version` before it may become the agent)
-and exec `setup`. Every other decision — installed-vs-published, PATH repair, the Windows launcher stub — runs
-from [src/install.ts](src/install.ts) at the top of every `setup`: it moves this side onto the machine's newest
-release through the same download→probe→swap→rollback machinery as `upgrade`, then re-execs the new agent with the
-same argv, so re-running a card's command still upgrades a machine while the rule lives in exactly one compiled,
-tested place.
-
-The one decision a shim cannot delegate is whether the installed agent can take the handover at all: `device
-setup` is itself part of this CLI's vocabulary, so an agent older than a route rename rejects it — and the
-self-update that would have replaced it lives behind that same command. Renaming `computer` to `device` did
-that to every machine paired before it. So each shim runs `<route> setup --help` on the installed binary
-first, and replaces an agent that cannot answer. The shims' bootstrap blocks are held identical per dialect by
-[src/installers.test.ts](src/installers.test.ts), which also pins that probe, that the route is named once per
-file, and that no other decision creeps back into shell.
-
-The install-and-stay-alive plumbing is
-[`@intentic/local-agent`](../local-agent)'s; the windowless Windows logon start is
-[`_devices/win-launcher`](../win-launcher)'s.
-
-## Conventions & gotchas
-
-- **Bidirectional sync has no undo.** The integration tests here run against real directories and a real
-  Mutagen for exactly that reason; a unit test that mocks the sync proves nothing about the case that loses work.
-- **The two halves keep separate state files** (`device.json`, `sync.json`) in the one home: the agent rewrites
-  one half's state while a concurrent `setup` writes the other's, and separate files make cross-half torn
-  writes impossible rather than unlikely.
-- **Scopes are a cache.** The sandbox pushes the real grant on every connect; what is stored only governs the
-  seconds before the first push, and it starts at everything-off.
-- **The transport lives in the resident agent**, so `sync setup` starts the agent *before* it probes ssh or hands
-  anything to Mutagen: every step after that one needs the port to be open.
+```sh
+pnpm --filter @intentic/machine test
+pnpm turbo run build --filter=./_devices/machine
+node _devices/machine/dist/cli.js status
+```

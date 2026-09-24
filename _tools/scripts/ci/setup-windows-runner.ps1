@@ -1,7 +1,7 @@
 ﻿<#
 .SYNOPSIS
   Provision this PC as the Windows CI runner, and bring an existing one back to the shape the desktop tiers
-  need. Companion to docs/ci-runner-windows.md, which explains why the shape is what it is.
+  need. Companion to docs/ops/ci-runner-windows.md, which explains why the shape is what it is.
 
   THE ONE THING THE PIPELINE CANNOT DO FOR ITSELF. Everything else the Windows tiers want of a machine, they
   reconcile on their own: every tier now tears down before it asserts, so a leftover install, a stray sandbox
@@ -60,7 +60,7 @@ param(
     [string]$Token,
     [string]$Name = $env:COMPUTERNAME.ToLower(),
     # `runs-on` is an AND over labels, so this box must NOT carry the Linux fleet's `intentic` label — it would
-    # be offered every container job in the pipeline and fail them all. See docs/ci-runner-windows.md.
+    # be offered every container job in the pipeline and fail them all. See docs/ops/ci-runner-windows.md.
     [string]$Labels = 'windows-desktop',
     [string]$RunnerRoot = 'C:\actions-runner',
     # Pinned only when you need a specific one; otherwise the latest release.

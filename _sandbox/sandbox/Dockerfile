@@ -514,11 +514,7 @@ COPY --chmod=755 _sandbox/sandbox/bin/agent-output-filter.mjs /usr/local/bin/age
 COPY --chmod=755 _sandbox/sandbox/bin/cleaners.mjs /usr/local/bin/cleaners.mjs
 # retrieve-output on PATH — the reversible half of the filter (fetch back elided output; the footer names it).
 COPY --chmod=755 _sandbox/sandbox/bin/retrieve-output.mjs /usr/local/bin/retrieve-output
-# rtk is NOT baked. It was the alternate cleaner backend behind a `filterBackend` setting; that setting was
-# removed after measurement (docs/output-cleaners.md, "Why there is one filter and not a choice of backend")
-# and the behaviours worth keeping were ported into the native cleaners. What remains is a benchmarking tool,
-# so it ships the way every other opt-in tool does — the git-installed `rtk` extension's environment fragment
-# composes it into the overlay for an owner who asks. Nothing on this image execs it.
+# rtk is not baked: the `rtk` extension's environment fragment adds it for an owner who asks; nothing here execs it.
 # The VPN command the agent's vpn skill teaches and an owner can run in a terminal. It calls the daemon's /vpn
 # routes (never a VPN client directly), so agent-initiated and UI-initiated connects are the same operation.
 # The clients themselves are NOT baked — they ride the vpn capability's environment fragment, like WireGuard

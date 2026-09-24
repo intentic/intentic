@@ -1,7 +1,7 @@
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
-/* The extension bundle, built exactly as /api/build/ prescribes. */
+/* The extension bundle, built exactly as /developers/build/ prescribes. */
 export default defineConfig({
     plugins: [vue()],
     build: {

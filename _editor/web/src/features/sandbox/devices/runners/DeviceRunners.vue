@@ -10,7 +10,7 @@ import { environmentTitle } from "../machineEnvironments";
 import { useHubWork } from "../../../../shell/hub/hubWork";
 import { useT } from "@intentic/ui/i18n";
 
-// This sandbox's runners on one MACHINE: containers it keeps there to run agents (docs/remote-runners-plan.md),
+// This sandbox's runners on one MACHINE: containers it keeps there to run agents,
 // separate from the sandbox list above (workspaces belonging to a person). Only runners this sandbox asked for
 // appear under a machine; one started by hand has no host recorded and no row here.
 //

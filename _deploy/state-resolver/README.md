@@ -1,27 +1,32 @@
-# @intentic/state-resolver
+# state-resolver
 
-The **state resolver**: turns an `IntentSet` into the desired state, a `DesiredStateGraph`. It assigns each need its catalog option and compiles the emitted nodes into one graph. Depends on [`@intentic/graph`](../graph), [`@intentic/need-resolver`](../need-resolver) (needs), and [`@intentic/resources`](../resources) (the vocabulary it emits); consumed by [`@intentic/sdk`](../sdk).
+Turns an intent into the desired-state graph: it derives the needs, fills each from a catalog of concrete tools, and emits every resource node the deployment requires.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    intent["IntentSet"] --> needs["need-resolver<br/>resolveNeeds"]
+    needs --> state(["state-resolver<br/>resolveState"])
+    catalog["catalogFor<br/>Forgejo · GitHub · GitLab stack"] --> state
+    state -- "emit → ResolvedNode[]" --> compile["graph<br/>compile"]
+    compile --> artifact["DesiredStateGraph"]
+```
 
-- Resolve needs to concrete catalog options (Forgejo for git+registry, Komodo for control, Cloudflare for domain, GitHub/GHCR as the alternative stack).
-- Emit the `ResolvedNode`s for each assignment and `compile` them into a single dependency-ordered graph (`resolveState`).
-- Derive the control-plane platform and the application-plane support stack (repos, CI, deployments, tunnel, routes, workspace sandbox).
-- It does **not** talk to infra or reconcile: it only produces the serializable artifact.
+- The catalog follows the intent: `i.have.github` selects the GitHub stack, `i.have.gitlab` the GitLab stack, otherwise self-hosted Forgejo. In all three, Komodo deploys and a Cloudflare tunnel exposes the apps.
+- Each need must map to exactly one catalog option. Zero or several options throw; the resolver makes no choices.
+- `src/resolvers` holds one resolver per concern: the control plane, apps, routes, backings with per-app bindings, catalog services, agent workspaces, users and teams, and scheduled backups.
+- Every derived id and platform domain comes from `src/lib/ids.ts`. The SDK imports the same functions, so a handle's ids match the graph's.
+- It is pure. The Cloudflare `zone` arrives as an argument; the CLI discovers it before calling.
 
 ## Key files
 
-- [src/state.ts](src/state.ts), `resolveState`: intent → `DesiredStateGraph`.
-- [src/lib/catalog.ts](src/lib/catalog.ts): `defaultCatalog`, `Catalog`/`Option` (what satisfies each capability).
-- [src/emit/emit.ts](src/emit/emit.ts): `emit` + `Assignment` (build the nodes for one assignment).
-- [src/resolvers](src/resolvers), per-area node derivation: `platform.ts`, `app.ts`, `route.ts`, `workspace.ts` (control plane, app plane, DNS routes, dev workspace sandbox).
-- [src/lib/ids.ts](src/lib/ids.ts) / [src/resolvers/identity.ts](src/resolvers/identity.ts): id helpers, `adminUsername`.
+- [src/state.ts](src/state.ts) — `resolveState`: needs, catalog assignment, emit, compile.
+- [src/emit/emit.ts](src/emit/emit.ts) — builds the nodes for one assignment, host by host.
+- [src/lib/catalog.ts](src/lib/catalog.ts) — the three stacks and which capabilities each option provides.
+- [src/lib/ids.ts](src/lib/ids.ts) — every derived resource id and platform domain.
+- [src/resolvers/app.ts](src/resolvers/app.ts) — what one app becomes: repo, CI per environment, deployment, route.
 
-## How it fits
+## Commands
 
-Stage 2 of the pipeline: `need-resolver` produces `Need`s, this maps each to an `Option` and emits `@intentic/resources` nodes, then `graph.compile` orders them. The `sdk`'s `defineStack` runs this end-to-end; `cli resolve` writes the result to `desired-state.json`.
-
-## Conventions & gotchas
-
-- Adding a resource kind means emitting it here **and** registering its type/outputs in `resources` and a provider in `providers`.
-- Emitter changes are snapshot-tested ([src/emit/emit.test.ts](src/emit/emit.test.ts), [src/state.test.ts](src/state.test.ts)): update fixtures deliberately. See [ARCHITECTURE.md](../../ARCHITECTURE.md).
+```sh
+pnpm --filter @intentic/state-resolver test
+```

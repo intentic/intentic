@@ -1,122 +1,27 @@
-# Self-hosting the intentic platform
+# Self-hosted platform
 
-This compose stack runs the **platform**: the thin identity + sandbox-URL store that lives at
-`app.intentic.dev` / `api.intentic.dev`, from the published images. It is **not** a sandbox: sandboxes are
-per-user and get provisioned _through_ this platform (see [ARCHITECTURE.md](../../../ARCHITECTURE.md)).
+A Docker Compose stack that runs the intentic platform on a host of your own: Postgres, the api, the web app and the sandbox edge, published through a Cloudflare tunnel.
 
-```
-browser ──▶ app.<zone> (web · nginx static SPA)
-        └─▶ api.<zone> (api · Bun / Hono / oRPC / Better-Auth) ──▶ postgres
-                             ▲
-                      cloudflared tunnel
-```
-
-Web and api are separate origins under the **same registrable domain** on purpose: the Better-Auth session
-cookie is `SameSite=Lax`, so `app.<zone>` → `api.<zone>` is cross-origin (CORS is load-bearing) but same-site
-(the cookie rides). Keep them on the same apex.
-
-## Prerequisites
-
-1. **The images exist.** `ghcr.io/intentic/{web,api}` are published by
-   `images-platform` on push to main, or by hand:
-   ```sh
-   docker login ghcr.io
-   TAGS=latest pnpm publish:platform-images        # or TAGS="latest sha-abc1234"
-   ```
-   These packages are **private**: on the deploy host, `docker login ghcr.io` before `up`
-   (the sandbox image is public; the platform is not).
-
-2. **A Google OAuth client.** The web SPA's public client id is hardcoded in
-   [environment.deployment.ts](../../../_editor/web/src/app/environments/environment.deployment.ts). Use that same
-   client and, on it, authorize:
-   - Authorized JavaScript origin: `https://app.intentic.dev` (your `WEB_ORIGIN`)
-   - Authorized redirect URI: `https://api.intentic.dev/api/auth/callback/google` (your `API_URL` + `/api/auth/callback/google`)
-
-3. **A Cloudflare tunnel.** Create one in the dashboard, copy its token into `PLATFORM_TUNNEL_TOKEN`, and add
-   two public hostnames pointing at the compose services (cloudflared runs inside the network and resolves
-   them by name):
-   | Public hostname | Service |
-   | --- | --- |
-   | `app.intentic.dev` | `http://web:80` |
-   | `api.intentic.dev` | `http://api:6480` |
-
-## Run
-
-```sh
-cd _tools/selfhost/platform
-cp .env.example .env         # fill EVERY required value (see comments in the file)
-docker compose up -d
-docker compose logs -f api   # first boot runs `prisma migrate deploy`, then serves
+```mermaid
+flowchart LR
+    browser["browser"] --> tunnel["cloudflared<br/>tunnel"]
+    boxes["sandboxes<br/>dial out"] --> tunnel
+    tunnel -->|"app subdomain"| web["web :80"]
+    tunnel -->|"api subdomain"| api(["api :6480"])
+    tunnel -->|"sandbox wildcard"| ingress["ingress :8080"]
+    api --> pg["postgres"]
+    ingress -->|"does the sandbox exist"| api
 ```
 
-The api entrypoint applies Prisma migrations on every boot (idempotent, advisory-locked), so a fresh Postgres
-volume self-initializes and an image bump self-migrates: no manual db step.
+- It runs sign-in, the sandbox registry and setup; the sandboxes themselves run elsewhere.
+- Every optional setting passes through empty, and the api reads empty as unset, so defaults live only in [config.ts](../../../_platform/api/src/config.ts). Compose forwards only what it names: a new config field needs its line in [docker-compose.yml](docker-compose.yml) too.
+- Optional lanes switch on with their credentials: the free trial, hosted sandboxes on Fly, the paid hosted plan, the `/admin` surface (`ADMIN_EMAILS`), invite email and tracing. [.env.example](.env.example) explains each one.
+- Without the `ingress` service and `INGRESS_SIGNING_KEY`, no sandbox can be made reachable and setup offers only the attach lane. This file runs the edge on one host; a platform with hosted sandboxes runs it on Fly instead ([ingress](../../../_platform/ingress)).
 
-## Notes
+## Setup
 
-- **Email / analytics are optional.** Without mail credentials an invite still stands: the accept link comes
-  back to the owner in the Access tab (with a Copy button) and is logged server-side; analytics stay off until
-  their env vars are set. Google + the tunnel + the secrets are the only hard requirements. The same handover
-  happens when `WEB_ORIGIN` is a localhost address: a link only this machine can open is never mailed, because
-  the recipient would get an invitation whose button lands on their own empty localhost.
-- **Reaching sandboxes** needs `INGRESS_SIGNING_KEY` (+ `INGRESS_URL`, `INGRESS_ZONE`): the edge every sandbox
-  dials, [`@intentic/ingress`](../../../_platform/ingress), which is deployed on its own (Fly machines behind
-  one wildcard certificate for `*.<zone>`) rather than being a service in this compose file. This stack's whole
-  part in it is a signature: it mints each sandbox a grant naming that sandbox's id, the box dials the ingress
-  with it, and from then on answers under `sandbox-<id>.<zone>`. Nothing here calls the ingress and no state is
-  shared with it, so the two can be deployed and restarted independently. Without a signing key, setup can only
-  attach a sandbox the user already publishes under their own domain.
-- **Hosted sandboxes** (`HOSTED_FLY_API_TOKEN` + `HOSTED_FLY_ORG`, on top of the reachability above) make
-  signing in the whole setup: this deployment creates each new user's machine on its own Fly account and can
-  wake, stop and destroy it. That is a deliberate hole in the boundary the rest of this platform keeps: read
-  the hosted paragraph in [ARCHITECTURE.md](../../../ARCHITECTURE.md) before switching it on, and remember the
-  bill is yours. Off by default; every other setup lane is unaffected. Create the token org-scoped
-  (`fly tokens create org --org <org> --name intentic-hosted`): a deploy token cannot create apps. Machines
-  sleep after `HOSTED_IDLE_STOP_MINUTES` of nobody-connected-and-nothing-running and wake on the next visit,
-  which is what keeps an idle user's cost at storage alone.
-- **The hosted reaper deletes too.** A daily sweep destroys every Fly app under `HOSTED_APP_PREFIX` whose
-  sandbox row is gone. Keep that prefix unique to this deployment, and do not put unrelated apps behind it.
-- **Scaling:** the api is stateless (DB-backed sessions) and safe to run at `--scale api=N`; the retention
-  reaper + sandbox-pool top-up take a Postgres advisory lock so replicas don't duplicate the work.
-- **No host ports are published**: everything is reached over the tunnel. Add a `ports:` mapping to `api`/`web`
-  only for local debugging.
-- **There is nothing to reconcile about reachability.** A grant is a signature over a sandbox id, not a row on
-  some hub, so it cannot leak or be forgotten — and it is only worth anything while the sandbox exists: the
-  ingress asks this deployment on every tunnel register (`GET /api/reachability/<id>`), so deleting the sandbox
-  IS the revocation, and it takes effect the next time that box reconnects. That check deliberately fails
-  **open** when this platform does not answer: sandboxes stay reachable while the platform is down, for the
-  same reason the platform is off the hot path everywhere else.
-- **The daily sweep is now just the zone's residue.** One wildcard record serves every sandbox, so the zone no
-  longer fills up; what is left to clear are the loopback (`local-*`) records of same-machine sandboxes.
-  Deletes are final; run a new deployment's first sweep with `INTENTIC_CLOUDFLARE_REAP_DRY_RUN=true` and read
-  the candidates:
-  ```sh
-  docker compose logs api | grep -E 'orphan DNS|DNS record sweep'
-  ```
-- **Back up the database yourself.** The `intentic-platform-db` volume is the stack's only state: accounts,
-  sandbox registrations and the encrypted tokens. Nothing here schedules a dump; on the deploy host:
-  ```sh
-  docker compose exec -T postgres pg_dump -U intentic intentic | gzip > intentic-$(date +%F).sql.gz
-  ```
-
-## Continuous deploy via Komodo (optional)
-
-Run this compose as a **Komodo stack** named `intentic-platform` and every main push redeploys itself:
-`images-platform` ends with [deploy-platform.sh](../../scripts/platform/deploy-platform.sh), which calls Komodo's
-`DeployStack`, the stack's services run `:latest` with `pull_policy: always`, so the redeploy pulls what CI
-just pushed.
-
-That script then waits for the roll to **land**, in both services, because `DeployStack` returns as soon as
-Komodo accepts it: the api must answer `/health`, and `app.<zone>` must report the build the job pushed in its
-`X-Web-Build` header (baked into the web image by `docker-release.sh`). Until it does, the origin is either
-the outgoing container or a `cloudflared` recreated after both of them — and the sign-in smoke that runs next
-would read that as a fault in the SPA. The stack name is set in the job's `env` (`PLATFORM_DEPLOY_STACK`) and the Komodo core origin
-defaults to `https://komodo.radarsu.com`, leaving one thing to configure: the api key, as GitHub Actions
-secrets:
-
-| Variable | Value |
-| --- | --- |
-| `KOMODO_API_KEY` / `KOMODO_API_SECRET` | an api key minted in Komodo (mask both) |
-
-Optional overrides: `KOMODO_URL` (a different core origin, e.g. `http://192.168.0.x:9120`) and
-`PLATFORM_DEPLOY_STACK` (a different stack name: unsetting it in the rules disables the deploy).
+1. `cp .env.example .env`. Generate `BETTER_AUTH_SECRET` and `SECRETS_KEY` with `openssl rand -base64 48`, and keep `POSTGRES_PASSWORD` URL-safe.
+2. Google sign-in uses the client whose id is `GOOGLE_CLIENT_ID` in [constants](../../constants/src/index.ts). Put its id and secret in `.env` and authorize `WEB_ORIGIN` as a JavaScript origin and `API_URL/api/auth/callback/google` as a redirect URI.
+3. Make an Ed25519 pair with `openssl genpkey -algorithm ed25519 -out ingress-key.pem` and `openssl pkey -in ingress-key.pem -pubout`. The private half goes in `INGRESS_SIGNING_KEY`, the public half in `INGRESS_PUBLIC_KEY`, each on one line with `\n` escapes inside double quotes. Set `INGRESS_ZONE` and `INGRESS_URL`.
+4. Create a Cloudflare tunnel, put its token in `PLATFORM_TUNNEL_TOKEN`, and add public hostnames: `app.<zone>` → `http://web:80`, `api.<zone>` → `http://api:6480`, and both `ingress.<INGRESS_ZONE>` and `*.<INGRESS_ZONE>` → `http://ingress:8080`.
+5. `docker compose up -d`. The api applies migrations before it serves.

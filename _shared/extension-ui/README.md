@@ -1,58 +1,36 @@
-# @intentic/extension-ui
+# extension-ui
 
-The UI kit an extension renders with, so its views look like the app rather than like a website.
+The UI kit extensions render with: a curated slice of the editor's design system that the host supplies at runtime, so extension views use the shell's own component instances.
 
-A curated slice of the app design system ([`@intentic/ui`](../../_editor/ui)) plus the PrimeVue primitives extension views
-actually use. One of the two packages an extension may depend on (with
-[`@intentic/extension-api`](../../_shared/extension-api)).
+```mermaid
+flowchart LR
+    ui["_editor/ui<br/>design system"] -- "re-exported by src/" --> kit(["extension-ui"])
+    kit -- "compiled into" --> host["Editor<br/>hostModules.ts"]
+    bundle["Extension bundle"] -- "import map" --> shim["/ext-shims/extension-ui.js"]
+    shim -- "globalThis.__intenticHost" --> host
+```
 
-## Host-provided at runtime
-
-This package's [`src/index.ts`](src/index.ts) is its one public surface (the repo's re-export exception). The
-kit is **host-provided**: the web app maps this module into its import map
-([extension-host/hostModules.ts](../../_editor/web/src/extension-host/hostModules.ts)), so a third-party bundle
-that marks it external resolves to the **shell's own** component instances and theming: one Vue, one
-PrimeVue, one theme across the host and every extension. In-repo builtin extensions bundle this same module
-and land on the same instances.
-
-The scope reads oddly (an `@intentic/*` package depending on the app-side `@intentic/ui`) but it is
-deliberate: the dependency is build-time-only (for in-repo builtins); at runtime the import map supplies the
-shell's instances, so no second copy is shipped.
-
-## Drift assertion
-
-Export names are mirrored in [`names.mjs`](names.mjs), which drives shim generation and a drift assertion:
-keep the two in sync when adding or removing an export. Publishing a typed npm artifact for out-of-repo
-authors is a marketplace-phase task.
+- `src/index.ts` re-exports chosen components and helpers from `@intentic/ui` (`_editor/ui`) plus the PrimeVue
+  primitives extension views use. Nothing is reimplemented, so an extension view looks and behaves like the shell
+  around it. This dependency on `_editor/ui` is a recorded exception to the [`_shared/` boundary](../README.md).
+- At runtime the host supplies the kit: `hostModules.ts` publishes the editor's own module instances on
+  `globalThis.__intenticHost`, and the import map in the editor's `index.html` resolves `@intentic/extension-ui` to a
+  shim that reads them. A second copy would render unthemed, outside the app's reactivity and its query cache.
+- `scripts/build.mjs` compiles the published package from `_editor/ui`'s sources: declarations pruned to what the kit
+  re-exports, and a `dist/index.js` bridge that throws when loaded outside an intentic host.
+- `names.mjs` lists the runtime export names by hand, because the `.vue` graph cannot load in Node. The editor's shim
+  generator reads it, and a dev-time assertion in `hostModules.ts` catches drift.
+- `./diff`, `./format` and `./i18n` skip the component barrel, for extension tests that run without a Vue compiler.
 
 ## Key files
 
-- [src/index.ts](src/index.ts), the whole surface: which components and helpers an extension may render with.
-- [src/format.ts](src/format.ts): the shared formatters, so two extensions render a duration the same way.
-- [src/i18n.ts](src/i18n.ts): the extension's words. `extensionI18n(id, base, load)` is the one call every in-repo
-  extension's `src/i18n.ts` now makes, returning the catalog the host mounts and the translator its components read;
-  `extensionT(id)` is that translator alone, bound to its own slice of the host's one message tree, and
-  `registerExtensionMessages` mounts a catalog, which is what the host does before `activate` and what a test
-  calling `activate` itself has to do instead.
+- [src/index.ts](src/index.ts) — the kit: every name an extension may import, with usage notes.
+- [scripts/build.mjs](scripts/build.mjs) — builds the published types and the host bridge from `_editor/ui`.
+- [names.mjs](names.mjs) — the runtime export names the shims and the host check read.
+- [../../_editor/web/src/extension-host/hostModules.ts](../../_editor/web/src/extension-host/hostModules.ts) — where the shell publishes its instances to extension bundles.
 
-## The one control worth calling out
+## Commands
 
-`AgentRunButton` and `useAgentRunPick` are re-exported because five extensions start an agent for the user:
-pipelines, deployments, maintenance, documentation, acceptance: and each had reached its own answer about how
-you choose what that costs. Press the primary half and the run opens on the sandbox's standing model for the job
-the caller named; use the caret and a panel opens on that run, ending in a bar that carries the button's own
-label. Both halves emit the same `run`, because both are the same act: the press that finishes configuring the
-run is the press that starts it.
-
-The choice covers more than the model — the account, the harness, the tier, extended thinking and speed
-(`AgentRunChoice`) — and every one of them is a different price. Send them on the turn you start beside `model`:
-the sandbox fills a pinned entry's knobs in only for a run that named no model, so dropping them runs the model
-you chose on the provider's defaults for everything else. `runPickOf(choice)` (from `@intentic/sandbox-contract`)
-translates the whole thing into the turn's own field names in one call.
-
-`useAgentRunPick` takes `api.models` as an argument rather than importing it, which is what lets the control
-live in a kit that knows nothing about the extension API. Pass the extension's own host handle:
-
-```ts
-const runModel = useAgentRunPick(() => host().models);
+```sh
+pnpm --filter @intentic/extension-ui build
 ```

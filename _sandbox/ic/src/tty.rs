@@ -18,7 +18,7 @@ pub fn prompting_disabled() -> bool {
 }
 
 /// The variable, named once. The desktop app sets it (desktop-app/src-tauri/src/commands.rs) and the
-/// contract is written down in docs/cli-output-protocol.md alongside INTENTIC_UI.
+/// contract is written down in docs/ops/cli-output-protocol.md alongside INTENTIC_UI.
 pub const NO_PROMPT: &str = "INTENTIC_NO_PROMPT";
 
 /// Split from the read so the RULE is testable without mutating a process-wide environment from a test

@@ -1,58 +1,36 @@
-# @intentic/code-read
+# code-read
 
-How the product reads source code: which grammar a path is tokenized with, which of its lines are comment, and
-how big a change is once those are out of it.
+Resolves a path to its grammar and walks its tokens once, so the daemon's code-only line counts and the app's comment-free diff read source the same way.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    path["File path<br/>or shebang"] --> lang["codeLangForPath<br/>the langs.ts table"]
+    grammars["Shiki grammars<br/>lazy imports"] --> walk
+    lang --> walk(["code-read<br/>one TextMate walk"])
+    walk --> daemon["Daemon<br/>codeLineStat in a worker"]
+    walk --> web["Web app<br/>diff view, review stat"]
+```
 
-- Resolve a path to a Shiki grammar, once, so the colours, the comment-free diff and the counts beside it cannot
-  disagree about what a file is.
-- Walk a file's TextMate tokens a line at a time, and answer the two structural questions a review asks of that
-  walk: which lines are comment, and which are imports.
-- Count a change with the comments stripped from both sides, the +/− every review row shows.
+- A review row's added and removed counts skip comments, and the diff pane beside it hides them. Both come from
+  `analyzeCode`, so the two numbers cannot disagree.
+- The app passes the grammars its own renderer already loaded. `./grammars` is for a process with no screen: it
+  builds its own Shiki core on the JavaScript RegExp engine (no WASM asset) and loads each grammar once.
+- `langs.ts` is the one table of grammars the app ships, and `_editor/web`'s Vite config derives its dependency
+  pre-bundling from it, so its import specifiers stay literal.
+- An id missing from the table is a compile error. Files over `HIGHLIGHT_MAX_BYTES` render as plain text, since
+  the regex tokenizer chokes on huge or minified input.
 
 ## Key files
 
-- [src/langs.ts](src/langs.ts): the grammar table, a map of lazy `@shikijs/langs` imports keyed by Shiki language
-  id, plus `ShikiLang` (the ids, as a type) and the list Vite pre-bundles. The import specifiers must stay
-  literal: the bundler reads them to decide which grammar chunks to emit.
-- [src/lang-for-path.ts](src/lang-for-path.ts): extension and filename tables, the dockerfile/.env/ignore
-  specials, the shebang fallback VSCode uses for extensionless scripts, and the size cap past which nothing is
-  tokenized at all.
-- [src/tokens.ts](src/tokens.ts): the walk. Takes its grammars from the caller (`Grammars`), which is the seam
-  between the two sides below.
-- [src/analysis.ts](src/analysis.ts): one walk, two answers, the comment-free source and the import lines.
-- [src/stat.ts](src/stat.ts): `lineStat` (a minimal diff's two counts, from one longest-common-subsequence pass),
-  `codeLineStat` (the same, with both sides stripped first), and `rememberAnalyses`, which keeps each side's
-  reading by its text so a file saved again re-tokenizes only the side that moved.
-- [src/grammars.ts](src/grammars.ts): a Shiki core for a process with no screen. The daemon's; the app does not
-  use it.
+- [src/index.ts](src/index.ts) — the shared surface: `analyzeCode`, `codeLangForPath`, `codeLineStat`.
+- [src/langs.ts](src/langs.ts) — `LANGS`, the Shiki grammars the app ships, imported lazily.
+- [src/lang-for-path.ts](src/lang-for-path.ts) — which grammar a path, extension or shebang resolves to.
+- [src/analysis.ts](src/analysis.ts) — the comment-free text and import spans from one walk.
+- [src/stat.ts](src/stat.ts) — code-only added and removed counts; `rememberAnalyses` re-tokenizes only the side that moved.
+- [src/grammars.ts](src/grammars.ts) — the daemon's own lazily loaded tokenizer.
 
-## How it fits
+## Commands
 
-A changed file is read twice in this product, on two sides of the wire, and both readings come from here.
-
-The **daemon** counts it when it builds a change list ([git/code-counts.ts](../../_sandbox/sandbox/src/git/changes/code-counts.ts)),
-so the +/− a review row shows is final the first time the reader sees it. That is the whole reason this package
-exists as a package: the app used to compute those counts itself, from the diffs as they happened to be fetched,
-which meant a badge changed under whoever was reading it and a list sorted by size re-sorted on the click that
-selected a row.
-
-The **app** renders it: the diff surface strips the comments out of both sides before Monaco sees them, and lands
-the diff below the imports. It supplies the renderer's own Shiki core as the `Grammars` source, because those
-grammars are already loaded to colour the file — a second core would compile and hold every one of them again.
-
-The two must agree to the line, or a row's badge describes a diff its pane is not showing. They agree because it
-is the same walk over the same table, resolved by the same rule; the only thing either side brings is where the
-grammar comes from.
-
-## Conventions & gotchas
-
-- Nothing here imports a framework, and nothing reaches for a global core. A caller passes `Grammars` in.
-- A partial answer is never returned. If the grammar is missing or the walk is abandoned (the budget in
-  `tokens.ts`), `analyzeCode` answers `undefined` and every caller falls back to git's own numbers, which for
-  such a file are the honest reading anyway.
-- Lines are counted the way git counts them: a trailing newline terminates the last line, it does not begin
-  another. Getting that wrong reads as one phantom added line on every file whose other side is empty.
-- Adding a language is two edits: a row in `langs.ts` and an extension in `lang-for-path.ts`. The `ShikiLang`
-  type is what stops a surface naming a grammar this build does not ship.
+```sh
+pnpm --filter @intentic/code-read test
+```

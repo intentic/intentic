@@ -58,7 +58,7 @@ need() {
 }
 
 # The scripts as the COMMIT carries them, extracted once — not as they happen to sit in the working tree. The
-# runners keep their checkout between jobs (`clean: false`, docs/ci-runner.md) and share the machine with five
+# runners keep their checkout between jobs (`clean: false`, docs/ops/ci-runner.md) and share the machine with five
 # others, so what is on disk can hold an untracked leftover, and it can CHANGE while the six-minute bundle build
 # runs: in job 92707727494 the .deb was packed with a cleanup.sh that the .rpm, bundled two seconds later, no
 # longer saw — three correct installers, a tree that moved under them, and a red build. A release ships what the
@@ -194,7 +194,7 @@ check_nsis() {
 # THE SIGNATURE, WHEN THIS BUILD WAS MEANT TO MAKE ONE.
 #
 # "Windows protected your PC" is what a user meets when nothing we ship carries a publisher identity, and the
-# only cure is an Authenticode signature (sign-windows.sh, docs/windows-code-signing.md). A release that was
+# only cure is an Authenticode signature (sign-windows.sh, docs/ops/windows-code-signing.md). A release that was
 # configured to sign and produced an unsigned installer anyway is the one failure mode worth failing a build
 # over — it looks exactly like a release that worked, right up until it is in front of somebody.
 #

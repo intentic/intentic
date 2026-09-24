@@ -258,7 +258,7 @@
         "unicorn/no-instanceof-builtins": "error",
         "unicorn/no-invalid-fetch-options": "error",
         // Owns `typeof x === "undefined"` and autofixes it. Kept ahead of anti-slop/no-runtime-typeof, which
-        // is configured not to re-flag the same narrowing (see agent.oxlintrc.json).
+        // is configured not to re-flag the same narrowing (see .oxlintrc.plugins.json).
         "unicorn/no-typeof-undefined": "error",
         "unicorn/no-useless-promise-resolve-reject": "error",
         "unicorn/no-magic-array-flat-depth": "error",
@@ -354,7 +354,7 @@
         "typescript/prefer-promise-reject-errors": "off", // duplicate of the eslint rule
         "typescript/no-implied-eval": "off", // duplicate of the eslint rule
         "typescript/prefer-string-starts-ends-with": "off", // duplicate of the unicorn rule
-        // Type assertions are owned by anti-slop in agent.oxlintrc.json, which offers a way through (justify
+        // Type assertions are owned by anti-slop in .oxlintrc.plugins.json, which offers a way through (justify
         // it with a SAFETY comment) instead of a demand that cannot always be met.
         "typescript/no-unsafe-type-assertion": "off",
         // Noise without a matching gain: strict-boolean-expressions rejects every truthiness check, and

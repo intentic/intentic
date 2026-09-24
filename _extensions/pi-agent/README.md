@@ -1,36 +1,26 @@
-# @intentic/ext-pi-agent
+# pi-agent
 
-The [Pi coding agent](https://pi.dev) as a chat provider: declared here, served by the daemon's own Pi
-runtime rather than ACP.
+A data-only extension that adds the Pi coding agent as a chat provider: a capability card, and a Dockerfile fragment that installs the `pi` CLI.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    card(["pi-agent<br/>capability card"]) -->|"adding it"| image["Sandbox image<br/>rebuilt with pi"]
+    card --> picker["Chat model picker"]
+    picker --> daemon["Daemon Pi adapter"]
+    daemon -->|"pi --mode rpc<br/>one process per turn"| pi["Pi CLI"]
+```
 
-- Declare the reserved `pi` agent capability, so the fleet can offer Pi as a choice of who runs a turn.
-- Carry the image fragment that bakes the Pi CLI into the sandbox (a one-time rebuild on install).
+- Holds no code. The manifest declares the `pi` capability (`kind: agent`) and an `environment` fragment. The
+  directory is copied into the sandbox image whole.
+- Adding the card bakes the CLI into the image, a one-time rebuild. After that the card's `command`, `env` and
+  login fields configure how the daemon spawns it.
+- The daemon drives Pi over Pi's own RPC protocol, which carries mid-turn steering and an effort level. Pi has no
+  MCP seam, so it gets none of the sandbox's tools.
+- Sign-in and the default model live inside Pi itself (`/login`, `/model` in a terminal), or API keys go in the
+  card's environment field.
 
 ## Key files
 
-- [intentic-extension.json](intentic-extension.json): the one capability and the environment fragment. This
-  file IS the package; there is no `src/` and no skills directory.
-- [env/pi.Dockerfile](env/pi.Dockerfile): `npm install -g` for the Pi CLI, composed into the image overlay.
-- [package.json](package.json): the manifest that makes it a package at all.
-
-## How it fits
-
-Pi deliberately speaks no ACP: its embedding surface is its own RPC mode (strict-LF JSONL over stdio). So
-unlike the `acp-agents` cards, whose ids are ordinary and land on the generic ACP floor, the `pi` id is
-RESERVED in the contract's agent catalog: `capabilitiesOf("pi", …)` names the `pi` runtime, and
-`_sandbox/sandbox/src/pi/` is what drives it. That runtime is why this card exists at all: it carries
-abilities the ACP floor cannot: real mid-turn steering (Pi's `steer` queue), reasoning-effort control
-(`set_thinking_level`), and a published slash-command list.
-
-Pi owns its own model catalog and credentials: API keys ride the capability's environment block, and
-subscription logins (`/login` inside Pi) persist in Pi's own store in the container: installed means
-runnable, the `agent`-kind convention.
-
-## Conventions & gotchas
-
-- The `id` must stay `pi`: it is the contract's reserved name for this runtime. Renaming the card's display
-  name is free; renaming the id would silently demote it to an ACP agent that speaks no ACP.
-- Nearly the smallest package in the repository, deliberately: a capability that needs logic is not a
-  capability. The logic lives behind the daemon's adapter seam.
+- [intentic-extension.json](intentic-extension.json) — the capability card, its guide and its fields.
+- [env/pi.Dockerfile](env/pi.Dockerfile) — the image fragment that installs the Pi CLI.
+- [../../_sandbox/sandbox/src/runtimes/pi/pi-agent.ts](../../_sandbox/sandbox/src/runtimes/pi/pi-agent.ts) — the daemon side that runs a turn over Pi's RPC.

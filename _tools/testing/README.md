@@ -1,44 +1,36 @@
-# @intentic/testing
+# testing
 
-The test-support seams every package's suites share: deep, self-naming stand-ins for wide interfaces.
+The test support every package's suites share: the `suites` runner behind each `test` script, fakes for Fly and Stripe, and helpers `bun test` lacks.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    script["a package's<br/>pnpm test"] --> suites["suites bin"]
+    suites --> unit["bun test<br/>unit files"]
+    suites --> slow["bun test<br/>*.integration · *.e2e"]
+    unit --> testing(["@intentic/testing"])
+    slow --> testing
+    testing --> fakes["Fly · Stripe<br/>HTTP fakes"]
+    testing --> helpers["unstubbed · e2eTier<br/>waitFor · jsdom · .vue"]
+```
 
-- Provide the fakes that stand in for wide interfaces, so a suite does not hand-roll a fifth one.
-- Provide the bun test harness every package runs on, and the e2e gate.
+- `suites` runs two `bun test` passes because the two kinds need different budgets: unit files get a short hang-detector timeout, `*.integration.test.*` and `*.e2e.test.*` files get room for real work. Positional arguments filter by path; `SUITES_JUNIT_DIR` adds JUnit reports for the verify gates.
+- Each package's `bunfig.toml` preloads `src/bun-preload.ts`, so a file run with plain `bun test` gets the same budget.
+- `unstubbed` stands in for a wide interface: any member the test did not provide throws when called, naming its full path.
+- `e2eTier` gates a costly suite behind an opt-in switch plus its credentials. With the switch on and a secret missing it skips and names the secret, so a nightly run with partial credentials stays green.
+- The fakes hold state and refuse what the real service refuses: `fly-fake` models exactly the Fly Machines calls the platform makes, `stripe-fake` runs a Stripe server that signs its webhooks.
+- Consumed from source as a devDependency; nothing here ships.
 
 ## Key files
 
-- [src/index.ts](src/index.ts): the stand-ins.
-- [bin/suites.mjs](bin/suites.mjs): every package's `test` script — two `bun test` runs, the unit hang detector and
-  the integration budget, each reading the package's own bunfig.toml.
-- [src/bun-preload.ts](src/bun-preload.ts): loaded per file through bunfig.toml — the budget by suite name.
-- [src/globals.d.ts](src/globals.d.ts): types for the test globals `bun test` defines, named in each test
-  tsconfig's `types` as `@intentic/testing/globals`.
-- [src/bun.ts](src/bun.ts): helpers `bun test` lacks — `waitFor`, `stubGlobal`/`stubEnv`,
-  `advanceTimersByTimeAsync`, `freshImport`.
-- [src/dom.ts](src/dom.ts): a jsdom window as globals, for the suite that imports it first.
-- [src/bun-vue.ts](src/bun-vue.ts): the `.vue` loader, so a component test mounts the real SFC.
-- [src/e2e.ts](src/e2e.ts): the opt-in gate `*.e2e.test.ts` suites sit behind.
-- [src/stripe-fake.ts](src/stripe-fake.ts): a Stripe that speaks Stripe's own form encoding, over real HTTP.
-- [src/fly-fake.ts](src/fly-fake.ts): a Fly Machines API that remembers what it was told, over `fetch`.
+- [bin/suites.mjs](bin/suites.mjs) — the two-pass test runner every package's `test` script calls.
+- [src/index.ts](src/index.ts) — `unstubbed`, the self-naming stand-in.
+- [src/e2e.ts](src/e2e.ts) — `e2eTier`: whether a gated suite runs, and what it is missing.
+- [src/bun.ts](src/bun.ts) — `waitFor` on the real clock, async timer advance, env and global stubs that restore.
+- [src/fly-fake.ts](src/fly-fake.ts) — the stateful Fly Machines API over `fetch`.
 
-## How it fits
+## Commands
 
-Imported by suites across the monorepo. It ships no production code and nothing depends on it at runtime.
-
-## Conventions & gotchas
-
-- **Self-naming.** A stand-in reports what it is when an assertion fails, because the alternative: a bare
-  `undefined is not a function` five frames deep: is how an afternoon disappears.
-- Deep rather than shallow: it stands in for the whole interface, so a suite does not have to know which three
-  methods the code under test happens to call today.
-- **A provider fake models the provider's RULES, not its replies.** `fly-fake` refuses a fork smaller than its
-  source, refuses a restore from a snapshot that has not finished, and remembers which machine is running, because
-  those are the constraints the code under test is written around and a per-request stub cannot express any of
-  them. It answers an unrouted path with a loud 404 rather than `{ ok: true }`: a fake that answers everything
-  hides the call you got wrong. Both provider fakes have suites of their own, since a fixture with rules in it is
-  only as right as the rules.
-- **A suite keeps its own stub when the seam is a different one.** `hosted-health` also probes the edge,
-  `hosted-abuse` also reads Prometheus, and `fly.test.ts` is the client these fakes are built on — none of those is
-  the Machines API alone, and pressing them through one fake would make it a fake of three things.
+```sh
+pnpm --filter @intentic/testing test
+pnpm --filter <package> test <path filter>   # only the files whose path matches
+```

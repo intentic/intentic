@@ -6,7 +6,7 @@
 #
 # WHY A STAGING STEP AT ALL. `tauri.conf.json` used to glob the site directory directly, which made the
 # bundled set whatever the WORKING TREE held at the moment each bundler ran. The runners keep their checkout
-# between jobs (`clean: false`, docs/ci-runner.md), so that directory can hold a file the commit does not
+# between jobs (`clean: false`, docs/ops/ci-runner.md), so that directory can hold a file the commit does not
 # carry — and every one of them shipped, inside an installer, as a script the app spawns by basename and
 # nobody can review at its source path. That is not hypothetical: release 1.206.0's windows-build died at
 # verify-desktop-bundle.sh with `stale connect-host.ps1 is bundled but is not committed`, on a checkout that

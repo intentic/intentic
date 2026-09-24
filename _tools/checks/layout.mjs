@@ -239,7 +239,6 @@ const DEAD_NAME_OK = new Map([
     ["_sandbox/sandbox/src/panels/panel-upstream.test.ts", "fixture: a workspace repo named intentic with an _apps/ instance"],
     ["_tools/nav/baselines/", "recorded measurements of a tree that had those names"],
     ["_tools/checks/layout.mjs", "this file: the patterns above are the rule"],
-    ["docs/audits/", "an audit describes the tree as it was"],
 ]);
 const TEXT = /\.(ts|tsx|mts|cts|js|mjs|cjs|vue|json|jsonc|json5|md|ya?ml|sh|bash|toml|astro|css|html|txt|Dockerfile)$|(^|\/)(Dockerfile|[A-Z]+)$/;
 const deadNames = [];
@@ -303,7 +302,7 @@ finish(
     [
         [
             `these directories hold more than ${MAX_FILES_PER_DIR} files a reader reads, so listing one costs an agent a page before it can act\n` +
-                "  split by what the files DO (see docs/audits/directory-structure-audit.md), or, if splitting is the wrong answer here,\n" +
+                "  split by what the files DO, or, if splitting is the wrong answer here,\n" +
                 "  record it: node _tools/checks/layout.mjs --allow <dir>",
             fanOutGrown,
         ],
@@ -312,7 +311,7 @@ finish(
                 "  rename one, or — if both names are wire groups — the pair is vocabulary and belongs in TOLERATED_TWINS with its reason",
             twins,
         ],
-        ["a package's directory name must be its npm name without the scope (ARCHITECTURE.md, Conventions)", nameMismatches],
+        ["a package's directory name must be its npm name without the scope (docs/architecture/conventions.md)", nameMismatches],
         [
             "these packages hold two files with the same name, so a guessed path lands on the wrong one\n" +
                 "  rename by what each one does, or, if both names are right, record it: node _tools/checks/layout.mjs --allow <package>",

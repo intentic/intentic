@@ -1,25 +1,21 @@
-# docs
+# Documentation
 
-Which document belongs where, so a reader looking for one thing opens one directory.
+Where each kind of document in this repository belongs, so a new page lands beside the ones like it.
 
-- **[architecture/](architecture)** — how the running system is put together, one subject per page, plus the
-  repository-level map (`repo.json` is authored; `index.json` is generated). `ARCHITECTURE.md` at the repo root
-  is the index into it.
-- **[design/](design)** — a decision recorded while it was being made: what was chosen, what it was chosen
-  over, and what it costs. Written once, read when somebody asks "why is it like this".
-- **[audits/](audits)** — what was measured, on a date, and what it said. An audit describes the tree it was
-  run against, so a stale path inside one is not a defect (the layout check exempts this directory for exactly
-  that reason).
-- **[ops/](ops)** — running the machinery around the code: CI runners, code signing, store publishing,
-  provider conformance, the CLI's output protocol.
-- **[marketing/](marketing)** and **[user-stories/](user-stories)** — what the product says about itself, and
-  the jobs it is supposed to do.
+```mermaid
+flowchart LR
+    q(["What does the page describe?"]) --> pkg["one package"]
+    q --> sys["how the system<br/>is put together"]
+    q --> ops["the machinery<br/>around the code"]
+    q --> product["the product<br/>to its buyers and testers"]
+    pkg --> readme["that package's README.md"]
+    sys --> arch["architecture/"]
+    ops --> opsdir["ops/"]
+    product --> mkt["marketing/ · user-stories/"]
+```
 
-## What does NOT live here
-
-**What a package IS belongs to that package's own `README.md`**, updated in the same commit as the change that
-invalidated it (AGENTS.md, "Documentation"). A second description in `docs/` is a copy that starts drifting the
-day it is written, and the one an agent reads is the one beside the code.
-
-Anything about the WORKSPACE rather than this repository — a harness plan, a cross-repo audit, the platform's
-own operations — lives in the workspace's `/work/docs/`, not here.
+- **A package is documented by its own `README.md`**, updated in the same commit as the change that made it wrong. Nothing here repeats what a package README says.
+- [`architecture/`](architecture) holds one page per subject of how the system fits together, indexed by [ARCHITECTURE.md](../ARCHITECTURE.md). `repo.json` is the authored map of parts, packages and glossary; `index.json` is generated from the package READMEs by `intentic-docs` and never edited by hand.
+- [`ops/`](ops) holds how to run the machinery around the code: CI runners, release and store publishing, code signing, the CLI output protocol.
+- [`marketing/`](marketing) holds positioning, messaging and the press kit. [`user-stories/`](user-stories) holds acceptance stories grouped by journey step, which the acceptance-testing surface reads. Both are product material, not engineering documentation.
+- Anything about the workspace rather than this repository belongs in `/work/docs/`, outside this repository.

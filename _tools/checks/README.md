@@ -1,172 +1,86 @@
-# The checks
+# checks
 
-Every check that reads the checkout and nothing else, listed once and run everywhere the list is read.
+The repository's invariant checks: one Node script per rule, listed once in `manifest.mjs` and run by `run.mjs` after each edit, at turn end, at push and in CI.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    edit["Each edited file<br/>.intentic/checks.json"] -->|"--paths"| run(["run.mjs"])
+    turn["Turn end<br/>pnpm verify:turn"] --> run
+    push["Push<br/>.githooks/pre-push"] --> run
+    ci["CI and nightly<br/>ci.yml · nightly.yml"] --> run
+    manifest["manifest.mjs<br/>CHECKS"] --> run
+    run --> procs["One process per check<br/>exit 0 · 1 · 2"]
+```
 
-- Name each checkout-readable gate exactly once (`manifest.mjs`), with what it needs under it and what it is for.
-- Run them side by side, each in its own process, from a clone that has never installed (`run.mjs`).
-- Hold the repository's structural promises: the lockfile records the manifests, every test file is in a
-  type-check program and under a budget, the workflows keep the fork boundary and the permission ceilings, a
-  shrunk wire contract arrives declared, no new handler throws an error away without narrowing it or saying why,
-  the daemon's module seams stay where they are and no value import closes
-  a new cycle between its subsystems, nothing in `_shared/` reaches back into another part, every third-party
-  package something intentic ships carries may be handed on under its licence, no build script removes
-  a directory agent turns have mounted over, the UI draws from its design system, a mark beside a run of text is
-  placed by the rule that computes it rather than by a hand-tuned offset, no tracked text file carries a control
-  byte, every skill description fits the budget the prompt pays for on every call, no `.astro` frontmatter holds a
-  script tag for vite's dependency scan to lift out and parse, the words a reader sees live in a message catalog
-  rather than in a template and every key one asks for is in one, no model label falls back to its raw id, and the
-  one picture that defines the site's four product nouns is read from a docs page and never from the home page.
+- Checks run before `pnpm install`, so they read the tree by shape (regex, `lib/repo.mjs`) instead of importing the
+  code they judge, and each runs as its own process.
+- To add one, write `<name>.mjs` and answer through `lib/report.mjs`: `finish` prints problems to stderr and exits
+  1, or prints what it vouched for and exits 0; `cannotMeasure` exits 2 when the check could not look. Then add an
+  entry to `CHECKS` in `manifest.mjs`.
+- An entry's `needs` says what it may read (`checkout`, `git` history, or `node_modules` when installed). A `code`
+  gate refuses everywhere. A `tidy` gate refuses only what a turn or a push adds, and fails the nightly tidy job
+  on main. A new check enters as `tidy`.
+- `scoped: true` means the check takes `--paths a,b` and reaches the same verdict on those files as on the whole
+  tree. `fix` names the arguments that let it repair the tree itself.
+- After each edit, `.intentic/checks.json` runs `run.mjs --paths {file}`: scoped checks only, silent unless one
+  fails. At turn end `pnpm verify:turn` applies each `fix`, then runs every check against the main-line base. At
+  push `.githooks/pre-push` runs them all through `verify-push.mjs`. CI runs `--tidy=warn`, the nightly `--gate=tidy`.
+- Ratcheted checks keep their standing backlog in `baselines/` (`lib/ratchet.mjs`), which may shrink and never
+  grow; `--write-baseline` adopts the current findings.
 
-## Key files
+## Commands
 
-- [manifest.mjs](manifest.mjs): the list, each check's `gate`, and whether it is `scoped`. A check that is not on
-  it runs nowhere, which is the failure this directory exists to end: five gates were red for weeks inside a
-  `pnpm check` chain no hook and no job ran.
-- [run.mjs](run.mjs): the runner. `--list`, `--only a,b`, `--skip a`, `--gate=code|tidy`, `--tidy=warn`,
-  `--paths a,b`, `--json`; exit 1 if any check that may refuse here failed.
-- [lib/report.mjs](lib/report.mjs): the one contract every check keeps: problems to stderr and exit 1, what it
-  vouched for to stdout and exit 0, or `cannotMeasure` and exit 2.
-- [lib/repo.mjs](lib/repo.mjs): the workspace packages, the test files, the export maps a workspace import
-  resolves through, read once and without `node_modules`; and `subjectFiles`, the files a run is asked to JUDGE,
-  which `--paths` narrows and nothing else does.
-- [lib/workspace-graph.mjs](lib/workspace-graph.mjs): the `workspace:` dependency graph and "which packages do
-  these changed paths reach", shared by CI's `changes` job and the turn-ending check. It reads
-  `pnpm-workspace.yaml`'s globs first, because a `package.json` is not the same thing as a workspace member: a seed
-  template, a test fixture and a store shell each carry one, and a change inside any of them belongs to the member
-  that contains it rather than to a name turbo would refuse.
+```sh
+node _tools/checks/run.mjs --list            # every check: needs, gate, per-file or whole-tree
+node _tools/checks/run.mjs --only paths,md-links
+node _tools/checks/run.mjs --paths _tools/README.md
+pnpm checks                                  # all of them; pnpm checks:tidy for the tidy gate
+```
 
-## How it fits
+## The checks
 
-Who reads the list: CI's `preflight` job (before any install) and `nightly.yml`'s `tidy` job, the pre-push
-hook's first tier (`_tools/scripts/verify/verify-push.mjs`), the turn-ending check
-(`_tools/scripts/verify/verify-turn.mjs`), the per-edit run (`run.mjs --paths {file}`), `pnpm prepass` (the
-checks, then `_tools/scripts/build/emit-declarations.mjs`), and `pnpm checks` by hand. The middle two are the
-two moments this repository declares for itself in `.intentic/checks.json`, and the only two: the push is the
-checkout's own git hook, which needs nobody's permission to run and is told its range by git.
-
-The turn-ending check reads it twice on a red run: once on the working tree, and once on a throwaway worktree
-at `HEAD`, so that a problem already standing before the turn started is reported and not held against it. That
-snapshot is on the red path only (~1.2s: the `git worktree add` is most of it), so a green turn pays nothing
-for it, and only the checks that failed are re-run inside it. A `node_modules` check is never asked — the
-snapshot has none, so every line it printed would read as newly introduced.
-
-Every check works on a bare checkout, which decides how they are written: a relative import of
-`@intentic/constants`' hand-written JavaScript rather than a bare specifier, a line scanner over
-`pnpm-lock.yaml` and the workflow files rather than a YAML parser, one pattern scanner for the modules a file
-imports (`lib/imports.mjs`, read by the daemon's cycle rule and the `_shared/` rule alike) rather than a
-TypeScript parser, and a `vue/compiler-sfc` or an installed `node_modules` that is attempted and vouched for less
-when it is absent: `licences.mjs` reads each shipped package's licence from its installed `package.json`, so
-before the install it names the units it could not read and passes. The four judgments the daemon also makes (the
-assertion measure, the wire-contract shrink, the control-byte table, the overlay mirror roots) live in
-`@intentic/constants` for the same reason, one copy each.
-
-## Two gates: what a failure means decides where it may refuse
-
-Each check declares a `gate`, and that is what decides its blast radius:
-
-- **`code`** — the tree does not work, or CI cannot build it: a lockfile that no longer records the manifests, a
-  test file no program type-checks, a workflow that opens the fork boundary, an alias pointing at nothing.
-  Refused everywhere it is read.
-- **`tidy`** — the tree costs its readers more than it should: a directory of 35 files, a dead link in a README,
-  a hand-spelled root, a UI element off the design system, a subsystem with no invariant. Every one is a real
-  cost with a measurement behind it in `docs/audits/`, and none of them is a reason to stop somebody's push. A
-  tidy failure is a **warning** at the push and in CI's preflight, a **refusal** for the lines one turn added
-  (see below), and a **refusal** in `nightly.yml`'s `tidy` job, which reads one commit on a GitHub-hosted runner
-  and gates nothing at all.
-
-The split was made after a day in which 18 pushes were attempted, 11 were refused, and 9 of those were refused
-in under five seconds by a tidy check — for state (a ghost directory a landed rename left, a baseline one count
-too high after somebody else's deletion, a link another conversation had broken) that no single actor had
-produced, that the commits being pushed could not fix, and that the agent then sent after the failure could not
-even see from its worktree.
-
-### The question is who wrote the line, not how bad the rule is
-
-A tidy rule cannot refuse a push, and for the first three weeks of the split that left it refusing in exactly
-one place: the nightly, at 03:00, against a commit that is the sum of everyone's day, in a job holding
-`contents: read` and no actor at all. It was red on 7 of its first 10 scheduled runs. Every anchor it printed
-came from a single feature commit one or two days old — one line, in one file, that one turn wrote and nobody
-was ever told about, because the turn's whole report of it was `layout, paths: tidy rules, worth fixing and not
-what holds a turn`, and the push said the same.
-
-So the refusal moved to the two moments that can name an author, and the shared cost stayed where it was:
-
-- **The edit** (`.intentic/checks.json`'s `edit` moment → `run.mjs --paths {file}`): every `scoped` check, on
-  the one file just written, in about 100ms, folded into that edit's own response. Silent when the file is
-  clean. This is the only moment at which the model that wrote the line is still holding it.
-- **The turn** (`verify-turn.mjs`): every check, diffed against a `HEAD` worktree **line by line**. A problem
-  line that was already there is named and not held against the turn; one that was not is refused, whatever the
-  check's gate. Line numbers are flattened for the comparison, so inserting a line above a standing finding
-  moves it and does not accuse anyone.
-- **The nightly**: unchanged, and still the only place a standing cost nobody caused is refused.
-
-That is what the `gate` split was always reaching for and could not express: the difference between a directory
-another conversation filled and a line this one wrote.
-
-### A check that could not measure is not a finding
-
-`lib/report.mjs`'s `cannotMeasure` exits 2, and the runner counts that as neither a pass nor a tidy failure. The
-distinction is not pedantic — `pnpm peers check`'s output shape moved, and the nightly went red with nothing
-wrong in the tree and nothing anybody could commit to fix it. An unmeasured check refuses where a tidy one does
-(so somebody finds out), is dropped at the edit moment (one edit is the wrong occasion to learn a tool broke),
-and never holds a turn (no diff can answer for it).
-
-### A new check enters as `tidy`
-
-That is the on-ramp, and it is a rule about **process**, not about the check:
-
-1. Land it as `tidy`. It runs everywhere at once and says what it would refuse, and nobody's push or turn stops
-   for a rule that has not yet met every environment it will run in. The day the `layout` check landed it was
-   green on a fresh clone, red on every persistent CI workspace and red in the owner's own tree, all for the
-   same commit, because those three trees hold different files.
-2. Give it a week of real runs, and prune every environment it turned out to be wrong about.
-3. Promote it to `code` in a change of its own — **never in the same push as a large rename**. The directory
-   overhaul moved ~20 packages, added this check, its dead-name patterns and its baselines, on the day node and
-   pnpm were bumped; every environment was stale relative to it at once, and the fallout took five rounds of
-   fixes to clear.
-
-## Ratchets fail on growth, and only on growth
-
-A check that cannot be met today is ratcheted, never switched off: a baseline it may shrink and not grow
-(`baselines/layout.json`, `baselines/path-literals.json`, `baselines/daemon-cycles.json`, and the `UNAUDITED` and
-`NARROW_TAKERS` lists inside the daemon's two structural checks). A new finding fails by name.
-
-`baselines/daemon-cycles.json` holds every value import between two daemon subsystems whose target already
-reaches back to its source, a cycle of any length, keyed `from -> to`; a value beside an edge is the reason it
-stands, where one was ever written down. A new edge that closes a cycle fails with the cycle it closes, the files
-that import across it, and one import for each step of the way back, which is where to cut: a type-only port, an
-event, or a module above both. Two subsystems importing each other are a cycle of two, and the reason they do
-sits on both edges.
-
-An exception list is not a ratchet. `EXCEPTIONS` in `shared-boundary.mjs` and `REVIEWED` in `licences.mjs` hold
-the owner's decisions, one entry per break that stands, and every entry carries its reason; `REVIEWED` also
-carries the licence the package was read at, so a package that changes its terms is read again instead of riding
-an old yes. An entry the tree no longer needs is reported beside the verdict, never refused.
-
-A stale entry — one the tree has already beaten — does **not** fail. It is tightened in place by the check
-itself, wherever the write can become a commit, and merely reported everywhere else: in an agent's worktree it
-would be one more line for the owner's tree to reconcile against every other turn's, and on a CI runner nobody
-commits anything at all (`lib/repo.mjs`'s `writesBaselines` is the one place that decides). Failing on a shrink is
-what turned every deletion into everybody else's red: one conversation removed a component, and every other
-conversation's turn and the owner's next push were refused over a number in a shared file none of them had
-touched — and two of them editing that file to unblock themselves was a merge conflict.
-
-Growth in the other direction needs a way to be *deliberate*, or the ratchet only ever produces reshuffling.
-`layout.mjs --allow <dir|package>` records one entry at what the tree now has and writes nothing else; the
-failure message names it beside the answer it still prefers (split the directory). The instrument that existed
-before it was `--write-baseline`, which adopts every finding in the tree — run from a worktree, that launders
-every other conversation's drift into your commit, so growing one directory on purpose meant hand-editing a
-shared JSON file and usually meant a reshuffle instead.
-
-A scoped run (`--paths`) may **never** write a baseline, and no check may report a waiver as stale under one: it
-read a handful of files, so every entry it did not look at would read as beaten. `subjectScope()` is what each
-of those rules asks.
-
-Ghost directories follow the same principle one step further: `layout.mjs` **sweeps** them rather than naming
-them. Nothing in git can remove a directory git does not track, so a rule that only reported one refused the
-same tree on every push until somebody typed the `rm -rf` by hand.
-
-Deliberately not here: anything that needs the suite. Typecheck and tests are `pnpm verify` (the whole
-repository, after every land) and `pnpm verify:turn` (the affected closure, when a turn ends).
+| Check | Refuses |
+| --- | --- |
+| [control-chars](control-chars.mjs) | literal control bytes in tracked text |
+| [skill-descriptions](skill-descriptions.mjs) | a skill description over its catalog budget |
+| [lockfile](lockfile-drift.mjs) | a lockfile that has drifted from the manifests |
+| [peer-deps](peer-deps.mjs) | an unmet, missing or conflicting peer dependency |
+| [licences](licences.mjs) | a shipped dependency whose licence forbids handing it on |
+| [test-programs](test-programs.mjs) | a test outside a type-check program, its budget or build order |
+| [workflows](workflow-policy.mjs) | a workflow crossing the fork boundary or a permission ceiling |
+| [release-notes](release-headings.mjs) | release headings the writer and parsers spell differently |
+| [contract-shrink](contract-shrink.mjs) | a shrunk wire contract with no breaking-change declaration |
+| [hooks-armed](hooks-armed.mjs) | a non-executable git hook, re-armed in place |
+| [invariant-registry](invariant-registry.mjs) | a daemon subsystem with no runtime invariant or stated reason |
+| [daemon-boundaries](daemon-boundaries.mjs) | a new whole-`Services` taker or cycle between daemon subsystems |
+| [shared-boundary](shared-boundary.mjs) | a `_shared/` package depending on another part |
+| [contract-paths](contract-paths.mjs) | a contract route called by spelling its path |
+| [publish-set](publish-set.mjs) | a publish list that is not dependency-closed and ordered |
+| [publish-retry](publish-retry.mjs) | retry patterns that ride out the wrong release failures |
+| [release-api](release-api.mjs) | a `github.sh` helper that masks a failed write |
+| [engines](engines-blessed.mjs) | an `engines.json` version this repository does not pin |
+| [build-cache](build-cache-mounts.mjs) | a sandbox image fragment without BuildKit cache mounts |
+| [mirror-roots](mirror-roots.mjs) | replacing a directory an agent turn overlays instead of emptying it |
+| [paths](path-literals.mjs) | hand-spelled roots and `../..`-counted ones |
+| [vocabulary](vocabulary.mjs) | a retired word spelled again |
+| [silent-catch](silent-catch.mjs) | a new handler that throws an error away unnarrowed |
+| [time-zones](time-zones.mjs) | a cron, date format or day bucket with no zone |
+| [layout](layout.mjs) | ghost, over-full, twin, colliding or dead directories |
+| [md-links](md-links.mjs) | a relative documentation link that does not resolve |
+| [metaphor-home](metaphor-home.mjs) | the four-noun picture defined twice or on the home page |
+| [alias-targets](alias-targets.mjs) | a resolver alias pointing at a missing path |
+| [i18n](i18n-catalogs.mjs) | translation keys, placeholders or plurals English lacks |
+| [i18n-literals](i18n-literals.mjs) | English typed into a Vue template |
+| [i18n-keys](i18n-keys.mjs) | a missing `t()` key, an unused message, a message that does not compile |
+| [tailwind](tailwind-bypass.mjs) | arbitrary colours or pixel sizes in class attributes |
+| [display](display-descenders.mjs) | clipped display type without descender clearance |
+| [marks](mark-alignment.mjs) | a mark placed by a hand-tuned offset instead of `.mark` |
+| [rows](row-tiers.mjs) | a list row that sets its own density or padding |
+| [buttons](button-tiers.mjs) | a hand-styled action button instead of `<Button>` |
+| [inputs](input-tiers.mjs) | a hand-styled field instead of `ui-field-box` |
+| [run-settings](run-settings-tier.mjs) | effort, thinking or speed controls drawn outside `PickerRunSettings.vue` |
+| [model-labels](model-labels.mjs) | a model named by its raw id |
+| [astro-scripts](astro-scripts.mjs) | a `<script` inside an `.astro` frontmatter |
+| [vue-templates](vue-templates.mjs) | a `.vue` template that does not compile |
+| [submit-guards](submit-guards.mjs) | an Enter-bound async handler that accepts a second press |
+| [extension-siblings](extension-siblings.mjs) | an unlisted repository under the workspace's `extensions/` |

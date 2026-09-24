@@ -1,29 +1,28 @@
-# @intentic/api-contract
+# api-contract
 
-The single source of truth for the platform's API surface: the oRPC contract and its Zod schemas.
+The oRPC contract between the editor and the platform api: accounts, the sandbox registry, invites, hosted plans, push relay, wallet, admin reads and API tokens.
 
-Consumed by both the backend ([`@intentic/api`](../../_platform/api), which `implement`s it) and the web client ([`@intentic/web`](../../_editor/web), which calls it). No codegen: the TypeScript source *is* the contract, so request/response types stay in lockstep across the wire.
+```mermaid
+flowchart LR
+    web["Editor<br/>apiClient"] -- "HTTP under /rpc" --> contract(["apiContract"])
+    demo["Demo build<br/>typed fixtures"] -.-> contract
+    contract --> api["Platform api<br/>implement(apiContract)"]
+    wire["sandbox-contract<br/>daemon wire shapes"] -. "re-exported" .-> contract
+```
 
-## Responsibilities
-
-- Define `apiContract`, the aggregate oRPC router (`me`, `sandbox`, `invite`, `desktop`, `pool`, `creator`, `push`, `admin`). `push` is the push relay's three-route handshake (register a device / release it / the daemon's sessionless send), the schema section in `schemas.ts` states the whole capability model. `admin` is the operator's surface (overview, activation funnel, attention feed, cost meters, marketplace read, trend lines, account directory + per-account support page, and the `ADMIN_MUTATIONS`-gated writes: suspend/reinstate a listing, retry a payout, stop a machine, GDPR erasure), gated server-side by the `ADMIN_EMAILS` allowlist — see the api's `guards.ts requireAdmin`.
-- Define the Zod schemas + inferred wire types (`ProjectSchema`/`Project`, `ServerSchema`/`Server`, `CloudflareStatusSchema`, `Repo` kinds, …).
-- It contains **no** implementation: only the contract shapes both sides bind to.
+- Both ends are typed from the same `apiContract`: the browser's `OpenAPILink` client in `_editor/web` and the
+  per-domain handlers in `_platform/api`, mounted under `API_BASE_PATH` (`/rpc`).
+- `src/schemas.ts` holds two kinds of shape. Platform-native ones (users, hosted plans, invites, tokens) are defined
+  here; daemon wire shapes are re-exported from `@intentic/sandbox-contract`, so the editor imports one module for
+  both.
+- Nothing between the editor and a sandbox travels over it: the editor talks to the daemon directly over
+  `sandbox-contract`.
+- `ResourceType` comes from `_deploy/resources`, a recorded exception to the rule that `_shared/` depends on no other
+  part (see [the area README](../README.md)).
 
 ## Key files
 
-- [src/index.ts](src/index.ts): `apiContract` + public re-exports.
-- [src/schemas.ts](src/schemas.ts): the Zod schemas and inferred types.
-
-## How it fits
-
-The seam between web and API. Add or change an endpoint here first; the API gets a type error until it `implement`s the new shape, and the web client gets the new method typed automatically.
-
-## Conventions & gotchas
-
-- `sandbox.hostedProvision` requires the owner's current connect token alongside `sandboxId`, binding the
-  request to that setup attempt. `hostedRelease` cancels at any boot stage, revokes that token, and returns the
-  updated sandbox once cleanup is durable. Provider deletion may still be running when it returns.
-
-- Edit shapes here, never inline in a route or component: that's how the two sides stay in sync.
-- Built before the API runs under `tsx` (it's an imported workspace package); run `pnpm build` after changes. Depends on `@orpc/contract` + Zod.
+- [src/index.ts](src/index.ts) — `apiContract`: every platform route, grouped by domain, with who may call it.
+- [src/schemas.ts](src/schemas.ts) — platform schemas, re-exported daemon shapes, and limits such as `SANDBOX_RECOVERY_DAYS`.
+- [../../_platform/api/src/router.ts](../../_platform/api/src/router.ts) — where the per-domain handlers are assembled into the contract's shape.
+- [../../_editor/web/src/lib/useApi.ts](../../_editor/web/src/lib/useApi.ts) — the single typed client the editor uses.

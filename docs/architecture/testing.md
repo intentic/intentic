@@ -1,101 +1,42 @@
-# Local end-to-end testing
+# Testing
 
-The tiers a suite can run in, what each one needs, and how a gated suite stands down instead of failing.
+Tests are split into tiers by file name, run through one `suites` wrapper over Bun, and checked at an agent's turn end, after every land, at the push and in CI.
 
-`createProviders()` ([_deploy/providers/src/providers.ts](../../_deploy/providers/src/providers.ts)) assembles the
-full `ResourceType → Provider` map: the single seam between a compiled graph and execution. Passing
-fakes drives the whole suite in-memory ([suite.engine.test.ts](../../_deploy/providers/src/suite.engine.test.ts));
-passing nothing uses the real SSH/Cloudflare/Forgejo/Komodo implementations.
-
-[cli.e2e.test.ts](../../_deploy/cli/src/cli.e2e.test.ts) is a **manual, real** run that drives the actual CLI
-exactly as an operator would. It boots a Docker-in-Docker "host"
-([_tools/dind-host/Dockerfile](../../_tools/dind-host/Dockerfile)) via `testcontainers`, scaffolds with `init`, authors a
-`deploy.config.ts` pointed at the host's mapped SSH port (with a per-run generated key), fills
-`desired-state/.env`, then runs `resolve` + `apply`. Phase 1 stands up the platform (Forgejo + its Actions
-runner + Komodo + the workspace sandbox) and exposes `git.<zone>`/`deploy.<zone>` through a **real
-Cloudflare tunnel**; phase 2 pushes a
-tiny Dockerfile and authors an environment so `apply` wires CI/CD: the Forgejo Actions workflow builds +
-pushes the image and Komodo rolls it out live at `app.<zone>`. It asserts the platform containers are up,
-the public URLs respond, and the app serves its body, then purges the Cloudflare DNS + tunnel it created.
-
-It is gated behind `INTENTIC_E2E` **and `CLOUDFLARE_API_TOKEN`**: both, so the suite stands down rather than
-fails wherever its live credentials are absent, which is what lets the nightly CI job (`nightly.yml`'s `e2e`) run
-`pnpm e2e` unconditionally and get whatever the pipeline's variables unlock. It is excluded from `pnpm test`
-either way. Run it from the repo root with `pnpm e2e`: turbo builds the libs (`^build`) and each package's
-e2e script sets the switch. That command asks **every** gated tier to run, and the ones you hold no
-credentials for stand down; you supply only a Cloudflare token here (and, optionally, the zone to deploy
-under). The host SSH key is generated per run, and the Forgejo/Komodo admin passwords are intentic-generated:
-
-```sh
-CLOUDFLARE_API_TOKEN=...        # Account → Tunnel → Edit; Zone → DNS → Edit; Zone → Zone → Read
-CLOUDFLARE_ZONE=example.com \   # a zone you own — DNS records + a tunnel are created and then deleted
-pnpm e2e
+```mermaid
+flowchart LR
+    file["*.test.ts"] --> suites(["suites<br/>bun test"])
+    suites -->|"unit · 20 s hang bound"| unit["unit run"]
+    suites -->|"*.integration / *.e2e · 120 s"| integ["integration run"]
+    integ -.->|"INTENTIC_E2E* switch<br/>plus credentials"| e2e["e2e tiers"]
 ```
 
-> Networking: providers run nested containers with `--network host`, so the engine reaches services at
-> the host's internal IP and port. This works from a Linux/WSL2 host (routable bridge IPs); on Docker
-> Desktop (macOS/Windows) run the harness as a sibling container on the same network.
+## Suites
 
-### The hermetic tier (no secrets, runs on every MR)
+- Every package's `test` script is `suites` ([`_tools/testing/bin/suites.mjs`](../../_tools/testing/bin/suites.mjs)). It runs `bun test --conditions=@intentic/src --isolate` twice, because one run has one timeout: unit files with a 20-second hang detector, then `*.integration.test.*` and `*.e2e.test.*` files with room for real work.
+- The kind comes from the file name alone (`suiteKindOf` and `SUITE_TIMEOUTS` in [`test-suites.mjs`](../../_tools/constants/src/test-suites.mjs)). Each package's `bunfig.toml` preloads [`bun-preload.ts`](../../_tools/testing/src/bun-preload.ts), so a plain `bun test` gets the same budget.
+- A suite that reaches the machine (temp directories, subprocesses, real git, Docker) must be named `*.integration.test.ts`. [`test-programs.mjs`](../../_tools/checks/test-programs.mjs) recognizes one by what it imports, fixtures included. The same check requires every test file to be inside a type-check program and every `jest.mock` of a workspace package to supply every name the code under test imports.
+- [`@intentic/testing`](../../_tools/testing) holds the shared seams: `unstubbed` (a fake whose unstubbed members throw with their own name), Bun helpers such as `waitFor` and `freshImport`, a DOM, and Fly and Stripe fakes. A package's own fixtures live in its `src/testing.ts`. The rules for writing tests are in [`AGENTS.md`](../../AGENTS.md).
+- Other runners: Playwright for the browser and onboarding tiers, `cargo test` for the Rust crates, and `node:test` for the scripts in `_tools/scripts`.
 
-[hermetic.e2e.test.ts](../../_deploy/cli/src/hermetic.e2e.test.ts) covers the deployment path that actually
-breaks in the field: the **derived** Forgejo + runner + Komodo control plane coming up on a real Docker
-host, with zero external dependencies. Two existing seams make it hermetic: an authored `zone` in
-`i.have.cloudflare` resolves the artifact fully offline (the dummy token is never sent anywhere), and
-`apply --target host-git,host-git-runner,host-deploy` reconciles a slice whose inputs reference nothing
-but the host (pinned by a contract test in [_deploy/sdk/src/index.test.ts](../../_deploy/sdk/src/index.test.ts)).
-The suite boots the same DinD host, then asserts: offline resolve derives the platform nodes; the targeted
-apply converges with the real engine-level SSH readiness gate; a second apply is all-noop; `adopt
---baseUrl http://<host>:<mapped-3000>` pushes the intent + desired-state repos into the real Forgejo and
-sets the Actions secrets, idempotently; and a reproduced readiness failure (the service healthy on
-localhost but its `internalUrl` firewalled: the field failure class) prints the SSH diagnostic sweep
-(`readinessDiagnostics` in [_deploy/providers/src/core/ssh-diagnostics.ts](../../_deploy/providers/src/core/ssh-diagnostics.ts):
-docker state, the node's logs, listeners, addresses, one verbose probe) before the
-`ReadinessTimeoutError` propagates. The same sweep runs on any real `intentic deploy apply` readiness timeout.
+## Tiers
 
-Run it locally with `pnpm e2e:hermetic` (privileged local Docker, Linux/WSL2). In CI it runs on
-every pull request as a **non-blocking** sidecar (`e2e-hermetic` job, `continue-on-error: true`), pulling
-the published `dind-host:latest` image (falling back to building [_tools/dind-host](../../_tools/dind-host)) and uploading
-the CLI run logs as artifacts on failure. In the field `adopt` needs no flag at all: its default
-transport is an SSH port-forward to Forgejo on the host (public DNS never enters the path); `--baseUrl`
-remains an explicit transport override for reaching Forgejo over an already-mapped address like this test's.
-
-### What each tier needs
-
-`pnpm e2e` asks every gated tier to run at once, which only works because a tier that cannot reach its
-service stands down instead of failing. Each declares its own requirement with `e2eTier`
-([_tools/testing/src/e2e.ts](../../_tools/testing/src/e2e.ts)): the opt-in switch it reads, and the credentials it
-is useless without:
-
-| Tier | Suite | Needs beyond a Docker daemon |
+| Tier | What it needs | Where it runs |
 | --- | --- | --- |
-| sandbox-daemon | [sandbox.e2e.test.ts](../../_sandbox/sandbox/src/e2e/sandbox.e2e.test.ts) | nothing |
-| cloudflare | [cli.e2e.test.ts](../../_deploy/cli/src/cli.e2e.test.ts) | `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ZONE` to pick the zone) |
-| discord | [discord.e2e.test.ts](../../_sandbox/sandbox/src/e2e/discord.e2e.test.ts) | `DISCORD_E2E_BOT_TOKEN` + `_SENDER_TOKEN` + `_CHANNEL_ID`; `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` unlocks the real-agent-turn spec |
-| stripe | [hosted-plan-stripe.e2e.test.ts](../../_platform/api/src/e2e/hosted-plan-stripe.e2e.test.ts) | `HOSTED_PLAN_E2E_STRIPE_SECRET_KEY` (a **test-mode** key; a live one is refused) + `HOSTED_PLAN_E2E_STRIPE_PRICE_ID` (the hosted plan's test-mode price). No Docker: it is the platform's own Stripe client against Stripe |
+| Unit | nothing outside the process | turn end, after a land, CI |
+| Integration | temp trees, git, subprocesses, Docker | turn end, after a land, CI |
+| `pnpm e2e` | Docker for the daemon image, plus Cloudflare, Discord, Stripe or Fly credentials; `e2eTier` makes a suite stand down without them | nightly |
+| `e2e:hermetic` | a Docker-in-Docker host from [`_tools/dind-host`](../../_tools/dind-host), Postgres, faked Stripe | CI |
+| `e2e:providers` | the real agent CLIs against [`_tools/fake-model`](../../_tools/fake-model), no network | CI before a release; nightly with the newest CLIs |
+| `e2e:browser` | Playwright ([`_tools/e2e`](../../_tools/e2e)) against a localhost Postgres, API, Vite and daemon container | a developer machine |
+| `e2e:mobile` | Chromium over the demo build, checking every mobile route's geometry | `pnpm e2e:mobile` |
+| Onboarding | Playwright ([`_tools/onboarding`](../../_tools/onboarding)) with [`_tools/fake-upstream`](../../_tools/fake-upstream) standing in for model endpoints | nightly |
+| Desktop smoke | installed desktop builds ([`_tools/desktop-smoke`](../../_tools/desktop-smoke), [`_tools/desktop-smoke-windows`](../../_tools/desktop-smoke-windows)) | CI, release, nightly |
+| Mutation | [`stryker.conf.mjs`](../../stryker.conf.mjs) over unit suites of the daemon and its contract | the daemon's `test-strength` chore |
 
-A tier that is asked to run and finds a credential missing puts the variable's name in its own suite title,
-which is what the runner prints beside its skip marker: so the nightly's log states which tiers ran without anything
-logging it. Widening the nightly is adding a protected CI variable, not editing a job. The credentials a
-tier declares and the `passThroughEnv` list on turbo's `e2e` task are the same statement written twice: a
-variable absent from `turbo.json` never reaches the suite, however CI is configured.
+## Where they run
 
-Two tiers deliberately sit outside that command, each under its own turbo task, and neither declares
-credentials because neither needs any:
-
-- **hermetic** (`pnpm e2e:hermetic`): needing no secrets at all is exactly what earns it a run on every merge
-  request rather than nightly, so it reads its own switch and must not wake with the gated ones. Two suites
-  answer to it: the CLI's ([hermetic.e2e.test.ts](../../_deploy/cli/src/hermetic.e2e.test.ts), above) and the
-  hosted plan's ([hosted-plan.e2e.test.ts](../../_platform/api/src/e2e/hosted-plan.e2e.test.ts)),
-  which is the money path as one system: the real api (`createApp`, the real router, Better Auth's real
-  session and deletion hook) on a Postgres testcontainer, with Stripe stood in for by
-  [stripe-fake.ts](../../_tools/testing/src/stripe-fake.ts) at the client's one seam (`HOSTED_PLAN_STRIPE_API_URL`).
-  A checkout the real client encoded, completed on "Stripe", delivered as a signed webhook to the real route,
-  mirrored by the real `updateMany` ordering guard into a real row, and read back as the entitlement the rest
-  of the platform acts on (the wake that was refused is allowed, the offer says "on your plan", the meter comes
-  off); then slots with proration, a cancel in the portal, a failed charge, an ended plan, the same customer
-  buying again, and the account deleted with its subscription. [billing-e2e.md](../design/billing-e2e.md) is
-  the coverage map and the Stripe go-live checklist.
-- **browser** ([_tools/e2e](../../_tools/e2e), `pnpm e2e:browser`): a dev-machine tier. Its whole stack answers on
-  `localhost`, and every CI job here drives a docker-in-docker *service* that publishes ports on its own
-  namespace, so sharing the `e2e` name only ever swept it into a nightly it could not pass.
+- **Turn end**, `pnpm verify:turn` ([`verify-turn.mjs`](../../_tools/scripts/verify/verify-turn.mjs)): typecheck and tests on the packages the turn affected, re-run once on failure. [`failure-units.mjs`](../../_tools/scripts/verify/failure-units.mjs) sets aside failures main already had, and [`flakes.mjs`](../../_tools/scripts/verify/flakes.mjs) logs a test that passes on the re-run as a flake. The assertion ratchet refuses a test file made weaker without a `test!:` subject or `Test-Note:` trailer.
+- **After a land**, `pnpm verify` ([`verify.mjs`](../../_tools/scripts/verify/verify.mjs)): the whole repository, recorded as a verdict for the next turn and the push.
+- **Pre-push**, [`verify-push.mjs`](../../_tools/scripts/verify/verify-push.mjs): replays typecheck and test from a recorded verdict for the same tree, or leaves them to CI; `--suite` runs them locally.
+- **CI**, [`.github/workflows`](../../.github/workflows): `ci.yml` builds and tests each affected area through `verify.yml`, runs the provider tier, re-runs a subset of suites under unusual time zones (`verify-clocks`), and runs the hermetic, billing and desktop tiers. `nightly.yml` runs `pnpm e2e`, onboarding and the desktop update tiers. Jobs run on self-hosted runners in the `ci-base` image.
+- `pnpm test` fans out through `turbo run test --only`, with `TEST_WORKERS` sized to the machine's memory by [`test-workers.mjs`](../../_tools/scripts/verify/test-workers.mjs).

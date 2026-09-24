@@ -1,26 +1,29 @@
-# @intentic/sdk
+# sdk
 
-The **authoring surface** a user writes their `deploy.config.ts` against. A declaration uses `i.have.host` / `i.have.cloudflare` (the inventory you have) and `i.want.app` (what you want), wiring each app to its host/Cloudflare via `on` / `expose`. The split is lifecycle ownership, not requirements: intentic never creates or destroys a have, and owns a want end-to-end (create, reconcile, prune, destroy); requirements are the input fields, and may point at haves and wants alike. The support stack each app needs (git+CI, deploy orchestrator, runner, tunnel, routes) is *derived* by the resolvers, authors never name it. Depends on [`@intentic/graph`](../graph), [`@intentic/need-resolver`](../need-resolver), and [`@intentic/state-resolver`](../state-resolver).
+The authoring surface of a `deploy.config.ts`: a typed builder that records what infrastructure you have and what you want as a serializable intent.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    config["deploy.config.ts"] -- "defineIntent(i => …)" --> sdk(["sdk<br/>createStack"])
+    sdk -- "IntentSet" --> resolve["intentic deploy resolve"]
+    sdk -- "defineStack" --> state["state-resolver<br/>one-shot graph"]
+```
 
-- Provide the fluent `i.have.*` / `i.want.*` builders and capture them into an `IntentSet`.
-- `defineIntent`, the authoring entry: declaration → `IntentSet` (what `intentic deploy resolve` consumes).
-- `defineStack`, one-shot convenience: declaration → a single compiled `DesiredStateGraph`.
-- Export the handle types (`Host`, `Cloudflare`, `App`, `Repo`, `Deployment`, …) used to wire declarations.
+- `i.have.*` declares inventory intentic reads but never creates or destroys: hosts over SSH, a Cloudflare account, GitHub or GitLab, a backup target, Discord, Stripe.
+- `i.want.*` declares what intentic owns end to end: apps with environments, catalog services, backing databases, caches, auth and object storage, users, teams and per-host agent workspaces.
+- Each call returns a typed handle whose properties are inert refs (`host.internalIp`, `app.environments.production.url`). Passing a handle to another declaration is how wiring happens; nothing is derived here.
+- `defineIntent` is what a config exports. `defineStack` also runs the resolvers, which tests and fixtures use to get a graph without the CLI.
 
 ## Key files
 
-- [src/index.ts](src/index.ts): `defineIntent` / `defineStack` (public entry).
-- [src/handles.ts](src/handles.ts): the `i.have`/`i.want` builders and handle types.
-- [src/stack.ts](src/stack.ts): assembles the `IntentSet` and runs the resolver pipeline.
-- [src/\_\_fixtures\_\_](src/__fixtures__): the canonical `deploy.config.ts` + expected graph (snapshot).
+- [src/index.ts](src/index.ts) — `defineIntent` and `defineStack`.
+- [src/handles.ts](src/handles.ts) — the `Have`, `Want` and handle interfaces an author sees.
+- [src/stack.ts](src/stack.ts) — `createStack`, the recorder that turns calls into an `IntentSet`.
+- [src/__fixtures__/deploy.config.ts](src/__fixtures__/deploy.config.ts) — a small config, compiled and asserted against `deploy.graph.ts`.
+- [src/outputs.test.ts](src/outputs.test.ts) — handle output refs must match the `OUTPUTS` table in `resources`.
 
-## How it fits
+## Commands
 
-The front door of the pipeline. A `deploy.config.ts` imports this + `@intentic/graph`; `defineIntent` yields an `IntentSet`; `need-resolver` then `state-resolver` turn it into the `DesiredStateGraph` the `engine` reconciles.
-
-## Conventions & gotchas
-
-- Authors import `env` (secret refs) from its true source, [`@intentic/graph`](../graph): **not** re-exported here.
-- The fixtures are snapshot-tested ([src/index.test.ts](src/index.test.ts), [src/deploy.config.test.ts](src/deploy.config.test.ts)); changing builder output updates them. See [_tools/examples/deploy.config.ts](../../_tools/examples/deploy.config.ts) and [ARCHITECTURE.md](../../ARCHITECTURE.md).
+```sh
+pnpm --filter @intentic/sdk test
+```

@@ -2,8 +2,8 @@ import { z } from "zod";
 import type { FlyMachineConfig } from "@intentic/sandbox-run/fly";
 
 // Plain-fetch client for Fly's Machines API, no provider SDK; the platform's own token (config.hosted) keeps permanent
-// access to every machine it creates, per the trust model in ARCHITECTURE.md. One Fly app per sandbox on its own
-// network (`<prefix>-<sandbox id>`), since Fly's 6PN spans an org by default; only Fly's edge proxy reaches in.
+// access to every machine it creates, per the trust model in docs/architecture/topology.md. One Fly app per sandbox on
+// its own network (`<prefix>-<sandbox id>`), since Fly's 6PN spans an org by default; only Fly's edge proxy reaches in.
 
 const BASE = `https://api.machines.dev/v1`;
 

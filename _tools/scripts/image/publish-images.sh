@@ -48,7 +48,7 @@ BUILDKIT_CACHE_MAX_AGE="${BUILDKIT_CACHE_MAX_AGE:-72h}"
 # over an untested path here, so this stays — but it is best-effort: a build must NEVER fail over builder setup.
 #
 # AND ITS CACHE IS THE ONE STORE ON THESE RUNNERS THAT NOTHING EVICTED. Every other shared directory has an
-# owner in docs/ci-runner.md's "Keeping it bounded": turbo gets a 14-day sweep in the pnpm-setup action, pnpm
+# owner in docs/ops/ci-runner.md's "Keeping it bounded": turbo gets a 14-day sweep in the pnpm-setup action, pnpm
 # and cargo grow only when a version is added, xwin and playwright are fixed-size downloads. This one is a
 # `docker-container` driver, so its BuildKit state is a docker VOLUME on the host daemon rather than anything
 # under /ci-cache — outside every sweep that file describes, and outside a `docker system prune` that spares

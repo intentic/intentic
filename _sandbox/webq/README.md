@@ -1,64 +1,46 @@
-# @intentic/webq
+# webq
 
-Agent-native web fetch: any URL as clean, token-budgeted markdown, and bounded same-site crawls, over one shared cache.
+A CLI that fetches web pages for an agent as pruned, token-budgeted markdown and crawls a site into files, over one shared cache.
 
-`webq` is to the web what `iq` is to the workspace — the tool an agent reaches for when the answer is on a
-page, sized for a context window instead of a screen. A fetch prints a capsule (title, final URL, token
-cost, where the bytes came from), the content up to a budget, and always saves the whole page to a file the
-agent can `Read` later. A crawl turns a docs site into a directory of markdown files plus an index, under
-hard caps it reports rather than hides.
+```mermaid
+flowchart LR
+    agent["Agent<br/>webq fetch · crawl"] --> webq(["webq"])
+    webq --> cache["Shared cache<br/>per URL and render mode"]
+    webq --> http["Static HTTP"]
+    webq --> chromium["Headless Chromium<br/>empty app shells"]
+    webq --> out["Capsule on stdout<br/>whole page saved"]
+```
 
-The interesting decisions:
+- A raw page is mostly navigation and script, and one docs page can fill a context window. `webq fetch` prints a
+  capsule (title, final URL, token cost, cache, network or browser), then the page with its chrome pruned and clipped
+  to `--budget`, and saves the whole page as markdown with front matter.
+- `--query` keeps only the blocks relevant to a question (BM25). On a crawl it also visits matching links first.
+- When the static HTML is an empty app shell, the page renders in the image's Chromium if that feature pack is
+  installed; without it webq says so and serves the static HTML.
+- Crawls stay on the start origin, obey `robots.txt` and report every skipped URL by reason, so a capped crawl never
+  reads as complete.
+- The sandbox image puts `webq` on PATH and loads [plugin/skills/webq/SKILL.md](plugin/skills/webq/SKILL.md), which
+  tells agents when to use it over WebFetch. It does not handle pages behind a sign-in. [fileq](../fileq) reuses the
+  `./dom` and `./markdown` exports for HTML-based documents.
 
-- **Fit-first.** By default pages are pruned to their readable content with a scoring walk (text density,
-  link density, tag kind, class/id smell) ported from crawl4ai's `PruningContentFilter` (Apache-2.0) —
-  battle-tested weights, our tree. `--raw` turns it off; `--query` adds a BM25 pass that keeps only blocks
-  relevant to a question.
-- **The cheap path has to be earned out of.** Static HTTP first; the image's Chromium (the browser feature
-  pack) is launched only when the static HTML is visibly an empty app shell, or on `--browser force`.
-  Without the pack, webq serves the static HTML and says so — it never downloads a browser mid-command.
-- **Honesty over completeness.** Byte caps, page caps, robots exclusions, sitemap truncation and JS-without-
-  browser degradation all surface as notes and per-reason skip counts. A capped crawl that reads like a
-  complete one is the failure mode the output format exists to prevent.
-- **One cache, raw HTML.** Fetches are cached by (URL, render mode) for 15 minutes, before any transform, so
-  every mode reuses one fetch and parallel subagents researching the same site stop paying the network twice.
-- **Neutralized in the bytes.** Every page's markdown passes `neutralizeOutsideText`
-  (`@intentic/base/outside-text`) before it is printed or saved: a forged `</untrusted-content>` or
-  `<system-reminder>` in a page must die in the saved file itself, because a later `Read` of that file gets no
-  envelope from the daemon. Same neutralizer as the daemon's seams and fileq's sidecars — one implementation,
-  or the copies drift and the drift is a working forgery.
-- **Crawls are polite by default.** robots.txt is parsed with Google's longest-match semantics and obeyed
-  (`--ignore-robots` is an explicit responsibility transfer), crawl-delay is honored (capped), crawls stay on
-  the start origin, and a `--query` makes the frontier best-first: links whose anchor text shares words with
-  the question are visited before their siblings.
+## Usage
+
+```sh
+webq fetch https://docs.example.com/guide --query "rate limits"
+webq crawl https://docs.example.com --max-pages 30
+```
 
 ## Key files
 
-- [src/lib/page.ts](src/lib/page.ts) — the pipeline every command runs: cache → HTTP → app-shell check → browser → prune/filter → markdown.
-- [src/lib/prune.ts](src/lib/prune.ts) — the fit-content scorer (the crawl4ai port, with attribution and the divergences noted).
-- [src/lib/markdown.ts](src/lib/markdown.ts) — DOM → markdown written for an agent reader: no escaping noise, absolute URLs, flow handling for loose text.
-- [src/lib/crawl.ts](src/lib/crawl.ts) — frontier, caps, robots, best-first scoring, and the skip accounting.
-- [src/app.ts](src/app.ts) — the CLI surface and the `--help` contract.
-- [src/cli.integration.test.ts](src/cli.integration.test.ts) — the whole surface driven against a loopback fixture site.
+- [src/app.ts](src/app.ts) — the commands and the `--help` text an agent reads.
+- [src/lib/page.ts](src/lib/page.ts) — one URL to one `PageResult`: cache, static fetch, browser fallback, notes.
+- [src/lib/prune.ts](src/lib/prune.ts) — scores elements and drops navigation and page chrome.
+- [src/lib/markdown.ts](src/lib/markdown.ts) — DOM to markdown with absolute links.
+- [src/lib/crawl.ts](src/lib/crawl.ts) — bounded crawl, breadth-first or query-steered, with skip counts.
+- [src/cli.integration.test.ts](src/cli.integration.test.ts) — the CLI end to end against a loopback fixture site.
 
-## How it fits
+## Commands
 
-The sandbox image bakes the CLI onto `PATH` out of the daemon's own dependency tree (the `lsp`/`iq`
-precedent in `_sandbox/sandbox/Dockerfile`), and ships [plugin/](plugin) — a skill teaching agents when to
-prefer `webq` over `WebFetch` (JS pages, whole-docs-site reads, repeated fetches) and when not to (one-off
-simple pages, anything needing sign-in, which belongs to the browser tools). Nothing in the daemon imports
-it, but it is no longer a pure island: `@intentic/fileq` imports the DOM → markdown writer (`./markdown`,
-`./dom` subpath exports) so workspace documents and fetched pages read by the same conventions.
-
-## Conventions & gotchas
-
-- Output and cache live under `WEBQ_HOME` (default `~/.cache/webq`); saved pages carry front matter
-  (url, title, fetched_at) so a file found later still says what it is.
-- Exit codes follow the grep convention agents already know: 0 content, 1 none (HTTP error, empty crawl),
-  2 broken invocation or broken install — and a broken install announces itself on stdout instead of
-  dying as a bare stack. That whole contract, the `WEBQ_HOME` layout, the capsule line and the budget cut are
-  [`@intentic/agent-cli`](../../_tools/agent-cli)'s, shared verbatim with `iq` and `fileq`: `src/cli.ts` names
-  this tool and its noun, and nothing else.
-- The integration suite drives the CLI in-process, not as a child process (`@intentic/agent-cli/testing`):
-  some sandboxes give each process its own loopback, which turns a spawn-based suite into a hang that says
-  nothing about webq.
+```sh
+pnpm --filter @intentic/webq test
+```

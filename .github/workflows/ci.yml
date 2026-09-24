@@ -7,7 +7,7 @@
 #
 # Node + pnpm are pinned by package.json engines/packageManager and baked into ci-base, so no version appears
 # here. The runner requirements — six instances, a shared /ci-cache on the same filesystem as the work dir,
-# and the host Docker socket — are in docs/ci-runner.md.
+# and the host Docker socket — are in docs/ops/ci-runner.md.
 #
 # FIRST RUN: ci-base is the one image with a bootstrap problem, because the jobs that could build it all run
 # INSIDE it — including `changes`, the job whose probe would otherwise notice it missing. On a repository that
@@ -47,7 +47,7 @@ permissions:
 
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-  # The two heavy stores live on the host directory the runner mounts at /ci-cache (docs/ci-runner.md), NOT in
+  # The two heavy stores live on the host directory the runner mounts at /ci-cache (docs/ops/ci-runner.md), NOT in
   # an Actions cache. Both are content-addressed stores that every job reads and appends to — exactly what a
   # shared directory is for, and exactly what a per-job archive is worst at. If the mount is absent both fall
   # back to the container's own filesystem: cold, never broken.
@@ -233,7 +233,7 @@ jobs:
   #
   # THE WORKFLOW LINT RUNS HERE TOO, and it is the one thing in this job that touches the network — two pinned
   # binaries into /ci-cache, once per runner per version, ~1s warm. It sits in this job rather than in one of
-  # its own on purpose: the DAG's widest wave is five against six runner processes (docs/ci-runner.md), and a
+  # its own on purpose: the DAG's widest wave is five against six runner processes (docs/ops/ci-runner.md), and a
   # fourth root would spend the single slot of headroom on a check that takes a second. What it buys is the
   # class of bug this pipeline keeps producing — a workflow that stops doing something and reports success.
   preflight:
@@ -1005,7 +1005,7 @@ jobs:
   #
   # `runs-on` names a label the Linux fleet does not carry, and that is load-bearing: `[self-hosted, intentic]`
   # is an AND over labels, so a Windows box carrying `intentic` would be handed container jobs it cannot run.
-  # See docs/ci-runner-windows.md — including why this runner must be started from a logged-in session rather
+  # See docs/ops/ci-runner-windows.md — including why this runner must be started from a logged-in session rather
   # than installed as a service (a service session has no desktop, and every assertion here reads a window).
   # Tier 1 only — everything it asserts is a property of the package and the OS, which is what lets it gate
   # main rather than sit in the nightly. The tiers that DO need a Docker daemon and a connected account are the

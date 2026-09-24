@@ -8,7 +8,7 @@
 // THE ONE THING ONLY THIS GATE CAN SEE is the tree that becomes main. A turn measures one worktree against its own HEAD
 // and a nightly measures main a day later with nobody attached; the push is the only moment at which the combined tree
 // exists AND somebody is standing there. That is why tidiness is judged here against the range (the checkout-gates block
-// below), and it is the finding docs/audits/tidy-job.md was written from.
+// below).
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -179,7 +179,7 @@ const lockfileRewriteOnly = () => {
 // a real cost with a measurement behind it (manifest.mjs splits the two by what a failure MEANS), and it used to refuse
 // nowhere anybody could act — `--tidy=warn` waved every one of them through here, and nightly.yml's `tidy` job read them
 // the next morning on a commit with no author attached. That job then failed on 14 of its 24 runs, 13 of them for
-// `layout` or `paths`, every finding traceable to one line in one commit a day or two old (docs/audits/tidy-job.md).
+// `layout` or `paths`, every finding traceable to one line in one commit a day or two old.
 //
 // THIS IS THE ONLY MOMENT THAT HAS BOTH HALVES. verify-turn asks the same question of a turn, but a turn measures its own
 // worktree against its own HEAD — a tree that never becomes main. What becomes main is this push, and the difference

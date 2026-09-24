@@ -1,31 +1,32 @@
-# @intentic/providers
+# providers
 
-The real **Provider SPI implementations** the engine reconciles against: the only seam between a compiled graph and live infrastructure. Each provider does `read` (stateless introspection), `diff` (pure decision), and `apply` (create/update) over SSH/Docker and the Forgejo/Komodo/Cloudflare/Authentik HTTP APIs. Depends on [`@intentic/engine`](../engine) (SPI types) + [`@intentic/graph`](../graph).
+The deploy tool's providers: one implementation of the engine's `Provider` contract per resource kind, reaching hosts over SSH and vendors over their HTTP APIs.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    engine["engine<br/>read · diff · apply · delete"] --> providers(["providers<br/>createProviders"])
+    providers -- "SSH + Docker" --> host["Hosts<br/>Forgejo · Komodo · backings · services"]
+    providers -- "SSH port-forward" --> cp["Forgejo · Komodo APIs"]
+    providers -- "HTTPS" --> vendors["Cloudflare · GitHub · GitLab<br/>Discord · Stripe"]
+```
 
-- Implement one provider per `ResourceType` and assemble them into the `ResourceType → Provider` map (`createProviders`).
-- Wrap external systems behind injectable API adapters (Forgejo, Komodo, Cloudflare, Authentik, Discord, Garage) so providers stay testable.
-- Own the host/SSH transport, Docker operations, DNS/tunnel routes, repos/CI, deployments, backups/restore, and identity (users/orgs/teams).
-- Validate node inputs with zod (`parseInputs`) before any I/O.
+- `createProviders` assembles the full kind-to-provider map over injectable dependencies: the SSH executor and each vendor API client. Tests pass fakes and drive the whole suite in memory.
+- Every container intentic starts on a host carries `intentic.id` and `intentic.type` labels, so `list` finds orphans with one `docker ps` per host.
+- Forgejo and Komodo APIs are reached through a loopback port-forward over SSH, because the Cloudflare tunnel behind their public routes may be the very thing an apply is changing.
+- A NAT'd host is reached through its own Cloudflare tunnel (`via: "cloudflared"`). Host keys are trusted on first use and pinned.
+- Stateful services on a host with the `guarded` update policy snapshot their volumes with restic before an image bump and roll back if the new image fails its health check.
 
 ## Key files
 
-- [src/index.ts](src/index.ts): `createProviders` + `ProviderDeps`; re-points to every `create*Provider` factory.
-- `src/<kind>.ts`, one provider per kind: e.g. [src/network/cloudflare.ts](src/network/cloudflare.ts), [src/forgejo/forgejo.ts](src/forgejo/forgejo.ts), [src/komodo/komodo.ts](src/komodo/komodo.ts), [src/komodo/deployment.ts](src/komodo/deployment.ts), [src/network/cf-route.ts](src/network/cf-route.ts), [src/forgejo/ci.ts](src/forgejo/ci.ts).
-- `src/<system>-api.ts`, HTTP adapters: [src/forgejo/forgejo-api.ts](src/forgejo/forgejo-api.ts), [src/komodo/komodo-api.ts](src/komodo/komodo-api.ts), [src/network/cloudflare-api.ts](src/network/cloudflare-api.ts), [src/auth/authentik-api.ts](src/auth/authentik-api.ts); fakes like [src/forgejo/forgejo-api.fake.ts](src/forgejo/forgejo-api.fake.ts).
-- [src/backings](src/backings): `sshExecutor` (+ `SshExecutor`/`SshSession`); [src/api-validation.test.ts](src/api-validation.test.ts), input-validation coverage.
-- The three **skeletons** every Docker-deploying provider is built from, so a new one is a spec rather than another copy of `read`/`diff`/`apply`/`delete`/`list`:
-    - [src/core/backing-provider.ts](src/core/backing-provider.ts) — one container per node id (postgres, valkey, garage, authentik): a schema, a compose file, a readiness probe.
-    - [src/core/instance-binding.ts](src/core/instance-binding.ts) — an app's slice INSIDE a backing (a database, an ACL user, a bucket), reached with `docker exec`.
-    - [src/services/compose-service.ts](src/services/compose-service.ts) — one singleton stack per kind (the catalog services, signoz), diffed per compose service.
-    - [src/core/host-files.ts](src/core/host-files.ts) is the writing the three share: rewritten config files, and the write-once `.env` whose two quoting layers are the part that used to be got wrong.
+- [src/providers.ts](src/providers.ts) — `createProviders`, the map the engine reconciles against.
+- [src/core/ssh.ts](src/core/ssh.ts) — the SSH executor, cloudflared forwarding and host-key pinning.
+- [src/core/over-ssh.ts](src/core/over-ssh.ts) — why and how control-plane APIs go over SSH.
+- [src/core/backing-provider.ts](src/core/backing-provider.ts) — the shared shape of Postgres, Valkey, Garage and Authentik.
+- [src/komodo/deployment.ts](src/komodo/deployment.ts) — one Komodo deployment per app environment.
+- [src/suite.engine.test.ts](src/suite.engine.test.ts) — the whole provider stack reconciling an app over fakes, then again as a noop.
 
-## How it fits
+## Commands
 
-The infra boundary. `engine` defines the SPI and consumes a `Providers` map; this package is the production implementation of that map (the `cli` builds it via `createProviders`). Tests inject the fakes instead.
-
-## Conventions & gotchas
-
-- Providers are constructed from injected deps/adapters: never reach for ambient globals; pass a fake adapter in tests.
-- Keep `diff` pure: do all reads in `read`, all mutations in `apply`. Stamp created resources (`intentic.id=<id>`) for future orphan detection. See [ARCHITECTURE.md](../../ARCHITECTURE.md).
+```sh
+pnpm --filter @intentic/providers test
+```

@@ -40,7 +40,7 @@ rules:
     #
     # The callees are `./.github/workflows/verify.yml` and `./.github/workflows/release.yml` — IN THIS
     # REPOSITORY, on the same commit, reviewed in the same diff, and reachable only from a branch pushed here
-    # (the fork boundary, docs/ci-runner.md). zizmor's concern is a called workflow it cannot see; there is no
+    # (the fork boundary, docs/ops/ci-runner.md). zizmor's concern is a called workflow it cannot see; there is no
     # such workflow here. Enumerating each secret per call would move the same set across the same boundary,
     # while adding a list that goes stale the first time a job needs one more.
     #

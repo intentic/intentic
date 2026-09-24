@@ -1,88 +1,49 @@
-# The platform, and what it is allowed to know
+# The platform
 
-The hosted plane — sign-in and the sandbox registry — the line between it and the product, and what happens
-as the fleet grows.
+The hosted account service: Google sign-in, the registry that tells a browser where each sandbox is, and the lifecycle and billing of the sandboxes intentic hosts.
 
-## Control plane vs application plane
+```mermaid
+flowchart LR
+    browser["Editor in the browser"] -->|"/api/auth · /rpc"| api(["platform api"])
+    machine["Machine running<br/>the setup command"] -->|"/setup/claim"| api
+    daemon["Sandbox daemon"] -->|"/sandbox/announce<br/>connect token"| api
+    api --> db["Postgres<br/>_platform/prisma"]
+    api -->|"power · volumes"| fly["Fly Machines API"]
+    api --> stripe["Stripe<br/>hosted plan"]
+    api -->|"signs grants for"| ingress["Ingress"]
+```
 
-Every need carries a `plane`: its role, independent of where it runs ([needs.ts](../../_deploy/need-resolver/src/needs.ts)):
+## What it is
 
-- **Control plane**, the deploy machinery: `source-control` + `docker-registry` (Forgejo by default,
-  GitHub/GitLab when declared) and `infra-control` (Komodo, on every stack): git/CI plus the deploy
-  orchestrator. The local `intent` repo
-  (`deploy.config.ts`) and `desired-state` repo (the artifact + execution status) drive it: `intentic
-  resolve` runs the flow above and writes the artifact, `intentic deploy apply` executes it. A remote, PR-managed
-  control plane (a standalone Forgejo watching the intent repo) is a planned later evolution of this same
-  flow. ([_deploy/cli/src/resolve/resolve.ts](../../_deploy/cli/src/resolve/resolve.ts), [artifact.ts](../../_deploy/cli/src/lib/artifact.ts),
-  [app.ts](../../_deploy/cli/src/app.ts))
-- **Application plane**, what actually serves an app: its `deployment-target` (the app's runtime on the
-  host) and its `domain` (the Cloudflare tunnel + DNS routes). Both are *derived from* `i.want.app` and
-  emitted alongside the control-plane stack. ([_deploy/state-resolver/src/resolvers/platform.ts](../../_deploy/state-resolver/src/resolvers/platform.ts),
-  [_deploy/providers/](../../_deploy/providers/src/))
+- [`_platform/api`](../../_platform/api) runs on Bun with Hono. Its oRPC router ([`router.ts`](../../_platform/api/src/router.ts)) serves the editor through the contract in [`_shared/api-contract`](../../_shared/api-contract), and Better Auth handles sign-in with Google as the only provider ([`auth.ts`](../../_platform/api/src/auth.ts)).
+- [`app.ts`](../../_platform/api/src/app.ts) holds the plain HTTP routes the machines call: the setup claim, the daemon's announce, farewell and boot report, the ingress's reachability lookup, and the Stripe webhook.
+- [`_platform/prisma`](../../_platform/prisma) owns the Postgres schema and migrations. [`_platform/ingress`](../../_platform/ingress) is the public edge a sandbox tunnels to; see [topology.md](topology.md).
+- The editor itself is a static build of [`_editor/web`](../../_editor/web) served by nginx at `app.intentic.dev`, next to the api. [`_tools/selfhost/platform`](../../_tools/selfhost/platform) runs the same stack (Postgres, api, web, ingress) for an operator's own fleet.
 
-The whole per-host support stack is self-contained: its control-plane Forgejo is just another reconciled
-node, so `apply` needs no pre-existing control plane. A future remote control plane would reuse the same
-`forgejo` provider: a different node instance, not a different implementation.
+## What it stores
 
+[`schema.prisma`](../../_platform/prisma/schema.prisma), in four groups:
 
-## Scaling model & limits
+- **Accounts**: `User`, Better Auth's `Session`, `Account` and `Verification`, and `ApiToken` for provisioning from a script or an agent.
+- **The registry**: `Sandbox` (the daemon's public URL, its last-seen time, the encrypted connect token, the setup code and the last boot report), `SandboxMember` for invitations, and `SandboxTrash` for a deleted sandbox that can still be restored. The daemon enforces membership; the platform only records it.
+- **Hosted sandboxes**: `HostedMachine` and the warm pool `HostedPoolMachine`, image builds, migrations, cleanups, awake-minute metering, the Stripe subscription mirror (`HostedPlan`, `HostedPlanItem`) and the abuse ledgers.
+- **Everything else**: the free trial's meter, the x402 wallet's custody handle and payments, APNs push devices, the desktop sign-in handoff, and admin statistics.
 
-Who pays for scale is a design decision, not an accident:
+## How a sandbox joins
 
-- **Compute is user-owned past the starter.** Every sandbox but one shape runs on the user's PC
-  (`connect.sh`) or the user's server (the `workspace` provider): no scheduler, no capacity manager, and
-  agent turns, dev servers and builds cost intentic nothing. The exception is the **hosted starter**, the
-  machine a browser arrival is given (Fly, one microVM per sandbox), which intentic does pay for: it is
-  bounded by an hour allowance per account (smaller in an account's first days) and by the idle-stop that puts
-  it to sleep the moment nobody is connected, and it is the rung a user leaves the moment they want power
-  rather than convenience. It is also the one rung somebody would farm or mine on, so it carries its own
-  defences (`docs/design/hosted-abuse.md`): per-address and per-domain caps on new machines, and a watch over
-  the provider's own per-machine meter that stops a free machine at full load for a whole window and suspends
-  the account's hosted lane on the repeat — from outside the box, since the platform cannot look inside one. It is
-  bounded a third way, by the provider: a Fly org's machine allowance is finite, so the platform counts its
-  own fleet — sandboxes, warm stock, builders — against `HOSTED_MAX_MACHINES` and treats running out as a
-  fact to state rather than a failure to report. The setup page says there are no machines free and points at
-  the rung that runs on the reader's own computer, the warm pool stops prewarming so the last slots go to
-  people, and the admins are mailed, because raising an allowance is a person's job
-  (`_platform/api/src/sandbox/hosted/hosted-capacity.ts`). (Corollary: intentic sets no `--cpus` cap;
-  a sandbox that saturates the CPU is the user's machine's problem. Memory is the one exception, and it
-  is a narrow one: the local shape carries a `--memory`/`--memory-swap` cap, because user-owned compute
-  still means a runaway build must not be able to take the user's desktop down with it, and a cgroup is
-  the only thing that can stop it in time. It is a **share** of the machine, not a number — everything
-  the docker engine has but a 3 GiB reserve for its other tenants, never under 4 GiB (`localSandboxMemory`,
-  `_shared/sandbox-run/src/index.ts`) — and it is only the default: an owner's own cap replaces it as typed,
-  reserve included and even past the engine's size, because the machine is theirs, and everything inside the
-  box that reads its ceiling reads the smaller of the cap and the engine. The measurement rides for free:
-  `intentic sandbox run-command` answers from inside an uncapped probe container the flow was already
-  starting, where `/proc/meminfo` reports the docker engine's own total. Hosted shapes opt out via
-  `init: false` and own their sizing.)
-- **The platform is off the hot path.** The browser drives the daemon directly; the daemon announces
-  its URL on boot (not a heartbeat: platform traffic is proportional to boot events, not sandbox
-  count × a tick); the SPA is static files. Steady-state platform traffic per active user is roughly
-  a `sandbox.list` every 30 s of navigation plus a plan check. The API is stateless with DB-backed
-  sessions, so it scales horizontally; background jobs (retention sweep, the zone's DNS sweep, hosted-pool
-  top-up) take a Postgres advisory lock so replicas don't duplicate the work.
-- **The one ceiling intentic owns is the edge** user-run sandboxes are reached through: `@intentic/ingress`
-  ([_platform/ingress](../../_platform/ingress)), N stateless machines on Fly behind anycast addresses. Intentic
-  operates no host in that path any more, so the limit is no longer one home server's uplink and its overlay
-  router's connection table. It is metered vendor bandwidth (~$0.02/GB out of North America and Europe) that
-  grows by adding machines, which makes the scaling question a bill and a region's capacity rather than a
-  saturated link nobody else can relieve. And a sandbox's registration is a live connection rather than a row,
-  so tunnels re-establish themselves against whichever machine answers next. A tunnel lands on the machine
-  nearest the sandbox and a browser on the machine nearest itself, so the machines tell each other what they
-  hold and hand a request across the private network to the one that has it — a hop the owner at home never
-  takes, since anycast puts their laptop and their browser on the same machine
-  ([_platform/ingress/src/cluster.ts](../../_platform/ingress/src/cluster.ts)). Hosted sandboxes do not count
-  against that ceiling at all: their bytes go from Fly's proxy to their own machine, and the edge is asked
-  once per hostname per cache TTL for a routing decision. Their bill is the machine's own egress.
-  A sandbox still costs ZERO DNS records: one wildcard record and one wildcard
-  certificate (issued and renewed over DNS-01, $1/mo) serve every hostname. That is what replaced a shared
-  Cloudflare account where each sandbox held ~10 records against a per-zone cap, and a full zone answered
-  every new setup with error 81045. Nothing accumulates to sweep, either: reachability is a signature the
-  platform mints, so there is no account anywhere to reconcile on a nightly pass. Two things keep bytes off
-  the meter — a sandbox on the same machine as its desktop agent syncs over loopback instead of through the
-  edge, and users who publish their own sandbox under their own domain don't touch it at all.
-- **Postgres stays small.** Workspace state (chat history, files, inventory, secrets) lives in the
-  sandbox, never the platform: per-user platform data is a handful of rows. Hot-path columns are
-  indexed and the connection pool is bounded per replica (`DATABASE_POOL_MAX`), so replicas × pool
-  stays under `max_connections` by configuration, not luck.
+1. The owner names a sandbox in the editor. The platform writes a `Sandbox` row and mints a setup code ([`setup-code.ts`](../../_platform/api/src/sandbox/setup-code.ts)) valid for thirty minutes.
+2. The setup command on the owner's machine redeems it at `/setup/claim` for the connect token, the reachability grant and the ingress address, then starts the container.
+3. The daemon announces its URL and liveness with the connect token, and opens its tunnel to the ingress.
+4. The editor lists the owner's sandboxes and talks to each daemon directly. The platform is never on that path.
+
+## Hosted sandboxes
+
+[`hosted.ts`](../../_platform/api/src/sandbox/hosted/hosted.ts) gives each hosted sandbox its own Fly app, machine and volume, booting the same public sandbox image every other lane runs, in a region chosen by where the owner is. The platform starts and stops machines (they stop when idle), resizes and moves them, keeps a pool of warm machines, and meters awake time against the hosted plan ([`hosted-plan.ts`](../../_platform/api/src/sandbox/hosted/hosted-plan.ts)): a Stripe subscription for a bigger machine than the free one. The tier ladder is in [`hosted-tiers.ts`](../../_tools/constants/src/hosted-tiers.ts).
+
+Background jobs started in [`main.ts`](../../_platform/api/src/main.ts) reap orphaned machines, refill the pool, finish builds, meter usage, watch for abuse and check health.
+
+## What it does not do
+
+- It does not relay or inspect agent turns. The one exception is the optional free trial ([`trial`](../../_platform/api/src/trial)), whose turns use platform-owned model accounts.
+- It holds no credential that drives a sandbox the owner runs. It can power, resize and destroy only the machines it hosts.
+- It does not deploy anything for users; that is the [deployment engine](deploy-engine.md), run from inside a sandbox.

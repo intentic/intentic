@@ -1,44 +1,34 @@
-# @intentic/ext-git-history
+# git-history
 
-One repository's commit graph, its branches, and the actions you can take on them.
+The Git tab of a repository's panel: its commit graph across every ref, with branch, tag, stash, merge, rebase and undo actions on it.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    tree["Workspace tree<br/>repo row"] --> tab(["git-history<br/>Git tab"])
+    palette["Command palette<br/>Show Git History"] --> tab
+    tab -->|"GET /git/*/log · diffs"| daemon["Daemon git routes"]
+    tab -->|"POST checkout · merge · rebase · undo"| daemon
+    daemon --> repo["Repository in /work"]
+    daemon -->|"ref push"| tab
+```
 
-- Draw the history as a graph: commits, branches, merges, and where you are in it.
-- Open a commit and show what it changed, as a file tree, and open any of those files' diffs beside the graph.
-- Search commits, switch and group branches, manage stashes, undo the last operation.
+- Runs in the browser, compiled into the web bundle. Every git operation is a daemon route listed in the manifest's `permissions.sandbox`; the extension never touches the repository itself.
+- Registered as an auxiliary `directory` view, so every repository gets the tab without starving views that serve only unclaimed ones. The workspace root has no tree row, so a `documents` entry and the `git-history.open` command open its history instead.
+- Clicking a file in a commit opens its diff in the editor's companion pane, from a repository panel and the root's document alike, so the graph stays on screen. A click peeks and a double-click keeps the tab.
+- Uncommitted work draws as an ordinary row parented to `HEAD`, and stashes splice in above the commit they were taken on, so the lane layout handles both without special cases.
+- Undo walks the branch back over its last move and leaves already-fixed files alone; Checkpoints restore the working tree instead. A halted merge or rebase left by a terminal shows with a way out.
+- History loads page by page as the graph scrolls; search covers only loaded pages.
 
 ## Key files
 
-- [src/graphLayout.ts](src/graphLayout.ts): turning a commit list into a drawable graph; the hard part of this package.
-- [src/groupBranches.ts](src/groupBranches.ts): how branches collapse into something readable at forty refs.
-- [src/commitFileTree.ts](src/commitFileTree.ts): one commit's changes as a tree.
-- [src/useGitLog.ts](src/useGitLog.ts): reading history from the daemon, paged.
-- [src/useUndo.ts](src/useUndo.ts): what "undo" means for a git operation, and what it refuses to do.
-- [src/extension.ts](src/extension.ts): activation: the repository's Git tab, and the workspace root's document.
+- [src/extension.ts](src/extension.ts) — the per-repository view, the root document and the palette command.
+- [src/GitHistoryTab.vue](src/GitHistoryTab.vue) — the graph, inline commit detail, diffs and the context menu.
+- [src/graphLayout.ts](src/graphLayout.ts) — pure lane and colour geometry for the graph.
+- [src/useGitLog.ts](src/useGitLog.ts) — the paged log query and lazy per-commit detail.
+- [src/useUndo.ts](src/useUndo.ts) — the last branch-moving action and its reversal.
 
-## How it fits
+## Commands
 
-**A tab in the repository's management panel.** A repository's history is read while looking at that
-repository's files, so it opens in the Workspace's editor area rather than navigating away from them. It is the
-first tab of the panel a directory row's cog opens, beside Docs, Health, Apps and the rest: everything a
-repository offers to be read or run is behind that one icon, rather than an icon per surface on the row.
-
-The workspace root is the exception. It has no tree row, and so no panel, so its history stays a document the
-palette opens (`git-history.open`) and no repository row offers one.
-
-The graph is WIDE, which is why it earns the editor area rather than the sidebar. This is the division VSCode
-makes between its SCM list and its Git Graph tab; the uncommitted half of the story: the Changes review:
-stays in the app's sidebar where it already lives.
-
-**The diff opens BESIDE the graph, not over it.** Clicking a file in a commit hands the host a diff, and because
-the active tab is a repository panel or the root's document, both surfaces with a file list in them, the host puts
-that diff in the editor's companion pane (its `EditorStrip`) and leaves the graph where it is. Reading a commit is a list and a diff, and in one pane they take
-turns: every file clicked used to replace the very list that named it. A click is a PEEK (one companion tab,
-replaced by the next file) and a double-click keeps the tab, the grammar the Changes panel already uses; the row
-whose diff is showing stays marked, so the two halves read as one view. The tab opens on the click with the
-status letter and ± counts it already knows, and its content lands underneath (`pending` + `fillDiff`).
-
-## Conventions & gotchas
-
-- Every action goes through the daemon's git routes. Nothing here shells out, and nothing here holds a credential.
+```sh
+pnpm --filter @intentic/ext-git-history test
+```

@@ -6,7 +6,7 @@ import { RUNNERS } from "../../../../lib/queryKeys";
 import { sandboxError, sandboxJson, sandboxRequest } from "../../client/sandboxClient";
 import { manageDeviceSandbox } from "../useDevices";
 
-// This sandbox's runners (docs/remote-runners-plan.md): one list read by the Devices view and the
+// This sandbox's runners: one list read by the Devices view and the
 // composer's placement picker. Polled slowly, since online/busy status rarely needs finer resolution.
 const POLL_MS = 15_000;
 

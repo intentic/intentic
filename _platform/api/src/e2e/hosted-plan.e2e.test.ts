@@ -421,7 +421,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         // The free slot is empty and offered again: this account's one machine stands on the Standard rung it moved to
         // earlier, and the card offers a free machine.
         expect((await offer()).body).toEqual({ enabled: true, remaining: 1, hours: { allowance: MONTHLY_HOURS, remaining: 0 } });
-        // The wake is judged against the machine's OWN rung, not the account's lane (docs/design/hosted-machines.md):
+        // The wake is judged against the machine's OWN rung, not the account's lane:
         // the spent forty hours are the free plan's, and a Standard machine is nowhere near Standard's ceiling.
         expect((await wake()).status).toBe(200);
     });

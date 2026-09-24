@@ -157,7 +157,7 @@ if (table.length > 0) {
 }
 console.log("");
 console.log(
-    `The rule (docs/ci-failure-audit.md): a class visible to the 60-minute job gets a detector in the seconds-long one. ` +
+    `The rule: a class visible to the 60-minute job gets a detector in the seconds-long one. ` +
         `The top code row whose reach is \`local\` is the next gate; an infra row is the fleet's; and a \`ci-only\` row is ` +
         `neither — no gate on a checkout can build an image or drive a Windows installer, so those are answered by making ` +
         `the job itself sturdier, not by tightening the push.`,

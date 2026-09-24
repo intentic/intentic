@@ -1,79 +1,39 @@
-# @intentic/base
+# base
 
-The runtime primitives every tier shares: the `when` condition language, disposal, the async schedulers, the
-outside-text neutralizer, the fuzzy path scorer, and the SQLite driver seam.
-
-Almost nothing in here knows what this product is. That is the point: each module replaced a decision
-that had been made independently, and differently, in the daemon and in the web app, where the copies could
-only ever drift apart. `outside-text` is the one deliberate exception — it IS product vocabulary (the
-untrusted-content envelope), and it sits here precisely because three separate writers (the daemon's seams,
-webq's saved pages, fileq's sidecars) must speak it byte-identically. There is no barrel export: a consumer
-imports the module it needs (`@intentic/base/when`), because these modules have nothing to do with each other
-and a package that offers them as one thing invites being treated as a junk drawer.
-
-## Responsibilities
-
-- **`when`**: parse and evaluate a condition written as a string, against a bag of named values the caller
-  supplies. This is what lets a condition live in a JSON manifest an extension ships, and be evaluated the same
-  way on both sides of the wire. Deliberately not a general expression language: no arithmetic, no calls, no
-  reaching past the context object, because these strings arrive from installed extensions.
-- **`lifecycle`**: teardown as structure rather than as a list somebody maintains. A store is registered into
-  where things are created and disposed once; it keeps going past a member that throws and reports the failures
-  together, so one bad stop cannot strand the ports and child processes queued behind it.
-- **`outside-text`**: the untrusted-content envelope (`wrapOutsideContent`) and the marker neutralizer
-  (`neutralizeOutsideText`) that makes it trustworthy: envelope forgeries, harness control tags and model
-  reserved tokens are folded (homoglyphs, zero-width characters) and replaced before content is sealed or
-  written to disk. Shared because the daemon's seams, webq's saved pages and fileq's derived sidecars must all
-  neutralize identically — a drifted copy is a working forgery.
-- **`fuzzy`**: the fzf-style path scorer and the ranking order built on it. Both ends of quick-open answer with
-  it — the sandbox's iq `files` engine and the app's own search box — and they used to answer with two copies of
-  it, kept identical by hand, where the same keystrokes could have put a different file first on either side.
-  `fuzzyRanker` is the same ranking for a query typed a key at a time: a keystroke that extends the query scores
-  only the paths the last one matched, with an identical answer.
-- **`errors`**: how a catch says which failure it expected. `isMissing` is ENOENT or ENOTDIR and nothing else,
-  and `undefinedIfMissing` is the `.catch` handler built on it: "not there" answers undefined, and EACCES, EIO or
-  a bug's TypeError still arrive. Without it every call site wrote `.catch(() => undefined)`, which reads an
-  unreadable file as an absent one, and a caller that then writes a default replaces what it could not read.
-- **`sqlite`**: the narrow seam a `node:sqlite` store is written against — the five-method driver interface, the
-  BEGIN/COMMIT/ROLLBACK transaction the driver has no helper for, and the schema-version guard that treats a
-  mismatch as cache loss. iq's index and iq's session recall are written against this one, not against two.
-- **`async`**: the four shapes of "don't do that again yet", named so the choice between them is visible:
-  `Delayer` restarts its clock on every call, `Coalescer` opens a window on the first call and lets later ones
-  join it, `SingleFlight` shares one run per key among concurrent callers, and `retry` is the loop with the
-  delay in it. Under them sit the three primitives every reconnect loop and readiness wait was hand-rolling
-  beside its own `setTimeout`-in-a-promise: `sleep` (interruptible, because a pause a teardown cannot cut
-  short is a teardown that waits for it), `pollUntil`, and `createBackoff`. `mapPool` is the odd one out and
-  the opposite question — not "wait longer" but "start more at once, up to a limit": the bounded fan-out a
-  caller reaches for after writing the same `for (… ) await` loop that turns twenty writes into twenty round
-  trips.
-
-## Delayer or Coalescer
-
-The two debouncers differ by one character when they are written by hand (`timer = setTimeout(…)` versus
-`timer ??= setTimeout(…)`) and by everything in behaviour. Choosing wrong is not a style mistake: a source that
-never goes quiet starves a `Delayer` forever.
+Runtime primitives that every tier, from the daemon to the browser, must run identically: when-expressions, disposal, async schedulers, untrusted-content tags, size and token formatting, and fuzzy path scoring.
 
 ```mermaid
 flowchart LR
-    subgraph D["Delayer — clock restarts"]
-        d1["call"] --> d2["call"] --> d3["call"] --> d4["quiet for N ms"] --> d5["run once"]
-    end
-    subgraph C["Coalescer — window from the first"]
-        c1["first call<br/>opens the window"] --> c2["calls join it"] --> c3["N ms after the FIRST"] --> c4["flush the batch"]
-    end
+    manifest["Extension manifests<br/>when strings"] --> base(["base"])
+    base -->|"when · fuzzy"| web["Web app<br/>and extension host"]
+    base -->|"outside-text · plain-text · lifecycle"| daemon["Sandbox daemon<br/>fileq · webq"]
+    base -->|"fuzzy · sqlite"| iq["iq engine"]
+    base -->|"async · errors · format"| rest["Every tier<br/>devices, deploy, extensions"]
 ```
 
-A search box wants the Delayer: the user stops typing, and stopping is the signal. A file watcher under a
-working agent wants the Coalescer: the agent never stops, and a batch that only arrives once it does arrives
-when nobody needs it any more.
+- One implementation per rule that more than one tier applies: two copies of a condition, a size label or a
+  quick-open ranking disagree on screen. Anything only one surface renders belongs next to that surface.
+- Subpath exports only, with no index, so a browser bundle pulls nothing it does not use. `outside-text` uses Web
+  Crypto and `sqlite` imports only types from `node:sqlite`, so neither ties a caller to Node.
+- `when.ts` is a closed grammar with no arithmetic, calls or property access, because its strings arrive from
+  installed extensions.
+- `outside-text.ts` wraps chat, pages and tool results in `<untrusted-content>` tags whose close carries a fresh id,
+  so content cannot forge its own end. It marks taint and does not defend against a hostile model.
+- `lifecycle.ts` is teardown as a store: whatever needs undoing registers when it is created, a member that throws
+  does not stop the rest, and failures surface together. Every scheduler in `async.ts` is disposable.
+- `errors.ts` lets a catch name the failure it expects: `isMissing` is ENOENT or ENOTDIR only, and
+  `undefinedIfMissing` answers undefined for "not there" while EACCES, EIO and a bug's TypeError still arrive.
 
 ## Key files
 
-- [src/when.ts](src/when.ts): the grammar, the parser, and what a condition means against a context.
-- [src/lifecycle.ts](src/lifecycle.ts): `DisposableStore` and the two things built on it.
-- [src/async.ts](src/async.ts): the schedulers, each with the case that made it a separate name.
-- [src/fuzzy.ts](src/fuzzy.ts): the path scorer, with its substring/subsequence split and why the substring
-  branch is deliberately uncapped.
-- [src/when.test.ts](src/when.test.ts), the evaluation rules that are decisions rather than syntax: an absent
-  key is false, ordering refuses anything but numbers, comparison crosses the type boundary by string form.
-- [src/async.test.ts](src/async.test.ts): the Delayer/Coalescer distinction pinned as behaviour.
+- [src/when.ts](src/when.ts) — `parseWhen` and `evaluateWhen`, the condition language manifests carry.
+- [src/async.ts](src/async.ts) — `Delayer`, `Coalescer`, `SingleFlight`, `keyedLock`, `retry`, `pollUntil`, `createBackoff`.
+- [src/lifecycle.ts](src/lifecycle.ts) — `IDisposable`, `DisposableStore` and `MutableDisposable`.
+- [src/outside-text.ts](src/outside-text.ts) — `wrapOutsideContent`, the envelope for outside text.
+- [src/fuzzy.ts](src/fuzzy.ts) — `fuzzyScore`, `rankByFuzzy` and the per-keystroke `fuzzyRanker` both quick-open ends share.
+
+## Commands
+
+```sh
+pnpm --filter @intentic/base test
+```

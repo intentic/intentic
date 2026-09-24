@@ -13,7 +13,7 @@ import { activeId, conversations, panes, scopedSandboxId } from "../tabs/useChat
 // what `useAgents-fleet.fleet` (and so `agentById`, and so every surface that asks the roster anything) rebuilds
 // from. The previews are the words in the composers, which move per character. Keeping them apart is what stops a
 // keystroke from rebuilding the roster: neither the strip computed nor the watcher that publishes it moves while
-// someone types. docs/audits/ui-rerender-analysis.md has the measurements.
+// someone types.
 const localStrip = computed<Strip>(() => ({
     active: activeId.value,
     panes: panes.value,

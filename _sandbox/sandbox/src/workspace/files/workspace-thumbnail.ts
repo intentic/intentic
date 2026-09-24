@@ -6,7 +6,7 @@ import { statePath } from "../../state-paths.js";
 
 // A picture re-encoded for the way it is drawn, rather than moved as the file it is. Reading originals moved a gigabyte
 // for a folder of screenshots and took seconds per picture on a slow link. Rendered once per version and kept on disk,
-// so the second look costs a read. Settings are measured in docs/audits/screenshot-renditions.md.
+// so the second look costs a read.
 
 // How a picture is drawn: `tile` whole inside a folder tile, `strip` as the top of the page in a chat strip's 16:10
 // box, `view` at its own size in the viewer and a tool card.

@@ -1,39 +1,42 @@
-# @intentic/scaffold
+# scaffold
 
-The starter files a new intentic workspace gets, shared by the two programs that create one.
+The workspace plumbing the intentic CLI and the sandbox daemon share: running git, the on-disk layout, template scaffolding, the `deploy.config.ts` managed region and secret sync state.
 
-Both the CLI's `init` and the sandbox daemon bring workspaces into existence, and they must produce the same
-skeleton. This package is that skeleton, plus the render-and-parse of `deploy.config.ts`'s managed region: the
-block the tooling owns inside a file the user also edits.
+```mermaid
+flowchart LR
+    cli["intentic CLI<br/>init · add-app · adopt · secrets"] --> scaffold(["scaffold"])
+    daemon["Sandbox daemon<br/>git · templates · secrets"] --> scaffold
+    scaffold --> git["git<br/>forked from a resident child"]
+    scaffold --> source["Template source repo<br/>templates.json"]
+    scaffold --> config["deploy.config.ts<br/>managed region"]
+```
 
-## Responsibilities
-
-- Lay out the intent repo: what files a fresh workspace starts with.
-- Render and re-parse the managed region of `deploy.config.ts` without disturbing what the user wrote around it.
-- Inject a template into a workspace, and know what a template is.
-- Run git operations a scaffold needs, including forking a starting point.
-- Take inventory of the secrets a scaffolded workspace will need.
+- `defaultGit` is the `GitRunner` behind almost every git call the daemon makes. It forks git from a small resident
+  child (`git-forker.ts`) rather than from the large daemon process, retries only on `index.lock` contention, and
+  marks pathspecs literal so a file named `[slug]` matches only itself. `politeGit` runs bulk agent work under
+  `nice` and `ionice`.
+- `workspace-layout.ts` names the three repos a project operates on (`intent`, `desired-state`, `app`) and their
+  well-known files. The CLI and the daemon must agree on these names.
+- `scaffoldMonorepo` and `addAppsToMonorepo` build an app monorepo from a template source repository described by
+  its `templates.json`; `DEFAULT_TEMPLATE_SOURCE` is the default, and a workspace overrides it in
+  `.intentic/config/templates.json`.
+- `writeManagedRegion` and `readManagedRegion` regenerate only the platform-owned block between the markers in
+  `deploy.config.ts`; user code outside it is untouched. A line inside the region the parser cannot read makes the
+  next write refuse and name that line, since regenerating the region would delete it.
+- `secret-inventory.ts` keeps sha256 digests of the secrets last pushed to CI, the only way to tell current from
+  stale since CI cannot read them back.
 
 ## Key files
 
-- [src/intent-repo.ts](src/intent-repo.ts): the skeleton itself.
-- [src/deploy-config.ts](src/deploy-config.ts), the managed region: rendering it, and reading it back out of a
-  file someone has edited around.
-- [src/workspace-layout.ts](src/workspace-layout.ts): where things go.
-- [src/inject-template.ts](src/inject-template.ts) / [src/template-manifest.ts](src/template-manifest.ts): what a
-  template is, and applying one.
-- [src/secret-inventory.ts](src/secret-inventory.ts): which secrets a workspace will be asked for.
+- [src/exec.ts](src/exec.ts) — `defaultGit`, `politeGit`, the forker client and git command observation.
+- [src/git.ts](src/git.ts) — generic git verbs over an injectable `GitRunner`.
+- [src/workspace-layout.ts](src/workspace-layout.ts) — the repo roles, directory names and file names.
+- [src/inject-template.ts](src/inject-template.ts) — template fetch, monorepo shell and app injection.
+- [src/deploy-config.ts](src/deploy-config.ts) — render and parse of the `deploy.config.ts` managed region.
+- [src/index.ts](src/index.ts) — the single export surface.
 
-## How it fits
+## Commands
 
-Shared by `_deploy/cli` and `_sandbox/sandbox`. Its whole reason for being a package rather than a directory in either
-one is that a workspace created two ways must be the same workspace.
-
-## Conventions & gotchas
-
-- The managed region round-trips. `deploy-config.ts` must be able to read back what it wrote even after a user has
-  reformatted the file around it, which is why parsing is tested against edited fixtures rather than its own output.
-  A line inside the region that the parse cannot read (an unmodeled provider, a declaration a formatter wrapped) makes
-  the next write refuse with that line named, because regenerating the region from what was read would delete it.
-- The git and template paths are covered by integration tests against real temp trees, because their failure modes
-  are filesystem and process failures rather than logic ones.
+```sh
+pnpm --filter @intentic/scaffold test
+```

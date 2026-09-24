@@ -1,286 +1,55 @@
 # The sandbox daemon
 
-What runs inside the box: the process that owns the files, serves the editor, and drives every agent turn.
+The Node process inside every sandbox that owns the workspace, runs each agent conversation in its own git worktree, lands the result onto the main tree, and keeps its records beyond the agents' reach.
 
-How a turn is put together (the facts-then-pure-decision planner, the frame pipeline, one actor per conversation, the
-ports every other subsystem reaches the turn through) and why is
-[docs/design/structural-decomposition.md](../design/structural-decomposition.md).
+```mermaid
+flowchart LR
+    editor["Editor"] --> front["intentic-front<br/>ports · tunnel"]
+    front -->|"Unix socket"| daemon(["daemon<br/>src/main.ts"])
+    daemon --> actor["one actor per<br/>conversation"]
+    actor --> runtime["runtime adapter<br/>Claude · Codex · ACP …"]
+    runtime --> wt["worktree<br/>/history/worktrees/id"]
+    wt -->|"land: patch as<br/>uncommitted changes"| main["main tree<br/>/work"]
+    main --> verify["land check<br/>verify-deps.ts"]
+```
 
-The daemon ([_sandbox/sandbox](../../_sandbox/sandbox)) is the whole per-user product surface, not just a chat
-endpoint. It runs behind **its front** ([_sandbox/front](../../_sandbox/front)), a Rust process the entrypoint execs,
-which owns every port and the ingress tunnel and supervises the Node process: the oRPC contract on `:8787`, the
-preview port `:5173`, and a loopback listener on `:8788` (published on the machine's own loopback) that serves the same
-app for a same-machine browser AND relays plain connections whose Host names a preview label
-(`port-<slot>-<id>.localhost` and its siblings) to that preview, so previews have a loopback lane too (the editor asks
-for it through `previewAddress`, and the preview's app is told the lane as `X-Forwarded-Host`/`-Proto`). Node serves
-HTTP on a Unix socket only the front dials and decides everything the front carries: which ports to bind, which
-upstream a preview host names ([panels/preview-routes.ts](../../_sandbox/sandbox/src/panels/preview-routes.ts)), what a
-refusal page says. A daemon crash restarts Node while every browser socket stays open; the reasoning is
-[native-front.md](../design/native-front.md). Terminals, panel dev servers, and agent shell commands all run in a
-shared `tmux` server so they survive reconnects. Its subsystems:
+## The process
 
-- **Agent backends**: Claude (agent SDK, spawned per turn), Codex, Grok/opencode, Kimi Code, Gemini, and
-  Cursor. Kimi
-  and Google's models are re-served from subscription OAuth through the bundled translator on the Claude Code
-  harness
-  ([agent/](../../_sandbox/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE. Native Codex
-  points app-server at that same subscription-backed translator; generated image items are copied into
-  `.intentic/records/artifacts/imagegen/` and stream as paths, never transcript-embedded base64. The five runtimes
-  behind that seam (the Claude Code loop, Codex app-server, OpenCode, ACP, Pi's RPC mode under the
-  reserved `pi` capability id: [pi/](../../_sandbox/sandbox/src/runtimes/pi/), and Cursor's own runtime run in-process
-  through `@cursor/sdk`: [cursor/](../../_sandbox/sandbox/src/runtimes/cursor/)) do not do the same things, so
-  what each one *can* do is **declared**, not inferred: `capabilitiesOf(provider, harness)`
-  ([sandbox-contract/agent-catalog.ts](../../_shared/sandbox-contract/src/models/agent-catalog.ts)) is one row per runtime:
-  steering, permissions, questions, MCP, effort, isolation, commands, terminals, recovery: and both sides of
-  the wire read it. The daemon gates its seams on it and strips the controls a runtime would silently drop
-  ([agent/run/decide/honoured.ts](../../_sandbox/sandbox/src/agent/run/decide/honoured.ts)); the composer offers only the modes and knobs
-  something applies, and names the rest as what this provider can't do. A capability is listed only if
-  something reads it, and `agent-catalog.test.ts` walks PROVIDERS × HARNESSES so a new provider cannot arrive
-  without a row
-  ([webchat/](../../_sandbox/sandbox/src/webchat/)). A chat turn executes as a **detached run**
-  ([agent/turn-runs.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-runs.ts)): `POST /agent` answers with what
-  became of the message (the run it `started`, the live run it was `steered` into, or `queued`), the
-  daemon folds the provider's frames into the conversation's rows as they arrive (one fold, the contract's
-  [transcript-fold.ts](../../_shared/sandbox-contract/src/text/transcript-fold.ts), shared with the demo), and any number
-  of clients render them via `/agent/attach`: the head carries the run's rows whole, then every change lands as
-  a patch and every fact about the turn (session, worktree, usage, error) as itself. The browser applies patches
-  and folds nothing, so a turn survives reloads and dropped connections, and every window or device on the
-  conversation streams it concurrently. Only `/agent/stop` cancels it, and a stop names its turn: by run id, or by
-  the message it carries while the send is unanswered, so a press landing after its turn ended cancels nothing the
-  conversation started since and the answer says what is running instead. The bare `live` form is for callers that
-  set a conversation aside whatever it is doing: a CI fix starting over retires its earlier attempt, whichever turn
-  that is on. Every message goes out under an id its sender mints; the daemon stamps it on the user's transcript row
-  and remembers what it did with it
-  ([message-receipts.ts](../../_sandbox/sandbox/src/agent/run/turn/message-receipts.ts)), so a retry after a lost
-  answer, even across a daemon restart, gets the first receipt back marked `duplicate` rather than a second
-  delivery. A rewind names the message by that id as well as its index, and is refused as stale once the transcript
-  has moved under it.
-  What waits for a conversation's next turn is **its queue**, and the queue is the daemon's: kept on the
-  conversation's actor, written through to the agent record so a restart keeps it
-  ([agents/actor/conversation-queue.ts](../../_sandbox/sandbox/src/agents/actor/conversation-queue.ts)), and shown
-  on the roster card (`AgentSummary.queue`), so every window lists the same messages and takes one back or rewords
-  it against the revision it read (`/agent/queue/remove`, `/agent/queue/edit`; an older copy is refused). Every
-  message, a person's or a sandbox wake's (a watcher, a helper's report, a land that broke the build), comes through
-  one admission ([turn-admission.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-admission.ts)): said into the
-  live run where that runtime takes words, a turn of its own when nothing runs, and otherwise queued, which is what
-  an unsteerable runtime, a turn parked on a card, a recovery or rewind going first, or a held queue get. A run
-  settling drains it, a person's consecutive messages joined into one turn on the newest sender's pick. A Stop holds
-  the queue for everyone until somebody lets it go (`/agent/queue/resume`, or a person sending again), and a refusal
-  at the door that ran nothing puts a person's words back at its head, held, rather than in whichever composer sent
-  them. A turn also survives **the
-  daemon**: every in-flight turn and automation fire is written to a **turn journal** on the history volume
-  ([agent/turn-journal.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-journal.ts)) and cleared when it settles, so whatever
-  is still there at boot is exactly what the process died under: and `resumeInterruptedTurns`
-  ([agent/turn-resume.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-resume.ts)) re-runs a turn on the session holding its
-  partial work, while an automation's fire is re-fired by its own scheduler (`resumeInterruptedFires`,
-  [automations/fire-resume.ts](../../_sandbox/sandbox/src/automations/fire-resume.ts)). That matters because intentic's own flows cause the deaths: every update, environment approval
-  and `dev-sandbox.sh` swap recreates the container, so approving the Dockerfile change an agent asked for used
-  to cost the run that asked for it. Off by default (`autoResumeOnRestart`) because a re-run spends the owner's
-  allowance unwatched; once turned on it fires once per turn, and only for turns under six hours old: a turn
-  that OOM-kills the daemon must not resurrect it on every boot. Not resuming is still recorded, and records
-  the WORK and not just the fact: the boot pass reads the dead turn back out of the provider's session store and
-  appends it to the conversation's transcript before consuming the journal entry that names it, so an hour of
-  tool calls that never settled is still there to read. The fleet card reads `interrupted` and an automation's
-  row shows an `interrupted` run.
-  A run's rows stay in memory only until it settles: the durable copy is the daemon's own **transcript record**,
-  one file per conversation on the history volume
-  ([sessions/transcript-record.ts](../../_sandbox/sandbox/src/sessions/transcript-record.ts)), appended the settled
-  run's rows, the same rows every window drew. The provider's session store is only the recovery source above,
-  which is why a provider that keeps no readable store still opens.
-- **Terminals**: tmux control-mode clients over WebSocket, the pane's raw bytes into the browser's xterm ([terminal/terminal.ts](../../_sandbox/sandbox/src/terminal/terminal.ts)).
-- **Panels & previews**: per-repo dev servers behind `preview-<panel>-<id>.<zone>` hostnames
-  ([panels/](../../_sandbox/sandbox/src/panels/)); plus generic **port forwarding** for anything run in a terminal
-  (a procfs scan lists listening ports, an explicit forward maps one onto a fixed slot behind
-  `port-<slot>-<id>.<zone>`, and Ctrl+clicking a `localhost:<port>` link in a terminal rides this
-  automatically) ([ports/](../../_sandbox/sandbox/src/ports/)). Port targets get Host/Origin rewritten to
-  `localhost:<port>` at the proxy, so stock dev-server host checks pass unconfigured. Desktop-sync users get the
-  stronger guarantee automatically: the sync agent's port-mirror watcher binds those same ports on their own
-  machine's localhost (see `@intentic/machine`), the only path where a frontend hard-coded to
-  `localhost:<other-port>` works untouched.
-- **Automations**: cron schedules, webhooks (`/automations/:id/fire`), and event listeners
-  ([automations/](../../_sandbox/sandbox/src/automations/)). Any of them can be fired by hand with **Run now**
-  (`POST /automations/:id/run`), down the same path the real trigger takes: a schedule stays a headless
-  main-tree wake, and its guard still runs, because a test-fire that proved something else ran would prove
-  nothing about the 3 a.m. one. Only the approval gate is skipped (the click is the approval), and a *disabled*
-  automation fires too: trying a prompt before switching it on is the main reason to press it. Every run records
-  the session it ran in, so the row's run history opens the transcript: the answer to "it failed overnight and
-  I can't see why".
-- **Visitor chat**: a chat bubble a customer embeds on their own website, talking to a `webchat` listener
-  automation ([webchat/](../../_sandbox/sandbox/src/webchat/), widget in
-  [\_sandbox/webchat-widget](../../_sandbox/webchat-widget)). It is the inbound-HTTP mirror of the gateway-process pattern:
-  no extension holds a connection, because the connection is a `<script>` tag on someone else's page. Five
-  routes are exempt from the bearer middleware: `widget.js`, and per-automation `config` / `challenge` /
-  `message` / `messages`: and that set, declared doors in the contract's
-  [raw-route table](../../_shared/sandbox-contract/src/protocol/raw-routes.ts), is the whole of what an anonymous
-  internet user can reach of it. The visitor holds no credential in any mode: even
-  with Google sign-in on, the ID token is verified daemon-side against the *site's own* client id (intentic's
-  cannot list every customer domain) and becomes a claim in the prompt, never a grant. Admission is the
-  trigger's `allowedOrigins` plus a per-conversation rate limit and an optional bot check: Cloudflare
-  Turnstile, or a built-in proof of work for sites with no Cloudflare account, spent once per visitor thread.
-  Each thread maps to ONE sandbox conversation, resumed by session id
-  ([webchat.routes.ts](../../_sandbox/sandbox/src/webchat/webchat.routes.ts)), so a five-message support chat is one
-  fleet card the owner can watch live and take over: not five worktrees with amnesia. Taking it over is what the
-  fifth route exists for. A live turn streams its reply down the open SSE, but an approval-gated one closes that
-  stream on a `pending` notice, and a human answering hours later with `place` ("write as agent") never had one:
-  both write into a per-thread **outbox**
-  ([webchat-outbox.ts](../../_sandbox/sandbox/src/webchat/webchat-outbox.ts)) that the widget collects against a
-  cursor. That is also why `place` reaches a Visitor chat visitor at all: `deliverToListenerChannel` walks
-  *extensions*, and webchat is core, so the outbox is checked first rather than the walk reporting that nothing
-  is listening. And because an
-  automation turn runs `bypassPermissions` by default, a Visitor chat's real boundary is `Automation.allowedTools`,
-  carried into the SDK's own allowlist: prompt wording is advice, an empty toolbox is not. The config fetch
-  doubles as the **install probe** ([store/installs.ts](../../_sandbox/sandbox/src/store/installs.ts)):
-  every widget load records its origin and whether it was admitted, which is the only thing that can tell a
-  working Visitor chat nobody has written to from a snippet that was never pasted: and turns the commonest
-  mistake of all (`example.com` listed, `www.example.com` not) into a named origin with an Allow button.
-- **CI pipelines**: the workspace repos' GitHub Actions / GitLab pipelines, as both an automation source and a
-  UI surface ([ci/](../../_sandbox/sandbox/src/ci/)). A repo participates when its remote's hostname matches a connected
-  github/gitlab capability (`projects.ts`: self-hosted GitLab included, via the capability's instance url). A
-  reconciler keeps a webhook on every mapped repo pointing at the public receiver `/ci/webhook/:host`,
-  authenticated by a per-sandbox secret in `.intentic/secrets/ci.json` (GitHub signs the body, GitLab echoes the
-  token); a refusal (token scope, role) degrades that repo to a warning, with the manual hook recipe (secret
-  included) attached for a maintainer or the owner only, the ssh-key-registration posture. The other public
-  doors, an event automation's webhook, a workflow's release gate and a bug intake's key, keep their credentials
-  in `.intentic/secrets/doors.json` ([door-tokens.ts](../../_sandbox/sandbox/src/auth/door-tokens.ts)) rather than in
-  the versioned manifests that declare them, accept them as `?token=` or a bearer header, and are rotatable. A
-  pipeline that wants to DRIVE the agent rather than knock on a door holds a control token instead:
-  `intentic/gate-action` and `npx @intentic/gate run` start an isolated turn, poll its card and land it on
-  request ([gate/src/run.ts](../../_sandbox/gate/src/run.ts)). Completed pipelines dispatch the core listener provider **`ci`**: the webchat
-  precedent: no gateway extension, the daemon's own receiver is the source, with event types
-  `pipeline_failed` / `pipeline_succeeded` / `pipeline_fixed` (a success ending a recorded failure streak on
-  that repo+branch, remembered across restarts in `ci.json`), so a listener automation narrows by repo
-  (`channelId`) and result. The same deliveries freshen the runs cache behind `GET /ci/runs`, which the
-  **Pipelines** rail view ([\_extensions/pipelines](../../_extensions/pipelines)) polls: backfilled over the
-  vendors' REST APIs when stale, so the view has history even where webhooks never registered. Row actions
-  proxy rerun/cancel to the vendor, and **Fix with agent** (`POST /ci/fix`) opens an isolated conversation
-  seeded with the failed jobs' log tails: a fleet card like any other agent. A failure can be tried more than
-  once: each attempt is its own conversation, named after the run and then numbered (`-attempt2`), and the
-  route continues an ended attempt, refuses while one is in play, or on `mode: start-over` stops and archives
-  it before opening the next ([ci/fix-attempts.ts](../../_sandbox/sandbox/src/ci/fix-attempts.ts)), by the
-  same rule the editor's push question reads (the contract's `planFixAttempt`).
-- **Push notifications**: the daemon is the sender, because it is the only tier that knows what the agent is
-  doing ([push/](../../_sandbox/sandbox/src/push/)). It owns a per-sandbox VAPID keypair and one subscription per
-  subscribed browser, stored on the **history volume** rather than under `/work/.intentic`: the private key can
-  forge notifications to the owner's devices, so it sits outside the agent's reach. Three moments notify: a
-  turn settled, a turn parked on the user (plan/question/permission), and an automation held for approval:
-  and every one is suppressed while anyone is present and non-idle on the sandbox (`idleEverywhere`, read off
-  the same presence roster `/events` maintains), so a turn you watch finish tells you nothing. The service
-  worker ([_editor/web/public/sw.js](../../_editor/web/public/sw.js)) is registered lazily and caches nothing; a
-  subscription is per-browser, and lives on the web origin while the sender is the daemon on its tunnel:
-  which works because a push endpoint is an absolute URL minted by the browser's own push service.
-- **Capabilities**: everything a user adds to the sandbox (connectors, vpn, mcp, plugins, …),
-  one unified model with a per-kind handler ([capabilities/](../../_sandbox/sandbox/src/capabilities/)): see
-  [Capabilities](#capabilities).
-- **VPN** (putting the sandbox on a private network ([vpn/](../../_sandbox/sandbox/src/vpn/))) see [VPN](#vpn).
-- **Geo exits** (making chosen traffic LEAVE from another country, without touching the sandbox's own
-  connection ([exit/](../../_sandbox/sandbox/src/exit/))) see [Geo exits](#geo-exits).
-- **Members**: shared access for invited collaborators, enforced by the daemon
-  ([auth.ts](../../_sandbox/sandbox/src/auth/auth.ts)).
-- **Workspace file service**: search, tree, watch, diff, and chunked multi-GB uploads
-  ([workspace/](../../_sandbox/sandbox/src/workspace/)); desktop sync is Mutagen over tunnel SSH
-  (`ssh-<id>.<zone>`, paired via `@intentic/machine`). Enrollment ([platform/sync.ts](../../_sandbox/sandbox/src/platform/sync.ts))
-  carries a **mode**: `sync` (bidirectional file sync, SINGLE-HOLDER, two machines two-way-syncing `/work`
-  would race) or `mirror` (port mirroring only, UNLIMITED: forwards are per-machine and independent, so every
-  collaborator mirrors the ports to their own localhost at once). The **owner** may enroll either; a **member**
-  is capped to `mirror` at pairing-mint. Each enrolled machine gets its own key in `authorized_keys` and its own
-  `/ports`-scoped sync token, so machines revoke independently (self-revoke on uninstall; owner clears all).
-- **History**: git snapshots every 60 s + per agent turn, on a `/history` volume mounted *outside*
-  `/work` so an agent `rm -rf` can't reach it ([history/](../../_sandbox/sandbox/src/history/)). Each conversation
-  is one storage unit on it: its rows in `/history/conversations.db` (SQLite in WAL mode,
-  [store/conversations-db.ts](../../_sandbox/sandbox/src/store/conversations-db.ts): the registry record, per-repo
-  worktree and landing provenance, turn checkpoints, the turn journal and armed watches, every table keyed to the
-  conversation's row with `ON DELETE CASCADE`), and its files under `/history/conversations/<id>/`
-  ([store/conversation-units.ts](../../_sandbox/sandbox/src/store/conversation-units.ts): the transcript record, the
-  system-prompt disclosure, a fenced conversation's own runtime session store). The facts that must agree are written
-  in one transaction: a turn's begin with its journal entry, a land's outcome, a purge. Archiving keeps the unit;
-  discarding a conversation or emptying the archive purges it (dispose the actor, delete the row, remove the
-  directory). Its checkouts under `/history/worktrees/<id>` are not in the unit: an archive retires them while the
-  conversation stays. `agents show <id> --stored` prints a unit's rows and files. The same volume holds
-  the managed ssh dir (`/history/ssh-hosts`, symlinked to `~/.ssh/intentic-hosts` at boot by
-  [`linkSshHosts`](../../_sandbox/sandbox/src/capabilities/ssh-hosts.ts)): container recreates, every rebuild, update
-  and `dev-sandbox.sh` swap: wipe `/root`, so a git-provider identity or an `ssh` capability's key kept there
-  died on each one while the manifest still read "connected". What genuinely can't be persisted (`~/.gitconfig`,
-  `~/.git-credentials`) is re-derived from the manifest at boot by
-  [`restoreConnectorGitAccess`](../../_sandbox/sandbox/src/capabilities/cli/git-access.ts), the git counterpart to
-  `reconnectVpns`. Every one of these HOME-level convergences: the ssh dir, the `~/.claude` session stores,
-  `authorized_keys`, the git credentials: runs only for the daemon holding the container claim
-  ([`claimContainer`](../../_sandbox/sandbox/src/platform/boot/container-owner.ts)), and so does everything else there is
-  only one of per container: the process sweep, the tmux session sweep, the translator, the platform announce,
-  the scheduler, the approvals executor and the CI hooks. A container can hold more than one daemon: this
-  repository IS the daemon, so a run of it from source is an ordinary thing for an agent to do: and the second
-  one otherwise repoints HOME at its own empty roots (taking the live sandbox's git access, transcripts and
-  desktop enrollment down without an error anywhere). A guest daemon serves its own routes and owns nothing that
-  was here before it. What a guest cannot reach at all is the live daemon's PROCESSES: the leftover sweep
-  ([`leftovers.ts`](../../_sandbox/sandbox/src/platform/boot/leftovers.ts)) enumerates its own process group rather than
-  filtering every process in the container by a label, so another daemon's work is not something it can decide
-  wrongly about: it is not in the set. The label that survives says only WHOSE turn a process belongs to, read
-  after group membership has already answered whose daemon it is.
-- **Disk**: what fills the sandbox's volumes, by what the space is for, and a clean for what may go
-  ([platform/resources/storage/](../../_sandbox/sandbox/src/platform/resources/storage/), the Disk card on the
-  sandbox's Overview). The volumes only grow otherwise: restore points, checkouts, package stores and the trash all
-  accumulate, and a 10 GB hosted volume that fills fails every turn and rebuild with ENOSPC. A scan is asked for,
-  never scheduled (`POST /system/storage/scan`, maintainer-floored like the spend ledger): one walk of the workspace
-  and history volumes, and on a hosted machine of the one volume holding both, never following a link or leaving a
-  filesystem, counting each file once however many links it has, and answering `partial` at a two-minute limit
-  rather than never. Every path is sorted by one pure table
-  ([storage-catalog.ts](../../_sandbox/sandbox/src/platform/resources/storage/storage-catalog.ts)) that the scan,
-  the plan and the cleaner all read; which categories may be cleaned, and which ask the owner first, is the
-  contract's `STORAGE_CLEANABILITY`. State, credentials, conversation records, restore points, repositories and every
-  live checkout are `none`; caches that come back and yesterday's logs are `safe`; the trash (it may hold commits
-  never pushed), agent-made files, browser captures and sign-ins, exported bundles and local model weights ask
-  first. A clean re-reads its candidates from disk, keeps what changed in the last day and whatever a running
-  program names (a model server's weights, a shell's working folder, an open browser's profile, a pack still being
-  written), asks the table about each path again right before removing it, and answers with the bytes really given
-  back. A package store goes to `pnpm store prune`, never while pnpm runs.
-- **Environment overlays**: agent-proposed Dockerfile layers, applied only after owner approval, by `ic` on
-  a docker host or by the platform's builder on a hosted machine
-  ([environment/](../../_sandbox/sandbox/src/environment/)).
-- **Workspace hooks**: the hooks Claude Code would load for a turn from its user and project sources run only once
-  the owner has approved that exact set. A hook runs outside the command guard, unattended automations included,
-  and the files declaring one are ones an agent (or a cloned repository) writes. Before each Claude-harness turn
-  the planner folds every declaration into one sha256
-  ([guard/settings-hooks.ts](../../_sandbox/sandbox/src/guard/settings-hooks.ts)): the `hooks` of
-  `~/.claude/settings.json` and of the project's `.claude/settings.json` (read through the turn's worktree), the
-  `hooks` in any skill, subagent or command frontmatter under either, and the bytes of every script a hook names
-  by a path that exists. A set not in the ledger runs the turn with `disableAllHooks` in the SDK's flag settings,
-  which switches off every settings-file, frontmatter and plugin hook while the guard, rules and checks (SDK
-  callbacks) keep running; the message says so, and the set lands in Approvals, where the owner approves it from
-  the next turn on ([guard/hook-approvals.ts](../../_sandbox/sandbox/src/guard/hook-approvals.ts)). The ledger and
-  the waiting sets live under the history root, never in `/work`, keyed by digest; one this build cannot read
-  approves nothing; the approve route is withheld from every machine credential. Claude Code applies an edit to
-  its settings or skills live, so a turn whose hooks run carries a `ConfigChange` callback refusing any edit that
-  would change the set it started with. What a hook's script reads without naming it, and the bytes of a named
-  script changed mid-turn, are outside the pin.
-- **Discord**, chat/stream/voice integration, now an image-baked extension: a gateway `process` +
-  `listener` in [\_extensions/discord](../../_extensions/discord).
+- `docker-entrypoint.sh` starts sshd, then [`intentic-front`](../../_sandbox/front) (Rust), which owns every port and the ingress tunnel and supervises `node dist/main.js`. The daemon listens only on a Unix socket, so a daemon restart drops no connection.
+- [`main.ts`](../../_sandbox/sandbox/src/main.ts) loads config, builds every service in [`composition.ts`](../../_sandbox/sandbox/src/composition.ts), runs the boot steps and opens the readiness gate.
+- The wire is the oRPC contract in [`_shared/sandbox-contract`](../../_shared/sandbox-contract) (one `*.contract.ts` per route group), served by [`router.ts`](../../_sandbox/sandbox/src/router.ts). `/events` and `/agent/attach` stream; terminals and the browser view are WebSockets opened with one-shot tickets. The daemon does not serve the editor itself.
 
-**One image, two ways to start.** The sandbox `connect.sh` runs on your PC and the one the
-`i.want.workspace` provider deploys onto a remote host (over SSH) are the *same image*. `connect.sh` itself is
-a bootstrap shim: it gets Docker on, fetches the `ic` host-side CLI ([_sandbox/ic](../../_sandbox/ic)) and hands the
-flow to `ic sandbox connect`: so is the desktop app ([_editor/desktop-app](../../_editor/desktop-app)) not a third
-way: it *spawns that same `connect.sh`*, which is what makes its onboarding identical to the pasted one rather
-than a second implementation to keep in step. Every lane on a machine the user owns then reaches the box the
-same way, and there is only one way: the daemon dials ONE outbound WebSocket to the ingress and presents the
-platform-signed grant naming `<id> = sha256(connectToken).slice(0, 12)`
-([tunnel-ids.ts](../../_shared/sandbox-contract/src/ids/tunnel-ids.ts)); the edge reads the `Host` header of each
-request and sends it down that sandbox's tunnel. The hosted lane is the one box that is dialled instead of
-dialling: the same image, booted as a Fly machine (`SANDBOX_VM`), declares its front's preview port as a Fly service
-([sandbox-run/fly.ts](../../_shared/sandbox-run/src/fly.ts)) and the edge replays requests for its hostnames to
-the app named after the same `<id>`.
+## Agents
 
-Publishing anything is therefore free of provisioning, because every name a sandbox serves already carries its
-id: `sandbox-<id>` for the daemon, `preview-<panel>-<id>` for a panel, `port-<slot>-<id>` for a forwarded port,
-`public-<slot>-<id>` for the outbox ([hostnames.ts](../../_shared/sandbox-contract/src/ids/hostnames.ts)). A new panel or
-a dev server on a fresh port is reachable the moment it exists: no record to mint, no name to claim, no pool to
-keep warm, nothing to reap when it goes. Desktop sync rides the same surface rather than a name of its own,
-Mutagen's SSH tunnelled over the daemon's HTTPS (`/system/sync/ssh`), and when the agent and the sandbox are on
-one machine every dial the machine agent makes, the computer half's socket included, resolves to the loopback
-address first and never crosses the edge at all ([daemon-base.ts](../../_devices/machine/src/daemon-base.ts)).
+- A conversation is the durable unit and a turn is one run inside it. One actor per conversation ([`conversation-actors.ts`](../../_sandbox/sandbox/src/agents/actor/conversation-actors.ts)) decides whether a new message starts a turn, steers the running one, or waits in the queue.
+- [`runtime-table.ts`](../../_sandbox/sandbox/src/runtimes/runtime-table.ts) picks an adapter per provider and harness: the Claude Agent SDK, Codex, OpenCode, Cursor, ACP agents and pi. What each runtime supports is declared in [`agent-runtimes.ts`](../../_shared/sandbox-contract/src/models/agent-runtimes.ts), so the editor never offers a control the runtime would ignore.
+- A turn runs detached from any client ([`turn-runs.ts`](../../_sandbox/sandbox/src/agent/run/turn/turn-runs.ts)). It is journaled in `/history/conversations.db` and resumed after a restart; transcripts live in `/history/conversations/<id>/`.
 
-Two lanes stay off the shared edge entirely. **A sandbox published under its owner's own domain** is reached
-through whatever that owner already runs; the platform stores its URL and nothing else, which is the whole of
-the attach lane. And **on a server** the workspace is just another service on that host's shared tunnel,
-exposing only the preview wildcard (the daemon stays host-internal: the server workspace is preview-only;
-`connect.sh` is the browser-direct path). The infrastructure a sandbox *provisions*, meanwhile, builds
-Cloudflare tunnels on its target hosts (see below): which is how the system fans out to "workers on many
-machines."
+## Worktrees
+
+- An isolated conversation works on branch `agent/<id>`, with one git worktree per repository under `/history/worktrees/<id>/` ([`worktrees.ts`](../../_sandbox/sandbox/src/agents/worktrees/worktrees.ts)). Parallel agents cannot collide.
+- Where the runtime supports it (`isolation: "namespace"`), [`isolation.ts`](../../_sandbox/sandbox/src/agents/worktrees/isolation.ts) binds the worktree over `/work` in a mount namespace and puts the real tree at `/mnt/intentic-main`; other runtimes only start in the worktree. `node_modules`, `.venv` and `dist` are overlay mounts of the main tree's, so a worktree needs no install.
+
+## Land
+
+- Landing applies a conversation's changes to the main tree as **uncommitted changes**. `HEAD` never moves; the owner's commit is the review boundary ([`land.ts`](../../_sandbox/sandbox/src/agents/land/land.ts), `landAgent`).
+- It rebases the branch onto main ([`sync.ts`](../../_sandbox/sandbox/src/agents/land/sync.ts)), reconciles the lockfile, and checks every repository's patch before writing any: one conflict and nothing is written. The `merge` mode writes conflict markers instead, and `measure` is a dry run.
+- After a land, [`verify-deps.ts`](../../_sandbox/sandbox/src/workspace/deps/verify-deps.ts) runs the repository's `land` check, else its `verify` script, else `test`. New failures go back to the conversation whose land caused them ([`land-breakage.ts`](../../_sandbox/sandbox/src/agents/land/land-breakage.ts)).
+
+## Checks
+
+- A repository declares its checks in `.intentic/checks.json` for the moments `edit`, `turn` and `land` (`RepoChecksFileSchema` in [`settings.ts`](../../_shared/sandbox-contract/src/schemas/settings.ts)). The owner adopts the file, and a changed declaration waits for re-adoption.
+- [`repo-checks.ts`](../../_sandbox/sandbox/src/rules/repo-checks.ts) turns them into rules. Edit checks run on every file an agent writes, and their output returns with the edit ([`file-edited.ts`](../../_sandbox/sandbox/src/rules/file-edited.ts)). Turn checks run when the agent stops and can send it back to work ([`turn-ending.ts`](../../_sandbox/sandbox/src/rules/turn-ending.ts)). A turn whose checks failed is held from landing unless a rule allows it.
+
+## State
+
+| Place | Holds |
+| --- | --- |
+| `/work` | the repositories, visible to agents, on its own volume |
+| `.intentic/config` | tracked configuration: settings, personas, skills, capabilities, the environment overlay |
+| `.intentic/records` | ledgers: agent sessions, land verdicts, chores |
+| `.intentic/local` | rebuildable caches and browser profiles |
+| `.intentic/identity`, `.intentic/secrets` | owner, members and passkeys; credentials |
+| `/history` | the conversation store, transcripts, worktrees, git directories, snapshots and logs |
+
+`/history` is a separate volume outside `/work`, so no command in the workspace can erase the recovery record. [`workspace-state.ts`](../../_shared/sandbox-contract/src/state/workspace-state.ts) lists every state file and its group, and the file API refuses the daemon's own entries.

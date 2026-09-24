@@ -11,8 +11,7 @@
 # and exits 0 having released nothing. At this repository's commit rate that is the ORDINARY outcome, not an
 # error. Every step after it was written as though a release had always happened: dispatch-publish.sh asked
 # GitHub to start a workflow at a tag nobody pushed, got a 422, and turned a 90-minute pipeline red with
-# nothing wrong. Three of the ten most recent red runs were that exact sequence (docs/ci-failure-audit.md,
-# class D), and the noise is the smaller half of the cost — a real publish failure had come to look identical
+# nothing wrong. Three of the ten most recent red runs were that exact sequence, and the noise is the smaller half of the cost — a real publish failure had come to look identical
 # to the routine one.
 #
 # THE `success` STEP IS THE SIGNAL, and the reason it is this rather than something simpler:

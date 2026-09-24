@@ -61,12 +61,7 @@ const configSchema = z.object({
     iqRgPath: z.string().default(""),
     // Image-baked iq Claude Code plugin dir, gated by the iqSearch setting (opt-in); empty ⇒ not loaded.
     iqPluginDir: z.string().default(""),
-    // Pre-turn retrieval (agent/run/turn/turn-context.ts), OFF unless this says otherwise. Opt-in rather than
-    // kill-switch because this mechanism already shipped once as `iqContext` and a three-week A/B removed it: the
-    // median attempt outran its deadline, and the turns a note did reach searched no less (docs/output-cleaners.md).
-    // The rebuild answers both findings — cheap lookups instead of one fused query, and a file the message names is
-    // resolved rather than skipped — so it is a hypothesis to re-measure on the `iqSearchArm` coin flip, not a
-    // conclusion to switch on for everyone.
+    // Pre-turn retrieval (agent/run/turn/turn-context.ts); off unless "true" or "1", and only with the iqSearch setting.
     iqTurnContext: z
         .string()
         .default("")

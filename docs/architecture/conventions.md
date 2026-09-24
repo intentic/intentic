@@ -1,106 +1,56 @@
-# Conventions, so the layout is predictable
+# Code conventions
 
-The rules the tree is held to: one concept per file, what a package group means, what may live in `_shared/`,
-what may ship, and how an import names its target.
+The rules the repository's own checks and linter hold every change to, grouped by what they protect, with the file that enforces each.
 
-## Conventions (so the layout is predictable)
+```mermaid
+flowchart LR
+    list(["_tools/checks/manifest.mjs<br/>one list of checks"]) --> edit["each edit<br/>scoped checks · lint-edit"]
+    list --> turn["turn end<br/>pnpm verify:turn"]
+    list --> land["after a land<br/>pnpm verify"]
+    list --> push["pre-push<br/>verify-push"]
+    list --> ci["CI preflight<br/>and nightly tidy"]
+```
 
-- **One concept per file**, named for the concept (`reconcile-loop.ts`, `resolve.ts`,
-  `forgejo-api.ts`). Tests are **co-located** next to their source.
-- **Test naming:** `*.test.ts` = unit; `*.engine.test.ts` = integration driven through the real engine;
-  `*.e2e.test.ts` = gated real run against live services. A gated suite does not hand-roll its gate: it
-  declares the switch and the credentials it needs with `e2eTier` ([_tools/testing/src/e2e.ts](../../_tools/testing/src/e2e.ts))
-  and stands down, saying which variable it wanted, when the environment is short of one. See
-  [What each tier needs](#what-each-tier-needs).
-- **Groups:** every `_`-prefixed root directory is a package group, and the group is the DOMAIN, not the
-  kind: `_editor/` (the screen you look at), `_sandbox/` (the per-project box), `_shared/` (the contracts and
-  SDKs more than one group is written against: the wire, the extension SDK, the file formats that cross a
-  boundary), `_devices/` (runs on the user's own machine), `_search/` (code search), `_deploy/` (the bundled
-  deploy tool: not product surface), `_platform/` (the hosted account plane), `_site/` (the public website),
-  `_extensions/` (loadable units only), `_tools/` (plumbing + repo-wide maintainer scripts,
-  `_tools/scripts/`). A package's directory name is its unscoped npm name; whether it is an app or a lib is
-  its package.json's business. pnpm-workspace.yaml globs the groups explicitly, and `_tools/checks/layout.mjs`
-  holds the layout to it: no ghost directory, no directory over thirty files, no twin sibling names, no
-  package whose directory disagrees with its npm name.
-- **What may live in `_shared/`** ([_shared/README.md](../../_shared/README.md)): a package imported by three or
-  more groups, or by both hubs (`_editor` and `_sandbox`), or belonging to the SDK an extension author may
-  depend on. Nothing in `_shared/` may depend on another group but `_tools/`, by manifest or by import (a
-  type-only one included) — a shared package that reached back into the daemon would hand every consumer the
-  part it was supposed to be free of — and [`shared-boundary.mjs`](../../_tools/checks/shared-boundary.mjs)
-  holds it, naming each standing exception with its reason. App-specific scripts live in that app's `scripts/`
-  dir (e.g. `_sandbox/sandbox/scripts/`); the user-facing connect/sync/cleanup scripts are tracked site assets
-  in `_site/site/public/scripts/`, served at intentic.dev vanity URLs by [worker.ts](../../_site/site/worker.ts).
-- **Imports:** import from the true source (no re-exports/aliases). The `@intentic/src` package export
-  condition resolves workspace imports straight to `src/`, so agents can edit across packages without
-  building.
-- **Failures:** a catch names the one failure it expects and lets the rest through: `undefinedIfMissing` /
-  `isMissing` from [`@intentic/base/errors`](../../_tools/base/src/errors.ts) for "not created yet", a status
-  check for "not found". A read that failed is never written back as a default: the daemon's persisted files go
-  through `jsonFile` / `textFile` ([_sandbox/sandbox/src/store/](../../_sandbox/sandbox/src/store/json-file.ts)),
-  which set aside or refuse what they could not read, and a guard (redaction, a policy, a permission) fails
-  closed. [`silent-catch.mjs`](../../_tools/checks/silent-catch.mjs) ratchets the handlers that throw an error
-  away unnarrowed; a discard that is right says why with `// silent-catch: <reason>`.
-- The compiled shape of the example/fixture is pinned by
-  [_deploy/sdk/src/deploy.config.test.ts](../../_deploy/sdk/src/deploy.config.test.ts) against
-  [_deploy/sdk/src/__fixtures__/deploy.graph.ts](../../_deploy/sdk/src/__fixtures__/deploy.graph.ts).
+## How a rule is enforced
 
-See [AGENTS.md](../../AGENTS.md) for the code-style rules every change must follow.
+- [`manifest.mjs`](../../_tools/checks/manifest.mjs) lists every check once and [`run.mjs`](../../_tools/checks/run.mjs) runs them, with node and git only. A `code` check means the tree is broken and is refused everywhere. A `tidy` check is a cost to readers: a warning at the push, a refusal for a turn's own new lines and in CI's tidy job.
+- A `scoped` check can judge one file, so [`.intentic/checks.json`](../../.intentic/checks.json) runs it the moment an agent writes that file, together with the linter.
+- Ratcheted checks keep their standing backlog in [`_tools/checks/baselines`](../../_tools/checks/baselines), which may only shrink.
 
-## The layout rules, and the check that holds them
+## Layout
 
-Every rule below is enforced by [`_tools/checks/layout.mjs`](../../_tools/checks/layout.mjs), which runs in
-`pnpm checks`, the turn-ending check and the push gate. Each one is a cost that was measured across 1,862
-agent conversations (`docs/audits/directory-structure-audit.md`), not a preference:
+[`layout.mjs`](../../_tools/checks/layout.mjs) keeps the tree navigable by path alone:
 
-1. **No ghosts.** A directory at part, package or module level with zero tracked files fails, naming the
-   command that removes it. Seventeen existed when this was written — build output of packages that had
-   already moved — and every one of them still answered `ls` and still got guessed at.
-2. **No directory over thirty files** under a package's `src/` (tests included, one level). A 159-file
-   directory answers a listing with four thousand characters an agent has to read before it can act; 29
-   listings came back that big in one month. Ratcheted through `_tools/checks/baselines/layout.json`: an entry
-   may shrink or disappear, never grow, and an unlisted directory fails on its first offence.
-3. **No twin siblings.** Two directories whose names differ by one character are told apart by nobody —
-   `agent/` beside `agents/` was read by 84 sessions that wanted one of them. Allowed only when both names are
-   wire groups, because then the pair is the product's own vocabulary and the contract already forces both.
-4. **A package's directory is its npm name** without the scope (and without `ext-` under `_extensions/`).
-5. **No two files in one package share a basename**, case-insensitively, outside the names whose job is to
-   repeat (`index.ts`, `invariant.ts`, `*.routes.ts`, `*.contract.ts`, `*.handler.ts`, a test beside its
-   subject). Ratcheted like rule 2. Case matters because TypeScript refuses a program that holds
-   `ModelPicker.test.ts` and `modelPicker.test.ts` at all.
-6. **No dead names.** A directory this repository removed may not be named inside it, because a name in the
-   tree is where the next agent learns to type it: `_apps/` and `_libs/` went in August and were still being
-   typed 89 times a month later.
-7. **Every documentation link resolves** ([`md-links.mjs`](../../_tools/checks/md-links.mjs)) and **every
-   resolver alias points at something** ([`alias-targets.mjs`](../../_tools/checks/alias-targets.mjs)). The
-   second is the one that fails silently: an alias bypasses the exports map the type-checker reads, so a moved
-   target type-checks green and dies at load in every suite of the package that owns the alias.
+- **A package's directory name must be its npm name without the scope.** `_search/iq` is `@intentic/iq`. Under `_extensions/` the npm name adds an `ext-` prefix the directory drops.
+- At most 30 readable files per directory under a package's `src/`. Images, fonts and media do not count, and `INDEX_DIRS` exempts directories that hold one file per member of a set, such as one `*.contract.ts` per wire group. `node _tools/checks/layout.mjs --allow <dir>` records a deliberate exception.
+- No two sibling directories one character apart, and no two files in a package with the same name (barrels, route, contract and handler files, and tests excepted).
+- No mention of a directory or scope the repository removed. Empty directories a rename leaves behind are deleted, not reported.
 
-## Where a package lives
+## Paths and boundaries
 
-- `_shared/` holds what more than one part is written against: a package imported by three or more parts, or
-  by both hubs (`_editor` and `_sandbox`), or belonging to the SDK an extension author may depend on. **Nothing
-  in `_shared/` may depend on another part** but the `_tools/` foundation ([_shared/README.md](../../_shared/README.md)),
-  held by [`shared-boundary.mjs`](../../_tools/checks/shared-boundary.mjs).
-- Everything else lives in the part that owns it, and a package that grows a second owner is a candidate for
-  `_shared/` rather than a reason to reach across.
+- [`path-literals.mjs`](../../_tools/checks/path-literals.mjs): no hand-spelled roots such as `/work` or `.intentic`, and no `../..` counted from a file's own location. Use `repoRoot()` and `packageRoot()` from `@intentic/constants/node`.
+- [`shared-boundary.mjs`](../../_tools/checks/shared-boundary.mjs): nothing in `_shared/` imports another part except the `_tools/` foundation, apart from the exceptions it names.
+- [`daemon-boundaries.mjs`](../../_tools/checks/daemon-boundaries.mjs): no new daemon module that takes the whole `Services` bag, and no new import cycle between daemon subsystems.
+- [`contract-paths.mjs`](../../_tools/checks/contract-paths.mjs): the app and extensions call a sandbox route through the typed client, never by spelling its path.
+- [`alias-targets.mjs`](../../_tools/checks/alias-targets.mjs): every resolver alias points at a file that exists.
 
-## What may ship
+## Words, time and text
 
-Anything intentic hands to somebody else — an npm package, the sandbox image, the desktop app, the browser
-extension, the GitHub Action — carries its production dependencies with it, and each of those has to be licensed
-so it may be handed on. [`licences.mjs`](../../_tools/checks/licences.mjs) reads what ships from where each
-artifact is built (the npm publish set and the release's other versioned artifacts, the image's trees and the
-packages it prunes by hand, every Tauri app, every `action.yml`), walks each one's production closure through the
-installed `node_modules`, and refuses AGPL, GPL, SSPL, BUSL, Elastic, PolyForm, non-commercial Creative Commons
-and a package that states no licence; LGPL, MPL and any licence it does not know are held for a review. What the
-owner has accepted is its `REVIEWED` list, each entry with the licence it was read at and why. The Rust crates the
-desktop app and `_sandbox/ic` compile in, and the mobile shells installed outside the workspace, are not read by
-it.
+- [`vocabulary.mjs`](../../_tools/checks/vocabulary.mjs): a retired word is not spelled again. [`vocabulary.mjs`](../../_tools/constants/src/vocabulary.mjs) in `@intentic/constants` lists each one and the word to use instead.
+- [`time-zones.mjs`](../../_tools/checks/time-zones.mjs): every cron names its zone, and dates format through the UI kit's formatters.
+- The i18n checks keep every visible word in a catalog ([languages.md](languages.md)).
+- [`md-links.mjs`](../../_tools/checks/md-links.mjs): every relative link in Markdown resolves, and every page here is linked from [ARCHITECTURE.md](../../ARCHITECTURE.md).
 
-## One name per concept, across the three tiers
+## UI
 
-A feature is called the same thing on the wire, in the daemon and in the app: the contract file
-(`<group>.contract.ts`), the daemon directory (`src/<group>/`) and the web feature (`src/features/<group>/`)
-all wear the wire group's name. The daemon already matched 36 of 41 groups when this was written; the web now
-does too, with one documented exception — **`chat` is the UI's name for wire group `agent`**, because that is
-what the surface is called and renaming the surface would be renaming the product.
+One component per kind of control, so a skin restyles everything at once: `Button` ([`button-tiers.mjs`](../../_tools/checks/button-tiers.mjs)), the `ui-field-box` field ([`input-tiers.mjs`](../../_tools/checks/input-tiers.mjs)), `RowGroup` lists ([`row-tiers.mjs`](../../_tools/checks/row-tiers.mjs)), and theme tokens instead of Tailwind arbitrary values ([`tailwind-bypass.mjs`](../../_tools/checks/tailwind-bypass.mjs)). [`vue-templates.mjs`](../../_tools/checks/vue-templates.mjs) compiles every template, and [`submit-guards.mjs`](../../_tools/checks/submit-guards.mjs) refuses an Enter key that can submit twice.
+
+## Failures
+
+A catch names the one failure it expects and lets the rest through: `isMissing` / `undefinedIfMissing` from [`@intentic/base/errors`](../../_tools/base/src/errors.ts) for "not created yet", a status check for "not found". A read that failed is never written back as a default: the daemon's files go through `jsonFile` / `textFile` ([`json-file.ts`](../../_sandbox/sandbox/src/store/json-file.ts)), and a guard fails closed. [`silent-catch.mjs`](../../_tools/checks/silent-catch.mjs) ratchets handlers that throw an error away; a discard that is right says why with `// silent-catch: <reason>`.
+
+## Code style
+
+- oxlint ([`.oxlintrc.json`](../../.oxlintrc.json)) runs on every edit through [`lint-edit.mjs`](../../_tools/oxlint/lint-edit.mjs), which fixes what it can and reports only what the edit added.
+- `pnpm lint:plugins` ([`.oxlintrc.plugins.json`](../../.oxlintrc.plugins.json)) adds the vendored [`anti-slop`](../../_tools/oxlint/anti-slop) type rules, cognitive complexity, and [`comments/one-line`](../../_tools/oxlint/comments/index.ts): a comment is one line stating what the code cannot.
+- The rest of the house rules, such as no re-exports, `undefined` over `null`, and early returns, are in [`AGENTS.md`](../../AGENTS.md). Test conventions are in [testing.md](testing.md).

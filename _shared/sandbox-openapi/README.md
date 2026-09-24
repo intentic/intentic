@@ -1,21 +1,30 @@
-# @intentic/sandbox-openapi
+# sandbox-openapi
 
-The daemon's wire contract as an OpenAPI 3.1 document, generated from the contract rather than written beside
-it.
+Generates the sandbox daemon's wire contract as one OpenAPI 3.1 document, which the site renders as its API reference and serves as `openapi.json`.
 
-A hand-kept spec is a second source of truth that is wrong the day after it is written. This package derives
-the document from `@intentic/sandbox-contract` — the same oRPC routes and zod schemas the daemon serves and
-the editor calls — so a route that changes shape changes the document in the same commit, and a route that
-nobody exposed cannot appear in it at all. What it adds on top of the contract is the part the contract has no
-opinion about: how operations are grouped for a reader, and what each one needs to be allowed to do.
+```mermaid
+flowchart LR
+    contract["sandbox-contract<br/>sandboxContract"] --> spec(["sandboxSpec"])
+    groups["groups.ts<br/>shelves · group prose"] --> spec
+    security["security.ts<br/>session · control token"] --> spec
+    spec --> json["/api/openapi.json"]
+    spec --> pages["Site API reference<br/>/api pages"]
+```
+
+- Paths, methods and schemas are derived from `sandboxContract` when the site builds. No copy of the document is
+  committed, since a route's change already shows in the contract's own diff.
+- What the contract cannot state is authored here: the reading order and audience of each route group
+  (`SPEC_GROUPS`, `SPEC_SHELVES`) and the two credentials, because authorization is middleware in the daemon rather
+  than part of each route.
+- `zodConverter` turns zod schemas into JSON Schema with `z.toJSONSchema`, keeping request and response shapes apart
+  where `.default()` or `.stringbool()` makes them differ.
+- `spec.test.ts` fails when a contract group has no entry in `groups.ts`, an entry has no routes, or two runs produce
+  different documents.
 
 ## Key files
 
-- [`src/spec.ts`](src/spec.ts) — the document itself: every route walked into a path item, with the operation
-  ids, request bodies and responses an OpenAPI reader expects.
-- [`src/converter.ts`](src/converter.ts) — zod → JSON Schema, in the dialect oRPC's own generator declares, so
-  a schema means the same thing on both sides of the conversion.
-- [`src/groups.ts`](src/groups.ts) — the shelves and tags a reader meets the surface through, which is the one
-  editorial decision here.
-- [`src/security.ts`](src/security.ts) — which control-token scope each operation sits behind, derived from the
-  contract's own scope ladder.
+- [src/spec.ts](src/spec.ts) — `sandboxSpec` and `serializeSpec`: the document, generated from the contract.
+- [src/groups.ts](src/groups.ts) — the hand-written groups and shelves the reference rail is built from.
+- [src/security.ts](src/security.ts) — the session bearer and control-token schemes, with each token scope's reach.
+- [src/converter.ts](src/converter.ts) — zod to JSON Schema for oRPC's OpenAPI generator.
+- [src/spec.test.ts](src/spec.test.ts) — coverage, grouping and determinism, checked by walking the contract.

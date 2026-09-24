@@ -594,7 +594,7 @@ model DesktopHandoff {
 // accepted invitee has daemon access immediately. inviteToken/inviteExpiresAt gate the accept link (resend mints
 // fresh ones); an unaccepted invite that expires is inert — the invitee never received a connect token.
 // ---------------------------------------------------------------------------
-// The hosted plan: the one thing the platform sells (docs/design/pricing-model.md).
+// The hosted plan: the one thing the platform sells.
 // Mirrored from Stripe by webhook — Stripe stays the source of truth for money,
 // this row is the platform's fast local answer to "is this owner's hosted sandbox
 // on the plan" (api sandbox/hosted/hosted-usage.ts, hosted-idle.ts).

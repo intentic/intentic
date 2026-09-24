@@ -1,57 +1,47 @@
 # Contributing
 
-Issues and pull requests are welcome. For anything larger than a bug fix, open an issue before you write the
-code: it costs you nothing and it is the only way to find out early that something is already in flight.
+How to set up, build and test the intentic monorepo, and which gates a change passes between your editor and a release.
 
-For security problems, do not open an issue: see [SECURITY.md](SECURITY.md).
-
-## Getting the tree running
-
-```sh
-pnpm install
-pnpm typecheck        # the gate — emits declarations first, needs no build
-pnpm verify           # typecheck, then test
+```mermaid
+flowchart LR
+    edit["your change"] --> turn["pnpm verify:turn<br/>what the branch touched"]
+    turn --> commit["commit<br/>commitlint"]
+    commit --> push(["pnpm verify:push<br/>pre-push hook"])
+    push --> ci["CI on the fleet"]
+    ci --> main["main"]
+    main --> verify["pnpm verify<br/>whole repository"]
+    main --> release["release on green"]
 ```
 
-Requires **Node 24** and **pnpm 12**, both pinned in `engines` (`24.21.0` and `12.4.1`, the versions CI runs);
-`packageManager` makes corepack fetch that pnpm. On Windows, `openssl` has to be on PATH before the first
-install: it mints this machine's development certificate. To run the platform locally (Postgres, the api, the
-browser workspace), see **Develop locally** in the [README](README.md).
+## Set up
 
-## How work is checked
+1. Install Node and pnpm at the versions `package.json` pins (`engines`, `packageManager`). The Rust crates (`_sandbox/ic`, `_sandbox/front`, `_devices/win-launcher`, the desktop app's `src-tauri`) need cargo. The database, the sandbox image and the e2e tiers need Docker.
+2. `pnpm install`. Its `prepare` script points git at `.githooks/`, which holds the commit-msg and pre-push hooks.
+3. `pnpm build`, `pnpm test`, `pnpm typecheck` and `pnpm lint` cover the workspace; `pnpm --filter @intentic/<name> test` covers one package.
+4. `pnpm dev` starts Postgres, the api, the web editor and the site. `pnpm build:sandbox` builds the sandbox image locally.
 
-- **`pnpm verify` is the gate.** It is `pnpm typecheck` and then `pnpm test`: under a minute for all 45
-  packages from a cold cache. Both emit every dependency's dist with `tsgo -b` first
-  (`_tools/scripts/build/emit-declarations.mjs`), so neither needs `pnpm build`. It is also what CI decides `main`'s health on,
-  so a green run here is a green run there.
-- **Edit `src/` directly.** Workspace packages expose an `@intentic/src` export condition, so cross-package
-  imports resolve to source: no build step sits between editing a lib and running a dependent test.
-- **Tests are co-located:** `*.test.ts` (unit), `*.integration.test.ts` (temp trees, subprocesses, real git:
-  a 60s budget instead of the 5s hang detector), and gated `*.e2e.test.ts` (real infra, opt-in).
-- **Tests are type-checked too**, by `pnpm typecheck` rather than by `pnpm build`. A package that emits to
-  `dist` excludes `*.test.ts` from its build config and re-includes it in `tsconfig.test.json`.
-- Every package is documented by its own README: what it is responsible for and where to start reading. It is
-  the package's documentation page, not a note beside one, so it is updated in the same commit as the change
-  that dates it. [AGENTS.md](AGENTS.md#documentation) has the two parts of it a tool reads.
+## The gates
 
-## House rules
+| Command | What it measures | When it runs |
+| --- | --- | --- |
+| `pnpm verify:turn` | checks, lint, the assertion ratchet, typecheck and tests over what the branch changed since main | before you commit |
+| `pnpm verify:push` | checks, the ratchet, manifest and lockfile lockstep, lint, rustfmt; replays a recorded typecheck, build and test verdict, or runs them with `--suite` | the pre-push hook |
+| `pnpm verify` | the whole repository, the way CI's verify groups do | after a change lands on main |
 
-[AGENTS.md](AGENTS.md) holds the editing rules every change follows, and they are stricter than most:
-no legacy or compatibility shims, no re-exports or aliases, let errors propagate rather than wrapping them,
-prefer `undefined` over `null`, early returns for edge cases. A change that reads like the code around it is a
-change that gets merged quickly.
+`git push --no-verify` skips the hook when you mean to push a tree that does not pass. CI builds only branches in this repository: a pull request from a fork runs nothing until a maintainer reads it and pushes its branch here ([the fork boundary](docs/ops/ci-runner.md)).
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org): `commitlint.config.ts` enforces
-it, and `semantic-release` derives the version and the release notes from it, so the prefix you choose decides
-what ships.
+## Commits
 
-[ARCHITECTURE.md](ARCHITECTURE.md) covers the platform / sandbox / workspace split, the ownership and trust
-model, the extension system, and the agent-facing tooling. For the shorter, picture-led version: the components,
-the vocabulary and what to read first: read [docs/architecture/repo.md](docs/architecture/repo.md); each
-package's own page is its README.
+- Conventional Commits, checked by [`commitlint.config.ts`](commitlint.config.ts): `feat`, `fix`, `chore`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`, `style` or `revert`. The subject may open with a code identifier but not in Title Case.
+- A `Release-Note:` trailer is one line a user would notice; it becomes a bullet under the release's "What's new".
+- A `!` after the type with a `Breaking-Note:` trailer declares a break. The push refuses a narrowed wire contract without one ([COMPATIBILITY.md](COMPATIBILITY.md)).
+- A weakened test needs a `test!:` subject or a `Test-Note:` trailer saying why, or the push refuses it.
+- The code rules (no legacy shims, one source of truth, what a comment may say) are in [AGENTS.md](AGENTS.md).
 
-## Extensions
+## Documentation
 
-If what you want to build is a capability rather than a change to the core, you probably want an extension
-instead: see [`intentic/extension-example`](https://github.com/intentic/extension-example) for the reference
-implementation and [`intentic/registry`](https://github.com/intentic/registry) for listing it.
+- A package's `README.md` changes in the same commit as the code that made it wrong.
+- How the system fits together goes in `docs/architecture/`, runbooks for the machinery around the code in `docs/ops/`; [docs/README.md](docs/README.md) says where each kind of page belongs.
+- User-facing documentation is the site's, under `_site/site/src/pages/docs/`.
+
+Report a vulnerability privately, as [SECURITY.md](SECURITY.md) describes, never in an issue. Contributions are under the [MIT licence](LICENSE).

@@ -712,7 +712,7 @@ fn run_agent_bootstrap(agent: AgentBootstrap, vars: &[(&str, &str)]) -> bool {
 ///
 /// Pure so the one decision here is tested rather than reasoned about. `nested` is set only when THIS run is
 /// drawing a checklist — a piped run hands the child the same pipe, and the child's own `is stdout a terminal`
-/// test reaches the right answer without being told (docs/cli-output-protocol.md §2).
+/// test reaches the right answer without being told (docs/ops/cli-output-protocol.md, "Choosing a mode").
 fn agent_env<'a>(vars: &[(&'a str, &'a str)], rich: bool) -> Vec<(&'a str, &'a str)> {
     let mut child = vars.to_vec();
     if rich {

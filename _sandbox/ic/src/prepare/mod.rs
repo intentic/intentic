@@ -415,8 +415,9 @@ fn sign_out(unmet: &[plan::Requirement], user: &str) -> Result<()> {
 }
 
 /// Whether something other than a person started this run — the desktop app says so outright
-/// (`INTENTIC_NO_PROMPT`, cli-output-protocol §2), and it parks the setup and brings it back itself, so
-/// telling its user to paste a command into a terminal they do not have is worse than saying nothing.
+/// (`INTENTIC_NO_PROMPT`, docs/ops/cli-output-protocol.md, "Prompts"), and it parks the setup and brings it
+/// back itself, so telling its user to paste a command into a terminal they do not have is worse than saying
+/// nothing.
 #[cfg(windows)]
 fn unattended() -> bool {
     std::env::var("INTENTIC_NO_PROMPT").as_deref() == Ok("1")

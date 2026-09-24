@@ -4,7 +4,7 @@ The marketplace wedge that needs no sandbox, no Docker, no account: plugins that
 session cheaper and sharper, installed by name, working on the very next session. Two plugins, one repo
 marketplace, one promise. This is the scope for getting both submittable; the companion analysis of *why*
 this wedge over the sandbox-shaped ones is in the conversation that produced this doc, and the mechanics it
-ports are documented in [`_sandbox/sandbox/docs/output-cleaners.md`](../../_sandbox/sandbox/docs/output-cleaners.md).
+ports live in [`_sandbox/sandbox/bin/`](../../_sandbox/sandbox/bin).
 
 ## What already exists (more than expected)
 

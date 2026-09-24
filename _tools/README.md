@@ -1,51 +1,46 @@
-# Plumbing
+# Tools
 
-Shared config and test harnesses, plus repo-wide maintainer scripts and non-package seeds for external repos.
-Nothing here is product; a package lives here when every group needs it (`tsconfig`, `constants`, `testing`)
-or when it exists for CI and release alone.
+The foundation every other part stands on: shared runtime primitives and config, test harnesses and stand-ins, the repository's gates and maintainer scripts, and seeds copied into other projects.
 
-Two directories carry the commands rather than the code. [checks/](checks) is every gate that reads the
-checkout and nothing else, listed once in its manifest and run everywhere that list is read.
-[scripts/](scripts) is everything else this repository runs around the code — verifying, building, publishing,
-and standing machines up — grouped by who it serves, one family per directory, with the shared decisions in
-`scripts/lib`. Each has a README naming every file in it.
-
-[perf/](perf) measures what the code costs the CPU and the screen as counts, not timings: Valgrind instruction
-counts for the daemon's pure-JS hot paths, and render, layout, call and mutation counts for the editor, each
-checked against a baseline in the repository.
-
-[nav/](nav) measures what this repository costs an *agent* to read — tokens spent locating and opening a
-symbol — and gates a decomposition against removing a public export or moving a frozen contract file.
-[`nav/structure-stats.mjs`](nav/structure-stats.mjs) is its sibling one level up: what FINDING a file costs,
-mined from the agent transcripts (listings, failed reads, packages touched per session).
-
-## What each entry is
-
-Four kinds live here, and the difference matters because it decides whether a change to one can break a user.
-**Shipped** is published to npm and depended on by product code. **Double** stands in for something real
-during a test and never ships. **Harness** runs the product against itself. **Plumbing** has no package.json
-at all: it is scripts this repository runs on itself.
-
-| kind         | entries                                                                                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| **shipped**  | [base](base), [code-read](code-read), [constants](constants), [registry-scan](registry-scan), [testing](testing), [tsconfig](tsconfig) |
-| **double**   | [fake-model](fake-model), [fake-upstream](fake-upstream)                                                                  |
-| **harness**  | [e2e](e2e), [onboarding](onboarding), [desktop-smoke](desktop-smoke), [desktop-smoke-windows](desktop-smoke-windows), [localhost-https](localhost-https), [examples](examples), [extension-example](extension-example), [dind-host](dind-host), [perf](perf) |
-| **plumbing** | [checks](checks), [scripts](scripts), [nav](nav), [oxlint](oxlint), [ci-base](ci-base), [ci-desktop](ci-desktop), [selfhost](selfhost) |
-
-`extension-example` and `registry-scan/seed` are **seeds**: directories copied OUT of this repository into
-somebody else's project, which is why their imports and their relative links resolve there rather than here
-(the checks know: `MAY_SPELL_A_ROOT` in `checks/path-literals.mjs`, `COPIED_OUT` in `checks/md-links.mjs`).
-
-## Moving a directory
-
-`scripts/build/move-files.mjs` is the tool a layout change is made of: `git mv` plus every module specifier the
-move invalidated — in the moved file, in every importer, and in the owning package's `exports` targets, with
-each file's own import style kept. It does not touch config path literals (tsconfig references, vite aliases,
-Dockerfile COPY, a check's baseline key); those are a `rg` sweep, because each is a decision. Its own tests run
-under `node --test` from `pnpm verify`.
-
-```bash
-echo '[{"from":"_sandbox/sandbox/src/agent/turn-plan.ts","to":"_sandbox/sandbox/src/agent/run/turn-plan.ts"}]' > /tmp/moves.json
-node _tools/scripts/build/move-files.mjs /tmp/moves.json --dry-run   # prints every specifier it would rewrite
+```mermaid
+flowchart LR
+    foundation(["Foundation<br/>base · constants · agent-cli · code-read"]) --> parts["Every other part<br/>_shared · _sandbox · _editor · …"]
+    suites["Test runner and fakes<br/>testing · fake-model · fake-upstream"] --> parts
+    harnesses["Harnesses<br/>e2e · onboarding · desktop-smoke"] --> product["The built product<br/>app, daemon, installers"]
+    standins["Stand-in hosts<br/>dind-host · localhost-https"] --> harnesses
+    gates["Gates<br/>checks · oxlint · perf · scripts/verify"] --> checkout["The checkout<br/>each edit, turn, push, CI"]
+    images["CI images<br/>ci-base · ci-desktop · turbo-cache"] --> gates
 ```
+
+`_tools/` holds what every part needs, so any part may depend on it, `_shared/` included. A `_tools/` member that
+itself depends on a package outside `_shared/` and `_tools/` loses that standing, and
+[checks/shared-boundary.mjs](checks/shared-boundary.mjs) refuses a `_shared/` package that leans on it.
+
+| Package | Role |
+| --- | --- |
+| [agent-cli](agent-cli) | Process contract and budgeted output shared by `iq`, `fileq` and `webq` |
+| [base](base) | Runtime primitives every tier shares: when-expressions, disposal, async schedulers |
+| [checks](checks) | The repository's invariant checks, run per edit, turn, push and CI |
+| [ci-base](ci-base) | The image every CI job runs in |
+| [ci-desktop](ci-desktop) | CI image with the Tauri, Rust and Windows cross toolchains |
+| [code-read](code-read) | Grammar resolution and the token walk behind code-only line counts |
+| [constants](constants) | Ports, paths, origins and tables several packages must agree on |
+| [desktop-smoke](desktop-smoke) | Bare Debian image that installs the Linux desktop build and deep-links it |
+| [desktop-smoke-windows](desktop-smoke-windows) | Installs the shipped Windows installer on a real machine and drives it |
+| [dind-host](dind-host) | Docker-in-Docker plus sshd, standing in for a deploy host |
+| [e2e](e2e) | Browser tiers against a local stack, plus screenshots, mobile gate, promo |
+| [examples](examples) | Example intent files for the deploy engine, type-checked by the build |
+| [extension-example](extension-example) | Seed of the reference extension, one contribution of every kind |
+| [fake-model](fake-model) | A scripted model that drives a provider's real CLI offline |
+| [fake-upstream](fake-upstream) | Local deterministic stand-in for the model the free trial spends |
+| [localhost-https](localhost-https) | Mints a per-machine dev CA and localhost certificate |
+| [nav](nav) | Measures what the tree costs an agent to navigate, gates refactors |
+| [onboarding](onboarding) | Nightly journey from sign-in to a connected sandbox, per path |
+| [oxlint](oxlint) | Repository lint plugins and the per-edit lint runner |
+| [perf](perf) | Counts instructions and editor render work against checked-in baselines |
+| [registry-scan](registry-scan) | Nightly scan proposing extension registry listings as pull requests |
+| [scripts](scripts) | Build, CI, desktop, image, release and verify scripts |
+| [selfhost](selfhost) | Compose files to self-host the platform |
+| [testing](testing) | The `suites` test runner and the fakes every package's tests share |
+| [tsconfig](tsconfig) | Base TypeScript configs every package extends |
+| [turbo-cache](turbo-cache) | Compose file for the fleet's turbo remote cache |

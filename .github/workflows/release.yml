@@ -60,7 +60,7 @@ jobs:
     steps:
       # ONE OF THE TWO CHECKOUTS IN THIS REPOSITORY THAT KEEPS ITS CREDENTIAL. Every other one sets
       # `persist-credentials: false` — the token checkout writes into .git/config outlives the job on a
-      # workspace six runner processes share (docs/ci-runner.md, "The token a checkout leaves behind"). These
+      # workspace six runner processes share (docs/ops/ci-runner.md, "The token a checkout leaves behind"). These
       # two run semantic-release, which reaches the git remote, and whether its own GITHUB_TOKEN-derived auth
       # URL fully replaces the persisted header is not a thing to find out by breaking a release.
       #
@@ -421,7 +421,7 @@ jobs:
       # carry as a hand-written `rm -rf` of five named paths.
       #
       # Why it matters here more than anywhere: `clean: false` keeps this runner's checkout between jobs
-      # (docs/ci-runner.md — it is what keeps node_modules warm), so those directories held whatever the last
+      # (docs/ops/ci-runner.md — it is what keeps node_modules warm), so those directories held whatever the last
       # desktop job on this runner put there, and ci.yml's desktop-verify builds a complete set of `0.0.0`
       # Linux bundles on this same label. While this job BUILT the release set, build-desktop.sh's
       # `rm -rf "$OUT"` cleared them as a side effect; assembling stages already-verified bytes into the

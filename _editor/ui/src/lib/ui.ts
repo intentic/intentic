@@ -46,7 +46,7 @@ const textAction = (...twClasses: string[]) =>
         ...twClasses,
     );
 
-// The text field is `ui-field-box`, in three variants and two sizes; nothing else (docs/input-audit.md).
+// The text field is `ui-field-box`, in three variants and two sizes; nothing else.
 // - `ui.input()`: the framed field (rim, fill, radius), for a page, dialog, settings card or standalone filter.
 // - `ui.inputInline()`: replaces text in place (a title being renamed, a tab, a tree node); no rim, takes the
 //   surrounding font, no height change.

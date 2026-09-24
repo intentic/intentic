@@ -1,6 +1,6 @@
 // The words this repository has retired, and what each became. Read by `_tools/checks/vocabulary.mjs`, which refuses a
 // tree that spells one of them again, and by anything else that needs the list as data rather than as prose.
-// A word is here because it named more than one idea or had to be taught; the reasoning is in docs/design/vocabulary.md.
+// A word is here because it named more than one idea or had to be taught.
 //
 // A pattern is the SPELLINGS of the retired word, not the English word itself: `slice` stays legal because
 // `Array.prototype.slice` owns it, so what is refused is `SliceSchema`, never `text.slice(0, 5)`.

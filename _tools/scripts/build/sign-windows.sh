@@ -32,7 +32,7 @@
 # Unset, this script does nothing and says so, which is what keeps `build-desktop.sh <version>` a command any
 # developer can run — the same trade the updater key already makes.
 #
-# WHAT TO BUY is a decision with real trade-offs; docs/windows-code-signing.md lays them out.
+# WHAT TO BUY is a decision with real trade-offs; docs/ops/windows-code-signing.md lays them out.
 set -euo pipefail
 
 # DOES THIS BINARY ALREADY CARRY A SIGNATURE — read off the file itself, with no Windows tool and no

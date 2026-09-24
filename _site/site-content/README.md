@@ -1,42 +1,32 @@
-# @intentic/site-content
+# site-content
 
-Every word on the public website, as data. So the marketing copy is reviewable in a diff instead of buried in
-markup.
+The words, documentation trees and page metadata of intentic.dev as typed TypeScript data, kept apart from the Astro markup that lays them out.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    content(["site-content"]) --> books["Books<br/>docs · developers · api"]
+    books --> rail["Sidebar, search,<br/>llms.txt sections"]
+    content --> meta["page-meta.ts<br/>title, description, date"]
+    meta --> head["head, OpenGraph,<br/>JSON-LD"]
+    content --> pages["Page markup<br/>_site/site/src/pages"]
+```
 
-- Hold the copy for each page: landing, product, docs, compare, about, FAQ, legal.
-- Hold the site's own constants: URLs, taglines, navigation, page metadata.
-- Hold the structured data search engines read.
+- Read only by `_site/site`, at build. Each module is exported as raw source by subpath (`@intentic/site-content/docs`), so there is no build step.
+- A `Book` (`book.ts`) is one documentation tree with its own root, sidebar and search scope: `docs.ts` for users, `developers.ts` for extension authors, and `reference.ts` for the sandbox HTTP API, generated from `@intentic/sandbox-openapi` behind a few hand-written pages. A new docs page is an entry in its tree plus an `.astro` page under `_site/site/src/pages/`.
+- `page-meta.ts` maps every indexable path to its title, description and `datePublished`; `dateModified` comes from git at build.
+- Prices, tiers, origins and legal specifics are imported from `@intentic/constants`, so the site cannot state a figure the product does not use.
 
 ## Key files
 
-- [src/site.ts](src/site.ts): URLs, org name and tagline; the constants everything else composes from.
-- [src/landing.ts](src/landing.ts): the front page's copy.
-- [src/docs.ts](src/docs.ts): the docs tree, with four shelves sorted by who is reading, their sub-groups and nested
-  pages. The sidebar, the top bar's Docs menu, the footer's docs column, the prev/next footer and every docs
-  page's metadata all derive from it, so they cannot disagree about the shape of the documentation.
-- [src/automate.ts](src/automate.ts): the words of the automation machine — six triggers, the check that may veto a
-  run, what a run turns out to be. One source for two drawings of it: the home page's Automate stage and the hero
-  figure on /features/automate/, both rendered by `AutomateFigure.astro`.
-- [src/worksite.ts](src/worksite.ts): the four nouns the docs spend without introducing — machine, sandbox, persona,
-  project — each with the part of a building camp it is drawn as, and each with a definition that has to survive that
-  gloss being deleted. Also where the drawing stops being true, which is on the page rather than in a footnote.
-  `WorksiteFigure.astro` draws it; the metaphor is licensed for `/docs/worksite/` and nowhere else
-  (`docs/marketing/landing-blueprint.md`).
-- [src/pricing.ts](src/pricing.ts): the pricing page's copy; figures from [src/hosted.ts](src/hosted.ts), the
-  published hosted figures (the plan's price, the free plan's hours and removal window, the machine's shape)
-  every page that mentions money reads.
-- [src/nav.ts](src/nav.ts) / [src/page-meta.ts](src/page-meta.ts): navigation and per-page metadata.
-- [src/structured-data.ts](src/structured-data.ts): the JSON-LD the site emits.
+- [src/book.ts](src/book.ts) — the `Book` shape and the helpers every tree shares.
+- [src/docs.ts](src/docs.ts) — the `/docs` tree: shelves, order, blurbs and page meta.
+- [src/page-meta.ts](src/page-meta.ts) — title, description and publish date per path.
+- [src/nav.ts](src/nav.ts) — the nav bar, phone menu and footer as data.
+- [src/site.ts](src/site.ts) — site URL, app URL, demo path and organisation facts.
+- [src/landing.ts](src/landing.ts) — the home page and desk page copy.
 
-## How it fits
+## Commands
 
-Consumed by `_site/site` (the Astro build). Separating copy from layout means a wording change is a one-line diff
-someone can review without reading a template.
-
-## Conventions & gotchas
-
-- `DEMO_PATH` is relative on purpose. The interactive demo builds into the site's own `public/`, so the hero's
-  iframe is SAME-ORIGIN: a cross-origin frame gets partitioned storage, and the demo seeds credentials into
-  localStorage before the app boots. A preview deploy therefore embeds its own copy rather than production's.
+```sh
+pnpm --filter @intentic/site-content check
+```

@@ -13,7 +13,7 @@
 # THE ONE WINDOWS MACHINE. `[self-hosted, windows-desktop]` is a label the Linux fleet does not carry, and that
 # is load-bearing: `runs-on` is an AND over labels, so a Windows box carrying `intentic` would be handed
 # container jobs it cannot run. There is exactly one such machine and it runs one job at a time, so every call
-# to this workflow serializes against every other — see docs/ci-runner-windows.md, including why it must be
+# to this workflow serializes against every other — see docs/ops/ci-runner-windows.md, including why it must be
 # started from a logged-in session rather than installed as a service (a service session has no desktop, and
 # every assertion here reads a window).
 name: windows smoke
@@ -103,7 +103,7 @@ jobs:
           cache: pnpm
 
       # Scoped to the smoke tier's own subtree rather than the whole workspace: this box carries Node, pnpm and
-      # Git and nothing else (docs/ci-runner-windows.md), while the workspace at large pulls native packages
+      # Git and nothing else (docs/ops/ci-runner-windows.md), while the workspace at large pulls native packages
       # that fall back to compiling on Windows — node-pty is source-compiled wherever it lands, so a full
       # install ends in node-gyp hunting for a Python and an MSVC toolchain this machine is deliberately
       # without. Nothing the tier loads lives outside the subtree.

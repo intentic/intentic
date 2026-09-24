@@ -1,24 +1,32 @@
-# @intentic/iq-recall
+# iq-recall
 
-Session recall behind the [`iq`](../../_search/iq) CLI: what past sessions already worked out.
+Session recall behind `iq sessions`: indexes Claude Code transcripts so an agent can ask which files past sessions touched for a topic, find a related session, or fork one mid-way.
 
-Indexes Claude Code transcripts (`node:sqlite`) for topic→file amplification and mid-session forking
-(`iq sessions`).
+```mermaid
+flowchart LR
+    transcripts["~/.claude/projects<br/>JSONL transcripts"] -- "ingest" --> recall(["iq-recall<br/>recall.db"])
+    fleet["Daemon conversations<br/>titles · owners"] -.-> recall
+    recall -- "files · grab · list" --> iq["iq sessions"]
+    recall -- "match" --> hook["prompt hook<br/>suggests a past session"]
+    recall -- "fork" --> resume["claude --resume"]
+```
 
-**Part of the iq dependency island**: imported only by `@intentic/iq`, and invoked via the `iq` subprocess.
-No app or daemon code imports this package, and none should.
+- The index is a disposable cache beside the search index (`.intentic/local/cache/iq/recall.db`). Ingest is incremental: unchanged transcripts are skipped and grown ones resume from their stored byte offset.
+- Ranking is purely statistical, with no model calls: BM25 over prompts, responses and titles, recency decay, and inverse ubiquity so files every session touches (`package.json`) carry no weight.
+- `forkPoint` suggests the turn that keeps the most still-valid context per token; `fork` writes a new transcript up to a chosen turn, which `claude --resume` opens.
+- Transcript lines are read tolerantly: unknown shapes and fields pass through as undefined rather than failing the ingest.
+- Inside a sandbox it joins sessions to the daemon's conversation titles; outside one that lookup is empty and nothing else changes.
 
 ## Key files
 
-- [src/ingest](src/ingest): reading Claude Code transcripts into the index.
-- [src/rank](src/rank): topic→file amplification; what makes a past session useful now.
-- [src/fork](src/fork): resuming a prior session's context instead of rebuilding it.
-- [src/store](src/store): the `node:sqlite` index.
-- [src/fleet](src/fleet): whose CONVERSATION a runtime session belonged to. A recall row is keyed on the
-  provider's bare session uuid and titled from whatever the transcript named itself, which for an agent-run
-  session is nothing — so a listing read as a column of uuids and the word "(untitled)" while the daemon next
-  door held the branch and title for every one of them. The join is the daemon's fleet registry read as a
-  plain file, and it is deliberately tolerant: `iq` runs outside a sandbox too, where the file does not exist
-  and the answer is simply that this listing has no conversations to name. A named row's id is the handle the
-  sandbox's own `agents show <id>` takes.
-- [src/index.ts](src/index.ts): the public surface.
+- [src/index.ts](src/index.ts) — `createRecall` and the `Recall` interface.
+- [src/ingest/ingest.ts](src/ingest/ingest.ts) — incremental transcript mirroring.
+- [src/rank/files.ts](src/rank/files.ts) — topic-to-file ranking.
+- [src/rank/match.ts](src/rank/match.ts) — ranking past sessions against a new first prompt.
+- [src/fork/fork-point.ts](src/fork/fork-point.ts) — the fork-point score over fresh and stale file reads.
+
+## Commands
+
+```sh
+pnpm --filter @intentic/iq-recall test
+```

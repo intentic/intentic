@@ -75,8 +75,7 @@ if (verdicts === undefined) {
         // NOT THE LAST ONE, THOUGH, AND THE DIFFERENCE IS THE WHOLE OF WHY THE NIGHTLY WENT RED. A turn measures its own
         // worktree against its own HEAD — a tree that never becomes main. Two turns that each add one file to a
         // directory of thirty are each green here and over the limit once they land together. verify-push asks this same
-        // question of the push RANGE, which is the first tree that does become main, and docs/audits/tidy-job.md is the
-        // measurement that put it there.
+        // question of the push RANGE, which is the first tree that does become main.
         const before = reportsAt(
             root,
             base ?? "HEAD",

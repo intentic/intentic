@@ -49,8 +49,8 @@ local-grade ownership.
 
 **Business model**: bring your own model subscription, run it on your own hardware, and pay us nothing:
 never a meter on model usage. The one thing we sell is a hosted sandbox ($20 a month, always on) for people
-who would rather not run a machine; money changes whose machine the agents run on, never what they can do
-([docs/design/pricing-model.md](../design/pricing-model.md)). There are no feature tiers: every sandbox, capability and shared
+who would rather not run a machine; money changes whose machine the agents run on, never what they can do.
+There are no feature tiers: every sandbox, capability and shared
 workspace is included. The whole product is MIT open source (`LICENSE`, GitHub).
 
 ## Who it's for

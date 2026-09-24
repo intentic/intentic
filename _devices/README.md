@@ -1,19 +1,24 @@
 # Your devices
 
-Everything that runs on a user's OWN device rather than in a sandbox: the agent that lets a sandbox work there,
-the browser and desktop drivers it uses, the extension that lets a sandbox work in the browser they are already
-signed into, and the local-agent plumbing (state home, autostart, detached agents) every one of these CLIs
-shares. Permissions are enforced at the far end, never in the sandbox: see [machine/](machine) for a device's,
-[webext/](webext) for a browser's.
+The parts of intentic that run on a user's own computer and browser, letting a sandbox's agent work there within the switches the owner set.
 
-Two connectors, and the difference is worth stating once: [machine/](machine) is the whole device — a shell,
-files, the screen — connected by a one-liner run over there. [webext/](webext) is one browser on it, connected
-by a code pasted into an extension, and it can do exactly one thing the other cannot: act as the person on the
-sites their browser is already signed into.
+```mermaid
+flowchart LR
+    subgraph device["User's device"]
+        launch["win-launcher<br/>starts it at logon"] --> machine["machine<br/>intentic-machine"]
+        machine --> libs["browser<br/>desktop-automation<br/>local-agent"]
+        webext["webext<br/>in the user's Chrome"]
+    end
+    machine -->|"outbound WebSocket<br/>device tools"| daemon["Sandbox daemon"]
+    machine -->|"Mutagen over SSH tunnel<br/>folder and ports"| daemon
+    webext -->|"outbound WebSocket<br/>page tools"| daemon
+```
 
-On the machine, enforcement covers what a command SAYS, not only whether commands are allowed at all. `shell`
-opens the door; a command the shared classifier
-([sandbox-contract/src/command-classes.ts](../_shared/sandbox-contract/src/policy/command-classes.ts)) reads as
-destructive — a recursive delete, a formatted disk, a removed Docker volume — additionally needs `destructive`,
-which is off until its owner turns it on. The sandbox's own gate holds far less than this, because a container
-is disposable and a laptop is not.
+| Package | Role |
+| --- | --- |
+| [machine](machine) | The device agent: sandbox tools, folder sync and port mirroring. |
+| [webext](webext) | Chrome extension letting the agent work in the user's signed-in browser. |
+| [browser](browser) | Drives a separate Chromium profile over CDP for the machine. |
+| [desktop-automation](desktop-automation) | Screen capture, pointer, keyboard and windows on Windows and Linux. |
+| [local-agent](local-agent) | State directory, login autostart and pidfiles for on-device CLIs. |
+| [win-launcher](win-launcher) | Starts an agent on Windows without a console window. |

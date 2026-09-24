@@ -1,32 +1,33 @@
-# @intentic/ext-imap
+# imap
 
-Email as a place the agent works: it watches a mailbox over IMAP and turns new mail into agent turns.
+The IMAP connection: an email card whose skill lets the agent read the inbox with `curl`, plus a gateway that watches the mailbox and wakes automations when mail arrives.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    server["IMAP server"] -->|"IDLE"| gw(["imap gateway<br/>node dist/gateway.js"])
+    gw -->|"message · flags · expunge"| daemon["Daemon<br/>automations"]
+    gw --> mark["UID watermark<br/>per account"]
+    agent["Agent"] -->|"curl imaps:// via skill"| server
+```
 
-- Hold an IMAP connection to a mailbox and notice new messages.
-- Normalise a message into something an agent can be handed.
-- Declare the event labels, filters and starter prompt the generic automation editor renders.
-- Remember how far it has read, so a reconnect does not replay the inbox.
+- The card is a `cli` capability: host, port and credentials reach the agent's environment, and [the skill](skills/imap/SKILL.md) covers listing, searching and fetching with `curl` over `imaps://`.
+- The gateway is an `autoStart` extension process holding one imapflow connection per account. It opens the watched mailbox read-only, catches up from its persisted UID watermark, then IDLEs and dispatches normalized events to the daemon's listener route.
+- The watermark survives restarts, so mail that arrived while the gateway was down is delivered on reconnect. A changed `UIDVALIDITY` or mailbox re-baselines without replaying history.
+- A bad credential is fatal until the card is edited, since providers lock accounts after repeated failed logins.
+- Events carry a bounded text excerpt and attachment names; the agent fetches the full message by `extra.uid`. The manifest also offers a "New email" automation template.
+- Only the manifest is in every image; the built gateway ships in the `messaging` image pack.
 
 ## Key files
 
-- [src/connection.ts](src/connection.ts): the IMAP connection and its lifecycle.
-- [src/watermark.ts](src/watermark.ts): how far it has read; the thing that stops a reconnect becoming a flood.
-- [src/normalize.ts](src/normalize.ts): a raw message into the shape a turn receives.
-- [src/gateway.ts](src/gateway.ts), what IMAP plugs into the shared connector runtime: open/close an account's connection, and when a failure is fatal.
+- [src/gateway.ts](src/gateway.ts) — the process entry: reconciles one connection per account.
+- [src/connection.ts](src/connection.ts) — one account's lifecycle: connect, catch up, IDLE.
+- [src/normalize.ts](src/normalize.ts) — IMAP events to listener messages, pure and tested.
+- [src/watermark.ts](src/watermark.ts) — the per-account resume point on disk.
+- [intentic-extension.json](intentic-extension.json) — the card, listener events, gateway process and template.
 
-## How it fits
+## Commands
 
-A **daemon-side** extension: a listener, a process and capabilities, no views. The process shell is
-`@intentic/connector-runtime`, shared with the chat connectors; what lives here: a connection, a normaliser, a
-watermark: is IMAP against a protocol that predates all of them.
-
-## Conventions & gotchas
-
-- The watermark is the whole correctness story. It is covered by an integration test
-  ([src/watermark.integration.test.ts](src/watermark.integration.test.ts)) rather than a unit test, because the
-  failure it prevents only appears across a real reconnect.
-- The "New email" starting point is declared here (`contributes.automationTemplates`), beside the listener it
-  fires on. The source's starter and the template's prompt describe the same payload, so they are one package's
-  problem rather than two.
+```sh
+pnpm --filter @intentic/ext-imap build   # tsc to dist/, which the process runs
+pnpm --filter @intentic/ext-imap test
+```

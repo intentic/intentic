@@ -5,8 +5,7 @@ import { MIN_VIEWPORT, regionOf, regionsEqual, windowBoundsFor, type WindowGeome
 
 const SCREEN = { width: 2560, height: 1600 };
 
-// What Chromium reports for a 1280×880 window at the screen's bottom-right corner; the toolbar measures 87 CSS px
-// (docs/design/browser-surface-analysis.md, §6).
+// What Chromium reports for a 1280×880 window at the screen's bottom-right corner; the toolbar measures 87 CSS px.
 const geometry = (over: Partial<WindowGeometry> = {}): WindowGeometry => ({
     screenX: 1280,
     screenY: 720,

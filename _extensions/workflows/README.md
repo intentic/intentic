@@ -1,61 +1,42 @@
-# @intentic/ext-workflows
+# workflows
 
-Multi-step agent work, designed as a graph and run as one thing.
+The Workflows rail view, where the owner designs graphs of agent sessions that each produce a declared output, runs them and watches the runs.
 
-Where an automation is one trigger and one prompt, a workflow is a sequence: steps that fan out, feed each other,
-and converge: designed on a canvas, saved, and then run with its progress visible per step.
+```mermaid
+flowchart LR
+    ext(["workflows<br/>browser"]) -->|"save · run · stop"| daemon["Daemon<br/>workflow runner"]
+    daemon --> steps["Agent sessions<br/>one per step"]
+    daemon --> files["workflows.json<br/>workflow-runs.json"]
+    files -->|"file push"| ext
+    ci["CI pipeline"] -->|"gate URL"| daemon
+    chat["Chat run graph"] -->|"workflowDag"| ext
+```
 
-## Responsibilities
-
-- Design a workflow on a canvas: steps, their order, and what each one is asked to do.
-- Keep a draft separate from the saved thing, so an unfinished edit is never what runs.
-- Pin each run to one immutable snapshot across every workspace repository, with candidate branches held for
-  downstream comparison instead of auto-landed into the workspace.
-- Run one, and show where it is, step by step, including per-step spend ceilings and complete response artifacts.
-- Offer templates for the workflows most workspaces want, including anonymous multi-model attempts, independent
-  evaluation, and a verified synthesis step.
-- Declare a release gate on a design: the token-authed webhook a CI pipeline calls with what it knows, answered
-  pass / fail / blocked off one declared output field. The designer's gate panel and the card's badge both show
-  the URL and a paste-ready CI step.
+- Runs in the browser, compiled into the editor app as a builtin. The daemon runs the steps and keeps designs in
+  `.intentic/config/workflows.json` and runs in `.intentic/records/workflow-runs.json`. Both files ride the
+  daemon's file-change push, so nothing here polls for them.
+- A step names the steps it `needs`, and may carry a goal, a prompt, a declared output and a persona. Edits go
+  through pure functions in `src/workflowEdit.ts`, which keep `needs` pointing at real steps and the graph acyclic.
+- The designer and the run view draw from one derivation, `workflowDag`. The package exports it with
+  `WorkflowNodeCard`, so the chat panel draws a workflow run with the same picture.
+- A release gate lets a CI pipeline run a workflow and wait for one step's verdict. `src/gateSnippets.ts` writes
+  the wiring for the `intentic/gate-action` step, which reads the gate URL from a secret because the URL carries its
+  token.
+- Nothing fires on its own: a design runs when started from this page, the chat composer or a gate. Templates
+  prefill the designer and create nothing until Save. The page also keeps saved loop designs.
+- The rail badge shows runs in flight, and the tile is seated only while one runs.
 
 ## Key files
 
-- [src/workflowDraft.ts](src/workflowDraft.ts): the draft/saved split, and what editing does to it.
-- [src/workflowDag.ts](src/workflowDag.ts): steps and dependencies as a layout the canvas can draw.
-- [src/workflowEdit.ts](src/workflowEdit.ts): the edit operations, as pure functions over a draft.
-- [src/templates.ts](src/templates.ts): the pre-built workflows, and what each is for.
-- [src/useWorkflows.ts](src/useWorkflows.ts): the list, and the runs against it.
-- [src/runsQuery.ts](src/runsQuery.ts): the run ledger, named once for the page and the badge, and what counts as
-  still working.
-- [src/attention.ts](src/attention.ts): the badge, filled while nothing here is on screen.
+- [src/extension.ts](src/extension.ts) — registers the rail view and starts the in-flight badge.
+- [src/WorkflowsView.vue](src/WorkflowsView.vue) — the page: saved workflows, loops and recent runs.
+- [src/WorkflowDesigner.vue](src/WorkflowDesigner.vue) — the graph editor, step inspector and gate panel.
+- [src/workflowDag.ts](src/workflowDag.ts) — a workflow, with or without a run, as a layered graph.
+- [src/workflowEdit.ts](src/workflowEdit.ts) — the edit operations and the invariants they hold.
+- [src/gateSnippets.ts](src/gateSnippets.ts) — the CI wiring text for a release gate.
 
-## How it fits
+## Commands
 
-Like automations, workflows are native to every sandbox (no capability to enable) so the view detects
-unconditionally: the area exists everywhere, which is what makes `/ext/workflows`, the More list, the mobile menu
-and the palette's "Go to Workflows" work.
-
-**The rail seats the tile while a run is in flight**, and otherwise keeps it behind the More menu
-(`core-views/registry.ts` holds the rule). A run is minutes to hours of fan-out that somebody started and walked
-away from, so a tile that appears exactly while one is working is the way back to the graph; a designer between
-visits is not worth one of the nine seats a laptop's rail has. The badge is `neutral`: runs working are an
-inventory, not a debt. Runs that ended BADLY are deliberately not counted, "unacknowledged" is the only honest
-form of that claim and there is nowhere here to acknowledge one yet; meanwhile a failed run's steps are agent
-conversations, so the fleet carries that news.
-
-## Conventions & gotchas
-
-- The edit operations are pure functions over a draft, which is what makes them testable without a canvas and
-  what keeps undo honest.
-- Creating and updating are explicit operations. New designs and template copies receive fresh UUID-backed ids,
-  so a stale browser cannot silently overwrite an existing workflow.
-- A model pin is the complete runtime choice: provider, model, account, and harness. Leaving it unpinned inherits
-  the workspace's normal unattended model. A step can separately act as a persona; without one it keeps the
-  unattended default: full tools, no logged-in accounts.
-- The gate's webhook token is minted by the daemon on first save and kept across every later edit, so the URL a
-  pipeline was taught survives renames and re-pointed fields. It is NOT on the design: it lives in the daemon's
-  secrets store and arrives beside the saved design and on the listed summary (`gateToken`) for a maintainer or
-  the owner only, so the versioned `workflows.json` carries no credential and a viewer's list carries no URL.
-  Removing the gate revokes it; a future gate gets a new one; **Rotate** on the gate panel mints a new one at once.
-- The run ledger keeps all active runs and the newest 50 ended runs. Long step responses live under
-  `.intentic/workflow-runs/<run>/<step>.md`; the ledger stores only a bounded preview.
+```sh
+pnpm --filter @intentic/ext-workflows test
+```

@@ -157,7 +157,7 @@ services:
             HOSTED_BUILDS_PER_DAY: ${HOSTED_BUILDS_PER_DAY:-}
             HOSTED_BUILD_CONCURRENCY: ${HOSTED_BUILD_CONCURRENCY:-}
             HOSTED_BUILD_MINUTES_PER_DAY: ${HOSTED_BUILD_MINUTES_PER_DAY:-}
-            # The free plan's abuse defences (docs/design/hosted-abuse.md). The newcomer ramp: a smaller ceiling
+            # The free plan's abuse defences. The newcomer ramp: a smaller ceiling
             # for an account's first days. The same-source caps: distinct accounts handed a machine per day from
             # one address and one email domain. The abuse watch: a machine at full load for a whole window, by
             # the provider's own meter, is stopped; the strike after the line suspends the account's hosted lane.

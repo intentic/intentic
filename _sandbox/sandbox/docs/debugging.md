@@ -1,64 +1,54 @@
-# Debugging the daemon from inside a dev sandbox
+# Debugging the daemon
 
-What an agent working ON this package can read, measure and run from its own shell, and where each answer lives.
-Everything here is read-only against the running daemon unless it says otherwise.
+Where to look when a running daemon misbehaves: its health probe, the log files it keeps on `/history`, the diagnostics tools its agents get, and the state it leaves on disk.
 
-## The records
+```mermaid
+flowchart LR
+    daemon(["daemon"]) --> stdout["stdout<br/>docker logs"]
+    daemon --> files["/history/logs<br/>daemon.log · perf · metrics"]
+    browser["Browser"] -->|"POST /logs/client"| files
+    tmux["tmux panes"] -->|"rendered captures"| files
+    files --> routes["GET /logs<br/>GET /logs/file"]
+    files --> tools["diagnostics tools<br/>errors · slow · turns · resources"]
+```
 
-| File under `/history/logs/` | What it holds |
+## First checks
+
+- Inside the container, `curl -s localhost:8787/health` answers even mid-boot. `boot` lists every boot step with its
+  state and time, `announce` says whether the platform was reached, and `reach` / `reachedBy` say how the world gets in.
+- On the host, `ic sandbox doctor` walks the sandbox's reachability chain and names the broken link.
+- `docker logs` shows the daemon's JSON lines and `intentic-front`'s own log (its level from `FRONT_LOG`). A daemon
+  that refuses its config says why on stderr and exits with code 78.
+
+## Log files
+
+Everything lives under `/history/logs`, outside the agents' `/work`; [src/logs/log-files.ts](../src/logs/log-files.ts)
+owns the layout and prunes by size, age and count.
+
+| File | What it records |
 | --- | --- |
-| `daemon.log` | The daemon's own JSON lines. A line written during a turn carries `ctx.conversationId`, one written while serving a browser request carries `ctx.requestId` (the id the editor's `client.jsonl` reports use). |
-| `perf.jsonl` | Only the spans over their slow floor (`src/platform/resources/perf.ts`), each with `load1` so a busy machine is separable from a slow op. The ranked summary is in `daemon.log` every ten minutes. |
-| `resource-metrics.jsonl` | One sample a minute: memory, PSI, event-loop delay, processes by role, and each heavy-command pool with its `longestHolder`. |
-| `client.jsonl` | What the editor reported about itself, warn and above. |
-| `filter-stats.jsonl` | One line per agent Bash call: bytes in, bytes out, which output cleaner removed what. |
-| `raw-output/` | The unfiltered output of a call whose footer named it; `retrieve-output <file> [pattern]` reads it back. |
-| `terminals/` | Every tmux pane, VT-rendered by `pane-log-clean`. |
-| `daemon-exit.json`, `report.*.json` | How the previous run ended; a fatal error leaves a Node diagnostic report beside it. |
+| `daemon.log` | The daemon's pino lines; `ctx.conversationId` and `ctx.requestId` tie a line to a turn or a browser request |
+| `perf.jsonl` | Timing spans, including every HTTP request |
+| `client.jsonl` | Errors, stalls and recoveries browsers reported |
+| `resource-metrics.jsonl` | One sample a minute: memory, CPU, event-loop delay, heaviest processes |
+| `filter-stats.jsonl` | One row per agent shell command through the output filter |
+| `terminals/`, `services/`, `intentic-runs/` | tmux pane captures, supervised service processes, `intentic` CLI runs |
+| `daemon-exit.json` | Whether the previous run exited cleanly or was killed |
 
-Every file is trimmed to its newest whole lines once over its cap, so the first line always parses. The
-`mcp__diagnostics__*` tools read the same files with a time window; `agents show <id> --transcript` reads one
-conversation's record without walking `/history` by hand.
+Node's fatal-error reports (`report.*.json`) land in the same directory. `LOG_LEVEL` sets the level; `LOG_PRETTY=1`
+pretty-prints to stdout instead of writing `daemon.log`.
 
-## Log level
+## Reading them
 
-`LOG_LEVEL` is read once at boot (`src/env.config.ts`); there is no runtime switch. At `debug`, every perf span is
-also written as a trace line, which is the finest timing the daemon can give without a profiler.
+- `GET /logs` lists the files and `GET /logs/file?name=…` returns a line-aligned tail window; both need the maintainer
+  role.
+- Agents get a read-only `diagnostics` MCP server ([src/logs/diagnostics-tools.ts](../src/logs/diagnostics-tools.ts))
+  with `errors`, `slow`, `turns` and `resources` over the same files and the spend ledger.
+- Invariant violations and event-loop stalls (`platform/resources/loop-watchdog.ts`) are written to `daemon.log`.
 
-## Profiling
+## State on disk
 
-- **A process you start**: `node --cpu-prof --cpu-prof-dir=/tmp/prof …` or `--heap-prof`, then
-  `fileq read /tmp/prof/<file>.cpuprofile` for self and total time ranked by function. `strace -f -p <pid>` works, since
-  the container runs as root with full capabilities.
-- **The running daemon**: `kill -USR1 <daemon pid>` opens its inspector on `127.0.0.1:9229`. That changes a process you
-  did not start, so ask the owner first. The daemon runs with `--report-on-fatalerror`, so a crash leaves a
-  `report.*.json` under `/history/logs/` without asking anyone.
-
-## Where a change runs
-
-In a dev sandbox `/opt/sandbox/dist` is the HOST checkout's build, bind-mounted (`scripts/dev-mounts.mjs`); a build
-inside `/work` never reaches the running daemon. The owner's `dev-restart` (`scripts/dev-restart.sh`, also a device
-command) compiles on the host and restarts the container, which ends every running turn. To exercise a change without
-that: the route and service tests stand the app up in-process (`createApp(services())`), `src/harness/e2e-harness.ts`
-builds and runs the full image under testcontainers, and `_site/demo` serves the editor against a fake daemon.
-
-## Tests
-
-`pnpm test <path…>` (the package's `suites` script) runs only the test files whose path contains one of the
-arguments, each under its own kind's budget. Without arguments it runs the whole package, about five minutes here.
-Test and typecheck commands pass through the heavy-command queue and its memory gate, so on a loaded machine they
-wait before they start; `resource-metrics.jsonl`'s `queue.<pool>.longestHolder` names what they wait behind.
-
-## Waiting
-
-A long command takes `run_in_background: true`; the turn is re-invoked when it exits, and the `wait` tool parks on it
-(or on a child agent) by id. Something outside the sandbox (CI, a deploy) is watched with `mcp__watch__start`. A
-`sleep` loop in Bash bills every poll to the turn.
-
-## Network
-
-`curl`, `ss`, `lsof`, `dig`, `nc`, `socat` and `openssl` are in the image. The daemon listens on `SANDBOX_PORT`
-(8787); `/health` is open, and every other route needs a session. The per-boot agent token
-(`/run/intentic/agent.token`, sent as `x-intentic-agent`) reaches only the routes the in-sandbox CLIs are declared
-for. For the editor, the browser tools record the page's console and network (`browser_console_messages`,
-`browser_network_requests`).
+- `/history`: `conversations.db` (the conversation registry), `conversations/` (one directory per conversation),
+  `worktrees/`, `gits/` (every repository's git dir), `scopes/` (workspace history snapshots), `engines/`.
+- `/work/.intentic`: `config/` (settings, capabilities, automations, safety policy), `records/` and `secrets/`. The
+  table of which file backs which view is `state/workspace-state.ts` in `@intentic/sandbox-contract`.

@@ -1,172 +1,35 @@
-# @intentic/local-agent
+# local-agent
 
-The plumbing every intentic CLI that lives on a **user's own computer** needs, and none of what any of them does.
+The shared plumbing for intentic CLIs that run on a user's own computer: a private state directory, login autostart, re-launching itself, and one background agent found again by pidfile.
 
-```
-~/.intentic/<name>/          agentHome(name)      — state dir + config.json
-        config.json          writeSecretFile()    — 0700 dir, 0600 file, written whole (writeFileAtomic)
-        <agent>.log          spawnDetached()      — the agent's output has nowhere else to go
-        <agent>.pid          claimPidFile()       — one agent per home: pid, its boot, its build, its supervisor
-
-Task Scheduler\<name>        autostart().register — Windows, per-user logon task, supervised, no elevation
-HKCU\…\Run                   autostart().register — Windows fallback, one shot at logon, nothing watches it
-~/Library/LaunchAgents/      autostart().register — macOS, opt-in per agent, KeepAlive on a non-zero exit
-~/.config/systemd/user/      autostart().register — Linux, Restart=on-failure
-~/.config/autostart/         autostart().register — Linux desktop session, where there is no user manager
-
-stdout                       createUi(process)    — the one renderer every agent speaks through
+```mermaid
+flowchart LR
+    machine["intentic-machine"] --> la(["local-agent"])
+    bridge["acp-bridge"] --> la
+    la --> home["~/.intentic/name<br/>owner-only files"]
+    la --> auto["Login autostart<br/>Task Scheduler, systemd, launchd"]
+    la --> pid["Pidfile + boot token<br/>one resident agent"]
+    auto -->|"Windows"| stub["intentic-launch.exe"]
 ```
 
-## Why it exists
-
-Two agents ship to a user's machine and have nothing in common except how they are **installed** and how they
-**stay alive**:
-
-| | what it does | uses |
-| --- | --- | --- |
-| [`@intentic/machine`](../../_devices/machine) | lets the sandbox's agent work on this computer, and mirrors files and ports between the two | home, launcher, autostart, detached, ui |
-| [`@intentic/acp-bridge`](../../_sandbox/acp-bridge) | lets an editor talk to the sandbox | home |
-
-The machine agent's two halves (and the standalone host/sync agents they used to be) were written months apart,
-and each copy of that plumbing was made from the last one: a shape with a known ending. The second copy is a
-snapshot of the first on the day it was taken, and every fix after that lands in only one of them. It already
-had:
-
-- **sync wrote its token file world-readable.** Its config module was copied from host's *before* the 0600 floor
-  was added there, and nothing afterwards compared the two.
-- **host has no macOS autostart.** It was copied from a sync that did not have one yet, and on macOS it wrote an
-  XDG entry that nothing reads.
-- **The Windows console rule, the compiled-binary argv rule and "report what the tool actually said"** were each
-  written out at length in two files, in prose, cross-referencing the other agent by name: including in
-  ARCHITECTURE.md, which said host's spawns behave "for the reason `@intentic/sync` documents".
-- **Each agent grew its own `out()` closure** writing straight to stdout, so every improvement to how one of
-  them reads landed in exactly one of them: while the install a user actually experiences is `ic` and these
-  agents in sequence, three voices deep.
-
-This package is those lessons as code, so the fourth agent inherits them by importing rather than by reading.
-
-## The five pieces
-
-**`home.ts`**: `agentHome(name)` gives `{ dir, configPath }` under `~/.intentic/<name>`; `writeSecretFile`
-writes through a 0700 directory to a 0600 file. The directory's mode is re-applied on every write, because `mkdir`
-does not tighten a directory that already exists: an agent installed before this floor existed would otherwise keep
-its old permissions forever. Every write goes through `writeFileAtomic`, which puts the bytes beside the file and
-renames them over it: a reader sees the old file or the new one, never a torn one, which a config reader would take
-for an empty list and write back.
-
-**`launcher.ts`**: `cliLauncher(cliName)` answers how to re-invoke this CLI. The subtlety is the compiled
-binary: `bun build --compile` reports an `argv[1]` inside its own virtual filesystem and re-injects it on every
-launch, so passing it again shifts the command to `argv[2]` where the parser never looks. `windowsLaunchStub()`
-finds the other half of a Windows install, [`intentic-launch.exe`](../win-launcher), sitting next to the agent's
-own executable.
-
-**`autostart.ts`**: `autostart(spec, launcher, log)` against an `AutostartSpec` the agent declares, answering three
-verbs. `register` writes the entry and never starts anything (with `repair`, it only puts back an entry that is
-missing, which is what a running agent calls on itself). `start` starts the agent through its entry — `schtasks /run`,
-`systemctl --user start`, `launchctl bootstrap` or `kickstart` — and answers false where the entry cannot, so the
-caller spawns it instead. `unregister` clears every mechanism's entry, since which one is in force depends on what the
-last registration found. Every mechanism here supervises what it starts, so every one gets the **foreground**
-command; on Windows it goes through the stub, `intentic-launch.exe --log <log> --wait -- <agent> <foreground args>`.
-`launchAgent` is optional: an agent that has not been exercised on macOS says so and gets a note, rather than a file
-macOS never reads.
-
-Supervised is the word that matters, and it is what each mechanism is chosen for. systemd has
-`Restart=on-failure`; launchd gets `KeepAlive: {SuccessfulExit: false}`, which is the same bargain and safe to
-make because these agents exit 0 for every deliberate stop and 128+SIGNAL otherwise. Windows gets a per-user
-**logon task**: a Run value starts the agent once and nothing watches it afterwards, so a crash at ten in the
-morning stayed a crash until the next sign-in. The task restarts a failed action three times a minute apart, and
-a repeating trigger re-starts one that died some other way — `IgnoreNew` is what makes that repetition a no-op
-while the agent is healthy rather than a second agent every five minutes. `InteractiveToken` is what makes it
-need no password and no elevation; the `schtasks` form that *does* want a password is `/sc ONLOGON /ru`, which
-is why this registers XML instead.
-
-Windows earns the stub on top of that. Explorer starts a Run entry in the interactive session, and the loader
-gives every console-subsystem program a console — which on Windows 11, where the default console host is Windows
-Terminal, is a terminal window on the desktop. The entry used to name the agent's own **detached** command,
-which spawns the agent and exits, so what a user saw at every single boot was a black window for one to two
-seconds. Nothing softer works: `powershell -WindowStyle Hidden` hides the console *its* host owns while the
-window belongs to WindowsTerminal.exe, and a logon task whose action is a **console** program maps a window like
-anything else. Only a program whose PE subsystem is GUI never gets a console, which is the whole of what the
-stub is — and it is why the logon task is registered only when the stub is there to be its action. Without one,
-`detachedArgs` in the Run key remains the fallback (a developer running `node dist/cli.js`), unsupervised, and
-registration says out loud that a window will flash.
-
-Starting through the entry, rather than spawning beside it, is what keeps an agent supervised after a restart: a
-process started outside the logon task is one the task does not know it is running, so the task starts a rival at
-the next watchdog tick and restarts nothing when this one dies. Registration and starting are separate verbs for the
-same reason: a running agent re-asserting its own entry must not be handed a rival, and on macOS a restart goes through
-booting the job out — which is to say, killing the caller.
-
-**`detached.ts`**: `spawnDetached`, the pidfile (`claimPidFile`, `holdPidFile`, `releasePidFile`, `livePidRecord`),
-`stopProcess`, `isProcessAlive`, and the log roll every supervisor runs before it opens the log (`ROTATE_LOG_SH`). On POSIX the agent is spawned
-`detached` for its own session; on Windows because without it the agent is torn down the moment its parent
-exits — measured on the compiled binary, and the reason "connected in the background (pid N)" was a lie there
-for every release that passed `windowsHide` instead. The two cannot be combined to get both properties
-(`CREATE_NO_WINDOW` is ignored alongside `DETACHED_PROCESS`), so a detached agent on Windows has no console at
-all, and Windows hands a console child of a console-less process a new console *with a window*. That is why
-every spawn inside a agent (git and ssh in sync's bridge, docker and PowerShell in host's tools) passes
-`windowsHide` itself; the flag applies whether or not the parent has a console, where inheritance did not.
-
-Where the stub is installed, `spawnDetached` goes through it on Windows and the bargain improves: the agent gets
-`CREATE_NO_WINDOW`, so it has a console of its own with **no window on it**, and every console child inherits
-that console instead of being handed a fresh one. The per-spawn `windowsHide` stays — it is what covers a agent
-started any other way — but it stops being the only thing between a user and a black window. The stub prints
-the agent's pid on its stdout, because its own pid belongs to a process that has already exited by the time the
-settle check below would probe it.
-
-`spawnDetached` also answers only once the agent has **survived** a short settle window, and throws naming its log
-otherwise. A pid proves the OS created a process; every caller turns it straight into a sentence promising the
-user their machine is now doing something.
-
-A pidfile lives beside the config, so it **outlives the boot that wrote it**, while the number in it means
-nothing outside that boot's process table: pids restart low and are handed out in roughly the same order every
-time, so an agent's own pid from yesterday is somebody else's transient process this morning. So the pidfile is a
-JSON record of the pid, a stamp naming the boot, and what only the agent knows about itself (the build it runs and
-who restarts it), and `livePidRecord` ignores any record from a different boot without probing it. On Linux the stamp is `/proc/sys/kernel/random/boot_id`, exact and unmoved by the clock; elsewhere
-it is the boot's epoch by subtraction from the uptime, which libuv takes from `GetTickCount64` on Windows and
-`kern.boottime` on macOS — both keep counting across sleep, so a laptop that suspends goes on answering the same
-boot. That derived form is compared with a two-minute tolerance, because it is anchored to `Date.now()` and a
-stepped clock would otherwise read as a new boot; a false *mismatch* is the expensive direction, since it lets a
-second agent start on top of a live one.
-
-The cost of not doing this was measured: a machine bugchecked in standby, nothing removed the sync watcher's
-pidfile, and on the next boot the watcher probed the pid it used to hold, found an unrelated early-boot process
-wearing it, and refused to start. Refusing is deliberate and so exits 0 — a supervisor must not restart a
-watcher into refusing again every `RestartSec` — which is precisely why `Restart=on-failure` never fired and
-desktop file sync stayed off until somebody went looking.
-
-Claiming is a write, not a check. Reading the file and then writing it let two agents started at the same moment both
-find it empty and both run; `claimPidFile` writes the record, waits a moment and reads it back, so only the last
-writer keeps it and the other is told who holds it. The holder re-asserts it every tick with `holdPidFile` as a lease,
-and `releasePidFile` removes the file only while it still names the caller, so a stopping agent never deletes the
-claim of the one that replaced it.
-
-**`ui.ts`**: `createUi(process)` is the whole of what an agent writes to a person, and the TypeScript twin of
-`ic`'s `_sandbox/ic/src/ui.rs`. One question decides everything: is stdout a terminal. A **pipe** gets the
-`intentic: [phase] message` marker stream and nothing else, because the desktop app parses it into a progress
-bar and CI reads it out of a log: that shape is a contract, written down in
-[docs/cli-output-protocol.md](../../docs/ops/cli-output-protocol.md). A **terminal** gets a banner, a numbered
-checklist with durations, one repainting status line and a ranked ending. And a third mode, **nested**, is what
-makes an install read as one program rather than three: `ic` runs these agents inside its own checklist and
-sets `INTENTIC_UI=nested`, so their output lands as detail under its step instead of opening a second banner in
-the middle of somebody's setup.
-
-The live region is deliberately **one line**, repainted with a carriage return. Redrawing a whole checklist in
-place needs the cursor moved up N lines, which needs to know when a line wrapped: and these run under
-`curl | sh` on terminals of unknown width. Everything already settled scrolls above it.
-
-## What this package is not
-
-It knows nothing about sandboxes, tunnels, enrollment or MCP. It takes a name, a launcher and a spec, and makes a
-CLI survive a reboot with its credentials readable only by its owner. *What* the agent then does is the agent's
-business: which is why host's scopes and sync's Mutagen sessions are nowhere near here.
+- Used by [`intentic-machine`](../machine) and [`acp-bridge`](../../_sandbox/acp-bridge); it always runs on the
+  user's device, never in a sandbox.
+- `agentHome` puts state under `~/.intentic/<name>`, and `writeSecretFile` writes owner-only files, since they hold
+  sandbox credentials.
+- `autostart` registers the agent at login under something that restarts it, with no elevation: a per-user logon
+  task through [`intentic-launch.exe`](../win-launcher) on Windows (a `HKCU\…\Run` value when the stub is absent), a
+  systemd user unit on Linux (an XDG autostart entry without a user manager), a LaunchAgent on macOS.
+- A pidfile stores a boot token beside the pid, so a pid reused after a reboot never reads as a running agent, and
+  `claimPidFile` settles two starters racing for one file.
+- `cliLauncher` rebuilds the argv that re-invokes the current CLI, both as `node dist/cli.js` and as a bun-compiled binary.
+- `createUi` renders a setup command's checklist: `rich` in a terminal, `plain` markers for a pipe, `nested` inside a
+  parent's checklist.
 
 ## Key files
 
-- [src/index.ts](src/index.ts): the public surface.
-- [src/home.ts](src/home.ts): the `~/.intentic/<agent>` directory and its 0600 floor.
-- [src/autostart.ts](src/autostart.ts): login autostart, per platform.
-- [src/detached.ts](src/detached.ts): the background agent, and surviving a closed terminal.
-- [src/launcher.ts](src/launcher.ts): `cliLauncher()` and the Windows launcher stub, including the
-  compiled-binary argv case.
-- [src/ui.ts](src/ui.ts), the renderer: the pipe/terminal/nested split, the checklist, the ranked ending.
+- [src/index.ts](src/index.ts) — everything the package exports.
+- [src/autostart.ts](src/autostart.ts) — the login entry per OS, including the Windows task XML.
+- [src/detached.ts](src/detached.ts) — pidfiles, `spawnDetached`, the launcher-stub spawn and log rotation.
+- [src/home.ts](src/home.ts) — the state directory, atomic writes and owner-only secret files.
+- [src/launcher.ts](src/launcher.ts) — the argv to re-launch this CLI and the stub command line.
+- [src/ui.ts](src/ui.ts) — the checklist renderer and its output modes.

@@ -1,29 +1,31 @@
-# @intentic/graph
+# graph
 
-The product-agnostic **desired-state IR** and its compiler: the data structure every other package is built around. A node's `type` is an opaque string here; the closed vocabulary lives in [`@intentic/resources`](../resources). This is the base of the dependency graph (depended on by every other package, depends on nothing internal).
+The desired-state representation the deploy tool passes between stages: refs, secrets and readiness checks compiled into one serializable, dependency-ordered graph.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    config["deploy.config.ts<br/>env('KEY')"] --> resolver["state-resolver<br/>RawNode[]"]
+    resolver -- "compile" --> dsg(["graph<br/>DesiredStateGraph"])
+    dsg -- "desired-state.json" --> engine["engine<br/>linearize · hashInputs"]
+    dsg -- "collectSecretUsage" --> cli["cli<br/>deploy secrets"]
+```
 
-- Define the serializable graph types: `DesiredStateGraph`, `RawNode`/`ResourceNode`, `Ref`, `SecretRef`, `Readiness`.
-- Compile a map of `RawNode`s into a validated, dependency-ordered `DesiredStateGraph` (`compile`).
-- Provide the primitives others compose with: typed refs between nodes, env-sourced secrets, HTTP readiness gates, and ownership stamps.
-- It does **not** know which resource kinds exist, how to reconcile them, or how to talk to infra: those belong to `resources`/`engine`/`providers`.
+- A resource node is `{ id, type, inputs, dependsOn, readyWhen }`. Inside inputs, a dependency's output is `{ $ref: "id.output" }` and a secret is `{ $secret: { source, key } }`, so the artifact is plain JSON with no values filled in.
+- `compile` derives `dependsOn` from every ref a node carries and throws on a ref to an unknown id. `linearize` orders nodes topologically with declaration order as the tiebreak, so apply order is deterministic.
+- Secrets come from `env("KEY")`, which the user supplies, or `generated("KEY")`, which intentic creates and stores. Configs import `env` from this package directly.
+- `stamp.ts` is the ownership contract: providers label live resources with `intentic.id` and a hash of their inputs, which lets the engine find and diff them without a state file.
+- A node's `type` is an opaque string here; [resources](../resources) owns the list of kinds.
 
 ## Key files
 
-- [src/types.ts](src/types.ts): the IR types (`DesiredStateGraph`, `RawNode`, `Ref`, `SecretRef`, `Readiness`).
-- [src/compile.ts](src/compile.ts), `compile`: RawNode map → graph (validates refs, fills order).
-- [src/topo.ts](src/topo.ts): `toNodeMap`, `linearize` (topological dependency order).
-- [src/ref.ts](src/ref.ts): `makeRef`/`refKey`/`isRef`, `env` (env-sourced secret), `httpOk` (readiness gate).
-- [src/stamp.ts](src/stamp.ts): `formatStamp`/`parseStamp` (resource ownership stamps).
-- [src/serialize.ts](src/serialize.ts): stable serialization of the graph.
+- [src/types.ts](src/types.ts) — `Ref`, `SecretRef`, `RawNode`, `ResourceNode`, `DesiredStateGraph`, `Move`.
+- [src/compile.ts](src/compile.ts) — raw nodes to the serialized graph with derived dependencies.
+- [src/index.ts](src/index.ts) — `env`, `generated`, `httpOk`, `linearize`, `subgraph`.
+- [src/stamp.ts](src/stamp.ts) — the `intentic.id` and `intentic.hash` stamp format.
+- [src/secrets.ts](src/secrets.ts) — every secret the graph requires and which nodes need it.
 
-## How it fits
+## Commands
 
-Foundational layer. `resources` constrains node `type`s on top of it; `need-resolver`, `state-resolver`, `engine`, and `sdk` all consume its types; authors import `env` from here (its true source) when writing a `deploy.config.ts`.
-
-## Conventions & gotchas
-
-- Refs are typed pointers to another node's outputs: never inline a downstream value; emit a `Ref` so ordering and resolution stay correct.
-- Secrets are `SecretRef`s with a `source` (`env` or `generated`); keep them as refs, never bake plaintext into a node.
-- Co-located tests in [src/index.test.ts](src/index.test.ts). See [ARCHITECTURE.md](../../ARCHITECTURE.md) for the full pipeline.
+```sh
+pnpm --filter @intentic/graph test
+```

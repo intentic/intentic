@@ -1,43 +1,41 @@
-# @intentic/ext-telegram
+# telegram
 
-Telegram as a place the agent works: it reads chats and groups, replies in them, and wakes when it is messaged.
+Connects a Telegram bot to the sandbox: a capability card and skill for the agent, and a long-polling gateway process that wakes automations on messages.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    tg["Telegram Bot API"] -->|"getUpdates"| gw(["telegram gateway<br/>sandbox process"])
+    gw -->|"dispatch"| daemon["Daemon<br/>listener routes"]
+    daemon -->|"state · streamed reply"| gw
+    daemon --> turn["Automation turn"]
+    turn -->|"curl Bot API"| tg
+```
 
-- Hold a long-polling connection per bot and turn Telegram messages into agent turns.
-- Give the agent the ability to send, react, and move files in both directions.
-- Declare the event labels, filters and starter prompt the generic automation editor renders.
-- Keep enough of a chat's recent traffic to answer "why are you telling me this?", since Telegram will not.
+- Three pieces. The capability card takes one token from `@BotFather`. The skill (`skills/telegram/SKILL.md`)
+  teaches the agent to call the Bot API with `curl` and `$TELEGRAM_BOT_TOKEN`. The gateway is a `processes` entry
+  the daemon runs while a Telegram card or Telegram automation exists.
+- The gateway long-polls once per bot, and only while an enabled Telegram automation exists. It uses no SDK, since
+  the Bot API is HTTPS and JSON, and needs no public URL. It is built on
+  [connector-runtime](../../_shared/connector-runtime).
+- Telegram allows one reader per bot. A webhook or a second poller answers 409, which the gateway treats as fatal;
+  it never clears a webhook itself.
+- Bots cannot read a chat's past. The context handed to the agent is the recent messages this process saw go by,
+  and a restart empties it.
+- On a private message, an @mention or a reply to the bot, it shows "typing…" and paints the reply into the chat as
+  the turn streams, spilling past Telegram's length limit into follow-ups.
+- In a group the bot hears only @mentions until privacy mode is turned off in BotFather.
 
 ## Key files
 
-- [src/client.ts](src/client.ts): the Bot API, the connection pool, and the poll loop.
-- [src/listener.ts](src/listener.ts): which messages become a turn, which are ignored, and how the reply is painted.
-- [src/gateway.ts](src/gateway.ts), what Telegram plugs into the shared connector runtime: open/close a bot's poll loop, and when a failure is fatal.
+- [intentic-extension.json](intentic-extension.json) — the card, its setup guide, the listener event and the gateway process.
+- [src/gateway.ts](src/gateway.ts) — the process: one bot token is one connection, reconciled by `runConnectorGateway`.
+- [src/client.ts](src/client.ts) — the poll loop, Bot API calls and which errors are fatal.
+- [src/listener.ts](src/listener.ts) — updates to dispatched messages, history rings and the live reply.
+- [skills/telegram/SKILL.md](skills/telegram/SKILL.md) — what the agent learns about using Telegram.
 
-## How it fits
+## Commands
 
-A **daemon-side** extension: a listener, a process and capabilities, no views. It runs inside the sandbox
-alongside the agent, and the browser never talks to Telegram.
-
-The process shell (reconcile loop, daemon client, status posts, streaming reply painter) is
-`@intentic/connector-runtime`, shared with `ext-slack`, `ext-discord`, `ext-whatsapp` and `ext-imap`; what lives
-here is only what Telegram is. It carries **no vendor dependency**: the Bot API is HTTPS and JSON, and
-`getUpdates` in a loop is the whole connection, so an SDK would buy a wrapper around `fetch` and cost a deploy
-tree.
-
-## Conventions & gotchas
-
-- **A bot cannot read a chat's past.** There is no history endpoint, so the context a turn receives is what this
-  process watched go by: a ring per chat, in memory. A restart starts it empty, and in a group with privacy
-  mode on it only ever holds the messages that mentioned the bot. Everything downstream should read `history`
-  as "what we happened to see", not "what was said".
-- **Only one reader per bot.** Telegram hands a bot's updates to exactly one poller or webhook. A second one
-  anywhere (a colleague's script, a webhook left over from another tool) is a 409, which is why that error is
-  reported to the owner rather than resolved by quietly deleting their webhook.
-- **The connection starts at now, not at the backlog.** Telegram holds undelivered updates for 24 hours, so a
-  gateway that polled from zero after a restart would answer a day of chatter at once, hours late.
-- Replies are painted as **plain text**. A half-written message cannot be parsed, so a streamed reply can never
-  set `parse_mode`: the skill and the starter prompt both tell the model to write prose rather than markdown.
-- The bot token rides in the URL path, which makes it the one credential here that can leak by being *logged*.
-  The activity sniffer records the method and drops the rest of the path for exactly that reason.
+```sh
+pnpm --filter @intentic/ext-telegram build   # dist/gateway.js
+pnpm --filter @intentic/ext-telegram test
+```

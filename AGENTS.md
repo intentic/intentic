@@ -12,7 +12,7 @@
   in the repo; a hardcoded file list repeats the miss it exists to prevent.
 - Comments state what the code cannot – an invariant, a unit, a rule that would tempt a "fix". One line for a
   member or statement, two for a function or type, three for a module header. No history, no restating the
-  code, no rhetoric; the reasoning behind a decision goes in `docs/design/`, not in the file.
+  code, no rhetoric; the reasoning behind a decision goes in the commit message, not in the file.
 
 ## Documentation
 
@@ -22,9 +22,9 @@ that invalidated it.** There is no second place to remember: the repository-leve
 
 `docs/architecture/` also holds how the system is put together, one subject per page — `topology.md`,
 `sandbox.md`, `platform.md`, `app-plane.md`, `extensions.md`, `capabilities.md`, `packages.md`,
-`conventions.md`, `testing.md`, `deploy-engine.md` — and `ARCHITECTURE.md` at the root is the index into them,
-nothing more. A decision and its reasons go in `docs/design/`, a measurement in `docs/audits/`, the machinery
-around the code in `docs/ops/` (`docs/README.md` states the line). Anything about the WORKSPACE rather than
+`conventions.md`, `testing.md`, `deploy-engine.md`, `languages.md`, `repo.md` — and `ARCHITECTURE.md` at the
+root is the index into them, nothing more. The machinery around the code goes in `docs/ops/` (`docs/README.md`
+states the line), and a decision's reasons go in its commit message. Anything about the WORKSPACE rather than
 this repository belongs in `/work/docs/`.
 
 - The `# H1` and the **one sentence** under it are parsed: that sentence becomes the package's one-liner

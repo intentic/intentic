@@ -60,9 +60,8 @@ pub enum Stage {
 }
 
 impl Stage {
-    /// What the tray entry says, and whether it can be clicked. The tray is the backstop surface — the app's
-    /// own README tells the story of a user who never found this icon — so it states the same fact the
-    /// banner does rather than only appearing when there is something to press.
+    /// What the tray entry says, and whether it can be clicked. The tray is the backstop surface, so it states
+    /// the same fact the banner does rather than only appearing when there is something to press.
     fn tray(&self) -> (String, bool) {
         match self {
             Stage::Idle | Stage::Checking => ("Checking for updates…".into(), false),

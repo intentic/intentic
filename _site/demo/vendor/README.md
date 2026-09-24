@@ -1,19 +1,32 @@
 # vendor
 
-The listed first-party extensions the demo runs, at the commits the registry pins. Nothing here is written by hand.
+Pinned copies of the first-party registry extensions the demo runs, so their views in the demo execute the same bytes an install would.
 
-- `extensions.json`: the pins, one `{ repo, sha }` per extension id. The sha is the registry's listing for that
-  extension; moving a listing means moving the pin.
-- `extensions/<id>/`: that extension's manifest and built UI bundle, fetched by `scripts/sync-extensions.mjs` before
-  every build and **gitignored**: the fixture lists them as installed extensions and serves the bundle exactly as a
-  daemon would, so the demo exercises the real install path rather than a compiled-in copy.
-- `knowledge/`: the fs-free half of the knowledge engine as source, **committed** so the fixture that stands in for
-  its backend type-checks with nothing fetched. A generated copy with its origin in every file's first line, refreshed
-  by the same sync — but only when the pin moves: `knowledge/source.json` names the commit the copy holds, and a build
-  that matches it leaves GitHub alone. Listing the engine's files is the one call this script makes to
-  `api.github.com`, which anonymously allows 60 an hour per IP and so is exhausted by a busy runner host.
+```mermaid
+flowchart LR
+    pins["extensions.json<br/>repo + sha"] --> sync["scripts/sync-extensions.mjs"]
+    github["Extension repos<br/>on GitHub"] --> sync
+    sync --> vendor(["vendor/extensions/<br/>vendor/knowledge/"])
+    vendor --> fixture["src/fixture<br/>extension list, bundles"]
+    fixture --> views["Extension views<br/>in the demo"]
+```
+
+- `extensions.json` pins each listed extension to its repository and a full commit sha, the same commit the registry lists. A pin that is not a sha leaves that extension out of the demo with a warning.
+- The sync writes each pin's `intentic-extension.json` and `dist/extension.js` into `extensions/<id>/`, which is gitignored and refetched by the demo's `dev` and `build` scripts. `--local <dir>` reads sibling checkouts instead of GitHub.
+- `knowledge/` is committed: the filesystem-free half of the knowledge extension's engine and its `wire-types.ts`, so `src/fixture/knowledge.ts` can answer the knowledge backend and type-check offline. `source.json` names the commit it holds, and the sync refetches it only when the pin moves.
+- Every synced file carries a "do not edit" header. Change the pin and re-run the sync instead.
+
+## Key files
+
+- [extensions.json](extensions.json) — which extensions the demo runs, at which commit.
+- [knowledge/source.json](knowledge/source.json) — the commit the committed engine copy came from.
+- [knowledge/wire-types.ts](knowledge/wire-types.ts) — the knowledge backend's response shapes the fixture answers in.
+- [../scripts/sync-extensions.mjs](../scripts/sync-extensions.mjs) — fetches bundles and the engine at the pins.
+- [../src/fixture/sandbox.ts](../src/fixture/sandbox.ts) — globs the vendored manifests and serves their bundles.
+
+## Commands
 
 ```sh
-pnpm sync                                   # from GitHub at the pins
-pnpm sync -- --local ../../../extensions    # from local checkouts while an extension is being changed
+pnpm -C _site/demo sync                                   # from GitHub at the pins
+cd _site/demo && node scripts/sync-extensions.mjs --local <dir>   # one checkout per extension
 ```

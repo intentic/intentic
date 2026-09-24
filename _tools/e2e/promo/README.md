@@ -1,35 +1,36 @@
-# promo: the product video, recorded
+# promo
 
-One unbroken Playwright take of the main journey, driven against the **interactive demo** (`_site/demo`, the real
-web app on a fixture): a repository is dragged in, an agent's turn is co-piloted through its plan and its
-question, a finished delta is reviewed and landed, and CI answers for it. Output is a silent 1080p master plus
-the shot list its beats sit on, for voice and music to be cut over.
+Records the product video: one unedited take of the web app on the demo fixture, from dropping a repository in to landing an agent's work, encoded with a shot list.
 
-```sh
-pnpm -C _site/demo dev                     # the fixture app on :47146 — must be up first
-cd _tools/e2e && node promo/record.mjs     # ~95s take → /tmp/intentic-promo/
+```mermaid
+flowchart LR
+    demo["Demo dev server<br/>:47146/demo"] --> rec(["record.mjs<br/>Chromium 1760x990"])
+    drop["dropped-repo.mjs<br/>a small repo on disk"] --> rec
+    cursor["cursor.js<br/>pointer, ripple, drag ghost"] --> rec
+    rec --> raw["Raw capture"]
+    raw --> ff["ffmpeg<br/>1080p30 H.264"]
+    ff --> out["intentic-promo.mp4<br/>shot-list.md"]
 ```
 
-`DEMO_URL` and `PROMO_OUT` override the address and the output directory.
+- Nothing is mocked or sped up: the page is the `@intentic/web` source served by `_site/demo`, whose in-memory
+  fixture stands in for a sandbox. A reload would rewind the fixture, so the take never reloads.
+- The fixture's scripted turn starts when the chat attaches and parks until the script answers, so the recording
+  sets the pace.
+- A headless browser draws no cursor, so `cursor.js` runs as an init script and draws the pointer, click ripples and
+  the drag ghost for the dropped folder. `dropped-repo.mjs` writes that folder, a small Go service, to
+  `/tmp/promo-drop`.
+- Output lands in `PROMO_OUT` (default `/tmp/intentic-promo`): the master MP4, `shot-list.md` with each beat's
+  start time, and the raw capture. `DEMO_URL` points it at another demo server. Needs `ffmpeg` and `ffprobe`.
 
-| File | What it is |
-| --- | --- |
-| `record.mjs` | capture settings, the pointer/pacing kit, the journey itself, and the ffmpeg delivery |
-| `cursor.js` | injected before the app: the cursor a headless browser doesn't draw, its click ripple, the drag ghost |
-| `dropped-repo.mjs` | the repository the take drags in, written to disk at record time (the drop is a real one) |
+## Key files
 
-## It lives here because Playwright does
+- [record.mjs](record.mjs) — the take, beat by beat, and the encode.
+- [cursor.js](cursor.js) — the visible pointer and drag ghost.
+- [dropped-repo.mjs](dropped-repo.mjs) — the repository dropped in on the first beat.
 
-This is not a test and never runs in CI. It sits inside `@intentic/e2e` because that package already owns
-this repo's browser automation and its `@playwright/test` install: a `_tools/promo` package would be the same
-dependency, installed twice, to hold three files.
+## Commands
 
-## Two things the take depends on
-
-- **No reloads.** The fixture daemon is in-memory, so a reload rewinds the dropped repo and the landed delta.
-  Everything after the first `goto` is an in-app click.
-- **The turn waits for the pointer.** `/agent/attach` starts the scripted run and parks it on the plan card and
-  the question card until this script answers, so the pauses are direction, not synchronisation.
-
-Re-record after a UI change rather than patching the video; the selectors are the app's own roles and labels, so
-a beat that moved will fail loudly instead of recording the wrong thing.
+```sh
+pnpm --filter @intentic/demo dev     # serves the demo on :47146
+node _tools/e2e/promo/record.mjs
+```

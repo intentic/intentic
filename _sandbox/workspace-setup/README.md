@@ -1,30 +1,34 @@
-# @intentic/workspace-setup
+# workspace-setup
 
-Which dependency manager a project needs, worked out from the names of its manifest and lockfile.
+Decides which dependency manager and install command a project needs from its manifest and lockfile names, for both the browser upload and the sandbox daemon.
 
-## Responsibilities
+```mermaid
+flowchart LR
+    drop["Folder drop<br/>browser, before upload"] --> setup(["workspace-setup"])
+    daemon["Daemon<br/>after files land"] --> setup
+    setup --> recipe["SetupRecipe<br/>manager · command · evidence"]
+    recipe --> install["Install panel<br/>in the sandbox"]
+```
 
-- Map a set of filenames to the install command a project wants: and nothing else.
+- A dropped project arrives without `node_modules` or `.venv`, which are built for the wrong platform and slow to
+  upload. Naming the manager lets the sandbox run the install itself.
+- Pure and browser-safe: it reads file names and an already-parsed `packageManager` field, never the disk. The web
+  app calls `detectProjects` before upload
+  ([useUploadQueue.ts](../../_editor/web/src/features/workspace/files/upload/useUploadQueue.ts)); the daemon calls
+  `recipeFor`, checks the `marker` directory and that `manager` is on PATH
+  ([workspace-setup.ts](../sandbox/src/workspace/layout/workspace-setup.ts)).
+- Node and Python only, because their managers are baked into the sandbox image. A `packageManager` field beats any
+  lockfile, and a Node project with no lockfile falls back to `npm`.
+- The shallowest manifest on each branch wins, so a monorepo installs once from its root.
 
 ## Key files
 
-- [src/index.ts](src/index.ts), the whole package: names in, manager out.
-- [src/index.test.ts](src/index.test.ts): the ambiguous cases, which are the only interesting ones.
+- [src/index.ts](src/index.ts) — `recipeFor`, `detectProjects`, `managerFromPackageJson` and the lockfile tables.
+- [src/index.test.ts](src/index.test.ts) — which files pick which manager, by example.
+- [package.json](package.json) — the single export, with no Node imports behind it.
 
-## How it fits
+## Commands
 
-Pure and browser-safe, which is the point: the drop-a-folder UI needs to say "this looks like a pnpm project"
-before anything has been uploaded, and the daemon needs the same answer to actually run the install. One
-function, two callers, no disagreement.
-
-## Conventions & gotchas
-
-- It reads NAMES, never file contents. That is what keeps it pure, browser-safe and instant: and it is why a
-  project with a misleading lockfile gets a misleading answer, which is the right trade for a first guess the
-  user can correct.
-- **A recipe's `marker` has to be a directory isolated turns mirror** (`MIRRORED_DIRS` in
-  `@intentic/constants/mirror-roots`). The daemon looks for the marker on the MAIN tree and every reader of that
-  answer stands in a worktree, which carries tracked files only — so a marker that is not mirrored makes
-  "installed" a claim that is true where nobody is standing. `.venv` was exactly that until it was added to the
-  set. Adding an ecosystem is a row in the tables here PLUS its marker in that set, and
-  `_sandbox/sandbox/src/workspace/layout/workspace-setup.test.ts` fails if the second half is forgotten.
+```sh
+pnpm --filter @intentic/workspace-setup test
+```

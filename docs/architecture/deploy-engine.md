@@ -1,86 +1,39 @@
-# The bundled deployment engine
+# The deployment engine
 
-Intent → needs → desired state → reconcile: a standalone infrastructure tool that ships in this monorepo and
-is not part of the product.
+A bundled tool that turns an intent file into a desired-state graph and reconciles the user's own hosts, DNS and services until they match it.
 
-## The intent-driven flow
-
+```mermaid
+flowchart LR
+    intent["intent/deploy.config.ts<br/>defineIntent"] --> needs["resolveNeeds<br/>need-resolver"]
+    needs --> state["resolveState<br/>state-resolver"]
+    state --> artifact["desired-state.json"]
+    artifact --> engine(["plan · apply · reconcile<br/>engine"])
+    engine --> providers["Provider read · diff · apply<br/>providers"]
+    providers --> infra["your hosts over SSH<br/>Cloudflare · Forgejo · Komodo"]
 ```
-Intent ──► NeedResolver ──► Needs ──► StateResolver ──► desired state ──► Execute ──► (reads true)
-```
 
-1. **Intent** (a declaration authored with the SDK: `i.have.*` (the inventory you bring) read, never
-   created or destroyed: `host`, `cloudflare`, `github`, `gitlab`, `backup`, `discord`, `stripe`) and
-   `i.want.*` (what intentic owns end-to-end, created, reconciled, pruned, destroyed: `app`, `service`,
-   `workspace`, `database`, `cache`, `auth`, `objectStorage`, `user`, `team`), each
-   app wired to its host/Cloudflare via `on` / `expose`. Captured as a serializable `IntentSet`.
-   ([_deploy/sdk/src/stack.ts](../../_deploy/sdk/src/stack.ts))
-2. **Need resolver**, derives the abstract capabilities the intent requires: `source-control`,
-   `docker-registry`, `infra-control` (control plane), `deployment-target`, `domain` (application plane).
-   (`resolveNeeds` in [_deploy/need-resolver/src/needs.ts](../../_deploy/need-resolver/src/needs.ts))
-3. **State resolver**: assigns each need its catalog option and compiles the emitted nodes into one
-   **desired state** (a `DesiredStateGraph`). The catalog maps capabilities to the concrete things that
-   satisfy them; one option may cover several (Forgejo provides both source-control and docker-registry).
-   `catalogFor(intent)` selects the source control: `i.have.github` ⇒ GitHub (GHCR + Actions),
-   `i.have.gitlab` ⇒ GitLab (its registry + CI), otherwise the self-hosted Forgejo default. **Komodo is
-   unconditional**: on every stack CI only builds and pushes the image and Komodo rolls it out, so no
-   host SSH credential ever reaches a hosted forge and the host stays outbound-only. The intent fully
-   determines the result: within the selected catalog there is exactly one option per capability, so
-   resolution stays deterministic. (`resolveState` in
-   [_deploy/state-resolver/src/state.ts](../../_deploy/state-resolver/src/state.ts), over `catalogFor` in
-   [catalog.ts](../../_deploy/state-resolver/src/lib/catalog.ts) and the nodes emitted by
-   [emit.ts](../../_deploy/state-resolver/src/emit/emit.ts))
-4. **Execute**: apply the desired state and re-read it, looping until a plan reads all-noop ("state reads
-   true"). (`reconcile` in [_deploy/engine/src/reconcile/reconcile-loop.ts](../../_deploy/engine/src/reconcile/reconcile-loop.ts), over
-   `apply`/`plan` and the Provider SPI)
-5. **Prune**, after convergence, deletion converges too, from two sources: the baseline diff (resources in
-   the last-applied artifact the new one no longer declares) and the **collection scan**: each provider's
-   `list` enumerates its live stamped resources (`intentic.id` / `intentic.type` labels, stamped DNS-record
-   comments) and everything absent from the graph is an orphan, pruned without needing any baseline.
-   Deletions require `apply --yes` (pending ones are previewed otherwise), nodes with a `protect: true`
-   input (stateful backings by default) are never deleted, and `intentic deploy destroy --yes` is the same prune
-   against the empty graph. Drift detection is also stamp-based: every resource carries an `intentic.hash`
-   of its serialized inputs, and a mismatch reads as an update regardless of the provider's own diff.
-   (`prune`/`pruneOrphans` in [prune.ts](../../_deploy/engine/src/reconcile/prune.ts), `collectOrphans` in
-   [orphans.ts](../../_deploy/engine/src/reconcile/orphans.ts), stamps in [stamp.ts](../../_deploy/graph/src/stamp.ts))
+## Where it sits
 
-A `DesiredStateGraph` is the central data structure: a serializable, dependency-ordered set of resource
-nodes with refs, secrets, and readiness gates. ([_deploy/graph/src/types.ts](../../_deploy/graph/src/types.ts))
+The engine is not part of the product (see [the app plane](app-plane.md)). It is baked into the sandbox image as the `intentic` CLI ([`_deploy/cli`](../../_deploy/cli)), and an agent or the daemon runs it like any other tool: [`check-run.ts`](../../_sandbox/sandbox/src/intentic/check-run.ts) resolves and plans, [`infra-apply.ts`](../../_sandbox/sandbox/src/intentic/infra-apply.ts) resolves, applies and adopts. It deploys the user's infrastructure, not intentic's own platform.
 
-## Output contract (driving the CLI as a service)
+## The pipeline
 
-The engine separates two seams on `EngineConfig`: `log` carries providers' free-form strings, and
-`onEvent` emits structured `EngineEvent`s for lifecycle progress: `node` (apply/plan, start/done with
-the action), `readiness`, `iteration`, `prune`, and `orphan`
-([types.ts](../../_deploy/engine/src/types.ts)). The CLI selects a renderer from `INTENTIC_OUTPUT`
-(`text` | `json` | `ndjson`) in [output.ts](../../_deploy/cli/src/lib/output.ts): `text` is the human default
-(unchanged), `json` serializes the command's returned outcome once, and `ndjson` streams each event as
-a line then a terminal `result`. The final result is built from the engine's return values
-(`PlanOutcome`/`ConvergeResult`/`PruneOutcome` and `collectAccess`), never from events: so a control
-plane gets both live progress and a parseable summary, and embedders consume `EngineEvent` directly.
+1. **Intent.** `intent/deploy.config.ts` exports `intent = defineIntent((i) => …)` from [`_deploy/sdk`](../../_deploy/sdk). `i.have.*` names what the user brings (hosts, a Cloudflare zone, GitHub, GitLab), which the engine reads but never creates or destroys. `i.want.*` names what it owns end to end (apps with environments, services, databases, caches, auth, object storage, users, teams, sandbox workspaces). `moved(from, to)` renames a resource in place. The file layout comes from [`workspace-layout.ts`](../../_sandbox/scaffold/src/workspace-layout.ts).
+2. **Resolve.** `intentic deploy resolve` loads the file (`loadIntent`), maps it to abstract needs (`resolveNeeds`: a capability, a scope, and a control or application plane), picks a stack (`catalogFor`: Forgejo, GitHub or GitLab for source control, Komodo for deployment, Cloudflare tunnels for domains), and emits and compiles the nodes (`resolveState`, `compile`) into a `DesiredStateGraph`. It writes `desired-state/desired-state.json`, plus `.env.example` listing the secrets the user must supply.
+3. **Plan.** `plan` in [`_deploy/engine`](../../_deploy/engine) reads each node's live resource through its provider and decides create, update or noop, first by the stamped hash and then by the provider's `diff`.
+4. **Apply.** `apply` walks the graph in `linearize` order, resolving each node's inputs from the outputs already produced. `reconcile` repeats apply and plan until every step is noop. The CLI's `deploy apply` wraps this with a lock per host, generated secrets, host migration and renames, and deletes removed or orphaned resources only with `--yes`.
+5. **Adopt.** `intentic deploy adopt` pushes the intent and desired-state repositories to the source control it provisioned and installs resolve and apply CI workflows, so later changes reconcile from CI.
 
+## State
 
-## The intent contract
+There is no state file. Every resource the engine creates carries a stamp (`intentic.id`, `intentic.hash` in [`stamp.ts`](../../_deploy/graph/src/stamp.ts)) as a Docker label or a DNS record comment, and `Provider.read` finds it again. `desired-state/` keeps only the artifact, the last applied graph (the prune baseline), generated secrets and known hosts.
 
-A local `deploy.config.ts` (see [_tools/examples/deploy.config.ts](../../_tools/examples/deploy.config.ts)) must
-`export const intent = defineIntent(...)`; `resolve` derives the desired state from it
-([resolve.ts](../../_deploy/cli/src/resolve/resolve.ts)). `defineStack(...)` is the one-shot,
-single-graph form used when a single deterministic graph is wanted directly.
+## Providers
 
+`Provider` in [`provider.ts`](../../_deploy/engine/src/provider.ts) is `read`, `diff` and `apply`, with optional `list` and `delete` for pruning. `createProviders` in [`_deploy/providers`](../../_deploy/providers) builds one per resource type in [`_deploy/resources`](../../_deploy/resources), over SSH, Cloudflare, Forgejo, Komodo, GitHub, GitLab and a few service APIs. Targets are machines the user already has, reached over SSH with Docker installed. The engine provisions no cloud VMs.
 
-## Demo
+## Testing it
 
-`pnpm demo:up` / `demo:down` / `demo:clear` ([_deploy/cli/src/demo.ts](../../_deploy/cli/src/demo.ts)) drive the
-real CLI (`init`/`resolve`/`apply`) against a Docker-in-Docker "host", standing up Forgejo + Komodo behind
-a Cloudflare tunnel so the result can be browsed. It is a **maintainer tool**, not a zero-setup demo: it
-provisions against a real Cloudflare zone (`CLOUDFLARE_ZONE`, default `intentic.dev`) using
-`CLOUDFLARE_API_TOKEN`, and shares the tunnel name `intentic-host` with the e2e harness (don't run both at
-once).
-
-- **`demo:up`** boots the privileged host (SSH on `DEMO_SSH_PORT`, default 2222), scaffolds with
-  `init --link`, runs resolve + apply, seeds a test app, and leaves everything running: printing the
-  public URLs (`git.<zone>` / `deploy.<zone>` / `app.<zone>`), the local URLs, and the generated admin
-  logins. State is persisted in `.demo/state.json` so teardown can always find what it created.
-- **`demo:down`** stops the host container but leaves the Cloudflare tunnel + DNS in place, so the next
-  `demo:up` reconnects in seconds.
-- **`demo:clear`** also purges the tunnel + DNS records the demo created.
+- [`suite.engine.test.ts`](../../_deploy/providers/src/suite.engine.test.ts) reconciles a whole app over fake SSH and fake APIs, then checks the second run is idempotent.
+- The CLI's `e2e:hermetic` suite runs against a Docker-in-Docker host from [`_tools/dind-host`](../../_tools/dind-host), with no secrets.
+- `pnpm demo:up` stands the same host up locally, applies a demo intent and rolls out an app; `demo:down` and `demo:clear` take it away.
