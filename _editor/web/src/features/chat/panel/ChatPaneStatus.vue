@@ -16,7 +16,7 @@ import { useSandboxAvailability } from "../../sandbox/overview/useSandboxAvailab
 import { useRole } from "../../sandbox/secrets/useRole";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
-import ChatJobsReadout from "./ChatJobsReadout.vue";
+import ChatJobsReadout from "./jobs/ChatJobsReadout.vue";
 import UsageRing from "../../../components/UsageRing.vue";
 import { useT } from "@intentic/ui/i18n";
 

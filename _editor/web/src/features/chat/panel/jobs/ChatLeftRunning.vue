@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import type { AgentJob, AgentWatch } from "@intentic/sandbox-contract";
 import { briefDuration } from "@intentic/base/format";
-import type { IconName } from "@intentic/ui";
+import { type IconName, ui } from "@intentic/ui";
 import { errorMessage, useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-import { formatElapsed } from "../../agents/fleet/agentStatus";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { portTargetId } from "../../preview/previewModel";
-import { openPreview } from "../../preview/previewSurface";
-import { useSandbox } from "../../sandbox/client/useSandbox";
-import { useChatSurface } from "../tools/chatToolSurface";
-import { portsLine, runningJobs } from "../transcript/jobPhase";
-import { usePaneView } from "./useChat-view";
+import { formatElapsed } from "../../../agents/fleet/agentStatus";
+import { useAgents } from "../../../agents/fleet/useAgents";
+import { portTargetId } from "../../../preview/previewModel";
+import { openPreview } from "../../../preview/previewSurface";
+import { useSandbox } from "../../../sandbox/client/useSandbox";
+import { useChatSurface } from "../../tools/chatToolSurface";
+import { portsLine, runningJobs } from "../../transcript/jobPhase";
+import { usePaneView } from "../useChat-view";
 
 // What a chat whose turn is over still has going, at the foot of the transcript where a reader looks to see whether it
 // is done: the jobs the turn left (the ones it waits on, which wake it when they exit, and the servers it left running
@@ -140,7 +140,7 @@ const preview = (job: AgentJob): void => {
                 <button
                     v-if="row.job?.handed === true && row.job.ports !== undefined && row.job.stoppedBy === undefined"
                     type="button"
-                    class="rounded px-1.5 py-0.5 transition-colors hover:bg-overlay hover:text-content"
+                    :class="ui.textAction(`text-2xs`)"
                     @click="preview(row.job)"
                 >
                     {{ t(`chat.chatLeftRunning.openInPreview`) }}
@@ -158,7 +158,7 @@ const preview = (job: AgentJob): void => {
                 <button
                     v-if="row.job?.stoppedBy === undefined"
                     type="button"
-                    class="rounded px-1.5 py-0.5 transition-colors hover:bg-overlay hover:text-content disabled:opacity-50"
+                    :class="ui.textAction(`text-2xs`)"
                     :disabled="!reachable || pressing === row.key"
                     v-tooltip.top="row.watch !== undefined ? t(`chat.chatLeftRunning.stopWatchingHint`) : t(`chat.chatLeftRunning.stopHint`)"
                     @click="stop(row)"

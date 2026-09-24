@@ -20,9 +20,9 @@ jest.mock("@intentic/ui", async () => {
         ui: { iconButton: (extra: string) => extra },
     };
 });
-jest.mock("../../agents/fleet/useAgents", () => ({ useAgents: () => ({ agentById: () => ({ jobs: roster.jobs }) }) }));
-jest.mock("./useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }) }) }));
-jest.mock("../../terminal/useWorkTerminals", () => ({ openWorkTerminal: opened }));
+jest.mock("../../../agents/fleet/useAgents", () => ({ useAgents: () => ({ agentById: () => ({ jobs: roster.jobs }) }) }));
+jest.mock("../useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }) }) }));
+jest.mock("../../../terminal/useWorkTerminals", () => ({ openWorkTerminal: opened }));
 
 const { default: ChatJobsReadout } = await import("./ChatJobsReadout.vue");
 

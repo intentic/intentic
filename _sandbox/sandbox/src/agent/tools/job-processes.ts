@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { errnoCode, isMissing } from "@intentic/base/errors";
 import { parseProcStat } from "../../platform/resources/proc-stat.js";
 
 // A background job's processes, found the way the kernel groups them rather than by parentage. bin/tmux-run runs every
@@ -15,6 +16,15 @@ const POLL_MS = 100;
 const pidsOf = async (procRoot: string): Promise<number[]> =>
     (await readdir(procRoot).catch(() => [] as string[])).filter((entry) => NUMERIC.test(entry)).map(Number);
 
+// One process's /proc file, empty once the process is gone: before the open that is a missing file, mid-read it is ESRCH.
+const procFile = (path: string): Promise<string> =>
+    readFile(path, "utf8").catch((error: unknown) => {
+        if (isMissing(error) || errnoCode(error) === "ESRCH") {
+            return "";
+        }
+        throw error;
+    });
+
 // The runner's argv as tmux-run writes its pane command; anything else naming the dir (a `cat` of its output) is not it.
 const runnerArgv = (dir: string): string => `bash\0${join(dir, "runner")}\0`;
 
@@ -26,7 +36,7 @@ export const jobRunnerPids = async (dirs: readonly string[], procRoot = "/proc")
         return found;
     }
     for (const pid of await pidsOf(procRoot)) {
-        const argv = await readFile(join(procRoot, String(pid), "cmdline"), "utf8").catch(() => "");
+        const argv = await procFile(join(procRoot, String(pid), "cmdline"));
         const dir = wanted.get(argv);
         if (dir !== undefined) {
             found.set(dir, pid);
@@ -42,7 +52,7 @@ const sessionMembers = async (leader: number, procRoot = "/proc"): Promise<numbe
         if (pid === leader) {
             continue;
         }
-        const stat = await readFile(join(procRoot, String(pid), "stat"), "utf8").catch(() => "");
+        const stat = await procFile(join(procRoot, String(pid), "stat"));
         if (parseProcStat(stat)?.session === leader) {
             members.push(pid);
         }
@@ -54,8 +64,11 @@ const signal = (pids: readonly number[], name: NodeJS.Signals): void => {
     for (const pid of pids) {
         try {
             process.kill(pid, name);
-        } catch {
-            // Already gone, which is the point.
+        } catch (error) {
+            // Already gone is the point; any other refusal leaves running a process the caller believes ended.
+            if (errnoCode(error) !== "ESRCH") {
+                throw error;
+            }
         }
     }
 };

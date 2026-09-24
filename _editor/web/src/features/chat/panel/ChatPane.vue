@@ -31,7 +31,7 @@ import { useComposerPopovers } from "./pane/composerPopovers";
 import { useComposerKeys, useRecallRing } from "./pane/composerKeys";
 import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
-import ChatLeftRunning from "./ChatLeftRunning.vue";
+import ChatLeftRunning from "./jobs/ChatLeftRunning.vue";
 import ChatQueue from "../composer/ChatQueue.vue";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatMentionPopover from "../composer/ChatMentionPopover.vue";

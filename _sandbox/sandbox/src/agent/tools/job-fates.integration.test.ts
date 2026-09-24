@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { pino } from "pino";
 import { type LiveRun, RUNS } from "../../agents/actor/conversation-holdings.js";
@@ -219,7 +220,7 @@ describe("the agent's own TaskStop", () => {
             tool_use_id: "tu-stop",
             session_id: "s",
             transcript_path: "",
-            cwd: "/work",
+            cwd: WORKSPACE_ROOT,
         } as const;
         await hook(input, "tu-stop", { signal: new AbortController().signal });
         await ended(job);
@@ -235,7 +236,7 @@ describe("the agent's own TaskStop", () => {
         });
         const hook = hooks.PostToolUse?.[0]?.hooks[0];
         await hook?.(
-            { hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "a1b2c3" }, tool_response: {}, tool_use_id: "t", session_id: "s", transcript_path: "", cwd: "/work" },
+            { hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "a1b2c3" }, tool_response: {}, tool_use_id: "t", session_id: "s", transcript_path: "", cwd: WORKSPACE_ROOT },
             "t",
             { signal: new AbortController().signal },
         );

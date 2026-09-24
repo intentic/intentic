@@ -10,13 +10,13 @@ const stopWatching = jest.fn((_id: string, _watchId?: string) => Promise.resolve
 const previewed = jest.fn((_router: unknown, _target?: string) => undefined);
 const watched = jest.fn((_session: string) => undefined);
 
-jest.mock("../../agents/fleet/useAgents", () => ({
+jest.mock("../../../agents/fleet/useAgents", () => ({
     useAgents: () => ({ agentById: () => ({ jobs: roster.jobs, watches: roster.watches }), stopJob, stopWatching }),
 }));
-jest.mock("./useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }), streaming: pane.streaming }) }));
-jest.mock("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ reachable: shallowRef(true) }) }));
-jest.mock("../tools/chatToolSurface", () => ({ useChatSurface: () => ({ watchTerminal: watched }) }));
-jest.mock("../../preview/previewSurface", () => ({ openPreview: previewed }));
+jest.mock("../useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }), streaming: pane.streaming }) }));
+jest.mock("../../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ reachable: shallowRef(true) }) }));
+jest.mock("../../tools/chatToolSurface", () => ({ useChatSurface: () => ({ watchTerminal: watched }) }));
+jest.mock("../../../preview/previewSurface", () => ({ openPreview: previewed }));
 jest.mock("vue-router", () => ({ useRouter: () => ({}) }));
 
 const { default: ChatLeftRunning } = await import("./ChatLeftRunning.vue");
