@@ -29,6 +29,8 @@ export interface TreeMenuHost {
     readonly requestDelete: () => void;
     readonly stage: (mode: "copy" | "cut", system: "async" | "event") => readonly string[];
     readonly paste: (dir: string) => Promise<void>;
+    // `dir` is workspace-relative.
+    readonly openTerminal: (dir: string) => void;
 }
 
 export const useTreeMenu = (host: TreeMenuHost) => {
@@ -74,6 +76,7 @@ export const useTreeMenu = (host: TreeMenuHost) => {
             host.stage(`copy`, `async`);
         },
         paste: () => void host.paste(dir),
+        openTerminal: () => host.openTerminal(dir),
     });
     // A right-click on empty space acts in the tree's OWN root: `` would aim every verb at /work from inside a project.
     const dirOf = (target: WorkspaceTreeEntry | undefined): string => {

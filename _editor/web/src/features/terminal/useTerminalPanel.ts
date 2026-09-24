@@ -44,9 +44,14 @@ const requested = sandboxRef<TerminalRequest | undefined>(() => undefined);
 const surfaced = sandboxRef<{ readonly name: string } | undefined>(() => undefined);
 
 // Mounted panel's newTab, plus a pending flag for when none is mounted; set via registerTerminalSpawn.
-let liveNewTab: (() => void) | undefined;
-let pendingSpawn = false;
-export const registerTerminalSpawn = (newTab: () => void): (() => void) => {
+// A spawn asked for while no panel was mounted, with the workspace-relative directory it starts in.
+export interface SpawnRequest {
+    readonly cwd?: string;
+}
+
+let liveNewTab: ((cwd?: string) => void) | undefined;
+let pendingSpawn: SpawnRequest | undefined;
+export const registerTerminalSpawn = (newTab: (cwd?: string) => void): (() => void) => {
     liveNewTab = newTab;
     return () => {
         if (liveNewTab === newTab) {
@@ -55,9 +60,9 @@ export const registerTerminalSpawn = (newTab: () => void): (() => void) => {
     };
 };
 // One-shot read of a spawn that arrived while unmounted, consumed by the panel's onMounted.
-export const consumeSpawnRequest = (): boolean => {
+export const consumeSpawnRequest = (): SpawnRequest | undefined => {
     const pending = pendingSpawn;
-    pendingSpawn = false;
+    pendingSpawn = undefined;
     return pending;
 };
 
@@ -79,14 +84,14 @@ export function useTerminalPanel() {
         surfaced.value = { name };
     };
     // Opens a new shell tab from anywhere: straight into a mounted panel, else flags the spawn for the panel that
-    // setOpen brings up.
-    const spawnShell = (): void => {
+    // setOpen brings up. `cwd` is workspace-relative; absent starts at the workspace root.
+    const spawnShell = (cwd?: string): void => {
         layout.setTerminalOpen(true);
         if (liveNewTab !== undefined) {
-            liveNewTab();
+            liveNewTab(cwd);
             return;
         }
-        pendingSpawn = true;
+        pendingSpawn = cwd === undefined ? {} : { cwd };
     };
     return {
         open: layout.terminalOpen,

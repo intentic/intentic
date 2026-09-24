@@ -46,8 +46,8 @@ export interface TerminalTabsSource {
 }
 
 // A process tab is a read-only log view: stdin off. The container sizes the PTY at birth, even hidden.
-const createPane = (tab: TerminalTab, onExit: (name: string) => void, spawnWithin: HTMLElement | undefined): TerminalSession =>
-    createTerminalSession(tab.name, onExit, KINDS[tab.kind].logs, spawnWithin);
+const createPane = (tab: TerminalTab, onExit: (name: string) => void, spawnWithin: HTMLElement | undefined, cwd?: string): TerminalSession =>
+    createTerminalSession(tab.name, onExit, KINDS[tab.kind].logs, spawnWithin, cwd);
 
 // Shared session cache, one xterm+socket per name; disposed only when a session deliberately ends, or with the
 // sandbox: a switch drops every cached socket. Sessions themselves keep running; reattaching replays their history.
@@ -92,7 +92,8 @@ export interface TerminalTabs {
     // Session an open request is still waiting for; undefined once it arrives or is superseded.
     readonly pending: Ref<string | undefined>;
     // Resolves true if attaching auto-created the first shell for an empty panel; never rejects.
-    readonly attach: (el: HTMLElement, awaited?: string) => Promise<boolean>;
+    // `cwd` is where the empty panel's own shell starts, when it spawns one.
+    readonly attach: (el: HTMLElement, awaited?: string, cwd?: string) => Promise<boolean>;
     readonly detach: () => void;
     readonly refresh: () => Promise<void>;
     // Focuses a session, relisting first if it isn't tabbed yet (a row's terminal button).
@@ -108,7 +109,8 @@ export interface TerminalTabs {
     readonly joinTabs: (names: string[]) => void;
     // Moves one session out of its split group into its own tab, right after the group.
     readonly unsplit: (name: string) => void;
-    readonly newTab?: () => void;
+    // `cwd` is workspace-relative; absent starts the shell at the workspace root.
+    readonly newTab?: (cwd?: string) => void;
     // Opens a fresh shell inside the named session's group, splitting the pane.
     readonly splitTab?: (name: string) => void;
     // Ends sessions, one or a whole selection; the only way out, so a kill always goes through the panel's confirm.
@@ -191,14 +193,14 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     };
 
     // Derive sessions from the full tab so a cache hit cannot ignore the daemon's pane kind.
-    const sessionOf = (tab: TerminalTab): TerminalSession => {
+    const sessionOf = (tab: TerminalTab, cwd?: string): TerminalSession => {
         const cached = cache.value.get(tab.name);
         if (cached !== undefined) {
             // Sessions outlive the instance that created them; rebind so this instance's list gets the exit.
             cached.onExit = endSession;
             return cached;
         }
-        const session = createPane(tab, endSession, container);
+        const session = createPane(tab, endSession, container, cwd);
         cache.value.set(tab.name, session);
         return session;
     };
@@ -407,7 +409,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
 
     // `awaited` is the session the panel opened for, suppressing the empty-panel shell it would otherwise spawn.
     // `pending` is the same fact arriving after mount, so the create decision waits on it too.
-    const attach = async (el: HTMLElement, awaited?: string): Promise<boolean> => {
+    const attach = async (el: HTMLElement, awaited?: string, cwd?: string): Promise<boolean> => {
         container = el;
         // A refused first list isn't this call's to throw; it's already `answer`/`retryLater`'s to report.
         let listed = true;
@@ -419,7 +421,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             return false;
         }
         if (order.value.length === 0 && awaited === undefined && pending.value === undefined && source.create !== undefined) {
-            newTab();
+            newTab(cwd);
             return true;
         }
         return false;
@@ -598,15 +600,15 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const kill = source.kill;
     // Claims a session before the daemon lists it (creation runs `tmux new-session -A` asynchronously); the claim
     // counts on the rail and survives relists until endSession or the first list names it.
-    const claim = (name: string): TerminalTab => {
+    const claim = (name: string, cwd?: string): TerminalTab => {
         const tab = { name, kind: `shell` as const, running: true, activityAt: Date.now() };
         addPendingTerminal(tab);
-        sessionOf(tab);
+        sessionOf(tab, cwd);
         return tab;
     };
     // Opens a fresh tab and switches to it.
-    const newTab = (): void => {
-        const tab = claim(create());
+    const newTab = (cwd?: string): void => {
+        const tab = claim(create(), cwd);
         order.value = [...order.value, tab];
         arrangement.value = [...arrangement.value, [tab.name]];
         persistGroups();

@@ -5,6 +5,7 @@ import { computed, type Ref, ref, watch } from "vue";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import type { RowAction } from "../explorer/rowActions";
+import { useTerminalPanel } from "../../terminal/useTerminalPanel";
 import { useTreeDelete } from "../explorer/tree/useTreeDelete";
 import { useInlineEdit, useTreeEdits } from "../explorer/tree/useTreeEdits";
 import { useTreeMenu } from "../explorer/tree/useTreeMenu";
@@ -146,6 +147,7 @@ export function useHomeActions(ctx: HomeActionsContext) {
         uploads,
         say,
     });
+    const terminalPanel = useTerminalPanel();
     const { menu, menuItems, openMenu } = useTreeMenu({
         rootDir: here,
         rowActions: ctx.dirActions,
@@ -161,6 +163,7 @@ export function useHomeActions(ctx: HomeActionsContext) {
         requestDelete,
         stage: transfer.stage,
         paste: transfer.paste,
+        openTerminal: (dir) => terminalPanel.spawnShell(dir),
         // What a double-click does, for the keyboard and touch.
         frame: (target, multi) => ({
             head:

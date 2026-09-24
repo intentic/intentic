@@ -34,6 +34,8 @@ export type TerminalSession = {
     // Single-member on purpose: the agent's browser view is a separate, simpler kind of cache entry.
     readonly kind: `terminal`;
     readonly name: string;
+    // Workspace-relative directory the shell starts in; the daemon honors it only when it creates the session.
+    readonly cwd?: string;
     readonly term: Terminal;
     // Search addon; the panel's Ctrl+F bar searches the buffer through this.
     readonly search: SearchAddon;
@@ -103,8 +105,13 @@ const attachRenderer = (s: TerminalSession): void => {
 
 // Authenticated wss URL for one session, or undefined if unreachable or signed out. A one-shot ticket keeps the bearer
 // off the query string, and the endpoint picker prefers loopback on a same-machine sandbox.
-const socketUrl = (name: string, cols: number, rows: number): Promise<string | undefined> =>
-    wsSocketUrl(`/system/terminal`, { session: name, cols: String(cols), rows: String(rows) });
+const socketUrl = (s: TerminalSession): Promise<string | undefined> =>
+    wsSocketUrl(`/system/terminal`, {
+        session: s.name,
+        cols: String(s.term.cols),
+        rows: String(s.term.rows),
+        ...(s.cwd === undefined ? {} : { cwd: s.cwd }),
+    });
 
 const scheduleRetry = (s: TerminalSession, uptimeMs = 0): void => {
     s.reconnect = window.setTimeout(() => void connectSocket(s), s.backoff.next(uptimeMs));
@@ -117,7 +124,7 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
     if (s.closing) {
         return;
     }
-    const url = await socketUrl(s.name, s.term.cols, s.term.rows);
+    const url = await socketUrl(s);
     // Disposed during the token fetch; don't resurrect a socket for a dead session.
     if (s.closing) {
         return;
@@ -316,7 +323,13 @@ export const pasteIntoTerminal = (s: TerminalSession): void => {
 
 // Builds one session's xterm, host, and socket; the host stays out of the DOM until mountTerminalSession. `readOnly`
 // makes it a log view with no stdin; `spawnWithin` sizes the attach grid.
-export const createTerminalSession = (name: string, onExit: (name: string) => void, readOnly = false, spawnWithin?: HTMLElement): TerminalSession => {
+export const createTerminalSession = (
+    name: string,
+    onExit: (name: string) => void,
+    readOnly = false,
+    spawnWithin?: HTMLElement,
+    cwd?: string,
+): TerminalSession => {
     const host = document.createElement(`div`);
     host.className = `h-full w-full`;
     const term = new Terminal({
@@ -388,6 +401,7 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     const s: TerminalSession = {
         kind: `terminal`,
         name,
+        ...(cwd === undefined ? {} : { cwd }),
         term,
         search,
         host,

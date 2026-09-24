@@ -19,6 +19,8 @@ export interface EntryVerbs {
     readonly cut: () => void;
     readonly copy: () => void;
     readonly paste: () => void;
+    // Starts a shell in the right-clicked folder.
+    readonly openTerminal: () => void;
 }
 
 export interface EntryMenuInput {
@@ -111,6 +113,9 @@ export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
         { label: t(`workspace.entryMenu.newFile`), icon: `file`, command: verbs.newFile },
         { label: t(`workspace.entryMenu.newFolder`), icon: `folder`, command: verbs.newFolder },
         ...lead,
+        ...(input.target?.type === `dir` && !input.multi
+            ? [{ label: t(`workspace.entryMenu.openTerminal`), icon: `terminal`, command: verbs.openTerminal }]
+            : []),
         ...entryVerbs(input),
         ...(clipboardFull ? [{ label: t(`shared.paste`), icon: `clone`, command: verbs.paste }] : []),
         ...withSeparator(tail),

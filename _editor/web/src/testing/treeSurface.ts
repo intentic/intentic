@@ -219,6 +219,7 @@ export const treeSurface = (
             requestDelete: deleting.requestDelete,
             stage: transfer.stage,
             paste: transfer.paste,
+            openTerminal: () => undefined,
         });
         return { rows, rules, selecting, inline, edits, deleting, transfer, menu };
     })!;

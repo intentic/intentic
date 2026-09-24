@@ -4135,7 +4135,8 @@
             "extract": "Extraer",
             "keepFolder": "Conservar la carpeta",
             "newFile": "Archivo nuevo",
-            "newFolder": "Carpeta nueva"
+            "newFolder": "Carpeta nueva",
+            "openTerminal": "Abrir terminal"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "también está viendo este archivo"

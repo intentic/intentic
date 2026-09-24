@@ -4395,7 +4395,8 @@
             "extract": "Extract",
             "keepFolder": "Keep folder",
             "newFile": "New File",
-            "newFolder": "New Folder"
+            "newFolder": "New Folder",
+            "openTerminal": "Open Terminal"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "also viewing this file"

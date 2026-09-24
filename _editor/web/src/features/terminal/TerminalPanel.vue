@@ -144,16 +144,15 @@ onMounted(async () => {
         return;
     }
     // `initial` at mount means the panel opened FOR that session: the attach skips the empty panel's shell for it.
-    const attaching = tabs.attach(pane, initial?.name);
+    // Spent before the attach, whose empty-panel shell then IS that terminal; a later press reaches the hook below.
+    const spawnAsked = consumeSpawnRequest();
+    const attaching = tabs.attach(pane, initial?.name, spawnAsked?.cwd);
     if (newTab !== undefined) {
         disposeSpawn = registerTerminalSpawn(newTab);
     }
     const autoCreated = await attaching;
-    // Spent whatever the outcome, and read before any skippable branch: a raced press opens into whatever panel comes
-    // up next, and the empty panel's auto-created shell already IS that terminal.
-    const spawnAsked = consumeSpawnRequest();
-    if (live && newTab !== undefined && spawnAsked && !autoCreated) {
-        newTab();
+    if (live && newTab !== undefined && spawnAsked !== undefined && !autoCreated) {
+        newTab(spawnAsked.cwd);
     }
     if (live && initial !== undefined) {
         await openRequested(initial);

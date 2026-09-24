@@ -41,6 +41,7 @@ import { useTreeWindow } from "./tree/useTreeWindow";
 import { useEmptyDirs } from "./useEmptyDirs";
 import { useFileNesting } from "./useFileNesting";
 import { useWorkspaceTree } from "./useWorkspaceTree";
+import { useTerminalPanel } from "../../terminal/useTerminalPanel";
 
 // Recursive file tree and file-management surface: verbs act on the whole selection via useWorkspaceTree, with a file
 // standing in for its parent directory as a target. Template and wiring: what the tree draws and what every gesture
@@ -184,6 +185,7 @@ const { onRowClick, onRowDblClick, onChevronClick, onBackgroundClick, onKeydown 
 
 // A row's own affordances, or none when the parent supplied no source (the mobile listing, a test).
 const actionsFor = (path: string): readonly RowAction[] => rowActions?.(path) ?? [];
+const terminalPanel = useTerminalPanel();
 const { menu, menuItems, openMenu, runAction } = useTreeMenu({
     rootDir: () => rootDir,
     rowActions: actionsFor,
@@ -198,6 +200,7 @@ const { menu, menuItems, openMenu, runAction } = useTreeMenu({
     requestDelete,
     stage,
     paste,
+    openTerminal: (dir) => terminalPanel.spawnShell(dir),
     frame: () => ({
         tail:
             store.expanded.value.size > 0

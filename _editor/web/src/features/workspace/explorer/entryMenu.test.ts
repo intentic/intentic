@@ -15,6 +15,7 @@ const verbs = (): EntryVerbs => ({
     cut: jest.fn(),
     copy: jest.fn(),
     paste: jest.fn(),
+    openTerminal: jest.fn(),
 });
 const input = (over: Partial<EntryMenuInput> = {}): EntryMenuInput => ({
     target: file,
@@ -53,6 +54,16 @@ describe(`the entry menu`, () => {
         expect(labels(entryMenuItems(input({ target: undefined, clipboardFull: true })))).toEqual([`New File`, `New Folder`, `Paste`]);
     });
 
+    it(`offers Open Terminal on one folder, never on a file, a bulk selection or to a read-only member`, () => {
+        const opened = input({ target: dir });
+        const row = entryMenuItems(opened).find((item) => item.label === `Open Terminal`);
+        row?.command?.({} as never);
+        expect(opened.verbs.openTerminal).toHaveBeenCalledTimes(1);
+        expect(labels(entryMenuItems(input({ target: file })))).not.toContain(`Open Terminal`);
+        expect(labels(entryMenuItems(input({ target: dir, multi: true, count: 2 })))).not.toContain(`Open Terminal`);
+        expect(labels(entryMenuItems(input({ target: dir, canEdit: false })))).not.toContain(`Open Terminal`);
+    });
+
     it(`offers Keep folder to one empty folder chain, never to a file or a bulk selection`, () => {
         expect(labels(entryMenuItems(input({ target: dir, barren: true })))).toContain(`Keep folder`);
         expect(labels(entryMenuItems(input({ target: dir, barren: true, multi: true, count: 2 })))).not.toContain(`Keep folder`);
@@ -88,6 +99,7 @@ describe(`the entry menu`, () => {
             `New File`,
             `New Folder`,
             `Open management panel`,
+            `Open Terminal`,
             `—`,
             `Rename`,
             `Delete`,

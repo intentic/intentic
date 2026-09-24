@@ -4139,7 +4139,8 @@
             "extract": "Wypakuj",
             "keepFolder": "Zostaw folder",
             "newFile": "Nowy plik",
-            "newFolder": "Nowy folder"
+            "newFolder": "Nowy folder",
+            "openTerminal": "Otwórz terminal"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "też ogląda ten plik"

@@ -4105,7 +4105,8 @@
             "extract": "Entpacken",
             "keepFolder": "Ordner behalten",
             "newFile": "Neue Datei",
-            "newFolder": "Neuer Ordner"
+            "newFolder": "Neuer Ordner",
+            "openTerminal": "Terminal öffnen"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "sieht diese Datei ebenfalls an"

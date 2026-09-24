@@ -4096,7 +4096,8 @@
             "extract": "Extraire",
             "keepFolder": "Garder le dossier",
             "newFile": "Nouveau fichier",
-            "newFolder": "Nouveau dossier"
+            "newFolder": "Nouveau dossier",
+            "openTerminal": "Ouvrir un terminal"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "consulte aussi ce fichier"
