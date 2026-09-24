@@ -58,6 +58,22 @@ const mount = async (component: Parameters<typeof h>[0], props?: Record<string, 
     await settle();
 };
 
+// The bar floats over the section's own area, which the shell hands it; everything else is the rail and the overlays.
+const mountBar = async (): Promise<void> => {
+    const page = document.createElement(`main`);
+    page.append(document.createElement(`button`));
+    document.body.append(page);
+    await mount(ChatQuickBar, { page });
+};
+const onThePage = (): Element | null => document.querySelector(`main button`);
+const railLink = (): HTMLAnchorElement => {
+    const rail = document.createElement(`nav`);
+    const link = document.createElement(`a`);
+    rail.append(link);
+    document.body.append(rail);
+    return link;
+};
+
 const bar = (): HTMLElement | null => document.querySelector(`.chat-quick-float`);
 // The resting pill is itself the control: the one that grows the composer or, while a card waits, opens the chat.
 const press = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`.chat-quick-pill`)!;
@@ -108,7 +124,7 @@ afterEach(() => {
 });
 
 it(`draws where no composer is already on screen, and nowhere else`, async () => {
-    await mount(ChatQuickBar);
+    await mountBar();
     expect(bar()).not.toBeNull();
 
     // The /chat area publishes its slot: the whole panel is on that screen, composer included.
@@ -123,7 +139,7 @@ it(`draws where no composer is already on screen, and nowhere else`, async () =>
 });
 
 it(`publishes its slot only while it draws, so the panel parks when it doesn't`, async () => {
-    await mount(ChatQuickBar);
+    await mountBar();
     expect(chatBarDock.value?.isConnected).toBe(true);
 
     useLayout().setChatHome(`side`);
@@ -133,7 +149,7 @@ it(`publishes its slot only while it draws, so the panel parks when it doesn't`,
 
 it(`hovering takes the box and never the caret, so a passing pointer can't capture the keyboard`, async () => {
     const chat = useChat();
-    await mount(ChatQuickBar);
+    await mountBar();
     const caretRequests = chat.composerFocus.value;
 
     hoverIn();
@@ -144,7 +160,7 @@ it(`hovering takes the box and never the caret, so a passing pointer can't captu
 });
 
 it(`closes again when the pointer leaves an empty box`, async () => {
-    await mount(ChatQuickBar);
+    await mountBar();
     hoverIn();
     await waitOutHover();
 
@@ -156,7 +172,7 @@ it(`closes again when the pointer leaves an empty box`, async () => {
 
 it(`keeps words on screen: a box with a draft in it stays open when the pointer goes`, async () => {
     const chat = useChat();
-    await mount(ChatQuickBar);
+    await mountBar();
     hoverIn();
     await waitOutHover();
     chat.active.value.draft.value = `half a thought`;
@@ -170,7 +186,7 @@ it(`keeps words on screen: a box with a draft in it stays open when the pointer 
 
 it(`a press takes the caret, since it is the one gesture that means to type`, async () => {
     const chat = useChat();
-    await mount(ChatQuickBar);
+    await mountBar();
     const caretRequests = chat.composerFocus.value;
 
     press().click();
@@ -181,7 +197,7 @@ it(`a press takes the caret, since it is the one gesture that means to type`, as
 });
 
 it(`rises for a caret summoned anywhere: "New agent" pressed on a board is typed into here`, async () => {
-    await mount(ChatQuickBar);
+    await mountBar();
     expect(opened()).toBe(false);
 
     focusComposer();
@@ -194,7 +210,7 @@ it(`rises for a caret summoned anywhere: "New agent" pressed on a board is typed
 // did the same job to the eye and kept the composer unfocusable for the whole fade, so the caret arriving with a
 // summons landed nowhere.
 it(`hands reach to whichever form is showing, in the frame it opens`, async () => {
-    await mount(ChatQuickBar);
+    await mountBar();
     const pill = document.querySelector(`.chat-quick-pill`)!;
     const host = document.querySelector(`.chat-quick-host`)!;
     expect([pill.hasAttribute(`inert`), host.hasAttribute(`inert`)]).toEqual([false, true]);
@@ -209,7 +225,7 @@ it(`hands reach to whichever form is showing, in the frame it opens`, async () =
 // declared or guessed. Measuring it is what left a box standing open at full width with nothing in it, having read
 // the composer's height while the panel was still parked offscreen.
 it(`sizes itself by whichever form is in flow, never by a measured height`, async () => {
-    await mount(ChatQuickBar);
+    await mountBar();
     expect(bar()!.style.height).toBe(``);
 
     press().click();
@@ -221,7 +237,7 @@ it(`sizes itself by whichever form is in flow, never by a measured height`, asyn
 // The pill is the whole resting form: a second control on it was one more thing to mean, in the one place the reader
 // came to write a sentence.
 it(`rests as one control and nothing else, so its only press is the composer`, async () => {
-    await mount(ChatQuickBar);
+    await mountBar();
 
     expect(document.querySelectorAll(`.chat-quick-float button`)).toHaveLength(1);
 });
@@ -233,7 +249,7 @@ it(`turns into a door while a card waits for an answer, rather than a box that c
     chat.active.value.transcript.restoreMessages([
         { role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, status: `pending` } },
     ]);
-    await mount(ChatQuickBar);
+    await mountBar();
 
     expect(line()).toContain(`waiting for you`);
     expect(press().hasAttribute(`aria-expanded`)).toBe(false);
@@ -247,13 +263,13 @@ it(`turns into a door while a card waits for an answer, rather than a box that c
 it(`says what is running while it rests, since the pill is the only sign a parked turn leaves`, async () => {
     const chat = useChat();
     chat.active.value.title.value = `Add Stripe checkout`;
-    await mount(ChatQuickBar);
+    await mountBar();
 
     expect(line()).toBe(`Add Stripe checkout`);
 });
 
 it(`invites when there is nothing to report`, async () => {
-    await mount(ChatQuickBar);
+    await mountBar();
 
     expect(line()).toBe(`Ask anything…`);
 });
@@ -261,7 +277,7 @@ it(`invites when there is nothing to report`, async () => {
 // Escape means four things in the composer (stop the turn, abandon an edit, quit hands-free, dismiss a list), and
 // closing the pill is last in that queue.
 it(`closes on Escape, unless the composer claimed that press`, async () => {
-    await mount(ChatQuickBar);
+    await mountBar();
     press().click();
     await settle();
 
@@ -280,7 +296,7 @@ it(`closes on Escape, unless the composer claimed that press`, async () => {
 // for — so the way to it is an affordance, not a navigation, offered only where there is something to read.
 it(`offers the transcript only on the open box, and only once something has been said`, async () => {
     const chat = useChat();
-    await mount(ChatQuickBar);
+    await mountBar();
     press().click();
     await settle();
     expect(handle()).toBeNull();
@@ -299,7 +315,7 @@ it(`offers the transcript only on the open box, and only once something has been
 // together are over before the box's grace is.
 it(`folds a borrowed transcript away with the pointer, before the box itself goes`, async () => {
     said();
-    await mount(ChatQuickBar);
+    await mountBar();
     hoverIn();
     await waitOutHover();
 
@@ -317,7 +333,7 @@ it(`folds a borrowed transcript away with the pointer, before the box itself goe
 
 it(`gives an overshot edge its transcript back when the pointer returns in time`, async () => {
     said();
-    await mount(ChatQuickBar);
+    await mountBar();
     hoverIn();
     await waitOutHover();
     await peekThroughHandle();
@@ -333,7 +349,7 @@ it(`gives an overshot edge its transcript back when the pointer returns in time`
 // Selecting a line to copy starts with a press on the transcript and often ends past its edge: neither may fold it.
 it(`keeps the box and its transcript once pressed, so a selection survives the pointer leaving`, async () => {
     said();
-    await mount(ChatQuickBar);
+    await mountBar();
     hoverIn();
     await waitOutHover();
     await peekThroughHandle();
@@ -345,48 +361,61 @@ it(`keeps the box and its transcript once pressed, so a selection survives the p
     expect([chatBarPeek.value, opened()]).toEqual([true, true]);
 });
 
-// A press on text takes the caret out of the composer and gives it to nothing, which is not the reader leaving.
-it(`stays open when the caret falls to nothing, and folds when it leaves for the page`, async () => {
-    await mount(ChatQuickBar);
+// The caret goes to nothing on a press on text, and to the page when a view it opens takes it: neither is a gesture.
+it(`never folds for the caret moving, wherever it goes`, async () => {
+    await mountBar();
     hoverIn();
     await waitOutHover();
 
     caretLeavesFor(null);
+    caretLeavesFor(onThePage());
     await settle();
-    expect(opened()).toBe(true);
 
-    const elsewhere = document.createElement(`button`);
-    document.body.append(elsewhere);
-    caretLeavesFor(elsewhere);
-    await settle();
-    expect(opened()).toBe(false);
+    expect(opened()).toBe(true);
 });
 
 it(`folds the transcript and an empty box on a press on the page`, async () => {
     said();
-    await mount(ChatQuickBar);
+    await mountBar();
     press().click();
     await settle();
     handle()!.click();
     await settle();
 
-    pressOn(document.body);
+    pressOn(onThePage());
     await settle();
 
     expect([chatBarPeek.value, opened()]).toEqual([false, false]);
+});
+
+// The bar follows the reader from view to view: switching on the rail is not going back to the page under it.
+it(`keeps the box and its transcript through a view switch on the rail`, async () => {
+    said();
+    await mountBar();
+    press().click();
+    await settle();
+    handle()!.click();
+    await settle();
+
+    const link = railLink();
+    pressOn(link);
+    caretLeavesFor(link);
+    await settle();
+
+    expect([chatBarPeek.value, opened()]).toEqual([true, true]);
 });
 
 // Words hold the composer open against the page, so copying from it into them is one press away, and the box's own
 // minimize is what folds them; the pill carries them from there.
 it(`keeps a box holding words through a press on the page, and folds it only on its own minimize`, async () => {
     const chat = useChat();
-    await mount(ChatQuickBar);
+    await mountBar();
     press().click();
     await settle();
     chat.active.value.draft.value = `half a thought`;
     await settle();
 
-    pressOn(document.body);
+    pressOn(onThePage());
     await settle();
     expect(opened()).toBe(true);
 
@@ -397,7 +426,7 @@ it(`keeps a box holding words through a press on the page, and folds it only on 
 
 // The model list, the mode menu and their kind hang off the composer but are teleported to the body.
 it(`counts the menus the composer opens as part of the box`, async () => {
-    await mount(ChatQuickBar);
+    await mountBar();
     press().click();
     await settle();
     const menu = document.createElement(`div`);
@@ -417,7 +446,7 @@ it(`counts the menus the composer opens as part of the box`, async () => {
 // hover — and then one Escape undoes one thing, in the order they were opened.
 it(`keeps the transcript on a press, and gives it back one Escape before the box`, async () => {
     said();
-    await mount(ChatQuickBar);
+    await mountBar();
     press().click();
     await settle();
 
@@ -438,7 +467,7 @@ it(`keeps the transcript on a press, and gives it back one Escape before the box
 // The eye stays on the transcript it opened: pressing a borrowed one keeps it, pressing a kept one folds it.
 it(`keeps a borrowed transcript on the eye's press, and folds it on the next`, async () => {
     said();
-    await mount(ChatQuickBar);
+    await mountBar();
     hoverIn();
     await waitOutHover();
     await peekThroughHandle();
@@ -454,26 +483,36 @@ it(`keeps a borrowed transcript on the eye's press, and folds it on the next`, a
     expect([chatBarPeek.value, handle()!.getAttribute(`aria-expanded`)]).toEqual([false, `false`]);
 });
 
-// Pressing on transcript text leaves the caret on the body, so that is where the reader's Escape lands.
-it(`hears an Escape that lands on the body while the box is the last thing pressed`, async () => {
+// A press on transcript text leaves the caret on the body, and a view switch leaves it on the rail: the reader's
+// Escape lands there, and the page keeps its own.
+it(`hears an Escape that lands off the page while the box is the last thing pressed`, async () => {
     said();
-    await mount(ChatQuickBar);
+    await mountBar();
     press().click();
     await settle();
     handle()!.click();
     await settle();
+    const escapeOn = (target: Element | null): void =>
+        void target?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true }));
 
-    document.body.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true }));
+    escapeOn(onThePage());
+    await settle();
+    expect([chatBarPeek.value, opened()]).toEqual([true, true]);
+
+    escapeOn(railLink());
     jest.advanceTimersByTime(130);
     await settle();
-
     expect([chatBarPeek.value, opened()]).toEqual([false, true]);
+
+    escapeOn(document.body);
+    await settle();
+    expect(opened()).toBe(false);
 });
 
 it(`opens the full chat from the transcript's corner, folding the box behind it`, async () => {
     said();
     const push = jest.spyOn(router, `push`).mockResolvedValue(undefined);
-    await mount(ChatQuickBar);
+    await mountBar();
     press().click();
     await settle();
 

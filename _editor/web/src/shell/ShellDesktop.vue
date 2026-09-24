@@ -437,6 +437,8 @@ const onTileContextMenu = (tile: RailTile, event: MouseEvent): void => {
 // rail rank; each row can pin the section (railPins.ts). Never badges — anything with something to say is already on the rail.
 const moreTrigger = ref<HTMLButtonElement | null>(null);
 const moreOpen = ref(false);
+// The section's own area, which the parked chat's bar floats over and is dismissed by a press on.
+const page = ref<HTMLElement | null>(null);
 // The count is the whole point of hovering; phrased like every other tile's label. A `computed`, so it is rebuilt
 // when the language changes rather than holding the words it was born with.
 const moreLabel = computed(() =>
@@ -710,7 +712,7 @@ useKeybindings();
         <!-- This slot serves the panel's docked and floating instances. -->
         <div ref="chatDock" class="contents"></div>
 
-        <main class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
+        <main ref="page" class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
             <SandboxGate>
                 <div class="min-h-0 flex-1 overflow-auto">
                     <RouterView />
@@ -722,7 +724,7 @@ useKeybindings();
 
         <!-- The parked chat's composer, floating in the section's own cell: growing it must not reflow the page the reader
              opened it to talk about. Outside the gate, like the chat column: a stalled sandbox is a thing to ask about. -->
-        <ChatQuickBar />
+        <ChatQuickBar :page="page ?? undefined" />
 
         <!-- Portals to body, so it overlays the whole shell regardless of where it sits in the grid. -->
         <QuickOpen />

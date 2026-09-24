@@ -22,26 +22,34 @@ with a transcript besides reading it:
 - After a selection, a pointer drifting a few pixels off the edge folded the transcript at once, and the selection
   went with it.
 
-Holding focus counts as a press, and so does a summons (New agent, a board starter). Focus falling to nothing (a press
-on text, the window losing focus) is not the reader leaving, so it releases nothing.
+Holding focus counts as a press, and so does a summons (New agent, a board starter).
 
 ## What dismisses a kept box
 
 - **Escape** undoes one thing at a time: the composer's own claims first (stop a turn, drop an edit, quit
-  hands-free), then the transcript, then the box. After a press on transcript text the caret is on the body, so while
-  the box is kept, an Escape landing on the body is the box's too.
-- **A press on the page**, or focus leaving for something on it, always folds the transcript. It also folds the box
-  unless the box holds words: a draft keeps the composer so the reader can copy from the page into it.
+  hands-free), then the transcript, then the box. A press on transcript text leaves the caret on the body, and a
+  view switch leaves it on the rail, so while the box is kept, an Escape landing anywhere off the page is the box's
+  too. Menus and dialogs keep their own Escape.
+- **A press on the page** always folds the transcript. It also folds the box unless the box holds words: a draft
+  keeps the composer so the reader can copy from the page into it.
 - **Minimize** on the box's top edge folds it even when a draft is holding it open. Without it, a box holding words
   and no focus had no way closed but typing into it again. The pill shows the draft's first line from then on.
-- **Following a link** from the transcript folds the transcript and leaves the composer. Changing the route means the
-  reader went to look at something, and the transcript would cover it.
 
-## Inside the box
+## The page, and everything that is not it
 
-Anchored menus, dialogs and context menus the composer opens are teleported to `<body>`, outside the box's DOM
-subtree. A press or focus landing in one counts as inside. Before this rule, opening the model picker from the bar
-collapsed the composer and left the picker hanging over the pill.
+The page is the section's own area, the `<main>` the bar floats over (ShellDesktop passes it in). Only a press there
+means the reader went back to what the bar covers. The rest of the window is not the page:
+
+- **The rail.** The bar is the parked chat's home on every view, so it follows the reader from view to view. Switching
+  from `/workspace` to `/ext/pipelines` on the rail keeps the box and its transcript as they were; folding them there
+  made every look at another view cost reopening the chat.
+- **Menus and dialogs** the composer opens, teleported to `<body>`. Before, opening the model picker from the bar
+  collapsed the composer and left the picker hanging over the pill.
+- **Focus moving.** Focus falls to nothing on a press on text or when the window loses focus. A view that opens can
+  put the caret in a field of its own. Neither is a gesture, so the caret moving, wherever it goes, releases nothing.
+
+A borrowed box is different: it was never the reader's, so the pointer leaving for the rail folds it like any other
+leave.
 
 ## The tools
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ProgressRing, ui } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRouter } from "vue-router";
 import { chatBarPeek, chatParked } from "./chatPanelLayout";
 import { chatBarDock } from "../../../shell/window/dockSlots";
 import { focusComposer } from "../tabs/useChat-tabs";
@@ -14,10 +14,12 @@ import { contextPct } from "../../agents/fleet/agentStatus";
 // teleports into `slot`), with that pane's own transcript unfolding above it on request (chatBarPeek). Hover borrows the
 // box and a press keeps it until the reader dismisses it; docs/design/chat-quick-bar.md has the rules and their reasons.
 
+// The section's area the bar floats over: a press there is the one gesture that means the reader went back to the page.
+const { page } = defineProps<{ page: HTMLElement | undefined }>();
+
 const t = useT();
 
 const router = useRouter();
-const route = useRoute();
 const { active, messages, streaming, draft, composerFocus, awaitingDecision, contextUsage, provider } = useChat();
 
 const expanded = ref(false);
@@ -67,7 +69,7 @@ const PEEK_GRACE_MS = 200;
 const PEEK_INTENT_MS = 140;
 // Must match the card's exit transition in chat.css: the turns stay mounted this long so they fade with it.
 const PEEK_EXIT_MS = 130;
-// Surfaces the composer opens outside its own subtree; a press or the caret landing in one is still inside the box.
+// Menus and dialogs are teleported to the body and answer their own Escape.
 const OVERLAYS = `.ui-anchored, [role="dialog"], .p-contextmenu`;
 
 let boxTimer: ReturnType<typeof setTimeout> | undefined;
@@ -82,7 +84,7 @@ const cancelPeekTimer = (): void => {
     peekTimer = undefined;
 };
 
-const within = (node: Element): boolean => float.value?.contains(node) === true || node.closest(OVERLAYS) !== null;
+const onPage = (node: EventTarget | null): boolean => node instanceof Node && page?.contains(node) === true;
 
 // `peekOpen` is whether the transcript is asked for and `chatBarPeek` whether the panel draws it: they part only on the
 // way out, where the turns must stay mounted to fade with the card, and both flip in one render so Escape reads true.
@@ -144,7 +146,8 @@ const collapse = (): void => {
 // Words in the box hold it open against the pointer and a press on the page; only Escape or minimizing folds them.
 const collapsible = computed(() => !kept.value && draft.value.trim() === ``);
 
-// What the reader moving on to the page ends: the transcript always, the box unless it holds words.
+// What the reader going back to the page ends: the transcript always, the box unless it holds words. Nothing else
+// does: the rail switching views, a menu, a dialog, or the caret moving anywhere leaves the box as it is.
 const release = (): void => {
     closePeek();
     kept.value = false;
@@ -184,27 +187,31 @@ const onPressInside = (event: Event): void => {
         peekKept.value = true;
     }
 };
-const onPressOutside = (event: Event): void => {
-    if (event.target instanceof Element && !within(event.target)) {
+const onPagePress = (event: Event): void => {
+    if (onPage(event.target)) {
         release();
     }
 };
-// A press on transcript text leaves the caret nowhere, so its Escape arrives on the body; kept, the box was the last
-// thing pressed and the key is its.
+// A press on transcript text or on the rail leaves the caret off the page and out of the box, so that is where the
+// reader's Escape lands; kept, the box was the last thing pressed and the key is its.
 const onStrayEscape = (event: KeyboardEvent): void => {
-    if (event.key === `Escape` && kept.value && event.target === document.body) {
+    const target = event.target;
+    if (event.key !== `Escape` || !kept.value || !(target instanceof Element) || float.value?.contains(target) === true) {
+        return;
+    }
+    if (!onPage(target) && target.closest(OVERLAYS) === null) {
         onEscape(event);
     }
 };
 const disarm = (): void => {
-    document.removeEventListener(`pointerdown`, onPressOutside, true);
+    document.removeEventListener(`pointerdown`, onPagePress, true);
     document.removeEventListener(`keydown`, onStrayEscape);
 };
-// Capture phase, so a surface that stops its own presses cannot hide from the box that the reader moved on.
+// Capture phase, so a page that stops its own presses cannot hide from the box that the reader went back to it.
 watch(expanded, (open) => {
     disarm();
     if (open) {
-        document.addEventListener(`pointerdown`, onPressOutside, true);
+        document.addEventListener(`pointerdown`, onPagePress, true);
         document.addEventListener(`keydown`, onStrayEscape);
     }
 });
@@ -213,13 +220,6 @@ onBeforeUnmount(disarm);
 const onFocusIn = (): void => {
     if (expanded.value) {
         kept.value = true;
-    }
-};
-// Focus falling to nothing is a press on text inside the box or the window losing focus, never the reader leaving.
-const onFocusOut = (event: FocusEvent): void => {
-    const next = event.relatedTarget;
-    if (next instanceof Element && !within(next)) {
-        release();
     }
 };
 // Escape is the composer's first (a turn to stop, an edit to drop) and it claims one with preventDefault; then the
@@ -258,9 +258,6 @@ const openChat = (): void => {
     collapse();
     void router.push(`/chat`);
 };
-
-// A link followed from the transcript is the reader going to look at something the transcript would cover.
-watch(() => route.fullPath, closePeek);
 
 // Anything that asks for the caret (New agent, a board starter, a summons from another window) grows the pill; the
 // caret itself is already on its way from whoever raised the signal.
@@ -333,7 +330,6 @@ const tool = ui.iconButton(`rounded-full text-subtle`);
             @pointerleave="onLeave"
             @pointerdown.capture="onPressInside"
             @focusin="onFocusIn"
-            @focusout="onFocusOut"
             @keydown.esc="onEscape"
         >
             <!-- The transcript's glass: exactly the box's rect, drawn here so it can arrive without the composer moving. -->
