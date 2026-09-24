@@ -68,20 +68,20 @@ test(`each check is named by the moment it runs at`, () => {
             fired: [null, null, null],
         }),
     ];
-    const lines = [...mount().querySelectorAll(`span.flex-col > span`)].map((line) => line.textContent ?? ``);
+    const lines = [...mount().querySelectorAll(`li`)].map((line) => line.textContent ?? ``);
     expect(lines).toHaveLength(3);
-    expect(lines.find((line) => line.includes(`eslint`))).toContain(`after each edit`);
-    expect(lines.find((line) => line.includes(`pnpm lint`))).toContain(`before a turn ends`);
-    expect(lines.find((line) => line.includes(`pnpm test`))).toContain(`after it lands`);
+    expect(lines.find((line) => line.includes(`eslint`))).toContain(`After each edit`);
+    expect(lines.find((line) => line.includes(`pnpm lint`))).toContain(`Before a turn ends`);
+    expect(lines.find((line) => line.includes(`pnpm test`))).toContain(`After it lands`);
 });
 
 // The package script runs after a land whatever the owner adopted, so the row states it, undimmed, with nothing to switch.
 test(`a repository that declares nothing shows the package script that runs after a land, with no switch`, () => {
     repos.value = [declaring({ checks: [], fired: [], adopted: false, landDefault: `pnpm test` })];
     const host = mount();
-    expect(host.textContent).toContain(`after it lands`);
+    expect(host.textContent).toContain(`After it lands`);
     expect(host.textContent).toContain(`pnpm test`);
-    expect(host.textContent).toContain(`(package script)`);
+    expect(host.textContent).toContain(`package script`);
     expect(switchOf(host)).toBeNull();
     expect(host.querySelector(`.opacity-60`)).toBeNull();
     expect(host.textContent).not.toContain(`waiting on you`);
@@ -91,7 +91,7 @@ test(`a declared land check replaces the package script`, () => {
     repos.value = [declaring({ checks: [{ when: `land`, run: `pnpm test:integration` }], fired: [null], landDefault: `pnpm test` })];
     const host = mount();
     expect(host.textContent).toContain(`pnpm test:integration`);
-    expect(host.textContent).not.toContain(`(package script)`);
+    expect(host.textContent).not.toContain(`package script`);
 });
 
 const FIVE_DAYS_AGO = Date.now() - 5 * 86_400_000;
@@ -108,7 +108,7 @@ test(`a running check says when it last flagged something, and a land check leav
             fired: [FIVE_DAYS_AGO, null, null],
         }),
     ];
-    const lines = [...mount().querySelectorAll(`span.flex-col > span`)].map((line) => line.textContent ?? ``);
+    const lines = [...mount().querySelectorAll(`li`)].map((line) => line.textContent ?? ``);
     expect(lines.find((line) => line.includes(`eslint`))).toContain(`last flagged ${timeAgo(FIVE_DAYS_AGO, { days: true })}`);
     expect(lines.find((line) => line.includes(`pnpm lint`))).toContain(`never flagged`);
     expect(lines.find((line) => line.includes(`pnpm test`))).not.toContain(`flagged`);
@@ -136,7 +136,7 @@ test(`a declaration that changed since it was adopted says it is not running`, (
 test(`a declaration nobody has answered yet says so, and counts itself at the foot`, () => {
     repos.value = [declaring({ adopted: false })];
     const host = mount();
-    expect(host.textContent).toContain(`Declared, not running`);
+    expect(host.textContent).toContain(`Off. Nothing a repository declares runs`);
     expect(host.textContent).toContain(`One repository is waiting on you`);
 });
 

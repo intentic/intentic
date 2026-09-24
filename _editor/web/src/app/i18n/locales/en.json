@@ -2583,16 +2583,17 @@
             "viewAccounts": "View accounts"
         },
         "repoCheckRow": {
-            "changedSinceSwitchedOn": "This changed since you switched it on, so it is not running. Read it above and switch it on again to accept it.",
+            "changedSinceSwitchedOn": "Paused: this changed since you switched it on. Read it below, then switch it on again to accept it.",
             "checksFileCouldNot": "Its checks file could not be read: {error}",
-            "declaredNotRunningNothing": "Declared, not running. Nothing a repository asks for runs until you say so.",
+            "declaredNotRunningNothing": "Off. Nothing a repository declares runs until you switch it on.",
             "runChecksDeclares": "Run the checks {name} declares",
-            "afterEachEdit": "after each edit",
-            "afterItLands": "after it lands",
-            "beforeTurnEnds": "before a turn ends",
+            "afterEachEdit": "After each edit",
+            "afterItLands": "After it lands",
+            "beforeTurnEnds": "Before a turn ends",
             "lastFlagged": "last flagged {ago}",
             "neverFlagged": "never flagged",
-            "packageScript": "(package script)"
+            "packageScript": "package script",
+            "running": "Running"
         },
         "restartWatch": {
             "seeLog": "See the log",
@@ -4439,9 +4440,9 @@
             "allChecksInSandbox": "All checks in this sandbox",
             "appearHereTravelRepository": "and it will appear here, and travel with the repository to anyone else who clones it.",
             "checksIn": "Checks in {dir}",
-            "repositoryDeclaresIn": "This repository declares these in",
+            "declaredIn": "Declared in {path}, so they travel with the repository.",
             "repositoryDoesntDeclareAny": "This repository doesn't declare any checks of its own. Put a file at",
-            "theyTravelSwitchingOn": ", so they travel with it. Switching them on is what lets this sandbox run them.",
+            "runTheseChecks": "Run these checks",
             "whenIsOneOf": "{when} is {edit}, {turn} or {land}, and the command runs in this folder, so write it as you would in a terminal here."
         },
         "directoryPersonas": {

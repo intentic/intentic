@@ -2400,16 +2400,17 @@
             "viewAccounts": "Konten ansehen"
         },
         "repoCheckRow": {
-            "changedSinceSwitchedOn": "Das hat sich geändert, seit Sie es eingeschaltet haben, deshalb läuft es nicht. Lesen Sie es oben und schalten Sie es erneut ein, um es anzunehmen.",
+            "changedSinceSwitchedOn": "Pausiert: Das hat sich geändert, seit Sie es eingeschaltet haben. Lesen Sie es unten und schalten Sie es erneut ein, um es anzunehmen.",
             "checksFileCouldNot": "Seine Prüfdatei ließ sich nicht lesen: {error}",
-            "declaredNotRunningNothing": "Deklariert, läuft nicht. Nichts, worum ein Repository bittet, läuft, bis Sie es sagen.",
+            "declaredNotRunningNothing": "Aus. Nichts, was ein Repository deklariert, läuft, bis Sie es einschalten.",
             "runChecksDeclares": "Die Prüfungen ausführen, die {name} deklariert",
-            "afterEachEdit": "nach jeder Änderung",
-            "afterItLands": "nachdem es gelandet ist",
-            "beforeTurnEnds": "bevor ein Zug endet",
+            "afterEachEdit": "Nach jeder Änderung",
+            "afterItLands": "Nachdem es gelandet ist",
+            "beforeTurnEnds": "Bevor ein Zug endet",
             "lastFlagged": "zuletzt gemeldet {ago}",
             "neverFlagged": "nie etwas gemeldet",
-            "packageScript": "(Paket-Skript)"
+            "packageScript": "Paket-Skript",
+            "running": "Läuft"
         },
         "restartWatch": {
             "seeLog": "Das Protokoll ansehen",
@@ -4141,9 +4142,9 @@
             "allChecksInSandbox": "Alle Prüfungen in dieser Sandbox",
             "appearHereTravelRepository": "und sie erscheint hier und reist mit dem Repository zu jedem anderen, der es klont.",
             "checksIn": "Prüfungen in {dir}",
-            "repositoryDeclaresIn": "Dieses Repository deklariert diese in",
+            "declaredIn": "Deklariert in {path}, damit sie mit dem Repository reisen.",
             "repositoryDoesntDeclareAny": "Dieses Repository deklariert keine eigenen Prüfungen. Legen Sie eine Datei ab unter",
-            "theyTravelSwitchingOn": ", damit sie mit ihm reisen. Sie einzuschalten ist das, was diese Sandbox sie ausführen lässt.",
+            "runTheseChecks": "Diese Prüfungen ausführen",
             "whenIsOneOf": "{when} ist {edit}, {turn} oder {land}, und der Befehl läuft in diesem Ordner, schreiben Sie ihn also so, wie Sie es hier in einem Terminal täten."
         },
         "directoryPersonas": {

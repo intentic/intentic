@@ -2412,16 +2412,17 @@
             "viewAccounts": "Zobacz konta"
         },
         "repoCheckRow": {
-            "changedSinceSwitchedOn": "To się zmieniło, odkąd to włączyłeś, więc nie działa. Przeczytaj powyżej i włącz ponownie, żeby to przyjąć.",
+            "changedSinceSwitchedOn": "Wstrzymane: to się zmieniło, odkąd to włączyłeś. Przeczytaj poniżej i włącz ponownie, żeby to przyjąć.",
             "checksFileCouldNot": "Nie udało się odczytać jego pliku sprawdzeń: {error}",
-            "declaredNotRunningNothing": "Zadeklarowane, nie działa. Nic, o co prosi repozytorium, nie ruszy, dopóki tego nie powiesz.",
+            "declaredNotRunningNothing": "Wyłączone. Nic, co deklaruje repozytorium, nie działa, dopóki tego nie włączysz.",
             "runChecksDeclares": "Uruchom sprawdzenia, które deklaruje {name}",
-            "afterEachEdit": "po każdej zmianie",
-            "afterItLands": "po scaleniu",
-            "beforeTurnEnds": "zanim tura się skończy",
+            "afterEachEdit": "Po każdej zmianie",
+            "afterItLands": "Po scaleniu",
+            "beforeTurnEnds": "Zanim tura się skończy",
             "lastFlagged": "ostatnio zgłosił {ago}",
             "neverFlagged": "nigdy nic nie zgłosił",
-            "packageScript": "(skrypt pakietu)"
+            "packageScript": "skrypt pakietu",
+            "running": "Działa"
         },
         "restartWatch": {
             "seeLog": "Zobacz dziennik",
@@ -4175,9 +4176,9 @@
             "allChecksInSandbox": "Wszystkie sprawdzenia w tym sandboxie",
             "appearHereTravelRepository": "a pojawi się tutaj i pojedzie z repozytorium do każdego, kto je sklonuje.",
             "checksIn": "Sprawdzenia w {dir}",
-            "repositoryDeclaresIn": "To repozytorium deklaruje je w",
+            "declaredIn": "Zadeklarowane w {path}, więc jadą razem z repozytorium.",
             "repositoryDoesntDeclareAny": "To repozytorium nie deklaruje własnych sprawdzeń. Umieść plik w",
-            "theyTravelSwitchingOn": ", żeby jechały razem z nim. Włączenie ich jest tym, co pozwala temu sandboxowi je uruchamiać.",
+            "runTheseChecks": "Uruchamiaj te sprawdzenia",
             "whenIsOneOf": "{when} to {edit}, {turn} albo {land}, a polecenie wykonuje się w tym folderze, więc napisz je tak, jak zrobiłbyś to tutaj w terminalu."
         },
         "directoryPersonas": {

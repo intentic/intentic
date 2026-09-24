@@ -37,13 +37,17 @@ const EXAMPLE = `{
     <Modal v-model:open="visible" size="md" :header="t(`workspace.directoryChecks.checksIn`, { dir: dir ?? `` })">
         <div class="flex flex-col gap-4">
             <template v-if="entry !== undefined">
-                <!-- Explain the switch before the control because the row cannot explain itself. -->
-                <p class="text-xs text-subtle">
-                    {{ t(`workspace.directoryChecks.repositoryDeclaresIn`) }} <code class="ui-code">{{ entry.path }}</code
-                    >{{ t(`workspace.directoryChecks.theyTravelSwitchingOn`) }}
-                </p>
+                <!-- The file is named once, here, so the row beneath can name the switch instead of the repository. -->
+                <i18n-t keypath="workspace.directoryChecks.declaredIn" tag="p" class="text-xs text-subtle" scope="global">
+                    <template #path><code class="ui-code">{{ entry.path }}</code></template>
+                </i18n-t>
                 <RowGroup>
-                    <RepoCheckRow :entry="entry" :busy="pending === entry.repo" @switch="(on: boolean) => adopt(entry!.repo, on)" />
+                    <RepoCheckRow
+                        :entry="entry"
+                        :title="t(`workspace.directoryChecks.runTheseChecks`)"
+                        :busy="pending === entry.repo"
+                        @switch="(on: boolean) => adopt(entry!.repo, on)"
+                    />
                 </RowGroup>
             </template>
 

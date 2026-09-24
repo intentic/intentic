@@ -2412,16 +2412,17 @@
             "viewAccounts": "Ver cuentas"
         },
         "repoCheckRow": {
-            "changedSinceSwitchedOn": "Esto cambió desde que lo activaste, así que no se está ejecutando. Léelo arriba y vuelve a activarlo para aceptarlo.",
+            "changedSinceSwitchedOn": "En pausa: esto cambió desde que lo activaste. Léelo abajo y vuelve a activarlo para aceptarlo.",
             "checksFileCouldNot": "No se pudo leer su archivo de comprobaciones: {error}",
-            "declaredNotRunningNothing": "Declarado, sin ejecutarse. Nada de lo que pide un repositorio se ejecuta hasta que tú lo digas.",
+            "declaredNotRunningNothing": "Desactivado. Nada de lo que declara un repositorio se ejecuta hasta que lo actives.",
             "runChecksDeclares": "Ejecutar las comprobaciones que declara {name}",
-            "afterEachEdit": "tras cada edición",
-            "afterItLands": "tras integrarse",
-            "beforeTurnEnds": "antes de que acabe un turno",
+            "afterEachEdit": "Tras cada edición",
+            "afterItLands": "Tras integrarse",
+            "beforeTurnEnds": "Antes de que acabe un turno",
             "lastFlagged": "último aviso {ago}",
             "neverFlagged": "nunca avisó",
-            "packageScript": "(script del paquete)"
+            "packageScript": "script del paquete",
+            "running": "En marcha"
         },
         "restartWatch": {
             "seeLog": "Ver el registro",
@@ -4172,9 +4173,9 @@
             "allChecksInSandbox": "Todas las comprobaciones de este sandbox",
             "appearHereTravelRepository": "y aparecerá aquí, y viajará con el repositorio a cualquiera que lo clone.",
             "checksIn": "Comprobaciones en {dir}",
-            "repositoryDeclaresIn": "Este repositorio las declara en",
+            "declaredIn": "Declaradas en {path}, así que viajan con el repositorio.",
             "repositoryDoesntDeclareAny": "Este repositorio no declara comprobaciones propias. Pon un archivo en",
-            "theyTravelSwitchingOn": ", para que viajen con él. Activarlas es lo que permite a este sandbox ejecutarlas.",
+            "runTheseChecks": "Ejecutar estas comprobaciones",
             "whenIsOneOf": "{when} es {edit}, {turn} o {land}, y el comando se ejecuta en esta carpeta, así que escríbelo como lo harías en un terminal aquí."
         },
         "directoryPersonas": {

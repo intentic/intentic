@@ -2400,16 +2400,17 @@
             "viewAccounts": "Voir les comptes"
         },
         "repoCheckRow": {
-            "changedSinceSwitchedOn": "Ceci a changé depuis que vous l'avez activé : il ne tourne donc pas. Lisez-le ci-dessus et réactivez-le pour l'accepter.",
+            "changedSinceSwitchedOn": "En pause : ceci a changé depuis que vous l'avez activé. Lisez-le ci-dessous et réactivez-le pour l'accepter.",
             "checksFileCouldNot": "Son fichier de vérifications n'a pas pu être lu : {error}",
-            "declaredNotRunningNothing": "Déclaré, non exécuté. Rien de ce qu'un dépôt demande ne tourne tant que vous ne l'avez pas dit.",
+            "declaredNotRunningNothing": "Désactivé. Rien de ce qu'un dépôt déclare ne tourne tant que vous ne l'avez pas activé.",
             "runChecksDeclares": "Lancer les vérifications que {name} déclare",
-            "afterEachEdit": "après chaque modification",
-            "afterItLands": "après son intégration",
-            "beforeTurnEnds": "avant la fin d'un tour",
+            "afterEachEdit": "Après chaque modification",
+            "afterItLands": "Après son intégration",
+            "beforeTurnEnds": "Avant la fin d'un tour",
             "lastFlagged": "dernier signalement {ago}",
             "neverFlagged": "jamais rien signalé",
-            "packageScript": "(script du paquet)"
+            "packageScript": "script du paquet",
+            "running": "En cours"
         },
         "restartWatch": {
             "seeLog": "Voir le journal",
@@ -4133,9 +4134,9 @@
             "allChecksInSandbox": "Toutes les vérifications de ce sandbox",
             "appearHereTravelRepository": "et elle apparaîtra ici, et voyagera avec le dépôt vers quiconque le clone.",
             "checksIn": "Vérifications dans {dir}",
-            "repositoryDeclaresIn": "Ce dépôt les déclare dans",
+            "declaredIn": "Déclarées dans {path}, elles voyagent donc avec le dépôt.",
             "repositoryDoesntDeclareAny": "Ce dépôt ne déclare aucune vérification propre. Placez un fichier à",
-            "theyTravelSwitchingOn": ", pour qu'elles voyagent avec lui. Les activer, c'est ce qui permet à ce sandbox de les exécuter.",
+            "runTheseChecks": "Lancer ces vérifications",
             "whenIsOneOf": "{when} vaut {edit}, {turn} ou {land}, et la commande s'exécute dans ce dossier : écrivez-la donc comme vous le feriez dans un terminal ici."
         },
         "directoryPersonas": {
