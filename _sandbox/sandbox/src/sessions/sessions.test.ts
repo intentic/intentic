@@ -439,6 +439,50 @@ test("a re-run's resume note opens the tail, so the turn it replaced is not reco
     expect(messages[1]?.text).toBe("picking back up");
 });
 
+// The first turn on a switched account opens a fresh session with the record's own rows folded into its prompt. A
+// restart under that turn recovered the fold as rows of their own, appending a second copy of the conversation's end,
+// "[used: …]" trailers and all, to the record that already held it.
+test("a handoff turn's tail keeps the typed prompt, never the history its envelope carried", async () => {
+    const carried = [
+        { role: "user" as const, text: "port the edge" },
+        {
+            role: "assistant" as const,
+            text: "Porting it.",
+            tools: [{ id: "t1", name: "Bash", category: "execute" as const, status: "completed" as const, target: "cargo test" }],
+        },
+    ];
+    getSessionMessages.mockResolvedValue([
+        { type: "user", timestamp: at(5_000), message: { content: withRuntimeHistory("Continue", carried) } },
+        { type: "assistant", timestamp: at(6_000), message: { content: [{ type: "text", text: "Picking the port back up." }] } },
+    ]);
+    expect(await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 4_000)).toEqual([
+        { role: "user", text: "Continue" },
+        { role: "assistant", text: "Picking the port back up." },
+    ]);
+});
+
+// The envelope wraps a re-run's resume note, so the note sits behind the transcript, not at the prompt's start.
+test("a switched re-run inside a handoff envelope restores as its notice, not as machine prose in the user's bubble", async () => {
+    const prompt = withRuntimeHistory(withResumeNote("Continue", RESUME_NOTES.switched), [{ role: "user", text: "port the edge" }]);
+    getSessionMessages.mockResolvedValue([
+        { type: "user", timestamp: at(5_000), message: { content: prompt } },
+        { type: "assistant", timestamp: at(6_000), message: { content: [{ type: "text", text: "Picking the port back up." }] } },
+    ]);
+    expect(await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 4_000)).toEqual([
+        { role: "notice", text: "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session." },
+        { role: "assistant", text: "Picking the port back up." },
+    ]);
+    expect((await readWorkspaceSession(WORKSPACE_ROOT, "s0")).map((message) => message.role)).toEqual(["user", "notice", "assistant"]);
+});
+
+test("an answered park inside a handoff envelope keeps the user's answer and carries the restart as its note", async () => {
+    const prompt = withRuntimeHistory(withResumeNote("the second option", RESUME_NOTES.answered), [{ role: "user", text: "pick a store" }]);
+    getSessionMessages.mockResolvedValue([{ type: "user", timestamp: at(5_000), message: { content: prompt } }]);
+    expect(await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 4_000)).toEqual([
+        { role: "user", text: "the second option", notes: [{ title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered }] },
+    ]);
+});
+
 test("a session holding one unfinished turn is entirely tail", async () => {
     getSessionMessages.mockResolvedValue([
         { type: "user", timestamp: at(1_000), message: { content: "audit the rail" } },

@@ -9,7 +9,9 @@ import {
     type TranscriptQuestion,
     type TranscriptRow,
     type TranscriptTool,
+    resumeDisclosure,
     unspokenPromptRow,
+    withoutResumeNote,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
@@ -166,11 +168,18 @@ export const readWorkspaceSessionTail = async (dir: string, id: string, since: n
     const messages = scoped.length > 0 ? scoped : await sdk().getSessionMessages(id);
     // A user message mid-turn (a steer, a task notification) is no boundary: the turn opens where the daemon started it.
     const start = messages.findIndex((message) => storedAt(message) >= since);
-    return start < 0 ? [] : restoredSessionMessages(messages.slice(start), dir);
+    // The tail is appended to the daemon's record, which already holds any history a handoff envelope carried.
+    return start < 0 ? [] : restoredSessionMessages(messages.slice(start), dir, { carried: "dropped" });
 };
 
+// What a handoff envelope's folded-in transcript (runtime-history.ts) restores as: its own bubbles when the session is
+// read on its own, nothing when the rows are appended to the daemon's record, which holds them already.
+export interface RestoreOptions {
+    readonly carried: "bubbles" | "dropped";
+}
+
 // A prompt nobody typed is its own row, never the user's bubble; `dir` is the root attachment chips resolve against.
-const storedPromptRows = (text: string, dir: string): TranscriptRow[] => {
+const storedPromptRows = (text: string, dir: string, options: RestoreOptions): TranscriptRow[] => {
     // Read as the daemon's own record reads it (turn-transcript.ts).
     const unspoken = unspokenPromptRow(text);
     if (unspoken !== undefined) {
@@ -190,10 +199,17 @@ const storedPromptRows = (text: string, dir: string): TranscriptRow[] => {
     const chips = attachments.length > 0 ? { attachments } : {};
     const runtime = parseRuntimeHistory(stripped.text);
     if (runtime !== undefined) {
-        const carried: TranscriptRow[] = [...runtime.history];
-        return runtime.prompt.length > 0 || attachments.length > 0
-            ? [...carried, { role: "user", text: runtime.prompt, ...chips, ...added }]
-            : carried;
+        const carried: TranscriptRow[] = options.carried === "bubbles" ? [...runtime.history] : [];
+        // A re-run sent to a fresh session wraps its resume note inside the envelope, where unwrapStoredPrompt can't see
+        // it; read here, it becomes the same notice the daemon's own record shows (turn-transcript.ts `openingRows`).
+        const inner = resumeDisclosure(runtime.prompt);
+        if (inner?.kind === "notice") {
+            return [...carried, { role: "notice", text: inner.text }];
+        }
+        const typed = inner === undefined ? runtime.prompt : withoutResumeNote(runtime.prompt);
+        const all = inner === undefined ? notes : [...notes, inner.note];
+        const noted = all.length > 0 ? { notes: all } : {};
+        return typed.length > 0 || attachments.length > 0 ? [...carried, { role: "user", text: typed, ...chips, ...noted }] : carried;
     }
     return stripped.text.length > 0 || attachments.length > 0 ? [{ role: "user", text: stripped.text, ...chips, ...added }] : [];
 };
@@ -208,6 +224,7 @@ const CompactSummary = z.object({ isCompactSummary: z.literal(true) });
 export const restoredSessionMessages = (
     messages: readonly { readonly type?: string; readonly message?: unknown }[],
     dir: string,
+    options: RestoreOptions = { carried: "bubbles" },
 ): TranscriptRow[] => {
     const out: TranscriptRow[] = [];
     // The open bubble; stays open across tool_result messages between calls, since closing on one would split one run
@@ -323,7 +340,7 @@ export const restoredSessionMessages = (
             // Real words close whatever bubble was still open above them; a tool_results-only message never reaches
             // here.
             flush();
-            out.push(...storedPromptRows(text, dir));
+            out.push(...storedPromptRows(text, dir, options));
             continue;
         }
 
