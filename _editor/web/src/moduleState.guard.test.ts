@@ -144,8 +144,7 @@ const APP_WIDE = new Map<string, string>([
     [`shell/window/dockSlots.ts: previewDock = shallowRef(…)`, DOCK],
     [`shell/window/dockSlots.ts: terminalDock = shallowRef(…)`, DOCK],
     [`shell/window/floating.ts: elsewhere = shallowRef(…)`, WINDOW],
-    [`shell/window/floating.ts: mine = shallowRef(…)`, WINDOW],
-    [`shell/window/floating.ts: myId = shallowRef(…)`, WINDOW],
+    [`shell/window/floating.ts: own = shallowRef(…)`, WINDOW],
     [`shell/window/onScreen.ts: visible = ref(…)`, `this window's own visibility`],
 ]);
 
