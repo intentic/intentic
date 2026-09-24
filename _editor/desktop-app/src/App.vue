@@ -114,8 +114,8 @@ const dockerReady = ref<boolean | undefined>(undefined);
 const engineListening = ref<boolean | undefined>(undefined);
 const dockerStarting = ref(false);
 const dockerReport = ref<DockerStart | undefined>(undefined);
-// Where the start has got to: its latest narrated line, and nothing older.
-const dockerLine = ref<string | undefined>(undefined);
+// When the running start began, in epoch ms: the card's clock.
+const dockerStartedAt = ref<number | undefined>(undefined);
 // This launch opened the app's own face BECAUSE the engine was asleep (lib.rs), so this launch is the one that
 // hands over to the workspace once it wakes. A window opened from the tray was asked for and stays put.
 const wokeForDocker = ref(false);
@@ -271,40 +271,64 @@ watch(
     },
 );
 
-const refresh = async (): Promise<void> => {
+// Only the newest refresh writes: an older one answering late would put back a screen that has since moved on.
+let refreshes = 0;
+const newest = (generation: number): boolean => generation === refreshes;
+
+const refreshDocker = async (generation: number): Promise<void> => {
     // Asked first and answered in microseconds, because everything below it is a docker call: a `docker ps`
-    // against a daemon that is not there spends tens of seconds on the socket before it fails, and a screen
-    // that waits for that on every refresh is a screen that looks broken on the machines this is about.
-    engineListening.value = await dockerListening();
-    if (!engineListening.value) {
+    // against a daemon that is not there spends tens of seconds on the socket before it fails.
+    const listening = await dockerListening();
+    if (!newest(generation)) {
+        return;
+    }
+    engineListening.value = listening;
+    // A start under way owns the screen through its card, and a listing against an engine still booting only waits.
+    if (!listening || dockerStarting.value) {
         sandboxes.value = [];
         engine.value = undefined;
-        // Not an error: the card below says what is happening and what to press. `listError` is for a docker
-        // that answered and refused.
+        // Not an error: the card says what is happening and what to press. `listError` is for a docker that
+        // answered and refused, or never answered.
         listError.value = undefined;
-    } else {
-        // Alongside the list, not blocking it: this answer only sizes a form nobody has opened, and it's slow.
-        void dockerEngine()
-            .then((facts) => (engine.value = facts ?? undefined))
-            .catch(() => (engine.value = undefined));
-        try {
-            sandboxes.value = await sandboxList();
+        return;
+    }
+    // Alongside the list, not blocking it: this answer only sizes a form nobody has opened, and it's slow.
+    void dockerEngine()
+        .then((facts) => (engine.value = facts ?? undefined))
+        .catch(() => (engine.value = undefined));
+    try {
+        const listed = await sandboxList();
+        if (newest(generation)) {
+            sandboxes.value = listed;
             listError.value = undefined;
-        } catch (error) {
-            // Docker not being up is ordinary on an unset-up machine, so this reads as empty-with-explanation.
+        }
+    } catch (error) {
+        if (newest(generation)) {
             sandboxes.value = [];
             listError.value = String(error);
         }
     }
-    // Read separately from the sandbox list: the agent and docker can each be absent independently on a working
-    // device.
+};
+
+// Read beside the sandbox list, never behind it: the agent and docker are each absent on their own on a working device.
+const refreshAgent = async (generation: number): Promise<void> => {
     try {
-        status.value = await deviceStatus();
-        reportError.value = undefined;
+        const read = await deviceStatus();
+        if (newest(generation)) {
+            status.value = read;
+            reportError.value = undefined;
+        }
     } catch (error) {
-        status.value = undefined;
-        reportError.value = String(error);
+        if (newest(generation)) {
+            status.value = undefined;
+            reportError.value = String(error);
+        }
     }
+};
+
+const refresh = async (): Promise<void> => {
+    refreshes += 1;
+    await Promise.all([refreshDocker(refreshes), refreshAgent(refreshes)]);
 };
 
 /* STARTING THE ENGINE — the whole of what this window can do about a Docker that is not running, and it is a lot. */
@@ -319,8 +343,8 @@ const DOCKER_DOCS = `https://intentic.dev/docs/docker`;
 const startDocker = async (): Promise<void> => {
     dockerStarting.value = true;
     dockerReport.value = undefined;
-    dockerLine.value = undefined;
     const startedAt = Date.now();
+    dockerStartedAt.value = startedAt;
     try {
         const report = await dockerStart();
         dockerReport.value = report;
@@ -417,7 +441,7 @@ const restartAgent = async (): Promise<void> => {
     agentRestartOutcome.value = undefined;
     try {
         const said = await deviceAgentRestart();
-        agentRestartOutcome.value = said.trim() === `` ? `The agent restarted.` : said.trim();
+        agentRestartOutcome.value = said.trim() === `` ? t(`desktop.app.agentRestarted`) : said.trim();
     } catch (error) {
         agentRestartError.value = String(error);
     } finally {
@@ -981,14 +1005,6 @@ onMounted(async () => {
     });
     // Registered before `loadPending` can start a run, or its first seconds would show an empty log.
     stop = await Promise.all([
-        // The engine wait narrates under its own run id and has no log pane: the card shows its latest line and
-        // nothing older, which is the whole of what there is to know while waiting. Its own listener rather
-        // than a branch in the one below, which has enough to do.
-        onRun((event) => {
-            if (event.run === `docker` && event.kind === `line`) {
-                dockerLine.value = event.text;
-            }
-        }),
         onRun((event) => {
             // Requirement markers are protocol for this window, not output; parsed here and dropped so raw JSON never
             // reaches
@@ -1056,7 +1072,9 @@ onMounted(async () => {
     // listing comes back.
     const handover = loadPending();
     void handover.then(wakeDockerIfNeeded);
-    await Promise.all([refresh(), handover, drainRecreate(), drainSync()]);
+    // Not awaited: a setup parked across a restart must resume whatever a booting Docker is doing to the listing.
+    void refresh();
+    await Promise.all([handover, drainRecreate(), drainSync()]);
     // Only when nothing was handed over: a fresh link outranks a setup resumed from an earlier restart.
     if (pending.value === undefined) {
         await loadResumable();
@@ -1235,25 +1253,34 @@ onUnmounted(() => {
                         {{ t(`desktop.app.getLatestVersion`) }}
                     </button>
                 </Notice>
-                <Notice v-if="updateError" tone="warning" class="items-center">{{ updateError }}</Notice>
+                <!-- Only beside the offer it refused: a failed install turns the offer into the download notice above, which says why. -->
+                <Notice v-if="updateError && update.kind === `ready`" tone="warning" class="items-center">{{ updateError }}</Notice>
 
                 <!-- THE ENGINE, while this window is starting it and after a start that did not work out. It leads
                      the screen because a sandbox list drawn above a dead Docker is a list of things that are not there. -->
                 <DockerCard
                     v-if="dockerCardShown"
                     :starting="dockerStarting"
+                    :started-at="dockerStartedAt"
+                    :limit-seconds="info?.engineLimitSeconds"
                     :report="dockerReport"
-                    :line="dockerLine"
                     :os="info?.os"
                     @start="startDocker"
                     @open="openDocker"
                     @install="openUrl(DOCKER_DOCS)"
                 />
-                <!-- Docker is down and nothing here is going to start it: no sandbox has run on this machine, so
-                     there is nothing to wake and the sentence says what to do instead. -->
-                <p v-else-if="listError || engineListening === false" class="flex items-start gap-2 text-2xs text-muted">
-                    <Icon name="box" class="mt-0.5 shrink-0" />
-                    <span>{{ t(`desktop.app.dockerIsntReachableNothing`) }}</span>
+                <!-- Docker answered and refused, or never answered: its own words, and the press that asks again. -->
+                <Notice v-else-if="listError" tone="warning" class="items-start text-2xs">
+                    <span class="block font-medium">{{ t(`desktop.app.dockerDidntAnswer`) }}</span>
+                    <span class="mt-0.5 block font-mono break-words text-subtle">{{ listError }}</span>
+                    <Button class="mt-2" size="small" severity="secondary" :label="t(`desktop.docker.checkAgain`)" :disabled="running" @click="refresh" />
+                </Notice>
+                <!-- Docker is down and nothing here started it on its own: no sandbox has run on this machine yet, so
+                     the start is offered rather than taken. -->
+                <p v-else-if="engineListening === false" class="flex flex-wrap items-center gap-x-3 gap-y-2 text-2xs text-muted">
+                    <Icon name="box" class="shrink-0" />
+                    <span class="min-w-0 flex-1">{{ t(`desktop.app.dockerIsntReachableNothing`) }}</span>
+                    <Button size="small" severity="secondary" :label="t(`desktop.app.startDocker`)" @click="startDocker" />
                 </p>
                 <!-- Hidden while a sync enrollment is on screen, or the empty-state message would contradict it. -->
                 <p v-else-if="groups.length === 0 && !syncSetup" class="text-2xs text-muted">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, Notice } from "@intentic/ui";
-import { computed } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import type { DockerStart } from "../desktop";
 import { useT } from "@intentic/ui/i18n";
 
@@ -15,16 +15,50 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const props = defineProps<{
-    /** A start is under way; `line` is where it has got to. */
+    /** A start is under way. */
     starting: boolean;
+    /** When the running start began, in epoch ms. */
+    startedAt?: number;
+    /** Seconds the start waits for the engine before it gives up (commands.rs `engine_limit_seconds`). */
+    limitSeconds?: number;
     /** How the last start ended. Absent before there has been one. */
     report?: DockerStart;
-    /** The latest line of the start's own narration — one line, because a card is not a log. */
-    line?: string;
     /** `windows` changes what a refused engine means: a sign-out, rather than a group on this machine. */
     os?: string;
 }>();
 const emit = defineEmits<{ start: []; open: []; install: [] }>();
+
+// Seconds into a start before the card names what usually holds one up: a first start takes a couple of minutes.
+const HINT_AFTER_SECONDS = 75;
+
+// The card's own clock, ticking only while a start runs: the one thing on screen that moves during the wait.
+const now = ref(Date.now());
+let ticker: ReturnType<typeof setInterval> | undefined;
+watch(
+    () => props.starting,
+    (starting) => {
+        clearInterval(ticker);
+        ticker = undefined;
+        now.value = Date.now();
+        if (starting) {
+            ticker = setInterval(() => (now.value = Date.now()), 1000);
+        }
+    },
+    { immediate: true },
+);
+onUnmounted(() => clearInterval(ticker));
+
+const clock = (seconds: number): string => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, `0`)}`;
+// Held at the limit: the last `docker info` may still be answering after it, and "5:04 of 5:00" reads as broken.
+const waited = computed(() =>
+    props.startedAt === undefined ? 0 : Math.min(Math.max(0, (now.value - props.startedAt) / 1000), props.limitSeconds ?? Number.POSITIVE_INFINITY),
+);
+const progress = computed(() =>
+    props.limitSeconds === undefined
+        ? clock(waited.value)
+        : t(`desktop.docker.waitedOf`, { elapsed: clock(waited.value), limit: clock(props.limitSeconds) }),
+);
+const hinted = computed(() => props.starting && waited.value >= HINT_AFTER_SECONDS);
 
 const outcome = computed(() => props.report?.outcome);
 const windows = computed(() => props.os === `windows`);
@@ -49,6 +83,9 @@ const heading = computed(() => {
 });
 
 const body = computed(() => {
+    if (hinted.value) {
+        return t(`desktop.docker.mayBeAskingYou`);
+    }
     if (props.starting) {
         return t(`desktop.docker.sandboxRunsInDockerStarting`);
     }
@@ -64,7 +101,7 @@ const body = computed(() => {
     }
 });
 
-// Docker's own last words, kept for after the start: while one is running the narration says something newer.
+// Docker's own last words, kept for after the start.
 const detail = computed(() => (props.starting ? undefined : props.report?.detail) || undefined);
 // Nothing to open where there is nothing installed, and nothing a second window fixes where the engine is
 // already up and refusing this account. Linux has no Docker Desktop to promise either: there the engine is a
@@ -79,16 +116,22 @@ const canOpen = computed(
     <Notice :tone="starting ? `info` : `warning`" icon="box" class="items-start">
         <span class="block font-medium">{{ heading }}</span>
         <span class="mt-0.5 block text-2xs leading-relaxed">{{ body }}</span>
-        <!-- Where the start has got to, replaced as it moves — this is the only thing on screen that is alive. -->
-        <span v-if="starting && line" class="mt-1.5 block text-2xs text-subtle">{{ line }}</span>
+        <span v-if="starting" class="mt-1.5 block font-mono text-2xs text-subtle tabular-nums" role="timer">{{ progress }}</span>
         <!-- Evidence under the sentence, never instead of it: docker's own words are for whoever wants them. -->
         <span v-else-if="detail" class="mt-1.5 block font-mono text-2xs break-words text-subtle">{{ detail }}</span>
 
-        <span v-if="!starting" class="mt-2.5 flex flex-wrap items-center gap-2">
-            <Button size="small" :label="t(`desktop.docker.checkAgain`)" @click="emit(`start`)" />
-            <Button v-if="canOpen" size="small" severity="secondary" :label="t(`desktop.docker.openDockerDesktop`)" @click="emit(`open`)" />
+        <span v-if="!starting || canOpen" class="mt-2.5 flex flex-wrap items-center gap-2">
+            <Button v-if="!starting" size="small" :label="t(`desktop.docker.checkAgain`)" @click="emit(`start`)" />
+            <!-- Offered during the wait too: a welcome or sign-in screen in Docker's own window is what usually holds a start up. -->
             <Button
-                v-if="outcome === `notInstalled`"
+                v-if="canOpen"
+                size="small"
+                :severity="hinted ? undefined : `secondary`"
+                :label="t(`desktop.docker.openDockerDesktop`)"
+                @click="emit(`open`)"
+            />
+            <Button
+                v-if="!starting && outcome === `notInstalled`"
                 size="small"
                 severity="secondary"
                 :label="t(`desktop.docker.getDockerDesktop`)"

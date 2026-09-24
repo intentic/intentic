@@ -26,7 +26,7 @@ const skewOf = (agent: DeviceStatus[`sync`][`agent`]): { running: string | undef
 // The quiet line that makes a standing Restart button legible: what it is for on an agent asking for nothing.
 // Never carries a tone — there is no errand in it.
 const settled = (): AgentNote => ({
-    text: `Serving the build installed on this device.`,
+    text: t(`desktop.deviceAgent.servingInstalledBuild`),
     icon: `check-circle`,
     hint: t(`desktop.deviceAgent.whetherNewerAgentPublished`),
 });

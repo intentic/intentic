@@ -1,11 +1,13 @@
 {
     "app": {
+        "agentRestarted": "L'agent a redémarré.",
         "backToWorkspace": "Retour à votre espace de travail",
         "chooseFolderToKeep": "Choisissez le dossier à garder synchronisé avec {what}",
         "closingWindowDoesntStop": "Fermer cette fenêtre ne l'arrête pas : votre espace de travail affiche la même progression.",
         "connectingFolderTo": "Connexion d'un dossier à {sandbox}",
         "copy": "Le copier",
         "device": "Cet appareil",
+        "dockerDidntAnswer": "Docker n'a pas répondu",
         "dockerDidntDescribeSandboxs": "Docker n'a pas décrit la part de cet ordinateur revenant à ce sandbox. Rechargez et réessayez.",
         "dockerIsntReachableNothing": "Docker est injoignable, il n'y a donc rien à montrer pour l'instant. Démarrez Docker, ou créez un sandbox depuis votre espace de travail.",
         "downloadingIntentic": "Téléchargement d'Intentic {version}… {percent} %",
@@ -32,6 +34,7 @@
         "settingUp": "Préparation :",
         "setupCodeRanOut": "Votre code d'installation a expiré pendant que cet appareil était absent. Tout ce pour quoi le redémarrage avait lieu est déjà fait ; il ne manque qu'un nouveau code pour continuer.",
         "showLog": "Afficher le journal",
+        "startDocker": "Démarrer Docker",
         "startingOnDevice": "Démarrage sur cet appareil…",
         "stoppedInstallNothingElse": "Vous avez arrêté cette installation. Rien d'autre ne tourne sur cet appareil.",
         "stopping": "Arrêt en cours…",
@@ -49,6 +52,7 @@
         "sandboxesKeepRunningEither": "Vos sandboxes continuent de tourner dans les deux cas : ils vivent dans Docker, pas dans cette fenêtre."
     },
     "deviceAgent": {
+        "servingInstalledBuild": "Exécute la version installée sur cet appareil.",
         "whetherNewerAgentPublished": "Savoir si un agent plus récent a été publié est une question pour votre espace de travail, qui peut joindre le registre des versions ; cette fenêtre ne connaît que ce qui se trouve sur cet ordinateur."
     },
     "docker": {
@@ -61,13 +65,15 @@
         "dockerIsntRunning": "Docker n'est pas lancé",
         "dockerWouldntStart": "Docker n'a pas voulu démarrer",
         "getDockerDesktop": "Obtenir Docker",
+        "mayBeAskingYou": "Docker Desktop vous pose peut-être une question dans sa propre fenêtre, comme un écran d'accueil ou de connexion. Ouvrez-la et répondez ; un premier démarrage peut aussi simplement prendre quelques minutes.",
         "mayBeWaitingForYou": "Il attend peut-être que vous acceptiez ses conditions ou que vous vous connectiez. Ouvrez-le, répondez à ce qu'il demande, puis vérifiez à nouveau.",
         "nothingToStartUntilInstalled": "Votre sandbox tourne dans Docker : il n'y a donc rien à démarrer tant qu'il n'est pas réinstallé.",
         "openDockerDesktop": "Ouvrir Docker Desktop",
         "sandboxRunsInDockerStarting": "Votre sandbox tourne dans Docker, et Docker n'est pas encore lancé. Cela prend en général une minute environ.",
         "signOutAndBackIn": "Windows n'accorde la permission de Docker qu'à une nouvelle connexion. Déconnectez-vous de Windows, reconnectez-vous, puis vérifiez à nouveau.",
         "startingDockerDesktop": "Démarrage de Docker Desktop",
-        "tryOpeningItYourself": "Essayez de l'ouvrir vous-même, puis vérifiez à nouveau."
+        "tryOpeningItYourself": "Essayez de l'ouvrir vous-même, puis vérifiez à nouveau.",
+        "waitedOf": "Attente {elapsed} · abandon après {limit}"
     },
     "requirements": {
         "beforeSandboxRunHere": "Avant que votre sandbox puisse tourner ici :",

@@ -406,17 +406,22 @@ pub fn install(app: &AppHandle, restart: bool) -> Result<(), String> {
     let Some(staged) = staged else {
         return Err("there is no downloaded update to install".to_string());
     };
-    let bytes = std::fs::read(&staged.file)
-        .map_err(|error| format!("the downloaded update could not be read: {error}"))?;
-    app.state::<UpdateState>()
-        .installing
-        .store(true, Ordering::SeqCst);
-    let _ = std::fs::remove_file(&staged.file);
-
-    staged
-        .update
-        .install(bytes)
-        .map_err(|error| format!("the update could not be installed: {error}"))?;
+    let version = staged.update.version.clone();
+    let applied = std::fs::read(&staged.file)
+        .map_err(|error| error.to_string())
+        .and_then(|bytes| {
+            app.state::<UpdateState>()
+                .installing
+                .store(true, Ordering::SeqCst);
+            let _ = std::fs::remove_file(&staged.file);
+            staged
+                .update
+                .install(bytes)
+                .map_err(|error| error.to_string())
+        });
+    if let Err(error) = applied {
+        return Err(abandon(app, version, &error));
+    }
     // Windows never reaches this line. Linux does, having just replaced the file this process is running from.
     if restart {
         app.restart();
@@ -424,26 +429,52 @@ pub fn install(app: &AppHandle, restart: bool) -> Result<(), String> {
     Ok(())
 }
 
-/* WHAT THE OFFER DOES WHEN IT IS TAKEN — one entry point for all three surfaces. */
-pub fn act(app: &AppHandle) {
+/// An install that failed has spent its staged bytes, so the offer becomes the download page with the reason on
+/// it, and `installing` is released so a later check can stage the next release. Answers that sentence.
+fn abandon(app: &AppHandle, version: String, error: &str) -> String {
+    let reason = format!("Intentic couldn't install {version} ({error}). Download it instead.");
+    eprintln!("intentic: {reason}");
+    app.state::<UpdateState>()
+        .installing
+        .store(false, Ordering::SeqCst);
+    set(
+        app,
+        Stage::Manual {
+            version: Some(version),
+            reason: reason.clone(),
+            url: DOWNLOADS_URL.to_string(),
+        },
+    );
+    reason
+}
+
+/* WHAT THE OFFER DOES WHEN IT IS TAKEN — one entry point for all three surfaces. BLOCKING: the install reads and
+ * unpacks the whole download before it hands over, so every caller runs this off the main thread. */
+pub fn take_offer(app: &AppHandle) -> Result<(), String> {
     match stage(app) {
-        Stage::Ready { .. } => {
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = install(&app, true) {
-                    eprintln!("intentic: {error}");
-                }
-            });
-        }
+        Stage::Ready { .. } => install(app, true),
         Stage::Manual { url, .. } => {
             use tauri_plugin_opener::OpenerExt;
-            let _ = app.opener().open_url(url, None::<&str>);
+            app.opener()
+                .open_url(url, None::<&str>)
+                .map_err(|error| format!("could not open your browser: {error}"))
         }
-        // A press this state has nothing to answer with — a banner from a moment ago, a download still being written
-        // to disk. Said out loud rather than dropped: a link that does nothing and leaves no trace is indistinguishable
-        // from one the app never received, which is a whole class of bug reports nobody can act on.
-        other => eprintln!("intentic: nothing to install, the update is {other:?}"),
+        // A press this state has nothing to answer with — a banner from a moment ago, a download still being
+        // written to disk. Answered rather than dropped, so the surface that pressed it can say so.
+        other => Err(format!(
+            "there is nothing to install yet (the update is {other:?})"
+        )),
     }
+}
+
+/// The tray row and the `intentic://update` link, which have nowhere to show a refusal but the log.
+pub fn act(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(error) = take_offer(&app) {
+            eprintln!("intentic: {error}");
+        }
+    });
 }
 
 /* THE INVISIBLE PATH, AND THE ONE THAT MAKES "ALWAYS ON THE NEWEST VERSION" TRUE. */

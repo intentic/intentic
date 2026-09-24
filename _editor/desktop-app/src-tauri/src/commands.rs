@@ -26,6 +26,8 @@ pub struct DesktopInfo {
     /// This installation's own id, which the launcher's analytics send their events under — the same value the
     /// workspace window is marked with, so both faces report as one app (state.rs).
     pub install_id: String,
+    /// Seconds a Docker start waits for its engine before it answers `tookTooLong`.
+    pub engine_limit_seconds: u64,
 }
 
 /// What this build calls itself. `INTENTIC_VERSION` is stamped by build.rs from the release build's own
@@ -67,13 +69,16 @@ pub fn desktop_info(state: State<'_, AppState>) -> DesktopInfo {
         app_url: state.app_url(),
         platform_url: state.platform_url(),
         install_id: state.install_id(),
+        engine_limit_seconds: scripts::ENGINE_LIMIT.as_secs(),
     }
 }
 
 /* DOES A DOCKER DAEMON ANSWER RIGHT NOW — asked on its own, and off the main thread. */
 #[tauri::command]
 pub async fn docker_ready() -> bool {
-    scripts::docker_ready()
+    tauri::async_runtime::spawn_blocking(scripts::docker_ready)
+        .await
+        .unwrap_or(false)
 }
 
 /* STARTING THE ENGINE THIS MACHINE'S SANDBOX NEEDS — see scripts.rs for why nothing else does it. */
@@ -112,20 +117,15 @@ impl From<scripts::EngineOutcome> for DockerStart {
     }
 }
 
-/// Start Docker Desktop and wait for its engine, narrating through the same run stream every other long
-/// operation in this window reports on — so the card can say where it has got to instead of spinning.
+/// Start Docker Desktop and wait for its engine. The card keeps its own clock against [`scripts::ENGINE_LIMIT`]
+/// (`engine_limit_seconds` in [`DesktopInfo`]), which is the whole of what there is to say while it waits.
 ///
 /// Minutes long by design and deliberately NOT a `CommandResult`: every way this ends is an answer the screen
 /// has a sentence for, and an `Err` would collapse five of them into a red string.
 #[tauri::command]
-pub async fn docker_start(app: AppHandle) -> DockerStart {
-    const RUN: &str = "docker";
-    tauri::async_runtime::spawn_blocking(move || {
-        scripts::started(&app, RUN);
-        let say = |text: &str| scripts::line(&app, RUN, text);
-        let outcome = scripts::bring_engine_up(scripts::ENGINE_LIMIT, &say);
-        scripts::ended(&app, RUN, outcome == scripts::EngineOutcome::Ready);
-        DockerStart::from(outcome)
+pub async fn docker_start() -> DockerStart {
+    tauri::async_runtime::spawn_blocking(|| {
+        DockerStart::from(scripts::bring_engine_up(scripts::ENGINE_LIMIT))
     })
     .await
     .unwrap_or_else(|error| DockerStart {
@@ -313,12 +313,14 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
     // and leaving the file would re-offer this same setup on the next launch.
     app.state::<AppState>().clear_parked_setup();
 
-    let run = setup_script(&args, &SetupContext::of(&app, install));
     let name = args.name.clone();
     let handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || scripts::run(&handle, "setup", run))
-        .await
-        .map_err(|error| error.to_string())??;
+    tauri::async_runtime::spawn_blocking(move || {
+        let run = setup_script(&args, &SetupContext::of(&handle, install));
+        scripts::run(&handle, "setup", run)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
 
     // A setup that finished is a sandbox running here, whatever it ended up being called: from now on this
     // machine's stopped Docker is this app's to start (scripts.rs).
@@ -556,7 +558,7 @@ fn shares_of(names: &[String]) -> HashMap<String, SandboxResources> {
     }
     let mut args: Vec<&str> = vec!["inspect", "--format", "{{json .}}"];
     args.extend(names.iter().map(String::as_str));
-    scripts::docker_output(&args)
+    scripts::docker_output(&args, scripts::DOCKER_READ_LIMIT)
         .ok()
         .map(|listing| shares_from(&listing))
         .unwrap_or_default()
@@ -584,9 +586,12 @@ pub fn engine_from(info: &str) -> Option<DockerEngine> {
 #[tauri::command]
 pub async fn docker_engine() -> Option<DockerEngine> {
     tauri::async_runtime::spawn_blocking(|| {
-        scripts::docker_output(&["info", "--format", "{{.MemTotal}} {{.NCPU}}"])
-            .ok()
-            .and_then(|info| engine_from(&info))
+        scripts::docker_output(
+            &["info", "--format", "{{.MemTotal}} {{.NCPU}}"],
+            scripts::DOCKER_READ_LIMIT,
+        )
+        .ok()
+        .and_then(|info| engine_from(&info))
     })
     .await
     .unwrap_or(None)
@@ -599,14 +604,17 @@ struct ContainerRow {
 }
 
 fn containers() -> Result<Vec<ContainerRow>, String> {
-    let listing = scripts::docker_output(&[
-        "ps",
-        "-a",
-        "--filter",
-        &format!("name=^{CONTAINER_PREFIX}"),
-        "--format",
-        "{{.Names}}\t{{.State}}\t{{.Image}}",
-    ])?;
+    let listing = scripts::docker_output(
+        &[
+            "ps",
+            "-a",
+            "--filter",
+            &format!("name=^{CONTAINER_PREFIX}"),
+            "--format",
+            "{{.Names}}\t{{.State}}\t{{.Image}}",
+        ],
+        scripts::DOCKER_READ_LIMIT,
+    )?;
     Ok(listing
         .lines()
         .filter_map(|line| {
@@ -624,14 +632,17 @@ fn containers() -> Result<Vec<ContainerRow>, String> {
 /// re-deriving the script's slug rule (the hostname's leading label, or the connect token's digest) in a
 /// second place. `docker ps` lists newest first, and the sidecar it created alongside is skipped.
 fn newest_slug() -> Option<String> {
-    let listing = scripts::docker_output(&[
-        "ps",
-        "-a",
-        "--filter",
-        &format!("name=^{CONTAINER_PREFIX}"),
-        "--format",
-        "{{.Names}}",
-    ])
+    let listing = scripts::docker_output(
+        &[
+            "ps",
+            "-a",
+            "--filter",
+            &format!("name=^{CONTAINER_PREFIX}"),
+            "--format",
+            "{{.Names}}",
+        ],
+        scripts::DOCKER_READ_LIMIT,
+    )
     .ok()?;
     listing
         .lines()
@@ -712,7 +723,9 @@ pub async fn sandbox_power(slug: String, action: String) -> CommandResult<()> {
         // restarting raise it last. The same order the machine agent uses for the same three verbs.
         // The sidecar is optional (a sandbox reached over the user's own proxy has none), so its absence is
         // not a failure of the operation the user asked for; any other refusal is, reported after the sandbox's.
-        let power_sidecar = || match scripts::docker_output(&[&action, &sidecar]) {
+        let power =
+            |target: &str| scripts::docker_output(&[&action, target], scripts::DOCKER_POWER_LIMIT);
+        let power_sidecar = || match power(&sidecar) {
             Err(error) if !error.contains("No such container") => {
                 Err(format!("the sandbox's tunnel did not {action}: {error}"))
             }
@@ -720,10 +733,10 @@ pub async fn sandbox_power(slug: String, action: String) -> CommandResult<()> {
         };
         if action == "stop" {
             let tunnel = power_sidecar();
-            scripts::docker_output(&[&action, &container])?;
+            power(&container)?;
             tunnel
         } else {
-            scripts::docker_output(&[&action, &container])?;
+            power(&container)?;
             power_sidecar()
         }
     })
@@ -1064,15 +1077,13 @@ pub fn update_state(app: AppHandle) -> crate::update::Stage {
 }
 
 /// Take the offer: install the downloaded update and come back on it, or open the download page for a copy
-/// that cannot install one (update.rs states which is which). Refusals come back as words for the screen —
-/// a run in flight is the one this exists for, and "it will update once that finishes" is the true sentence.
+/// that cannot install one (update.rs states which is which). Refusals and failures come back as words for the
+/// screen; a successful install on Windows never answers, because it ends this process.
 #[tauri::command]
-pub fn update_install(app: AppHandle) -> CommandResult<()> {
-    if let Some(refusal) = crate::update::refusal(&app) {
-        return Err(refusal.to_string());
-    }
-    crate::update::act(&app);
-    Ok(())
+pub async fn update_install(app: AppHandle) -> CommandResult<()> {
+    tauri::async_runtime::spawn_blocking(move || crate::update::take_offer(&app))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

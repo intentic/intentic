@@ -83,6 +83,8 @@ export interface DesktopInfo {
     platformUrl: string;
     // Installation id, minted once; the thread analytics.ts uses to tie this app to the user's SPA session.
     installId: string;
+    // Seconds a Docker start waits for its engine before it answers `tookTooLong`.
+    engineLimitSeconds: number;
 }
 
 // What the workspace window's × does: `tray` hides it and leaves the app running; `quit` ends it, same as the tray
@@ -165,7 +167,6 @@ export interface DockerStart {
     readonly detail: string;
 }
 // Minutes long, and every ending is an answer rather than a throw: the card has a sentence for each of them.
-// Streams its narration under the run id `docker`.
 export const dockerStart = (): Promise<DockerStart> => invoke(`docker_start`);
 /** Docker Desktop's own window, in front — its welcome screen is the one thing this app cannot answer. */
 export const dockerOpen = (): Promise<void> => invoke(`docker_open`);
@@ -245,8 +246,8 @@ export const onPendingSync = (handler: () => void): Promise<UnlistenFn> => liste
 export const updateState = (): Promise<UpdateStage> => invoke(`update_state`);
 export const onUpdate = (handler: (stage: UpdateStage) => void): Promise<UnlistenFn> =>
     listen<UpdateStage>(`desktop://update`, (event) => handler(event.payload));
-// Installing ends this process and relaunches on the new version, so nothing after this call resolves; a refusal
-// comes back as a message for the screen.
+// Installing ends this process and relaunches on the new version, so nothing after this call resolves; a refusal or
+// a failed install comes back as a message for the screen, and a failed one also turns the stage `manual`.
 export const updateInstall = (): Promise<void> => invoke(`update_install`);
 
 // Format: `intentic: [<phase>] <sentence>`; unphased output is detail under the running step, not a step itself.

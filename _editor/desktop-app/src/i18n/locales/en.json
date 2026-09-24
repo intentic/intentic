@@ -1,11 +1,13 @@
 {
     "app": {
+        "agentRestarted": "The agent restarted.",
         "backToWorkspace": "Back to your workspace",
         "chooseFolderToKeep": "Choose the folder to keep in sync with {what}",
         "closingWindowDoesntStop": "Closing this window doesn't stop it — your workspace shows the same progress.",
         "connectingFolderTo": "Connecting a folder to {sandbox}",
         "copy": "Copy it",
         "device": "This device",
+        "dockerDidntAnswer": "Docker didn't answer",
         "dockerDidntDescribeSandboxs": "Docker didn't describe this sandbox's share of this computer. Refresh and try again.",
         "dockerIsntReachableNothing": "Docker isn't reachable, so there is nothing to show yet. Start Docker, or set a sandbox up from your workspace.",
         "downloadingIntentic": "Downloading Intentic {version}… {percent}%",
@@ -32,6 +34,7 @@
         "settingUp": "Setting up",
         "setupCodeRanOut": "Your setup code ran out while this device was away. Everything the restart was for is already done; it just needs a fresh code to carry on.",
         "showLog": "Show the log",
+        "startDocker": "Start Docker",
         "startingOnDevice": "Starting on this device…",
         "stoppedInstallNothingElse": "You stopped this install. Nothing else is running on this device.",
         "stopping": "Stopping…",
@@ -49,6 +52,7 @@
         "sandboxesKeepRunningEither": "Your sandboxes keep running either way: they live in Docker, not in this window."
     },
     "deviceAgent": {
+        "servingInstalledBuild": "Serving the build installed on this device.",
         "whetherNewerAgentPublished": "Whether a newer agent has been published is a question for your workspace, which can reach the release registry; this window only knows what is on this computer."
     },
     "docker": {
@@ -61,13 +65,15 @@
         "dockerIsntRunning": "Docker isn't running",
         "dockerWouldntStart": "Docker wouldn't start",
         "getDockerDesktop": "Get Docker",
+        "mayBeAskingYou": "Docker Desktop may be asking you something in its own window, like a welcome or sign-in screen. Open it and answer; a first start can also just take a couple of minutes.",
         "mayBeWaitingForYou": "It may be waiting for you to accept its terms or sign in. Open it, answer what it asks, then check again.",
         "nothingToStartUntilInstalled": "Your sandbox runs in Docker, so there's nothing to start until it's installed again.",
         "openDockerDesktop": "Open Docker Desktop",
         "sandboxRunsInDockerStarting": "Your sandbox runs in Docker, and Docker isn't running yet. This usually takes about a minute.",
         "signOutAndBackIn": "Windows only hands out Docker's permission at a new sign-in. Sign out of Windows and back in, then check again.",
         "startingDockerDesktop": "Starting Docker Desktop",
-        "tryOpeningItYourself": "Try opening it yourself, then check again."
+        "tryOpeningItYourself": "Try opening it yourself, then check again.",
+        "waitedOf": "Waiting {elapsed} · gives up after {limit}"
     },
     "requirements": {
         "beforeSandboxRunHere": "Before your sandbox can run here:",

@@ -46,42 +46,6 @@ pub enum RunEvent {
 
 pub const RUN_EVENT: &str = "desktop://run";
 
-/* A RUN THIS PROCESS DOES ITSELF — the engine wait, which has no child to stream. It reports on the same
- * three events a spawned script does, so the screen renders it with the parts it already has. No transcript:
- * there is no pipe to tee, and what it would hold is the same handful of lines the card is showing. */
-
-pub fn started(app: &AppHandle, id: &str) {
-    let _ = app.emit(
-        RUN_EVENT,
-        RunEvent::Started {
-            run: id.to_string(),
-            log: None,
-        },
-    );
-}
-
-pub fn line(app: &AppHandle, id: &str, text: &str) {
-    let _ = app.emit(
-        RUN_EVENT,
-        RunEvent::Line {
-            run: id.to_string(),
-            stream: Stream::Stdout,
-            text: text.to_string(),
-        },
-    );
-}
-
-pub fn ended(app: &AppHandle, id: &str, ok: bool) {
-    let _ = app.emit(
-        RUN_EVENT,
-        RunEvent::Exit {
-            run: id.to_string(),
-            code: Some(i32::from(!ok)),
-            ok,
-        },
-    );
-}
-
 /* Until now a run existed only as events in one webview: the lines a user could see were the lines that window happened to still be holding. */
 fn log_path(id: &str) -> Option<PathBuf> {
     let home = std::env::var("USERPROFILE")
@@ -159,26 +123,127 @@ pub fn stop(id: &str) -> Result<(), String> {
         .ok()
         .and_then(|live| live.get(id).copied())
         .ok_or_else(|| format!("nothing called {id} is running on this device"))?;
-    let killed = if cfg!(windows) {
-        quiet(Command::new("taskkill.exe"))
-            .args(["/PID", &pid.to_string(), "/T", "/F"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-    } else {
-        // The child leads its own process group (see `command_for`), so the negative pid reaches everything
-        // it started rather than only the shell.
-        Command::new("kill")
-            .args(["-TERM", "--", &format!("-{pid}")])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-    };
-    match killed {
+    match kill_tree(pid, "-TERM") {
         Ok(status) if status.success() => Ok(()),
         Ok(status) => Err(format!("could not stop it (exit {:?})", status.code())),
         Err(error) => Err(format!("could not stop it: {error}")),
     }
+}
+
+/// Signal a child and everything it started. The child leads its own process group on Unix (`own_group`), so
+/// the negative pid reaches the whole group; Windows reaches the tree through `taskkill /T`, which is always forced.
+fn kill_tree(pid: u32, unix_signal: &str) -> std::io::Result<std::process::ExitStatus> {
+    if cfg!(windows) {
+        return quiet(Command::new("taskkill.exe"))
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    Command::new("kill")
+        .args([unix_signal, "--", &format!("-{pid}")])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+}
+
+/* A SHORT CHILD, BOUNDED — every docker read and every agent call this window waits on goes through `capture`. */
+
+/// What a bounded child said, once it exited.
+#[derive(Debug)]
+pub struct Captured {
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+/// Why a bounded child has no answer. Displayed as it stands, so each reads as a sentence about `what`.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Unanswered {
+    NotStarted { what: String, reason: String },
+    TimedOut { what: String, limit: Duration },
+}
+
+impl std::fmt::Display for Unanswered {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Unanswered::NotStarted { what, reason } => write!(f, "{what} would not run: {reason}"),
+            Unanswered::TimedOut { what, limit } => {
+                write!(f, "{what} did not answer within {}s", limit.as_secs())
+            }
+        }
+    }
+}
+
+/// How often a bounded child is asked whether it has exited.
+const CAPTURE_POLL: Duration = Duration::from_millis(25);
+
+/// Run `command` to its exit, or kill its whole tree at `limit`. The exit ends the wait, never the pipes: a background
+/// process it leaves behind inherits them on Windows, so the streams get [`DRAIN_GRACE`] after the exit and no more.
+pub fn capture(what: &str, command: Command, limit: Duration) -> Result<Captured, Unanswered> {
+    let mut child = own_group(command)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| Unanswered::NotStarted {
+            what: what.to_string(),
+            reason: error.to_string(),
+        })?;
+    let (drained, drains) = channel::<()>();
+    let stdout = collect(child.stdout.take(), drained.clone());
+    let stderr = collect(child.stderr.take(), drained);
+    let deadline = Instant::now() + limit;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(CAPTURE_POLL),
+            Ok(None) | Err(_) => {
+                let _ = kill_tree(child.id(), "-KILL");
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(Unanswered::TimedOut {
+                    what: what.to_string(),
+                    limit,
+                });
+            }
+        }
+    };
+    await_drain(&drains, 2, DRAIN_GRACE);
+    let text = |bytes: &Mutex<Vec<u8>>| {
+        String::from_utf8_lossy(&bytes.lock().map(|held| held.clone()).unwrap_or_default())
+            .to_string()
+    };
+    Ok(Captured {
+        success: status.success(),
+        stdout: text(&stdout),
+        stderr: text(&stderr),
+    })
+}
+
+/// Read one stream to its end on a thread of its own, reporting on `drained` when it gets there. What arrived is
+/// readable at any moment, so a finished child's output is kept even while a leftover holder keeps the pipe open.
+fn collect(
+    handle: Option<impl std::io::Read + Send + 'static>,
+    drained: Sender<()>,
+) -> Arc<Mutex<Vec<u8>>> {
+    let bytes = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&bytes);
+    std::thread::spawn(move || {
+        if let Some(mut handle) = handle {
+            let mut chunk = [0u8; 8192];
+            while let Ok(read) = handle.read(&mut chunk) {
+                if read == 0 {
+                    break;
+                }
+                if let Ok(mut held) = sink.lock() {
+                    held.extend_from_slice(&chunk[..read]);
+                }
+            }
+        }
+        let _ = drained.send(());
+    });
+    bytes
 }
 
 /// Which script family a run targets, and therefore which argument convention and which interpreter. Every
@@ -237,16 +302,21 @@ fn resource(app: &AppHandle, file: &str) -> Result<PathBuf, String> {
         .map_err(|error| format!("{file} is missing from this build: {error}"))
 }
 
+/// Seconds a `docker info` gets: a booting Docker Desktop accepts on its pipe and then answers nothing at all.
+const DOCKER_PROBE_LIMIT: Duration = Duration::from_secs(10);
+
+/// Seconds a listing (`ps`, `inspect`, `logs`) gets before the screen says Docker is not answering.
+pub const DOCKER_READ_LIMIT: Duration = Duration::from_secs(20);
+
+/// Seconds a start, stop or restart gets: `docker stop` alone waits out the container's own stop timeout.
+pub const DOCKER_POWER_LIMIT: Duration = Duration::from_secs(180);
+
 /// Can this user reach a Docker daemon right now? Decides elevation on Linux, and on Windows it is what tells
 /// "Docker Desktop isn't installed" (connect.ps1 offers the winget install) from "it is, but not started".
 pub fn docker_ready() -> bool {
-    quiet(Command::new("docker"))
-        .args(["info", "--format", "{{.ServerVersion}}"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+    let mut command = quiet(Command::new("docker"));
+    command.args(["info", "--format", "{{.ServerVersion}}"]);
+    capture("docker info", command, DOCKER_PROBE_LIMIT).is_ok_and(|answer| answer.success)
 }
 
 /* THE ENGINE NOBODY ELSE STARTS.
@@ -269,11 +339,6 @@ const ENGINE_PIPE: &str = r"\\.\pipe\docker_engine";
 /// on a laptop; ic's `prepare::fix` allows the same five and it was the right call there for the same reason.
 pub const ENGINE_LIMIT: Duration = Duration::from_secs(300);
 
-/// How long before the wait mentions the thing that is usually happening. A first start genuinely takes a
-/// couple of minutes, so saying it at ten seconds would cry wolf on every launch; saying it only at the limit
-/// is telling somebody what to do after they have given up.
-const ENGINE_HINT_AFTER: Duration = Duration::from_secs(75);
-
 /// Where the engine listens on this machine, in the order worth trying. `DOCKER_HOST` wins when it names a
 /// path, because somebody who set it meant it; otherwise the sockets Docker Desktop actually creates — the
 /// per-user one a default macOS install leaves the `desktop-linux` context pointing at, and the shared one.
@@ -282,7 +347,7 @@ const ENGINE_HINT_AFTER: Duration = Duration::from_secs(75);
 /// cross-built on a Linux runner and first executes on somebody's PC, so one `cargo test` covers both halves.
 pub fn engine_endpoints(host: Host, docker_host: Option<&str>, home: Option<&str>) -> Vec<String> {
     // A `tcp://` or `ssh://` DOCKER_HOST is somebody else's daemon: there is no socket here to look at and
-    // nothing this app could start would help, so the list is empty and the probe answers "not listening".
+    // nothing this app could start would help, so the list is empty (see `engine_listening`).
     if let Some(explicit) = docker_host.filter(|value| !value.is_empty()) {
         return endpoint_path(host, explicit).into_iter().collect();
     }
@@ -317,9 +382,9 @@ pub fn engine_listening() -> bool {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .ok();
-    engine_endpoints(Host::current(), docker_host.as_deref(), home.as_deref())
-        .iter()
-        .any(|endpoint| listening_at(endpoint))
+    let endpoints = engine_endpoints(Host::current(), docker_host.as_deref(), home.as_deref());
+    // Nothing local to probe is a daemon this app cannot start, so the docker CLI's own answer decides instead.
+    endpoints.is_empty() || endpoints.iter().any(|endpoint| listening_at(endpoint))
 }
 
 /// Three answers, all of them instant: the pipe opened (an engine), every instance is busy or this account is
@@ -479,14 +544,13 @@ const CLI_MISSING: &str = "the docker command would not run";
 /// The daemon's own answer: None when it answered, its last words when it did not. Only ever asked of a
 /// socket that is already listening — against a stopped daemon this same call spends tens of seconds.
 pub fn daemon_refusal() -> Option<String> {
-    match quiet(Command::new("docker"))
-        .args(["info", "--format", "{{.ServerVersion}}"])
-        .stdin(Stdio::null())
-        .output()
-    {
-        Ok(output) if output.status.success() => None,
-        Ok(output) => Some(String::from_utf8_lossy(&output.stderr).trim().to_string()),
-        Err(error) => Some(format!("{CLI_MISSING}: {error}")),
+    let mut command = quiet(Command::new("docker"));
+    command.args(["info", "--format", "{{.ServerVersion}}"]);
+    match capture("docker info", command, DOCKER_PROBE_LIMIT) {
+        Ok(answer) if answer.success => None,
+        Ok(answer) => Some(answer.stderr.trim().to_string()),
+        Err(Unanswered::NotStarted { reason, .. }) => Some(format!("{CLI_MISSING}: {reason}")),
+        Err(silence) => Some(format!("Docker's engine is up but {silence}")),
     }
 }
 
@@ -515,12 +579,10 @@ pub enum EngineOutcome {
     TookTooLong(String),
 }
 
-/// Wait for the engine, saying where it has got to. The socket is polled rather than `docker info`, so a
-/// stopped daemon costs nothing per round; `docker info` is only asked once something is listening.
-fn wait_for_engine(limit: Duration, say: &dyn Fn(&str)) -> EngineOutcome {
+/// Wait for the engine. The socket is polled rather than `docker info`, so a stopped daemon costs nothing per
+/// round; `docker info` is only asked once something is listening, and each ask is bounded by its own limit.
+fn wait_for_engine(limit: Duration) -> EngineOutcome {
     let started = Instant::now();
-    let mut said = Instant::now();
-    let mut hinted = false;
     let mut last = String::new();
     while started.elapsed() < limit {
         if engine_listening() {
@@ -537,18 +599,6 @@ fn wait_for_engine(limit: Duration, say: &dyn Fn(&str)) -> EngineOutcome {
                 Some(refusal) => last = refusal,
             }
         }
-        if !hinted && started.elapsed() >= ENGINE_HINT_AFTER {
-            hinted = true;
-            /* Docker Desktop's first run puts up a licence screen, and sometimes an offer to sign in, in its OWN window. */
-            say("Docker Desktop may be asking you something: look at its window for a welcome or sign-in screen. A first start also just takes a couple of minutes.");
-        }
-        if said.elapsed() >= Duration::from_secs(15) {
-            said = Instant::now();
-            say(&format!(
-                "still waiting for Docker's engine ({}s before giving up)",
-                limit.saturating_sub(started.elapsed()).as_secs()
-            ));
-        }
         std::thread::sleep(Duration::from_secs(2));
     }
     EngineOutcome::TookTooLong(last)
@@ -557,7 +607,7 @@ fn wait_for_engine(limit: Duration, say: &dyn Fn(&str)) -> EngineOutcome {
 /// Start the engine if it is not up, then wait for it. BLOCKING, for minutes by design — call it from
 /// `spawn_blocking`. Safe to run twice at once: Docker Desktop is single-instance, so the second start is a
 /// no-op and both waits reach the same answer.
-pub fn bring_engine_up(limit: Duration, say: &dyn Fn(&str)) -> EngineOutcome {
+pub fn bring_engine_up(limit: Duration) -> EngineOutcome {
     if engine_listening() {
         match daemon_refusal() {
             None => return EngineOutcome::Ready,
@@ -567,7 +617,6 @@ pub fn bring_engine_up(limit: Duration, say: &dyn Fn(&str)) -> EngineOutcome {
             Some(_) => {}
         }
     } else {
-        say("starting Docker Desktop...");
         match start_docker_desktop(false) {
             Ok(()) => {}
             Err(StartTrouble::NotInstalled(problem)) => {
@@ -576,7 +625,7 @@ pub fn bring_engine_up(limit: Duration, say: &dyn Fn(&str)) -> EngineOutcome {
             Err(StartTrouble::Failed(problem)) => return EngineOutcome::WouldNotStart(problem),
         }
     }
-    wait_for_engine(limit, say)
+    wait_for_engine(limit)
 }
 
 fn command_for(app: &AppHandle, run: &ScriptRun) -> Result<Command, String> {
@@ -776,16 +825,15 @@ pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
 /// A short docker read whose output we want rather than stream — container listings and log tails. Not a
 /// script: these are the two places the app talks to docker directly, because there is no script that lists
 /// or tails, and inventing one to avoid a `docker ps` would be the tail wagging the dog.
-pub fn docker_output(args: &[&str]) -> Result<String, String> {
-    let output = quiet(Command::new("docker"))
-        .args(args)
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|error| format!("docker is not reachable: {error}"))?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+pub fn docker_output(args: &[&str], limit: Duration) -> Result<String, String> {
+    let mut command = quiet(Command::new("docker"));
+    command.args(args);
+    let what = format!("docker {}", args.first().copied().unwrap_or_default());
+    let answer = capture(&what, command, limit).map_err(|silence| silence.to_string())?;
+    if !answer.success {
+        return Err(answer.stderr.trim().to_string());
     }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    Ok(answer.stdout)
 }
 
 /// Where `intentic-machine` lives on this machine, in the order worth trying. The agent's own installer puts it
@@ -813,6 +861,33 @@ pub fn sync_agent_candidates(host: Host, home: Option<&str>) -> Vec<String> {
     candidates
 }
 
+/// Seconds `intentic-machine status` gets: it asks Mutagen about every session, which starts Mutagen's daemon first.
+const AGENT_STATUS_LIMIT: Duration = Duration::from_secs(30);
+
+/// Seconds `intentic-machine run --stop` gets: the agent waits 5s for the loop to exit before it kills it.
+const AGENT_STOP_LIMIT: Duration = Duration::from_secs(30);
+
+/// Seconds `intentic-machine run` gets: a logon task gets 20s to raise the loop, then the launch stub 10s more.
+const AGENT_START_LIMIT: Duration = Duration::from_secs(90);
+
+/// Ask one `intentic-machine` candidate, or None when there is no such binary at that path.
+fn ask_agent(
+    candidate: &str,
+    args: &[&str],
+    limit: Duration,
+) -> Option<Result<Captured, Unanswered>> {
+    let mut command = quiet(Command::new(candidate));
+    command.args(args);
+    match capture(
+        &format!("intentic-machine {}", args.join(" ")),
+        command,
+        limit,
+    ) {
+        Err(Unanswered::NotStarted { .. }) => None,
+        answer => Some(answer),
+    }
+}
+
 /// This machine's agent status — `intentic-machine status --json`, the SAME producer the terminal command
 /// prints: the sandbox links the device half holds, the sync half's whole machine report, and whether the one
 /// resident loop behind both is alive.
@@ -829,17 +904,12 @@ pub fn sync_report() -> Result<Option<String>, String> {
         .ok();
     let mut last: Option<String> = None;
     for candidate in sync_agent_candidates(Host::current(), home.as_deref()) {
-        let output = quiet(Command::new(&candidate))
-            .args(["status", "--json"])
-            .stdin(Stdio::null())
-            .output();
-        let Ok(output) = output else {
-            continue; // not at this path — try the next one
-        };
-        if output.status.success() {
-            return Ok(Some(String::from_utf8_lossy(&output.stdout).to_string()));
+        match ask_agent(&candidate, &["status", "--json"], AGENT_STATUS_LIMIT) {
+            None => continue,
+            Some(Ok(answer)) if answer.success => return Ok(Some(answer.stdout)),
+            Some(Ok(answer)) => last = Some(answer.stderr.trim().to_string()),
+            Some(Err(silence)) => last = Some(silence.to_string()),
         }
-        last = Some(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
     match last {
         None => Ok(None),
@@ -862,24 +932,20 @@ pub fn agent_restart() -> Result<String, String> {
         .ok();
     let mut last: Option<String> = None;
     for candidate in sync_agent_candidates(Host::current(), home.as_deref()) {
-        let stopped = quiet(Command::new(&candidate))
-            .args(["run", "--stop"])
-            .stdin(Stdio::null())
-            .output();
-        if stopped.is_err() {
+        if ask_agent(&candidate, &["run", "--stop"], AGENT_STOP_LIMIT).is_none() {
             continue; // not at this path — try the next one
         }
-        let started = quiet(Command::new(&candidate))
-            .arg("run")
-            .stdin(Stdio::null())
-            .output()
-            .map_err(|error| format!("the agent on this device could not be started: {error}"))?;
-        let merged = format!(
-            "{}{}",
-            String::from_utf8_lossy(&started.stdout),
-            String::from_utf8_lossy(&started.stderr)
-        );
-        if started.status.success() {
+        let started = match ask_agent(&candidate, &["run"], AGENT_START_LIMIT) {
+            None => return Err("the agent on this device could not be started".to_string()),
+            Some(Err(silence)) => {
+                return Err(format!(
+                    "the agent on this device did not restart: {silence}"
+                ))
+            }
+            Some(Ok(started)) => started,
+        };
+        let merged = format!("{}{}", started.stdout, started.stderr);
+        if started.success {
             return Ok(merged.trim().to_string());
         }
         last = Some(merged.trim().to_string());
@@ -897,17 +963,12 @@ pub fn agent_restart() -> Result<String, String> {
 /// not come up is nearly always in the second one — so unlike [`docker_output`], a non-zero exit here still
 /// returns what was captured rather than throwing it away.
 pub fn logs_tail(container: &str, tail: u32) -> Result<String, String> {
-    let output = quiet(Command::new("docker"))
-        .args(["logs", "--tail", &tail.to_string(), container])
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|error| format!("docker is not reachable: {error}"))?;
-    let merged = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    if !output.status.success() && merged.trim().is_empty() {
+    let mut command = quiet(Command::new("docker"));
+    command.args(["logs", "--tail", &tail.to_string(), container]);
+    let answer = capture("docker logs", command, DOCKER_READ_LIMIT)
+        .map_err(|silence| silence.to_string())?;
+    let merged = format!("{}{}", answer.stdout, answer.stderr);
+    if !answer.success && merged.trim().is_empty() {
         return Err(format!("no logs for {container}"));
     }
     Ok(merged)
@@ -973,6 +1034,92 @@ mod tests {
         );
     }
 
+    /* A BOUNDED CHILD answers by its exit or by its limit, never by whoever else holds its pipes. */
+
+    #[cfg(unix)]
+    fn shell(script: &str) -> Command {
+        let mut command = Command::new("sh");
+        command.args(["-c", script]);
+        command
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_child_that_exits_is_answered_with_both_streams() {
+        let answer = capture(
+            "sh",
+            shell("echo out; echo err >&2; exit 3"),
+            Duration::from_secs(10),
+        )
+        .expect("the child exits");
+        assert!(!answer.success);
+        assert_eq!(answer.stdout, "out\n");
+        assert_eq!(answer.stderr, "err\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_child_that_never_exits_is_killed_at_its_limit() {
+        let limit = Duration::from_millis(300);
+        let started = Instant::now();
+        let answer = capture("sh", shell("sleep 30"), limit);
+        assert_eq!(
+            answer.expect_err("the child outlives its limit"),
+            Unanswered::TimedOut {
+                what: "sh".to_string(),
+                limit
+            }
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "waited {:?} for a child whose limit was {limit:?}",
+            started.elapsed()
+        );
+    }
+
+    /// The Windows shape of `intentic-machine run`: the child exits at once, and the loop it left behind holds its
+    /// stdout for as long as the loop lives.
+    #[cfg(unix)]
+    #[test]
+    fn a_background_holder_of_the_pipes_costs_only_the_grace() {
+        let started = Instant::now();
+        let answer = capture(
+            "sh",
+            shell("echo started; sleep 20 & exit 0"),
+            Duration::from_secs(10),
+        )
+        .expect("the child itself exits at once");
+        assert!(answer.success);
+        assert_eq!(answer.stdout, "started\n");
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "waited {:?} on a pipe the child's own background process holds",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn a_binary_that_is_not_there_never_started() {
+        let answer = capture(
+            "nothing",
+            Command::new("intentic-no-such-binary-here"),
+            Duration::from_secs(1),
+        );
+        assert!(matches!(
+            answer,
+            Err(Unanswered::NotStarted { ref what, .. }) if what == "nothing"
+        ));
+    }
+
+    #[test]
+    fn a_silent_child_is_named_with_its_limit() {
+        let silence = Unanswered::TimedOut {
+            what: "docker ps".to_string(),
+            limit: Duration::from_secs(20),
+        };
+        assert_eq!(silence.to_string(), "docker ps did not answer within 20s");
+    }
+
     #[test]
     fn current_host_matches_the_build_target() {
         assert_eq!(
@@ -1020,8 +1167,7 @@ mod tests {
             vec!["\\\\.\\pipe\\other_engine".to_string()],
             "the URL spelling of a pipe has to come back as the pipe"
         );
-        // Somebody else's daemon: there is no local socket to probe and nothing this app starts would help,
-        // so the list is empty and the probe answers "not listening" rather than guessing.
+        // Somebody else's daemon: there is no local socket to probe and nothing this app starts would help.
         assert!(
             engine_endpoints(Host::Unix, Some("tcp://10.0.0.2:2375"), Some("/home/x")).is_empty()
         );
