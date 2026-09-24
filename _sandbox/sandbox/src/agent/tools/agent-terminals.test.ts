@@ -7,14 +7,17 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 import { syncHookOutput, memoryFleet } from "../../testing.js";
 import { DEFAULT_HEAVY_COMMANDS, type HeavyCommands, HeavyCommandsSchema } from "../../platform/resources/heavy-commands.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
-import { bashTmuxHooks } from "./agent-terminals.js";
+import { bashTmuxHooks, PIPESTATUS_TRAP } from "./agent-terminals.js";
 import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./background-jobs.js";
 
 // One fleet's actors, and the cards a turn here parks in them.
 const actors = memoryFleet().conversations;
 
+// The `bash -c` the pane runs: the command behind the trap that records its last pipeline's statuses.
+const shell = (command: string): string => `bash -c ${shellQuote(`${PIPESTATUS_TRAP}${command}`)}`;
+
 // Demotes a command via nice/ionice and runs it as one `bash -c` tree, before tmux-run sees it.
-const demoted = (command: string): string => `nice -n 10 ionice -c 2 -n 7 bash -c ${shellQuote(command)}`;
+const demoted = (command: string): string => `nice -n 10 ionice -c 2 -n 7 ${shell(command)}`;
 
 // Carries the conversation id; every forked process inherits it, marking the run as agent-started, not the sandbox's
 // own.
@@ -254,7 +257,7 @@ const heavy = (over: Partial<HeavyCommands> = {}) => {
 
 // The demoted form, with the queue between demotion and shell: position is the assertion.
 const queued = (command: string, label: string, pool = "heavy", limit = 2, onDeadline = DEFAULT_HEAVY_COMMANDS.onDeadline): string =>
-    `nice -n 10 ionice -c 2 -n 7 /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${onDeadline} --label ${shellQuote(label)} -- bash -c ${shellQuote(command)}`;
+    `nice -n 10 ionice -c 2 -n 7 /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${onDeadline} --label ${shellQuote(label)} -- ${shell(command)}`;
 
 test("a rule's deadline answer reaches the wrapper, so the one shipped rule that skips is the only one that does", async () => {
     const command = await rewritten({ command: "pnpm verify:turn" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
@@ -335,4 +338,31 @@ test("a config that cannot be read costs the command nothing", async () => {
         bashTmuxHooks([], undefined, undefined, undefined, () => Promise.reject(new Error("nope"))),
     );
     expect(command).toBe(wrap("pnpm test", born(demoted("pnpm test")), "run"));
+});
+
+// `pkill -f vite` matched its own call's command line and killed it: 161 results with no output and exit 144.
+test("a full-line pkill pattern is bracketed in every copy of the command, so it cannot match its own call", async () => {
+    const command = await rewritten({ command: "pkill -f vite; echo stopped", description: "Stop the dev server" });
+    expect(command).toBe(wrap(String.raw`pkill -f \[v]ite; echo stopped`, born(demoted(String.raw`pkill -f \[v]ite; echo stopped`)), "stop-the-dev-server"));
+});
+
+test("a window name that would repeat the pattern is dropped for the neutral one", async () => {
+    expect(await rewritten({ command: "pkill -f 'vite'", description: "Kill vite" })).toBe(wrap("pkill -f '[v]ite'", born(demoted("pkill -f '[v]ite'")), "run"));
+    // `kill-vite-dev` does not contain "vite dev", so that name stays.
+    expect(await rewritten({ command: "pkill -f 'vite dev'", description: "Kill vite dev" })).toBe(
+        wrap("pkill -f '[v]ite dev'", born(demoted("pkill -f '[v]ite dev'")), "kill-vite-dev"),
+    );
+});
+
+test("a pkill whose pattern the command repeats elsewhere is refused, and files no background job", async () => {
+    const jobs = { conversationId: "conv-pkill", profile: {}, conversations: actors };
+    const output = syncHookOutput(
+        await preToolUse(
+            { command: "pkill -f vite; rm -rf node_modules/.vite && pnpm dev", run_in_background: true },
+            bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs),
+        ),
+    ).hookSpecificOutput;
+    expect(output).toMatchObject({ hookEventName: "PreToolUse", permissionDecision: "deny" });
+    expect(output?.hookEventName === "PreToolUse" ? output.permissionDecisionReason : undefined).toContain("pkill -f 'vite' would kill this Bash call's own shell");
+    expect(settledBackgroundJobs(actors, "conv-pkill")).toEqual({ running: [], unseen: [] });
 });

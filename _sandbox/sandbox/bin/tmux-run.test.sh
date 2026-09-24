@@ -149,6 +149,16 @@ out="$(INTENTIC_RUN_FILTER=1 INTENTIC_FILTER_CMD="$F/echo-argv1" bash "$W" -c 'p
 out="$(INTENTIC_RUN_FILTER=1 INTENTIC_FILTER_CMD="$F/echo-argv1" bash "$W" "$S" 'echo ignored' run)"
 [ "$out" = "ARGV1=echo ignored" ] || { echo "FAIL: filter got '$out' with no -c (want the executed command)"; exit 1; }
 
+# The pane exports where the agent hook's EXIT trap leaves the last pipeline's statuses; the filter gets them as
+# argv[5], which is what lets it report a failure `| tail` hid behind an exit 0. Written by hand here: the trap
+# itself is the hook's, and this asserts only the wrapper's half of the handoff.
+printf '#!/usr/bin/env bash\nprintf "ARGV5=%%s\\n" "$5"\n' > "$F/echo-argv5"
+chmod +x "$F/echo-argv5"
+out="$(INTENTIC_RUN_FILTER=1 INTENTIC_FILTER_CMD="$F/echo-argv5" bash "$W" "$S" 'printf "1 0" > "$INTENTIC_PIPESTATUS_FILE"' run)"
+[ "$out" = "ARGV5=1 0" ] || { echo "FAIL: pipeline statuses did not reach the filter, got '$out'"; exit 1; }
+out="$(INTENTIC_RUN_FILTER=1 INTENTIC_FILTER_CMD="$F/echo-argv5" bash "$W" "$S" 'true' run)"
+[ "$out" = "ARGV5=" ] || { echo "FAIL: a run that left no statuses handed the filter '$out'"; exit 1; }
+
 # A DEGRADED RUN SAYS SO. Falling back to a plain `bash -c` when tmux is unreachable is correct — a tmux fault
 # must never cost the caller its command — but doing it silently made a run with no pane, no capture and no
 # filter indistinguishable from an ordinary one, and a command that ran outside the view it asked for reported
@@ -162,4 +172,4 @@ grep -q 'ran outside a terminal pane' "$err" || { echo "FAIL: degraded run said 
 # And it names the CAUSE rather than only the symptom: the namespace it was told to reach tmux from is gone.
 grep -q 'is unreachable' "$err" || { echo "FAIL: degraded run did not name the unreachable namespace: '$(cat "$err")'"; exit 1; }
 
-echo "PASS: tmux-run returns full output + real exit code, -e env, -c filter command, output cap, soft timeout + filter, honest fallback"
+echo "PASS: tmux-run returns full output + real exit code, -e env, -c filter command, pipeline statuses, output cap, soft timeout + filter, honest fallback"

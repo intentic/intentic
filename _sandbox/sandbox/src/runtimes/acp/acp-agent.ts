@@ -212,14 +212,15 @@ async function* runAcpTurn(
             wait.wake();
         });
 
-    const pull = watchedPull({ take: () => queue.shift(), settled: () => settled, clock: turnWatchdog(turn.timeouts), wait });
+    const clock = turnWatchdog(turn.timeouts);
+    const pull = watchedPull({ take: () => queue.shift(), settled: () => settled, clock, wait });
     try {
         for (let next = await pull(); next !== SETTLED; next = await pull()) {
             if (next === EXPIRED) {
                 // Cancel is best-effort; the kill is not. Sessions die with the process; the next send self-heals.
                 cancel();
                 connection.kill();
-                yield { kind: "error", message: "ACP agent timed out, no activity from the agent. It was stopped; send again to retry." };
+                yield { kind: "error", message: `ACP agent timed out: ${clock.expiry()}. It was stopped; send again to retry.` };
                 return { sessionId: session, text: held.text, errored: true };
             }
             yield next;

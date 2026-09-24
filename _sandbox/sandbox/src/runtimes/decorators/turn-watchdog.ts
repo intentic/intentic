@@ -21,20 +21,42 @@ export interface TurnWatchdog {
     readonly extendPast: (instant: number) => void;
     // Milliseconds until the nearer deadline, or `until` (epoch ms) if that comes first; zero or less means one passed.
     readonly remaining: (until?: number) => number;
+    // Why the loop stopped waiting, read once it did: the sentence a timeout error is built around.
+    readonly expiry: () => string;
 }
+
+// Whole minutes and seconds, the grain a person reads a turn's timing at.
+const duration = (ms: number): string => {
+    const seconds = Math.max(0, Math.round(ms / 1_000));
+    return seconds < 60 ? `${String(seconds)}s` : `${String(Math.floor(seconds / 60))}m ${String(seconds % 60)}s`;
+};
 
 // Both deadlines start now: the hard cap is fixed, the inactivity one moves with every touch.
 export const turnWatchdog = (timeouts: TurnTimeouts): TurnWatchdog => {
-    const turnDeadline = Date.now() + timeouts.maxTurnMs;
-    let inactivityDeadline = Date.now() + timeouts.inactivityMs;
+    const startedAt = Date.now();
+    const turnDeadline = startedAt + timeouts.maxTurnMs;
+    let inactivityDeadline = startedAt + timeouts.inactivityMs;
+    let lastActivity = startedAt;
     return {
         touch: () => {
-            inactivityDeadline = Date.now() + timeouts.inactivityMs;
+            lastActivity = Date.now();
+            inactivityDeadline = lastActivity + timeouts.inactivityMs;
         },
         extendPast: (instant) => {
             inactivityDeadline = Math.max(inactivityDeadline, instant + timeouts.inactivityMs);
         },
         remaining: (until = Number.POSITIVE_INFINITY) => Math.min(inactivityDeadline, turnDeadline, until) - Date.now(),
+        expiry: () => {
+            const now = Date.now();
+            const silent = `the last event came ${duration(now - lastActivity)} ago`;
+            if (now >= turnDeadline) {
+                return `the turn reached its ${duration(timeouts.maxTurnMs)} cap (${silent})`;
+            }
+            if (now >= inactivityDeadline) {
+                return `nothing arrived for ${duration(now - lastActivity)}, past the ${duration(timeouts.inactivityMs)} silence limit, ${duration(now - startedAt)} into the turn`;
+            }
+            return `the loop's own deadline passed ${duration(now - startedAt)} into the turn (${silent})`;
+        },
     };
 };
 

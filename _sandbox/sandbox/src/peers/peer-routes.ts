@@ -30,6 +30,9 @@ const AUTH_DEADLINE_MS = 10_000;
 // Standard WebSocket "protocol error". Here it means one thing: a first frame this build cannot read as a hello.
 const PROTOCOL_ERROR = 1002;
 
+// Standard WebSocket "going away", as the hub's heartbeat closes with: a peer that stopped answering, redialled as usual.
+const PEER_GONE_QUIET = 1001;
+
 export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announced, Facts, Scopes, Extra> {
     readonly store: PeerStore<Extra>;
     readonly hub: PeerHub<Client, Announced, Facts, Scopes>;
@@ -88,6 +91,37 @@ export const admitPeer = async <Scopes>(
     return scopes === undefined
         ? { refusal: `no capability card grants this ${door.noun} anything right now`, retry: true }
         : { id, scopes };
+};
+
+// Tells a just-attached peer its grant, then asks what it is. Never rejects: nothing awaits a socket handler's promise,
+// and a peer whose socket closes between hello and greeting is ordinary.
+export const greetPeer = async <Client extends PeerClient<Facts, Scopes>, Facts, Scopes>(
+    services: Pick<Services, "logger">,
+    slug: string,
+    hub: Pick<PeerHub<Client, unknown, Facts, Scopes>, "pushScopes" | "observe">,
+    peer: {
+        readonly id: string;
+        readonly client: Client;
+        readonly scopes: Scopes | undefined;
+        readonly hangUp: () => void;
+        readonly onConnected: ((id: string, facts: Facts) => void) | undefined;
+    },
+): Promise<void> => {
+    let facts: Facts;
+    try {
+        // Scopes pushed before facts, so a reconnect after the owner tightens a grant enforces it from the first call;
+        // one the hub could not deliver has already cost this socket its place.
+        if (peer.scopes !== undefined && !(await hub.pushScopes(peer.id, peer.scopes))) {
+            return;
+        }
+        facts = await peer.client.describe();
+    } catch (err) {
+        services.logger.warn({ err, id: peer.id }, `${slug}: could not greet a peer that just connected, dropping the connection`);
+        peer.hangUp();
+        return;
+    }
+    hub.observe(peer.id, facts);
+    peer.onConnected?.(peer.id, facts);
 };
 
 interface McpRequest {
@@ -238,15 +272,16 @@ export const createPeerRoutes = <
                 const socket = ws.raw as unknown as WebSocket;
                 const client = createORPCClient(new RPCLink({ websocket: socket })) as unknown as Client;
                 detach = hub.attach(id, { client, close: (code, reason) => ws.close(code, reason), announced: door.hello.announced(hello.data) });
-
-                // Scopes pushed before facts, so a reconnect after the owner tightens a grant enforces it from the
-                // first call.
-                if (scopes !== undefined) {
-                    await hub.pushScopes(id, scopes);
-                }
-                const facts = await client.describe();
-                hub.observe(id, facts);
-                deps.onConnected?.(id, facts);
+                await greetPeer(services, door.slug, hub, {
+                    id,
+                    client,
+                    scopes,
+                    hangUp: () => {
+                        ws.close(PEER_GONE_QUIET, "no answer");
+                        detach?.();
+                    },
+                    onConnected: deps.onConnected,
+                });
             },
             onClose: () => {
                 clearTimeout(deadline);

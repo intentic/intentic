@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { logsRoot } from "./log-files.js";
+import { lineAligned, logsRoot } from "./log-files.js";
 
 // Reads the daemon's own historyRoot/logs files back: filtered by level, time, and substring, newest-first, unlike a
 // raw tail. Reads off the file's tail within a byte budget; a window starting before the tail is reported as truncated
@@ -46,9 +46,7 @@ const tailText = async (path: string, bytes: number): Promise<{ text: string; wh
     if (raw.length <= bytes) {
         return { text: raw.toString("utf8"), whole: true };
     }
-    // Drops the first line: a byte slice can land mid-line, leaving a half JSON object that would look corrupt.
-    const text = raw.subarray(raw.length - bytes).toString("utf8");
-    return { text: text.slice(text.indexOf("\n") + 1), whole: false };
+    return { text: lineAligned(raw, raw.length - bytes).toString("utf8"), whole: false };
 };
 
 // Timestamp in epoch ms; `time` may be pino's default number or this daemon's ISO string. Resource samples use `at`

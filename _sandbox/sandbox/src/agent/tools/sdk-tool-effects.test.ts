@@ -168,18 +168,21 @@ const TOOL_CALL = /\.\s*tool\s*(?:<[^()]*>)?\s*\(/g;
 const SERVER_CALL = /\bcreateSdkMcpServer\s*\(/;
 // Extras giving the effect in the shared vocabulary, which spells out both hints: an absent destructiveHint reads as true.
 const DECLARES = /\bannotations\s*:[\s\S]*\btoolAnnotations\s*\(/;
+// Zod constructs whose JSON-schema processor reads converter state the SDK's bundled converter never sets, so it throws.
+const UNLISTABLE = /\.\s*(?:record|looseRecord|partialRecord|intersection|and)\s*\(/;
 
 interface ToolDefinition {
     // Source-relative path and line of the call.
     readonly at: string;
     readonly name: string;
     readonly declared: boolean;
+    readonly listable: boolean;
 }
 
 const definitionsIn = (file: string, source: string): ToolDefinition[] => {
     const code = codeOf(source);
     return [...code.matchAll(TOOL_CALL)].map((match) => {
-        const [name, , , , extras] = argumentsOf(code, match.index + match[0].length - 1);
+        const [name, , shape, , extras] = argumentsOf(code, match.index + match[0].length - 1);
         return {
             at: `${file}:${source.slice(0, match.index).split("\n").length}`,
             name:
@@ -190,6 +193,7 @@ const definitionsIn = (file: string, source: string): ToolDefinition[] => {
                           .trim()
                           .replace(/^["'`]|["'`]$/g, ""),
             declared: extras !== undefined && DECLARES.test(code.slice(extras.start, extras.end)),
+            listable: shape === undefined || !UNLISTABLE.test(code.slice(shape.start, shape.end)),
         };
     });
 };
@@ -244,12 +248,24 @@ test("a tool call is read by its arguments, not by the prose inside them", () =>
         'const b = sdk().tool("marked", /"[,(]/.source, {}, handler, { annotations: toolAnnotations("read") });',
         '// sdk().tool("commented", "d", {}, handler)',
         'const c = claude.tool("hand-written", "d", {}, handler, { annotations: { readOnlyHint: true } });',
+        'const d = sdk().tool("keyed", "a z.record(…) in prose", { picks: z.record(z.string(), z.string()) }, handler);',
     ].join("\n");
     expect(definitionsIn("fixture.ts", source)).toEqual([
-        { at: "fixture.ts:1", name: "plain", declared: false },
-        { at: "fixture.ts:2", name: "marked", declared: true },
-        { at: "fixture.ts:4", name: "hand-written", declared: false },
+        { at: "fixture.ts:1", name: "plain", declared: false, listable: true },
+        { at: "fixture.ts:2", name: "marked", declared: true, listable: true },
+        { at: "fixture.ts:4", name: "hand-written", declared: false, listable: true },
+        { at: "fixture.ts:5", name: "keyed", declared: false, listable: false },
     ]);
+});
+
+// One such schema makes the server's whole tools/list throw, and the CLI then mounts the server with no tools at all.
+test("no SDK tool's input shape uses a zod construct the SDK cannot list", async () => {
+    const { tools } = await scan();
+    expect(
+        tools.filter((tool) => !tool.listable).map((tool) => `${tool.at} ${tool.name}`),
+        "These SDK tools' shapes use z.record or an intersection, which the SDK's JSON-schema converter throws on, silently " +
+            "dropping every tool of their server. Take an array of objects, or a z.object with the keys spelled out.",
+    ).toEqual([]);
 });
 
 // What McpServer keeps per tool and answers tools/list from; private to it, hence the cast.

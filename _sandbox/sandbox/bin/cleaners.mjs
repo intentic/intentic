@@ -582,12 +582,14 @@ const takeWithinBudget = (source, budget) => {
     return kept;
 };
 
+const byteBudget = (command) => (READ_COMMAND.test(command) ? READ_MAX_BYTES : LOG_MAX_BYTES);
+
 // Caps on lines OR bytes, whichever policy the command earned. Returns the same array unchanged when nothing is over
 // budget, so the caller can tell "did not fire" from "fired and removed nothing".
 const capOutput = (lines, command) => {
     const isRead = READ_COMMAND.test(command);
     const maxLines = isRead ? READ_MAX : MAX;
-    const maxBytes = isRead ? READ_MAX_BYTES : LOG_MAX_BYTES;
+    const maxBytes = byteBudget(command);
     // Lines first: it is the cheaper test and the one whose elision marker reads best.
     if (lines.length > maxLines) {
         return isRead
@@ -626,8 +628,9 @@ const cleanSucceeded = (lines, command, enabled, ran) => {
     }
     // After dedup, never before: eliding the middle of two long lines can leave them identical, and dedup would then
     // report as repeats what the command actually printed once each. Before the cap for the opposite reason — a blob cut
-    // down to its head and tail may bring the whole output back under budget, so the cap never has to drop a line.
-    if (enabled.has("wide")) {
+    // down to its head and tail may bring the whole output back under budget, so the cap never has to drop a line. Only
+    // over that budget: output that already fits is shown whole, blob included (`jq -c` asked for exactly that line).
+    if (enabled.has("wide") && bodyBytes(out) > byteBudget(command)) {
         out = ran("wide", elideWideRuns(out));
     }
     if (enabled.has("cap")) {
@@ -730,9 +733,9 @@ export const openCacheStore = (terminalsDir, sessionKey) => {
     };
 };
 
-// Pure given `store` (lookup/record): on a hit, returns the collapse marker; otherwise records and passes the body
-// through. Tests inject an in-memory store.
-export const collapseCached = (body, command, store, logPath) => {
+// Pure given `store` (lookup/record) and `retain` (keeps this run's output, returning its path): on a hit, returns the
+// collapse marker; otherwise records and passes the body through. Tests inject an in-memory store.
+export const collapseCached = (body, command, store, retain = () => undefined) => {
     // Below the floor, nothing is worth collapsing or remembering: recording a short body risks naming it as the
     // "earlier command" for an unrelated one.
     if (body.length < CACHE_MIN_BYTES) {
@@ -741,16 +744,20 @@ export const collapseCached = (body, command, store, logPath) => {
     const commandHash = `c:${hashText(command)}`;
     const bodyKey = `b:${hashText(body)}`;
     const bodyHash = hashText(body);
-    const handle = logPath !== undefined && logPath !== "" ? ` · retrieve-output ${logPath}` : "";
+    // Called on a hit only: a miss shows the output itself and needs nothing kept.
+    const handle = () => {
+        const path = retain();
+        return path === undefined ? "" : ` · retrieve-output ${path}`;
+    };
     if (store.lookup(commandHash) === bodyHash) {
-        return { body: `${CACHE_MARKER}a previous run this session${handle})`, cached: true };
+        return { body: `${CACHE_MARKER}a previous run this session${handle()})`, cached: true };
     }
     // The same output can come from a different command (reading a file two ways, two spellings of the same script);
     // naming the earlier command lets the model act on the pointer instead of guessing which result it matches.
     const earlier = store.lookup(bodyKey);
     if (earlier !== undefined && earlier !== command) {
         const named = earlier.length > CACHE_COMMAND_MAX ? `${earlier.slice(0, CACHE_COMMAND_MAX)}…` : earlier;
-        return { body: `${CACHE_MARKER}the output of \`${named}\` earlier this session${handle})`, cached: true };
+        return { body: `${CACHE_MARKER}the output of \`${named}\` earlier this session${handle()})`, cached: true };
     }
     store.record(commandHash, bodyHash);
     // First writer of a body wins the back-reference: re-recording on every match would keep moving the pointer toward

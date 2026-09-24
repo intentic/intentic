@@ -15,6 +15,19 @@ describe("command classification", () => {
         ["cargo test", "test"],
         ["go build ./...", "build"],
         ["cd _editor/web && pnpm typecheck", "typecheck"],
+        ["pnpm verify", "test"],
+        ["pnpm verify:turn", "test"],
+        ["npm run verify", "test"],
+        ["yarn verify:push", "test"],
+        ["bun run verify", "test"],
+        ["pnpm test:unit", "test"],
+        ["pnpm turbo run typecheck test", "test"],
+        ["turbo run test", "test"],
+        ["turbo typecheck", "typecheck"],
+        ["pnpm turbo run check --filter @intentic/sandbox", "lint"],
+        ["turbo run build --filter=web", "build"],
+        ["go test -v ./...", "test"],
+        ["cargo test -V --lib", "test"],
     ] as const)("%s proves %s", (command, kind) => {
         expect(
             command
@@ -25,6 +38,33 @@ describe("command classification", () => {
     });
 
     test.each(["ls -la", "git status", "cat package.json", "echo test", "rm -rf dist"])("%s proves nothing", (command) => {
+        expect(classifyCommand(command)).toBeUndefined();
+    });
+
+    // A tool asked about itself ran nothing; `bun test --help` once read as a passing test run.
+    test.each([
+        "bun test --help",
+        "pnpm test --help",
+        "vitest -h",
+        "bun --version",
+        "pnpm turbo run test --help",
+        "tsc -v",
+        "./node_modules/.bin/vitest -V",
+        "pnpm verify:turn --help",
+        "cargo --version",
+    ])("%s asks rather than checks", (command) => {
+        expect(classifyCommand(command)).toBeUndefined();
+    });
+
+    test("a turn that only looked the runner up has proved nothing", () => {
+        const ledger = createVerificationLedger();
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
+        ledger.noteCommand("which bun; bun --version; bun test --help | head", true, "--- [exit 0, 1s]");
+        expect(ledger.standing()).toEqual({ state: "unproven", paths: ["/work/src/a.ts"], check: undefined });
+    });
+
+    // A script name means a check only behind a package manager or a task runner; bare, `test` is the shell builtin.
+    test.each(["test -f package.json", "check", "npx test", "turbo run dev", "turbo run"])("%s is not a script run", (command) => {
         expect(classifyCommand(command)).toBeUndefined();
     });
 
@@ -100,6 +140,30 @@ describe("the ledger", () => {
         ledger.noteCommand("pnpm test", true, "");
         ledger.noteEdit(`${WORKSPACE_ROOT}/README.md`);
         expect(ledger.verdict()).toBeUndefined();
+    });
+
+    // A declared check is evidence by declaration: its command need not classify as one.
+    test("a declared check proves the edits before it under its own name", () => {
+        const ledger = createVerificationLedger();
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
+        ledger.noteCheck("./gate.sh (end of turn)", true, "");
+        expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.ts"], check: "./gate.sh (end of turn)" });
+    });
+
+    test("a failing declared check is the reason the turn is failing", () => {
+        const ledger = createVerificationLedger();
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
+        ledger.noteCheck("pnpm verify:turn (end of turn)", false, "typecheck: 2 errors");
+        expect(ledger.standing()).toEqual({ state: "failing", paths: ["/work/src/a.ts"], check: "pnpm verify:turn (end of turn)" });
+        expect(ledger.verdict()?.failed?.detail).toBe("typecheck: 2 errors");
+    });
+
+    test("an edit after a declared check reopens it", () => {
+        const ledger = createVerificationLedger();
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
+        ledger.noteCheck("pnpm verify:turn (end of turn)", true, "");
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/b.ts`);
+        expect(ledger.standing().state).toBe("unproven");
     });
 });
 

@@ -56,6 +56,27 @@ test("a caller's own deadline caps the wait when it comes first, and only then",
     expect(clock.remaining(START + 5_000)).toBe(100);
 });
 
+test("an expiry names the deadline that passed, so a timed-out turn says whether it went silent or ran out of time", () => {
+    jest.setSystemTime(START);
+    const silent = turnWatchdog({ inactivityMs: 120_000, maxTurnMs: 1_800_000 });
+    jest.setSystemTime(START + 30_000);
+    silent.touch();
+    jest.setSystemTime(START + 155_000);
+    expect(silent.expiry()).toBe("nothing arrived for 2m 5s, past the 2m 0s silence limit, 2m 35s into the turn");
+
+    jest.setSystemTime(START);
+    const long = turnWatchdog({ inactivityMs: 120_000, maxTurnMs: 1_800_000 });
+    jest.setSystemTime(START + 1_795_000);
+    long.touch();
+    jest.setSystemTime(START + 1_800_000);
+    expect(long.expiry()).toBe("the turn reached its 30m 0s cap (the last event came 5s ago)");
+
+    jest.setSystemTime(START);
+    const aborted = turnWatchdog({ inactivityMs: 120_000, maxTurnMs: 1_800_000 });
+    jest.setSystemTime(START + 45_000);
+    expect(aborted.expiry()).toBe("the loop's own deadline passed 45s into the turn (the last event came 45s ago)");
+});
+
 test("an idle wait ends on a wake, and on its own time when nobody wakes it", async () => {
     jest.useFakeTimers();
     const wait = idleWait();

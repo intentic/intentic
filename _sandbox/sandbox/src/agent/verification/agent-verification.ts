@@ -23,9 +23,8 @@ export const commandExitCode = (response: unknown): number | undefined => {
     return last === undefined ? undefined : Number(last);
 };
 
-// One classified command the turn ran. `at` is the shared counter, not a clock.
+// One check the turn ran. `at` is the shared counter, not a clock.
 interface Evidence {
-    readonly kind: VerificationKind;
     readonly command: string;
     readonly passed: boolean;
     readonly detail: string;
@@ -54,6 +53,8 @@ export interface VerificationStanding {
 export interface VerificationLedger {
     readonly noteEdit: (path: string) => void;
     readonly noteCommand: (command: string, passed: boolean, detail: string) => void;
+    // A turn.ending rule's run: evidence by being the declared check, whatever its command would classify as.
+    readonly noteCheck: (name: string, passed: boolean, detail: string) => void;
     // Undefined ⇒ nothing to ask for: no code was edited, or a passing check followed the last edit.
     readonly verdict: () => VerificationVerdict | undefined;
     // Every code path edited, deduped, newest last, whether or not it has since been proven.
@@ -73,21 +74,59 @@ const SEGMENTS = /(?:&&|\|\||;|\|)/;
 // Wrappers/prefixes in front of the real command, dropped so classification looks at the token after them.
 const RUNNERS = new Set(["pnpm", "npm", "npx", "yarn", "bun", "bunx", "run", "exec", "time", "sudo", "env"]);
 
+// The runners a package script is run through; a script name means a check only behind one of them.
+const PACKAGE_MANAGERS = new Set(["pnpm", "npm", "yarn", "bun"]);
+
 // Flags that take a value, so the value itself is not mistaken for the command.
 const VALUED_FLAGS = new Set(["-C", "--dir", "--filter", "-w", "--workspace"]);
 
-// What a bare token proves, by the binary's basename; not exhaustive, an unmatched command is not evidence.
+// A segment carrying one of these asks a tool about itself (`bun test --help`) and runs nothing.
+const QUERY_FLAGS = new Set(["--help", "-h", "--version"]);
+
+// A version query only as the sole argument (`tsc -v`); beside anything else it is verbose (`go test -v ./...`).
+const VERSION_FLAGS = new Set(["-v", "-V"]);
+
+// What a bare token proves, by the binary's basename or the script's name; not exhaustive, an unmatched command is not
+// evidence. Strongest first: a command proves the first kind any of its parts does.
 const KINDS: ReadonlyArray<readonly [VerificationKind, ReadonlySet<string>]> = [
-    ["test", new Set(["test", "suites", "vitest", "jest", "pytest", "mocha", "ava", "tap", "phpunit", "rspec"])],
+    ["test", new Set(["test", "verify", "suites", "vitest", "jest", "pytest", "mocha", "ava", "tap", "phpunit", "rspec"])],
     ["typecheck", new Set(["typecheck", "type-check", "tsc", "tsgo", "vue-tsc", "mypy", "pyright", "flow"])],
     ["lint", new Set(["lint", "check", "oxlint", "eslint", "biome", "ruff", "clippy", "flake8", "golangci-lint"])],
     ["build", new Set(["build", "compile", "make", "tsup", "rollup", "vite", "webpack"])],
 ];
 
-// `go test ./...` / `cargo test` / `bun test`: the subcommand carries the meaning, not the binary.
-const SUBCOMMAND_TOOLS = new Set(["go", "cargo", "dotnet", "mvn", "gradle", "swift", "mix", "rake", "bun"]);
+// Names that are checks only as package scripts or tasks: bare, `test` is the shell builtin.
+const SCRIPT_NAMES = new Set(["test", "verify", "typecheck", "type-check", "lint", "check", "build", "compile"]);
+
+// `go test ./...` / `cargo test`: the subcommand carries the meaning, not the binary.
+const SUBCOMMAND_TOOLS = new Set(["go", "cargo", "dotnet", "mvn", "gradle", "swift", "mix", "rake"]);
+
+// Task runners whose every non-flag argument names a task: `turbo run typecheck test`.
+const TASK_RUNNERS = new Set(["turbo"]);
 
 const basename = (token: string): string => token.split("/").pop() ?? token;
+
+const kindOf = (token: string): VerificationKind | undefined => KINDS.find(([, names]) => names.has(token))?.[0];
+
+// A script's `:variant` is the same check narrowed (`verify:turn`, `test:unit`).
+const scriptKind = (name: string): VerificationKind | undefined => kindOf(name.split(":")[0] ?? name);
+
+const strongest = (kinds: readonly (VerificationKind | undefined)[]): VerificationKind | undefined =>
+    KINDS.map(([kind]) => kind).find((kind) => kinds.includes(kind));
+
+// The tasks a task runner is asked for, past its own `run` and flags.
+const taskNames = (args: readonly string[]): string[] => {
+    const names: string[] = [];
+    for (let i = 0; i < args.length; i += 1) {
+        const arg = args[i] ?? "";
+        if (VALUED_FLAGS.has(arg)) {
+            i += 1;
+        } else if (!arg.startsWith("-") && arg !== "run") {
+            names.push(arg);
+        }
+    }
+    return names;
+};
 
 // The kind one command segment proves, or undefined when it proves nothing.
 export const classifyCommand = (segment: string): VerificationKind | undefined => {
@@ -95,6 +134,10 @@ export const classifyCommand = (segment: string): VerificationKind | undefined =
         .trim()
         .split(/\s+/)
         .filter((token) => token !== "");
+    if (tokens.some((token) => QUERY_FLAGS.has(token))) {
+        return undefined;
+    }
+    let managed = false;
     for (let i = 0; i < tokens.length; i += 1) {
         const raw = tokens[i] ?? "";
         // Leading `FOO=bar` env assignments belong to the command, not to the classification.
@@ -110,31 +153,41 @@ export const classifyCommand = (segment: string): VerificationKind | undefined =
         }
         const token = basename(raw);
         if (RUNNERS.has(token)) {
+            managed ||= PACKAGE_MANAGERS.has(token);
             continue;
+        }
+        const args = tokens.slice(i + 1);
+        if (args.length === 1 && VERSION_FLAGS.has(args[0] ?? "")) {
+            return undefined;
+        }
+        if (TASK_RUNNERS.has(token)) {
+            return strongest(taskNames(args).map(scriptKind));
         }
         if (SUBCOMMAND_TOOLS.has(token)) {
             // The next non-flag token is the subcommand, `cargo test`, `go build`.
-            const next = tokens.slice(i + 1).find((t) => !t.startsWith("-"));
+            const next = args.find((t) => !t.startsWith("-"));
             return next === undefined ? undefined : kindOf(basename(next));
         }
-        return kindOf(token);
+        if (managed) {
+            return scriptKind(token);
+        }
+        return SCRIPT_NAMES.has(token) ? undefined : kindOf(token);
     }
     return undefined;
 };
 
-const kindOf = (token: string): VerificationKind | undefined => KINDS.find(([, names]) => names.has(token))?.[0];
-
 // A command proves the strongest thing any of its segments proves: `pnpm lint && pnpm test` is a test run.
-const commandKind = (command: string): VerificationKind | undefined => {
-    const kinds = new Set(command.split(SEGMENTS).map(classifyCommand));
-    return KINDS.map(([kind]) => kind).find((kind) => kinds.has(kind));
-};
+const commandKind = (command: string): VerificationKind | undefined => strongest(command.split(SEGMENTS).map(classifyCommand));
 
 export const createVerificationLedger = (): VerificationLedger => {
     // Every edit is recorded, prose included; the prose filter is applied where it's read (`verdict`), not here.
     const edits: { path: string; at: number; prose: boolean }[] = [];
     const evidence: Evidence[] = [];
     let counter = 0;
+    const note = (command: string, passed: boolean, detail: string): void => {
+        counter += 1;
+        evidence.push({ command: command.trim(), passed, detail: detail.slice(0, EVIDENCE_DETAIL_MAX), at: counter });
+    };
     // Only code counts, so a turn that touched nothing else is done already; order means after the last edit a check
     // could speak to. `paths` is deduped, newest last.
     const read = (): { readonly paths: readonly string[]; readonly after: readonly Evidence[] } => {
@@ -154,13 +207,11 @@ export const createVerificationLedger = (): VerificationLedger => {
             edits.push({ path, at: counter, prose: isProsePath(path) });
         },
         noteCommand: (command, passed, detail) => {
-            const kind = commandKind(command);
-            if (kind === undefined) {
-                return;
+            if (commandKind(command) !== undefined) {
+                note(command, passed, detail);
             }
-            counter += 1;
-            evidence.push({ kind, command: command.trim(), passed, detail: detail.slice(0, EVIDENCE_DETAIL_MAX), at: counter });
         },
+        noteCheck: note,
         edited: () => [...new Set(edits.map((edit) => edit.path))],
         verdict: () => {
             const { paths, after } = read();

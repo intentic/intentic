@@ -10,19 +10,31 @@ const QUEUE_SLOT_FD = 9;
 
 const SLOT_FILE = /^slot\.\d+$/u;
 
+// A holder's command line is kept to this many characters: enough to name it, not a pasted script.
+const HOLDER_COMMAND_CHARS = 120;
+
 export interface HeldSlot {
     readonly pool: string;
     readonly slot: string;
     readonly pid: number;
     // The holder process's age, not the lock's, which the kernel does not timestamp.
     readonly holderAgeSeconds: number;
+    // Its argv joined by spaces, capped; undefined once the process is gone or unreadable.
+    readonly command: string | undefined;
+    // Where it runs, as this namespace resolves /proc/<pid>/cwd.
+    readonly cwd: string | undefined;
 }
+
+// Who holds a pool's longest-held slot, so a stuck pool names its command.
+export type QueueHolder = Pick<HeldSlot, "pid" | "command" | "cwd">;
 
 export interface QueuePoolSummary {
     // Slot files that exist, not the pool's configured limit; the wrapper creates them lazily.
     readonly slots: number;
     readonly held: number;
     readonly longestHoldSeconds: number;
+    // Absent exactly when nothing is held.
+    readonly longestHolder?: QueueHolder;
 }
 
 export const queueRoot = (): string => process.env["INTENTIC_QUEUE_DIR"] ?? join(process.env["TMPDIR"] ?? tmpdir(), "intentic-queue");
@@ -44,6 +56,12 @@ const holderAgeSeconds = async (pid: number, uptimeSeconds: number, ticksPerSeco
     const stat = await readText(`/proc/${pid}/stat`);
     const started = stat === undefined ? undefined : parseProcStat(stat)?.startTimeTicks;
     return started === undefined ? undefined : Math.max(0, Math.round(uptimeSeconds - started / ticksPerSecond));
+};
+
+// /proc/<pid>/cmdline separates argv with NULs and ends with one.
+const holderCommand = async (pid: number): Promise<string | undefined> => {
+    const argv = (await readText(`/proc/${pid}/cmdline`))?.split("\0").filter((arg) => arg !== "");
+    return argv === undefined || argv.length === 0 ? undefined : argv.join(" ").slice(0, HOLDER_COMMAND_CHARS);
 };
 
 // One row per slot: a pipeline inherits fd 9 to every member, and the oldest of them took it.
@@ -73,8 +91,12 @@ export const heldSlots = async (root = queueRoot()): Promise<HeldSlot[]> => {
             if (slot === undefined) {
                 return undefined;
             }
-            const age = await holderAgeSeconds(pid, uptimeSeconds, ticksPerSecond);
-            return age === undefined ? undefined : { ...slot, pid, holderAgeSeconds: age };
+            const [age, command, cwd] = await Promise.all([
+                holderAgeSeconds(pid, uptimeSeconds, ticksPerSecond),
+                holderCommand(pid),
+                readlink(`/proc/${pid}/cwd`).catch(() => undefined),
+            ]);
+            return age === undefined ? undefined : { ...slot, pid, holderAgeSeconds: age, command, cwd };
         }),
     );
     return oldestPerSlot(found.filter((slot) => slot !== undefined));
@@ -94,15 +116,20 @@ export const poolSlotCounts = async (root = queueRoot()): Promise<ReadonlyMap<st
     return counts;
 };
 
-// The oldest holder's age is the number that tells a stuck command from a busy pool.
+// The oldest holder's age is the number that tells a stuck command from a busy pool, and its command says which.
 export const summarisePools = (slotCounts: ReadonlyMap<string, number>, held: readonly HeldSlot[]): Record<string, QueuePoolSummary> => {
     const summary: Record<string, QueuePoolSummary> = {};
     for (const [pool, slots] of slotCounts) {
         const mine = held.filter((slot) => slot.pool === pool);
+        const longest = mine.reduce<HeldSlot | undefined>(
+            (oldest, slot) => (oldest === undefined || slot.holderAgeSeconds > oldest.holderAgeSeconds ? slot : oldest),
+            undefined,
+        );
         summary[pool] = {
             slots,
             held: mine.length,
-            longestHoldSeconds: mine.reduce((longest, slot) => Math.max(longest, slot.holderAgeSeconds), 0),
+            longestHoldSeconds: longest?.holderAgeSeconds ?? 0,
+            ...(longest === undefined ? {} : { longestHolder: { pid: longest.pid, command: longest.command, cwd: longest.cwd } }),
         };
     }
     return summary;

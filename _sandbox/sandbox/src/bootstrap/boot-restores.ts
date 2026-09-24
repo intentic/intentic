@@ -8,6 +8,7 @@ import { restoreExits } from "../exit/exit-links.js";
 import { startAllExtensionProcesses } from "../extensions/extension-processes.js";
 import { applyTmuxLogHooks } from "../logs/log-files.js";
 import { remountNetdisks } from "../netdisk/netdisk-links.js";
+import { restoreExecBits, SANDBOX_INSTALL_DIR } from "../platform/boot/exec-bits.js";
 import { onPath } from "../platform/boot/on-path.js";
 import { reconnectVpns } from "../vpn/vpn-links.js";
 import type { BootPhase } from "./boot-phase.js";
@@ -50,4 +51,8 @@ export const startBootRestores = (phase: BootPhase): void => {
     services.extensionBackend.start().catch((error: unknown) => logger.warn({ err: error }, "extension backend host failed to start"));
     // tmux.conf covers server start; this re-arms hooks on a server that outlived a daemon restart.
     void applyTmuxLogHooks(config.historyRoot);
+    // The pane-log hooks above and queue-run's memory gate exec these by name; a dev build's dist lands without +x.
+    void restoreExecBits("/usr/local/bin", SANDBOX_INSTALL_DIR, logger).catch((error: unknown) =>
+        logger.warn({ err: error }, "boot: could not restore exec bits on PATH commands"),
+    );
 };

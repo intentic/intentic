@@ -270,7 +270,7 @@ import { type BootTracker, createBootTracker } from "./platform/boot/boot.js";
 import { DAEMON_OWNER } from "./seams/workload-stamp.js";
 import { type PlatformTunnel, startPlatformTunnel } from "./platform/listeners/local-tunnel.js";
 import { createResourceReaper, type ResourceReaper } from "./platform/boot/reaper.js";
-import { createClientLogger, createPerfLogger } from "./logger.js";
+import { createClientLogger, createPerfLogger, inLogContext } from "./logger.js";
 import { createPerfTracker, type PerfTracker } from "./platform/resources/perf.js";
 import { createLiveMetrics, type LiveMetrics } from "./platform/resources/live-metrics.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
@@ -1431,7 +1431,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // Bound to streamAgent here, the one module that may name the turn body.
         turns: turnDoors(
             () => services,
-            (input, signal) => streamAgent(services, input, signal),
+            (input, signal) =>
+                input.conversationId === undefined
+                    ? streamAgent(services, input, signal)
+                    : inLogContext({ conversationId: input.conversationId }, streamAgent(services, input, signal)),
         ),
         events,
         agentWorktrees,

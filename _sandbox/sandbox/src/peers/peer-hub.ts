@@ -49,7 +49,7 @@ export interface PeerHub<Client extends PeerClient<Facts, Scopes>, Announced, Fa
     readonly client: (id: string) => Client | undefined;
     // Throws when offline; pass `signal` for a deadline shorter than the default tool-call ceiling.
     readonly mcp: (id: string, payload: unknown, options?: { readonly signal?: AbortSignal }) => Promise<unknown>;
-    // False means nobody to push to; the peer gets the grant on its next connect instead.
+    // False means nobody took it: offline, or a failed push that dropped the peer; it gets the grant on its next connect.
     readonly pushScopes: (id: string, scopes: Scopes) => Promise<boolean>;
     // Cuts a peer off now: the owner revoking it, or the capability being removed.
     readonly disconnect: (id: string, reason: string) => void;
@@ -192,8 +192,18 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
             if (peer === undefined || peer.client.setScopes === undefined) {
                 return false;
             }
-            await peer.client.setScopes(scopes);
-            return true;
+            try {
+                await peer.client.setScopes(scopes);
+                return true;
+            } catch (err) {
+                // A peer that did not take the grant must not stay attached on the old one; it gets this one on redial.
+                logger.warn({ err, id }, `${spec.domain}: could not push this peer's grant, dropping the connection`);
+                peer.close(1001, "grant not delivered");
+                if (live.get(id) === peer) {
+                    drop(id, peer);
+                }
+                return false;
+            }
         },
         rememberTools: (id, result) => memory.set(toolKey(id), result),
         knownTools: (id) => memory.get(toolKey(id)),

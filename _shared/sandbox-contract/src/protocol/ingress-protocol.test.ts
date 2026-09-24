@@ -148,9 +148,25 @@ const target = createServer((request: IncomingMessage, response: ServerResponse)
 
 const cancelled = gate<string>();
 
+// `/late` holds its handshake until released, so the session can die while the loopback upgrade is still pending.
+const lateArrived = gate();
+const lateReleased = gate();
+let lateTornDown = false;
+
 // Hand-written HTTP/1.1 upgrade carrying the 101 head plus the raw bytes after it. `/refuse` answers instead of
 // upgrading.
 target.on("upgrade", (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+    if ((request.url ?? "") === "/late") {
+        socket.on("error", () => {});
+        socket.on("close", () => (lateTornDown = true));
+        lateArrived.open();
+        void lateReleased.opened.then(() => {
+            if (!socket.destroyed) {
+                socket.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n");
+            }
+        });
+        return;
+    }
     if ((request.url ?? "") === "/refuse") {
         socket.end("HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 7\r\n\r\nno dice");
         return;
@@ -179,7 +195,7 @@ target.on("upgrade", (request: IncomingMessage, socket: Duplex, head: Buffer) =>
 // One session; every request is routed through it.
 const front = async (
     targetPort: number,
-): Promise<{ readonly server: Server; readonly poison: (bytes: Buffer) => void; readonly close: () => void }> => {
+): Promise<{ readonly server: Server; readonly poison: (bytes: Buffer) => void; readonly sever: () => void; readonly close: () => void }> => {
     const [edgeSide, daemonSide] = duplexPair();
     const daemon = await serveIngressSession(daemonSide, { targetPort });
     const session = await openIngressSession(edgeSide);
@@ -202,6 +218,8 @@ const front = async (
         server,
         // Writes garbage onto the wire the edge reads, simulating a wedged or corrupted peer.
         poison: (bytes: Buffer) => void daemonSide.write(bytes),
+        // Cuts the tunnel under the daemon, which takes its h2 session and every stream on it down.
+        sever: () => void daemonSide.destroy(),
         close: () => {
             session.close();
             daemon.close();
@@ -437,6 +455,32 @@ test("a browser that gives up cancels the stream all the way to the target", asy
     request.destroy();
 
     await expect(cancelled.opened).resolves.toBe("aborted");
+});
+
+// The handshake lands after its stream is gone: answering it throws ERR_HTTP2_INVALID_STREAM from an event callback.
+test("a session that dies mid-handshake tears the loopback upgrade down instead of answering into a dead stream", async () => {
+    const own = await front((target.address() as AddressInfo).port);
+    const ownPort = await listen(own.server);
+    const request = h1Request({
+        host: "127.0.0.1",
+        port: ownPort,
+        path: "/late",
+        headers: { host: HOST, connection: "Upgrade", upgrade: "websocket", "sec-websocket-key": "x" },
+        agent: false,
+    });
+    request.on("error", () => {});
+    request.end();
+    await lateArrived.opened;
+
+    own.sever();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    lateReleased.open();
+
+    await waitFor(() => expect(lateTornDown).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(uncaught).toStrictEqual([]);
+    request.destroy();
+    own.close();
 });
 
 test("a tunnel whose target is not listening fails the exchange rather than answering for it", async () => {

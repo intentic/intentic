@@ -24,7 +24,8 @@ The interesting decisions:
   archives are listed as members, never opened: one level is a fact about this file, two is a crawl.
 - **The deterministic tier, plus what the image happens to carry.** Everything here runs without a model
   and without money: office and OpenDocument formats, EPUB chapters, notebook cells and pdf text layers
-  become prose, images become dimensions + EXIF, audio becomes duration + tags, archives become listings.
+  become prose, images become dimensions + EXIF, audio becomes duration + tags, archives become listings,
+  and a V8 CPU or heap profile becomes its functions ranked by self and total cost.
   Zip, tar and gzip are read in process; xz, bzip2 and zstd are codecs the image carries as binaries but
   node_modules cannot decompress, so GNU tar lists those when it is on PATH (the stamp says `archive+tar`)
   and the sidecar says so plainly when it is not. A scanned pdf is OCR'd

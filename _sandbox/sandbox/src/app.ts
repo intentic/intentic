@@ -64,6 +64,7 @@ import { createWorkspaceBytesRoutes } from "./workspace/files/workspace-bytes.ro
 import { reachPosture } from "./platform/listeners/ingress-tunnel.js";
 import { profileTraits } from "./platform/boot/profile.js";
 import { rawRouteServer } from "./http/raw-route-server.js";
+import { logContext } from "./logger.js";
 
 // Only genuine server faults (5xx) are logged; expected ORPCErrors are the routes' normal control flow.
 const logUnexpectedError = (services: Services, error: unknown): void => {
@@ -126,9 +127,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return next();
         }
         const from = process.hrtime.bigint();
-        await next();
         // The browser's own id for this call, echoed onto the served line so a report matches a log line by id.
         const requestId = c.req.header(REQUEST_ID_HEADER);
+        await (requestId === undefined ? next() : logContext.run({ requestId }, next));
         services.perf.record("http.request", Number(process.hrtime.bigint() - from) / 1e6, {
             method: c.req.method,
             path: c.req.path,

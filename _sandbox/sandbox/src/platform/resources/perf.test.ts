@@ -1,5 +1,5 @@
 import { type Logger, pino } from "pino";
-import { createPerfTracker } from "./perf.js";
+import { createPerfTracker, SUMMARY_MS } from "./perf.js";
 
 // Captures lines instead of writing them, so a test can assert which sink got a line. Explicit `Logger` type works
 // around pino's widened return under exactOptionalPropertyTypes.
@@ -80,7 +80,7 @@ test("the ranked summary stays on the main log, where an incident reader is alre
     const tracker = createPerfTracker(main.logger, perf.logger);
 
     tracker.record("git.run", 500, {});
-    jest.advanceTimersByTime(60_000);
+    jest.advanceTimersByTime(SUMMARY_MS);
     tracker.stop();
     jest.useRealTimers();
 
@@ -105,7 +105,7 @@ test("a wait op is printed beside the work it explains, however far down the ran
     }
     tracker.record("git.lock.wait", 1, {});
     tracker.record("git.run.wait", 1, {});
-    jest.advanceTimersByTime(60_000);
+    jest.advanceTimersByTime(SUMMARY_MS);
     tracker.stop();
     jest.useRealTimers();
 

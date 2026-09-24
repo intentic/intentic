@@ -39,8 +39,9 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     "events.frame": 250,
 };
 
-// Interval for the ranked summary to print while anything is being measured.
-const SUMMARY_MS = 60_000;
+// Interval for the ranked summary to print while anything is being measured. Counts are cumulative, so a longer cadence
+// costs resolution, not data, and each ~2.5 KB table is spent from daemon.log's byte cap (logs/log-files.ts).
+export const SUMMARY_MS = 10 * 60_000;
 
 // Ranked rows shown before wait siblings are added back (see summaryRows); keeps it to one screen.
 const SUMMARY_ROWS = 12;

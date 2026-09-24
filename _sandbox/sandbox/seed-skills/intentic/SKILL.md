@@ -110,7 +110,9 @@ conversation that starts there (a persona's `startIn`).
 /work/.agents/skills/                the loaded skills every runtime reads (Claude links them from .claude/skills/)
 /root/.claude/skills/                the image-baked skills: this one and the task skills routed above
 /history/logs/                       daemon.log, perf.jsonl, resource-metrics.jsonl, client.jsonl (what the
-                                     editor reported about itself), terminals/ (every pane's lossless log)
+                                     editor reported about itself), filter-stats.jsonl (what the output filter
+                                     cut from each Bash call), raw-output/ (a filtered call's whole output),
+                                     terminals/ (every pane's lossless log)
 ```
 
 Settings and config are the owner's to change from the editor (Sandbox ▸ Agent, ▸ Secrets, ▸ Personas,
@@ -137,7 +139,7 @@ over a window you choose. They cannot write, and nothing in this playbook restar
   languageServer, git, extension), `window.eventLoop.delayP99Ms`, `daemon.memory.rssBytes`,
   `system.pressure.memory.some`, `system.loadAverage`.
 - Output a command printed that the filter elided → its footer names the exact command:
-  `retrieve-output /history/logs/terminals/<log> [pattern]`.
+  `retrieve-output /history/logs/raw-output/<log> [pattern]`.
 
 An answer that says its read started mid-file may be missing older matches: narrow the window or raise the
 limit rather than concluding nothing happened.

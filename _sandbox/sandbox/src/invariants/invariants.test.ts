@@ -52,6 +52,49 @@ test("a check that never settles is bounded rather than holding the pass open", 
     }
 });
 
+// Fake timers keep their own clock, so moving the system time without advancing them is an event loop that was away:
+// the deadline timer then fires that much later than it was due.
+const stall = (ms: number): void => jest.setSystemTime(Date.now() + ms);
+
+// Under load the loop stalls for 24-40s; the check's read finished meanwhile, but its callback queues behind timers.
+test("a check held up by a stalled event loop gets its time back rather than being reported broken", async () => {
+    jest.useFakeTimers();
+    try {
+        const registry = createInvariantRegistry(silent());
+        let finish: () => void = () => {};
+        registry.register("agents", [check("reads", () => new Promise<void>((resolve) => (finish = resolve)))]);
+
+        const pass = registry.run("sweep");
+        await realYield();
+        stall(30_000);
+        await advanceTimersByTimeAsync(5_000);
+        finish();
+
+        expect(await pass).toEqual([]);
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("a check that hangs through stall after stall still expires", async () => {
+    jest.useFakeTimers();
+    try {
+        const registry = createInvariantRegistry(silent());
+        registry.register("agents", [check("hangs", () => new Promise<void>(() => {}))]);
+
+        const pass = registry.run("sweep");
+        await realYield();
+        for (let stalls = 0; stalls < 10; stalls += 1) {
+            stall(30_000);
+            await advanceTimersByTimeAsync(5_000);
+        }
+
+        expect((await pass)[0]).toMatchObject({ owner: "agents", broken: true });
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
 test("a passing check reports nothing", async () => {
     const registry = createInvariantRegistry(silent());
     registry.register("capabilities", [check("manifest", () => {})]);

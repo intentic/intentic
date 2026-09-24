@@ -39,6 +39,29 @@ test("tailLogFile returns the newest bytes and rejects escapes", async () => {
     expect(await tailLogFile(root, "../escape", 4)).toBeUndefined();
 });
 
+// A tail read for jq must open on a whole line; one that already starts on a line keeps it.
+test("tailLogFile starts on a whole line, keeping the first one when the cut already falls on a boundary", async () => {
+    const root = await tempRoot();
+    await writeFile(join(root, "daemon.log"), "one\ntwo\nthree\n");
+    expect((await tailLogFile(root, "daemon.log", 8))?.text).toBe("three\n");
+    expect((await tailLogFile(root, "daemon.log", 6))?.text).toBe("three\n");
+    expect((await tailLogFile(root, "daemon.log", 10))?.text).toBe("two\nthree\n");
+});
+
+test("pruneLogFiles leaves a JSONL file every line of which still parses", async () => {
+    const root = await tempRoot();
+    const record = (index: number): string => JSON.stringify({ level: "info", message: `line ${index}`, pad: "x".repeat(index % 97) });
+    await writeFile(join(root, "daemon.log"), `${Array.from({ length: 60_000 }, (_, index) => record(index)).join("\n")}\n`);
+    await pruneLogFiles(root);
+
+    const kept = await readFile(join(root, "daemon.log"), "utf8");
+    expect(Buffer.byteLength(kept)).toBeLessThanOrEqual(1_000_000);
+    expect(kept.endsWith(`${record(59_999)}\n`)).toBe(true);
+    const lines = kept.split("\n").slice(0, -1);
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.every((text) => typeof (JSON.parse(text) as { message?: unknown }).message === "string")).toBe(true);
+});
+
 test("pruneLogFiles truncates oversized files to their tail and drops stale ones", async () => {
     const root = await tempRoot();
     await writeFile(join(root, "big.log"), Buffer.alloc(5_000_001, 120));

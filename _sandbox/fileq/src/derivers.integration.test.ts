@@ -15,6 +15,7 @@ import { odsDeriver } from "./lib/derivers/ods.js";
 import { odfToHtml, odtDeriver } from "./lib/derivers/odt.js";
 import { ocrAvailable, pdfDeriver } from "./lib/derivers/pdf.js";
 import { pptxDeriver } from "./lib/derivers/pptx.js";
+import { profileDeriver } from "./lib/derivers/profile.js";
 import { rtfDeriver, rtfParagraphs } from "./lib/derivers/rtf.js";
 import { xlsxDeriver } from "./lib/derivers/xlsx.js";
 import { detectFormat } from "./lib/formats.js";
@@ -164,6 +165,52 @@ describe("ipynb", () => {
 
     test("the extension is the recognition: JSON has no magic", async () => {
         expect(await detectFormat(fixture("nb.ipynb", ipynbText("T", "x", [])))).toBe("ipynb");
+    });
+});
+
+describe("profile", () => {
+    const frame = (functionName: string, lineNumber = 0) => ({ functionName, url: "file:///work/app/server.js", lineNumber, columnNumber: 0 });
+
+    test("a CPU profile ranks functions by self and total time, one row per function however many call paths it has", async () => {
+        const cpu = {
+            nodes: [
+                { id: 1, callFrame: { functionName: "(root)", url: "" }, children: [2] },
+                { id: 2, callFrame: frame("handle", 9), children: [3] },
+                { id: 3, callFrame: frame("hashPassword", 41), children: [] },
+            ],
+            startTime: 0,
+            endTime: 400,
+            samples: [3, 3, 2, 3],
+            timeDeltas: [0, 100, 100, 100],
+        };
+        const path = fixture("CPU.20260924.cpuprofile", JSON.stringify(cpu));
+        expect(await detectFormat(path)).toBe("profile");
+        const doc = await profileDeriver.derive(path);
+        expect(doc.title).toBe("CPU profile: 0.4 ms over 4 samples");
+        // hashPassword owns three samples (the last one timed at the mean gap); handle owns one and sits under all four.
+        expect(doc.markdown).toContain("| 0.3 ms | 75.0% | 0.3 ms | 75.0% | `hashPassword /work/app/server.js:42` |");
+        expect(doc.markdown).toContain("| 0.1 ms | 25.0% | 0.4 ms | 100.0% | `handle /work/app/server.js:10` |");
+        expect(doc.notes).toEqual([]);
+    });
+
+    test("a heap profile ranks allocation sites by bytes here and below", async () => {
+        const heap = {
+            head: {
+                callFrame: { functionName: "(root)", url: "" },
+                selfSize: 0,
+                children: [{ callFrame: frame("load"), selfSize: 1_024, children: [{ callFrame: frame("parse", 7), selfSize: 3_072, children: [] }] }],
+            },
+        };
+        const doc = await profileDeriver.derive(fixture("Heap.heapprofile", JSON.stringify(heap)));
+        expect(doc.title).toBe("Heap profile: 4.0 KB sampled as allocated");
+        expect(doc.markdown).toContain("| 3.0 KB | 75.0% | 3.0 KB | 75.0% | `parse /work/app/server.js:8` |");
+        expect(doc.markdown).toContain("| 1.0 KB | 25.0% | 4.0 KB | 100.0% | `load /work/app/server.js:1` |");
+    });
+
+    test("JSON that is neither profile shape says so instead of rendering an empty table", async () => {
+        const doc = await profileDeriver.derive(fixture("other.cpuprofile", JSON.stringify({ hello: "world" })));
+        expect(doc.markdown).toBe("");
+        expect(doc.notes).toEqual(["not a V8 CPU or heap profile: neither `nodes` with start and end times, nor a `head` node"]);
     });
 });
 

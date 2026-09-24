@@ -181,15 +181,15 @@ const systemSnapshot = async (): Promise<Readonly<Record<"memory" | "cgroup" | "
 const finiteMs = (nanoseconds: number): number => (Number.isFinite(nanoseconds) ? Math.round(nanoseconds / 1e3) / 1e3 : 0);
 
 export interface ResourceSnapshot {
-    readonly schema: 1;
+    readonly schema: 2;
     readonly at: string;
     readonly uptimeSeconds: number;
     readonly window: unknown;
     readonly daemon: unknown;
     readonly system: unknown;
     readonly processes: unknown;
-    // Per pool: slots, how many are taken, and the oldest holder's age. A pool at its limit is ordinary; one whose
-    // oldest holder keeps climbing between samples is a command that is not coming back.
+    // Per pool: slots, how many are taken, the oldest holder's age and who it is (queue-slots.ts QueuePoolSummary). A pool
+    // at its limit is ordinary; one whose oldest holder keeps climbing between samples is a command not coming back.
     readonly queue: Readonly<Record<string, unknown>>;
     readonly owners: Readonly<Record<string, unknown>>;
 }
@@ -271,7 +271,7 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
         previousProcessCpu = processes.cpuByPid;
         const heap = getHeapStatistics();
         const snapshot: ResourceSnapshot = {
-            schema: 1,
+            schema: 2,
             at: new Date().toISOString(),
             uptimeSeconds: Math.round(process.uptime()),
             window: {
@@ -363,11 +363,11 @@ const OOM_EVENTS = ["event_oom_kill", "event_oom_group_kill"] as const;
 // command is named while there is still as long again before the ceiling takes the slot back by force.
 const SLOT_HOLD_WARN_SECONDS = 15 * 60;
 
+const valueAt = (source: unknown, path: readonly string[]): unknown =>
+    path.reduce<unknown>((held, key) => (held !== null && typeof held === "object" ? (held as Record<string, unknown>)[key] : undefined), source);
+
 const numberAt = (source: unknown, path: readonly string[]): number | undefined => {
-    const value = path.reduce<unknown>(
-        (held, key) => (held !== null && typeof held === "object" ? (held as Record<string, unknown>)[key] : undefined),
-        source,
-    );
+    const value = valueAt(source, path);
     return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 };
 
@@ -409,10 +409,15 @@ export const oomSinceSample = (
 
 // Pools whose oldest holder has been in place too long. Reads the sample rather than the queue directly, so the line
 // in the log and the line on disk can never disagree about what was held.
-export const longHeldPools = (snapshot: ResourceSnapshot, thresholdSeconds: number): { readonly pool: string; readonly heldSeconds: number }[] =>
+export const longHeldPools = (
+    snapshot: ResourceSnapshot,
+    thresholdSeconds: number,
+): { readonly pool: string; readonly heldSeconds: number; readonly holder: unknown }[] =>
     Object.entries(snapshot.queue).flatMap(([pool, summary]) => {
         const longest = numberAt(summary, ["longestHoldSeconds"]);
-        return longest === undefined || longest < thresholdSeconds ? [] : [{ pool, heldSeconds: longest }];
+        return longest === undefined || longest < thresholdSeconds
+            ? []
+            : [{ pool, heldSeconds: longest, holder: valueAt(summary, ["longestHolder"]) }];
     });
 
 const resourceMetricsPath = (historyRoot: string): string => join(logsRoot(historyRoot), RESOURCE_METRICS_FILE);
@@ -459,7 +464,7 @@ export const startResourceMetrics = ({
             for (const held of longHeld) {
                 if (!warnedPools.has(held.pool)) {
                     logger.warn(
-                        { pool: held.pool, heldSeconds: held.heldSeconds, at: snapshot.at },
+                        { pool: held.pool, heldSeconds: held.heldSeconds, holder: held.holder, at: snapshot.at },
                         "a heavy-command queue slot has been held without finishing; the pool is short by one until it ends",
                     );
                 }

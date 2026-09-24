@@ -3,6 +3,7 @@ import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
 import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.js";
 import { PANEL_SESSION_PREFIX } from "../terminal/terminal-session.js";
 import type { ListeningPort } from "./port-scan.js";
+import { SANDBOX_INSTALL_DIR } from "../platform/boot/exec-bits.js";
 
 // Turns scan evidence (argv, cwd, session) into a name, sentence and origin for each listener. Lives here, not in the
 // view, since the facts that attribute a port (panel key to extension index, workspace root) exist only here.
@@ -42,9 +43,6 @@ const binaryOf = (command: string | undefined): string => {
     const argv0 = command?.split(" ")[0] ?? "";
     return argv0.slice(argv0.lastIndexOf("/") + 1);
 };
-
-// Where the image installs the daemon and its helpers; everything under it is the sandbox itself.
-const SANDBOX_INSTALL_DIR = "/opt/sandbox/";
 
 // Ordered most specific first: the extension backend host is also under the install dir, so it must be matched before
 // the catch-all.

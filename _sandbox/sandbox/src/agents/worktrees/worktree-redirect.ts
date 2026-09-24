@@ -1,4 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { heredocSpans } from "../../heredoc.js";
 import { type IsolationPlan, inWorktree } from "./isolation.js";
 
 // When the worktree bind-mount cannot be built (no CAP_SYS_ADMIN), this rewrites absolute workspace-root paths into the
@@ -11,29 +12,6 @@ const escapeRegExp = (value: string): string => value.replaceAll(/[.*+?^${}()|[\
 // Matches absolute root paths inside a shell command. The lookbehind refuses a root that is part of a longer path
 // (letting MAIN_MOUNT through); the trailing class stops at the characters that end a path in shell.
 const commandPaths = (root: string): RegExp => new RegExp(String.raw`(?<![\w./-])${escapeRegExp(root)}(?:/[^\s'"\`;:,)\]}]*)?`, "g");
-
-// Detects heredoc delimiters; their bodies are data, not paths, and must stay unrewritten.
-const HEREDOC_START = /<<-?\s*(["']?)([A-Za-z_][\w]*)\1/g;
-
-// The [start, end) spans of every heredoc body in the command, in order.
-const heredocSpans = (command: string): { start: number; end: number }[] => {
-    const spans: { start: number; end: number }[] = [];
-    for (const match of command.matchAll(HEREDOC_START)) {
-        const word = match[2];
-        if (word === undefined) {
-            continue;
-        }
-        // Body: line after the delimiter to the line holding the word alone; unterminated protects the rest.
-        const bodyStart = command.indexOf("\n", match.index + match[0].length);
-        if (bodyStart === -1) {
-            continue;
-        }
-        const terminator = new RegExp(String.raw`^[ \t]*${word}[ \t]*$`, "m");
-        const rest = terminator.exec(command.slice(bodyStart));
-        spans.push({ start: bodyStart, end: rest === null ? command.length : bodyStart + rest.index });
-    }
-    return spans;
-};
 
 // Rewrites every main-root path in a shell command, outside heredoc bodies. Shared by the Bash hook and the terminal
 // wrapper.

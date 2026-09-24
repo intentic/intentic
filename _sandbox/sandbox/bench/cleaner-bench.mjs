@@ -129,7 +129,7 @@ const CONFIGS = [
     { name: "strip-only", spec: "-cap,-dedup,-redact,-files,-ls,-wide,-diff" },
 ];
 
-const cleanedFor = (raw, command, exitCode, spec) => (spec === "off" ? raw : filterOutput(raw, command, exitCode, "0", "", parseCleaners(spec)).out);
+const cleanedFor = (raw, command, exitCode, spec) => (spec === "off" ? raw : filterOutput(raw, { command, exitCode, enabled: parseCleaners(spec) }).out);
 
 const sweep = (samples, label) => {
     const baseline = samples.reduce((sum, sample) => sum + estimateTokens(sample.raw), 0);
@@ -255,7 +255,7 @@ const corpus = (root) => {
     const stageBytes = new Map();
     let emitted = 0;
     for (const sample of samples) {
-        const result = filterOutput(sample.raw, sample.command, sample.exitCode, "0", "", parseCleaners(""));
+        const result = filterOutput(sample.raw, { command: sample.command, exitCode: sample.exitCode, enabled: parseCleaners("") });
         emitted += result.out.length;
         for (const stage of result.stages) {
             stageBytes.set(stage.id, (stageBytes.get(stage.id) ?? 0) + stage.saved);

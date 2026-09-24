@@ -340,6 +340,10 @@ export const serveIngressSession = async (duplex: Duplex, options: ServeIngressS
     server.on("error", () => duplex.destroy());
     server.on("session", (session) => session.setLocalWindowSize(CONNECTION_WINDOW_SIZE));
 
+    // The loopback's answer can outlive its stream when the session dies, and respond/write on a dead stream throws
+    // ERR_HTTP2_INVALID_STREAM from an event callback, where nothing catches it.
+    const gone = (stream: ServerHttp2Stream): boolean => stream.destroyed || stream.closed;
+
     const forwardToLoopback = (stream: ServerHttp2Stream, headers: IncomingHttpHeaders): void => {
         const local = h1Request({
             host: LOOPBACK,
@@ -353,6 +357,10 @@ export const serveIngressSession = async (duplex: Duplex, options: ServeIngressS
         });
         stream.pipe(local);
         local.on("response", (response) => {
+            if (gone(stream)) {
+                response.destroy();
+                return;
+            }
             stream.respond({ [constants.HTTP2_HEADER_STATUS]: response.statusCode ?? 502, ...endToEnd(response.headers) });
             response.pipe(stream);
         });
@@ -364,6 +372,9 @@ export const serveIngressSession = async (duplex: Duplex, options: ServeIngressS
         // means this — on a reset, node fires `aborted` before `finish` and `close`, so a
         // `writableEnded`/`writableFinished` guard there would miss it.
         stream.on("aborted", () => local.destroy());
+        // `aborted` fires only while the stream's writable side is open; `close` covers every other way it dies, and a
+        // request whose answer already completed ignores the destroy.
+        stream.on("close", () => local.destroy());
     };
 
     const spliceUpgrade = (stream: ServerHttp2Stream, headers: IncomingHttpHeaders): void => {
@@ -372,6 +383,10 @@ export const serveIngressSession = async (duplex: Duplex, options: ServeIngressS
         // pool the request path above uses.
         const local = h1Request({ host: LOOPBACK, port: options.targetPort, method: head.method, path: head.path, headers: head.headers, agent: false });
         local.on("upgrade", (response, socket, first) => {
+            if (gone(stream)) {
+                socket.destroy();
+                return;
+            }
             stream.respond({ [constants.HTTP2_HEADER_STATUS]: constants.HTTP_STATUS_OK });
             // Response head written verbatim (see serializeHead), then any bytes already sent past it, then the pipe.
             stream.write(serializeHead(response, NOTHING_DROPPED, []));
@@ -383,11 +398,17 @@ export const serveIngressSession = async (duplex: Duplex, options: ServeIngressS
         // The local server declined to upgrade; its answer goes to the browser with framing that matches the already
         // de-chunked body.
         local.on("response", (response) => {
+            if (gone(stream)) {
+                response.destroy();
+                return;
+            }
             stream.respond({ [constants.HTTP2_HEADER_STATUS]: constants.HTTP_STATUS_OK });
             stream.write(serializeHead(response, DECLINED_UPGRADE_DROP, DECLINED_UPGRADE_ADD));
             response.pipe(stream);
         });
         local.on("error", () => stream.close(constants.NGHTTP2_CONNECT_ERROR));
+        // Before the handshake answers, nothing else ties the loopback request to the stream; once spliced, a no-op.
+        stream.on("close", () => local.destroy());
         // An upgrade request carries no body; the client is waiting on the handshake before it says anything else.
         local.end();
     };

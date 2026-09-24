@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Services } from "../composition.js";
 import type { PeerDoor } from "./peer.js";
 import type { PeerHub } from "./peer-hub.js";
-import { admitPeer, createPeerRoutes } from "./peer-routes.js";
+import { admitPeer, createPeerRoutes, greetPeer } from "./peer-routes.js";
 import type { Presented } from "./enrollment.js";
 import type { PeerStore } from "./peer-store.js";
 
@@ -266,4 +266,63 @@ test("an enrollment no card holds is refused, and invited back rather than unpai
         refusal: `no capability card grants this device anything right now`,
         retry: true,
     });
+});
+
+// The greeting runs inside a socket handler whose promise nobody awaits, so a rejection there is unhandled.
+const greeting = (overrides: { pushed?: () => Promise<boolean>; describe?: () => Promise<unknown> } = {}) => {
+    const order: string[] = [];
+    const warned: Record<string, unknown>[] = [];
+    const hub = {
+        pushScopes: jest.fn(async () => {
+            order.push("pushScopes");
+            return (await overrides.pushed?.()) ?? true;
+        }),
+        observe: jest.fn(() => void order.push("observe")),
+    };
+    const client = {
+        describe: jest.fn(async () => {
+            order.push("describe");
+            return (await overrides.describe?.()) ?? { os: "linux" };
+        }),
+        ping: async () => ({}),
+    };
+    const hangUp = jest.fn();
+    const onConnected = jest.fn();
+    const greeted = greetPeer({ logger: { warn: (data: Record<string, unknown>) => void warned.push(data) } } as unknown as Services, "hosts", hub, {
+        id: "laptop",
+        client,
+        scopes: { shell: "on" },
+        hangUp,
+        onConnected,
+    });
+    return { greeted, order, warned, hangUp, onConnected, client };
+};
+
+test("a greeted peer gets its grant before it is asked what it is", async () => {
+    const run = greeting();
+    await run.greeted;
+    expect(run.order).toEqual(["pushScopes", "describe", "observe"]);
+    expect(run.onConnected).toHaveBeenCalledWith("laptop", { os: "linux" });
+    expect(run.hangUp).not.toHaveBeenCalled();
+});
+
+test("a socket that closes between hello and describe is logged and hung up, never an unhandled rejection", async () => {
+    const run = greeting({
+        describe: async () => {
+            throw new Error("Cannot send message, WebSocket is not open.");
+        },
+    });
+    await expect(run.greeted).resolves.toBeUndefined();
+    expect(run.warned).toEqual([expect.objectContaining({ id: "laptop" })]);
+    expect(run.hangUp).toHaveBeenCalledTimes(1);
+    expect(run.onConnected).not.toHaveBeenCalled();
+});
+
+// The hub already dropped the socket its push failed on; asking that socket anything else only fails again.
+test("a grant the hub could not deliver ends the greeting without asking the peer anything", async () => {
+    const run = greeting({ pushed: async () => false });
+    await run.greeted;
+    expect(run.client.describe).not.toHaveBeenCalled();
+    expect(run.hangUp).not.toHaveBeenCalled();
+    expect(run.onConnected).not.toHaveBeenCalled();
 });

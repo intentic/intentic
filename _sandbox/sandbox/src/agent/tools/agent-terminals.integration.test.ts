@@ -1,9 +1,11 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { agentShellBusy } from "./agent-terminals.js";
+import { agentShellBusy, PIPESTATUS_TRAP } from "./agent-terminals.js";
+import { guardSelfMatch } from "./self-kill-guard.js";
 
 // Runs against a real tmux server: the dead-vs-running window distinction (remain-on-exit) needs a real process, not a
 // stub.
@@ -87,4 +89,43 @@ test("an unnameable session id is not busy", async () => {
     await server();
 
     expect(await agentShellBusy("///")).toBe(false);
+});
+
+// A real bash: which pipeline PIPESTATUS names inside an EXIT trap, and whether the trap disturbs the exit status, are
+// properties of the shell, not of the string.
+test("the pipeline trap leaves the last pipeline's statuses and the command's own exit status", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "pipestatus-"));
+    const file = join(scratch, "pipestatus");
+    const run = (command: string, env: NodeJS.ProcessEnv = { ...process.env, INTENTIC_PIPESTATUS_FILE: file }) => {
+        const result = spawnSync("bash", ["-c", `${PIPESTATUS_TRAP}${command}`], { env, encoding: "utf8" });
+        return { status: result.status, stdout: result.stdout, stderr: result.stderr, statuses: readFileSync(file, "utf8") };
+    };
+    try {
+        expect(run("echo out; false | true")).toEqual({ status: 0, stdout: "out\n", stderr: "", statuses: "1 0 " });
+        // Only the LAST pipeline is reported; an earlier one's failure is not.
+        expect(run("false | true; echo done | cat")).toEqual({ status: 0, stdout: "done\n", stderr: "", statuses: "0 0 " });
+        expect(run("yes | head -1").statuses).toBe("141 0 ");
+        expect(run("true | (exit 3)").status).toBe(3);
+        expect(run("exit 4").status).toBe(4);
+        // No file named (the no-tmux fallback): the trap writes nowhere and says nothing.
+        const bare = spawnSync("bash", ["-c", `${PIPESTATUS_TRAP}false | true`], { env: { PATH: process.env["PATH"] ?? "" }, encoding: "utf8" });
+        expect({ status: bare.status, stderr: bare.stderr }).toEqual({ status: 0, stderr: "" });
+    } finally {
+        await rm(scratch, { recursive: true, force: true });
+    }
+});
+
+// pgrep, never pkill: the same full-line match, without killing anything on a shared machine.
+test("a bracketed pattern still finds its process, and no longer finds the shell that names it", async () => {
+    const marker = `zz-self-match-${String(process.pid)}`;
+    const target = spawn("bash", ["-c", `exec -a ${marker} sleep 30`], { stdio: "ignore" });
+    const pid = String(target.pid);
+    try {
+        await settle(async () => readFileSync(`/proc/${pid}/cmdline`, "utf8").startsWith(marker));
+        const found = (command: string): string[] => spawnSync("bash", ["-c", `${command}; echo end`], { encoding: "utf8" }).stdout.trim().split("\n");
+        expect(found(guardSelfMatch(`pgrep -f ${marker}`).command)).toEqual([pid, "end"]);
+        expect(found(`pgrep -f ${marker}`)).toEqual([pid, expect.any(String), "end"]);
+    } finally {
+        target.kill();
+    }
 });

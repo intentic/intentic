@@ -98,10 +98,11 @@ async function* runPiTurn(
             return settled(true);
         }
 
+        const clock = turnWatchdog(timeouts);
         const pull = watchedPull({
             take: () => state.queue.shift(),
             settled: () => state.exited,
-            clock: turnWatchdog(timeouts),
+            clock,
             wait: state.wait,
             // An abort narrows the wait to a grace window: Pi usually settles the run, but a wedged provider call may
             // never, and the user has already asked for their turn back.
@@ -138,7 +139,7 @@ async function* runPiTurn(
         // it, so the next send resumes the conversation.
         sendAbort();
         proc.kill();
-        yield { kind: "error", message: "Pi timed out, no activity from the agent. It was stopped; send again to retry." };
+        yield { kind: "error", message: `Pi timed out: ${clock.expiry()}. It was stopped; send again to retry.` };
         return settled(true);
     } finally {
         unwatchAbort();

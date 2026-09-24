@@ -44,6 +44,9 @@ test("a slot held by a real command is found, and names the process holding it",
         // queue-run execs the command, so the pid holding the lock is the one that was spawned.
         expect(slots[0]?.pid).toBe(child.pid);
         expect(slots[0]?.holderAgeSeconds).toBeGreaterThanOrEqual(0);
+        // Named by what it runs, read off the holder itself; whether `bash -c` execs its last command is bash's version.
+        expect(slots[0]?.command).toMatch(/^(bash -c echo held > .+; )?sleep 30$/u);
+        expect(slots[0]?.cwd).toBe(process.cwd());
     } finally {
         child.kill("SIGKILL");
     }

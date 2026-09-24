@@ -177,7 +177,7 @@ export const createGrokRunner = (openCode: OpenCodeService, timeouts: TurnTimeou
                     if (result === EXPIRED) {
                         next.catch(() => {}); // swallow the abandoned read
                         await c.session.abort({ path: { id: sessionId } }).catch(() => {});
-                        throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} turn timed out waiting for OpenCode.`);
+                        throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} turn timed out waiting for OpenCode: ${clock.expiry()}.`);
                     }
                     if (result.done) {
                         // Stream closed without the turn ending; refuseEarlyClose throws unless this turn's own abort

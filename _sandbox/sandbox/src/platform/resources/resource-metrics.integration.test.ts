@@ -13,7 +13,7 @@ test("samples immediately into the durable logs tree as JSONL", async () => {
     const historyRoot = await mkdtemp(join(tmpdir(), "resource-metrics-"));
     roots.push(historyRoot);
     const snapshot: ResourceSnapshot = {
-        schema: 1,
+        schema: 2,
         at: "2026-08-09T00:00:00.000Z",
         uptimeSeconds: 12,
         window: { eventLoop: { delayP99Ms: 4 } },
@@ -52,7 +52,7 @@ test("an empty history root is the explicit persistence opt-out", async () => {
 
 // OOM alarm: fires on the delta between samples, never on the first sample after a restart.
 const withCgroup = (at: string, kills: number, roles: Record<string, number>): ResourceSnapshot => ({
-    schema: 1,
+    schema: 2,
     at,
     uptimeSeconds: 1,
     window: {},

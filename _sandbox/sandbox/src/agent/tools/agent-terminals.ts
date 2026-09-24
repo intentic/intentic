@@ -13,6 +13,7 @@ import { type HeavyCommands, matchHeavyCommand } from "../../platform/resources/
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type BackgroundJob, type BackgroundJobSeed, jobCommandLine, openBackgroundJob } from "./background-jobs.js";
 import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
+import { guardSelfMatch, selfKillRefusal } from "./self-kill-guard.js";
 
 // Rewrites every Bash tool command through bin/tmux-run so it runs visibly in the `agent-<sdk session>` tmux session
 // the terminal panel attaches to; subagent Bash calls land in the same session as extra windows.
@@ -66,6 +67,10 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
 
 // Demotes every agent command (nice +10, ionice); `bash -c` wraps it since `nice` execs a binary not a keyword.
 const POLITE_PREFIX = "nice -n 10 ionice -c 2 -n 7 ";
+
+// Leaves the last pipeline's per-stage statuses where bin/tmux-run's pane exports INTENTIC_PIPESTATUS_FILE. An EXIT
+// trap on the command's first line: its text, line numbers and exit status stay the agent's own.
+export const PIPESTATUS_TRAP = `trap 'printf "%s " "\${PIPESTATUS[@]}" 2>/dev/null >"\${INTENTIC_PIPESTATUS_FILE:-/dev/null}"' EXIT; `;
 
 // Bounds concurrent heavy commands via bin/queue-run, since demotion rations CPU but not memory. Spliced inside the
 // namespace hop and the demotion, so the slot covers the whole forked tree.
@@ -160,7 +165,10 @@ export const bashTmuxHooks = (
                         // own.
                         const redirected =
                             isolation !== undefined && isolation.anchor === undefined ? redirectCommand(tool.command, isolation.plan) : tool.command;
-                        const command = redirected;
+                        // Every copy below, `-c` included, carries the rewritten pattern: each is some process's
+                        // command line.
+                        const guarded = guardSelfMatch(redirected);
+                        const command = guarded.command;
                         // A secret reference resolves into the executed line's value; `-c` below keeps the
                         // reference-form `command`.
                         let executed = command;
@@ -189,12 +197,31 @@ export const bashTmuxHooks = (
                                 return "";
                             }
                         })();
+                        const shell = `bash -c ${shellQuote(`${PIPESTATUS_TRAP}${executed}`)}`;
                         // Namespace hop and demotion sit inside the wrapper; the forked tree inherits both, tmux-run
                         // stays outside.
                         const inner =
                             isolation?.anchor !== undefined
-                                ? `${stamp}${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}${queue}bash -c ${shellQuote(executed)}`
-                                : `${stamp}${POLITE_PREFIX}${queue}bash -c ${shellQuote(executed)}`;
+                                ? `${stamp}${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}${queue}${shell}`
+                                : `${stamp}${POLITE_PREFIX}${queue}${shell}`;
+                        // The window name rides the wrapper's command line too, where a pattern it contains matches.
+                        const slug = windowSlug(tool.description);
+                        const name = guarded.matches.some((match) => match.pattern.test(slug)) ? "run" : slug;
+                        // `-c` carries the command as written; cleaner matching reads it too, not the wrapped line
+                        // tmux-run executes.
+                        const line = (jobFlag: string): string =>
+                            `${TMUX_RUN_BIN} ${envFlags}${jobFlag}-c ${shellQuote(command)} ${session} ${shellQuote(inner)} ${name}`;
+                        // Judged before a job is filed, so a refusal leaves nothing behind.
+                        const suicidal = guarded.matches.find((match) => match.kills && match.pattern.test(line("")));
+                        if (suicidal !== undefined) {
+                            return {
+                                hookSpecificOutput: {
+                                    hookEventName: "PreToolUse",
+                                    permissionDecision: "deny",
+                                    permissionDecisionReason: selfKillRefusal(suicidal),
+                                },
+                            };
+                        }
                         // Filed before the command is rewritten, so the flag and the registry entry cannot disagree
                         // about which dir holds this job's completion. A dir that cannot be made leaves the call
                         // ordinary rather than failing it.
@@ -207,9 +234,7 @@ export const bashTmuxHooks = (
                                 hookEventName: "PreToolUse",
                                 updatedInput: {
                                     ...(tool as Record<string, unknown>),
-                                    // `-c` carries the command as written; cleaner matching reads it too, not the
-                                    // wrapped line tmux-run executes.
-                                    command: `${TMUX_RUN_BIN} ${envFlags}${job === undefined ? "" : `-b ${shellQuote(job.dir)} `}-c ${shellQuote(command)} ${session} ${shellQuote(inner)} ${windowSlug(tool.description)}`,
+                                    command: line(job === undefined ? "" : `-b ${shellQuote(job.dir)} `),
                                 },
                             },
                         };

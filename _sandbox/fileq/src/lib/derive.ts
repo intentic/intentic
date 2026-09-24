@@ -18,6 +18,7 @@ import { odsDeriver } from "./derivers/ods.js";
 import { odtDeriver } from "./derivers/odt.js";
 import { pdfDeriver } from "./derivers/pdf.js";
 import { pptxDeriver } from "./derivers/pptx.js";
+import { profileDeriver } from "./derivers/profile.js";
 import { rtfDeriver } from "./derivers/rtf.js";
 import { xlsxDeriver } from "./derivers/xlsx.js";
 import { isFresh, readSidecar, removeSidecar, sidecarBody, sidecarPathFor, sha256OfFile, writeSidecar } from "./sidecar.js";
@@ -40,6 +41,7 @@ export const DERIVERS: Record<Format, Deriver> = {
     rtf: rtfDeriver,
     epub: epubDeriver,
     archive: archiveDeriver,
+    profile: profileDeriver,
 };
 
 // Above this, a derivation isn't background-cheap and the file is data to process, not shadow; skipped loudly.

@@ -9,7 +9,7 @@ import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 // daemon.log, and resource-metrics.jsonl. Kept under historyRoot, outside the agent's /work mount.
 
 // Prune policy:
-// - truncate a file over its cap to its newest tail (safe under append-only writers)
+// - truncate a file over its cap to its newest whole lines (safe under append-only writers)
 // - drop files idle past MAX_AGE_MS
 // - keep only the newest MAX_FILES
 const MAX_FILE_BYTES = 5_000_000;
@@ -53,7 +53,17 @@ export const listLogFiles = async (root: string): Promise<LogFileEntry[]> => {
     return files.filter((file) => file !== undefined).toSorted((a, b) => b.modifiedAt - a.modifiedAt);
 };
 
-// Newest `bytes` of a log file; undefined for a missing file or a name that escapes root (404).
+// `chunk` from `cut` on, moved forward past the first line break unless `chunk[cut - 1]` is one, so a JSONL tail never
+// opens on half a line. A cut with no line break after it is one line's own tail and is kept whole.
+export const lineAligned = (chunk: Buffer, cut: number): Buffer => {
+    if (cut === 0) {
+        return chunk;
+    }
+    const newline = chunk.indexOf(0x0a, cut - 1);
+    return newline === -1 ? chunk.subarray(cut) : chunk.subarray(newline + 1);
+};
+
+// Newest `bytes` of a log file, starting on a whole line; undefined for a missing file or a name that escapes root (404).
 export const tailLogFile = async (root: string, name: string, bytes: number): Promise<{ sizeBytes: number; text: string } | undefined> => {
     const target = resolveWithin(root, name);
     if (target === undefined) {
@@ -68,8 +78,10 @@ export const tailLogFile = async (root: string, name: string, bytes: number): Pr
     try {
         const size = (await handle.stat()).size;
         const length = Math.min(bytes, size);
-        const { buffer } = await handle.read(Buffer.alloc(length), 0, length, size - length);
-        return { sizeBytes: size, text: buffer.toString("utf8") };
+        // One byte before the cut rides along, so lineAligned can tell a cut that already fell on a line boundary.
+        const lead = length < size ? 1 : 0;
+        const { buffer } = await handle.read(Buffer.alloc(length + lead), 0, length + lead, size - length - lead);
+        return { sizeBytes: size, text: lineAligned(buffer, lead).toString("utf8") };
     } finally {
         await handle.close();
     }
@@ -94,8 +106,8 @@ export const pruneLogFiles = async (root: string): Promise<void> => {
             .filter((file) => file.size > capFor(root, file.path).maxBytes)
             .map(async (file) => {
                 // Read-then-rewrite can drop an append racing the rewrite; acceptable for debug logs at these caps.
-                const tail = (await readFile(file.path)).subarray(-capFor(root, file.path).tailBytes);
-                await writeFile(file.path, tail);
+                const whole = await readFile(file.path);
+                await writeFile(file.path, lineAligned(whole, Math.max(0, whole.length - capFor(root, file.path).tailBytes)));
             }),
     );
 };

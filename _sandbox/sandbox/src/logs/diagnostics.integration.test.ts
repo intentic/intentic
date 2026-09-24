@@ -117,6 +117,25 @@ test("a window entirely inside what was read is never flagged as truncated", asy
     expect(complete.windowTruncated).toBe(false);
 });
 
+// A cut that falls between two lines has torn nothing; dropping the line after it would lose a good line.
+test("a read cut on a line boundary keeps that line, and one cut mid-line drops only the torn one", async () => {
+    const dir = await root();
+    const newest = line({ level: "error", message: "newest" });
+    const first = (pad: number): string => line({ level: "error", message: "first", pad: "x".repeat(pad) });
+    // Sized so the budget's cut falls exactly at the start of `first`.
+    const pad = TAIL_BUDGET_BYTES - `${first(0)}\n${newest}\n`.length;
+    const older = line({ level: "error", message: "older" });
+
+    await write(dir, "daemon.log", [older, first(pad), newest]);
+    const onBoundary = await readLogLines(dir, { file: "daemon.log", level: "error", limit: 10 });
+    expect(onBoundary.lines.map((l) => l["message"])).toEqual(["newest", "first"]);
+
+    await write(dir, "daemon.log", [older, first(pad + 1), newest]);
+    const midLine = await readLogLines(dir, { file: "daemon.log", level: "error", limit: 10 });
+    expect(midLine.lines.map((l) => l["message"])).toEqual(["newest"]);
+    expect(midLine.windowTruncated).toBe(true);
+});
+
 // ---- the resource series ----
 
 const sample = (minute: number, over: Record<string, unknown>): string => JSON.stringify({ at: AT(minute), ...over });

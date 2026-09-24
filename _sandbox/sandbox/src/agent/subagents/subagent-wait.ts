@@ -137,21 +137,28 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                       sdk().tool(
                           "answer",
                           "Answer a QUESTION a child you started is parked on (wait reports blocked and carries the question). " +
-                              "Pass your picks keyed by the question's own text, values as chosen option labels or your own words. " +
+                              "Pass one entry per question: its own text, and your picks as chosen option labels or your own words. " +
                               "Only questions: a permission hold or a plan approval is the owner's consent to give, and this tool " +
                               "refuses those.",
                           {
                               child: z.string().min(1).describe("The child's id, from spawn."),
+                              // Never z.record: the SDK's JSON-schema converter throws on one, emptying this server's tools/list.
                               answers: z
-                                  .record(z.string(), z.array(z.string()))
-                                  .describe("Your picks, keyed by question text; each value is the chosen labels (or your own words)."),
+                                  .array(
+                                      z.object({
+                                          question: z.string().min(1).describe("The question's own text."),
+                                          picks: z.array(z.string()).describe("The chosen option labels, or your own words."),
+                                      }),
+                                  )
+                                  .describe("Your picks, one entry per question."),
                           },
                           async (args) => {
                               const children = deps.children;
                               if (children === undefined) {
                                   return answer({ ok: false, message: "This turn cannot supervise agents." });
                               }
-                              return answer(await children.answer(args.child, args.answers));
+                              const picks = Object.fromEntries(args.answers.map((entry) => [entry.question, entry.picks]));
+                              return answer(await children.answer(args.child, picks));
                           },
                           { annotations: toolAnnotations("write") },
                       ),

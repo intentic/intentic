@@ -141,7 +141,7 @@ describe("a settlement", () => {
             conversationId: "settle-1",
             profile: {},
             rules: [suite],
-            ledger: { edited: () => [], verdict: () => undefined, standing: () => noCode, noteEdit: () => {}, noteCommand: () => {} },
+            ledger: { edited: () => [], verdict: () => undefined, standing: () => noCode, noteEdit: () => {}, noteCommand: () => {}, noteCheck: () => {} },
         };
         await performSettlement(
             deps,

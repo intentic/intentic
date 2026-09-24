@@ -60,9 +60,17 @@ export interface InvariantRegistry {
 // A check reads a file or two; slower than this means gone wrong, and the sweep must not hold shutdown open.
 const CHECK_TIMEOUT_MS = 5_000;
 
+// A deadline timer firing this late was held up by a stalled event loop, which also holds the check's finished I/O
+// behind it: timers run before I/O callbacks, so expiring here would blame a healthy check for the stall.
+const STALLED_BY_MS = 1_000;
+
+// How many stalls may restart one check's allowance, so a check hung through a thrashing machine still expires.
+const MAX_STALL_RESTARTS = 3;
+
 // A live signal, not a ledger; the durable copy is the log line each violation writes.
 const MAX_VIOLATIONS = 200;
 
+// Races `work` against `ms` of running time: a stall restarts the allowance rather than spending it.
 const deadline = async (work: Promise<void> | void, ms: number): Promise<void> => {
     if (!(work instanceof Promise)) {
         return;
@@ -72,7 +80,17 @@ const deadline = async (work: Promise<void> | void, ms: number): Promise<void> =
         await Promise.race([
             work,
             new Promise<never>((_, reject) => {
-                timer = setTimeout(() => reject(new Error(`check did not settle within ${ms}ms`)), ms);
+                const arm = (restarts: number): void => {
+                    const due = Date.now() + ms;
+                    timer = setTimeout(() => {
+                        if (Date.now() - due > STALLED_BY_MS && restarts < MAX_STALL_RESTARTS) {
+                            arm(restarts + 1);
+                            return;
+                        }
+                        reject(new Error(`check did not settle within ${ms}ms`));
+                    }, ms);
+                };
+                arm(0);
             }),
         ]);
     } finally {

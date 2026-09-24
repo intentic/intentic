@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { jsonFile } from "../../store/json-file.js";
 import type { ManifestProblem } from "../../store/manifest-problems.js";
+import { heredocSpans } from "../../heredoc.js";
 
 // Which agent commands are too big to run four at once, as an editable list: a monorepo fan-out exhausts memory, which
 // no scheduling class rations, and the admission gate can't see a command a running turn spawns. Enforced at the
@@ -87,8 +88,9 @@ export const DEFAULT_HEAVY_COMMANDS: HeavyCommands = HeavyCommandsSchema.parse({
         // Never two at once, not even after the wait: overlapping is the measured peak (24.9 GiB against a 16 GiB cap),
         // and a verification that did not run costs a check the next land repeats.
         { id: "repo-verify", pattern: "\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?verify(:\\S+)?\\b", limit: 1, onDeadline: "skip" },
-        { id: "vitest", pattern: "\\bvitest\\b" },
-        { id: "typechecker", pattern: "\\b(tsc|tsgo|vue-tsc)\\b" },
+        // A program's name joined to `.` or `-` is a file or another word (`vitest.config.ts`, `check-tsc.mjs`), not the program.
+        { id: "vitest", pattern: "(?<![-.])\\bvitest\\b(?![-.])" },
+        { id: "typechecker", pattern: "(?<![-.])\\b(tsc|tsgo|vue-tsc)\\b(?![-.])" },
         { id: "turbo-fanout", pattern: "\\bturbo\\b[^&|;]*\\brun\\b[^&|;]*\\b(build|test|typecheck|check)\\b" },
         { id: "package-script", pattern: "\\b(pnpm|npm|yarn|bun)\\b[^&|;]*\\b(test|typecheck|verify|check|build)\\b" },
     ],
@@ -195,6 +197,17 @@ const ASSIGNMENT_WORD = /(?:^|\s)[A-Za-z_][A-Za-z0-9_]*=\S*/gu;
 const matchableText = (segment: string): string =>
     SHELLS.test(segment) ? segment : segment.replace(QUOTED, " ").replace(COMMENT, " ").replace(GLOB_WORD, " ").replace(ASSIGNMENT_WORD, " ");
 
+// A heredoc's body is stdin for the command that opens it (`cat > f`, `python3 -`), so its lines are data; only a shell
+// reading one runs it, and that body stays. Later spans are cut first so earlier offsets still hold.
+const withoutHeredocBodies = (command: string): string =>
+    heredocSpans(command)
+        .toReversed()
+        .reduce((text, span) => {
+            const openingLine = text.slice(text.lastIndexOf("\n", span.start - 1) + 1, span.start);
+            const opener = openingLine.slice(0, openingLine.indexOf("<<")).split(/[;&|(]/u).at(-1) ?? "";
+            return SHELLS.test(opener) ? text : text.slice(0, span.start) + text.slice(span.end);
+        }, command);
+
 // Whether this command is one of the big ones, as a pure function of the line and config, matched against the agent's
 // own command before the daemon's wrapping and before secret resolution.
 export const matchHeavyCommand = (command: string, config: HeavyCommands, report?: (problem: ManifestProblem) => void): HeavyMatch | undefined => {
@@ -203,7 +216,7 @@ export const matchHeavyCommand = (command: string, config: HeavyCommands, report
         const one = compile(rule, report);
         return one === undefined ? [] : [one];
     });
-    for (const segment of commandSegments(command.slice(0, MATCH_LIMIT)).map(matchableText)) {
+    for (const segment of commandSegments(withoutHeredocBodies(command.slice(0, MATCH_LIMIT))).map(matchableText)) {
         for (const { rule, regex } of compiled) {
             if (!regex.test(segment)) {
                 continue;

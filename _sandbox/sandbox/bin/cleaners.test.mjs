@@ -90,7 +90,8 @@ test("cleanLines: a single line over the whole budget is truncated rather than d
 });
 
 test("wide: an unbroken run is cut to its head and tail, and prose on the same line is not", () => {
-    const blob = "x".repeat(5000);
+    // Past the 16 KB log budget: under it, nothing needs cutting.
+    const blob = "x".repeat(20_000);
     const out = cleanLines([`config.json:1:{"icons":"${blob}"} loaded from disk`], {
         command: "rg -n icons config.json",
         exitCode: "0",
@@ -102,6 +103,32 @@ test("wide: an unbroken run is cut to its head and tail, and prose on the same l
     expect(out[0].endsWith(" loaded from disk")).toBe(true);
     expect(out[0]).toMatch(/… \d+ chars elided …/);
     expect(out[0].length).toBeLessThan(400);
+});
+
+test("wide: a blob that fits the budget is shown whole, since it is what the command was asked for", () => {
+    const page = (from) => JSON.stringify({ runs: Array.from({ length: 40 }, (_, i) => ({ id: from + i, conclusion: "failure", name: "ci-audit" })) });
+    const command = "gh run list --json id,conclusion,name | jq -c .";
+    expect(cleanLines([page(0)], { command, exitCode: "0", enabled: new Set(CLEANERS) }).lines).toEqual([page(0)]);
+    // Eight such pages are over the budget, and only then are the runs cut.
+    const over = cleanLines(Array.from({ length: 8 }, (_, i) => page(i * 40)), { command, exitCode: "0", enabled: new Set(CLEANERS) }).lines;
+    expect(over.map((line) => /… \d+ chars elided …/.test(line))).toEqual(Array.from({ length: 8 }, () => true));
+});
+
+// "The shell output filter was rewriting `ci-audit` to `n`" was `rg -rn ci-audit`: ripgrep's -r is --replace. The
+// filter's own folds keep every token, and the note names the flag that did it.
+test("files/hits: a token repeated across paths and hits survives every fold verbatim", () => {
+    const hits = Array.from({ length: 8 }, (_, i) => `_tools/scripts/ci-audit.mjs:${i + 1}:// ci-audit step ${i}: ci-audit`);
+    // Two directories, so the shared-root trim runs too; one of them is literally named `n`.
+    const paths = Array.from({ length: 12 }, (_, i) => `_tools/ci-audit/${i % 2 === 0 ? "ci-audit" : "n"}/ci-audit-${i}.mjs`);
+    const out = cleanLines([...hits, "", ...paths], { command: "rg -n ci-audit _tools", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
+    expect(out).toEqual([
+        "_tools/scripts/ci-audit.mjs:1:// ci-audit step 0: ci-audit",
+        ...Array.from({ length: 7 }, (_, i) => `  ${i + 2}:// ci-audit step ${i + 1}: ci-audit`),
+        "",
+        "12 paths in 2 directories under _tools/ci-audit/:",
+        "ci-audit/ ci-audit-0.mjs ci-audit-2.mjs ci-audit-4.mjs ci-audit-6.mjs ci-audit-8.mjs ci-audit-10.mjs",
+        "n/ ci-audit-1.mjs ci-audit-3.mjs ci-audit-5.mjs ci-audit-7.mjs ci-audit-9.mjs ci-audit-11.mjs",
+    ]);
 });
 
 test("wide: a long line of words keeps every character", () => {
@@ -224,7 +251,7 @@ test("cleanLines: a log-shaped command is still capped at MAX", () => {
 
 test("filterOutput: strips ANSI and appends a footer with the handle when the trim is big enough to retrieve", () => {
     const raw = `${[...Array.from({ length: 30 }, (_, i) => `Progress: resolved ${i}00, reused ${i}00, downloaded 0, added 0`), "\x1b[32mdone\x1b[0m"].join("\n")}\n`;
-    const out = filterOutput(raw, "pnpm install", "0", "1", "/logs/x.log").out;
+    const out = filterOutput(raw, { command: "pnpm install", exitCode: "0", durationS: "1", retain: () => "/logs/x.log" }).out;
     expect(out).toContain("done");
     expect(out).not.toContain("\x1b[");
     expect(out).toContain("retrieve-output /logs/x.log");
@@ -232,7 +259,7 @@ test("filterOutput: strips ANSI and appends a footer with the handle when the tr
 
 test("filterOutput: a small trim keeps the counts and drops the retrieval handle", () => {
     const raw = `${[...Array.from({ length: 4 }, (_, i) => `Progress: resolved ${i}00, reused ${i}00, downloaded 0, added 0`), "done"].join("\n")}\n`;
-    const out = filterOutput(raw, "pnpm install", "0", "1", "/logs/x.log").out;
+    const out = filterOutput(raw, { command: "pnpm install", exitCode: "0", durationS: "1", retain: () => "/logs/x.log" }).out;
     expect(out).toContain("5 lines filtered to 1");
     expect(out).not.toContain("retrieve-output");
 });
@@ -240,7 +267,7 @@ test("filterOutput: a small trim keeps the counts and drops the retrieval handle
 test("filterOutput: a trim smaller than the footer it would buy keeps the trim and drops the footer", () => {
     // The never-worse rule sits behind the handle gate, not replaced by it: a result must never grow.
     const raw = "total 48\n-rw-r--r--  1 root root  3801 Jul 30 13:38 a.ts\n";
-    const out = filterOutput(raw, "ls -la", "0", "1", "/logs/x.log").out;
+    const out = filterOutput(raw, { command: "ls -la", exitCode: "0", durationS: "1", retain: () => "/logs/x.log" }).out;
     expect(out.length).toBeLessThanOrEqual(raw.length);
     expect(out).toContain("644 a.ts  3.7K");
     expect(out).not.toContain("retrieve-output");
@@ -248,12 +275,13 @@ test("filterOutput: a trim smaller than the footer it would buy keeps the trim a
 
 test("filterOutput: never emits more than it was given", () => {
     for (const raw of ["x\n", "total 0\n", "a\nb\n", "(no notable output)\n"]) {
-        expect(filterOutput(raw, "ls -la /empty", "0", "1", "/logs/x.log").out.length).toBeLessThanOrEqual(raw.length);
+        const { out } = filterOutput(raw, { command: "ls -la /empty", exitCode: "0", durationS: "1", retain: () => "/logs/x.log" });
+        expect(out.length).toBeLessThanOrEqual(raw.length);
     }
 });
 
 test("filterOutput: no footer when nothing was dropped", () => {
-    expect(filterOutput("hello\nworld\n", "echo hi", "0", "0", "").out).toBe("hello\nworld\n");
+    expect(filterOutput("hello\nworld\n", { command: "echo hi", exitCode: "0", durationS: "0" }).out).toBe("hello\nworld\n");
 });
 
 test("cleaner: drops per-test pass lines on green, keeps the summary", () => {
@@ -529,9 +557,9 @@ const body = (label) => `${label}: ${"x".repeat(600)}`;
 
 test("collapseCached: first run records and passes through, an identical repeat collapses to the marker", () => {
     const store = memoryStore();
-    const first = collapseCached(body("git status output"), "git status", store, "/logs/x.log");
+    const first = collapseCached(body("git status output"), "git status", store, () => "/logs/x.log");
     expect(first).toEqual({ body: body("git status output"), cached: false });
-    const second = collapseCached(body("git status output"), "git status", store, "/logs/x.log");
+    const second = collapseCached(body("git status output"), "git status", store, () => "/logs/x.log");
     expect(second.cached).toBe(true);
     expect(second.body).toContain(CACHE_MARKER);
     expect(second.body).toContain("retrieve-output /logs/x.log");
@@ -539,24 +567,24 @@ test("collapseCached: first run records and passes through, an identical repeat 
 
 test("collapseCached: different output for the same command is not a hit", () => {
     const store = memoryStore();
-    collapseCached(body("first"), "date", store, "");
-    expect(collapseCached(body("second"), "date", store, "").cached).toBe(false);
+    collapseCached(body("first"), "date", store);
+    expect(collapseCached(body("second"), "date", store).cached).toBe(false);
 });
 
 // The floor also stops short bodies colliding across unrelated commands, and stops a small result being replaced by a
 // larger pointer.
 test("collapseCached: a body under the floor is never collapsed, and is never recorded as a back-reference", () => {
     const store = memoryStore();
-    expect(collapseCached("OK", "verify-install.sh", store, "/logs/x.log").cached).toBe(false);
-    expect(collapseCached("OK", "verify-install.sh", store, "/logs/x.log").cached).toBe(false);
+    expect(collapseCached("OK", "verify-install.sh", store, () => "/logs/x.log").cached).toBe(false);
+    expect(collapseCached("OK", "verify-install.sh", store, () => "/logs/x.log").cached).toBe(false);
     // It also cannot be named as the earlier producer for a different command that happens to print `OK` too.
-    expect(collapseCached("OK", "sleep 90; cat /tmp/smoke-run1.log", store, "").body).toBe("OK");
+    expect(collapseCached("OK", "sleep 90; cat /tmp/smoke-run1.log", store).body).toBe("OK");
 });
 
 test("collapseCached: an identical body from a DIFFERENT command collapses, naming the command that produced it", () => {
     const store = memoryStore();
-    collapseCached(body("the file contents"), "cat src/a.ts", store, "/logs/x.log");
-    const second = collapseCached(body("the file contents"), "sed -n '1,50p' src/a.ts", store, "/logs/x.log");
+    collapseCached(body("the file contents"), "cat src/a.ts", store, () => "/logs/x.log");
+    const second = collapseCached(body("the file contents"), "sed -n '1,50p' src/a.ts", store, () => "/logs/x.log");
     expect(second.cached).toBe(true);
     expect(second.body).toContain(CACHE_MARKER);
     expect(second.body).toContain("`cat src/a.ts`");
@@ -565,46 +593,48 @@ test("collapseCached: an identical body from a DIFFERENT command collapses, nami
 test("collapseCached: the named command is truncated so the marker stays cheap", () => {
     const store = memoryStore();
     const long = `cd /work/intentic && ${"./node_modules/.bin/vitest run src/very/long/path ".repeat(6)}`;
-    collapseCached(body("suite"), long, store, "");
-    const second = collapseCached(body("suite"), "pnpm test", store, "");
+    collapseCached(body("suite"), long, store);
+    const second = collapseCached(body("suite"), "pnpm test", store);
     expect(second.body).toContain("…");
     expect(second.body.length).toBeLessThan(300);
 });
 
 test("collapseCached: the back-reference keeps naming the earliest command, not the latest", () => {
     const store = memoryStore();
-    collapseCached(body("same"), "first-cmd", store, "");
-    collapseCached(body("same"), "second-cmd", store, "");
-    expect(collapseCached(body("same"), "third-cmd", store, "").body).toContain("`first-cmd`");
+    collapseCached(body("same"), "first-cmd", store);
+    collapseCached(body("same"), "second-cmd", store);
+    expect(collapseCached(body("same"), "third-cmd", store).body).toContain("`first-cmd`");
 });
 
 test("collapseCached: a body seen only under this same command still reads as a repeat, not a cross-reference", () => {
     const store = memoryStore();
-    collapseCached(body("out"), "ls", store, "");
-    expect(collapseCached(body("out"), "ls", store, "").body).toContain("a previous run this session");
+    collapseCached(body("out"), "ls", store);
+    expect(collapseCached(body("out"), "ls", store).body).toContain("a previous run this session");
 });
 
 test("filterOutput: cache collapses a byte-identical success repeat, and is a no-op without a store", () => {
     const store = memoryStore();
     // Must stay over CACHE_MIN_BYTES, or the collapse is declined before the never-worse guard runs.
     const raw = `${Array.from({ length: 20 }, (_, i) => `branch-${i} is up to date with origin/main and tracking it cleanly`).join("\n")}\n`;
-    expect(filterOutput(raw, "git branch -vv", "0", "0", "", new Set(CLEANERS), store).out).toBe(raw);
-    const repeat = filterOutput(raw, "git branch -vv", "0", "0", "/logs/y.log", new Set(CLEANERS), store).out;
+    expect(filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", enabled: new Set(CLEANERS), cacheStore: store }).out).toBe(raw);
+    const retain = () => "/logs/y.log";
+    const repeat = filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", retain, enabled: new Set(CLEANERS), cacheStore: store }).out;
     expect(repeat).toContain(CACHE_MARKER);
     // Without a store, the same input passes through unchanged.
-    expect(filterOutput(raw, "git branch -vv", "0", "0", "").out).toBe(raw);
+    expect(filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0" }).out).toBe(raw);
 });
 
 test("filterOutput: a repeat too short to pay for the collapse marker is left alone", () => {
     const store = memoryStore();
     const raw = "hello\nworld\n";
-    filterOutput(raw, "echo hi", "0", "0", "/logs/y.log", new Set(CLEANERS), store);
-    expect(filterOutput(raw, "echo hi", "0", "0", "/logs/y.log", new Set(CLEANERS), store).out).toBe(raw);
+    const options = { command: "echo hi", exitCode: "0", durationS: "0", retain: () => "/logs/y.log", enabled: new Set(CLEANERS), cacheStore: store };
+    filterOutput(raw, options);
+    expect(filterOutput(raw, options).out).toBe(raw);
 });
 
 test("filterOutput: cache disabled leaves a repeat untouched", () => {
     const store = memoryStore();
     const raw = `${Array.from({ length: 20 }, (_, i) => `branch-${i} is up to date with origin/main and tracking it cleanly`).join("\n")}\n`;
-    filterOutput(raw, "git branch -vv", "0", "0", "", parseCleaners("-cache"), store);
-    expect(filterOutput(raw, "git branch -vv", "0", "0", "", parseCleaners("-cache"), store).out).toBe(raw);
+    filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", enabled: parseCleaners("-cache"), cacheStore: store });
+    expect(filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", enabled: parseCleaners("-cache"), cacheStore: store }).out).toBe(raw);
 });

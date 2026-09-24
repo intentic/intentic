@@ -32,8 +32,9 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   which is what separates "git is slow" from "git was never started"), and cardinalities for the resident
   transcript, turn, browser, performance, and IQ owners. It is readable directly from a later sandbox shell (for example,
   `tail -n 20 /history/logs/resource-metrics.jsonl | jq .`) and through the existing authenticated
-  `GET /logs/file?name=resource-metrics.jsonl&bytes=1000000` route. The normal logs retention applies: files are
-  tail-truncated after 5 MB, expire after 30 days, and participate in the 100-file cap.
+  `GET /logs/file?name=resource-metrics.jsonl&bytes=1000000` route. The logs retention applies with this file's own
+  cap: past 40 MB it is cut back to its newest 30 MB of whole lines (other logs: 5 MB, cut to 1 MB), files expire after
+  30 days, and they participate in the 100-file cap.
 - **A failed turn leaves a record that outlives the feed it happened in.** Two facts about a turn used to live
   only in `activity.jsonl`, which prunes to its most recent entries, and in the client's event stream, which
   exists only while a browser is attached: that it failed, and what it failed with. So the most common failure in
@@ -72,7 +73,8 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   only record of whether a turn ended against the wall — and the only way anyone will ever answer whether badly
   timed compaction hurts, by joining those against outcome over months of real turns. All of it is folded off
   the normalized frame stream in `streamAgent`, subagents' calls included, so a Codex turn is judged exactly as
-  a Claude one is. No single stop-reason word is stored: which of the five modes the facts add up to is a rule
+  a Claude one is; the Stop's own `turn.ending` command joins the same ledger, so a `pnpm verify:turn` that passed
+  after the last edit is the `check` of a `verified` turn, named `pnpm verify:turn (end of turn)`. No single stop-reason word is stored: which of the five modes the facts add up to is a rule
   that will get better, and a word written down now would freeze today's rule into rows that outlive it. The
   harness's own non-success result is classified too, `turn-cap` for a loop out of iterations and
   `harness-incomplete` for the rest, where both used to land as an uncoded failure — the one shape nothing
@@ -169,8 +171,8 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   installed workspace, with `nsenter` right there in its own command line. Unset rather than reassigned: with
   nothing to trust, every shell takes it from `getcwd()`, which `--wdns` already made correct.
 - **A `turn.ending` check says in the log where it ran** (`src/agent/run/harness/harness-hooks.ts`): `checks: check started`
-  and `checks: check settled` carry the command, `anchored`, the status, the exit code and the duration, the
-  same shape the push run has. Without them a check that exited 127 over a missing workspace binary left the only
+  and `checks: check settled` both carry the command, `anchored`, `cwd`, the session and the conversation id, and
+  the settled line adds the status, the exit code and the duration, the same shape the push run has. Without them a check that exited 127 over a missing workspace binary left the only
   record of itself in a model's transcript.
 - **A worktree's dependency mirrors take their form from the TURN's runtime, not the container's capability**
   (`entersNamespace` in `src/agent/routes/agent.routes.ts` → `ensure` → `linkMirrors` in `src/agents/worktrees/worktrees.ts`).

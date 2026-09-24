@@ -117,14 +117,16 @@ const followUpAt =
 // Logged like the pre-push check, since a red `turn.ending` command has two very different causes (broken work, or a
 // check that never saw the workspace's dependencies) told apart only by whether it ran anchored in the turn's namespace.
 const ruleRunnerIn =
-    (deps: TurnEndingHooksDeps, context: TurnContext): NonNullable<TurnHooks["runRuleCommand"]> =>
+    (deps: TurnEndingHooksDeps, input: AgentTurn, context: TurnContext): NonNullable<TurnHooks["runRuleCommand"]> =>
     async (command, timeoutMs, repo) => {
         const anchor = context.base.spec.isolation?.anchor;
         const from = Date.now();
         // A rule naming a repository runs inside it, in this turn's own tree: for an isolated turn that is its
         // worktree's copy of the repository, not the one on /work.
         const cwd = repoCwd(context.localCwd, repo);
-        deps.logger.info({ command, anchored: anchor !== undefined, cwd, session: CHECKS_SESSION }, "checks: check started");
+        // Both lines carry the same identity, so a settled line is attributable without its started line.
+        const identity = { command, anchored: anchor !== undefined, cwd, session: CHECKS_SESSION, ...opt("conversationId", input.conversationId) };
+        deps.logger.info(identity, "checks: check started");
         const run = await runRuleCommand(deps, {
             command: ruleCommandIn(command, anchor, repo),
             timeoutMs,
@@ -135,8 +137,7 @@ const ruleRunnerIn =
         });
         deps.logger.info(
             {
-                command,
-                anchored: anchor !== undefined,
+                ...identity,
                 status: run.status,
                 ...opt("exitCode", run.exitCode),
                 ...(run.timedOut === true ? { timedOut: true } : {}),
@@ -146,6 +147,15 @@ const ruleRunnerIn =
         );
         return run;
     };
+
+// A turn.ending command's run as the turn's own proof: after the last edit it verifies or fails the turn. A run that
+// errored or was cancelled measured nothing, as it does for the land (turn-checks.ts landingOutcome).
+const noteEndOfTurnCheck = (ledger: TurnContext["verification"], rule: Rule, run: RuleCommandRun): void => {
+    if (ledger === undefined || rule.action.kind !== "command" || (run.status !== "passed" && run.status !== "failed")) {
+        return;
+    }
+    ledger.noteCheck(`${rule.action.command} (end of turn)`, run.status === "passed", run.output);
+};
 
 // What the tree says an isolated turn changed. Only there: its branch holds nothing but its own work since the
 // main-line base, while the main checkout's dirty set is everyone's.
@@ -167,17 +177,17 @@ export const turnEndingHooksOf = (
     }
     const conversation = input.conversationId;
     return {
-        // The verdict goes to the conversation's actor, which keeps the card's line and the land's verdict apart: the land
-        // takes its copy once, the card goes on reading its own.
-        ...(conversation === undefined
-            ? {}
-            : {
-                  onCheckRun: (rule: Rule, run: RuleCommandRun) =>
-                      void deps.conversations.send(conversation, { kind: "check-ran", check: checkRunOf(rule, run) }),
-              }),
+        onCheckRun: (rule: Rule, run: RuleCommandRun) => {
+            noteEndOfTurnCheck(context.verification, rule, run);
+            // The conversation's actor keeps the card's line and the land's verdict apart: the land takes its copy once,
+            // the card goes on reading its own.
+            if (conversation !== undefined) {
+                void deps.conversations.send(conversation, { kind: "check-ran", check: checkRunOf(rule, run) });
+            }
+        },
         onRuleFired: ruleFiredAt(deps, input),
         onFollowUpOutcome: followUpAt(deps, input),
-        runRuleCommand: ruleRunnerIn(deps, context),
+        runRuleCommand: ruleRunnerIn(deps, input, context),
         // Asked only after a command has failed, so a healthy turn pays nothing: a check run mid-install isn't a verdict.
         dependencyInstalling: async () =>
             (await deps.dependencies.status())

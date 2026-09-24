@@ -128,6 +128,19 @@ test("pushScopes reaches a connected peer and reports when there is nobody to re
     expect(await live.pushScopes("desktop", { shell: "on" })).toBe(false);
 });
 
+// The oRPC link throws "Cannot send message, WebSocket is not open." when the socket closed under the push; a peer
+// left attached on its old grant would enforce a boundary the owner has already moved.
+test("a grant that cannot be delivered drops the peer instead of rejecting", async () => {
+    const live = hub();
+    const peer = fakePeer();
+    live.attach("laptop", peer.connection);
+    peer.client.setScopes.mockRejectedValueOnce(new Error("Cannot send message, WebSocket is not open."));
+
+    expect(await live.pushScopes("laptop", { shell: "off" })).toBe(false);
+    expect(peer.closed).toEqual(["grant not delivered"]);
+    expect(live.online("laptop")).toBe(false);
+});
+
 test("disconnect cuts the socket and takes the peer off the roster, forgetting what it said", async () => {
     const live = hub();
     const peer = fakePeer();

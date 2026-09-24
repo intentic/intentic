@@ -103,6 +103,25 @@ test("a glob is a pattern, not a program: shell syntax naming a tool does not qu
     expect(matched(`VITEST_MAX_WORKERS=4 turbo run test`)).toBe("turbo-fanout");
 });
 
+test("a program's name inside a file name is not the program: reading its config does not queue", () => {
+    expect(matched(`cd /work/intentic && sed -n 1,20p vitest.config.ts`)).toBeUndefined();
+    expect(matched(`node scripts/check-tsc.mjs`)).toBeUndefined();
+    expect(matched(`sed -n 1,5p _tools/scripts/vitest-workers.mjs`)).toBeUndefined();
+    // The program still matches on its own word, whatever files it is handed.
+    expect(matched(`npx vitest run --config=vitest.config.ts src/foo.test.ts`)).toBe("vitest");
+    expect(matched(`tsc -p tsconfig.test.json`)).toBe("typechecker");
+    expect(matched(`./node_modules/.bin/vue-tsc --noEmit`)).toBe("typechecker");
+});
+
+test("a heredoc's body is the opening command's stdin, not commands, unless a shell reads it", () => {
+    expect(matched(`cat > /tmp/rules.json <<'EOF'\n{ "run": "pnpm verify:turn" }\nEOF\nls`)).toBeUndefined();
+    expect(matched(`python3 - <<EOF\nprint("npx vitest run")\nEOF`)).toBeUndefined();
+    // A command after the delimiter is still judged, and a shell's heredoc is the commands it runs.
+    expect(matched(`cat > f <<'EOF'\nx\nEOF\npnpm test`)).toBe("package-script");
+    expect(matched(`bash <<'EOF'\npnpm test\nEOF`)).toBe("package-script");
+    expect(matched(`cd /work && sh -s <<-EOF\n\tturbo run build\n\tEOF`)).toBe("turbo-fanout");
+});
+
 // The regression: a quoted program is ARGUMENT text, and cutting it into fragments matched the rules against lines
 // that never ran. Measured before this: the awk line below waited in the heavy pool behind two repo-wide test runs.
 test("a separator inside quotes belongs to its argument, not to the command line", () => {

@@ -153,7 +153,9 @@ printf '%s\n' "$cmd" > "$d/cmd"
 # clean `git clone` came back as "exited 2" with its own untroubled output attached, once in a full test run and
 # never on a re-run. `mv` within one directory is atomic, so the file appears already complete or not at all.
 epitaph='#{?#{==:#{pane_dead_status},0},#[fg=green]✓ finished,#[fg=red]✗ #{?#{!=:#{pane_dead_signal},},signal #{pane_dead_signal},exit #{pane_dead_status}}}#[default] · #{t:pane_dead_time}'
-printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on 2>/dev/null\ntmux set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null\nbash %q/cmd 2>&1 | tee -a %q/out\ncode=${PIPESTATUS[0]}\necho "$code" > %q/status.part\nmv %q/status.part %q/status\nexit $code\n' "$epitaph" "$d" "$d" "$d" "$d" "$d" > "$d/runner"
+# INTENTIC_PIPESTATUS_FILE is where the agent hook's EXIT trap (PIPESTATUS_TRAP, src/agent/tools/agent-terminals.ts)
+# leaves the per-stage statuses of the command's last pipeline, for the filter to report a failure `| tail` hid.
+printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on 2>/dev/null\ntmux set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null\nexport INTENTIC_PIPESTATUS_FILE=%q/pipestatus\nbash %q/cmd 2>&1 | tee -a %q/out\ncode=${PIPESTATUS[0]}\necho "$code" > %q/status.part\nmv %q/status.part %q/status\nexit $code\n' "$epitaph" "$d" "$d" "$d" "$d" "$d" "$d" > "$d/runner"
 
 # The persistent pane log (written by the global pipe-pane hooks, src/logs/log-files.ts, VT-rendered to clean
 # text by pane-log-clean) — the filter's footer points the agent here for the full output. Path known only
@@ -170,7 +172,7 @@ emit() {
     # output in, compacted out) and defaults to agent-output-filter.
     filter="${INTENTIC_FILTER_CMD:-agent-output-filter}"
     if [ "${INTENTIC_RUN_FILTER:-1}" != "0" ] && command -v "$filter" >/dev/null 2>&1; then
-        "$filter" "$agentcmd" "$1" "$SECONDS" "$logfile" < "$d/out" 2>/dev/null && return
+        "$filter" "$agentcmd" "$1" "$SECONDS" "$logfile" "$(cat "$d/pipestatus" 2>/dev/null)" < "$d/out" 2>/dev/null && return
     fi
     if [ -n "${INTENTIC_RUN_OUTPUT_BYTES:-}" ]; then
         tail -c "$INTENTIC_RUN_OUTPUT_BYTES" "$d/out" 2>/dev/null

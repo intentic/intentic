@@ -8,7 +8,7 @@ import { fileTypeFromFile } from "file-type";
 // Magic wins over a lying extension both ways: a renamed docx still derives, a fake .docx is refused rather than
 // mis-parsed.
 
-export type Format = "docx" | "xlsx" | "pptx" | "pdf" | "image" | "media" | "html" | "ipynb" | "odt" | "ods" | "odp" | "rtf" | "epub" | "archive";
+export type Format = "docx" | "xlsx" | "pptx" | "pdf" | "image" | "media" | "html" | "ipynb" | "odt" | "ods" | "odp" | "rtf" | "epub" | "archive" | "profile";
 
 // file-type's ext per container to its format; preferred over sniffing zip since it names OOXML/ODF/EPUB.
 const MAGIC_FORMAT: Record<string, Format> = {
@@ -67,6 +67,8 @@ export const EXTENSION_FORMAT: Record<string, Format> = {
     ".rtf": "rtf",
     ".epub": "epub",
     ".ipynb": "ipynb", // JSON: no magic bytes name it, so the extension is the whole recognition.
+    ".cpuprofile": "profile", // V8 profiles are JSON too: named by extension alone, like a notebook.
+    ".heapprofile": "profile",
     ".pdf": "pdf",
     ".png": "image",
     ".jpg": "image",

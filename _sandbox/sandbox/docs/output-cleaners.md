@@ -5,14 +5,22 @@ A/B-benchmarkable: flip a config, measure the delta.
 
 ## How it works
 
-Every agent Bash command is rewritten by a PreToolUse hook (`src/agent/agent-terminals.ts`) to run through
+Every agent Bash command is rewritten by a PreToolUse hook (`src/agent/tools/agent-terminals.ts`) to run through
 `bin/tmux-run`, which tees the raw combined output and pipes it to `bin/agent-output-filter` (a stdin→stdout
 filter). **The filter's stdout is the tool result the model sees**: the transformation is invisible to the agent.
 Fail-open: any filter error emits the raw output unchanged.
 
 The filter is exit-code-asymmetric: on **success** it runs the matching command cleaners + a head/tail cap; on
 **failure** it keeps everything (only collapsing identical runs and capping at a generous tail) so errors survive
-verbatim. When lines are dropped it prints a footer naming the retrieval command (below).
+verbatim. When lines are dropped, or long runs are cut inside a line, it prints a footer naming the retrieval command
+(below).
+
+The hook also prepends an EXIT trap to the command (`PIPESTATUS_TRAP`) that writes the last pipeline's per-stage
+statuses to the file tmux-run exports as `INTENTIC_PIPESTATUS_FILE`; tmux-run hands them to the filter as its fifth
+argument. And it brackets the first character of every `pkill -f`/`pgrep -f` pattern (`vite` → `[v]ite`,
+`src/agent/tools/self-kill-guard.ts`): the call's own shells carry its text, so an unbracketed pattern matched and
+killed them, leaving no output and nothing after the pkill run. A pattern still found on the wrapped line (repeated
+later in the command, say) is refused with the reason.
 
 ## The cleaner registry: `bin/cleaners.mjs`
 
@@ -90,7 +98,9 @@ cost the model real information:
   pass 2,000 characters, and `git diff` of `contract.lock.json` puts a 5,941-character line on screen whose
   longest unbroken run is 546, because the generated JSON has English `description` values inside it. Sampling
   the corpus by band settles it: a blind line elision at >800 would have saved 4.17 MB and cut real prose in
-  every band it touched; eliding runs saves **975 KB** and cannot touch a word. It runs **after** `dedup`,
+  every band it touched; eliding runs saves **975 KB** and cannot touch a word. It fires only when the output is
+  over the cap's byte budget: a run that fits is what the command was asked for (`jq -c`), and cutting it sent the
+  agent back to re-run with other piping. It runs **after** `dedup`,
   because eliding two long lines' middles can leave them identical and dedup would then report as repeats what
   the command printed once each: and **before** `cap`, because a blob cut to its ends often brings the whole
   output back under budget, so the cap never has to drop a line at all.
@@ -142,8 +152,9 @@ that instead is what made the un-cleaned-commands report unreadable and ungroupa
 reached it (`cleanLines` returns `{ lines, stages }`). Sequential by construction, so the stages sum exactly to
 raw − emitted and stack into one bar; the flip side is that a cleaner running before the cap is credited with
 lines the cap would have taken anyway, so this is **not** "what turning it off would save": the holdout is the
-only whole-pipeline counterfactual. Three stages have no toggle: `ansi` (escapes/`\r` frames), `footer`, which is
-**negative** (the retrieval pointer adds bytes, and it rides the same ledger as what it bought) and `guard`.
+only whole-pipeline counterfactual. Four stages have no toggle: `ansi` (escapes/`\r` frames), `footer`, which is
+**negative** (the retrieval pointer adds bytes, and it rides the same ledger as what it bought), `guard`, and `notes`
+(negative too: what the filter says about the command rather than cuts from it, appended after `guard`).
 
 **Never worse than raw.** The pointer is attached only when the trim it explains is bigger than the pointer
 itself: dropping one `total 48` header bought ten bytes and used to buy a 122-byte footer with them, which is how
@@ -182,13 +193,22 @@ savings and high-volume commands that matched **no** cleaner: i.e. where to add 
 
 ## Reversible retrieval: `bin/retrieve-output`
 
-Trimming is lossy display, lossless storage: the full output stays in the persistent pane log. The filter footer
-prints a ready-to-run command (`… full: retrieve-output <log> [pattern]`) and `retrieve-output` greps that log
-(case-insensitive, literal fallback), budget-capped to ~2000 tokens so retrieval never re-floods context.
+Trimming is lossy display, lossless storage: when the footer is about to name it, the filter writes the run's
+unfiltered text (ANSI stripped, redacted) to `logs/raw-output/<session>-<pane>.log`, keeping the newest 30 files and
+the last 2M characters of each. The pane log is not the source: it is VT-rendered at pane width, so a long line comes
+back wrapped into fragments. The footer prints a ready-to-run command (`… full: retrieve-output <file> [pattern]`)
+and `retrieve-output` greps that file (case-insensitive, literal fallback), budget-capped to ~2000 tokens so
+retrieval never re-floods context.
+
+Two lines ride after the footer whatever the trim, because they correct what the result would otherwise say. An exit
+0 whose last pipeline had an earlier stage fail reads `--- [exit 0 (pipeline: 1 0 — an earlier stage failed), 12s]`
+(141, a writer cut off by `head`, is not a failure). And `rg -rn`/`-rl` gets a note that rg's `-r` is `--replace`:
+that cluster rewrites every match to `n`, which agents read as the filter mangling their output.
 
 **The two halves of the footer are priced separately, because they are worth different things.** The counts
 (`--- [exit 0, 4s] 120 lines filtered to 81`) ride every trim: ~24 bytes, and they are what stops a trimmed
-result being read as a complete one. The retrieval HANDLE is gated on `RETRIEVAL_MIN_DROPPED` (20 lines),
+result being read as a complete one. The retrieval HANDLE is gated on `RETRIEVAL_MIN_DROPPED` (20 lines) or any cut
+inside a line,
 because it is ~100 of the footer's ~124 bytes and it used to ride every trim however small. Measured over one
 two-day window: 551 handles cost 17k tokens, 15.7% of everything the cleaners saved on those same commands:
 **86% of them explained a trim of under twenty lines**, and across 10,446 agent commands `retrieve-output` was

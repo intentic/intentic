@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// retrieve-output <log-file> [pattern]: fetch back output that agent-output-filter elided. Reads the persistent
-// pane log (lossless, VT-cleaned by pane-log-clean), optionally greps it for <pattern> (case-insensitive regex,
-// falling back to a literal substring), and caps the result to a token budget so retrieval never re-floods
-// context. This is the reversible half of lossy display / lossless storage: the filter footer prints the exact
-// command to run. Copied into the image as /usr/local/bin/retrieve-output.
+// retrieve-output <log-file> [pattern]: fetch back output that agent-output-filter elided. Reads the file the filter
+// footer names (the run's unfiltered output, retained under logs/raw-output/), optionally greps it for <pattern>
+// (case-insensitive regex, falling back to a literal substring), and caps the result to a token budget so retrieval
+// never re-floods context. This is the reversible half of lossy display / lossless storage: the footer prints the
+// exact command to run. Copied into the image as /usr/local/bin/retrieve-output.
 
 import { readFileSync } from "node:fs";
 

@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { longHeldPools, parseProcStatus, type ProcessRow, type ResourceSnapshot, topProcesses } from "./resource-metrics.js";
 
 describe("resource metric process attribution", () => {
@@ -47,7 +48,7 @@ Threads:\t7
 
 describe("queue slot alarm", () => {
     const snapshot = (queue: Record<string, unknown>): ResourceSnapshot => ({
-        schema: 1,
+        schema: 2,
         at: "2026-09-21T19:00:00.000Z",
         uptimeSeconds: 3_600,
         window: {},
@@ -59,11 +60,13 @@ describe("queue slot alarm", () => {
     });
 
     test("a pool is reported only once its oldest holder passes the threshold", () => {
-        const busy = snapshot({ heavy: { slots: 2, held: 2, longestHoldSeconds: 120 } });
-        const stuck = snapshot({ heavy: { slots: 2, held: 1, longestHoldSeconds: 1_800 } });
+        const holder = { pid: 7, command: "npx vue-tsc --noEmit", cwd: `${WORKSPACE_ROOT}/intentic` };
+        const busy = snapshot({ heavy: { slots: 2, held: 2, longestHoldSeconds: 120, longestHolder: holder } });
+        const stuck = snapshot({ heavy: { slots: 2, held: 1, longestHoldSeconds: 1_800, longestHolder: holder } });
         // A pool at its limit with commands that are getting on with it is not an alarm.
         expect(longHeldPools(busy, 900)).toEqual([]);
-        expect(longHeldPools(stuck, 900)).toEqual([{ pool: "heavy", heldSeconds: 1_800 }]);
+        // The alarm names what is stuck, so a thirty-minute hold is attributable from the log line alone.
+        expect(longHeldPools(stuck, 900)).toStrictEqual([{ pool: "heavy", heldSeconds: 1_800, holder }]);
     });
 
     test("pools are judged one at a time, and a pool with nothing held never reports", () => {
@@ -71,7 +74,7 @@ describe("queue slot alarm", () => {
             heavy: { slots: 2, held: 1, longestHoldSeconds: 2_400 },
             quiet: { slots: 1, held: 0, longestHoldSeconds: 0 },
         });
-        expect(longHeldPools(mixed, 900)).toEqual([{ pool: "heavy", heldSeconds: 2_400 }]);
+        expect(longHeldPools(mixed, 900)).toStrictEqual([{ pool: "heavy", heldSeconds: 2_400, holder: undefined }]);
     });
 
     test("a sample from a daemon that never measured the queue is not an alarm", () => {

@@ -396,12 +396,12 @@ const childrenOf = (services: Services, input: TurnInput, cwd: string): ChildSup
         : childSupervisor(services, { conversationId: input.conversationId, cwd });
 
 // Everything a turn resolves before it can be planned: where it runs, the session it resumes and what a fresh one is
-// told, the request every arm builds on, and the repo sync already under way.
+// told, the request every arm builds on, the readings its frames fold into, and the repo sync already under way.
 interface Preflight {
     readonly context: Parameters<typeof planTurn>[2];
     readonly isolation: TurnPlacement | undefined;
     readonly effectiveCwd: string;
-    readonly resumed: string | undefined;
+    readonly frames: TurnFrames;
     readonly handoffNote: TurnNote | undefined;
     readonly repoSync: Promise<RepoSync[]> | undefined;
 }
@@ -443,6 +443,8 @@ const preflight = async (
     clock.mark("history");
     const settings = await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get());
     const base = baseRequestOf(services, input, { history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
+    // Made before planning so the Stop's checks, bound there, land in the same ledger as the frames.
+    const frames = createTurnFrames(effectiveCwd, resumed);
     const context = {
         base,
         attachmentPaths: attachments.paths,
@@ -453,8 +455,9 @@ const preflight = async (
         settings,
         ...opt("resync", worktree?.resync),
         ...opt("children", childrenOf(services, input, localCwd)),
+        verification: frames.verification,
     };
-    return { context, isolation, effectiveCwd, resumed, handoffNote, repoSync };
+    return { context, isolation, effectiveCwd, frames, handoffNote, repoSync };
 };
 
 // A refusal that ran nothing, as the frame the chat draws. `unattended` rides with it because the row it becomes
@@ -551,8 +554,7 @@ interface PreparedTurn {
     readonly request: AgentRequest;
     readonly isolation: TurnPlacement | undefined;
     readonly effectiveCwd: string;
-    // The session the turn starts on, until the stream names its own.
-    readonly resumed: string | undefined;
+    readonly frames: TurnFrames;
 }
 
 // Preflight, then the plan, then the notes the message grew and the checkpoint it can be rewound to; a refusal at any
@@ -593,7 +595,7 @@ async function* prepareTurn(
     }
     clock.mark("snapshot");
     clock.report(services.logger);
-    return { plan, request: wire.request, isolation: ready.isolation, effectiveCwd: ready.effectiveCwd, resumed: ready.resumed };
+    return { plan, request: wire.request, isolation: ready.isolation, effectiveCwd: ready.effectiveCwd, frames: ready.frames };
 }
 
 // Only a stored Claude account's credential is re-minted, never on the re-mint itself: refused again, it is dead.
@@ -687,7 +689,7 @@ async function* runTurn(
     if (prepared === undefined) {
         return;
     }
-    const { plan, request, isolation, effectiveCwd } = prepared;
+    const { plan, request, isolation, effectiveCwd, frames } = prepared;
     const provider = input.agent ?? "claude";
     const account = plan.account;
     const attribution = { ...opt("account", account), ...opt("actor", input.actor) };
@@ -695,7 +697,6 @@ async function* runTurn(
     const turnId = randomUUID();
     // Tees every frame past the activity sniffer: outbound provider calls are only visible here.
     const sniffer = createOutboundSniffer(services, turnId);
-    const frames = createTurnFrames(effectiveCwd, prepared.resumed);
     const record = turnActivity(services, { input, provider, turnId, attribution, sessionId: () => frames.readings().sessionId });
     const state: TurnState = { input, turnId, provider, account, attribution, request, remint: remintFor(input, account, request), frames };
     const aborted = (): boolean => signal?.aborted === true;
