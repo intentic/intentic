@@ -1,8 +1,13 @@
 <script setup lang="ts">
-import { formatTokens, Icon, ProgressRing, useDevice } from "@intentic/ui";
-import { computed } from "vue";
+import { formatTokens, Icon, ProgressRing, ResponsiveOverlay, useDevice } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
+import { formatClock } from "@intentic/ui/format";
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { contextPct } from "../../agents/fleet/agentStatus";
+import KeepWarmPanel from "../../agents/fleet/KeepWarmPanel.vue";
+import { contextPct, formatElapsed, turnInFlight } from "../../agents/fleet/agentStatus";
+import { cacheAlive, cacheCooling, endedLine, keptWarm } from "../../agents/fleet/promptCache";
+import { useAgents } from "../../agents/fleet/useAgents";
 import { effectiveAccount } from "../accounts/providerAccounts";
 import { formatReset, formatUtilization, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../session/usageStatus";
 import { usePaneView } from "./useChat-view";
@@ -30,7 +35,7 @@ const { block, hint } = defineProps<{
 }>();
 
 const { isGuest } = useRole();
-const { contextUsage, provider, account, model } = usePaneView();
+const { contextUsage, provider, account, model, conversation } = usePaneView();
 const { mobile, keyboardInset } = useDevice();
 
 // The sandbox's state as a reader should see it, not raw `reachable`: the liveness stream reconnects for ordinary
@@ -54,6 +59,40 @@ const contextRing = computed(() => {
         tooltip: t(`chat.chatPaneStatus.context`, { tokens: formatTokens(usage.tokens), contextWindow: formatTokens(usage.contextWindow), pct }),
     };
 });
+
+// The chat's own cache clock, between turns only: a running turn's requests refresh the cache faster than this could say.
+const { agentById } = useAgents();
+const card = computed(() => agentById(conversation.value.conversationId));
+const settled = computed(() => card.value !== undefined && !turnInFlight(card.value));
+const now = useNow(() => settled.value && (card.value?.promptCache !== undefined || card.value?.keepWarm !== undefined));
+const cacheChip = computed(() => {
+    const agent = card.value;
+    if (agent === undefined || !settled.value) {
+        return undefined;
+    }
+    const kept = keptWarm(agent);
+    if (kept !== undefined) {
+        const time = formatClock(kept.until);
+        return { icon: `sun` as const, text: t(`chat.chatPaneStatus.cacheKept`, { time }), hint: t(`agents.keepWarm.keptTitle`, { time }), tone: `text-link` };
+    }
+    const ended = agent.keepWarm?.ended;
+    if (ended !== undefined && ended.reason !== `elapsed`) {
+        return { icon: `moon` as const, text: t(`chat.chatPaneStatus.cacheCold`), hint: endedLine(ended), tone: `text-warning` };
+    }
+    const cache = agent.promptCache;
+    if (cache === undefined || !cacheAlive(agent, now.value)) {
+        return undefined;
+    }
+    const countdown = formatElapsed(now.value, cache.at + cache.ttlMs);
+    return {
+        icon: `bolt` as const,
+        text: t(`chat.chatPaneStatus.cacheCountdown`, { countdown }),
+        hint: t(`chat.chatPaneStatus.cacheTooltip`, { countdown }),
+        tone: cacheCooling(agent, now.value)?.near === true ? `text-link` : ``,
+    };
+});
+const cacheOpen = ref(false);
+const cacheTrigger = ref<HTMLElement>();
 
 // Subscription headroom for this conversation's account, from the shared usage map; a small ring once there's a
 // reading, tinted as the binding pool fills, keyed by account. Tracks the pool that gates this conversation's
@@ -89,6 +128,24 @@ const usageChip = computed(() => {
             <ChatJobsReadout />
             <!-- Whether this transcript shows its tool calls (ChatToolCallsToggle, also drawn in the Subagents pane); joins the other readouts under the composer. -->
             <ChatToolCallsToggle />
+            <!-- How long answering stays cheap, and the one press that keeps it so while the chat sits idle. -->
+            <template v-if="cacheChip !== undefined && card !== undefined">
+                <button
+                    ref="cacheTrigger"
+                    type="button"
+                    class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content"
+                    :class="cacheChip.tone"
+                    :aria-expanded="cacheOpen"
+                    v-tooltip.top="cacheChip.hint"
+                    @click="cacheOpen = !cacheOpen"
+                >
+                    <Icon :name="cacheChip.icon" class="text-2xs" />
+                    <span class="tabular-nums @max-xs:hidden">{{ cacheChip.text }}</span>
+                </button>
+                <ResponsiveOverlay v-model="cacheOpen" :anchor="cacheTrigger" cross="end" :header="t(`agents.keepWarm.title`)" panel-class="w-80">
+                    <KeepWarmPanel :agent="card" @done="cacheOpen = false" />
+                </ResponsiveOverlay>
+            </template>
             <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
                 <span class="@max-xs:hidden">{{ contextRing.label }}</span>

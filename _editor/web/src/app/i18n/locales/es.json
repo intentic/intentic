@@ -147,7 +147,11 @@
             "landAutomatically": "Integrar automáticamente",
             "putsBackOnBoard": "Lo devuelve al tablero",
             "takeOver": "Asumir esta sesión",
-            "takeOverHint": "Pertenece a {name}; un mantenedor puede hacerla suya"
+            "takeOverHint": "Pertenece a {name}; un mantenedor puede hacerla suya",
+            "keepWarm": "Mantener la caché caliente",
+            "keepWarmHint": "Releer su contexto en caché antes de que caduque, hasta {hours} h",
+            "stopKeepingWarm": "Dejar de mantener la caché caliente",
+            "stopKeepingWarmHint": "Mantenida caliente hasta las {time}"
         },
         "agentStatus": {
             "approvalNeeded": "Hace falta aprobación",
@@ -311,7 +315,23 @@
             "startedByProgramHolding": "Iniciada por un programa que tiene el token de control «{tokenLabel}»; nadie la ha reclamado"
         },
         "promptCache": {
-            "promptCacheGoesCold": "Su caché de indicaciones se enfría en {countdown}. Responde antes y {read} se sirve desde la caché del proveedor; después, todo se envía y se paga otra vez."
+            "promptCacheGoesCold": "Su caché de indicaciones se enfría en {countdown}. Responde antes y {read} se sirve desde la caché del proveedor; después, todo se envía y se paga otra vez.",
+            "lastRead": "La última actualización leyó {tokens} tokens de la caché.",
+            "warmUntil": "Caliente hasta las {time}",
+            "keptWarmHint": "Mantenida caliente hasta las {time}; actualizaciones hasta ahora: {refreshes}. {read} Haz clic para cambiarlo o detenerlo.",
+            "coldSince": "Fría desde las {time}",
+            "coolingHint": "{hint} Haz clic para mantenerla caliente más tiempo.",
+            "ended": {
+                "elapsed": "Mantenida caliente todo el tiempo pedido.",
+                "allowance": "Detenida para dejar la reserva de la cuenta al trabajo real",
+                "limited": "El proveedor rechazó una actualización: la cuenta está en su límite",
+                "changed": "Lo que enviaría el siguiente turno ya no coincide con la caché",
+                "rewrote": "Una actualización encontró la caché ya perdida",
+                "cold": "Se enfrió antes de que pudiera ejecutarse una actualización",
+                "failed": "Falló una actualización",
+                "midnight": "La fecha de la indicación cambió a medianoche, lo que empieza una caché nueva",
+                "moved": "La conversación pasó a otra sesión o cuenta"
+            }
         },
         "reviewGroupCheck": {
             "markAllFilesIn": "Marcar los {total} archivos de {name} como revisados",
@@ -349,6 +369,25 @@
             "steps": "{done}/{count} pasos",
             "stopRunStepsCut": "Detener la ejecución: sus pasos se cortan donde están y no empieza nada nuevo.",
             "stopWorkflowRun": "Detener esta ejecución de flujo de trabajo"
+        },
+        "keepWarm": {
+            "everything": "todo lo que ya ha leído",
+            "explain": "Mantiene {tokens} tokens en caché releyéndolos cada {minutes} min aproximadamente, al precio de la caché, cerca de una décima parte de enviarlos de nuevo. No se añade nada a la conversación.",
+            "turnRunning": "Hay un turno en curso, y sus propias solicitudes mantienen la caché caliente.",
+            "noCache": "Todavía no hay una caché medida que mantener.",
+            "notReplayable": "Solo se puede mantener caliente un turno de suscripción de Claude que este sandbox pueda repetir, y tiene que ser el último turno aquí desde que arrancó el sandbox.",
+            "dateChanged": "La fecha de la indicación ha cambiado desde el último turno, así que el siguiente empezará una caché nueva de todos modos.",
+            "alreadyCold": "La caché ya está fría: mantenerla ahora pagaría por adelantado toda la relectura.",
+            "title": "Mantener caliente la caché de este chat",
+            "keptTitle": "Mantenida caliente hasta las {time}",
+            "noRefreshYet": "Aún no hace falta actualizar: la caché sigue fresca desde el último turno.",
+            "refreshedSoFar": "Actualizaciones hasta ahora: {refreshes}. La última leyó {tokens} tokens de la caché.",
+            "untilTime": "Hasta las {time}",
+            "hours": "{hours} h",
+            "refreshes": "Actualizaciones: {refreshes}",
+            "cappedNote": "Acortado donde pasaría de la medianoche, cuando cambia la fecha de la indicación, o del punto en que actualizar cuesta más que releer.",
+            "stopsWhen": "Se detiene sola cuando empieza un turno, cuando la cuenta supera el {reserve} % de un límite o cuando la indicación del siguiente turno ya no coincidiría.",
+            "stop": "Dejar de mantener caliente"
         }
     },
     "app": {
@@ -920,7 +959,11 @@
         },
         "chatPaneStatus": {
             "context": "Contexto · {tokens} / {contextWindow} ({pct} %)",
-            "manage": "· Gestionar"
+            "manage": "· Gestionar",
+            "cacheCountdown": "Caché {countdown}",
+            "cacheTooltip": "La caché de indicaciones sigue caliente {countdown} más. Haz clic para mantenerla caliente más tiempo.",
+            "cacheKept": "Caliente · {time}",
+            "cacheCold": "Caché fría"
         },
         "chatPanel": {
             "backToDiagramEvery": "Volver al diagrama: cada paso de esta ejecución",
@@ -1512,7 +1555,19 @@
             "resumeTurnsAfterRestart": "Reanudar los turnos tras un reinicio",
             "stopFailingAutomation": "Detener una automatización que falla",
             "tokensUnderMoveKeeps": "Tokens. Por debajo de esto, un traslado conserva la sesión (la relee una vez, en frío); a partir de ahí arranca una sesión nueva desde el resumen medido. 0 arranca siempre de nuevo.",
-            "turnBreaks": "Cuando un turno se rompe"
+            "turnBreaks": "Cuando un turno se rompe",
+            "keepWarmGroup": "Chats inactivos",
+            "keepWarm": "Mantener las cachés calientes tras un turno",
+            "keepWarmNote": "Relee el contexto en caché de una conversación de Claude poco antes de que caduque, para que volver horas después cueste una lectura de caché en lugar de enviarlo todo de nuevo. Cada actualización gasta un poco de la cuota de la cuenta.",
+            "keepWarmHours": "Durante cuánto tiempo",
+            "keepWarmHoursNote": "Horas después del último turno; se acorta a medianoche y donde actualizar costaría más de lo que ahorra.",
+            "keepWarmHoursLabel": "Horas que un chat inactivo se mantiene caliente",
+            "keepWarmMinTokens": "Solo chats de más de",
+            "keepWarmMinTokensNote": "Tokens de contexto; un chat pequeño es barato de releer de todos modos.",
+            "keepWarmMinTokensLabel": "Contexto mínimo, en tokens",
+            "keepWarmReserve": "Dejar libre esta cuota",
+            "keepWarmReserveNote": "La actualización se detiene en cuanto cualquier límite que gaste el modelo de la cuenta está más lleno que el 100 % menos este valor.",
+            "keepWarmReserveLabel": "Cuota dejada libre, en porcentaje"
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "No se pudo leer qué declaran los repositorios.",

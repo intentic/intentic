@@ -11,7 +11,7 @@ import {
     tileRim,
     turnInFlight,
 } from "../../agents/fleet/agentStatus";
-import { type CacheCooling, cacheCooling } from "../../agents/fleet/promptCache";
+import { type CacheCooling, cacheCooling, type WarmMark, warmMark } from "../../agents/fleet/promptCache";
 import { snapshotFingerprint } from "../../agents/fleet/useAgents-registry";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
 import { modelLabelFor } from "../accounts/providerCatalog";
@@ -39,6 +39,8 @@ export interface CardView {
     // The board's cooling chip at rail width: the glyph and its sentence, without the countdown, since a second clock
     // beside the title would read as the turn's own.
     readonly cooling: CacheCooling | undefined;
+    // A hold on the cache outranks the cooling glyph; the open chat's status bar is where it is changed.
+    readonly warm: WarmMark | undefined;
     readonly meta: boolean;
 }
 
@@ -120,6 +122,7 @@ export const createCardViews = (): CardViews => {
                 snippet,
                 model: modelOf(entry),
                 cooling: entry.agent === undefined ? undefined : cacheCooling(entry.agent, now),
+                warm: entry.agent === undefined || turnInFlight(entry.agent) ? undefined : warmMark(entry.agent),
                 meta: hasMeta(entry),
             };
             const print = snapshotFingerprint(view);

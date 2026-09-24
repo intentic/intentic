@@ -5,6 +5,7 @@ import {
     type AgentSummary,
     type AgentWatch,
     type ForkedFrom,
+    type KeepWarmEnd,
     type ResumeRouting,
     RETRY_LADDER_TRIES,
     type SessionOwner,
@@ -163,7 +164,15 @@ export type ConversationEvent =
     | { readonly kind: "queue-removed"; readonly id: string; readonly revision: number }
     | { readonly kind: "queue-edited"; readonly id: string; readonly revision: number; readonly text: string }
     // A held queue is let go, what a person waits with pointed at who the press names to serve it.
-    | { readonly kind: "queue-released"; readonly routing?: ResumeRouting };
+    | { readonly kind: "queue-released"; readonly routing?: ResumeRouting }
+    // Whether the daemon now holds the settled turn's request to replay as a cache refresh.
+    | { readonly kind: "replay-noted"; readonly replayable: boolean }
+    // The prompt cache is to be kept warm until `until`; a second arming moves the deadline and keeps the count.
+    | { readonly kind: "keep-warm-armed"; readonly until: number; readonly auto: boolean }
+    | { readonly kind: "keep-warm-dropped" }
+    // A refresh landed: the cache's clock restarts at `at`, and `readTokens` is what it found still cached.
+    | { readonly kind: "keep-warm-refreshed"; readonly at: number; readonly ttlMs: number; readonly readTokens: number }
+    | { readonly kind: "keep-warm-ended"; readonly reason: KeepWarmEnd; readonly detail?: string };
 
 export type ConversationEffect =
     // Publishes the whole roster; readers take the state as it is by then.
@@ -390,12 +399,19 @@ const onBegin = (state: ConversationState, turn: BeginTurn, now: number, entry: 
     }
     const session = entry?.sessionId;
     const staged = state.journal?.written === false ? state.journal.entry : undefined;
+    const kept = state.keepWarm;
     return {
         state: {
             ...state,
             phase: { kind: "running", startedAt: now, parked: [], stopping: undefined },
-            turn: { ...freshRuntime(), lastAt: now, promptToFile: session === undefined ? turn.prompt : undefined },
+            turn: {
+                ...freshRuntime(),
+                lastAt: now,
+                promptToFile: session === undefined ? turn.prompt : undefined,
+                keptWarm: kept === undefined || kept.ended !== undefined ? undefined : { forMs: now - kept.since, refreshes: kept.refreshes },
+            },
             journal: staged === undefined ? state.journal : { entry: staged, written: true },
+            keepWarm: undefined,
         },
         effects: [
             { kind: "entry-opened", turn, ...opt("inFlight", staged) },
@@ -572,6 +588,45 @@ const onGrantTaken = (state: ConversationState, tool: string, now: number): Deci
     return unchanged({ ...state, grant: undefined }, { always: grant.always });
 };
 
+// A live hold keeps its start and its count when re-armed; an ended one starts over.
+const onKeepWarmArmed = (state: ConversationState, until: number, auto: boolean, now: number): Decision<undefined> => {
+    const live = state.keepWarm?.ended === undefined ? state.keepWarm : undefined;
+    return {
+        state: { ...state, keepWarm: { since: live?.since ?? now, until, refreshes: live?.refreshes ?? 0, ...opt("readTokens", live?.readTokens), ...(auto ? { auto } : {}) } },
+        effects: BROADCAST,
+        reply: undefined,
+    };
+};
+
+// A refresh or an ending that lands after a turn took the hold has nothing left to write to.
+const onKeepWarmRefreshed = (state: ConversationState, event: Extract<ConversationEvent, { kind: "keep-warm-refreshed" }>): Decision<undefined> => {
+    const kept = state.keepWarm;
+    if (kept === undefined || kept.ended !== undefined || state.phase.kind === "running") {
+        return unchanged(state, undefined);
+    }
+    return {
+        state: {
+            ...state,
+            turn: { ...state.turn, promptCache: { at: event.at, ttlMs: event.ttlMs } },
+            keepWarm: { ...kept, refreshes: kept.refreshes + 1, readTokens: event.readTokens },
+        },
+        effects: BROADCAST,
+        reply: undefined,
+    };
+};
+
+const onKeepWarmEnded = (state: ConversationState, event: Extract<ConversationEvent, { kind: "keep-warm-ended" }>, now: number): Decision<undefined> => {
+    const kept = state.keepWarm;
+    if (kept === undefined || kept.ended !== undefined) {
+        return unchanged(state, undefined);
+    }
+    return {
+        state: { ...state, keepWarm: { ...kept, ended: { at: now, reason: event.reason, ...opt("detail", event.detail) } } },
+        effects: BROADCAST,
+        reply: undefined,
+    };
+};
+
 // Both halves go, the live turn's pending id and the entry's, or the next turn would resume through whichever survived.
 const onSessionCleared = (state: ConversationState, entry: PersistedAgent | undefined): Decision<undefined> =>
     entry === undefined
@@ -643,6 +698,14 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     },
     "queue-released": (state, event) =>
         withQueue(state, released(event.routing === undefined ? state.queue : rerouted(state.queue, event.routing)), undefined),
+    "replay-noted": (state, event) =>
+        state.turn.replayable === event.replayable
+            ? unchanged(state, undefined)
+            : { state: { ...state, turn: { ...state.turn, replayable: event.replayable } }, effects: BROADCAST, reply: undefined },
+    "keep-warm-armed": (state, event, now) => onKeepWarmArmed(state, event.until, event.auto, now),
+    "keep-warm-dropped": (state) => (state.keepWarm === undefined ? unchanged(state, undefined) : { state: { ...state, keepWarm: undefined }, effects: BROADCAST, reply: undefined }),
+    "keep-warm-refreshed": (state, event) => onKeepWarmRefreshed(state, event),
+    "keep-warm-ended": (state, event, now) => onKeepWarmEnded(state, event, now),
 };
 
 /* ONE EVENT, APPLIED WHOLE: the next state, the effects in the order they must run, and the sender's answer. */

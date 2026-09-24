@@ -144,7 +144,11 @@
             "landAutomatically": "Intégrer automatiquement",
             "putsBackOnBoard": "Le remet sur le tableau",
             "takeOver": "Reprendre cette session",
-            "takeOverHint": "Appartient à {name} ; un mainteneur peut se l’attribuer"
+            "takeOverHint": "Appartient à {name} ; un mainteneur peut se l’attribuer",
+            "keepWarm": "Garder le cache chaud",
+            "keepWarmHint": "Relire son contexte en cache avant qu'il n'expire, jusqu'à {hours} h",
+            "stopKeepingWarm": "Ne plus garder le cache chaud",
+            "stopKeepingWarmHint": "Gardé chaud jusqu'à {time}"
         },
         "agentStatus": {
             "approvalNeeded": "Approbation nécessaire",
@@ -307,7 +311,23 @@
             "startedByProgramHolding": "Lancée par un programme détenant le jeton de contrôle « {tokenLabel} » ; personne ne l’a prise en charge"
         },
         "promptCache": {
-            "promptCacheGoesCold": "Son cache de consignes refroidit dans {countdown}. Répondez avant et {read} est servi depuis le cache du fournisseur ; après, tout est renvoyé et repayé."
+            "promptCacheGoesCold": "Son cache de consignes refroidit dans {countdown}. Répondez avant et {read} est servi depuis le cache du fournisseur ; après, tout est renvoyé et repayé.",
+            "lastRead": "Le dernier rafraîchissement a relu {tokens} jetons depuis le cache.",
+            "warmUntil": "Chaud jusqu'à {time}",
+            "keptWarmHint": "Gardé chaud jusqu'à {time} ; rafraîchissements jusqu'ici : {refreshes}. {read} Cliquez pour modifier ou arrêter.",
+            "coldSince": "Froid depuis {time}",
+            "coolingHint": "{hint} Cliquez pour le garder chaud plus longtemps.",
+            "ended": {
+                "elapsed": "Gardé chaud aussi longtemps que demandé.",
+                "allowance": "Arrêté pour laisser la réserve du compte au vrai travail",
+                "limited": "Le fournisseur a refusé un rafraîchissement : le compte est à sa limite",
+                "changed": "Ce que le prochain tour enverrait ne correspond plus au cache",
+                "rewrote": "Un rafraîchissement a trouvé le cache déjà disparu",
+                "cold": "Il a refroidi avant qu'un rafraîchissement puisse partir",
+                "failed": "Un rafraîchissement a échoué",
+                "midnight": "La date dans la consigne a changé à minuit, ce qui commence un nouveau cache",
+                "moved": "La conversation est passée à une autre session ou à un autre compte"
+            }
         },
         "reviewGroupCheck": {
             "markAllFilesIn": "Marquer les {total} fichiers de {name} comme relus",
@@ -345,6 +365,25 @@
             "steps": "{done}/{count} étapes",
             "stopRunStepsCut": "Arrêter l'exécution : ses étapes sont coupées là où elles en sont et rien de nouveau ne démarre.",
             "stopWorkflowRun": "Arrêter cette exécution de workflow"
+        },
+        "keepWarm": {
+            "everything": "tout ce qu'il a déjà lu",
+            "explain": "Garde {tokens} jetons en cache en les relisant environ toutes les {minutes} min au prix du cache, soit environ un dixième d'un nouvel envoi. Rien n'est ajouté à la conversation.",
+            "turnRunning": "Un tour est en cours, et ses propres requêtes gardent le cache chaud.",
+            "noCache": "Il n'y a pas encore de cache mesuré à garder.",
+            "notReplayable": "Seul un tour d'abonnement Claude que ce bac à sable peut rejouer peut être gardé chaud, et ce doit être le dernier tour ici depuis le démarrage du bac à sable.",
+            "dateChanged": "La date dans la consigne a changé depuis le dernier tour, donc le prochain commencera de toute façon un nouveau cache.",
+            "alreadyCold": "Le cache est déjà froid : le garder chaud maintenant paierait toute la relecture d'avance.",
+            "title": "Garder chaud le cache de ce chat",
+            "keptTitle": "Gardé chaud jusqu'à {time}",
+            "noRefreshYet": "Pas encore besoin de rafraîchir : le cache est encore frais depuis le dernier tour.",
+            "refreshedSoFar": "Rafraîchissements jusqu'ici : {refreshes}. Le dernier a relu {tokens} jetons depuis le cache.",
+            "untilTime": "Jusqu'à {time}",
+            "hours": "{hours} h",
+            "refreshes": "Rafraîchissements : {refreshes}",
+            "cappedNote": "Raccourci là où il dépasserait minuit, quand la date de la consigne change, ou le point où rafraîchir coûte plus que relire.",
+            "stopsWhen": "S'arrête de lui-même quand un tour commence, quand le compte dépasse {reserve} % d'une limite, ou quand la consigne du prochain tour ne correspondrait plus.",
+            "stop": "Ne plus garder chaud"
         }
     },
     "app": {
@@ -914,7 +953,11 @@
         },
         "chatPaneStatus": {
             "context": "Contexte · {tokens} / {contextWindow} ({pct} %)",
-            "manage": "· Gérer"
+            "manage": "· Gérer",
+            "cacheCountdown": "Cache {countdown}",
+            "cacheTooltip": "Le cache de consignes reste chaud encore {countdown}. Cliquez pour le garder chaud plus longtemps.",
+            "cacheKept": "Chaud · {time}",
+            "cacheCold": "Cache froid"
         },
         "chatPanel": {
             "backToDiagramEvery": "Retour au diagramme : chaque étape de cette exécution",
@@ -1501,7 +1544,19 @@
             "resumeTurnsAfterRestart": "Reprendre les tours après un redémarrage",
             "stopFailingAutomation": "Arrêter une automatisation qui échoue",
             "tokensUnderMoveKeeps": "Jetons. En dessous, un déplacement garde la session (la relit une fois, à froid) ; à partir de là une nouvelle session démarre depuis le brief mesuré. 0 repart toujours de zéro.",
-            "turnBreaks": "Quand un tour casse"
+            "turnBreaks": "Quand un tour casse",
+            "keepWarmGroup": "Chats inactifs",
+            "keepWarm": "Garder les caches chauds après un tour",
+            "keepWarmNote": "Relit le contexte en cache d'une conversation Claude peu avant son expiration, pour qu'un retour des heures plus tard coûte une lecture de cache au lieu de tout renvoyer. Chaque rafraîchissement consomme un peu du quota du compte.",
+            "keepWarmHours": "Pendant combien de temps",
+            "keepWarmHoursNote": "Heures après le dernier tour ; raccourci à minuit et là où rafraîchir coûterait plus que cela n'économise.",
+            "keepWarmHoursLabel": "Heures pendant lesquelles un chat inactif reste chaud",
+            "keepWarmMinTokens": "Seulement les chats plus grands que",
+            "keepWarmMinTokensNote": "Jetons de contexte ; un petit chat est de toute façon bon marché à relire.",
+            "keepWarmMinTokensLabel": "Contexte minimal, en jetons",
+            "keepWarmReserve": "Laisser ce quota libre",
+            "keepWarmReserveNote": "Le rafraîchissement s'arrête dès qu'une limite consommée par le modèle du compte est plus remplie que 100 % moins cette valeur.",
+            "keepWarmReserveLabel": "Quota laissé libre, en pourcentage"
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Impossible de lire ce que déclarent les dépôts.",

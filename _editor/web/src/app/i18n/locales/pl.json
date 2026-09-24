@@ -147,7 +147,11 @@
             "landAutomatically": "Scalaj automatycznie",
             "putsBackOnBoard": "Odkłada go z powrotem na tablicę",
             "takeOver": "Przejmij tę sesję od właściciela",
-            "takeOverHint": "Należy do: {name}; opiekun może ją sobie przypisać"
+            "takeOverHint": "Należy do: {name}; opiekun może ją sobie przypisać",
+            "keepWarm": "Utrzymaj pamięć podręczną ciepłą",
+            "keepWarmHint": "Odczytuj jej zawartość przed wygaśnięciem, do {hours} h",
+            "stopKeepingWarm": "Przestań utrzymywać pamięć podręczną",
+            "stopKeepingWarmHint": "Utrzymywana ciepła do {time}"
         },
         "agentStatus": {
             "approvalNeeded": "Potrzebna zgoda",
@@ -312,7 +316,23 @@
             "startedByProgramHolding": "Uruchomiona przez program z tokenem sterującym „{tokenLabel}”; nikt jej nie przejął"
         },
         "promptCache": {
-            "promptCacheGoesCold": "Jego pamięć podręczna promptu wystygnie za {countdown}. Odpowiedz wcześniej, a {read} zostanie podane z pamięci dostawcy; później całość idzie i jest płacona jeszcze raz."
+            "promptCacheGoesCold": "Jego pamięć podręczna promptu wystygnie za {countdown}. Odpowiedz wcześniej, a {read} zostanie podane z pamięci dostawcy; później całość idzie i jest płacona jeszcze raz.",
+            "lastRead": "Ostatnie odświeżenie odczytało z pamięci podręcznej {tokens} tokenów.",
+            "warmUntil": "Ciepła do {time}",
+            "keptWarmHint": "Utrzymywana ciepła do {time}; odświeżeń dotąd: {refreshes}. {read} Kliknij, aby zmienić lub zatrzymać.",
+            "coldSince": "Zimna od {time}",
+            "coolingHint": "{hint} Kliknij, aby utrzymać ją ciepłą dłużej.",
+            "ended": {
+                "elapsed": "Utrzymywana ciepła tak długo, jak proszono.",
+                "allowance": "Zatrzymano, by zostawić rezerwę konta na prawdziwą pracę",
+                "limited": "Dostawca odrzucił odświeżenie: konto osiągnęło limit",
+                "changed": "To, co wyśle następna tura, nie pasuje już do pamięci podręcznej",
+                "rewrote": "Odświeżenie zastało pamięć podręczną już wygasłą",
+                "cold": "Wystygła, zanim odświeżenie zdążyło się wykonać",
+                "failed": "Odświeżenie nie powiodło się",
+                "midnight": "O północy zmieniła się data w prompcie, co zaczyna nową pamięć podręczną",
+                "moved": "Rozmowa przeszła na inną sesję lub konto"
+            }
         },
         "reviewGroupCheck": {
             "markAllFilesIn": "Oznacz wszystkie pliki ({total}) w {name} jako przejrzane",
@@ -349,6 +369,25 @@
             "steps": "{done}/{count} kroków",
             "stopRunStepsCut": "Zatrzymaj przebieg: jego kroki zostaną ucięte tam, gdzie są, i nic nowego nie ruszy.",
             "stopWorkflowRun": "Zatrzymaj ten przebieg workflow"
+        },
+        "keepWarm": {
+            "everything": "wszystko, co już przeczytała",
+            "explain": "Utrzymuje {tokens} tokenów w pamięci podręcznej, odczytując je mniej więcej co {minutes} min po cenie pamięci podręcznej, około jednej dziesiątej ceny ponownego wysłania. Do rozmowy nic nie jest dodawane.",
+            "turnRunning": "Trwa tura, a jej własne zapytania utrzymują pamięć podręczną ciepłą.",
+            "noCache": "Nie ma jeszcze zmierzonej pamięci podręcznej do utrzymania.",
+            "notReplayable": "Ciepłą można utrzymać tylko turę z subskrypcji Claude, którą ta piaskownica potrafi odtworzyć, i musi to być ostatnia tura tutaj od startu piaskownicy.",
+            "dateChanged": "Data w prompcie zmieniła się od ostatniej tury, więc następna i tak zacznie nową pamięć podręczną.",
+            "alreadyCold": "Pamięć podręczna już wystygła: utrzymywanie jej teraz oznaczałoby zapłatę za cały ponowny odczyt z góry.",
+            "title": "Utrzymaj pamięć podręczną tego czatu ciepłą",
+            "keptTitle": "Utrzymywana ciepła do {time}",
+            "noRefreshYet": "Odświeżenie jeszcze niepotrzebne: pamięć podręczna jest świeża po ostatniej turze.",
+            "refreshedSoFar": "Odświeżeń dotąd: {refreshes}. Ostatnie odczytało z pamięci podręcznej {tokens} tokenów.",
+            "untilTime": "Do {time}",
+            "hours": "{hours} h",
+            "refreshes": "Odświeżeń: {refreshes}",
+            "cappedNote": "Skrócono tam, gdzie wykroczyłoby poza północ, gdy zmienia się data w prompcie, lub poza punkt, w którym odświeżanie kosztuje więcej niż ponowny odczyt.",
+            "stopsWhen": "Zatrzymuje się samo, gdy zaczyna się tura, gdy konto przekroczy {reserve}% limitu albo gdy prompt następnej tury przestałby pasować.",
+            "stop": "Przestań utrzymywać ciepłą"
         }
     },
     "app": {
@@ -923,7 +962,11 @@
         },
         "chatPaneStatus": {
             "context": "Kontekst · {tokens} / {contextWindow} ({pct}%)",
-            "manage": "· Zarządzaj"
+            "manage": "· Zarządzaj",
+            "cacheCountdown": "Pamięć {countdown}",
+            "cacheTooltip": "Pamięć podręczna promptu pozostanie ciepła jeszcze przez {countdown}. Kliknij, aby utrzymać ją dłużej.",
+            "cacheKept": "Ciepła · {time}",
+            "cacheCold": "Pamięć zimna"
         },
         "chatPanel": {
             "backToDiagramEvery": "Wróć do diagramu: każdy krok tego przebiegu",
@@ -1513,7 +1556,19 @@
             "resumeTurnsAfterRestart": "Wznawiaj tury po restarcie",
             "stopFailingAutomation": "Zatrzymaj automatyzację, która zawodzi",
             "tokensUnderMoveKeeps": "Tokeny. Poniżej tego przeniesienie zachowuje sesję (odczytuje ją raz, na zimno); od tej wartości w górę startuje świeża sesja z odmierzonego briefu. 0 zawsze startuje od zera.",
-            "turnBreaks": "Gdy tura się załamie"
+            "turnBreaks": "Gdy tura się załamie",
+            "keepWarmGroup": "Bezczynne czaty",
+            "keepWarm": "Utrzymuj pamięć podręczną ciepłą po turze",
+            "keepWarmNote": "Odczytuje zawartość pamięci podręcznej rozmowy z Claude tuż przed jej wygaśnięciem, więc powrót po kilku godzinach kosztuje odczyt z pamięci zamiast ponownego wysłania wszystkiego. Każde odświeżenie zużywa odrobinę limitu konta.",
+            "keepWarmHours": "Jak długo",
+            "keepWarmHoursNote": "Godziny od ostatniej tury; skracane o północy i tam, gdzie odświeżanie kosztowałoby więcej, niż oszczędza.",
+            "keepWarmHoursLabel": "Ile godzin utrzymywać bezczynny czat ciepłym",
+            "keepWarmMinTokens": "Tylko czaty większe niż",
+            "keepWarmMinTokensNote": "Tokeny kontekstu; mały czat i tak tanio odczytać ponownie.",
+            "keepWarmMinTokensLabel": "Minimalny kontekst, w tokenach",
+            "keepWarmReserve": "Zostaw tyle limitu wolnego",
+            "keepWarmReserveNote": "Odświeżanie ustaje, gdy którykolwiek limit zużywany przez model konta jest pełniejszy niż 100% minus ta wartość.",
+            "keepWarmReserveLabel": "Wolny limit, w procentach"
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Nie udało się odczytać, co deklarują repozytoria.",

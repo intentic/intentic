@@ -183,6 +183,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
             assign: { id: fleet.AWAITING_AGENT_ID, to: `grace@acme.dev` },
             autoLand: { id: fleet.AWAITING_AGENT_ID, autoLand: true },
             breakPolicy: { id: fleet.AWAITING_AGENT_ID, ending: `limit`, policy: null },
+            keepWarm: { id: fleet.AWAITING_AGENT_ID, until: null },
             land: { id: fleet.REVIEW_AGENT_ID },
             discard: { id: fleet.CONFLICT_AGENT_ID },
             archive: {},

@@ -1,4 +1,4 @@
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import { type AgentSummary, nextDayStartIn, UTC } from "@intentic/sandbox-contract";
 
 // One afternoon across two repos, with a card in every lane `laneOf` distinguishes: attention (awaiting a parked
 // question, conflict from a land overlap), active (running, one delegating to subagents), finished (ready, landed,
@@ -14,6 +14,9 @@ export const REVIEW_AGENT_ID = `cnv_soft_deletes`;
 export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
 
 const minutes = (count: number): number => count * 60_000;
+
+// Midnight on the daemon's UTC clock after `now`, when the date in an agent's prompt changes and its cache can no longer be kept.
+const midnightAfter = (now: number): number => nextDayStartIn(now, UTC);
 
 // Two commands the soft-deletes agent left running past their calls: one finished, one still going.
 export const SOFT_TYPECHECK_JOB = `job_soft_typecheck`;
@@ -105,6 +108,8 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         outputTokens: 2_480,
         contextTokens: 16_800,
         contextWindow: 200_000,
+        // Parked on its question for most of an hour: its cache is in the last fifth of its life, so the card offers to keep it.
+        promptCache: { at: now - minutes(50), ttlMs: minutes(60), rollsAt: midnightAfter(now), keepable: true },
         updatedAt: now - minutes(2),
         seenAt: now - minutes(9),
         attention: { ...NO_ATTENTION, question: true },
@@ -239,6 +244,9 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         outputTokens: 7_100,
         contextTokens: 40_000,
         contextWindow: 200_000,
+        // Held for review and kept warm meanwhile: refreshed twice, so picking it up reads the cache instead of re-sending.
+        promptCache: { at: now - minutes(6), ttlMs: minutes(60), rollsAt: midnightAfter(now), keepable: true },
+        keepWarm: { since: now - minutes(106), until: now + minutes(134), refreshes: 2, readTokens: 39_400 },
         updatedAt: now - minutes(18),
         seenAt: now - minutes(18),
         attention: NO_ATTENTION,

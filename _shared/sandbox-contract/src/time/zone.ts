@@ -108,6 +108,13 @@ const offsetMinutes = (at: number, zone: Zone): number => {
     return (match[1] === "-" ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3]));
 };
 
+/** The instant the calendar day after the one `at` falls on begins, in a named zone: where `civilDayIn` next changes. */
+export const nextDayStartIn = (at: number, zone: Zone): number => {
+    const [year = 0, month = 1, day = 1] = civilDayIn(at, zone).split("-").map(Number);
+    const midnightUtc = Date.UTC(year, month - 1, day + 1);
+    return midnightUtc - offsetMinutes(midnightUtc, zone) * 60_000;
+};
+
 /** Whether two zones are showing the same wall clock right now — which is when naming one on screen would be noise. */
 export const sameClock = (a: Zone, b: Zone, at: number = Date.now()): boolean => a === b || offsetMinutes(at, a) === offsetMinutes(at, b);
 

@@ -27,6 +27,7 @@ import { AgentsListSchema } from "../schemas/automations.js";
 import { AgentChangesSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
+import { AgentKeepWarmSchema } from "../schemas/keep-warm.js";
 import { ConversationPromptSchema } from "../schemas/system-prompt.js";
 
 // Every registered conversation-agent (AgentSummarySchema); an unknown {id} is NOT_FOUND across this whole family.
@@ -150,6 +151,18 @@ export const agentsContract = {
         })
         .meta({ floor: "collaborator" })
         .input(AgentBreakPolicySchema)
+        .output(AgentSummarySchema),
+    // Legal for a workspace conversation too, and only between turns in effect: a turn starting ends the hold.
+    keepWarm: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/keep-warm",
+            summary: "Keep this conversation's prompt cache warm while it sits idle",
+            description:
+                "Re-reads the conversation's cached context shortly before the provider would drop it, until the time asked for, so picking it back up costs a cache read instead of re-sending everything. Each refresh is a forked, unsaved request that adds nothing to the conversation. Stops by itself when the time runs out, when a turn starts, when the account nears its limit, or when the prompt the next turn would send has changed. Refused for a conversation whose cache is already cold or that this sandbox cannot replay. Null stops it.",
+        })
+        .meta({ floor: "collaborator" })
+        .input(AgentKeepWarmSchema)
         .output(AgentSummarySchema),
     seen: procedure
         .route({

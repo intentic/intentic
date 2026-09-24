@@ -387,6 +387,36 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "When a spent usage limit moves a turn to another account, carry the provider session (the model keeps everything, and re-reads all of it once on the other account) while the conversation's context is under this many tokens; at or above it, start a fresh session with the sandbox's measured brief instead. Zero always starts fresh.",
         ),
+    // Off by default: every refresh spends the account's own allowance on a conversation nobody is using yet.
+    keepWarm: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Keep a Claude conversation's prompt cache warm after each turn a person asked for, so coming back to it hours later costs a cache read instead of re-sending everything. Each refresh re-reads the cached context at the cache price and adds nothing to the conversation. Any one conversation can be kept warm or let cool by hand either way.",
+        ),
+    keepWarmHours: z
+        .number()
+        .min(1)
+        .max(8)
+        .default(4)
+        .describe(
+            "How long an idle conversation is kept warm after its last turn, in hours. Shortened where refreshing would cost more than the cold resume it saves, and at midnight where the agent runs, when the date in its prompt changes.",
+        ),
+    keepWarmMinTokens: z
+        .number()
+        .int()
+        .min(0)
+        .default(100_000)
+        .describe("Only conversations at least this large, in tokens, are kept warm by themselves: a small one is cheap to re-read anyway."),
+    keepWarmReserve: z
+        .number()
+        .int()
+        .min(0)
+        .max(90)
+        .default(15)
+        .describe(
+            "How much of an account's usage limit, in percent, keeping conversations warm must leave untouched for real work. Refreshing stops once any limit that account's model spends is fuller than that.",
+        ),
     // Worth it since the container is recreated on every update or environment approval — otherwise approving a
     // Dockerfile change costs the run that asked for it.
     // What happens to breakage found after the work that caused it has left the turn: a land that turns the main tree's own

@@ -48,6 +48,20 @@ const setLimitMoveCarryUnder = (event: Event): void => {
     patch({ limitMoveCarryUnder });
 };
 
+// One clamp for the three numeric keep-warm rows: an emptied field takes the bound, and the input shows what was kept.
+const setBounded = (key: `keepWarmHours` | `keepWarmMinTokens` | `keepWarmReserve`, min: number, max: number) => (event: Event): void => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+        return;
+    }
+    const value = Math.min(max, Math.max(min, Math.round(Number(input.value) || 0)));
+    input.value = String(value);
+    patch({ [key]: value });
+};
+const setKeepWarmHours = setBounded(`keepWarmHours`, 1, 8);
+const setKeepWarmMinTokens = setBounded(`keepWarmMinTokens`, 0, 10_000_000);
+const setKeepWarmReserve = setBounded(`keepWarmReserve`, 0, 90);
+
 const setAutomationFailureLimit = (event: Event): void => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) {
@@ -129,6 +143,60 @@ const setAutomationFailureLimit = (event: Event): void => {
                     :value="settings?.automationFailureLimit ?? 0"
                     :disabled="settings === undefined"
                     @change="setAutomationFailureLimit"
+                />
+            </template>
+        </Row>
+    </RowGroup>
+    <!-- Off by default: each refresh spends the account's allowance on a chat nobody is using yet. -->
+    <RowGroup :label="t(`sandbox.agentRecovery.keepWarmGroup`)">
+        <Row icon="sun" :title="t(`sandbox.agentRecovery.keepWarm`)" :description="t(`sandbox.agentRecovery.keepWarmNote`)">
+            <template #control>
+                <ToggleSwitch
+                    :model-value="settings?.keepWarm ?? false"
+                    :disabled="settings === undefined"
+                    @update:model-value="(value: boolean) => patch({ keepWarm: value })"
+                />
+            </template>
+        </Row>
+        <template v-if="settings?.keepWarm === true">
+            <Row icon="clock" :title="t(`sandbox.agentRecovery.keepWarmHours`)" :description="t(`sandbox.agentRecovery.keepWarmHoursNote`)">
+                <template #control>
+                    <input
+                        type="number"
+                        min="1"
+                        max="8"
+                        :aria-label="t(`sandbox.agentRecovery.keepWarmHoursLabel`)"
+                        class="ui-field-box ui-field-sm w-16 text-right"
+                        :value="settings.keepWarmHours"
+                        @change="setKeepWarmHours"
+                    />
+                </template>
+            </Row>
+            <Row icon="database" :title="t(`sandbox.agentRecovery.keepWarmMinTokens`)" :description="t(`sandbox.agentRecovery.keepWarmMinTokensNote`)">
+                <template #control>
+                    <input
+                        type="number"
+                        min="0"
+                        step="10000"
+                        :aria-label="t(`sandbox.agentRecovery.keepWarmMinTokensLabel`)"
+                        class="ui-field-box ui-field-sm w-24 text-right"
+                        :value="settings.keepWarmMinTokens"
+                        @change="setKeepWarmMinTokens"
+                    />
+                </template>
+            </Row>
+        </template>
+        <Row icon="usage" :title="t(`sandbox.agentRecovery.keepWarmReserve`)" :description="t(`sandbox.agentRecovery.keepWarmReserveNote`)">
+            <template #control>
+                <input
+                    type="number"
+                    min="0"
+                    max="90"
+                    :aria-label="t(`sandbox.agentRecovery.keepWarmReserveLabel`)"
+                    class="ui-field-box ui-field-sm w-16 text-right"
+                    :value="settings?.keepWarmReserve ?? 15"
+                    :disabled="settings === undefined"
+                    @change="setKeepWarmReserve"
                 />
             </template>
         </Row>

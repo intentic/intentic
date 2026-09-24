@@ -216,6 +216,7 @@ export * from "./schemas/system-prompt.js";
 export * from "./schemas/system.js";
 export * from "./schemas/terminal.js";
 export * from "./schemas/turn-break.js";
+export * from "./schemas/keep-warm.js";
 export * from "./schemas/providers/usage.js";
 export * from "./schemas/vpn.js";
 export * from "./schemas/webext.js";

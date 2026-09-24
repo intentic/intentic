@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ConversationQueueSchema, ForkedFromSchema } from "./agent.js";
 import { LoopStateSchema } from "./loops.js";
 import { LimitPolicySchema, RetryPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
+import { KeepWarmSchema } from "./keep-warm.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
 // A fleet agent is any conversation with a registry entry, keyed by conversationId. Isolated ones own a git worktree
 // (branch agent/<id>); workspace conversations have none, but both share one status/activity/cost lifecycle.
@@ -329,11 +330,24 @@ export const AgentSummarySchema = z.object({
         .object({
             at: z.number().describe("When its last request touched the provider's prompt cache, in milliseconds."),
             ttlMs: z.number().describe("How long that entry lives from `at`, in milliseconds."),
+            rollsAt: z
+                .number()
+                .optional()
+                .describe(
+                    "When the date written into the agent's prompt next changes, in milliseconds (midnight where the agent runs). Past it the next turn sends a different prompt, so nothing kept before it is read again.",
+                ),
+            keepable: z
+                .boolean()
+                .optional()
+                .describe("Whether this sandbox can keep this cache warm: it holds the last turn's exact request to replay, on a Claude subscription account."),
         })
         .optional()
         .describe(
             "When this conversation's prompt cache was last kept alive and how long it lasts, which together say when picking the conversation up stops being cheap. Absent when the provider publishes nothing to ground it on.",
         ),
+    keepWarm: KeepWarmSchema.optional().describe(
+        "Whether the sandbox is keeping this conversation's prompt cache warm while it sits idle, how that is going, or why it stopped. Absent when nobody asked for it.",
+    ),
     activity: AgentActivitySchema.optional().describe("What it is doing at this moment."),
     // Beside `activity` because both answer "where is it", one in a sentence and one as a fraction. Live while a turn
     // runs, and left standing after it, so a settled card still says how far the work got.

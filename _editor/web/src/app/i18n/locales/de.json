@@ -143,7 +143,11 @@
             "landAutomatically": "Automatisch landen",
             "putsBackOnBoard": "Legt ihn zurück aufs Board",
             "takeOver": "Diese Sitzung an dich nehmen",
-            "takeOverHint": "Gehört {name}; ein Maintainer darf sie sich zuweisen"
+            "takeOverHint": "Gehört {name}; ein Maintainer darf sie sich zuweisen",
+            "keepWarm": "Cache warm halten",
+            "keepWarmHint": "Den gecachten Kontext vor dem Ablauf erneut lesen, bis zu {hours} Std.",
+            "stopKeepingWarm": "Cache nicht mehr warm halten",
+            "stopKeepingWarmHint": "Warm gehalten bis {time}"
         },
         "agentStatus": {
             "approvalNeeded": "Genehmigung nötig",
@@ -308,7 +312,23 @@
             "startedByProgramHolding": "Gestartet von einem Programm mit dem Steuer-Token „{tokenLabel}“; niemand hat es übernommen"
         },
         "promptCache": {
-            "promptCacheGoesCold": "Sein Prompt-Cache wird in {countdown} kalt. Antworten Sie vorher, dann wird {read} aus dem Cache des Anbieters bedient; danach wird alles erneut gesendet und bezahlt."
+            "promptCacheGoesCold": "Sein Prompt-Cache wird in {countdown} kalt. Antworten Sie vorher, dann wird {read} aus dem Cache des Anbieters bedient; danach wird alles erneut gesendet und bezahlt.",
+            "lastRead": "Die letzte Auffrischung hat {tokens} Tokens aus dem Cache gelesen.",
+            "warmUntil": "Warm bis {time}",
+            "keptWarmHint": "Warm gehalten bis {time}; bisherige Auffrischungen: {refreshes}. {read} Klicken, um es zu ändern oder zu beenden.",
+            "coldSince": "Kalt seit {time}",
+            "coolingHint": "{hint} Klicken, um ihn länger warm zu halten.",
+            "ended": {
+                "elapsed": "So lange warm gehalten wie gewünscht.",
+                "allowance": "Beendet, um die Reserve des Kontos für echte Arbeit freizuhalten",
+                "limited": "Der Anbieter hat eine Auffrischung abgelehnt: Das Konto ist an seinem Limit",
+                "changed": "Was der nächste Zug senden würde, passt nicht mehr zum Cache",
+                "rewrote": "Eine Auffrischung fand den Cache bereits leer",
+                "cold": "Er wurde kalt, bevor eine Auffrischung laufen konnte",
+                "failed": "Eine Auffrischung ist fehlgeschlagen",
+                "midnight": "Um Mitternacht hat sich das Datum im Prompt geändert, was einen neuen Cache beginnt",
+                "moved": "Die Unterhaltung ist in eine andere Sitzung oder ein anderes Konto gewechselt"
+            }
         },
         "reviewGroupCheck": {
             "markAllFilesIn": "Alle {total} Dateien in {name} als geprüft markieren",
@@ -344,6 +364,25 @@
             "steps": "{done}/{count} Schritte",
             "stopRunStepsCut": "Den Lauf stoppen: seine Schritte werden dort abgeschnitten, wo sie sind, und nichts Neues startet.",
             "stopWorkflowRun": "Diesen Workflow-Lauf stoppen"
+        },
+        "keepWarm": {
+            "everything": "alles, was er schon gelesen hat",
+            "explain": "Hält {tokens} Tokens im Cache, indem es sie etwa alle {minutes} Min. zum Cache-Preis erneut liest, rund ein Zehntel des erneuten Sendens. Der Unterhaltung wird nichts hinzugefügt.",
+            "turnRunning": "Ein Zug läuft, und seine eigenen Anfragen halten den Cache warm.",
+            "noCache": "Es gibt noch keinen gemessenen Cache zum Warmhalten.",
+            "notReplayable": "Warm halten lässt sich nur ein Zug über ein Claude-Abonnement, den diese Sandbox wiederholen kann, und es muss der letzte Zug hier seit dem Start der Sandbox sein.",
+            "dateChanged": "Das Datum im Prompt hat sich seit dem letzten Zug geändert, der nächste beginnt also ohnehin einen neuen Cache.",
+            "alreadyCold": "Der Cache ist bereits kalt: Ihn jetzt warm zu halten, würde das ganze erneute Lesen vorab bezahlen.",
+            "title": "Cache dieses Chats warm halten",
+            "keptTitle": "Warm gehalten bis {time}",
+            "noRefreshYet": "Noch keine Auffrischung nötig: Der Cache ist vom letzten Zug noch frisch.",
+            "refreshedSoFar": "Bisherige Auffrischungen: {refreshes}. Die letzte hat {tokens} Tokens aus dem Cache gelesen.",
+            "untilTime": "Bis {time}",
+            "hours": "{hours} Std.",
+            "refreshes": "Auffrischungen: {refreshes}",
+            "cappedNote": "Gekürzt, wo es über Mitternacht hinausginge, wenn sich das Datum im Prompt ändert, oder über den Punkt, ab dem Auffrischen mehr kostet als erneutes Lesen.",
+            "stopsWhen": "Endet von selbst, wenn ein Zug beginnt, wenn das Konto {reserve} % eines Limits überschreitet oder wenn der Prompt des nächsten Zuges nicht mehr passen würde.",
+            "stop": "Nicht mehr warm halten"
         }
     },
     "app": {
@@ -912,7 +951,11 @@
         },
         "chatPaneStatus": {
             "context": "Kontext · {tokens} / {contextWindow} ({pct} %)",
-            "manage": "· Verwalten"
+            "manage": "· Verwalten",
+            "cacheCountdown": "Cache {countdown}",
+            "cacheTooltip": "Der Prompt-Cache bleibt noch {countdown} warm. Klicken, um ihn länger warm zu halten.",
+            "cacheKept": "Warm · {time}",
+            "cacheCold": "Cache kalt"
         },
         "chatPanel": {
             "backToDiagramEvery": "Zurück zum Diagramm: jeder Schritt dieses Laufs",
@@ -1505,7 +1548,19 @@
             "resumeTurnsAfterRestart": "Züge nach einem Neustart fortsetzen",
             "stopFailingAutomation": "Eine fehlschlagende Automation stoppen",
             "tokensUnderMoveKeeps": "Tokens. Darunter behält eine Verschiebung die Session (liest sie einmal kalt erneut); ab diesem Wert startet eine frische Session aus dem gemessenen Briefing. 0 startet immer frisch.",
-            "turnBreaks": "Wenn ein Zug abbricht"
+            "turnBreaks": "Wenn ein Zug abbricht",
+            "keepWarmGroup": "Ruhende Chats",
+            "keepWarm": "Caches nach einem Zug warm halten",
+            "keepWarmNote": "Liest den gecachten Kontext einer Claude-Unterhaltung kurz vor dem Ablauf erneut, sodass eine Rückkehr Stunden später einen Cache-Lesezugriff kostet statt alles erneut zu senden. Jede Auffrischung verbraucht etwas vom Kontingent des Kontos.",
+            "keepWarmHours": "Wie lange",
+            "keepWarmHoursNote": "Stunden nach dem letzten Zug; gekürzt um Mitternacht und dort, wo Auffrischen mehr kosten würde, als es spart.",
+            "keepWarmHoursLabel": "Stunden, die ein ruhender Chat warm bleibt",
+            "keepWarmMinTokens": "Nur Chats größer als",
+            "keepWarmMinTokensNote": "Tokens Kontext; ein kleiner Chat ist ohnehin günstig erneut zu lesen.",
+            "keepWarmMinTokensLabel": "Mindestkontext, in Tokens",
+            "keepWarmReserve": "So viel Kontingent frei lassen",
+            "keepWarmReserveNote": "Das Auffrischen endet, sobald ein Limit, das das Modell des Kontos verbraucht, voller ist als 100 % minus diesen Wert.",
+            "keepWarmReserveLabel": "Frei gelassenes Kontingent, in Prozent"
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Es ließ sich nicht lesen, was die Repositorys deklarieren.",

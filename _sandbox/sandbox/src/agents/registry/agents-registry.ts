@@ -48,6 +48,7 @@ import {
 import type { LandOutcome } from "../land/land.js";
 import type { LandedPresences } from "../land/landed-presence.js";
 import type { LandStandings } from "../land/standing.js";
+import { nextPromptDayAt } from "../../agent/run/prompt-fingerprint.js";
 
 // The persisted half of the fleet: the in-memory entry list (loaded once, written through on persisted mutations), the
 // AgentSummary each card is projected as, and the roster's subscribers. Every card-visible change broadcasts the full
@@ -93,11 +94,17 @@ const sanitizeSubject = (subject: string): string | undefined => sanitizeLine(su
 
 // Live context readings: how full the window is, how large it is, and how long what is already cached stays cheap to
 // re-send. One clause on the summary, since no reader wants one without the others.
-const contextFill = (state: ConversationState | undefined): Pick<AgentSummary, "contextTokens" | "contextWindow" | "promptCache"> => ({
-    ...opt("contextTokens", state?.turn.contextTokens),
-    ...opt("contextWindow", state?.turn.contextWindow),
-    ...opt("promptCache", state?.turn.promptCache),
-});
+const contextFill = (state: ConversationState | undefined): Pick<AgentSummary, "contextTokens" | "contextWindow" | "promptCache" | "keepWarm"> => {
+    const cache = state?.turn.promptCache;
+    return {
+        ...opt("contextTokens", state?.turn.contextTokens),
+        ...opt("contextWindow", state?.turn.contextWindow),
+        ...(cache === undefined
+            ? {}
+            : { promptCache: { ...cache, rollsAt: nextPromptDayAt(cache.at), ...(state?.turn.replayable === true ? { keepable: true } : {}) } }),
+        ...opt("keepWarm", state?.keepWarm),
+    };
+};
 
 // What a turn left open, read at finish from only what it measured, no model asked, nothing self-reported: a missing
 // check means it was not re-run; what a missing checklist means depends on how the turn ended (`TurnEnding`).

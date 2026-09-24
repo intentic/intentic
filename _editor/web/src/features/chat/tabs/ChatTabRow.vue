@@ -123,7 +123,14 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             />
             <!-- One glyph, no countdown: the rail says which chat is about to stop being cheap to answer, the board says for how long. -->
             <Icon
-                v-if="props.view.cooling !== undefined"
+                v-if="props.view.warm !== undefined"
+                :name="props.view.warm.icon"
+                class="shrink-0 text-2xs"
+                :class="props.view.warm.cold ? 'text-warning' : 'text-link'"
+                v-tooltip.top="props.view.warm.hint"
+            />
+            <Icon
+                v-else-if="props.view.cooling !== undefined"
                 name="bolt"
                 class="shrink-0 text-2xs"
                 :class="props.view.cooling.near ? 'text-link' : 'text-muted'"

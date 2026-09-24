@@ -103,6 +103,13 @@ export const UsageTurnSchema = z.object({
     compactions: z.number().optional(),
     contextTokens: z.number().optional(),
     contextWindow: z.number().optional(),
+    // Absent is a turn; `keep-warm` is a cache refresh sent while the conversation sat idle, billed but not a turn.
+    purpose: z.enum(["keep-warm"]).optional().describe("What the row is when it is not a turn: `keep-warm` is a cache refresh sent while the conversation sat idle."),
+    // The first request alone: a warm resume reads nearly the whole context here, a cold one writes it.
+    openingCacheReadTokens: z.number().optional().describe("Tokens the turn's first request read from the provider's cache."),
+    openingCacheCreationTokens: z.number().optional().describe("Tokens the turn's first request wrote to the provider's cache."),
+    // Equal on two turns means the prefix both sent was assembled from the same parts (PromptFingerprintSchema).
+    promptFingerprint: z.string().optional().describe("A short hash over the parts of the prompt a cache is keyed on; a change between two turns names why the second could not reuse the first's cache."),
     // This turn's model was chosen by the Auto judge reading the conversation's opening message, not picked by hand.
     // Marked on that one turn only; a later row of the same conversation naming a different model is the user
     // overruling it, which is the escalation rate this feature has to be able to answer for.

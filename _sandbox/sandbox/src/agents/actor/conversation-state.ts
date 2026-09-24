@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentJob, AgentSummary, AgentWatch, TodoItem } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentJob, AgentSummary, AgentWatch, KeepWarm, TodoItem } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
@@ -61,6 +61,10 @@ export interface TurnRuntime {
     readonly contextWindow: number | undefined;
     // Outlives the turn that set it: the cache entry goes on expiring whether or not this conversation runs.
     readonly promptCache: { readonly at: number; readonly ttlMs: number } | undefined;
+    // Whether the daemon holds this conversation's last request to replay as a cache refresh (cache-keepwarm.ts).
+    readonly replayable: boolean;
+    // How long the cache was kept warm for the turn now running, stamped onto its first cache reading.
+    readonly keptWarm: { readonly forMs: number; readonly refreshes: number } | undefined;
     // The agent's own checklist, whole, as of the last `todos` frame. `undefined` is a turn that has not seen the list,
     // which is not the same as an empty one.
     readonly checklist: readonly TodoItem[] | undefined;
@@ -144,6 +148,8 @@ export interface ConversationState {
     // What waits for its next turn (conversation-queue.ts), written onto the entry at every change and read back from it
     // by an actor made after a restart.
     readonly queue: TurnQueue;
+    // A hold on the prompt cache while the conversation sits idle; the next turn to begin takes it.
+    readonly keepWarm: KeepWarm | undefined;
 }
 
 export interface RestoredGrant {
@@ -162,6 +168,8 @@ export const freshRuntime = (): TurnRuntime => ({
     contextTokens: undefined,
     contextWindow: undefined,
     promptCache: undefined,
+    replayable: false,
+    keptWarm: undefined,
     checklist: undefined,
     promptToFile: undefined,
     sessionId: undefined,
@@ -190,6 +198,7 @@ export const idleConversation = (queue: TurnQueue = NO_QUEUE): ConversationState
     workflow: undefined,
     journal: undefined,
     queue,
+    keepWarm: undefined,
 });
 
 export const runningPhase = (state: ConversationState): RunningPhase | undefined => (state.phase.kind === "running" ? state.phase : undefined);

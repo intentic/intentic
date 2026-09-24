@@ -7,6 +7,7 @@ import {
     capabilitiesOf,
     type ContextTrim,
     type ConversationQueue,
+    type PromptFingerprint,
     type SnapshotTurn,
     type TranscriptRow,
     type TurnNote,
@@ -48,6 +49,7 @@ import { opt } from "../../opt.js";
 import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { recordProviderFailure } from "../providers/provider-health.js";
 import { breakPolicyFor, type HeldTurn, stopResumeAt } from "../run/turn/turn-resume.js";
+import { noteReplay, replayOf } from "../run/turn/cache-keepwarm.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-requests.js";
 import { applyReply, editorContextNote } from "../run/turn/turn-interactions.js";
@@ -615,6 +617,15 @@ const failureQueries = (services: Services): FailureQueries => ({
     },
 });
 
+// A turn's first cache reading names the hold it picked up, which the transcript turns into its receipt.
+const keptWarmOf = (services: Pick<Services, "conversations">, conversationId: string | undefined, event: AgentEvent): AgentEvent => {
+    if (event.kind !== "prompt_cache" || conversationId === undefined) {
+        return event;
+    }
+    const kept = services.conversations.state(conversationId)?.turn.keptWarm;
+    return kept === undefined ? event : { ...event, kept };
+};
+
 // What a running turn knows about itself, which each failure it classifies reads.
 interface TurnState {
     readonly input: TurnInput;
@@ -703,11 +714,15 @@ async function* runTurn(
     const silent = (): string | undefined => silentEnding(silenceOf(frames, { conversationId: input.conversationId, aborted: aborted() }));
     record({ type: "turn.started", content: input.prompt.slice(0, 2_000) });
     const release = holdTurn(account, isolation);
+    // The prefix this turn's requests were built from, as the CLI announced it; what a cache refresh must match.
+    let fingerprint: PromptFingerprint | undefined;
     try {
-        for await (const event of withSilentEnding(plan.run(request.spec), silent)) {
-            if (abortSuppresses(event, aborted())) {
+        for await (const raw of withSilentEnding(plan.run(request.spec), silent)) {
+            if (abortSuppresses(raw, aborted())) {
                 continue;
             }
+            const event = keptWarmOf(services, input.conversationId, raw);
+            fingerprint = event.kind === "init" ? (event.prompt ?? fingerprint) : fingerprint;
             sniffer.observe(event);
             if (frames.note(event)) {
                 providerAnswered(services, provider, account);
@@ -719,11 +734,19 @@ async function* runTurn(
         }
     } finally {
         release();
+        const spawned = input.conversationId !== undefined && isSpawnedChild(services.conversations, input.conversationId);
+        if (input.conversationId !== undefined) {
+            noteReplay(
+                services.conversations,
+                input.conversationId,
+                replayOf({ input, request, account, sessionId: frames.readings().sessionId, fingerprint, spawned }),
+            );
+        }
         const settlement = settleTurn({
             ...state,
             aborted: aborted(),
             isolated: worktree !== undefined,
-            spawnedChild: input.conversationId !== undefined && isSpawnedChild(services.conversations, input.conversationId),
+            spawnedChild: spawned,
             cwd: effectiveCwd,
             isolation,
             experiments: plan.experiments,

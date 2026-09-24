@@ -113,6 +113,8 @@ export interface TurnPolicy {
     readonly subagentsAtOnce?: number;
     readonly subagentsPerTurn?: number;
     readonly subagentDepth?: number;
+    // A cache refresh, not a turn: one forked, unsaved request with every tool refused and every hook off.
+    readonly keepWarm?: boolean;
 }
 
 // What is mounted: the servers and plugins the model can call, the shell's environment and filters, and the browser stack.

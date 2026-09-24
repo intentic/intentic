@@ -5,6 +5,7 @@ import {
     type DeviceFlowLine,
     type Info,
     isTurnBreakPolicy,
+    keepWarmCap,
     type ConversationPrompt,
     type Persona,
     type Area,
@@ -302,6 +303,19 @@ const setBreakPolicy = ({ id, ending, policy }: SandboxHandlerInput<`agents`, `b
     return agentAnswer(patchAgent(id, { [key]: policy ?? undefined }));
 };
 
+// Cut where the real daemon cuts a hold, so the demo never promises longer than a cache could honestly be kept.
+const keepWarmAgent = ({ id, until }: SandboxHandlerInput<`agents`, `keepWarm`>): AgentSummary => {
+    if (until === null) {
+        return agentAnswer(patchAgent(id, { keepWarm: undefined }));
+    }
+    const now = Date.now();
+    const cache = roster.agents.find((agent) => agent.id === id)?.promptCache;
+    if (cache?.keepable !== true || cache.at + cache.ttlMs <= now) {
+        return refuse(`The cache is already cold: keeping it warm now would pay the whole re-read up front.`, 409);
+    }
+    return agentAnswer(patchAgent(id, { keepWarm: { since: now, until: Math.min(until, keepWarmCap(cache, cache.rollsAt)), refreshes: 0 } }));
+};
+
 // The demo's own reader is Ada (the session this daemon mints), so a press here joins or leaves her from the chip,
 // exactly as the real one attributes a mark to the verified caller rather than to anything the browser sent.
 const reactToAgent = ({ id, emoji, on }: SandboxHandlerInput<`agents`, `react`>): AgentSummary => {
@@ -468,6 +482,7 @@ export const procedures = {
         assign: assignAgent,
         autoLand: ({ id }) => agentAnswer(patchAgent(id, {})),
         breakPolicy: setBreakPolicy,
+        keepWarm: keepWarmAgent,
         land: ({ id }) => land(id),
         discard: () => refuse(`This is the demo workspace: there is no worktree to discard.`),
         archive: archiveAgents,

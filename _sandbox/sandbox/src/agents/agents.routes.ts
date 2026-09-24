@@ -40,6 +40,7 @@ import { syncBeforeLand } from "./land/sync.js";
 import { verifyLandedTree } from "./land/verify-landed.js";
 import { settleLandingInBackground } from "./land/version-landed.js";
 import { routeLandBreakage } from "./land/land-breakage.js";
+import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
 // discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT.
@@ -345,6 +346,23 @@ export const createAgentsRoutes = (services: Services) => {
             const summary = await services.agents.setBreakPolicy(input.id, input.ending, input.policy);
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent, or an answer that ending cannot take" });
+            }
+            return summary;
+        }),
+        // Legal on any conversation between turns; a refusal says why nothing can be kept, in words the press can show.
+        keepWarm: i.keepWarm.handler(async ({ input }) => {
+            const entry = entryOf(input.id);
+            if (input.until === null) {
+                dropKeepWarm(services, entry.id);
+            } else {
+                const answer = armKeepWarm(services, entry.id, input.until, false);
+                if ("refused" in answer) {
+                    throw new ORPCError("CONFLICT", { message: answer.refused });
+                }
+            }
+            const summary = services.agents.get(entry.id);
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
             return summary;
         }),

@@ -11,6 +11,7 @@ import {
     type TranscriptTool,
 } from "../events/transcript.js";
 import { contextTrimLine } from "../schemas/context-trim.js";
+import { keptWarmLine } from "../schemas/keep-warm.js";
 import { turnedAwayCode } from "../policy/turned-away.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
@@ -302,7 +303,16 @@ export class TranscriptFold {
             }
             case "usage": {
                 // Lands on the last assistant bubble and closes it: a steered turn's stream can carry several turns.
-                const { kind: _kind, account: _account, cacheReadTokens: _read, cacheCreationTokens: _written, ...usage } = event;
+                const {
+                    kind: _kind,
+                    account: _account,
+                    cacheReadTokens: _read,
+                    cacheCreationTokens: _written,
+                    openingCacheReadTokens: _openingRead,
+                    openingCacheCreationTokens: _openingWritten,
+                    promptFingerprint: _fingerprint,
+                    ...usage
+                } = event;
                 const index = this.rows.findLastIndex((row) => row.role === "assistant");
                 const closed = this.closeBubble();
                 if (index === -1) {
@@ -324,6 +334,11 @@ export class TranscriptFold {
             case "preamble":
                 // Collapses the daemon's preamble notes onto the user row; an empty note list is not a disclosure.
                 return event.notes.length === 0 ? [] : this.stampOpener((row) => (row.notes = [...event.notes]));
+            case "prompt_cache": {
+                // Only a conversation the sandbox kept warm gets a row: every other turn's cache is its own business.
+                const line = keptWarmLine(event);
+                return line === undefined ? [] : this.pushRow({ role: "notice", text: line });
+            }
             case "context_trim":
                 // A row of its own rather than a stamp on the message: what was left out is not part of what was sent,
                 // and the fold beside the message only ever lists notes that actually rode.

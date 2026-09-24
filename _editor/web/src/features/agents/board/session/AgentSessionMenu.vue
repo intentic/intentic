@@ -12,6 +12,8 @@ import { mayAssign, ownedBy } from "../ownership";
 import { landsByDefault } from "../../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
+import { formatClock } from "@intentic/ui/format";
+import { keptWarm, warmOffer } from "../../fleet/promptCache";
 
 // Session-level actions (refresh, rename, land, hold, archive, discard), as opposed to diff actions; once-per-session
 // decisions live behind one glyph rather than permanently cluttering the toolbar.
@@ -37,7 +39,7 @@ const { changes, agentId, phone, renameable, sessionName } = defineProps<{
 // and `identity` are the header's own presses, handed back to it.
 const emit = defineEmits<{ selected: []; discard: []; forceLand: []; rename: []; identity: []; handOver: [] }>();
 
-const { agentById, restore, busyIds, setBreakPolicy } = useAgents();
+const { agentById, restore, busyIds, setBreakPolicy, setKeepWarm } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
 // Whose the session is, and what that lets this reader do about it. Claim and take over both make it the reader's
 // own; hand over goes up as a dialog, since it needs a name.
@@ -88,6 +90,21 @@ const limitRows = computed(() => breakAnswers(`limit`).filter((answer) => answer
 const chooseLimit = async (policy: TurnBreakPolicy): Promise<void> => {
     emit(`selected`);
     await setBreakPolicy(agentId, `limit`, policy === sandboxPolicy(`limit`, sandboxSettings.value) ? null : policy);
+};
+
+// The sandbox's own length, not a choice here: the chat's status bar and the card's corner offer the finer one.
+const warmHold = computed(() => {
+    const agent = agentById(agentId);
+    return agent === undefined ? undefined : keptWarm(agent);
+});
+const warmable = computed(() => {
+    const agent = agentById(agentId);
+    return agent !== undefined && warmOffer(agent, Date.now());
+});
+const warmHours = computed(() => sandboxSettings.value?.keepWarmHours ?? 4);
+const toggleWarm = async (): Promise<void> => {
+    emit(`selected`);
+    await setKeepWarm(agentId, warmHold.value === undefined ? Date.now() + warmHours.value * 3_600_000 : null).catch(() => undefined);
 };
 
 // Ship-tier items are hidden below maintainer, not shown disabled: a collaborator's request lives on the card instead.
@@ -203,6 +220,20 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 <span class="text-2xs text-subtle">
                     {{ autoLandOn ? t(`agents.agentSessionMenu.finishedTurnsLandInto`) : t(`agents.agentSessionMenu.holdingFinishedWorkWaits`) }}
                 </span>
+            </span>
+        </button>
+        <!-- Only where a hold can be kept or is running: a cold cache or one this sandbox cannot replay has nothing to offer. -->
+        <button v-if="warmHold !== undefined || warmable" type="button" :class="ITEM" :disabled="archived" @click="toggleWarm">
+            <Icon :name="warmHold === undefined ? 'sun' : 'moon'" class="mt-0.5 text-xs" :class="warmHold === undefined ? 'text-link' : 'text-subtle'" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">{{
+                    warmHold === undefined ? t(`agents.agentSessionMenu.keepWarm`) : t(`agents.agentSessionMenu.stopKeepingWarm`)
+                }}</span>
+                <span class="text-2xs text-subtle">{{
+                    warmHold === undefined
+                        ? t(`agents.agentSessionMenu.keepWarmHint`, { hours: warmHours })
+                        : t(`agents.agentSessionMenu.stopKeepingWarmHint`, { time: formatClock(warmHold.until) })
+                }}</span>
             </span>
         </button>
         <!-- What happens next for a spent allowance, shown only on a card actually waiting on one: one question, one

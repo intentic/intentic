@@ -4,6 +4,7 @@ import { LandConflictSchema } from "../schemas/agents.js";
 import { ContextTrimSchema } from "../schemas/context-trim.js";
 import { RateLimitInfoSchema } from "../schemas/providers/claude-gate.js";
 import { FastModeStateSchema } from "../schemas/providers/fast-mode.js";
+import { PromptCacheOpeningSchema, PromptFingerprintSchema } from "../schemas/keep-warm.js";
 import { AgentReplySchema, UsageWindowSchema } from "../schemas/providers/plan-limits.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { RetryLadderSchema } from "../schemas/turn-break.js";
@@ -50,7 +51,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // message to be drawn beside, so this is the only place the reader can learn the turn ran thin.
     ContextTrimSchema.extend({ kind: z.literal("context_trim") }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
-    z.object({ kind: z.literal("init"), model: z.string() }),
+    // `prompt` names the parts the cache is keyed on, so a later turn can say which of them changed.
+    z.object({ kind: z.literal("init"), model: z.string(), prompt: PromptFingerprintSchema.optional() }),
     // The pre-turn snapshot id, emitted once before the provider stream so the client can offer
     // restore-to-before-this-message. Absent on an isolated turn or when the tree was already clean.
     // `index` is the message's position in the transcript, which the rewind route addresses by; absent on a turn with
@@ -139,7 +141,13 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         cacheCreationTokens: z.number().optional(),
         durationMs: z.number().optional(),
         numTurns: z.number().optional(),
+        // The stream's first request only; a sum of frames keeps the first frame's, never adds them.
+        openingCacheReadTokens: z.number().optional(),
+        openingCacheCreationTokens: z.number().optional(),
+        promptFingerprint: z.string().optional(),
     }),
+    // What the turn's first request found in the prompt cache, sent as soon as it is known.
+    PromptCacheOpeningSchema.extend({ kind: z.literal("prompt_cache") }),
     // The provider's live answer to whether this turn may run, pushed mid-turn; drives the rate-limited notice, not the
     // headroom readouts.
     RateLimitInfoSchema.extend({ kind: z.literal("rate_limit_info"), account: z.string().optional() }),

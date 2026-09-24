@@ -142,9 +142,21 @@ const failureOf = (failure: TurnFailure | undefined): Pick<UsageRow, "errorCode"
     failure === undefined ? {} : { ...opt("errorCode", failure.code), errorMessage: failure.message.slice(0, ERROR_MESSAGE_CHARS) };
 
 // What the turn cost, zero where the provider billed nothing; a billed turn with no count of its own is one turn.
-const costOf = (
+export const costOf = (
     usage: UsageFrame | undefined,
-): Pick<UsageRow, "turns" | "inputTokens" | "outputTokens" | "cacheReadTokens" | "cacheCreationTokens" | "costUsd" | "durationMs"> => {
+): Pick<
+    UsageRow,
+    | "turns"
+    | "inputTokens"
+    | "outputTokens"
+    | "cacheReadTokens"
+    | "cacheCreationTokens"
+    | "costUsd"
+    | "durationMs"
+    | "openingCacheReadTokens"
+    | "openingCacheCreationTokens"
+    | "promptFingerprint"
+> => {
     const bill = usage ?? { kind: "usage" };
     return {
         turns: bill.numTurns ?? (usage === undefined ? 0 : 1),
@@ -154,6 +166,9 @@ const costOf = (
         cacheCreationTokens: counted(bill.cacheCreationTokens),
         costUsd: counted(bill.costUsd),
         durationMs: counted(bill.durationMs),
+        ...opt("openingCacheReadTokens", bill.openingCacheReadTokens),
+        ...opt("openingCacheCreationTokens", bill.openingCacheCreationTokens),
+        ...opt("promptFingerprint", bill.promptFingerprint),
     };
 };
 

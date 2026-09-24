@@ -3,7 +3,15 @@
 // emitted by runAgent, not here.
 import type { Options, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand, TerminalReason } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
-import { type AgentEvent, type FastModeState, type PermissionMode, PermissionModeSchema, type TodoItem, type UsageWindow } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    type FastModeState,
+    type PermissionMode,
+    PermissionModeSchema,
+    type PromptFingerprint,
+    type TodoItem,
+    type UsageWindow,
+} from "@intentic/sandbox-contract";
 import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { browserServerOfTool } from "../../browser/sessions/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "../providers/agent-commands.js";
@@ -13,6 +21,7 @@ import { probeRoutedEndpoint, type RoutedEndpoint } from "../providers/routed-re
 import type { TurnAllowance } from "../providers/harness-credentials.js";
 import { opt } from "../../opt.js";
 import { type CacheCreationBuckets, ttlFromCacheCreation } from "./turn/prompt-cache.js";
+import { promptFingerprint } from "./prompt-fingerprint.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../subagents/subagents.js";
 import { noteJobNotice, noteJobShell, noteModelRequest } from "../tools/background-jobs.js";
 import { TaskChecklist } from "./task-checklist.js";
@@ -306,6 +315,9 @@ class TurnFold {
     // under. The TTL outlives a read-only request, which refreshes the entry without saying how long it now lives.
     private cachedAt: number | undefined;
     private cacheTtlMs: number | undefined;
+    // The stream's first main-thread request against the cache: what a resume found there.
+    private opening: { readonly read: number; readonly written: number } | undefined;
+    private fingerprint: PromptFingerprint | undefined;
     // A block's stop always precedes its assistant frame, so introduced tool calls render after it, not before.
     private readonly textBlocks = new Map<string, number>();
     // Fast-mode speed, de-duplicated on the (state, reason) pair, since a changing reason alone is informative.
@@ -414,6 +426,10 @@ class TurnFold {
             this.contextTokens = (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
             this.contextModel = event.message.model;
             this.notePromptCache(usage, parent);
+            if (parent === undefined && this.opening === undefined) {
+                this.opening = { read: usage.cache_read_input_tokens ?? 0, written: usage.cache_creation_input_tokens ?? 0 };
+                yield { kind: "prompt_cache", readTokens: this.opening.read, writtenTokens: this.opening.written };
+            }
         }
     }
 
@@ -635,9 +651,10 @@ class TurnFold {
     private async *onSystem(message: SdkOf<"system">, parent: string | undefined): AsyncGenerator<AgentEvent, boolean> {
         switch (message.subtype) {
             case "init": {
+                this.fingerprint ??= promptFingerprint(message, this.args.options);
                 // Guard the model: the frame's schema requires a string, so never forward an empty init.
                 if (message.model) {
-                    yield { kind: "init", model: message.model };
+                    yield { kind: "init", model: message.model, prompt: this.fingerprint };
                 }
                 const changed = this.modeChange(message.permissionMode as PermissionMode);
                 if (changed !== undefined) {
@@ -804,6 +821,9 @@ class TurnFold {
                 ...opt("cacheCreationTokens", message.usage?.cache_creation_input_tokens),
                 ...opt("durationMs", message.duration_ms),
                 ...opt("numTurns", message.num_turns),
+                ...opt("openingCacheReadTokens", this.opening?.read),
+                ...opt("openingCacheCreationTokens", this.opening?.written),
+                ...opt("promptFingerprint", this.fingerprint?.hash),
             };
         }
         // Context-window fill: pairs the latest message_start size with the model's window, keyed by the turn's model.

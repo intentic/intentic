@@ -27,6 +27,10 @@ export function sumUsage(a: UsageFrame | undefined, b: UsageFrame | undefined): 
     const cacheCreationTokens = add(a.cacheCreationTokens, b.cacheCreationTokens);
     const durationMs = add(a.durationMs, b.durationMs);
     const numTurns = add(a.numTurns, b.numTurns);
+    // The stream's first request, whichever frame reported it: first wins, never summed.
+    const openingCacheReadTokens = a.openingCacheReadTokens ?? b.openingCacheReadTokens;
+    const openingCacheCreationTokens = a.openingCacheCreationTokens ?? b.openingCacheCreationTokens;
+    const promptFingerprint = a.promptFingerprint ?? b.promptFingerprint;
     return {
         kind: "usage",
         ...(account !== undefined ? { account } : {}),
@@ -37,5 +41,8 @@ export function sumUsage(a: UsageFrame | undefined, b: UsageFrame | undefined): 
         ...(cacheCreationTokens !== undefined ? { cacheCreationTokens } : {}),
         ...(durationMs !== undefined ? { durationMs } : {}),
         ...(numTurns !== undefined ? { numTurns } : {}),
+        ...(openingCacheReadTokens !== undefined ? { openingCacheReadTokens } : {}),
+        ...(openingCacheCreationTokens !== undefined ? { openingCacheCreationTokens } : {}),
+        ...(promptFingerprint !== undefined ? { promptFingerprint } : {}),
     };
 }

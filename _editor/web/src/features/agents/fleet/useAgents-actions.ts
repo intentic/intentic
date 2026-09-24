@@ -44,6 +44,10 @@ export const setAutoLand = (id: string, autoLand: boolean | null): Promise<void>
 export const setBreakPolicy = (id: string, ending: TurnBreak, policy: TurnBreakPolicy | null): Promise<void> =>
     optimistic(id, policyPatch(ending, policy ?? undefined), () => sandboxRpc.agents.breakPolicy({ id, ending, policy }));
 
+// Keeps this conversation's prompt cache warm until `until`, or stops (null); the daemon shortens `until` to what it can keep, so only a stop is drawn before it answers.
+export const setKeepWarm = (id: string, until: number | null): Promise<void> =>
+    optimistic(id, until === null ? { keepWarm: undefined } : {}, () => sandboxRpc.agents.keepWarm({ id, until }));
+
 // The echo narrowed to what the ending's field can hold: an answer that ending cannot take echoes as inherit, which is
 // what the daemon refuses it as too.
 const policyPatch = (ending: TurnBreak, policy: TurnBreakPolicy | undefined): Partial<AgentSummary> => {

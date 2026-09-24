@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ProgressRing, SegmentRing, ui, useDevice } from "@intentic/ui";
+import { Button, ProgressRing, ResponsiveOverlay, SegmentRing, ui, useDevice } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { errorMessage, useNow } from "@intentic/ui/async";
 import { computed, ref, useTemplateRef } from "vue";
@@ -42,7 +42,8 @@ import {
     watching,
     watchLine,
 } from "../../fleet/agentStatus";
-import { cacheCooling, cacheWarm } from "../../fleet/promptCache";
+import { cacheCooling, cacheWarm, warmMark } from "../../fleet/promptCache";
+import KeepWarmPanel from "../../fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
 // user to exactly this place for exactly this refusal.
 import { openChanges } from "../../../workspace/changes/openChanges";
@@ -304,6 +305,15 @@ const limitBackAt = computed(() => limitCountdown(props.agent, now.value));
 // Shares that same corner, and yields it: a reset clock and a watch are each a firmer promise about the card than a
 // cache that only makes answering cheaper, so this speaks when the corner is otherwise free.
 const cooling = computed(() => (watch.value !== undefined || limitBackAt.value !== undefined ? undefined : cacheCooling(props.agent, now.value)));
+// A hold outranks the cooling clock in that corner: it is the answer to the question the cooling chip asks.
+const warm = computed(() => (watch.value !== undefined || limitBackAt.value !== undefined || working.value ? undefined : warmMark(props.agent)));
+// Either mark opens the same question the chat's status bar asks, answered for this card.
+const warmOpen = ref(false);
+const warmAnchor = ref<HTMLElement>();
+const openWarm = (event: MouseEvent): void => {
+    warmAnchor.value = event.currentTarget as HTMLElement;
+    warmOpen.value = true;
+};
 // Re-runs the exact held turn (useAgents.resumeHeldTurn), not a new message; a local flag, since `pending` names drop
 // actions and this is neither.
 // Cleared in `finally`, not only on success, since a roster frame is about to replace the card either way.
@@ -824,16 +834,30 @@ const grab = (event: PointerEvent): void => {
                         <Icon name="clock" class="shrink-0 text-2xs" />
                         <span class="tabular-nums">{{ t(`agents.agentCard.back`, { limitBackAt }) }}</span>
                     </span>
+                    <!-- A hold on the cache, running or stopped early: the corner says until when, or since when it went cold. -->
+                    <button
+                        v-else-if="warm !== undefined"
+                        type="button"
+                        class="inline-flex shrink-0 items-center gap-1 hover:underline"
+                        :class="warm.cold ? 'text-warning' : 'text-link'"
+                        v-tooltip.top="warm.hint"
+                        @click.stop="openWarm"
+                    >
+                        <Icon :name="warm.icon" class="shrink-0 text-2xs" />
+                        <span class="tabular-nums">{{ warm.text }}</span>
+                    </button>
                     <!-- Borrows the date's slot for the last fifth of the cache's life: for that minute or twelve, "answering now is cheap" is worth more than "4m ago", and it hands the slot straight back. -->
-                    <span
+                    <button
                         v-else-if="cooling !== undefined"
-                        class="inline-flex shrink-0 items-center gap-1"
+                        type="button"
+                        class="inline-flex shrink-0 items-center gap-1 hover:underline"
                         :class="cooling.near ? 'font-medium text-link' : 'text-muted'"
-                        v-tooltip.top="cooling.hint"
+                        v-tooltip.top="t(`agents.promptCache.coolingHint`, { hint: cooling.hint })"
+                        @click.stop="openWarm"
                     >
                         <Icon name="bolt" class="shrink-0 text-2xs" />
                         {{ cooling.text }}<span class="tabular-nums">{{ cooling.countdown }}</span>
-                    </span>
+                    </button>
                     <span v-else-if="watch === undefined && !working && agent.updatedAt > 0" class="shrink-0">{{
                         relativeTime(agent.updatedAt)
                     }}</span>
@@ -872,5 +896,8 @@ const grab = (event: PointerEvent): void => {
                 </span>
             </div>
         </div>
+        <ResponsiveOverlay v-model="warmOpen" :anchor="warmAnchor" cross="end" :header="t(`agents.keepWarm.title`)" panel-class="w-80">
+            <KeepWarmPanel :agent="agent" @done="warmOpen = false" />
+        </ResponsiveOverlay>
     </div>
 </template>

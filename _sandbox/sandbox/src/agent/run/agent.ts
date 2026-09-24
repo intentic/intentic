@@ -180,6 +180,32 @@ const turnSettings = (request: HarnessRequest): Exclude<NonNullable<Options["set
     ...(request.policy.settingsHooks?.held === true ? { disableAllHooks: true } : {}),
 });
 
+// Refuses from a PreToolUse hook, which runs even under bypassPermissions where canUseTool is never asked.
+const REFUSE_EVERY_TOOL: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {
+    PreToolUse: [
+        {
+            hooks: [
+                async () => ({
+                    hookSpecificOutput: {
+                        hookEventName: "PreToolUse" as const,
+                        permissionDecision: "deny" as const,
+                        permissionDecisionReason: "This request only refreshes the prompt cache; nothing runs.",
+                    },
+                }),
+            ],
+        },
+    ],
+};
+
+// Everything a refresh changes about the turn it replays; none of it reaches the request's prefix.
+const keepWarmOptions = (request: HarnessRequest): Partial<Options> => ({
+    forkSession: true,
+    persistSession: false,
+    maxTurns: 1,
+    hooks: REFUSE_EVERY_TOOL,
+    settings: { ...turnSettings(request), disableAllHooks: true },
+});
+
 // Concatenates hook matchers per event instead of spreading, so two producers of the same event (e.g. PreToolUse:Bash)
 // both fire.
 export const mergeHooks = (...sets: Partial<Record<HookEvent, HookCallbackMatcher[]>>[]): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
@@ -840,6 +866,7 @@ export async function* runAgent(
         planModeInstructions:
             "Write the complete, clear, concise plan in your response, then call ExitPlanMode to ask for approval before executing. When you need the user to choose between options, ask with the AskUserQuestion tool rather than writing the choices as plain text.",
         canUseTool: permissionGate(conversations, request, push, shell, documents, prose, posture),
+        ...(request.policy.keepWarm === true ? keepWarmOptions(request) : {}),
     };
 
     // Only a stored-account token reads usage pools at settle; other turns have no pool or account to file under.

@@ -121,7 +121,7 @@ test("a turn surfaces session, text deltas, tool actions, and done", async () =>
     );
     expect(events).toEqual([
         { kind: "session", sessionId: "sess-1" },
-        { kind: "init", model: "sonnet" },
+        { kind: "init", model: "sonnet", prompt: { hash: expect.any(String), parts: expect.objectContaining({ model: "sonnet" }) } },
         { kind: "delta", text: "Adding " },
         {
             kind: "tool_call",
@@ -1552,10 +1552,11 @@ test("a message_start and result surface context-window fill (input + both cache
     );
     // The request read 100k from cache, so it also moved the cache's clock; the instant is wall-clock and is asserted
     // against the window the call ran in rather than matched loosely.
-    const [session, context, done] = events;
+    const [session, opening, context, done] = events;
     const { cachedAt, ...fill } = context as { cachedAt?: number };
-    expect([session, fill, done]).toEqual([
+    expect([session, opening, fill, done]).toEqual([
         { kind: "session", sessionId: "s" },
+        { kind: "prompt_cache", readTokens: 100_000, writtenTokens: 2000 },
         { kind: "context_usage", tokens: 142_000, contextWindow: 200_000 },
         { kind: "done" },
     ]);
@@ -1588,7 +1589,7 @@ test("the cache instant rides the context frame, carrying the TTL the write's ow
             { type: "result", subtype: "success", modelUsage: { "claude-opus-4-8": { contextWindow: 200_000 } } },
         ),
     );
-    expect(events[1]).toMatchObject({ kind: "context_usage", cacheTtlMs: 60 * 60 * 1000 });
+    expect(events[2]).toMatchObject({ kind: "context_usage", cacheTtlMs: 60 * 60 * 1000 });
 });
 
 // Caching switched off (DISABLE_PROMPT_CACHING) reads as a request that touched no cache: there is no entry to expire,
@@ -1613,6 +1614,7 @@ test("a request that touched no cache moves no clock", async () => {
     );
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
+        { kind: "prompt_cache", readTokens: 0, writtenTokens: 0 },
         { kind: "context_usage", tokens: 142_000, contextWindow: 200_000 },
         { kind: "done" },
     ]);
@@ -1672,7 +1674,40 @@ test("no context_usage is emitted when the result carries no context window", as
             { type: "result", subtype: "success", modelUsage: {} },
         ),
     );
-    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "done" }]);
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "prompt_cache", readTokens: 0, writtenTokens: 0 }, { kind: "done" }]);
+});
+
+// What a resume found in the cache is known at its first request, not at the turn's end: sent then, and kept on the bill.
+test("the first main-thread request's cache reading goes out at once and rides the usage frame", async () => {
+    const start = (read: number, written: number) => ({
+        type: "stream_event",
+        session_id: "s",
+        event: { type: "message_start", message: { model: "m", usage: { input_tokens: 10, cache_read_input_tokens: read, cache_creation_input_tokens: written } } },
+    });
+    const events = await collect(
+        request,
+        fakeQuery(start(250_000, 1_500), start(251_500, 900), {
+            type: "result",
+            subtype: "success",
+            usage: { input_tokens: 20, output_tokens: 5, cache_read_input_tokens: 501_500, cache_creation_input_tokens: 2_400 },
+            modelUsage: {},
+        }),
+    );
+    expect(events.filter((event) => event.kind === "prompt_cache")).toEqual([{ kind: "prompt_cache", readTokens: 250_000, writtenTokens: 1_500 }]);
+    expect(events.find((event) => event.kind === "usage")).toMatchObject({ openingCacheReadTokens: 250_000, openingCacheCreationTokens: 1_500 });
+});
+
+// Everything a refresh changes must stay off the prompt: an unsaved fork, one answer, no tool, no hook.
+test("a cache refresh forks its session unsaved, answers once, refuses every tool and runs no hooks", async () => {
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        captured.push(args.options);
+        yield { type: "result", subtype: "success" } as unknown as SDKMessage;
+    };
+    await collect({ ...request, policy: { ...request.policy, keepWarm: true } }, capture as unknown as QueryFn);
+    const [options] = captured;
+    expect(options).toMatchObject({ forkSession: true, persistSession: false, maxTurns: 1, settings: expect.objectContaining({ disableAllHooks: true }) });
+    expect(Object.keys(options?.hooks ?? {})).toEqual(["PreToolUse"]);
 });
 
 test("without steering the prompt stays a plain string (single-message mode)", async () => {

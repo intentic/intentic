@@ -147,7 +147,11 @@
             "landAutomatically": "Land automatically",
             "putsBackOnBoard": "Puts it back on the board",
             "takeOver": "Take over this session",
-            "takeOverHint": "Owned by {name}; a maintainer may make it theirs"
+            "takeOverHint": "Owned by {name}; a maintainer may make it theirs",
+            "keepWarm": "Keep cache warm",
+            "keepWarmHint": "Re-read its cached context before it expires, for up to {hours} h",
+            "stopKeepingWarm": "Stop keeping cache warm",
+            "stopKeepingWarmHint": "Kept warm until {time}"
         },
         "agentStatus": {
             "approvalNeeded": "Approval needed",
@@ -322,7 +326,23 @@
             "startedByProgramHolding": "Started by a program holding the control token “{tokenLabel}”; nobody has claimed it"
         },
         "promptCache": {
-            "promptCacheGoesCold": "Its prompt cache goes cold in {countdown}. Answer before then and {read} is served from the provider's cache; after, all of it is sent and paid for again."
+            "promptCacheGoesCold": "Its prompt cache goes cold in {countdown}. Answer before then and {read} is served from the provider's cache; after, all of it is sent and paid for again.",
+            "lastRead": "The last refresh read {tokens} tokens back from the cache.",
+            "warmUntil": "Warm until {time}",
+            "keptWarmHint": "Kept warm until {time}; refreshes so far: {refreshes}. {read} Click to change or stop it.",
+            "coldSince": "Cold since {time}",
+            "coolingHint": "{hint} Click to keep it warm longer.",
+            "ended": {
+                "elapsed": "Kept warm for as long as asked.",
+                "allowance": "Stopped to leave the account's reserve for real work",
+                "limited": "The provider refused a refresh: the account is at its limit",
+                "changed": "What the next turn would send no longer matches the cache",
+                "rewrote": "A refresh found the cache already gone",
+                "cold": "It went cold before a refresh could run",
+                "failed": "A refresh failed",
+                "midnight": "The date in the prompt changed at midnight, which starts a new cache",
+                "moved": "The conversation moved to another session or account"
+            }
         },
         "reviewGroupCheck": {
             "markAllFilesIn": "Mark all {total} files in {name} as reviewed",
@@ -360,6 +380,25 @@
             "steps": "{done}/{count} steps",
             "stopRunStepsCut": "Stop the run: its steps are cut off where they are and nothing new starts.",
             "stopWorkflowRun": "Stop this workflow run"
+        },
+        "keepWarm": {
+            "everything": "everything it has read",
+            "explain": "Keeps {tokens} tokens cached by re-reading them about every {minutes} min, at the cache's price, roughly a tenth of sending them again. Nothing is added to the conversation.",
+            "turnRunning": "A turn is running, and its own requests keep the cache warm.",
+            "noCache": "There is no measured cache to keep yet.",
+            "notReplayable": "Only a Claude subscription turn this sandbox can replay can be kept warm, and it has to be the last turn here since the sandbox started.",
+            "dateChanged": "The date in the prompt has changed since the last turn, so the next one starts a new cache anyway.",
+            "alreadyCold": "The cache is already cold: keeping it warm now would pay the whole re-read up front.",
+            "title": "Keep this chat's cache warm",
+            "keptTitle": "Kept warm until {time}",
+            "noRefreshYet": "No refresh needed yet: the cache is still fresh from the last turn.",
+            "refreshedSoFar": "Refreshes so far: {refreshes}. The last one read {tokens} tokens back from the cache.",
+            "untilTime": "Until {time}",
+            "hours": "{hours} h",
+            "refreshes": "Refreshes: {refreshes}",
+            "cappedNote": "Shortened where it would run past midnight, when the date in the prompt changes, or past the point where refreshing costs more than re-reading.",
+            "stopsWhen": "Stops by itself when a turn starts, when the account passes {reserve}% of a limit, or when the next turn's prompt would no longer match.",
+            "stop": "Stop keeping warm"
         }
     },
     "app": {
@@ -961,7 +1000,11 @@
         },
         "chatPaneStatus": {
             "context": "Context · {tokens} / {contextWindow} ({pct}%)",
-            "manage": "· Manage"
+            "manage": "· Manage",
+            "cacheCountdown": "Cache {countdown}",
+            "cacheTooltip": "The prompt cache stays warm for {countdown} more. Click to keep it warm longer.",
+            "cacheKept": "Warm · {time}",
+            "cacheCold": "Cache cold"
         },
         "chatPanel": {
             "backToDiagramEvery": "Back to the diagram: every step of this run",
@@ -1670,7 +1713,19 @@
             "stopFailingAutomation": "Stop a failing automation",
             "stopPolicyNote": "What happens to a turn that stopped short with nothing to repair: a hung runtime, a crashed harness.",
             "tokensUnderMoveKeeps": "Tokens. Under this a move keeps the session (re-reads it once, cold); at or above it a fresh session starts from the measured brief. 0 always starts fresh.",
-            "turnBreaks": "When a turn breaks"
+            "turnBreaks": "When a turn breaks",
+            "keepWarmGroup": "Idle chats",
+            "keepWarm": "Keep caches warm after a turn",
+            "keepWarmNote": "Re-reads a Claude conversation's cached context shortly before it would expire, so coming back hours later costs a cache read instead of sending everything again. Each refresh spends a little of the account's allowance.",
+            "keepWarmHours": "For how long",
+            "keepWarmHoursNote": "Hours after the last turn; shortened at midnight and where refreshing would cost more than it saves.",
+            "keepWarmHoursLabel": "Hours to keep an idle chat warm",
+            "keepWarmMinTokens": "Only chats larger than",
+            "keepWarmMinTokensNote": "Tokens of context; a small chat is cheap to re-read anyway.",
+            "keepWarmMinTokensLabel": "Minimum context, in tokens",
+            "keepWarmReserve": "Leave this much allowance free",
+            "keepWarmReserveNote": "Refreshing stops once any limit the account's model spends is fuller than 100% minus this.",
+            "keepWarmReserveLabel": "Allowance kept free, in percent"
         },
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Couldn't read what the repositories declare.",

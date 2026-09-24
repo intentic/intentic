@@ -12,6 +12,7 @@ import { sqliteTurnCheckpoints } from "../../agent/checkpoints/turn-checkpoints.
 import { type JournalledTurn, sqliteTurnJournal } from "../../agent/run/turn/turn-journal.js";
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
+import { nextPromptDayAt } from "../../agent/run/prompt-fingerprint.js";
 
 // Hand-dialed stand-in for land standing; real derivation needs a git repo per case (standing.integration.test.ts).
 // This suite only pins the projection: which half wins, and what each surface reads off it.
@@ -1836,7 +1837,7 @@ describe("agents registry", () => {
             frame: { kind: "context_usage", tokens: 142_000, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 3_600_000 },
         });
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
-        expect(registry.list()[0]?.promptCache).toEqual({ at: 1_500, ttlMs: 3_600_000 });
+        expect(registry.list()[0]?.promptCache).toEqual({ at: 1_500, ttlMs: 3_600_000, rollsAt: nextPromptDayAt(1_500) });
     });
 
     // Half a pair names no deadline, and a frame that carries neither is a turn that used no cache this time, not one
@@ -1853,7 +1854,7 @@ describe("agents registry", () => {
             frame: { kind: "context_usage", tokens: 20, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 300_000 },
         });
         conversations.send("c1", { kind: "frame", frame: { kind: "context_usage", tokens: 30, contextWindow: 200_000 } });
-        expect(registry.list()[0]?.promptCache).toEqual({ at: 1_500, ttlMs: 300_000 });
+        expect(registry.list()[0]?.promptCache).toEqual({ at: 1_500, ttlMs: 300_000, rollsAt: nextPromptDayAt(1_500) });
     });
 
     // A chip is worth nothing without the names behind it, which is the whole reason the wire carries people rather
