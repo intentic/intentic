@@ -45,6 +45,26 @@ test("running() reports in-flight work per session; commands in one session run 
     expect(runner.running("job-serial")).toBe(false);
 });
 
+test("a command cancelled while it waits its turn never starts", async () => {
+    const runner = createTerminalRunner();
+    const cwd = mkdtempSync(join(tmpdir(), "term-run-cancel-"));
+    const ahead = runner.tryRun("job-cancel", "sleep 0.2", { cwd });
+    const controller = new AbortController();
+    let started = false;
+    const waiting = runner.tryRun("job-cancel", "true", {
+        cwd,
+        signal: controller.signal,
+        onStarted: () => {
+            started = true;
+        },
+    });
+    controller.abort();
+    await expect(waiting).rejects.toThrow();
+    expect((await ahead).code).toBe(0);
+    expect(started).toBe(false);
+    expect(runner.running("job-cancel")).toBe(false);
+});
+
 test("an aborted run rejects as an abort instead of returning a code", async () => {
     const runner = createTerminalRunner();
     const controller = new AbortController();

@@ -114,7 +114,7 @@ const followUpAt =
             .catch((error: unknown) => deps.logger.warn({ err: error, rule: rule.id }, "rule outcome append failed"));
     };
 
-// Logged like the pre-push check, since a red `turn.ending` command has two very different causes (broken work, or a
+// Logged like the push run, since a red `turn.ending` command has two very different causes (broken work, or a
 // check that never saw the workspace's dependencies) told apart only by whether it ran anchored in the turn's namespace.
 const ruleRunnerIn =
     (deps: TurnEndingHooksDeps, input: AgentTurn, context: TurnContext): NonNullable<TurnHooks["runRuleCommand"]> =>
@@ -124,9 +124,9 @@ const ruleRunnerIn =
         // A rule naming a repository runs inside it, in this turn's own tree: for an isolated turn that is its
         // worktree's copy of the repository, not the one on /work.
         const cwd = repoCwd(context.localCwd, repo);
-        // Both lines carry the same identity, so a settled line is attributable without its started line.
+        // Every line carries the same identity, so each is attributable without the others.
         const identity = { command, anchored: anchor !== undefined, cwd, session: CHECKS_SESSION, ...opt("conversationId", input.conversationId) };
-        deps.logger.info(identity, "checks: check started");
+        deps.logger.info(identity, "checks: check queued");
         const run = await runRuleCommand(deps, {
             command: ruleCommandIn(command, anchor, repo),
             timeoutMs,
@@ -134,6 +134,8 @@ const ruleRunnerIn =
             session: CHECKS_SESSION,
             window: "checks",
             outputBytes: TURN_RULE_OUTPUT_BYTES,
+            // Every conversation's checks share one session, so the wait behind the others is its own number, not the run's.
+            onStarted: () => deps.logger.info({ ...identity, waitedMs: Date.now() - from }, "checks: check started"),
         });
         deps.logger.info(
             {

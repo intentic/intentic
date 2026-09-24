@@ -32,7 +32,13 @@ const setup = (input: AgentTurn = { prompt: "p", conversationId: "c-1" }) => {
                 logged.push({ fields, message });
             }) as Services["logger"]["info"],
         }),
-        terminalRun: unstubbed<Services["terminalRun"]>("terminalRun", { tryRun: async () => ({ code: 0, output: "all green\n" }) }),
+        // As the real runner does, `onStarted` fires as the command leaves the session's queue.
+        terminalRun: unstubbed<Services["terminalRun"]>("terminalRun", {
+            tryRun: async (_session, _command, options) => {
+                options.onStarted?.();
+                return { code: 0, output: "all green\n" };
+            },
+        }),
     });
     const frames = createTurnFrames(WORKSPACE_ROOT, undefined);
     const context: TurnContext = {
@@ -92,12 +98,13 @@ describe("the end-of-turn check", () => {
     });
 });
 
-// A settled line read alone must say whose check it was and where it ran, as the started line does.
-test("the check's settled line carries the started line's identity", async () => {
+// Any line read alone must say whose check it was and where it ran; the started line adds how long it waited its turn.
+test("every line of the check carries the same identity", async () => {
     const { logged, hooks } = setup();
     await hooks.runRuleCommand?.("pnpm verify:turn", 60_000);
     const identity = { command: "pnpm verify:turn", anchored: false, cwd: WORKSPACE_ROOT, session: CHECKS_SESSION, conversationId: "c-1" };
-    expect(logged.map((line) => line.message)).toEqual(["checks: check started", "checks: check settled"]);
+    expect(logged.map((line) => line.message)).toEqual(["checks: check queued", "checks: check started", "checks: check settled"]);
     expect(logged[0]?.fields).toStrictEqual(identity);
-    expect(logged[1]?.fields).toStrictEqual({ ...identity, status: "passed", exitCode: 0, durationMs: expect.any(Number) });
+    expect(logged[1]?.fields).toStrictEqual({ ...identity, waitedMs: expect.any(Number) });
+    expect(logged[2]?.fields).toStrictEqual({ ...identity, status: "passed", exitCode: 0, durationMs: expect.any(Number) });
 });

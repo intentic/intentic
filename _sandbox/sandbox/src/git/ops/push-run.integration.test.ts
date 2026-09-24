@@ -9,11 +9,12 @@ import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
-import { CHECKS_SESSION } from "../../terminal/terminal-session.js";
+import { CHECKS_SESSION, PUSH_SESSION } from "../../terminal/terminal-session.js";
 import { createPushRuns, type PushRunDeps } from "./push-run.js";
 
-// Real git and hooks, a fake terminal (the real one would open actual tmux sessions): tests what this module decides
-// about visibility, settlement and refusal, with all three refusal kinds produced by real git.
+// Real git and hooks, a fake terminal (the real one would open actual tmux sessions) keeping the real one's contract: tests
+// what this module decides about visibility, settlement, refusal and whose queue it waits in, with all three refusal kinds
+// produced by real git.
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -60,29 +61,39 @@ const hook = async (clone: string, script: string): Promise<void> => {
     await chmod(path, 0o755);
 };
 
-const fakeRunner = (visible: boolean, count: () => void, starts = true): TerminalRunner =>
-    unstubbed<TerminalRunner>("terminalRun", {
+// The real runner's contract (terminal-run.ts): a session is a FIFO queue, and `onStarted` fires as a command leaves it.
+const fakeRunner = (visible: boolean, count: () => void): TerminalRunner => {
+    const queues = new Map<string, Promise<unknown>>();
+    const execute: TerminalRunner["tryRun"] = async (_session, command, options) => {
+        options.signal?.throwIfAborted();
+        count();
+        options.onStarted?.();
+        try {
+            const { stdout, stderr } = await exec("bash", ["-c", command], {
+                cwd: options.cwd,
+                ...(options.signal !== undefined ? { signal: options.signal } : {}),
+            });
+            return { code: 0, output: stdout + stderr };
+        } catch (cause) {
+            const failure = cause as { code?: number | string; stdout?: string; stderr?: string };
+            if (options.signal?.aborted === true || typeof failure.code !== "number") {
+                throw cause;
+            }
+            return { code: failure.code, output: (failure.stdout ?? "") + (failure.stderr ?? "") };
+        }
+    };
+    return unstubbed<TerminalRunner>("terminalRun", {
         visible,
-        tryRun: async (_session, command, options) => {
-            count();
-            if (starts) {
-                options.onStarted?.();
-            }
-            try {
-                const { stdout, stderr } = await exec("bash", ["-c", command], {
-                    cwd: options.cwd,
-                    ...(options.signal !== undefined ? { signal: options.signal } : {}),
-                });
-                return { code: 0, output: stdout + stderr };
-            } catch (cause) {
-                const failure = cause as { code?: number | string; stdout?: string; stderr?: string };
-                if (options.signal?.aborted === true || typeof failure.code !== "number") {
-                    throw cause;
-                }
-                return { code: failure.code, output: (failure.stdout ?? "") + (failure.stderr ?? "") };
-            }
+        tryRun: (session, command, options) => {
+            const turn = (queues.get(session) ?? Promise.resolve()).then(() => execute(session, command, options));
+            queues.set(
+                session,
+                turn.catch(() => undefined),
+            );
+            return turn;
         },
     });
+};
 
 interface Fakes {
     readonly services: PushRunDeps;
@@ -94,8 +105,8 @@ interface Fakes {
     readonly runs: () => number;
 }
 
-const fakes = (over: { visible?: boolean; starts?: boolean } = {}): Fakes => {
-    const { visible = true, starts = true } = over;
+const fakes = (over: { visible?: boolean } = {}): Fakes => {
+    const { visible = true } = over;
     let runs = 0;
     const notified: string[] = [];
     const feed: string[] = [];
@@ -107,13 +118,9 @@ const fakes = (over: { visible?: boolean; starts?: boolean } = {}): Fakes => {
                 return { delivered: 1, failed: 0 };
             },
         }),
-        terminalRun: fakeRunner(
-            visible,
-            () => {
-                runs += 1;
-            },
-            starts,
-        ),
+        terminalRun: fakeRunner(visible, () => {
+            runs += 1;
+        }),
         activity: unstubbed<Services["activity"]>("activity", {
             append: async (event) => {
                 feed.push(event.type);
@@ -149,7 +156,7 @@ test("a running push names its terminal once the command is in it, and none with
     const visible = fakes();
     const runs = createPushRuns(visible.services, () => {});
     await runs.start("app", clone, {});
-    await waitFor(() => expect(runs.state("app").session).toBe(CHECKS_SESSION), SETTLES);
+    await waitFor(() => expect(runs.state("app").session).toBe(PUSH_SESSION), SETTLES);
     await settled(runs, "app");
 
     const { clone: other } = await ahead();
@@ -255,15 +262,47 @@ test("two repos take turns in the one terminal window", async () => {
     await runs.start("one", first.clone, {});
     await runs.start("two", second.clone, {});
     // The second push is queued behind the first and has no session until it actually starts.
-    await waitFor(() => expect(runs.state("one").session).toBe(CHECKS_SESSION), SETTLES);
+    await waitFor(() => expect(runs.state("one").session).toBe(PUSH_SESSION), SETTLES);
     expect(runs.state("two")).toMatchObject({ status: "running" });
     expect(runs.state("two").session).toBeUndefined();
     const one = await settled(runs, "one");
     const two = await settled(runs, "two");
     expect(one.status).toBe("passed");
     expect(two.status).toBe("passed");
-    expect(two.session).toBe(CHECKS_SESSION);
+    expect(two.session).toBe(PUSH_SESSION);
 });
+
+// Every conversation's turn checks take turns in the checks session, minutes each; a push pressed meanwhile waited out
+// all of them with no terminal to show for it, then shared its pane with the next one.
+test("a push starts at once while a turn check holds the checks session", async () => {
+    const { clone, origin } = await ahead();
+    const { services } = fakes();
+    const check = new AbortController();
+    const holding = services.terminalRun.tryRun(CHECKS_SESSION, "sleep 30", { cwd: tmpdir(), signal: check.signal }).catch(() => undefined);
+    try {
+        const runs = createPushRuns(services, () => {});
+        await runs.start("app", clone, {});
+        expect(await settled(runs, "app")).toMatchObject({ status: "passed", session: PUSH_SESSION });
+        expect(await sh(origin, "log", "--format=%s", "-1", "main")).toBe("two");
+    } finally {
+        check.abort();
+        await holding;
+    }
+});
+
+test("a push queued behind another repo's has its whole ceiling to run in", async () => {
+    const first = await ahead();
+    const second = await ahead();
+    await hook(first.clone, "sleep 1.2");
+    await hook(second.clone, "sleep 1.2");
+    const { services } = fakes();
+    const runs = createPushRuns(services, () => {}, undefined, { timeoutMs: 2_000 });
+    await runs.start("one", first.clone, {});
+    await runs.start("two", second.clone, {});
+    expect((await settled(runs, "one")).status).toBe("passed");
+    // Past the ceiling counted from the press, well inside it counted from its own start.
+    expect(await settled(runs, "two")).toMatchObject({ status: "passed", session: PUSH_SESSION });
+}, 15_000);
 
 test("a cancelled push is cancelled, not failed, and nobody is notified", async () => {
     const { clone, origin } = await ahead();
@@ -271,7 +310,7 @@ test("a cancelled push is cancelled, not failed, and nobody is notified", async 
     const { services, notified } = fakes();
     const runs = createPushRuns(services, () => {});
     await runs.start("app", clone, {});
-    await waitFor(() => expect(runs.state("app").session).toBe(CHECKS_SESSION), SETTLES);
+    await waitFor(() => expect(runs.state("app").session).toBe(PUSH_SESSION), SETTLES);
     runs.cancel("app");
     const run = await settled(runs, "app");
     expect(run.status).toBe("cancelled");

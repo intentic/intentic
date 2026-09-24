@@ -4,13 +4,13 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Services } from "../../composition.js";
 import { pushRefused } from "../../push/notifications.js";
 import { type RuleCommandRun, runRuleCommand } from "../../rules/rule-command.js";
-import { CHECKS_SESSION } from "../../terminal/terminal-session.js";
+import { PUSH_SESSION } from "../../terminal/terminal-session.js";
 import { pushRefusal, pushRefusalReason } from "../git.js";
 import { pushPlan } from "../remote/remote.js";
 
-// Started and answered at once, executed in the `job-checks` terminal, polled for its verdict; the repository's own
-// pre-push hook is the only gate a push passes. Serialized per repo (a second start for a running repo joins it);
-// nothing is persisted or polled at rest — a run exists only while it runs.
+// Started and answered at once, executed in the `job-push` terminal, polled for its verdict; the repository's own
+// pre-push hook is the only gate a push passes. One per repo (a second start for a running repo joins it), and pushes
+// across repos take turns in that session's queue; nothing is persisted or polled at rest — a run exists only while it runs.
 
 // Generous ceiling since the hook may be a whole suite (usually cached, fast); past this it's a hang.
 const PUSH_TIMEOUT_MS = 15 * 60_000;
@@ -51,8 +51,6 @@ export const createPushRuns = (
     const runs = new Map<string, PushRun>();
     const controllers = new Map<string, AbortController>();
     const inFlight = new Set<string>();
-    // One terminal, pushes take turns: two commands sharing a pane is unreadable, and concurrency buys nothing here.
-    let queue: Promise<unknown> = Promise.resolve();
 
     const publish = (run: PushRun): void => {
         runs.set(run.repo, run);
@@ -76,7 +74,14 @@ export const createPushRuns = (
     const report = (settled: PushRun): PushRun => {
         publish(settled);
         logger.info(
-            { repo: settled.repo, command: settled.command, status: settled.status, exitCode: settled.exitCode, refusedBy: settled.refusedBy, durationMs: Date.now() - (settled.startedAt ?? Date.now()) },
+            {
+                repo: settled.repo,
+                command: settled.command,
+                status: settled.status,
+                exitCode: settled.exitCode,
+                refusedBy: settled.refusedBy,
+                durationMs: Date.now() - (settled.startedAt ?? Date.now()),
+            },
             "push: settled",
         );
         if (settled.status === "passed") {
@@ -107,18 +112,21 @@ export const createPushRuns = (
 
     const execute = async (running: PushRun, dir: string, abort: AbortController): Promise<void> => {
         // No session without the tmux wrapper, or the browser would chase a tab nothing lists. Named only once the
-        // command is actually in it (as the check does), not while still queued.
-        const session = terminalRun.visible ? CHECKS_SESSION : undefined;
-        logger.info({ repo: running.repo, command: running.command, session }, "push: started");
+        // command is actually in it, not while it waits for another repo's push ahead of it in the session.
+        const session = terminalRun.visible ? PUSH_SESSION : undefined;
         const run = await runRuleCommand(services, {
             command: running.command,
             timeoutMs,
             cwd: dir,
-            session: CHECKS_SESSION,
+            session: PUSH_SESSION,
             window: "push",
             outputBytes: PUSH_OUTPUT_BYTES,
             signal: abort.signal,
             onStarted: () => {
+                logger.info(
+                    { repo: running.repo, command: running.command, session, waitedMs: Date.now() - (running.startedAt ?? Date.now()) },
+                    "push: started",
+                );
                 if (session !== undefined) {
                     publish({ ...running, session });
                 }
@@ -148,10 +156,8 @@ export const createPushRuns = (
                 const abort = new AbortController();
                 controllers.set(repo, abort);
                 publish(running);
-                // Not awaited: the caller polls the published state instead. The queue runs it when the window frees;
-                // in-flight clears on settle, whichever way it goes.
-                queue = queue
-                    .then(() => execute(running, dir, abort))
+                // Not awaited: the caller polls the published state instead; in-flight clears on settle, whichever way it goes.
+                void execute(running, dir, abort)
                     .catch((error: unknown) => {
                         logger.warn({ err: error, repo }, "push: run failed");
                         publish({ ...running, status: "error", finishedAt: Date.now(), output: "" });

@@ -170,10 +170,17 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   dependency directories are bare mount points and reported a red tree over `prisma: not found` in a fully
   installed workspace, with `nsenter` right there in its own command line. Unset rather than reassigned: with
   nothing to trust, every shell takes it from `getcwd()`, which `--wdns` already made correct.
-- **A `turn.ending` check says in the log where it ran** (`src/agent/run/harness/harness-hooks.ts`): `checks: check started`
-  and `checks: check settled` both carry the command, `anchored`, `cwd`, the session and the conversation id, and
-  the settled line adds the status, the exit code and the duration, the same shape the push run has. Without them a check that exited 127 over a missing workspace binary left the only
-  record of itself in a model's transcript.
+- **A `turn.ending` check says in the log where it ran** (`src/agent/run/harness/harness-hooks.ts`): `checks: check queued`,
+  `checks: check started` and `checks: check settled` all carry the command, `anchored`, `cwd`, the session and the
+  conversation id; the started line adds the wait behind other conversations' checks (`waitedMs`), and the settled
+  line the status, the exit code and the duration, the same shape the push run has. Without them a check that exited
+  127 over a missing workspace binary left the only record of itself in a model's transcript.
+- **A terminal session is a queue** (`src/terminal/terminal-run.ts`): the runner runs one command at a time per
+  session, so the session a caller picks decides whose commands it waits behind. The push shared `job-checks` with
+  every conversation's turn checks and sat minutes behind them with no terminal to show, then handed its open pane
+  to the next agent's check; it has `job-push` now. A command's ceiling (`src/rules/rule-command.ts`) counts from
+  its start: counted from the enqueue, a deep queue killed checks two minutes into their run as "timed out after
+  900s", and each agent sent to repair one queued another.
 - **A worktree's dependency mirrors take their form from the TURN's runtime, not the container's capability**
   (`entersNamespace` in `src/agent/routes/agent.routes.ts` → `ensure` → `linkMirrors` in `src/agents/worktrees/worktrees.ts`).
   A container able to build a namespace left empty mount points for turns that never enter one (native Codex,

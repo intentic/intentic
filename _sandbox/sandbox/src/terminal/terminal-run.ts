@@ -80,10 +80,12 @@ export const directExec: ExecInTerminal = (file, args) => execFileAsync(file, [.
 export const createTerminalRunner = (): TerminalRunner => {
     const visible = existsSync(TMUX_RUN_BIN);
     const inFlight = new Map<string, number>();
-    // Per-session queue: commands run in order, so new-window/set-option always targets the wrapper's own window.
+    // A session is a FIFO queue, one command at a time: a caller's choice of session is a choice of whose commands it waits behind.
     const queues = new Map<string, Promise<unknown>>();
 
     const execute = async (session: string, command: string, options: TerminalRunOptions): Promise<TerminalRunResult> => {
+        // Cancelled while it waited its turn: it never starts, so nothing announces a window that would only be killed.
+        options.signal?.throwIfAborted();
         options.onStarted?.();
         const env = { ...process.env, ...options.env };
         const execOptions = {

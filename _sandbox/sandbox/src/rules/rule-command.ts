@@ -30,6 +30,7 @@ const openCheckWindow = (root: string, cwd: string): (() => void) => {
 
 export interface RuleCommandRequest {
     readonly command: string;
+    // Counted from the command's start: time spent queued in its session is never charged to it.
     readonly timeoutMs: number;
     readonly cwd: string;
     // Tmux session/window for the run; watchability is the caller's call (terminalRun.visible).
@@ -50,26 +51,27 @@ export const runRuleCommand = async (deps: RuleCommandDeps, request: RuleCommand
         return { status: "cancelled", output: "" };
     }
     const { command, timeoutMs, cwd, session, window, outputBytes, signal, onStarted } = request;
-    const checkDone = openCheckWindow(workspace.root, cwd);
     const abort = new AbortController();
     let timedOut = false;
-    // Measured from the command's start; unref'd so a rule's watchdog never keeps the daemon alive alone.
-    const watchdog = setTimeout(() => {
-        timedOut = true;
-        logger.warn({ command, timeoutMs }, "rule: command timed out, killing");
-        abort.abort();
-    }, timeoutMs);
-    watchdog.unref();
+    let watchdog: NodeJS.Timeout | undefined;
+    let checkDone = (): void => undefined;
+    // The ceiling and the check window belong to the run, so both begin when the session's queue lets the command start.
+    const started = (): void => {
+        checkDone = openCheckWindow(workspace.root, cwd);
+        // Unref'd so a rule's watchdog never keeps the daemon alive alone.
+        watchdog = setTimeout(() => {
+            timedOut = true;
+            logger.warn({ command, timeoutMs }, "rule: command timed out, killing");
+            abort.abort();
+        }, timeoutMs);
+        watchdog.unref();
+        onStarted?.();
+    };
     const relay = (): void => abort.abort();
     signal?.addEventListener("abort", relay, { once: true });
     const tail = (text: string): string => plainText(text).slice(-outputBytes);
     try {
-        const { code, output } = await terminalRun.tryRun(session, command, {
-            cwd,
-            window,
-            signal: abort.signal,
-            ...(onStarted !== undefined ? { onStarted } : {}),
-        });
+        const { code, output } = await terminalRun.tryRun(session, command, { cwd, window, signal: abort.signal, onStarted: started });
         return { status: code === 0 ? "passed" : "failed", exitCode: code, output: tail(output) };
     } catch (cause) {
         // Not our abort: the command never ran, so `error`, not `failed`; nothing was learned to send someone to fix.

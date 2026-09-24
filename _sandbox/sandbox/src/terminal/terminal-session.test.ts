@@ -1,4 +1,4 @@
-import { jobSessionLabel, panePidSessions, type ReapPolicy, reapableSessions } from "./terminal-session.js";
+import { CHECKS_SESSION, jobSessionLabel, panePidSessions, PUSH_SESSION, type ReapPolicy, reapableSessions } from "./terminal-session.js";
 
 /* The retention sweep's policy. */
 
@@ -81,6 +81,7 @@ test("panePidSessions maps each pane's root pid to its session, skipping lines w
 
 /* Job sessions use daemon ids and display labels. */
 test("a job session reads as a name rather than as its id", () => {
-    expect(jobSessionLabel("job-checks")).toBe("Checks");
+    expect(jobSessionLabel(CHECKS_SESSION)).toBe("Checks");
+    expect(jobSessionLabel(PUSH_SESSION)).toBe("Push");
     expect(jobSessionLabel("job-capability-demo")).toBe("Capability demo");
 });
