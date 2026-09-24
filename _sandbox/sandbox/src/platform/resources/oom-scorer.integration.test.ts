@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { type OomScorer, startOomScorer } from "./oom-scorer.js";
 
@@ -37,13 +38,18 @@ const child = (command: string, args: readonly string[]): ChildProcess => {
     return started;
 };
 
-const describeLinux = process.platform === "linux" ? describe : describe.skip;
+// Children inherit this process's score and the scorer never lowers one, so every target sits between it and the max of 1000.
+const INHERITED = process.platform === "linux" ? Number(readFileSync("/proc/self/oom_score_adj", "utf8").trim()) : 0;
+const STEP = Math.floor((1_000 - INHERITED) / 4);
+const [LOW, MID, HIGH] = [INHERITED + STEP, INHERITED + 2 * STEP, INHERITED + 3 * STEP];
+
+const describeLinux = process.platform === "linux" && STEP > 0 ? describe : describe.skip;
 
 describeLinux("the scorer ranks the daemon's children for the kernel's OOM killer", () => {
     test("a child the resolver names is raised to its score", async () => {
-        scorer = startOomScorer(({ command }) => (command.includes("sleep 31") ? 321 : undefined));
+        scorer = startOomScorer(({ command }) => (command.includes("sleep 31") ? LOW : undefined));
         const sleeper = child("sleep", ["31"]);
-        expect(await settledScore(sleeper.pid ?? 0, 321)).toBe(321);
+        expect(await settledScore(sleeper.pid ?? 0, LOW)).toBe(LOW);
     });
 
     test("what the child had already forked is raised with it", async () => {
@@ -51,19 +57,19 @@ describeLinux("the scorer ranks the daemon's children for the kernel's OOM kille
         // Forked before the scorer starts, so only the walk down the tree can reach the grandchild.
         await new Promise((resolve) => setTimeout(resolve, 200));
         const grandchild = Number((await readFile(`/proc/${String(shell.pid ?? 0)}/task/${String(shell.pid ?? 0)}/children`, "utf8")).trim());
-        scorer = startOomScorer(({ command }) => (command.includes("sleep 32 & wait") ? 432 : undefined));
-        expect(await settledScore(shell.pid ?? 0, 432)).toBe(432);
-        expect(await settledScore(grandchild, 432)).toBe(432);
+        scorer = startOomScorer(({ command }) => (command.includes("sleep 32 & wait") ? MID : undefined));
+        expect(await settledScore(shell.pid ?? 0, MID)).toBe(MID);
+        expect(await settledScore(grandchild, MID)).toBe(MID);
     });
 
     test("a child already ranked above the resolver's score keeps its own", async () => {
-        scorer = startOomScorer(({ command }) => (command.includes("sleep 33") ? 250 : undefined));
-        // choom execs sleep in place, so the pid is the sleeper's; a lower score written over it would read 250.
-        const ranked = child("choom", ["-n", "700", "--", "sleep", "33"]);
+        scorer = startOomScorer(({ command }) => (command.includes("sleep 33") ? MID : undefined));
+        // choom execs sleep in place, so the pid is the sleeper's; a lower score written over it would read MID.
+        const ranked = child("choom", ["-n", String(HIGH), "--", "sleep", "33"]);
         const plain = child("sleep", ["33"]);
         // The plain one landing proves a pass reached both; the pass after it is the margin for the other.
-        expect(await settledScore(plain.pid ?? 0, 250)).toBe(250);
+        expect(await settledScore(plain.pid ?? 0, MID)).toBe(MID);
         await new Promise((resolve) => setTimeout(resolve, 600));
-        expect(await scoreOf(ranked.pid ?? 0)).toBe(700);
+        expect(await scoreOf(ranked.pid ?? 0)).toBe(HIGH);
     });
 });
