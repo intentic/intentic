@@ -1,6 +1,7 @@
 import { ref, shallowRef } from "vue";
 import { onRuntimeChanged } from "../live/runtimeEvents";
 import { sandboxRequest } from "../client/sandboxClient";
+import { refusalText, SandboxHttpError, wordsOf } from "../client/sandboxHttpError";
 
 // Drives Connect for a peer capability (host or browser) sharing one door shape. Connect mints a single-use
 // token bound to this capability; the door pushes a runtime-change event on pairing, so the card updates
@@ -71,10 +72,14 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
     };
 
     // Drops the peer's key and cuts its socket; the capability itself stays, so Connect can be offered again
-    // as a fresh pairing, not a resume.
+    // as a fresh pairing, not a resume. A refusal throws: a revoke that didn't take leaves the peer able to connect.
     const revoke = async (id: string): Promise<void> => {
-        await sandboxRequest(`/system/${door.slug}/${encodeURIComponent(id)}`, { method: `DELETE` });
+        const response = await sandboxRequest(`/system/${door.slug}/${encodeURIComponent(id)}`, { method: `DELETE` });
         await refresh();
+        if (!response.ok) {
+            const said = wordsOf(await response.json().catch(() => undefined));
+            throw new SandboxHttpError(response.status, refusalText(response.status, said), said);
+        }
     };
 
     const peerFor = (id: string): Summary | undefined => peers.value.find((peer) => peer.id === id);

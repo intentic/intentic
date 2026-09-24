@@ -1,5 +1,6 @@
 import { readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomic, writeSecretFile } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { LONG_OUTAGE_ATTEMPTS, type PeerLinkState, type PeerOutage } from "@intentic/sandbox-contract/peer-dial";
@@ -88,7 +89,15 @@ export const readDeviceConfig = async (): Promise<DeviceConfigFile> => {
         }
         throw error;
     });
-    return raw === undefined ? { links: [] } : (JSON.parse(raw) as DeviceConfigFile);
+    if (raw === undefined) {
+        return { links: [] };
+    }
+    const parsed = JSON.parse(raw) as Partial<DeviceConfigFile> | null;
+    // Parsed JSON of another shape is as unreadable as bytes that do not parse, so it takes the same SyntaxError path.
+    if (!Array.isArray(parsed?.links)) {
+        throw new SyntaxError(`${configPath} has no "links" list`);
+    }
+    return { ...parsed, links: parsed.links };
 };
 
 export const writeDeviceConfig = async (config: DeviceConfigFile): Promise<void> =>
@@ -105,7 +114,8 @@ const updateDeviceConfig = async (
         if (!recover || !(error instanceof SyntaxError)) {
             throw error;
         }
-        await rename(configPath, `${configPath}.corrupt`).catch(() => undefined);
+        // The write below lands on this path, so content that could not be set aside must stop it.
+        await rename(configPath, `${configPath}.corrupt`).catch(undefinedIfMissing);
         return { links: [] } satisfies DeviceConfigFile;
     });
     const next = mutate(config);
@@ -115,7 +125,7 @@ const updateDeviceConfig = async (
 
 // Every link, or none when nothing has ever been connected, so a missing file and an empty list aren't two cases. An
 // unreadable file is a third case and throws: callers act on emptiness, and none of them may act on a guess.
-export const readLinks = async (): Promise<readonly HostLink[]> => (await readDeviceConfig()).links ?? [];
+export const readLinks = async (): Promise<readonly HostLink[]> => (await readDeviceConfig()).links;
 
 // Adds a sandbox, keeping the others; replaces rather than duplicates an existing one (a token rotation or
 // re-enrollment). Keyed on the url, the link's one sandbox-chosen identity field.
@@ -138,13 +148,13 @@ export const removeLinks = async (sandboxUrl?: string): Promise<readonly HostLin
     return dropped;
 };
 
-// Persists the scopes one sandbox just pushed, leaving other links alone. Best-effort: the live grant is already
-// enforcing in memory, so a failed write must never drop the connection.
+// Persists the scopes one sandbox just pushed, leaving other links alone. Rejects like every writer; the connection
+// logs that and keeps the link, since the live grant is already enforcing in memory.
 export const rememberScopes = async (sandboxUrl: string, scopes: DeviceScopes): Promise<void> => {
     await updateDeviceConfig((config) => {
         const at = config.links.findIndex((link) => link.sandboxUrl === sandboxUrl);
         // A push from a disconnected sandbox is dropped, not re-added, since its socket may just still be closing.
         const link = config.links[at];
         return link === undefined ? config : { ...config, links: config.links.with(at, { ...link, scopes }) };
-    }).catch(() => undefined);
+    });
 };

@@ -1,5 +1,6 @@
-import { readFile, rename } from "node:fs/promises";
+import { lstat, readFile, rename } from "node:fs/promises";
 import { basename } from "node:path";
+import { errnoCode, isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { type ManifestProblem, recordManifestProblems } from "./manifest-problems.js";
 import { type ManifestEdit, registerManifestEditor } from "./manifest-repair.js";
 import { queueOnFile, writeTextFile } from "./text-file.js";
@@ -45,6 +46,11 @@ export interface JsonFileOptions<T> {
     readonly onUnreadable?: "setAside" | "refuse";
 }
 
+// Where unreadable content is set aside: `<name>.corrupt`, or a stamped sibling when an earlier episode already holds
+// that name, since neither copy is regrowable.
+export const asideOf = async (path: string): Promise<string> =>
+    (await lstat(`${path}.corrupt`).catch(undefinedIfMissing)) === undefined ? `${path}.corrupt` : `${path}.corrupt.${Date.now()}`;
+
 // Writes one JSON file atomically (temp file, then rename); used by jsonFile and by stores that must own their own read
 // path.
 export const writeJsonFile = (path: string, value: unknown, mode?: number): Promise<void> =>
@@ -67,8 +73,12 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable 
         let text: string;
         try {
             text = await readFile(path, "utf8");
-        } catch {
-            return done({ value: fallback(), unreadable: false });
+        } catch (error) {
+            // Only absence is "nothing written yet"; a file that exists but cannot be read must never be written over.
+            if (isMissing(error)) {
+                return done({ value: fallback(), unreadable: false });
+            }
+            return unreadable(`the file could not be read (${errnoCode(error) ?? String(error)})`);
         }
         let raw: unknown;
         try {
@@ -125,7 +135,7 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable 
                         if (onUnreadable === "refuse") {
                             throw new ManifestUnreadableError(path, state.detail);
                         }
-                        await rename(path, `${path}.corrupt`).catch(() => undefined);
+                        await rename(path, await asideOf(path)).catch(undefinedIfMissing);
                     }
                     await writeJsonFile(path, updated, mode);
                 }

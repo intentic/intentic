@@ -9,22 +9,12 @@
 // flags instead would pass `saveError` as a guard and fail `replying`. The handler is judged where its body lives, often
 // a composable the component only wires up; a handler whose body cannot be found is a finding, never a pass.
 import { readFileSync, statSync } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { finish } from "./lib/report.mjs";
-import { byName, packages, root, VUE_FILE, walk, workspaceSource } from "./lib/repo.mjs";
+import { byName, installedModule, packages, root, VUE_FILE, walk, workspaceSource } from "./lib/repo.mjs";
 
 const vueHost = packages.find(({ pkg }) => pkg.dependencies?.vue !== undefined || pkg.devDependencies?.vue !== undefined);
-const compiler = (() => {
-    if (vueHost === undefined) {
-        return undefined;
-    }
-    try {
-        return createRequire(join(vueHost.dir, "package.json"))("vue/compiler-sfc");
-    } catch {
-        return undefined;
-    }
-})();
+const compiler = vueHost === undefined ? undefined : installedModule(vueHost.dir, "vue/compiler-sfc");
 
 /* GUARDS: read off a function's text, in the module its body was found in. */
 

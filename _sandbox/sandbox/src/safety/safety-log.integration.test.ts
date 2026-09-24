@@ -73,6 +73,14 @@ test("an unreadable file reads as an empty log rather than throwing", async () =
     expect(await safety.recent()).toEqual([]);
 });
 
+test("one row this build cannot read drops alone, and the rest survive the next write", async () => {
+    const { path, log: safety } = await log();
+    await writeFile(path, JSON.stringify([entry({ at: 1 }), { ...entry({ at: 2 }), decision: "defer-to-newer-build" }, entry({ at: 3 })]), "utf8");
+    expect((await safety.recent()).map((row) => row.at)).toEqual([3, 1]);
+    await safety.record(entry({ at: 4 }));
+    expect((await safety.recent()).map((row) => row.at)).toEqual([4, 3, 1]);
+});
+
 // The whole program is in the transcript beside the tool call either way, so the log holds an excerpt rather than a
 // second copy of everything it ran.
 test("a long program is excerpted, and says how much it dropped", () => {

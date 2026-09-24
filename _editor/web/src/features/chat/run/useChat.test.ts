@@ -44,6 +44,7 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({
             disconnect: procedureOf(`translator.disconnect`),
         },
         usage: { refreshPlanLimits: procedureOf(`usage.refreshPlanLimits`) },
+        system: { usage: procedureOf(`system.usage`) },
         agent: {
             refusals: procedureOf(`agent.refusals`),
             commands: procedureOf(`agent.commands`),
@@ -657,6 +658,37 @@ describe(`the remembered account`, () => {
         expect(chat.account.value).toBe(`second`);
     });
 
+    it(`drops a disconnected account from the list, and keeps one the daemon refused to disconnect, saying why`, async () => {
+        const chat = useChat();
+        chat.setManagedProvider(`claude`);
+        daemonAnswers((procedure, input) => {
+            if (procedure !== `accounts.disconnect`) {
+                return undefined;
+            }
+            return field(input, `id`) === `first` ? Promise.reject(daemonRefusal(500, `The credential store is read-only.`)) : Promise.resolve({ ok: true });
+        });
+
+        await chat.disconnect(`first`);
+        expect(chat.managedAccounts.value.map((account) => account.id)).toEqual([`first`, `second`]);
+        expect(chat.error.value).toBe(`The credential store is read-only.`);
+        expect(chat.accountBusy.value).toBeUndefined();
+
+        await chat.disconnect(`second`);
+        expect(chat.managedAccounts.value.map((account) => account.id)).toEqual([`first`]);
+        expect(chat.error.value).toBeNull();
+    });
+
+    it(`holds usage unread when its read fails, rather than reading every account as never used`, async () => {
+        const chat = useChat();
+        daemonAnswers((procedure) => (procedure === `system.usage` ? Promise.reject(new TypeError(`Failed to fetch`)) : undefined));
+        await chat.loadUsage();
+        expect(chat.usageLoaded.value).toBe(false);
+
+        daemonAnswers((procedure) => (procedure === `system.usage` ? Promise.resolve({ accounts: [] }) : undefined));
+        await chat.loadUsage();
+        expect(chat.usageLoaded.value).toBe(true);
+    });
+
     it(`moves an open chat off a pick the list no longer has, and still remembers the pick`, async () => {
         const chat = useChat();
         chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
@@ -673,6 +705,43 @@ describe(`the remembered account`, () => {
         chat.draft.value = `this tab is in use`;
         newChat();
         expect(chat.account.value).toBe(`second`);
+    });
+});
+
+// A history read that fails must say so: an empty menu reads as "you have no past chats".
+describe(`the past-chats list`, () => {
+    const PAST = [{ id: `s1`, title: `Yesterday's refactor`, updatedAt: 1 }];
+
+    beforeEach(() => {
+        resetSandboxScope();
+    });
+
+    it(`says why a read failed instead of listing nothing, and clears it once a read lands`, async () => {
+        const chat = useChat();
+        daemonAnswers((procedure) => (procedure === `sessions.list` ? Promise.resolve({ sessions: PAST }) : undefined));
+        await chat.loadSessions();
+        expect([chat.sessions.value, chat.sessionsFailure.value]).toEqual([PAST, undefined]);
+
+        daemonAnswers((procedure) => (procedure === `sessions.list` ? Promise.reject(daemonRefusal(500, `The session store is unreadable.`)) : undefined));
+        await chat.loadSessions(`refactor`);
+        expect(chat.sessionsFailure.value).toBe(`The session store is unreadable.`);
+
+        daemonAnswers((procedure) => (procedure === `sessions.list` ? Promise.resolve({ sessions: [] }) : undefined));
+        await chat.loadSessions();
+        expect([chat.sessions.value, chat.sessionsFailure.value]).toEqual([[], undefined]);
+    });
+
+    it(`says nothing about a read a newer one replaced`, async () => {
+        const chat = useChat();
+        daemonAnswers((procedure, _input, options) =>
+            procedure === `sessions.list`
+                ? new Promise((_answer, refuse) => options?.signal?.addEventListener(`abort`, () => refuse(new DOMException(`aborted`, `AbortError`))))
+                : undefined,
+        );
+        const replaced = chat.loadSessions(`ref`);
+        daemonAnswers((procedure) => (procedure === `sessions.list` ? Promise.resolve({ sessions: PAST }) : undefined));
+        await Promise.all([replaced, chat.loadSessions(`refactor`)]);
+        expect([chat.sessions.value, chat.sessionsFailure.value]).toEqual([PAST, undefined]);
     });
 });
 

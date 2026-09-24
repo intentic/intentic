@@ -213,6 +213,26 @@ it("refuses a payment that would pass the day's cap, counting rows already writt
     expect(payments).toHaveLength(1);
 });
 
+/* A DATABASE THAT FAILS IS NOT A CAP THAT REFUSED: the sandbox relays a 403 as policy, and nobody would look further. */
+it("answers a failed cap transaction with 503, never the cap's 403, and signs nothing", async () => {
+    const { prisma, payments } = fakePrisma({ wallets: [seededWallet] });
+    (prisma.$transaction as unknown as ReturnType<typeof jest.fn>).mockRejectedValueOnce(new Error(`could not serialize access due to concurrent update`));
+    let signed = false;
+    const response = await app({
+        prisma,
+        custody: custody({
+            signTypedData: async () => {
+                signed = true;
+                return `0x${`ab`.repeat(65)}`;
+            },
+        }),
+    })(`/sign`, signBody());
+    expect(response.status).toBe(503);
+    expect(((await response.json()) as { error: string }).error).toBe(`the daily cap could not be checked; nothing was signed, try again`);
+    expect(signed).toBe(false);
+    expect(payments).toHaveLength(0);
+});
+
 it("refuses to sign for a wallet that is not this account's", async () => {
     const { prisma } = fakePrisma({ wallets: [seededWallet] });
     const response = await app({ prisma })(`/sign`, signBody({}, { from: `0x0000000000000000000000000000000000000001` }));

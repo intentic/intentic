@@ -58,11 +58,11 @@ export const tunnelHandler = <Config>(spec: TunnelKind<Config>): CapabilityHandl
     echo: spec.echo,
     fragment: spec.fragment,
     // Files are written per name by the driver; a rename only takes the old name down and erases it, since re-apply
-    // writes fresh ones under the new name.
+    // writes fresh ones under the new name. A `down` that fails stops the move: its files are how the tunnel is found.
     rename: {
         carry: async (_ctx, from, _to, raw) => {
             const config = raw as Config;
-            await spec.down({ id: from, config }).catch(() => undefined);
+            await spec.down({ id: from, config });
             await spec.driverOf(config).erase(from, config);
         },
     },
@@ -74,7 +74,7 @@ export const tunnelHandler = <Config>(spec: TunnelKind<Config>): CapabilityHandl
         await driver.write(id, config);
         await writeLoadedSkill(ctx.files, ctx.workspace.root, spec.skill.name, spec.skill.text);
         // Re-applying must never leave the old instance running: take it down, then bring it back below if wanted.
-        await spec.down(entry).catch(() => undefined);
+        await spec.down(entry);
         if (!spec.wanted(config)) {
             yield { kind: "log", message: spec.stored(id) };
             return;
@@ -90,7 +90,8 @@ export const tunnelHandler = <Config>(spec: TunnelKind<Config>): CapabilityHandl
     status: async (_ctx, id, raw) => await spec.status({ id, config: raw as Config }),
     remove: async (ctx, id, raw) => {
         const config = raw as Config;
-        await spec.down({ id, config }).catch(() => undefined);
+        // A tunnel that would not come down keeps its entry, or it runs on with no card left to stop it from.
+        await spec.down({ id, config });
         await spec.driverOf(config).erase(id, config);
         // Skill is shared by the kind, so it goes only with the last entry; the route removes the manifest entry after
         // this handler runs, so `id` still counts here.

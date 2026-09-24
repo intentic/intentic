@@ -52,6 +52,19 @@ test("a refusal carries fileq's own reason back, rather than a bare failure", as
     });
 });
 
+test("a derive that ran out of time says so, rather than reading as a file with nothing to render", async () => {
+    const timedOut: ExecFn = async () => {
+        throw Object.assign(new Error("Command failed: fileq derive --json scan.pdf"), { code: null, killed: true, signal: "SIGTERM", stdout: "" });
+    };
+    const result = await deriveText(root, "scan.pdf", timedOut);
+    expect(result).toMatchObject({ present: false, path: "scan.pdf", reason: "fileq ran past its 120s limit and was stopped" });
+});
+
+test("a derive that crashed names the crash", async () => {
+    const result = await deriveText(root, "notes.docx", failing(134, ""));
+    expect(result).toMatchObject({ present: false, path: "notes.docx", reason: "fileq failed: fileq failed" });
+});
+
 test("a sandbox without the binary blames the sandbox, not the file: `broken`, never `undeliverable`", async () => {
     const result = await deriveText(root, "notes.docx", failing("ENOENT", ""));
     expect(result).toEqual({

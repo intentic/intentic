@@ -1784,6 +1784,25 @@ describe("the archive list", () => {
         resetSandboxScope();
         expect(archived.value).toEqual([]);
     });
+
+    it("says why a read failed, keeping what it listed, and clears that once a read lands", async () => {
+        const { archived, archiveFailure, archiveLoading, loadArchived } = useAgents();
+        daemon.archived.mockResolvedValueOnce(AgentsListSchema.parse({ agents: [archivedAgent(`a`)], rev: 1 }));
+        await loadArchived();
+        expect([archived.value.map((entry) => entry.id), archiveFailure.value]).toEqual([[`a`], undefined]);
+
+        daemon.archived.mockRejectedValueOnce(new Error(`The archive index is unreadable.`));
+        await loadArchived();
+        expect([archived.value.map((entry) => entry.id), archiveFailure.value, archiveLoading.value]).toEqual([
+            [`a`],
+            `The archive index is unreadable.`,
+            false,
+        ]);
+
+        daemon.archived.mockResolvedValueOnce(AgentsListSchema.parse({ agents: [], rev: 2 }));
+        await loadArchived();
+        expect([archived.value, archiveFailure.value]).toEqual([[], undefined]);
+    });
 });
 
 // The daemon's own retention sweep used to take only the card and leave the tab, growing the chat list's Finished
@@ -1808,6 +1827,8 @@ describe("tabs the daemon retired", () => {
 
     beforeEach(() => {
         resetDaemon({});
+        // A departure re-reads the archive, whose answer must be one the contract allows.
+        daemon.archived.mockResolvedValue(AgentsListSchema.parse({ agents: [], rev: 0 }));
         resetSandboxScope();
         // The user's own chat; focused, so the strip's one-untouched-draft rule keeps it through the writes below.
         useChat().conversations.value = [new Conversation(`here`)];

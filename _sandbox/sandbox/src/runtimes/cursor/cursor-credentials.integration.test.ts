@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "../../logger.js";
@@ -40,6 +40,13 @@ test("a corrupt or foreign-shaped file reads as absent rather than throwing", as
     writeFileSync(join(dir, "broken.json"), "{ not json");
     writeFileSync(join(dir, "foreign.json"), JSON.stringify({ hello: "world" }));
     expect((await store.list()).map((account) => account.id)).toEqual(["good"]);
+});
+
+// Signed out is only a missing file: a key the daemon cannot read must not show as never connected.
+test("an account file that cannot be read is an error, not an absent account", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cursor-store-"));
+    mkdirSync(join(dir, "a1.json"));
+    await expect(fileCursorStore(dir, logger).list()).rejects.toThrow("EISDIR");
 });
 
 test("accounts are listed oldest first, which is the one that serves a turn by default", async () => {

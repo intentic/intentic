@@ -115,7 +115,8 @@ world lives on loopback ports and is handed its certificate as a bind mount of a
 A daemon reached over somebody else's socket satisfies neither. The CLI lane additionally needs this checkout's
 `ic`: hand one in with `IC_BIN`, leave one at `_sandbox/ic/dist-bin/ic-linux-amd64`
 (`bash _tools/scripts/build/build-ic.sh linux-x64`), or have `cargo` on PATH and it builds one. With none of
-those that lane stands down with the sentence that fixes it and the compose lane still runs. Two switches earn their keep while working on it:
+those that lane stands down with the sentence that fixes it and the compose lane still runs; an `IC_BIN` that
+names no executable fails the lane instead, since naming one is how a job says the lane must run. Two switches earn their keep while working on it:
 `ONBOARDING_SKIP_IMAGE_BUILD=1` reuses whatever is already tagged, and `ONBOARDING_KEEP=1` leaves the world, the
 compose folder and the CLI lane's sandbox standing after a failure, which is the difference between reading a
 daemon's log and reproducing the run to get one.

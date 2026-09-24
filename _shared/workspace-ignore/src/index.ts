@@ -75,7 +75,16 @@ const makeScope = (layers: readonly GitignoreLayer[]): IgnoreScope => ({
         return false;
     },
     async descend(absDir, relDir) {
-        return this.layer(relDir, await readFile(join(absDir, ".gitignore"), "utf8").catch(() => undefined));
+        // Only a directory with no .gitignore has no rules; one that could not be read would make everything under it
+        // count as tracked, which a walk then descends into and a portability bundle then carries.
+        const content = await readFile(join(absDir, ".gitignore"), "utf8").catch((error: unknown) => {
+            const code = (error as NodeJS.ErrnoException).code;
+            if (code === "ENOENT" || code === "ENOTDIR") {
+                return undefined;
+            }
+            throw error;
+        });
+        return this.layer(relDir, content);
     },
     layer(relDir, gitignore) {
         if (gitignore === undefined) {

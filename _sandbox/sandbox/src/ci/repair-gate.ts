@@ -63,9 +63,16 @@ const act = async (services: Services, key: string, fetchFn: FetchFn): Promise<v
     if (entry === undefined || entry.started !== undefined || !(await services.sandboxSettings.get()).autoRepair) {
         return;
     }
+    // Unlisted runs cannot show this is still the newest word, so no fix starts on them.
     const runs = await ciClientFor(entry.project.account.provider, fetchFn)
         .listRuns(entry.project, RUNS_LISTED)
-        .catch(() => []);
+        .catch((error: unknown) => {
+            services.logger.warn({ err: error, repo: entry.project.repo }, "ci repair: runs not listed, the fix waits for the next red run");
+            return undefined;
+        });
+    if (runs === undefined) {
+        return;
+    }
     const newest = runs.filter((run) => run.branch === entry.branch).toSorted((left, right) => right.createdAt - left.createdAt)[0];
     if ((newest !== undefined && newest.runId !== entry.streak.runId) || fixInFlight(services, entry.project.repo)) {
         return;
@@ -116,7 +123,7 @@ const reddened = async (services: Services, run: PipelineRun, fetchFn: FetchFn):
     if (project === undefined || !(await services.sandboxSettings.get()).autoRepair) {
         return;
     }
-    const evidence = await ciFailureEvidence(project, run.runId, fetchFn);
+    const evidence = await ciFailureEvidence(project, run.runId, services.logger, fetchFn);
     if (evidence.infra) {
         await rerunFleet(services, project, run, fetchFn);
         return;

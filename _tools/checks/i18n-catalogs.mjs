@@ -21,11 +21,15 @@ if (!locales.includes(BASE)) {
 }
 const translations = locales.filter((code) => code !== BASE);
 
+// Undefined only for a file that is not there: `--fix` writes an empty catalog over whatever this could not read.
 const readText = (path) => {
     try {
         return readFileSync(path, "utf8");
-    } catch {
-        return undefined;
+    } catch (error) {
+        if (error.code === "ENOENT") {
+            return undefined;
+        }
+        throw error;
     }
 };
 

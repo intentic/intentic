@@ -63,6 +63,18 @@ test("a crashing service is respawned with the exit code on the record and the p
     expect(serviceSession("crasher")).toBe("svc-crasher");
 });
 
+// A child that never starts emits 'error' and no 'exit'; without the backoff it would read as running forever.
+test("a service whose child could not even start is retried on the backoff, never shown as running", async () => {
+    const dir = logsDir();
+    const failures: unknown[] = [];
+    supervisor = createServiceProcesses(dir, unstubbed<Logger>("logger", { warn: () => {}, error: (payload: unknown) => void failures.push(payload) }), TIMING);
+    await supervisor.start("no-cwd", { cwd: join(dir, "removed"), command: "sleep 30" });
+    await until("two retries", () => (supervisor?.statusOf("no-cwd")?.restarts ?? 0) >= 2);
+    expect(supervisor.running("no-cwd")).toBe(false);
+    expect(supervisor.statusOf("no-cwd")?.state).toBe("backoff");
+    expect(failures[0]).toEqual({ err: expect.objectContaining({ code: "ENOENT" }), service: "no-cwd" });
+});
+
 test("stop kills the whole process group and ends the respawning", async () => {
     const dir = logsDir();
     supervisor = createServiceProcesses(dir, logger, TIMING);

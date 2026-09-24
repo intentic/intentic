@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { ProofMethodSchema } from "@intentic/sandbox-contract";
 import { jwtVerify, SignJWT } from "jose";
 import { z } from "zod";
@@ -43,7 +44,8 @@ export const createSessions = (secretPath: string): Sessions => {
     };
     const loadSecret = (): Promise<Uint8Array> => {
         secret ??= (async () => {
-            const stored = await readFile(secretPath, "utf8").catch(() => undefined);
+            // Only absence re-keys: a key that exists but cannot be read is never replaced, or every session signs out.
+            const stored = await readFile(secretPath, "utf8").catch(undefinedIfMissing);
             if (stored !== undefined) {
                 const bytes = Buffer.from(stored.trim(), "base64url");
                 // A truncated or corrupt file must not become a weak HMAC key; fall through and re-key.
@@ -53,7 +55,14 @@ export const createSessions = (secretPath: string): Sessions => {
             }
             return writeFresh();
         })();
-        return secret;
+        // A failed load is not cached, so the next request retries the read instead of failing until restart.
+        const loading = secret;
+        loading.catch(() => {
+            if (secret === loading) {
+                secret = undefined;
+            }
+        });
+        return loading;
     };
     return {
         mint: async (proof) => {

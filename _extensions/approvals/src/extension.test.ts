@@ -3,7 +3,7 @@ import type { Activation, ExtensionContext, HostQuery, IntenticApi, ViewRegistra
 import { waitFor } from "@intentic/testing/bun";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { extensionIdOf } from "@intentic/extension-manifest";
-import { activate } from "./extension";
+import { activate, approvalsAttention } from "./extension";
 import { bindHost } from "./host";
 import { messages } from "./i18n";
 import { manifest } from "./manifest";
@@ -160,6 +160,31 @@ describe(`the Approvals tile`, () => {
             [`sandbox`, `box`, `approvals`],
             [`sandbox`, `box`, `automation-approvals`],
         ]);
+    });
+
+    /* COULD NOT ASK IS NOT NOTHING THERE: a maintainer's hook sets that failed to load must not fall out of the count. */
+    it(`keeps its last count when a maintainer's hook sets cannot be read, rather than dropping them`, async () => {
+        const { api, views } = fakeHost({ approvals: [post(`a`)], invalid: [] }, [], { requests: [hookSet(`h`)] });
+        let hookReads = 0;
+        let failing = false;
+        (api.sandbox.rpc.approvals as { hookRequests: () => Promise<HookRequests> }).hookRequests = async () => {
+            hookReads += 1;
+            if (failing) {
+                throw new Error(`the daemon is restarting`);
+            }
+            return { requests: [hookSet(`h`)] };
+        };
+        bindHost(api);
+        activate(api, { extensionId: `ext-approvals`, subscriptions });
+        await waitFor(() => expect(views[0]?.badge?.(tile)).toMatchObject({ count: 2 }));
+
+        failing = true;
+        const before = hookReads;
+        approvalsAttention.refresh();
+        await waitFor(() => expect(hookReads).toBe(before + 1));
+        // Every step of a read is a settled promise here, so one macrotask later the failed read has finished.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(views[0]?.badge?.(tile)).toMatchObject({ count: 2 });
     });
 
     it(`turns to danger once something is broken rather than merely waiting`, async () => {

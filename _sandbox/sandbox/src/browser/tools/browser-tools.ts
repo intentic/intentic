@@ -320,10 +320,11 @@ export const prepareBrowserOwner = async (
     if (bound !== undefined && "refusal" in bound) {
         return bound;
     }
-    // Logged-in browsers require the display; a missing Xvfb refuses rather than shipping a headless one.
-    const display = await ensureDisplay(owner).catch(() => undefined);
-    if (display === undefined) {
-        return { refusal: `${owner}: no X display could be started for it, so it was not opened headless instead. Rebuild the sandbox to install Xvfb.` };
+    // Logged-in browsers require the display; one that won't start refuses rather than shipping a headless browser, with
+    // display.ts's own reason, which tells a missing Xvfb (rebuild) from one that did not come up (no rebuild helps).
+    const display = await ensureDisplay(owner).catch((error: unknown) => ({ failed: errorMessage(error) }));
+    if ("failed" in display) {
+        return { refusal: `${owner}: no X display could be started for it (${display.failed}), so it was not opened headless instead.` };
     }
     const exit = bound?.exit;
     // One device per owner (fingerprint.ts); a bound profile's clock matches its exit's country, not the sandbox's.

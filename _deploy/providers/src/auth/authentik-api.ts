@@ -26,19 +26,31 @@ export interface AuthentikApi {
 const listSchema = z.object({ results: z.array(z.object({ pk: z.union([z.number(), z.string()]) })) });
 const scopeListSchema = z.object({ results: z.array(z.object({ pk: z.string(), scope_name: z.string() })) });
 
-// A single fetch with the Bearer token; throws on a non-2xx status with the response body for context.
-const call = async (method: string, baseUrl: string, token: string, path: string, body?: unknown): Promise<Response> => {
-    const response = await fetch(`${baseUrl}/api/v3${path}`, {
+const send = async (method: string, baseUrl: string, token: string, path: string, body?: unknown): Promise<Response> =>
+    fetch(`${baseUrl}/api/v3${path}`, {
         method,
         headers: { Authorization: `Bearer ${token}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         // Bound a stalled connection (undici's default headers timeout is much longer).
         signal: AbortSignal.timeout(30_000),
     });
-    if (!response.ok) {
-        throw new Error(`authentik ${method} ${path} failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
+
+const fail = async (method: string, path: string, response: Response): Promise<never> => {
+    throw new Error(`authentik ${method} ${path} failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
+};
+
+// A single fetch with the Bearer token; throws on a non-2xx status with the response body for context.
+const call = async (method: string, baseUrl: string, token: string, path: string, body?: unknown): Promise<Response> => {
+    const response = await send(method, baseUrl, token, path, body);
+    return response.ok ? response : fail(method, path, response);
+};
+
+// A delete whose target may already be gone: 404 is the desired end state, any other non-2xx throws.
+const remove = async (baseUrl: string, token: string, path: string): Promise<void> => {
+    const response = await send("DELETE", baseUrl, token, path);
+    if (!response.ok && response.status !== 404) {
+        await fail("DELETE", path, response);
     }
-    return response;
 };
 
 const get = async (baseUrl: string, token: string, path: string): Promise<unknown> => (await call("GET", baseUrl, token, path)).json();
@@ -95,10 +107,10 @@ export const authentikApi: AuthentikApi = {
         }
     },
     deleteClient: async ({ baseUrl, token, slug }) => {
-        await call("DELETE", baseUrl, token, `/core/applications/${slug}/`).catch(() => undefined);
+        await remove(baseUrl, token, `/core/applications/${slug}/`);
         const providerPk = firstPk(await get(baseUrl, token, `/providers/oauth2/?name=${slug}`));
         if (providerPk !== undefined) {
-            await call("DELETE", baseUrl, token, `/providers/oauth2/${providerPk}/`).catch(() => undefined);
+            await remove(baseUrl, token, `/providers/oauth2/${providerPk}/`);
         }
     },
 };

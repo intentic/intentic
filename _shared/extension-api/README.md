@@ -166,7 +166,10 @@ when the work ends.
 `key → mark`, where the mark is what makes an entry stale. Compare marks (a chore's evidence digest, a story's
 verdict) and the same key with new evidence is news again; ignore them and it is a plain presence ledger. It
 reads a missing or mangled file as "nothing acknowledged", writes nothing when nothing moved, and holds the
-scope guard across its own read-then-write so an acknowledgement cannot land in the wrong workspace's tree.
+scope guard across its own read-then-write so an acknowledgement cannot land in the wrong workspace's tree. A
+write reads through the typed `workspace.file` route rather than `readJson`, since that route fails where
+`readJson` answers "absent" for a refused or unreachable read: `mark` and `replace` then reject instead of writing
+their entries over every acknowledgement the file still holds.
 
 This is not advice. `sandboxScope.guard.test.ts` in the app walks each extension's UI entry through its own
 imports and refuses module-level `ref`/`shallowRef`/`reactive`, any reassignable module binding, and any

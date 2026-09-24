@@ -323,7 +323,9 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         retryTimer = undefined;
         retried = 0;
     };
-    const retryLater = (): void => {
+    // Every refresh's failure lands here, so this is the one place it's logged; callers only swallow the rejection.
+    const retryLater = (error: unknown): void => {
+        console.warn(`terminal ${storageKey}: listing sessions failed`, error);
         const wait = RETRY_MS[retried];
         if (wait === undefined && answer.value === `waiting`) {
             // Nothing more is coming; said explicitly so the panel stops promising terminals it's no longer asking for.

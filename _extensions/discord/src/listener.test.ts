@@ -1,5 +1,5 @@
-import type { Message } from "discord.js";
-import { authorOf, toHistory } from "./listener.js";
+import { type Client, DiscordAPIError, type Message } from "discord.js";
+import { authorOf, deliverToChannel, toHistory } from "./listener.js";
 
 // A fetched discord message, only the fields toHistory reads.
 const msg = (id: string, authorId: string, name: string, content: string): Message =>
@@ -32,4 +32,28 @@ test("authorOf names the sender by id and carries the member's role ids as group
 test("authorOf carries no groups for a DM, which has no member", () => {
     const dm = { author: { id: "u1", username: "radarsu" }, member: null } as unknown as Pick<Message, "author" | "member">;
     expect(authorOf(dm)).toEqual({ id: "u1", name: "radarsu" });
+});
+
+/* WHO CAN POST HERE, as Discord answers it: a bot Discord says cannot see the channel is passed over, while an outage
+ * is not an answer about the channel at all and must not read as "no bot can post in this channel". */
+const deliveringBot = (fetched: () => Promise<unknown>): Client => ({ channels: { fetch: fetched } }) as unknown as Client;
+
+const channelThatRecords = (sent: string[]) => ({ send: async (content: string) => void sent.push(content) });
+
+test("deliverToChannel passes over a bot Discord says cannot see the channel, and posts through the next", async () => {
+    const sent: string[] = [];
+    const hidden = new DiscordAPIError({ code: 50001, message: "Missing Access" }, 50001, 403, "GET", "/channels/c1", { body: undefined, files: undefined });
+    const bots = new Map([
+        ["t1", deliveringBot(() => Promise.reject(hidden))],
+        ["t2", deliveringBot(async () => channelThatRecords(sent))],
+    ]);
+    await deliverToChannel(bots, "c1", "hello");
+    expect(sent).toEqual(["hello"]);
+});
+
+test("deliverToChannel lets an outage through instead of reading it as a channel no bot can post in", async () => {
+    const sent: string[] = [];
+    const bots = new Map([["t1", deliveringBot(() => Promise.reject(new Error("connect ETIMEDOUT")))]]);
+    await expect(deliverToChannel(bots, "c1", "hello")).rejects.toThrow("connect ETIMEDOUT");
+    expect(sent).toEqual([]);
 });

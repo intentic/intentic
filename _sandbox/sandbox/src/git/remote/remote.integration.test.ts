@@ -283,6 +283,22 @@ test("pushBranch pushes to the remote the branch tracks, not the first one git l
     expect(await remoteState(clone)).toMatchObject({ ahead: 0, behind: 0 });
 });
 
+test("pushBranch refuses when the upstream read fails, never planning a first push to another remote", async () => {
+    const { clone, origin, upstream } = await forked();
+    await commit(clone, "b.txt", "two");
+    const forker: GitRunner = async (dir, args, env) => {
+        if (args[0] === "for-each-ref") {
+            throw new Error("git forker exited");
+        }
+        return defaultGit(dir, args, env);
+    };
+
+    expect(await pushBranch(clone, {}, forker)).toEqual({ ok: false, reason: "git forker exited" });
+    expect(await sh(upstream, "log", "-1", "--format=%s", "main")).toBe("one");
+    expect(await sh(origin, "log", "-1", "--format=%s", "main")).toBe("one");
+    expect((await remoteState(clone)).upstream).toBe("upstream/main");
+});
+
 test("pushBranch publishes a never-pushed branch to the repo's configured remote", async () => {
     const { clone, origin } = await forked();
     // A brand-new branch tracks nothing, so it publishes to the repo's first configured remote by default.

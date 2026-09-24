@@ -29,6 +29,7 @@ void runConnectorGateway<TelegramConnectorConfig, string>({
                         ctx.log.error({ err: error, capabilityId: id }, "telegram poll stopped");
                         control.markFatal(config.botToken, error.message);
                     },
+                    (error, waitMs) => ctx.log.warn({ err: error, capabilityId: id, waitMs }, "telegram poll failed; retrying"),
                 );
                 return config.botToken;
             },

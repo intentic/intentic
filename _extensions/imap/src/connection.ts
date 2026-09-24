@@ -141,12 +141,22 @@ export const openImapConnection = async (
 
     const uidValidity = String(box.uidValidity);
     const path = watermarkPath(ctx.workspaceRoot, capabilityId);
-    const point = resumePoint(await readWatermark(path), { mailbox, uidValidity, uidNext: box.uidNext });
-    const mark = { lastUid: point.lastUid };
-    if (point.baselined) {
-        // New mailbox generation (add, folder change, UIDVALIDITY reset): baseline now, dispatch nothing from history.
-        await writeWatermark(path, { mailbox, uidValidity, lastUid: mark.lastUid });
+    let point: { lastUid: number; baselined: boolean };
+    try {
+        const stored = await readWatermark(path, (detail) =>
+            ctx.log.warn({ capabilityId, path, detail }, "imap watermark unreadable; resuming from the mailbox's current end, so mail from the downtime is not dispatched"),
+        );
+        point = resumePoint(stored, { mailbox, uidValidity, uidNext: box.uidNext });
+        if (point.baselined) {
+            // New mailbox generation (add, folder change, UIDVALIDITY reset): baseline now, dispatch nothing from history.
+            await writeWatermark(path, { mailbox, uidValidity, lastUid: point.lastUid });
+        }
+    } catch (error) {
+        // No watcher gets attached to this client, so nothing else would ever log it out.
+        await client.logout().catch(() => undefined);
+        throw error;
     }
+    const mark = { lastUid: point.lastUid };
 
     const dispatchNew = (): Promise<void> =>
         syncNewMail(

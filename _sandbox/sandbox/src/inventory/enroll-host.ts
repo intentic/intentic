@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { EnrollHostInput, InventoryEntry } from "@intentic/sandbox-contract";
-import { hostSshKeyVar } from "@intentic/scaffold";
+import { ENV_FILE, hostSshKeyVar } from "@intentic/scaffold";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import { upsertEnv } from "../secrets/secrets.routes.js";
+import { textFile } from "../store/text-file.js";
 import { createConfigStore } from "./config-store.js";
 import { hasManagedEntry, upsertManagedEntry } from "./managed-region.js";
 
@@ -19,12 +19,11 @@ export const enrollHost = async (services: Services, input: EnrollHostInput): Pr
         throw new ORPCError("PRECONDITION_FAILED", { message: "DevOps is not active, activate it before enrolling a host." });
     }
 
-    // Secrets → desired-state/.env (mode 0600), the same file `apply` reloads (mirrors secrets.routes).
-    const envPath = join(desiredState, ".env");
+    // Secrets → desired-state/.env (mode 0600), the same file `apply` reloads, on the same queue secrets.routes writes
+    // it through, so an unreadable .env is refused rather than replaced by this one key.
+    const env = textFile(join(desiredState, ENV_FILE), 0o600);
     const writeSecret = async (key: string, value: string): Promise<void> => {
-        const current = await readFile(envPath, "utf8").catch(() => "");
-        await mkdir(dirname(envPath), { recursive: true });
-        await writeFile(envPath, upsertEnv(current, key, value), { mode: 0o600 });
+        await env.update((current) => upsertEnv(current, key, value));
     };
     await writeSecret(hostSshKeyVar(input.name), input.sshKey);
     if (input.cfToken !== undefined) {

@@ -90,15 +90,11 @@ export const createKomodoPeripheryProvider = (executor: SshExecutor = sshExecuto
             await session.dispose();
         }
     },
-    delete: async (inputs, ctx) => {
+    // An unreachable host fails the delete: prune would otherwise count it deleted and drop it from the baseline, and
+    // the unstamped container is invisible to the orphan scan.
+    delete: async (inputs) => {
         const parsed = parse(inputs);
-        let session: SshSession;
-        try {
-            session = await executor.connect(sshTarget(parsed));
-        } catch (error) {
-            ctx.log(`komodo-periphery "${ctx.id}": host not reachable for delete: ${String(error)}`);
-            return;
-        }
+        const session = await executor.connect(sshTarget(parsed));
         try {
             await session.exec(`docker rm -f ${containerName(parsed.serverName)} 2>/dev/null || true`);
         } finally {

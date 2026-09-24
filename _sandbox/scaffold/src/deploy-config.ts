@@ -88,10 +88,14 @@ const renderOption = (entry: InventoryEntry, field: FieldSpec): string | undefin
     if (field.optional && (value === undefined || value === ``)) {
         return undefined;
     }
-    if (field.source === `number`) {
-        return `${field.key}: ${typeof value === `number` ? value : Number(value ?? 0)}`;
+    // Rendered as `""` or `0`, a value the parse could not read back would overwrite the one written in the file.
+    if (value === undefined) {
+        throw new ManagedRegionError(`deploy.config.ts: "${entry.name}" has no ${field.key}, so its declaration cannot be written.`);
     }
-    return `${field.key}: ${JSON.stringify(String(value ?? ``))}`;
+    if (field.source === `number`) {
+        return `${field.key}: ${typeof value === `number` ? value : Number(value)}`;
+    }
+    return `${field.key}: ${JSON.stringify(String(value))}`;
 };
 
 const renderBackendEntry = (entry: Extract<InventoryEntry, { kind: `backend` }>): string => {
@@ -119,8 +123,11 @@ const renderServiceEntry = (entry: ServiceEntry): string => {
 // Wires on/expose like a service; the one production environment carries the domain, branch fixed to "main". Kept to
 // one line for the region's line-based parse.
 const renderAppEntry = (entry: AppEntry): string => {
-    const domain = JSON.stringify(String(entry.values[`domain`] ?? ``));
-    const options = `on: ${entry.on}, expose: ${entry.expose}, environments: { production: { domain: ${domain}, branch: "main" } }`;
+    const domain = entry.values[`domain`];
+    if (domain === undefined) {
+        throw new ManagedRegionError(`deploy.config.ts: "${entry.name}" has no domain, so its declaration cannot be written.`);
+    }
+    const options = `on: ${entry.on}, expose: ${entry.expose}, environments: { production: { domain: ${JSON.stringify(String(domain))}, branch: "main" } }`;
     return `${INDENT}const ${entry.name} = i.want.app(${JSON.stringify(entry.name)}, { ${options} });`;
 };
 
@@ -138,7 +145,13 @@ const renderRegion = (entries: readonly InventoryEntry[]): string =>
     [`${INDENT}${BEGIN_MARKER}`, ...entries.map(renderEntry), `${INDENT}${END_TAG}`].join(`\n`);
 
 // Rewrites the managed region in `src` to `entries`, replacing it if present or inserting one inside defineIntent's
-// body; throws if there's no defineIntent to insert into.
+// body; throws if there's no defineIntent to insert into, or if the region holds a line the parse cannot read.
+// The region cannot be written as asked: a line a rewrite would delete, or an entry missing a value it needs. The
+// owner's to fix, not a fault.
+export class ManagedRegionError extends Error {
+    override name = `ManagedRegionError`;
+}
+
 export const writeManagedRegion = (src: string, entries: readonly InventoryEntry[]): string => {
     const lines = src.split(`\n`);
     const begin = lines.findIndex((line) => line.trim().startsWith(BEGIN_TAG));
@@ -146,6 +159,14 @@ export const writeManagedRegion = (src: string, entries: readonly InventoryEntry
     const region = renderRegion(entries).split(`\n`);
 
     if (begin !== -1 && end !== -1 && end > begin) {
+        // `entries` came from the lines the parse could read; replacing the region would delete every other one.
+        const unreadable = lines.slice(begin + 1, end).find((line) => line.trim() !== `` && parseLine(line) === undefined);
+        if (unreadable !== undefined) {
+            throw new ManagedRegionError(
+                `deploy.config.ts's managed region holds a line intentic cannot read, and rewriting the region would delete it: ${unreadable.trim()}\n` +
+                    `Put it back on one line as intentic wrote it, or move it outside the ${BEGIN_TAG} markers.`,
+            );
+        }
         return [...lines.slice(0, begin), ...region, ...lines.slice(end + 1)].join(`\n`);
     }
 
@@ -192,8 +213,48 @@ const serviceValues = (kind: ServiceKind, all: Record<string, string | number>):
     return values;
 };
 
-// Parses i.have.* / i.want.service declarations in the managed region into structured entries; an unmodeled provider or
-// service is skipped, left untouched.
+// One managed-region line as an entry, or undefined for a line in no shape this parse models (an unmodeled provider or
+// service, a hand edit, a declaration a formatter wrapped).
+const parseLine = (line: string): InventoryEntry | undefined => {
+    // Matches i.want.service("name", { kind, on, expose, ... }); on/expose are bare const references.
+    const serviceMatch = /i\.want\.service\(\s*"([^"]+)"\s*,\s*\{(.*)\}\s*\)/.exec(line);
+    if (serviceMatch) {
+        const name = serviceMatch[1];
+        const optionsSrc = serviceMatch[2];
+        const kind = /\bkind\s*:\s*"([^"]+)"/.exec(optionsSrc ?? ``)?.[1];
+        const on = /\bon\s*:\s*([a-zA-Z_]\w*)/.exec(optionsSrc ?? ``)?.[1];
+        const expose = /\bexpose\s*:\s*([a-zA-Z_]\w*)/.exec(optionsSrc ?? ``)?.[1];
+        if (name === undefined || optionsSrc === undefined || kind === undefined || !KNOWN_SERVICES.has(kind) || on === undefined || expose === undefined) {
+            return undefined;
+        }
+        return { kind: `service`, service: kind as ServiceKind, name, on, expose, values: serviceValues(kind as ServiceKind, parseValues(optionsSrc)) };
+    }
+    // Matches i.want.app("name", { on, expose, environments: { production: { domain, branch } } }).
+    const appMatch = /i\.want\.app\(\s*"([^"]+)"\s*,\s*\{(.*)\}\s*\)/.exec(line);
+    if (appMatch) {
+        const name = appMatch[1];
+        const optionsSrc = appMatch[2];
+        const on = /\bon\s*:\s*([a-zA-Z_]\w*)/.exec(optionsSrc ?? ``)?.[1];
+        const expose = /\bexpose\s*:\s*([a-zA-Z_]\w*)/.exec(optionsSrc ?? ``)?.[1];
+        const domain = /\bdomain\s*:\s*"([^"]*)"/.exec(optionsSrc ?? ``)?.[1];
+        if (name === undefined || on === undefined || expose === undefined || domain === undefined) {
+            return undefined;
+        }
+        return { kind: `app`, name, on, expose, values: { domain } };
+    }
+    // Matches i.have.<provider>("name", { ... }).
+    const match = /i\.have\.(\w+)\(\s*"([^"]+)"\s*,\s*\{(.*)\}\s*\)/.exec(line);
+    const provider = match?.[1];
+    const name = match?.[2];
+    const optionsSrc = match?.[3];
+    if (provider === undefined || name === undefined || optionsSrc === undefined || !KNOWN_PROVIDERS.has(provider)) {
+        return undefined;
+    }
+    return { kind: `backend`, provider: provider as InventoryProvider, name, values: parseValues(optionsSrc) };
+};
+
+// Parses i.have.* / i.want.service declarations in the managed region into structured entries; a line in no modeled
+// shape is skipped here, and writeManagedRegion refuses to write over it.
 export const readManagedRegion = (src: string): InventoryEntry[] => {
     const lines = src.split(`\n`);
     const begin = lines.findIndex((line) => line.trim().startsWith(BEGIN_TAG));
@@ -201,60 +262,7 @@ export const readManagedRegion = (src: string): InventoryEntry[] => {
     if (begin === -1 || end === -1 || end <= begin) {
         return [];
     }
-
-    const entries: InventoryEntry[] = [];
-    for (const line of lines.slice(begin + 1, end)) {
-        // Matches i.want.service("name", { kind, on, expose, ... }); on/expose are bare const references.
-        const serviceMatch = /i\.want\.service\(\s*"([^"]+)"\s*,\s*\{(.*)\}\s*\)/.exec(line);
-        if (serviceMatch) {
-            const name = serviceMatch[1];
-            const optionsSrc = serviceMatch[2];
-            const kind = /\bkind\s*:\s*"([^"]+)"/.exec(optionsSrc ?? ``)?.[1];
-            const on = /\bon\s*:\s*([a-zA-Z_]\w*)/.exec(optionsSrc ?? ``)?.[1];
-            const expose = /\bexpose\s*:\s*([a-zA-Z_]\w*)/.exec(optionsSrc ?? ``)?.[1];
-            if (
-                name !== undefined &&
-                optionsSrc !== undefined &&
-                kind !== undefined &&
-                KNOWN_SERVICES.has(kind) &&
-                on !== undefined &&
-                expose !== undefined
-            ) {
-                entries.push({
-                    kind: `service`,
-                    service: kind as ServiceKind,
-                    name,
-                    on,
-                    expose,
-                    values: serviceValues(kind as ServiceKind, parseValues(optionsSrc)),
-                });
-            }
-            continue;
-        }
-        // Matches i.want.app("name", { on, expose, environments: { production: { domain, branch } } }).
-        const appMatch = /i\.want\.app\(\s*"([^"]+)"\s*,\s*\{(.*)\}\s*\)/.exec(line);
-        if (appMatch) {
-            const name = appMatch[1];
-            const optionsSrc = appMatch[2];
-            const on = /\bon\s*:\s*([a-zA-Z_]\w*)/.exec(optionsSrc ?? ``)?.[1];
-            const expose = /\bexpose\s*:\s*([a-zA-Z_]\w*)/.exec(optionsSrc ?? ``)?.[1];
-            const domain = /\bdomain\s*:\s*"([^"]*)"/.exec(optionsSrc ?? ``)?.[1];
-            if (name !== undefined && on !== undefined && expose !== undefined && domain !== undefined) {
-                entries.push({ kind: `app`, name, on, expose, values: { domain } });
-            }
-            continue;
-        }
-        // Matches i.have.<provider>("name", { ... }).
-        const match = /i\.have\.(\w+)\(\s*"([^"]+)"\s*,\s*\{(.*)\}\s*\)/.exec(line);
-        const provider = match?.[1];
-        const name = match?.[2];
-        const optionsSrc = match?.[3];
-        if (provider === undefined || name === undefined || optionsSrc === undefined || !KNOWN_PROVIDERS.has(provider)) {
-            continue;
-        }
-        entries.push({ kind: `backend`, provider: provider as InventoryProvider, name, values: parseValues(optionsSrc) });
-    }
-    return entries;
+    return lines.slice(begin + 1, end).flatMap((line) => parseLine(line) ?? []);
 };
 
 // Fresh deploy.config.ts containing only the managed region; the base for a repo with no config yet, used by `init

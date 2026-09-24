@@ -69,6 +69,8 @@ export const filePasskeys = (path: string): PasskeyStore => {
     const file = jsonFile<PasskeysFile>(path, {
         parse: objectParse(PasskeysFileSchema),
         fallback: () => ({ required: false, credentials: [], recovery: [] }),
+        // The owner's require-a-passkey switch and recovery hashes: a fresh file over an unreadable one would drop both.
+        onUnreadable: "refuse",
     });
     return {
         list: async () => [...(await file.read()).credentials],

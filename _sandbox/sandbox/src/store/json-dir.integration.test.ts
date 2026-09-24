@@ -1,9 +1,10 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
 import { jsonDir } from "./json-dir.js";
+import { ManifestUnreadableError } from "./json-file.js";
 
 const dirs: string[] = [];
 const tempDir = async (): Promise<string> => {
@@ -55,6 +56,27 @@ test("a bad name, unparseable bytes, and a schema-rejected body are all reported
     expect(await store.read("bad.name!")).toBeUndefined();
 });
 
+// A store that reads-or-creates (the issues store's `record`) would otherwise write a fresh entry over the one it could
+// not read.
+test("an entry that exists but cannot be read throws on read instead of reading as absent", async () => {
+    const dir = await tempDir();
+    const store = notes(dir);
+    await store.write("seed", { text: "creates the directory" });
+    await writeFile(join(dir, "torn.json"), "{ not json");
+    await writeFile(join(dir, "wrong-shape.json"), JSON.stringify({ nope: 1 }));
+    // A link to itself: a read that fails with ELOOP, not ENOENT, whoever runs the test.
+    await symlink(join(dir, "looped.json"), join(dir, "looped.json"));
+
+    await expect(store.read("torn")).rejects.toThrow(new ManifestUnreadableError(join(dir, "torn.json"), "the file is not valid JSON"));
+    await expect(store.read("wrong-shape")).rejects.toThrow(
+        new ManifestUnreadableError(join(dir, "wrong-shape.json"), "the file does not match what this build expects"),
+    );
+    await expect(store.read("looped")).rejects.toThrow(new ManifestUnreadableError(join(dir, "looped.json"), "the file could not be read (ELOOP)"));
+    expect(await store.read("never-written")).toBeUndefined();
+    expect((await store.list()).invalid.toSorted()).toEqual(["looped.json", "torn.json", "wrong-shape.json"]);
+    expect(await readFile(join(dir, "torn.json"), "utf8")).toBe("{ not json");
+});
+
 test("a write leaves no temp behind, so a concurrent list never sees a half-written entry", async () => {
     const dir = await tempDir();
     const store = notes(dir);
@@ -62,6 +84,15 @@ test("a write leaves no temp behind, so a concurrent list never sees a half-writ
     // The rename target is the only entry: a leftover temp would be a write that never completed its swap:
     // and one caught mid-swap must not surface as `invalid`, which is why the scan takes `.json` alone.
     expect(await readdir(dir)).toEqual(["only.json"]);
+});
+
+test("an entry removed between the listing and its read is skipped, not reported invalid", async () => {
+    const dir = await tempDir();
+    const store = notes(dir);
+    await store.write("kept", { text: "stays" });
+    // A dangling link lists like an entry and reads like one that was just removed.
+    await symlink(join(dir, "nowhere"), join(dir, "gone.json"));
+    expect(await store.list()).toEqual({ entries: [{ text: "stays", id: "kept" }], invalid: [] });
 });
 
 test("remove unlinks the entry; a second remove reports missing", async () => {

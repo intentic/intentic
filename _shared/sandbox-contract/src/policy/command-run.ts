@@ -10,8 +10,9 @@ export interface FollowRunOptions<R extends CommandRun> {
     readonly signal?: AbortSignal | undefined;
     // Every state read, settled or not, for a surface that draws progress.
     readonly onState?: ((run: R) => void) | undefined;
-    // A poll that failed, not a run that failed: the run is still going, and following continues.
-    readonly onError?: ((cause: unknown) => void) | undefined;
+    // A poll that failed, not a run that failed: the run is still going, and following continues. Required, since a
+    // loop that retries a failing read forever with nobody told looks exactly like a run that is still going.
+    readonly onError: (cause: unknown) => void;
 }
 
 // Follows a run to its verdict: reads state until it is no longer running. The one shared loop, so a dropped poll isn't
@@ -22,14 +23,18 @@ export const followCommandRun = async <R extends CommandRun>(read: () => Promise
         if (signal?.aborted === true) {
             return undefined;
         }
+        // Only the read is a poll that may fail and be retried; a throw from `onState` is the caller's own bug.
+        let run: R | undefined;
         try {
-            const run = await read();
+            run = await read();
+        } catch (cause) {
+            onError(cause);
+        }
+        if (run !== undefined) {
             onState?.(run);
             if (run.status !== "running") {
                 return run;
             }
-        } catch (cause) {
-            onError?.(cause);
         }
         await sleep(intervalMs, { signal });
     }

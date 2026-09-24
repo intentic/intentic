@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { envLine, UnquotableValueError } from "@intentic/sandbox-run/quote";
@@ -161,7 +162,13 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
         }),
         inventory: i.inventory.handler(async () => {
             const [repoEntries, capabilities, connectors, providerEntries, uses, gates] = await Promise.all([
-                existsSync(desiredState()) ? collectSecretInventory(desiredState()) : [],
+                // A display surface: one unparseable repo file costs its own rows, said in the log, not the whole panel.
+                existsSync(desiredState())
+                    ? collectSecretInventory(desiredState()).catch((error: unknown) => {
+                          services.logger.warn({ err: error }, "secrets inventory: the desired-state repo's secret files could not be read");
+                          return [];
+                      })
+                    : [],
                 services.capabilities.list(),
                 contributionRegistry(services),
                 // Every provider's connected-account rows, from the modules themselves, not hand-kept here.
@@ -228,7 +235,8 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             if (typeof envValue === "string") {
                 return { value: envValue };
             }
-            const generatedRaw = await readFile(join(desiredState(), SECRETS_FILE), "utf8").catch(() => "{}");
+            // Only absence is "no generated secrets": an unreadable file must not answer NOT_FOUND for a secret it holds.
+            const generatedRaw = (await readFile(join(desiredState(), SECRETS_FILE), "utf8").catch(undefinedIfMissing)) ?? "{}";
             const generatedValue = (JSON.parse(generatedRaw) as Record<string, unknown>)[input.key];
             if (typeof generatedValue === "string") {
                 return { value: generatedValue };
@@ -281,8 +289,8 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
         request: i.request.handler(async ({ input, context, signal }) => {
             const gate = await services.credentialGates.list().then(
                 (gates) => gates.find((entry) => entry.subject === input.subject),
-                () => {
-                    throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "the credential gate policy could not be read" });
+                (error: unknown) => {
+                    throw new ORPCError("INTERNAL_SERVER_ERROR", { message: errorMessage(error), cause: error });
                 },
             );
             if (gate === undefined) {

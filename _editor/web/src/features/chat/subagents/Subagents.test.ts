@@ -21,13 +21,21 @@ const child = (over: Partial<SubagentSession>): SubagentSession => ({
 });
 
 const sessions = ref<SubagentSession[]>([]);
+// Why the roster read failed, and the transcript read's rejection, as each query reports it.
+const rosterError = ref<string | undefined>(undefined);
+const transcriptError = ref<Error | null>(null);
 // Conversation ids the page pointed the docked chat at.
 const opened: string[] = [];
 
 // Stubs the roster/fleet caches so the test drives the list, not the network; `subagentLive` stays real.
 jest.mock("./subagentsQuery", () => ({
     ...subagentsQueryOriginal,
-    useSubagentsQuery: () => ({ sessions: computed(() => sessions.value), running: computed(() => sessions.value), refetch: async () => undefined }),
+    useSubagentsQuery: () => ({
+        sessions: computed(() => sessions.value),
+        running: computed(() => sessions.value),
+        error: computed(() => rosterError.value),
+        refetch: async () => undefined,
+    }),
 }));
 jest.mock("../../agents/fleet/useAgents", () => ({
     useAgents: () => ({
@@ -38,7 +46,7 @@ jest.mock("../../agents/fleet/useAgents", () => ({
 // Stubs useQuery (the transcript read); irrelevant to which rows the rail draws.
 jest.mock("@tanstack/vue-query", () => ({
     ...vueQueryOriginal,
-    useQuery: () => ({ data: ref([]) }),
+    useQuery: () => ({ data: ref(undefined), error: transcriptError }),
 }));
 
 const { default: Subagents } = await import("./Subagents.vue");
@@ -79,6 +87,8 @@ afterEach(() => {
     mounted = undefined;
     document.body.innerHTML = ``;
     sessions.value = [];
+    rosterError.value = undefined;
+    transcriptError.value = null;
     opened.length = 0;
 });
 
@@ -143,4 +153,19 @@ it(`offers the chat's tool-call control, and no composer`, async () => {
     const el = await mount({});
     expect(el.querySelector(`[aria-label="Show tool calls"]`)).not.toBeNull();
     expect(el.querySelector(`textarea`)).toBeNull();
+});
+
+it(`says why the roster could not be read, rather than claiming no agent was ever started`, async () => {
+    rosterError.value = `Request failed (503).`;
+    const text = (await mount({})).textContent ?? ``;
+    expect(text).toContain(`Request failed (503).`);
+    expect(text).not.toContain(`No agents started`);
+});
+
+it(`says why a finished child's transcript could not be read, rather than claiming none was recorded`, async () => {
+    sessions.value = [child({ status: `completed` })];
+    transcriptError.value = new Error(`The session store is unreadable.`);
+    const text = (await mount({})).textContent ?? ``;
+    expect(text).toContain(`The session store is unreadable.`);
+    expect(text).not.toContain(`No transcript was recorded for this agent.`);
 });

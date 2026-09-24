@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
 import { existsSync, lstatSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { STATE_DIR } from "@intentic/constants";
-import { gitInit } from "@intentic/scaffold";
+import { defaultGit, gitInit, type GitRunner } from "@intentic/scaffold";
 import { noIsolation } from "../../testing.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
@@ -203,6 +203,23 @@ test("a mount point left by a namespaced turn does not make the symlink that rep
     await worktrees.retire("c1", created.repos, "t");
 
     expect(await sh(join(work, "intent"), "ls-tree", "-r", "--name-only", "agent/c1")).not.toContain("node_modules");
+});
+
+// The exclude file holds the owner's own lines beside the mirrors'; one that exists but cannot be read is never
+// replaced, and the links it would have covered are dropped instead.
+test("an exclude file that cannot be read is left as it was, and the mirror it would have covered is not linked", async () => {
+    const { work, historyRoot, worktrees } = await setup();
+    await install(join(work, "intent"), "node_modules/");
+    const exclude = join(repoGitDir(historyRoot, "intent"), "info", "exclude");
+    await rm(exclude, { force: true });
+    // Pointing at itself, so every read fails with ELOOP; git warns and carries on.
+    await symlink(exclude, exclude);
+
+    const conversation = await worktrees.ensure("c1", []);
+
+    expect(lstatSync(exclude).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(conversation.cwd, "intent", "node_modules"))).toBe(false);
+    expect(await sh(join(conversation.cwd, "intent"), "status", "--porcelain")).toBe("");
 });
 
 // The repo itself un-ignores the path, and a tracked .gitignore outranks the exclude file, so no link may stand.
@@ -608,6 +625,39 @@ test("a repo the selection drops leaves with its work committed onto the branch,
     expect(rejoined.repos.map(({ repo }) => repo)).toEqual(["root", "intent"]);
     expect(await readFile(join(rejoined.cwd, "intent", "deploy.config.ts"), "utf8")).toBe("edited by the agent\n");
     expect(await sh(join(rejoined.cwd, "intent"), "branch", "--show-current")).toBe("agent/c1");
+});
+
+// A branch still on the shelf must not be built over: a fresh `-b` beside it would be what the next park shelves,
+// replacing the conversation's own commits there.
+test("a repo whose parked branch cannot be unparked stays out, and joins with its work once the unpark succeeds", async () => {
+    const { work, historyRoot, worktrees } = await setup();
+    const created = await worktrees.ensure("c1", []);
+    await writeFile(join(created.cwd, "intent", "deploy.config.ts"), "edited by the agent\n");
+    const narrowed = await worktrees.ensure("c1", created.repos, undefined, undefined, []);
+    const intent = join(work, "intent");
+    const shelved = await sh(intent, "rev-parse", "refs/agent/c1");
+    // The unpark's first write, refused as a held ref lock would refuse it.
+    const locked: GitRunner = async (dir, args, env) => {
+        if (args[0] === "update-ref" && args[1] === "refs/heads/agent/c1") {
+            throw Object.assign(new Error("cannot lock ref 'refs/heads/agent/c1'"), { code: 128 });
+        }
+        return defaultGit(dir, args, env);
+    };
+    const refusing = createAgentWorktrees(
+        { workspace: workspacePaths(work), worktreesRoot: join(historyRoot, "worktrees"), historyRoot, isolation: noIsolation(work, historyRoot), logger, perf },
+        locked,
+    );
+
+    const refused = await refusing.ensure("c1", narrowed.repos, undefined, undefined, ["intent"]);
+
+    expect(refused.repos.map(({ repo }) => repo)).toEqual(["root"]);
+    expect(existsSync(join(refused.cwd, "intent"))).toBe(false);
+    expect(await sh(intent, "for-each-ref", "--format=%(refname)", "refs/heads/agent/")).toBe("");
+    expect(await sh(intent, "rev-parse", "refs/agent/c1")).toBe(shelved);
+
+    const rejoined = await worktrees.ensure("c1", refused.repos, undefined, undefined, ["intent"]);
+    expect(rejoined.repos.map(({ repo }) => repo)).toEqual(["root", "intent"]);
+    expect(await readFile(join(rejoined.cwd, "intent", "deploy.config.ts"), "utf8")).toBe("edited by the agent\n");
 });
 
 test("a conversation with no selection keeps the composition it was born with", async () => {

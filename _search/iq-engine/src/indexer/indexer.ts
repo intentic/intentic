@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { errnoCode, errorMessage, isMissing } from "@intentic/base/errors";
 import { MODEL_ID } from "../embed/embedder.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import {
@@ -33,6 +34,8 @@ export interface RevalidateResult {
     readonly generation: number;
     readonly fileCount: number;
     readonly changed: number;
+    // `path (CODE)` per swept file that failed to read for a reason other than being gone: left as it was, retried next pass.
+    readonly unreadable: string[];
 }
 
 const isBinary = (buf: Buffer): boolean => buf.includes(0);
@@ -85,7 +88,8 @@ export const revalidate = async (db: SqliteDb, entries: readonly FileEntry[], pa
     const seen = new Set<string>();
     const reparseAll = parse !== undefined && getMeta(db, "parser_version") !== PARSER_VERSION;
     let changed = 0;
-    // Oversized/binary/unreadable files keep a bare row (hash "-", no symbols/chunks) so the mtime+size diff
+    const unreadable: string[] = [];
+    // Oversized/binary/vanished files keep a bare row (hash "-", no symbols/chunks) so the mtime+size diff
     // short-circuits them on the next sweep instead of re-reading every time.
     const skipEntry = (entry: FileEntry): void => {
         db.transaction(() =>
@@ -125,8 +129,11 @@ export const revalidate = async (db: SqliteDb, entries: readonly FileEntry[], pa
         );
         changed++;
     };
+    // Undefined for a file gone since the sweep; the failure's code, as a string, for one that is there but did not read.
+    const readEntry = (entry: FileEntry): Promise<Buffer | undefined | string> =>
+        readFile(entry.abs).catch((error: unknown) => (isMissing(error) ? undefined : (errnoCode(error) ?? errorMessage(error))));
     // Partition first: unchanged files short-circuit on mtime+size; the rest need a read.
-    const toRead: { entry: FileEntry; previous: ReturnType<(typeof stored)["get"]>; read: Promise<Buffer | undefined> | undefined }[] = [];
+    const toRead: { entry: FileEntry; previous: ReturnType<(typeof stored)["get"]>; read: Promise<Buffer | undefined | string> | undefined }[] = [];
     for (const entry of entries) {
         seen.add(entry.path);
         const previous = stored.get(entry.path);
@@ -141,15 +148,21 @@ export const revalidate = async (db: SqliteDb, entries: readonly FileEntry[], pa
         for (let ahead = index; ahead < Math.min(index + READ_AHEAD, toRead.length); ahead++) {
             const upcoming = toRead[ahead]!;
             if (upcoming.read === undefined && upcoming.entry.size <= MAX_FILE_BYTES) {
-                upcoming.read = readFile(upcoming.entry.abs).catch(() => undefined);
+                upcoming.read = readEntry(upcoming.entry);
             }
         }
         if (item.entry.size > MAX_FILE_BYTES) {
             skipEntry(item.entry);
             continue;
         }
-        applyRead(item.entry, item.previous, await item.read);
+        const read = await item.read;
         item.read = undefined; // release the buffer: memory stays bounded by the window
+        // Nothing is written for it: a bare row would stand in for its content until the next edit, over the last that read.
+        if (typeof read === "string") {
+            unreadable.push(`${item.entry.path} (${read})`);
+            continue;
+        }
+        applyRead(item.entry, item.previous, read);
     }
     for (const [path, file] of stored) {
         if (!seen.has(path)) {
@@ -161,5 +174,5 @@ export const revalidate = async (db: SqliteDb, entries: readonly FileEntry[], pa
         setMeta(db, "parser_version", PARSER_VERSION);
     }
     const generation = changed > 0 ? bumpGeneration(db) : generationOf(db);
-    return { generation, fileCount: seen.size, changed };
+    return { generation, fileCount: seen.size, changed, unreadable };
 };

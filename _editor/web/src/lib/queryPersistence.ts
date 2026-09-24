@@ -1,6 +1,6 @@
 import type { PersistedClient } from "@tanstack/query-persist-client-core";
 import { persistQueryClient } from "@tanstack/query-persist-client-core";
-import { defaultShouldDehydrateQuery, QueryClient } from "@tanstack/vue-query";
+import { defaultShouldDehydrateQuery, QueryCache, QueryClient } from "@tanstack/vue-query";
 import { del, get, set } from "idb-keyval";
 import { buildId } from "../app/buildEpoch";
 import { trackPerf } from "../app/perf";
@@ -29,7 +29,12 @@ export const mirrors = (queryKey: readonly unknown[]): boolean => queryKey[0] !=
 // heals on the next visit.
 const NAVIGATION_STALE_MS = 30_000;
 
-export const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: NAVIGATION_STALE_MS } } });
+// Every read that finally failed is logged here, the one place all of them pass: a view that draws only `data` shows
+// a failure as an empty list, and without this line nothing anywhere would say it happened.
+export const queryClient = new QueryClient({
+    queryCache: new QueryCache({ onError: (error, query) => console.warn(`query ${JSON.stringify(query.queryKey)} failed`, error) }),
+    defaultOptions: { queries: { staleTime: NAVIGATION_STALE_MS } },
+});
 
 let uninstall: (() => void) | undefined;
 

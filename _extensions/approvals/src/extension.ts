@@ -25,8 +25,9 @@ export const approvalsAttention = sandboxPoll<ViewBadge | undefined>({
         const [list, held, hooks] = await Promise.all([
             api.sandbox.fetch(approvalsQuery()),
             api.sandbox.fetch(heldWakesQuery()),
-            // Refused below maintainer, where there is no yes to give: that reader is owed nothing here.
-            api.sandbox.fetch(hookRequestsQuery()).catch(() => undefined),
+            // Refused below maintainer, where there is no yes to give: that reader is owed nothing here. Above it, a
+            // failed read fails the badge, which then keeps its last count rather than dropping the waiting hook sets.
+            roleAtLeast(api.sandbox.role(), `maintainer`) ? api.sandbox.fetch(hookRequestsQuery()) : undefined,
         ]);
         const { owed, broken } = owedOf(list);
         const count = owed + waitingOf(held).length + waitingHooksOf(hooks).length;

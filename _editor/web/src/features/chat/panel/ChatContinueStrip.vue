@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, SegmentedControl, useDevice } from "@intentic/ui";
-import { useNow } from "@intentic/ui/async";
+import { errorMessage, useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
@@ -82,6 +82,11 @@ const answerOptions = computed(() => answers.value.map((answer) => ({ label: ans
 // Held while a write is in flight, so the pill moves under the finger rather than after the round trip; cleared either
 // way, so a refused write snaps back to what the daemon actually holds.
 const pending = ref<TurnBreakPolicy>();
+// Why the last answer didn't save; about that question only, so a new ending starts without it.
+const answerRefused = ref<string>();
+watch(ending, () => {
+    answerRefused.value = undefined;
+});
 const answer = computed<TurnBreakPolicy>({
     get: () => pending.value ?? (ending.value === undefined ? `wait` : effectivePolicy(ending.value, agentById(conversation.value.conversationId), settings.value)),
     set: (next) => void choose(next),
@@ -92,6 +97,7 @@ const choose = async (next: TurnBreakPolicy): Promise<void> => {
         return;
     }
     pending.value = next;
+    answerRefused.value = undefined;
     try {
         // Writing the sandbox's own answer clears the override instead of freezing a copy of a default this
         // conversation would then quietly stop following.
@@ -99,8 +105,10 @@ const choose = async (next: TurnBreakPolicy): Promise<void> => {
         // The outage is the one ending with a second party already retrying it: this window has to start (or stop)
         // watching for the run the daemon brings back, or a resumed turn streams into nothing.
         conversation.value.failures.watchOutage(next === `retry`);
-    } catch {
-        // Left as it stands: a control that moved on a failed write would claim an automation nobody armed.
+    } catch (error) {
+        // Left as it stands: a control that moved on a failed write would claim an automation nobody armed. The snap
+        // back alone is easy to miss, so the card says why.
+        answerRefused.value = errorMessage(error, `That answer didn't save.`);
     } finally {
         pending.value = undefined;
     }
@@ -275,6 +283,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
             <!-- What that answer does, and when: one clock, stated once, on the line the answer sits on. -->
             <span v-if="nextLine !== undefined" class="min-w-0 flex-1 text-subtle">{{ nextLine }}</span>
         </div>
+        <span v-if="answerRefused !== undefined" role="alert" class="text-2xs text-danger">{{ answerRefused }}</span>
         <!-- What came back when the reset changed nothing: these are full sentences, so they get their own line. -->
         <span v-if="resetNote !== undefined" class="text-2xs text-subtle">{{ resetNote }}</span>
     </div>

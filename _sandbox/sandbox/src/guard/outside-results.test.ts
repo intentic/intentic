@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { CONTROL_MCP_SERVERS, DAEMON_MCP_SERVERS, RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract";
-import { mcpServerOf, outsideSourceOf, sealResult } from "./outside-results.js";
+import { mcpServerOf, outsideResultHooks, outsideSourceOf, sealResult } from "./outside-results.js";
 
 const ENVELOPE = /^<untrusted-content source="([^"]*)" id="([0-9a-f]{16})">\n([\s\S]*)\n<\/untrusted-content id="\2">$/;
 
@@ -217,5 +219,40 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
         for (const [server, provenance] of Object.entries(DAEMON_MCP_SERVERS)) {
             expect(CONTROL_MCP_SERVERS.has(server), server).toBe(provenance === "control");
         }
+    });
+});
+
+describe("the PostToolUse hook, which marks the turn's taint bit", () => {
+    const fire = async (toolName: string, toolInput: unknown, toolResponse: unknown): Promise<{ output: unknown; marked: string[] }> => {
+        const marked: string[] = [];
+        const [matcher] = outsideResultHooks((source) => marked.push(source)).PostToolUse!;
+        const input = { hook_event_name: "PostToolUse", tool_name: toolName, tool_input: toolInput, tool_response: toolResponse, tool_use_id: "t1" };
+        const output = await matcher!.hooks[0]!(input as unknown as HookInput, "t1", { signal: new AbortController().signal });
+        return { output, marked };
+    };
+
+    test("a fetched result is wrapped and marks the source", async () => {
+        const { output, marked } = await fire("WebFetch", { url: "https://example.com" }, { result: "page text" });
+        expect(marked).toEqual(["web"]);
+        expect(body((output as { hookSpecificOutput: { updatedToolOutput: { result: string } } }).hookSpecificOutput.updatedToolOutput.result)).toBe(
+            "page text",
+        );
+    });
+
+    test("an outside result that cannot be sealed is left alone, but still marks the turn", async () => {
+        const unreadable = {
+            get result(): string {
+                throw new Error("a result shape nobody expected");
+            },
+        };
+        const { output, marked } = await fire("WebFetch", { url: "https://example.com" }, unreadable);
+        expect(output).toEqual({});
+        expect(marked).toEqual(["web"]);
+    });
+
+    test("the agent's own material marks nothing", async () => {
+        const { output, marked } = await fire("Read", { file_path: `${WORKSPACE_ROOT}/x.ts` }, { content: "x" });
+        expect(output).toEqual({});
+        expect(marked).toEqual([]);
     });
 });

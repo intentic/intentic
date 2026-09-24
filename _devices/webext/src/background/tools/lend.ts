@@ -86,5 +86,7 @@ export const lendSite = async (account: string, tabId?: number): Promise<string>
     // Reloaded, since an already-open page still shows the old session; without this, the person sees a stale page
     // while being told it worked.
     await chrome.tabs.reload(tab.id).catch(() => undefined);
-    return `${siteOf(domain)} is now signed in here as "${account}". Finish the step in this browser, then hand the session back with connect_site so the sandbox has the refreshed one.`;
+    const refused = answer.cookies.length - written;
+    const partial = refused === 0 ? "" : ` Chrome refused ${refused} of its ${answer.cookies.length} cookies, so if the page does not show the account signed in, that is why.`;
+    return `${siteOf(domain)} is now signed in here as "${account}".${partial} Finish the step in this browser, then hand the session back with connect_site so the sandbox has the refreshed one.`;
 };

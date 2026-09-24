@@ -204,11 +204,12 @@ export const turnEndingHooksOf = (
 // The judge and its writes: snapshots taken here, for one document and one model per turn.
 const safetyHooksOf = (deps: HarnessHooksDeps, settings: SandboxSettings, safetyPolicy: string): Omit<TurnHooks, "cards"> => ({
     judge: judgeFor(deps, safetyPolicy, settings.modelRoles[`safety-judge`]),
+    // The safety log is the owner's record of what the judge decided; a line it could not keep is said out loud.
     logSafety: (entry) => {
-        void deps.safetyLog.record(entry).catch(() => undefined);
+        void deps.safetyLog.record(entry).catch((error: unknown) => deps.logger.warn({ err: error }, "safety log: a judged command was not recorded"));
     },
     safetyAnswered: (at, answer, outcome) => {
-        void deps.safetyLog.answered(at, answer, outcome).catch(() => undefined);
+        void deps.safetyLog.answered(at, answer, outcome).catch((error: unknown) => deps.logger.warn({ err: error }, "safety log: the owner's answer was not recorded"));
     },
     rememberSafety: (line) => deps.safetyPolicy.append(line),
 });

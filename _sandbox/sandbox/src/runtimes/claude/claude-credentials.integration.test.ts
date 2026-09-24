@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
@@ -220,6 +220,16 @@ test("fileClaudeStore ignores non-account json in the store dir", async () => {
     await writeFile(join(dir, "models.json"), JSON.stringify([{ id: "claude-opus-4-8", label: "Opus" }]));
     await writeFile(join(dir, "truncated.json"), `{"id":"half`);
     expect(await store.list()).toEqual([{ id: "acct-1", label: "Personal", connectedAt: 1 }]);
+});
+
+// Signed out is only a missing file: an account the daemon cannot read must not show as "connect your subscription".
+test("fileClaudeStore reports an account file it cannot read instead of reading it as not connected", async () => {
+    const dir = storeDir();
+    const store = fileClaudeStore(dir, silent);
+    await mkdir(join(dir, "acct-1.json"));
+    await expect(store.read("acct-1")).rejects.toThrow("EISDIR");
+    await expect(store.list()).rejects.toThrow("EISDIR");
+    expect(await store.read("never-connected")).toBeUndefined();
 });
 
 test("fileClaudeStore round-trips an account through the filesystem", async () => {

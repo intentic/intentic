@@ -1,4 +1,5 @@
 import { access } from "node:fs/promises";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { type AgentTurn, type Capability, PI_PROVIDER } from "@intentic/sandbox-contract";
 import {
     type AgentAdapter,
@@ -62,13 +63,6 @@ export const PI_ADAPTER: AgentAdapter<"pi", PiAdapterDeps> = {
         return (await onPath(head)) ? healthReady() : healthUnavailable(`\`${head}\` is not on PATH, rebuild the sandbox so the Pi install lands in the image.`);
     },
     // A Pi session is a JSONL file (the id on the wire is its path); resume-ability is whether the file still exists,
-    // asked of the filesystem since there's no process between turns to ask.
-    holdsSession: async (_services, sessionId) => {
-        try {
-            await access(sessionId);
-            return true;
-        } catch {
-            return false;
-        }
-    },
+    // asked of the filesystem since there's no process between turns to ask. Only a missing file is a lost session.
+    holdsSession: async (_services, sessionId) => (await access(sessionId).then(() => true, undefinedIfMissing)) ?? false,
 };

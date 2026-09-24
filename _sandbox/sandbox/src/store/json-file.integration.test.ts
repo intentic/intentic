@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
@@ -51,10 +51,13 @@ test("an update never overwrites content it could not read: the bytes move aside
     expect(await file.read()).toEqual([1]);
     expect(await readFile(`${path}.corrupt`, "utf8")).toBe(`{"from":"a newer build"}`);
 
-    // Not-JSON-at-all is protected the same way.
+    // Not-JSON-at-all is protected the same way, and a second episode never replaces the first one's copy.
     await writeFile(path, `[1, 2`);
     await file.update(() => [2]);
-    expect(await readFile(`${path}.corrupt`, "utf8")).toBe(`[1, 2`);
+    expect(await readFile(`${path}.corrupt`, "utf8")).toBe(`{"from":"a newer build"}`);
+    const stamped = (await readdir(join(path, ".."))).filter((name) => name.startsWith("state.json.corrupt."));
+    expect(stamped).toHaveLength(1);
+    expect(await readFile(join(path, "..", stamped[0]!), "utf8")).toBe(`[1, 2`);
 });
 
 test("state says whether the fallback stands in for content that could not be read", async () => {
@@ -78,6 +81,17 @@ test("under onUnreadable refuse, an update over unreadable content throws and mo
     // The refusal settles the queue: once the content reads again, the next update runs.
     await writeFile(path, `[3]`);
     expect(await file.update((current) => [...current, 4])).toEqual([3, 4]);
+});
+
+test("a path that exists but cannot be read is unreadable, not absent, so an update sets it aside", async () => {
+    const path = await tempFile();
+    const file = numbers(path);
+    // A directory where the file belongs: readFile fails with EISDIR, which is not "nothing written yet".
+    await mkdir(join(path, "inside"), { recursive: true });
+    expect(await file.state()).toEqual({ value: [], unreadable: true, detail: "the file could not be read (EISDIR)" });
+    await file.update(() => [1]);
+    expect(await file.read()).toEqual([1]);
+    expect(await readdir(`${path}.corrupt`)).toEqual([`inside`]);
 });
 
 test("an absent file has nothing to protect: a first write sets nothing aside", async () => {

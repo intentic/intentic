@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { errnoCode, errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import {
     REPO_CHECKS_FILE,
     type RepoCheck,
@@ -47,12 +48,16 @@ export const fingerprintOf = (checks: readonly RepoCheck[]): string =>
         .digest("hex")
         .slice(0, 16);
 
-/** Reads one repository's declaration. Absent file ⇒ undefined: a repository that declares nothing is not a row. */
+/** Reads one repository's declaration. Absent file ⇒ undefined: a repository that declares nothing is not a row. A
+ *  file that exists but cannot be read is that repository's error row, never "declares nothing" and never every row's. */
 export const readRepoDeclaration = async (root: string, repo: string): Promise<RepoDeclaration | undefined> => {
-    let text: string;
+    let text: string | undefined;
     try {
-        text = await readFile(join(root, repoChecksPath(repo)), "utf8");
-    } catch {
+        text = await readFile(join(root, repoChecksPath(repo)), "utf8").catch(undefinedIfMissing);
+    } catch (error) {
+        return { repo, checks: [], fingerprint: "", error: `the file could not be read (${errnoCode(error) ?? errorMessage(error)})` };
+    }
+    if (text === undefined) {
         return undefined;
     }
     try {

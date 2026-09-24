@@ -59,20 +59,21 @@ const typesAbove = (fromDir: string): boolean => {
     }
 };
 
-interface RunResult {
-    readonly output: string;
-    readonly failure: string | undefined;
-}
+// The compiler's verdict (exit 0 is a clean program, 1 one with errors; it has no other), or a process-level fault
+// (could not spawn, did not finish, crashed) that is no verdict at all.
+type RunResult = { readonly output: string; readonly code: 0 | 1 } | { readonly failure: string };
+
+// The head of what a process printed, enough to name a fault without relaying a whole stack.
+const headOf = (text: string): string => text.trim().split("\n").slice(0, 5).join("\n");
 
 // Runs the compiler to completion at lowered priority, since a check must lose to the control plane under contention.
-// `failure` is a process-level fault (could not spawn, did not finish), not a non-zero exit for found errors.
 const runCompiler = (args: readonly string[], cwd: string, placement: CheckPlacement | undefined): Promise<RunResult> =>
     new Promise((settle) => {
         let exe: string;
         try {
             exe = tsgoExePath();
         } catch (error) {
-            settle({ output: "", failure: errorMessage(error) });
+            settle({ failure: errorMessage(error) });
             return;
         }
         // Paths are relative to the compiler's cwd; an entered run sets it via `env -C`.
@@ -95,21 +96,28 @@ const runCompiler = (args: readonly string[], cwd: string, placement: CheckPlace
         child.stderr.on("data", (chunk: Buffer) => {
             stderr += String(chunk);
         });
+        let timedOut = false;
         const timer = setTimeout(() => {
+            timedOut = true;
             child.kill("SIGKILL");
         }, RUN_TIMEOUT_MS);
         child.on("error", (error) => {
             clearTimeout(timer);
-            settle({ output, failure: error.message });
+            settle({ failure: error.message });
         });
         child.on("close", (code, signal) => {
             clearTimeout(timer);
             if (signal !== null) {
-                settle({ output, failure: `the checker did not answer within ${RUN_TIMEOUT_MS / 1000}s` });
+                settle({ failure: timedOut ? `the checker did not answer within ${RUN_TIMEOUT_MS / 1000}s` : `the checker was killed by ${signal}` });
                 return;
             }
-            // Exit code 1 means errors were found; any other code with empty output is a fault, kept verbatim.
-            settle({ output: output === "" && code !== 0 && code !== 1 ? stderr : output, failure: undefined });
+            if (code === 0 || code === 1) {
+                settle({ output, code });
+                return;
+            }
+            // A crash (a Go panic exits 2) may have printed part of the program's diagnostics: none of it is a verdict.
+            const said = headOf(stderr) || headOf(output);
+            settle({ failure: `the checker exited with code ${String(code)}${said === "" ? "" : `: ${said}`}` });
         });
     });
 
@@ -151,11 +159,16 @@ export const checkProject = async (
 ): Promise<DiagReport> => {
     const projectDir = dirname(tsconfigPath ?? files[0] ?? ".");
     const args = tsconfigPath === undefined ? ["--noEmit", "--pretty", "false", ...files] : ["--noEmit", "--pretty", "false", "-p", tsconfigPath];
-    const { output, failure } = await runCompiler(args, projectDir, placement);
-    if (failure !== undefined) {
-        return refusal(files, failure);
+    const run = await runCompiler(args, projectDir, placement);
+    if ("failure" in run) {
+        return refusal(files, run.failure);
     }
-    const all = parseCompilerOutput(output, projectDir);
+    const all = parseCompilerOutput(run.output, projectDir);
+    // Exit 1 says errors exist; if none parsed, the output format moved under the parser and every file would read clean.
+    if (run.code === 1 && !all.some((d) => d.category === "error")) {
+        const said = headOf(run.output);
+        return refusal(files, `the checker reported errors in a form this reader does not parse${said === "" ? "" : `: ${said}`}`);
+    }
     const reason = unusableReason(all, tsconfigPath, projectDir);
     if (reason !== undefined) {
         return refusal(files, reason);

@@ -1,5 +1,6 @@
 import { type Issue, type IssueReport, IssueSchema, type IssueStatus, type IssueSummary } from "@intentic/sandbox-contract";
 import { jsonDir } from "../store/json-dir.js";
+import { ManifestUnreadableError } from "../store/json-file.js";
 import { culpritOf, titleOf } from "./fingerprint.js";
 
 // One file per fingerprint under `.intentic/records/issues/`, holding the group (what broke, how often, when, the
@@ -86,6 +87,19 @@ const folded = (existing: Issue, report: IssueReport, now: number): Issue => {
 export const fileIssuesStore = (dir: string): IssuesStore => {
     const files = jsonDir<Issue>(dir, (raw) => IssueSchema.safeParse(raw).data);
 
+    // A group this build cannot read is set aside and restarted, or every later report of that fingerprint would fail.
+    const readOrSetAside = async (id: string): Promise<(Issue & { id: string }) | undefined> => {
+        try {
+            return await files.read(id);
+        } catch (error) {
+            if (!(error instanceof ManifestUnreadableError)) {
+                throw error;
+            }
+            await files.setAside(id);
+            return undefined;
+        }
+    };
+
     // One chain per fingerprint, dropped once drained, so concurrent arrivals of one bug are never undercounted.
     const chains = new Map<string, Promise<unknown>>();
     const serialize = <T>(id: string, job: () => Promise<T>): Promise<T> => {
@@ -144,7 +158,7 @@ export const fileIssuesStore = (dir: string): IssuesStore => {
 
         record: (input) =>
             serialize(input.id, async () => {
-                const existing = await files.read(input.id);
+                const existing = await readOrSetAside(input.id);
                 if (existing === undefined) {
                     const issue = await write(input.id, freshIssue(input));
                     await countedOne();

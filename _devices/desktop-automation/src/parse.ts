@@ -1,4 +1,4 @@
-import type { SessionState, WindowInfo } from "./types.js";
+import { DesktopError, type SessionState, type WindowInfo } from "./types.js";
 
 // Turns platform window-lister output (wmctrl/PowerShell text or JSON) into WindowInfo, and writes the one
 // sentence that gets built from such a read rather than from a list. Pure functions, testable without a desktop.
@@ -68,23 +68,22 @@ const walkSwayNode = (node: SwayNode): WindowInfo[] => {
     ];
 };
 
-export const parseSwayTree = (json: string): WindowInfo[] => {
+// A lister that answered something other than its JSON has not said the desktop is empty, so it is not read as that.
+const listedJson = (json: string, lister: string): unknown => {
     try {
-        return walkSwayNode(JSON.parse(json) as SwayNode);
+        return JSON.parse(json);
     } catch {
-        return [];
+        const said = json.trim().slice(0, 200);
+        throw new DesktopError(`${lister} answered something that is not a window list: ${said === "" ? "nothing" : said}`);
     }
 };
+
+export const parseSwayTree = (json: string): WindowInfo[] => walkSwayNode(listedJson(json, "swaymsg") as SwayNode);
 
 // ConvertTo-Json emits a bare object for one item, an array otherwise; both shapes are accepted here instead of
 // relying on -AsArray (PowerShell 7 only).
 export const parseWindowsJson = (json: string): WindowInfo[] => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(json);
-    } catch {
-        return [];
-    }
+    const parsed = listedJson(json, "PowerShell");
     const rows = Array.isArray(parsed) ? parsed : [parsed];
     return rows.flatMap((row) => {
         const record = row as Record<string, unknown>;

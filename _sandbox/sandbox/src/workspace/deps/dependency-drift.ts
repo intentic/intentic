@@ -1,6 +1,7 @@
 import { opendir, readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve as resolvePath } from "node:path";
-import { parse } from "yaml";
+import { undefinedIfMissing } from "@intentic/base/errors";
+import { parse, YAMLError } from "yaml";
 import { pathExists } from "../../path-exists.js";
 import { readWorkspaceManifests } from "./package-graph.js";
 
@@ -138,12 +139,20 @@ const lockedVersions = async (projectDir: string): Promise<LockedVersions> => {
     if (cached?.stamp === stamp) {
         return cached.versions;
     }
-    const text = await readFile(lockfile, "utf8").catch(() => undefined);
-    let versions: LockedVersions = new Map();
+    // Removed since the stat: nothing to cache. Any other read failure propagates, never cached as "no versions".
+    const text = await readFile(lockfile, "utf8").catch(undefinedIfMissing);
+    if (text === undefined) {
+        return new Map();
+    }
+    let versions: LockedVersions;
     try {
-        versions = text === undefined ? versions : lockedVersionsOf(text);
-    } catch {
+        versions = lockedVersionsOf(text);
+    } catch (error) {
         // A lockfile mid-merge (conflict markers) says nothing about versions; resolvability still reports.
+        if (!(error instanceof YAMLError)) {
+            throw error;
+        }
+        versions = new Map();
     }
     lockCache.set(lockfile, { stamp, versions });
     return versions;

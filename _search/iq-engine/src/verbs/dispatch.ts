@@ -32,6 +32,8 @@ export interface DispatchContext {
     readonly generation: number;
     // How current the index is: fresh from the CLI, or building/stale mid-revalidation from the daemon.
     readonly freshness: WorkspaceSearchFreshness;
+    // `path (CODE)` per path the sweep or index pass could not read; every answer names them, since it cannot see them.
+    readonly unreadable: readonly string[];
     // Runs the semantic scan and cross-encoder rerank: the two stages heavy enough to pick their own thread.
     readonly scorer: QueryScorer;
     readonly features: ReadonlySet<Feature>;
@@ -295,12 +297,19 @@ const packGroups = async (db: SqliteDb, root: string, groups: readonly RankedGro
 
 const ANCHOR_VERBS = new Set<Verb>(["outline", "context", "read", "recent", "log", "who", "hotspots", "map", "impact"]);
 
-// How many paths an `impact` header note names before it switches to counting instead.
+// How many paths a note names before it switches to counting instead.
 const NOTE_PATHS = 5;
+
+// Caps how many paths are named in a note and counts the rest, so completeness reporting doesn't cost budget.
+const namedPaths = (list: readonly string[]): string =>
+    list.length <= NOTE_PATHS ? list.join(", ") : `${list.slice(0, NOTE_PATHS).join(", ")} +${list.length - NOTE_PATHS} more`;
 
 // Grep-escaped metachars rust regex takes literally: `a\|b` matches the text "a|b", not alternation.
 const GREP_DIALECT = /\\[|+?(){}]/;
 const GREP_DIALECT_NOTE = "pattern has grep-style escapes, iq uses rust regex: alternation is a|b (no backslash); literal text: --literal";
+
+// The one rg failure a literal rerun can recover from; any other rg error is the answer's own failure.
+const isRegexParseError = (error: unknown): boolean => error instanceof Error && error.message.includes("regex parse error");
 
 // Verbs that match a name or pattern literally; only the bare-query semantic pipeline reads prose intent.
 const EXACT_VERBS = new Set<Verb>(["find", "files", "def", "refs", "sym", "ast"]);
@@ -541,7 +550,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
                 ...(request.options.literal ? { literal: true } : {}),
             });
         } catch (error) {
-            if (request.options.literal || !(error instanceof Error) || !error.message.includes("regex parse error")) {
+            if (request.options.literal || !isRegexParseError(error)) {
                 throw error;
             }
             found = await rgSearch({ ...rgBase, ...ceiling, pattern: request.query, ...modifiers, literal: true });
@@ -549,7 +558,13 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         }
         if (found.hits.length === 0 && note === undefined && !request.options.literal && GREP_DIALECT.test(request.query)) {
             const rewritten = request.query.replaceAll(/\\([|+?(){}])/g, "$1");
-            const retried = await rgSearch({ ...rgBase, ...ceiling, pattern: rewritten, ...modifiers }).catch(() => undefined);
+            // The rewrite can unbalance a group (`\(` alone becomes `(`); only that is a rewrite that did not take.
+            const retried = await rgSearch({ ...rgBase, ...ceiling, pattern: rewritten, ...modifiers }).catch((error: unknown) => {
+                if (!isRegexParseError(error)) {
+                    throw error;
+                }
+                return undefined;
+            });
             if (retried !== undefined && retried.hits.length > 0) {
                 found = retried;
                 note = `grep-style escapes rewritten to rust regex, matched: ${rewritten}`;
@@ -713,14 +728,11 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             const role = classOf(file.path) === "tests" ? "test" : "code";
             return { path: file.path, score, hits: [{ path: file.path, line: 1, text: `${file.hops} hop   ${role}`, tags: [], score }] };
         });
-        // Caps how many paths are named in the note and counts the rest, so completeness reporting doesn't cost budget.
-        const some = (list: readonly string[]): string =>
-            list.length <= NOTE_PATHS ? list.join(", ") : `${list.slice(0, NOTE_PATHS).join(", ")} +${list.length - NOTE_PATHS} more`;
         const notes = [
             `${seeds.length} changed file${seeds.length === 1 ? "" : "s"}`,
             ...(result.truncated > 0 ? [`${result.truncated} more reachable, not shown`] : []),
-            ...(result.unknownSeeds.length > 0 ? [`not indexed, no reach known: ${some(result.unknownSeeds)}`] : []),
-            ...(untested.length > 0 ? [`NO TEST REACHES: ${some(untested)}`] : []),
+            ...(result.unknownSeeds.length > 0 ? [`not indexed, no reach known: ${namedPaths(result.unknownSeeds)}`] : []),
+            ...(untested.length > 0 ? [`NO TEST REACHES: ${namedPaths(untested)}`] : []),
         ];
         return {
             groups,
@@ -779,8 +791,8 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             }
         } else {
             // Same recovery as `find`: a query that only looks like regex (`foo({`) must not crash auto mode.
-            const found = await rgSearch({ ...rgBase, pattern: request.query }).catch(async (error: Error) => {
-                if (!error.message.includes("regex parse error")) {
+            const found = await rgSearch({ ...rgBase, pattern: request.query }).catch(async (error: unknown) => {
+                if (!isRegexParseError(error)) {
                     throw error;
                 }
                 return rgSearch({ ...rgBase, pattern: request.query, literal: true });
@@ -809,6 +821,7 @@ const toResult = (
     hint: string | undefined,
     note: string | undefined,
     features: ReadonlySet<Feature>,
+    leftOut: boolean,
 ): WorkspaceSearchResult => {
     const shownGroups: WorkspaceSearchGroup[] = plan.groups.slice(offset, offset + rendered.shownGroups).map((group) =>
         Object.assign(
@@ -836,8 +849,9 @@ const toResult = (
         groups: shownGroups,
         freshness,
         truncated: rendered.truncated,
-        // `total` is a floor if a file hit the per-file cap or the scan hit its ceiling: both mean at least this many.
-        ...(plan.ceiling === true || plan.groups.some((group) => group.capped === true) ? { partial: true } : {}),
+        // `total` is a floor if a file hit the per-file cap, the scan hit its ceiling, or a path could not be read: each
+        // means at least this many.
+        ...(leftOut || plan.ceiling === true || plan.groups.some((group) => group.capped === true) ? { partial: true } : {}),
         ...(rendered.cursor !== undefined ? { cursor: rendered.cursor } : {}),
         ...(hint !== undefined ? { hint } : {}),
         ...(note !== undefined ? { note } : {}),
@@ -871,9 +885,14 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         }
     }
 
+    let unreadable = context.unreadable;
     if (plan === undefined) {
         // Reuses the sweep from revalidation; `--ignored` needs its own wider, still floor-guarded sweep.
-        const baseEntries = request.scope.ignored === true ? await sweep(context.root, true) : defaultEntries;
+        const wider = request.scope.ignored === true ? await sweep(context.root, true) : undefined;
+        if (wider !== undefined) {
+            unreadable = [...new Set([...wider.unreadable, ...context.unreadable])];
+        }
+        const baseEntries = wider?.entries ?? defaultEntries;
         const entries = filterScope(baseEntries, request.scope);
         // An empty scope from `--lang` alone is usually the wrong language for this repo; names the ones present.
         if (entries.length === 0 && request.scope.langs !== undefined) {
@@ -904,8 +923,12 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
     const featureNote = disabled.length > 0 ? `features ${disabled.map((feature) => `-${feature}`).join(",")}` : undefined;
 
     const hint = plan.hint ?? (plan.groups.length === 0 ? zeroHitHint(request) : undefined);
-    // Capsule text carries everything about the run; the JSON result carries only what the caller's query provoked.
-    const note = headerNote ?? plan.headerNote;
+    // Capsule text carries everything about the run; the JSON result carries only what the caller's query provoked, and
+    // what it could not see.
+    const note =
+        [headerNote ?? plan.headerNote, unreadable.length > 0 ? `unreadable, left out: ${namedPaths(unreadable)}` : undefined]
+            .filter((part) => part !== undefined)
+            .join(" · ") || undefined;
     const capsuleNote = [note, plan.provenance, featureNote].filter((part) => part !== undefined).join(" · ") || undefined;
     const rendered =
         list !== undefined
@@ -946,7 +969,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
     }
 
     return {
-        result: toResult(plan, rendered, request, offset, context.freshness, hint, note, context.features),
+        result: toResult(plan, rendered, request, offset, context.freshness, hint, note, context.features, unreadable.length > 0),
         text: rendered.text,
         exitCode: rendered.exitCode,
     };

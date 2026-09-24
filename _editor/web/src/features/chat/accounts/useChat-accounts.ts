@@ -9,6 +9,7 @@ import {
     type UsageAccount,
 } from "@intentic/sandbox-contract";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { accountsLoaded, providerAccounts, providerRefusals, selectedAccountId, translatorAccounts } from "./providerAccounts";
@@ -49,15 +50,12 @@ export const accountUsage = sandboxRef<Record<string, UsageAccount>>(() => ({}))
 // Whether the usage read has landed, separately from connections; surfaces hold a placeholder until
 // it flips.
 export const usageLoaded = sandboxRef(() => false);
-export const loadUsage = async (): Promise<void> => {
-    const current = sandboxScopeGuard();
-    await readOrKeep(sandboxRpc.system.usage(), (body) => {
+// A failed read leaves it unflipped: flipped anyway, every row would read "no turns yet" about an account with history.
+export const loadUsage = (): Promise<void> =>
+    readOrKeep(sandboxRpc.system.usage(), (body) => {
         accountUsage.value = Object.fromEntries(body.accounts.map((usage) => [usage.account, usage]));
-    });
-    if (current()) {
         usageLoaded.value = true;
-    }
-};
+    });
 
 // Only points the card at a provider; never starts a handshake (that's startConnect/connectTranslator).
 // A live handshake elsewhere is not cancelled by switching tabs.
@@ -275,9 +273,9 @@ export const renameAccount = async (id: string, label: string): Promise<void> =>
     let renamed: OauthAccount | SandboxHttpError;
     try {
         renamed = await orRefusal(sandboxRpc.accounts.rename({ provider: target as NativeProvider, id, label: typed }));
-    } catch {
+    } catch (unanswered) {
         replaceAccount(target, current);
-        throw new Error(`Couldn't reach your sandbox to rename that account.`);
+        throw new Error(`Couldn't reach your sandbox to rename that account.`, { cause: unanswered });
     }
     if (renamed instanceof SandboxHttpError) {
         // A 404 means the row is gone elsewhere; re-read rather than restore a name onto a dead account.
@@ -286,25 +284,31 @@ export const renameAccount = async (id: string, label: string): Promise<void> =>
             throw new Error(`That account is no longer connected.`);
         }
         replaceAccount(target, current);
-        throw new Error(`Couldn't rename that account.`);
+        throw new Error(`Couldn't rename that account: ${renamed.message}`, { cause: renamed });
     }
     replaceAccount(target, renamed);
 };
 
 // Disconnect one account of the managed provider by id; drop it from the list and fix the selection. Busy for
-// the round-trip, like every other account write, the row's own button says so.
+// the round-trip, like every other account write, the row's own button says so. A refused disconnect keeps the row: the
+// account is still signed in, and a list without it would say otherwise.
 export const disconnect = async (id: string): Promise<void> => {
     const target = managedProvider.value;
     accountBusy.value = target;
+    error.value = null;
     const current = sandboxScopeGuard();
-    await sandboxRpc.accounts
-        .disconnect({ provider: target as NativeProvider, id })
-        .catch(() => undefined)
-        .finally(() => {
-            if (current()) {
-                accountBusy.value = undefined;
-            }
-        });
+    try {
+        await sandboxRpc.accounts.disconnect({ provider: target as NativeProvider, id });
+    } catch (caught) {
+        if (current()) {
+            error.value = errorMessage(caught, `Couldn't disconnect that account.`);
+        }
+        return;
+    } finally {
+        if (current()) {
+            accountBusy.value = undefined;
+        }
+    }
     // The account was the box left behind's: this box's list and picks never held it.
     if (!current()) {
         return;

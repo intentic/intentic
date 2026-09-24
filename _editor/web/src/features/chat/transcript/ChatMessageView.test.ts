@@ -1197,6 +1197,22 @@ describe(`condition watches`, () => {
         expect(stopWatching).toHaveBeenCalledWith(`agent-1`, `watch-2`);
     });
 
+    it(`says why a stop the daemon refused didn't take, since the watch keeps waking the agent`, async () => {
+        roster.watches = [armed()];
+        stopWatching.mockImplementationOnce(async () => {
+            throw new Error(`The watch registry is read-only.`);
+        });
+        const element = mount(armedRow());
+
+        [...element.querySelectorAll(`button`)].find((button) => button.textContent === `Stop watching`)!.click();
+        // The refusal settles, then the row redraws with it.
+        await nextTick();
+        await nextTick();
+
+        expect(element.querySelector(`[role="alert"]`)?.textContent).toBe(`The watch registry is read-only.`);
+        expect(element.textContent).not.toContain(`this chat stays put instead of picking itself back up`);
+    });
+
     it(`offers no stop on a wake, which has already happened`, () => {
         expect(mount(wakeRow()).textContent).not.toContain(`Stop watching`);
     });

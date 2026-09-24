@@ -53,6 +53,19 @@ const WaitBodySchema = z.object({
     timeoutSeconds: z.number().min(5).max(WAIT_MAX_S).optional(),
 });
 
+// A wait's arguments: an empty body is a wait on everything with the defaults, a malformed one is no arguments at all,
+// never those defaults, or a wait meant for one child would return on any other.
+const waitBody = (text: string): unknown => {
+    if (text.trim() === "") {
+        return {};
+    }
+    try {
+        return JSON.parse(text);
+    } catch {
+        return undefined;
+    }
+};
+
 export const createChildrenRoutes = (services: Services) => ({
     /** POST /children/spawn — start a child; answers `{ok:true,id}` the moment it is queued, before any wait for memory. */
     spawn: async (c: Context<AppEnv>): Promise<Response> => {
@@ -103,7 +116,7 @@ export const createChildrenRoutes = (services: Services) => ({
         if (conversationId === undefined) {
             return c.json({ outcome: "unknown-target", note: "No conversation: this shell carries no turn stamp and nothing is live." });
         }
-        const parsed = WaitBodySchema.safeParse(await c.req.json().catch(() => ({})));
+        const parsed = WaitBodySchema.safeParse(waitBody(await c.req.text()));
         if (!parsed.success) {
             return c.json({ outcome: "unknown-target", note: "The wait's own arguments did not parse; fix them rather than retrying." }, 400);
         }

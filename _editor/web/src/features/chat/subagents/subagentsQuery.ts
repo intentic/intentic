@@ -20,11 +20,13 @@ export const subagentLive = (session: SubagentSession): boolean => LIVE.has(sess
 export const useSubagentsQuery = (): {
     sessions: ComputedRef<SubagentSession[]>;
     running: ComputedRef<SubagentSession[]>;
+    // Why the roster read failed; an empty `sessions` beside it is unknown, not "none started".
+    error: ComputedRef<string | undefined>;
     refetch: () => Promise<unknown>;
 } => {
-    const { query } = useSandboxQuery(rpcQuery(`system.subagents`));
+    const { query, error } = useSandboxQuery(rpcQuery(`system.subagents`));
     // Keeps the daemon's live-first, newest-active order; do not re-sort.
     const sessions = computed(() => query.data.value?.sessions ?? []);
     const running = computed(() => sessions.value.filter(subagentLive));
-    return { sessions, running, refetch: () => query.refetch() };
+    return { sessions, running, error, refetch: () => query.refetch() };
 };

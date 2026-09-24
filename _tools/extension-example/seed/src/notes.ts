@@ -11,8 +11,8 @@ export interface Note {
 const isNote = (value: unknown): value is Note =>
     typeof value === `object` && value !== null && typeof (value as Note).at === `string` && typeof (value as Note).text === `string`;
 
-// Newest first. A missing or unparsable file returns an empty list rather than throwing: the CLI owns this file, so an
-// absent or half-written one is an ordinary, transient state.
+// Newest first. A missing or unparsable file returns an empty list rather than throwing: the CLI owns this file, and
+// refuses to write over one it cannot parse, so this view never has to.
 export const readNotes = async (): Promise<readonly Note[]> => {
     let content: string | undefined;
     try {

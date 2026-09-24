@@ -1,5 +1,6 @@
 import { appendFile, type FileHandle, mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { isConversationId, type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract";
 import { conversationUnit } from "../store/conversation-units.js";
 import { writeTextFile } from "../store/text-file.js";
@@ -82,9 +83,9 @@ const row = (line: string): TranscriptRow[] => {
 };
 
 // Unparsed stored lines, the shared notion of position for read, count and truncate; they must agree on what a given
-// index means.
+// index means. Only an absent record is empty: one that cannot be read is not a conversation with no history.
 const rawRows = async (path: string): Promise<string[]> => {
-    const raw = await readFile(path, "utf8").catch(() => undefined);
+    const raw = await readFile(path, "utf8").catch(undefinedIfMissing);
     return raw === undefined ? [] : raw.split("\n").filter((line) => line.length > 0);
 };
 
@@ -248,10 +249,10 @@ export const fileTranscriptRecord = (historyRoot: string): TranscriptRecord => {
         return remember(path, { size: info.size, mtimeMs: info.mtimeMs, starts: kept.starts, ends: kept.ends, settled });
     };
 
-    // Runs `use` over one open, indexed record; a record that doesn't exist answers `absent`.
+    // Runs `use` over one open, indexed record; a record that doesn't exist answers `absent`, one that won't open throws.
     const opened = async <T>(conversationId: string, absent: T, use: (handle: FileHandle, index: RowIndex) => Promise<T>): Promise<T> => {
         const path = transcriptFile(historyRoot, conversationId);
-        const handle = await open(path, "r").catch(() => undefined);
+        const handle = await open(path, "r").catch(undefinedIfMissing);
         if (handle === undefined) {
             indexes.delete(path);
             return absent;

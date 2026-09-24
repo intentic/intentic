@@ -10,6 +10,7 @@ import { relativeTime } from "../models/catalog";
 import { modelLabelFor } from "../accounts/providerCatalog";
 import { sessionCategory } from "../../../app/sessionCategory";
 import { rpcQuery } from "../../sandbox/client/rpcQuery";
+import { readFailure } from "../../sandbox/overview/useDaemonRoutes";
 import { subagentLive, useSubagentsQuery } from "./subagentsQuery";
 import { CHAT_SURFACE } from "../tools/chatToolSurface";
 import { workspaceSurface } from "../panel/workspaceSurface";
@@ -34,7 +35,7 @@ const TRANSCRIPT_POLL_MS = 4000;
 const route = useRoute();
 const router = useRouter();
 const { mobile } = useDevice();
-const { sessions } = useSubagentsQuery();
+const { sessions, error: rosterError } = useSubagentsQuery();
 const { agentById, open: openAgent } = useAgents();
 // Which agent's card was clicked, if any; carried as a query, not a route, so 'show all' just drops it.
 const focus = computed<string | undefined>(() => (typeof route.query[`agent`] === `string` ? route.query[`agent`] : undefined));
@@ -177,6 +178,8 @@ const transcript = useQuery({
     refetchInterval: computed(() => (current.value !== undefined && subagentLive(current.value) ? TRANSCRIPT_POLL_MS : false)),
 });
 const messages = computed<TranscriptRow[]>(() => transcript.data.value?.messages ?? []);
+// A failed read is not "no transcript recorded": the record may be whole on the daemon.
+const transcriptError = computed(() => (transcript.error.value === null ? undefined : readFailure(transcript.error.value)));
 
 // Built once, not per render, so a new decorator doesn't re-parse every message on each frame.
 const decorate = fileLinkDecorator();
@@ -265,8 +268,12 @@ watch(
     <!-- On the card ground (ChatPanel's), not the route's default canvas, since the rail list is copied from the floating chat and must read the same way. -->
     <!-- Clips to this surface; an overgrown block used to paint past the card ground and over the shell. -->
     <div class="ground-card flex h-full min-h-0 overflow-hidden bg-card">
-        <!-- Not an error: most turns start no agent. -->
-        <div v-if="visible.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
+        <!-- An empty list is not an error, since most turns start no agent; a failed read is, and says so instead. -->
+        <div v-if="visible.length === 0 && rosterError !== undefined" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
+            <Icon name="users" class="text-2xl text-muted" />
+            <div role="alert" class="max-w-sm text-xs text-danger">{{ rosterError }}</div>
+        </div>
+        <div v-else-if="visible.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
             <Icon name="users" class="text-2xl text-muted" />
             <div class="text-sm text-content">
                 {{ focus === undefined ? t(`chat.subagents.noAgentsStarted`) : t(`chat.subagents.nothingRunningAgent`) }}
@@ -406,7 +413,10 @@ watch(
                                         </template>
                                     </div>
                                     <!-- A running child streams from its parent's turn, so empty here means "nothing yet", not "nothing coming". -->
-                                    <p v-if="messages.length === 0" class="px-1 py-3 text-center text-2xs text-subtle">
+                                    <p v-if="messages.length === 0 && transcriptError !== undefined" role="alert" class="px-1 py-3 text-center text-2xs text-danger">
+                                        {{ transcriptError }}
+                                    </p>
+                                    <p v-else-if="messages.length === 0" class="px-1 py-3 text-center text-2xs text-subtle">
                                         {{
                                             current !== undefined && subagentLive(current)
                                                 ? t(`chat.subagents.watchingLiveWhatAgent`)

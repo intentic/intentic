@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { HOST_STATE_ROOT } from "@intentic/constants";
 import { createStore, resolveInputs } from "@intentic/engine";
 import type { DesiredStateGraph } from "@intentic/graph";
@@ -42,8 +43,21 @@ export const createHostSecretStore = (target: SshTarget, executor: SshExecutor):
         loading ??= (async () => {
             const session = await executor.connect(target);
             try {
-                const result = await session.exec(`cat ${HOST_SECRETS_PATH} 2>/dev/null || echo '{}'`);
-                return JSON.parse(result.stdout.trim() || "{}") as Record<string, string>;
+                // Only an absent file reads as empty: `set` rewrites the whole file from this read, so an unreadable one
+                // must fail here rather than be replaced.
+                const result = await session.exec(`if [ -e ${HOST_SECRETS_PATH} ]; then cat ${HOST_SECRETS_PATH}; fi`);
+                if (result.code !== 0) {
+                    throw new Error(`cannot read ${HOST_SECRETS_PATH} on ${target.address}: exited ${result.code}: ${result.stderr.trim()}`);
+                }
+                const text = result.stdout.trim();
+                if (text === "") {
+                    return {};
+                }
+                try {
+                    return JSON.parse(text) as Record<string, string>;
+                } catch (error) {
+                    throw new Error(`${HOST_SECRETS_PATH} on ${target.address} is not valid JSON: ${errorMessage(error)}`, { cause: error });
+                }
             } finally {
                 await session.dispose();
             }
@@ -58,12 +72,15 @@ export const createHostSecretStore = (target: SshTarget, executor: SshExecutor):
             const json = JSON.stringify(store, undefined, 4);
             const session = await executor.connect(target);
             try {
-                // Heredoc with a quoted delimiter writes the JSON body verbatim; write to a temp file then mv so a
-                // concurrent
-                // reader never sees a partial file.
-                await session.exec(
-                    `mkdir -p /opt/intentic && cat > ${HOST_SECRETS_PATH}.tmp <<'INTENTIC_SECRETS_EOF'\n${json}\nINTENTIC_SECRETS_EOF\nchmod 600 ${HOST_SECRETS_PATH}.tmp && mv ${HOST_SECRETS_PATH}.tmp ${HOST_SECRETS_PATH}`,
+                // Heredoc with a quoted delimiter writes the JSON body verbatim; the temp file is moved over the real one
+                // only after `cat` succeeded, so a failed (short) write never replaces it.
+                const tmp = `${HOST_SECRETS_PATH}.tmp`;
+                const written = await session.exec(
+                    `mkdir -p /opt/intentic && cat > ${tmp} <<'INTENTIC_SECRETS_EOF' && chmod 600 ${tmp} && mv ${tmp} ${HOST_SECRETS_PATH}\n${json}\nINTENTIC_SECRETS_EOF`,
                 );
+                if (written.code !== 0) {
+                    throw new Error(`cannot write ${HOST_SECRETS_PATH} on ${target.address}: exited ${written.code}: ${written.stderr.trim()}`);
+                }
             } finally {
                 await session.dispose();
             }
@@ -72,8 +89,9 @@ export const createHostSecretStore = (target: SshTarget, executor: SshExecutor):
 };
 
 // Compose stores into a precedence chain (most-authoritative first). `get` returns the first defined value; with
-// `backfill` on, it reconciles every other layer to that value. `backfill` is off for read-only commands. `set`
-// writes every layer.
+// `backfill` on, it reconciles every other readable layer to that value. `backfill` is off for read-only commands.
+// `set` writes every layer. A failed layer is skipped only while another supplies the value: with none, `get`
+// throws, since undefined means "absent" to ensureGeneratedSecrets, which would mint a replacement.
 export const createLayeredSecretStore = (
     layers: readonly SecretStore[],
     options: { readonly backfill: boolean; readonly log?: (message: string) => void },
@@ -82,18 +100,25 @@ export const createLayeredSecretStore = (
     return {
         get: async (key) => {
             const values: (string | undefined)[] = [];
-            for (const layer of layers) {
+            const failures = new Map<number, unknown>();
+            for (const [i, layer] of layers.entries()) {
                 try {
                     values.push(await layer.get(key));
                 } catch (error) {
-                    log(`secret-store: a layer's read of "${key}" failed, skipping it: ${String(error)}`);
+                    log(`secret-store: a layer's read of "${key}" failed, skipping it: ${errorMessage(error)}`);
+                    failures.set(i, error);
                     values.push(undefined);
                 }
             }
             const result = values.find((value) => value !== undefined);
+            if (result === undefined && failures.size > 0) {
+                const reasons = [...failures.values()].map(errorMessage).join("; ");
+                throw new Error(`cannot tell whether generated secret "${key}" exists: ${reasons}`, { cause: failures.values().next().value });
+            }
             if (result !== undefined && options.backfill) {
                 for (const [i, layer] of layers.entries()) {
-                    if (values[i] === result) {
+                    // A layer that could not be read is never written: its content is unknown, not absent.
+                    if (values[i] === result || failures.has(i)) {
                         continue;
                     }
                     try {

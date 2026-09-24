@@ -343,6 +343,26 @@ it(`grants an area on an existing row, at the tier that row already holds`, asyn
     expect(shown()).toContain(`Support guest`);
 });
 
+// A grant replaces the member's whole row on the daemon, so one sent while that roster is unread would drop the areas
+// the row holds and widen what the member sees; the tab says the fences are unknown and rewrites nothing.
+it(`rewrites no grant while it cannot read which areas each member holds`, async () => {
+    list.mockResolvedValue({ members: [{ email: `guest@example.com`, role: `collaborator`, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` }] });
+    sandboxJson.mockImplementation(async (path: unknown, init?: unknown) => {
+        if (path === `/members` && init === undefined) {
+            throw new Error(`Request failed (503).`);
+        }
+        return { members: [] };
+    });
+    mount();
+    await settle();
+
+    expect(shown()).toContain(`guest@example.com`);
+    expect(shown()).toContain(`Couldn't read which areas each member holds, so roles and areas can't be changed until the sandbox answers.`);
+    expect(document.body.querySelector<HTMLButtonElement>(`button[aria-label="Role for guest@example.com"]`)?.disabled).toBe(true);
+    expect(buttonLabelled(`Areas`)?.disabled).toBe(true);
+    expect(sandboxJson).not.toHaveBeenCalledWith(`/members`, expect.objectContaining({ method: `POST` }));
+});
+
 it(`keeps the token surfaces off a member's tab`, async () => {
     role.value = `viewer`;
     mount();

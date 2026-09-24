@@ -65,3 +65,16 @@ test("a 401 surfaces as ACP auth_required; other failures name the status", asyn
     expect(failure).toBeInstanceOf(RequestError);
     expect((failure as RequestError).code).toBe(-32000);
 });
+
+test("a transcript the sandbox does not have replays as nothing; a refused token on that read is still auth_required", async () => {
+    const url = await serve((request, response) => {
+        response.writeHead(request.headers["x-intentic-control"] === "ict_revoked" ? 401 : 404);
+        response.end("nope");
+    });
+    expect(await createDaemonClient(url, "ict_x").getSession("pruned")).toEqual([]);
+    const failure = await createDaemonClient(url, "ict_revoked")
+        .getSession("any")
+        .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(RequestError);
+    expect((failure as RequestError).code).toBe(-32000);
+});

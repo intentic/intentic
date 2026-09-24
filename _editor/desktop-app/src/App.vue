@@ -704,7 +704,7 @@ const loadResumable = async (): Promise<void> => {
     }
     pending.value = parked.args;
     setupOpen.value = true;
-    resumedHow.value = parked.how ?? undefined;
+    resumedHow.value = parked.how;
     if (parked.agedSeconds > RESUME_WINDOW_SECONDS) {
         await forgetResumableSetup();
         expired.value = true;
@@ -868,8 +868,11 @@ const drainSync = async (): Promise<void> => {
         await workspaceOpen();
         return;
     }
-    const entries = await folderEntries(picked).catch(() => 0);
-    const held = entries === 0 ? `` : `\n\nIt already holds ${entries} item${entries === 1 ? `` : `s`}, and the sandbox's own files land in it too.`;
+    // A folder that couldn't be read is said as unread, never as empty: the count is the warning's only evidence.
+    const held = await folderEntries(picked).then(
+        (entries) => (entries === 0 ? `` : `\n\nIt already holds ${entries} item${entries === 1 ? `` : `s`}, and the sandbox's own files land in it too.`),
+        (error: unknown) => `\n\nWhat it already holds couldn't be read (${String(error)}); anything in it syncs too.`,
+    );
     const agreed = await confirm(
         `${picked}\n\nEverything in this folder syncs BOTH ways with ${what}: changes agents make in the sandbox appear here, with no undo.${held}`,
         { title: t(`desktop.app.keepFolderInSync`, { what }), kind: `warning`, okLabel: `Start syncing` },

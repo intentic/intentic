@@ -142,7 +142,8 @@ const textOf = async (dir: string, side: Side): Promise<string | undefined> => {
         if (stat === undefined || stat.size > MAX_FILE_DIFF_BYTES) {
             return undefined;
         }
-        const content = await readWorkspaceFile(side.abs);
+        // silent-catch: a count is display only; one unreadable file shows none rather than failing every count.
+        const content = await readWorkspaceFile(side.abs).catch(() => undefined);
         return content === undefined || content.includes("\0") ? undefined : content;
     }
     const bytes = await gitBytes(dir, ["cat-file", "-p", side.spec], MAX_FILE_DIFF_BYTES).catch(() => undefined);

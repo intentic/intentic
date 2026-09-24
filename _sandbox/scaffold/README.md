@@ -33,5 +33,7 @@ one is that a workspace created two ways must be the same workspace.
 
 - The managed region round-trips. `deploy-config.ts` must be able to read back what it wrote even after a user has
   reformatted the file around it, which is why parsing is tested against edited fixtures rather than its own output.
+  A line inside the region that the parse cannot read (an unmodeled provider, a declaration a formatter wrapped) makes
+  the next write refuse with that line named, because regenerating the region from what was read would delete it.
 - The git and template paths are covered by integration tests against real temp trees, because their failure modes
   are filesystem and process failures rather than logic ones.

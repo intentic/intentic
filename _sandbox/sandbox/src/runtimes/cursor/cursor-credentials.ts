@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { OauthAccount } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
@@ -72,19 +73,28 @@ export interface CursorStore {
 
 const cursorCredentialPath = (dir: string, id: string): string => join(dir, `${id}.json`);
 
-const readCursorCredential = async (dir: string, id: string): Promise<StoredCursorAccount | undefined> => {
+const jsonOrUndefined = (text: string): unknown => {
     try {
-        const parsed = StoredAccountSchema.safeParse(JSON.parse(await readFile(cursorCredentialPath(dir, id), "utf8")));
-        return parsed.success ? parsed.data : undefined;
+        return JSON.parse(text) as unknown;
     } catch {
         return undefined;
     }
 };
 
+// Only a missing file is "no such account"; one that cannot be read throws, or a connected account would read as gone.
+const readCursorCredential = async (dir: string, id: string): Promise<StoredCursorAccount | undefined> => {
+    const text = await readFile(cursorCredentialPath(dir, id), "utf8").catch(undefinedIfMissing);
+    if (text === undefined) {
+        return undefined;
+    }
+    const parsed = StoredAccountSchema.safeParse(jsonOrUndefined(text));
+    return parsed.success ? parsed.data : undefined;
+};
+
 // Files with Cursor's own account shape; shared with the provider-pack predicate so a stray cache or foreign JSON can't
 // make a disconnected sandbox look connected.
 export const readCursorCredentials = async (dir: string): Promise<StoredCursorAccount[]> => {
-    const entries = await readdir(dir).catch(() => [] as string[]);
+    const entries = (await readdir(dir).catch(undefinedIfMissing)) ?? [];
     const stored = await Promise.all(
         entries.filter((name) => name.endsWith(".json")).map((name) => readCursorCredential(dir, name.slice(0, -5))),
     );

@@ -1,4 +1,5 @@
 import type { ListenerDispatchFrame, ListenerMessage, ListenerStatus } from "@intentic/sandbox-contract";
+import type { Logger } from "./log.js";
 
 // The gateway's client for the daemon's provider-scoped listener routes (app.ts / listener.routes.ts): the daemon holds
 // no provider connection itself, so every automation interaction rides these four routes, authenticated with
@@ -16,13 +17,25 @@ export interface DaemonClient<TConfig> {
     readonly state: () => Promise<DaemonState<TConfig>>;
     readonly dispatch: (message: ListenerMessage) => Promise<void>;
     readonly dispatchStreaming: (message: ListenerMessage, onFrame: (frame: ListenerDispatchFrame) => void) => Promise<void>;
+    // Reports never reject: a connector fires them and moves on, so a report the daemon did not take is logged here.
     readonly failure: (detail: string) => Promise<void>;
     readonly status: (snapshot: ListenerStatus) => Promise<void>;
 }
 
-export const createDaemonClient = <TConfig>(provider: string, base: string, token: string): DaemonClient<TConfig> => {
+export const createDaemonClient = <TConfig>(provider: string, base: string, token: string, log: Logger): DaemonClient<TConfig> => {
     const url = (path: string): string => `${base}/listeners/${provider}/${path}`;
     const jsonHeaders = { "content-type": "application/json", "x-intentic-panel": token };
+    const report = async (path: "failure" | "status", body: unknown, context: object): Promise<void> => {
+        try {
+            const res = await fetch(url(path), { method: "POST", headers: jsonHeaders, body: JSON.stringify(body) });
+            await res.text();
+            if (!res.ok) {
+                log.warn({ ...context, status: res.status }, `/listeners/${provider}/${path} returned ${res.status}`);
+            }
+        } catch (error) {
+            log.warn({ ...context, err: error }, `/listeners/${provider}/${path} failed`);
+        }
+    };
     return {
         state: async () => {
             const res = await fetch(url("state"), { headers: { "x-intentic-panel": token } });
@@ -66,11 +79,7 @@ export const createDaemonClient = <TConfig>(provider: string, base: string, toke
             }
             drain(true);
         },
-        failure: async (detail) => {
-            await fetch(url("failure"), { method: "POST", headers: jsonHeaders, body: JSON.stringify({ detail }) }).catch(() => undefined);
-        },
-        status: async (snapshot) => {
-            await fetch(url("status"), { method: "POST", headers: jsonHeaders, body: JSON.stringify(snapshot) }).catch(() => undefined);
-        },
+        failure: (detail) => report("failure", { detail }, { detail }),
+        status: (snapshot) => report("status", snapshot, {}),
     };
 };

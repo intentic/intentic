@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* This standalone CLI writes the file watched by the example extension view. */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 
@@ -23,14 +23,24 @@ const workspaceRoot = () => {
 
 const notesPath = join(workspaceRoot(), NOTES_TAIL);
 
+// No file yet is "no notes"; one that cannot be read or parsed throws, since `add` would otherwise write over it.
 const read = async () => {
+    let text;
     try {
-        const parsed = JSON.parse(await readFile(notesPath, `utf8`));
-        return Array.isArray(parsed.notes) ? parsed.notes : [];
-    } catch {
-        // No file yet, or a half-written one. Either way the answer is "no notes", not a crash.
-        return [];
+        text = await readFile(notesPath, `utf8`);
+    } catch (error) {
+        if (error.code === `ENOENT`) {
+            return [];
+        }
+        throw error;
     }
+    let parsed;
+    try {
+        parsed = JSON.parse(text);
+    } catch (error) {
+        throw new Error(`${notesPath} is not valid JSON, so nothing was changed: fix or remove it (${error.message})`, { cause: error });
+    }
+    return Array.isArray(parsed.notes) ? parsed.notes : [];
 };
 
 const [verb, ...rest] = process.argv.slice(2);
@@ -44,7 +54,10 @@ if (verb === `add`) {
     const notes = await read();
     notes.push({ at: new Date().toISOString(), text });
     await mkdir(dirname(notesPath), { recursive: true });
-    await writeFile(notesPath, `${JSON.stringify({ notes }, undefined, 4)}\n`);
+    // Temp-then-rename: the view reading mid-write sees the whole old list or the whole new one.
+    const staged = `${notesPath}.${process.pid}.tmp`;
+    await writeFile(staged, `${JSON.stringify({ notes }, undefined, 4)}\n`);
+    await rename(staged, notesPath);
     console.log(`noted (${notes.length} total) — ${notesPath}`);
 } else if (verb === `list`) {
     console.log(JSON.stringify({ notes: await read() }, undefined, 4));

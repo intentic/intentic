@@ -33,8 +33,11 @@ async function downloadsFor(name) {
             if (typeof body?.downloads === `number` && body.downloads > 0) {
                 value = body.downloads;
             }
+        } else {
+            console.warn(`[npm-downloads] ${name}: npm answered ${response.status}, so no install figure is printed for it`);
         }
-    } catch {
+    } catch (error) {
+        console.warn(`[npm-downloads] ${name}: npm could not be read (${String(error)}), so no install figure is printed for it`);
     }
 
     cache.set(name, value);

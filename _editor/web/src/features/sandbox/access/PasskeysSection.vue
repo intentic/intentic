@@ -17,7 +17,7 @@ const t = useT();
 
 const { user } = useAuth();
 const { active } = useSandbox();
-const { list, codes, busy, notice, supported, add, remove, setRequired, regenerateCodes } = usePasskeys();
+const { list, unread, codes, busy, notice, supported, add, remove, setRequired, regenerateCodes } = usePasskeys();
 
 const isOwner = computed(() => active.value?.role === `owner`);
 const label = ref(``);
@@ -71,6 +71,7 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
 
         <RowNote variant="block">
             <div class="flex flex-col gap-3">
+                <Notice v-if="unread" :of="unread" />
                 <Notice v-if="notice" :of="notice" />
                 <form class="flex flex-wrap items-center gap-2" @submit.prevent="submit">
                     <input
@@ -95,7 +96,8 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
             </div>
         </RowNote>
 
-        <template v-if="isOwner">
+        <!-- Unread, the rule could be on or off: drawn from the empty list it would read "Off" about a sandbox that may require it. -->
+        <template v-if="isOwner && unread === undefined">
             <Row icon="shield" :title="t(`sandbox.passkeysSection.requirePasskeyToOpen`)" :description="requiredDescription">
                 <template #meta>
                     <StatusBadge :variant="list.required ? `success` : `neutral`" :label="list.required ? `required` : `optional`" size="xs" />

@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { Client, GatewayIntentBits, Partials } from "discord.js";
+import { type Channel, Client, DiscordAPIError, GatewayIntentBits, Partials } from "discord.js";
 
 export interface DiscordConnectorConfig {
     readonly provider: string;
@@ -57,6 +57,16 @@ export const ensureDiscordClient = (token: string, consumer: Consumer): Promise<
     slots.set(token, slot);
     return slot.ready;
 };
+
+// The channel as this bot sees it, or null when Discord answers that the id names nothing this bot can see. Any other
+// failure (an outage, a rate limit) throws, since it says nothing about what the bot may see.
+export const visibleChannel = (client: Client, channelId: string): Promise<Channel | null> =>
+    client.channels.fetch(channelId).catch((error: unknown) => {
+        if (error instanceof DiscordAPIError && (error.status === 400 || error.status === 403 || error.status === 404)) {
+            return null;
+        }
+        throw error;
+    });
 
 // Live gateway state for the status snapshot, a probe over the pool, no event plumbing.
 export const discordGatewayState = (token: string): "ready" | "connecting" | "disconnected" => {

@@ -85,7 +85,7 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
         }),
         fix: i.fix.handler(async ({ input, context }) => {
             const project = await resolve(input.repo);
-            const evidence = await ciFailureEvidence(project, input.runId, fetchFn);
+            const evidence = await ciFailureEvidence(project, input.runId, services.logger, fetchFn);
             // A run that died in its runner's own setup, or whose log names the fleet, never ran a line of this repository:
             // an agent opened on it would fix code that is fine, so it is refused with the reason unless forced.
             if (evidence.infra && input.force !== true) {

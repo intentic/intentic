@@ -1,5 +1,6 @@
 import { lstat, mkdir, readdir, readFile, readlink, rm, symlink } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Services } from "../composition.js";
 import { parseSkillFile } from "../skill-file.js";
 
@@ -55,8 +56,9 @@ const ensureClaudeLink = async (root: string, name: string): Promise<void> => {
 // renamed link still sweeps.
 const isManagedLink = (target: string | undefined): boolean => target !== undefined && target.split(/[\\/]/).includes(".agents");
 
+// Only a missing folder lists empty: converge sweeps every link this list does not name.
 const skillDirNames = async (dir: string): Promise<string[]> => {
-    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    const entries = (await readdir(dir, { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
     return entries
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name)

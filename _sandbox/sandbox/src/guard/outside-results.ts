@@ -102,8 +102,17 @@ export const sealResult = (toolName: string, result: unknown, source: string): u
     return entries.length === 0 ? result : { ...record, ...Object.fromEntries(entries) };
 };
 
-// `onWrapped` marks the turn's taint bit (guard/turn-taint.ts), fired only when a result was actually rewritten, not
-// merely eligible.
+// A call the classifier cannot read counts as outside, labelled by its tool: the taint bit may only err toward set.
+const classifiedSource = (toolName: string, toolInput: unknown): string | undefined => {
+    try {
+        return outsideSourceOf(toolName, toolInput);
+    } catch {
+        return toolName;
+    }
+};
+
+// `onWrapped` marks the turn's taint bit (guard/turn-taint.ts), fired when a result was actually rewritten, not merely
+// eligible, or when an eligible one could not be sealed.
 export const outsideResultHooks = (onWrapped: (source: string) => void): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PostToolUse: [
         {
@@ -113,21 +122,24 @@ export const outsideResultHooks = (onWrapped: (source: string) => void): Partial
                     if (input.hook_event_name !== "PostToolUse") {
                         return {};
                     }
-                    try {
-                        const source = outsideSourceOf(input.tool_name, input.tool_input);
-                        if (source === undefined) {
-                            return {};
-                        }
-                        const wrapped = sealResult(input.tool_name, input.tool_response, source);
-                        if (wrapped === input.tool_response) {
-                            return {};
-                        }
-                        onWrapped(source);
-                        return { hookSpecificOutput: { hookEventName: "PostToolUse" as const, updatedToolOutput: wrapped } };
-                    } catch {
-                        // An unexpected result shape is left alone rather than failing the tool call that produced it.
+                    const source = classifiedSource(input.tool_name, input.tool_input);
+                    if (source === undefined) {
                         return {};
                     }
+                    let wrapped: unknown;
+                    try {
+                        wrapped = sealResult(input.tool_name, input.tool_response, source);
+                    } catch {
+                        // An unexpected result shape is left unwrapped rather than failing its tool call, but its outside
+                        // content still entered the turn, so the taint bit is set all the same.
+                        onWrapped(source);
+                        return {};
+                    }
+                    if (wrapped === input.tool_response) {
+                        return {};
+                    }
+                    onWrapped(source);
+                    return { hookSpecificOutput: { hookEventName: "PostToolUse" as const, updatedToolOutput: wrapped } };
                 },
             ],
         },

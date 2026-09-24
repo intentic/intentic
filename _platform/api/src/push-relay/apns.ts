@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { PushNotification } from "@intentic/sandbox-contract";
 import { createPrivateKey, createSign } from "node:crypto";
 import { connect, constants } from "node:http2";
@@ -8,12 +9,13 @@ import type { Config } from "../config.js";
 // dead: the device is gone for good, so the caller deletes the row.
 // transient: everything else, including our own bad credential.
 
-export type ApnsVerdict = "delivered" | "dead" | "transient";
+// One send's verdict; `reason` (Apple's word, or what failed on our side) rides every transient, for the relay's log.
+export type ApnsOutcome = { readonly verdict: "delivered" | "dead" } | { readonly verdict: "transient"; readonly reason: string };
 
 export interface ApnsForwarder {
     // False with no APNs key set; the relay's routes then 404, like the platform's other credential-switched lanes.
     readonly enabled: boolean;
-    readonly send: (token: string, notification: PushNotification) => Promise<ApnsVerdict>;
+    readonly send: (token: string, notification: PushNotification) => Promise<ApnsOutcome>;
 }
 
 // Apple wants provider tokens 20-60 minutes old; re-signing every send would be rejected as too frequent.
@@ -45,7 +47,7 @@ const signProviderToken = (keyPem: string, keyId: string, teamId: string): strin
 export const createApnsForwarder = (config: Config): ApnsForwarder => {
     const { keyP8, keyId, teamId, bundleId, url } = config.apns;
     if (keyP8 === "") {
-        return { enabled: false, send: async () => "transient" };
+        return { enabled: false, send: async () => ({ verdict: "transient", reason: "no APNs key is configured" }) };
     }
 
     // One signed provider token serves every send until it ages out.
@@ -106,7 +108,7 @@ export const createApnsForwarder = (config: Config): ApnsForwarder => {
             request.end(body);
         });
 
-    const send = async (token: string, notification: PushNotification): Promise<ApnsVerdict> => {
+    const send = async (token: string, notification: PushNotification): Promise<ApnsOutcome> => {
         // tag is both the collapse id (replaces an earlier one) and the thread id; no APNs match for requireInteraction
         const body = JSON.stringify({
             aps: {
@@ -119,14 +121,14 @@ export const createApnsForwarder = (config: Config): ApnsForwarder => {
         try {
             const { status, reason } = await post(providerToken(), token, body, notification.tag);
             if (status === 200) {
-                return "delivered";
+                return { verdict: "delivered" };
             }
             if (status === 410 || DEAD_REASONS.has(reason)) {
-                return "dead";
+                return { verdict: "dead" };
             }
-            return "transient";
-        } catch {
-            return "transient";
+            return { verdict: "transient", reason: `APNs answered ${status}${reason === "" ? "" : ` ${reason}`}` };
+        } catch (error) {
+            return { verdict: "transient", reason: errorMessage(error) };
         }
     };
 

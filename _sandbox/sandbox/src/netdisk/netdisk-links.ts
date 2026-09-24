@@ -63,11 +63,12 @@ export const remountNetdisks = async (
         if (entry.config.autoMount !== "on") {
             continue;
         }
-        const probe = await netdiskDrivers[entry.config.provider].probe(entry.id, entry.config);
-        if (probe.state === "mounted") {
-            continue;
-        }
+        // Probed inside the try: one disk whose state can't be read must not strand every one after it.
         try {
+            const probe = await netdiskDrivers[entry.config.provider].probe(entry.id, entry.config);
+            if (probe.state === "mounted") {
+                continue;
+            }
             for await (const line of mountNetdisk(entry)) {
                 void line;
             }

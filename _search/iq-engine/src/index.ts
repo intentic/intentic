@@ -146,22 +146,24 @@ export const createEngine = (options: EngineOptions): Engine => {
         db: ReturnType<typeof openIndex>;
         generation: number;
         sweepStart: number;
-        entries: Awaited<ReturnType<typeof sweep>>;
+        entries: FileEntry[];
+        // What the sweep, and the index pass if this process ran one, could not read.
+        unreadable: string[];
         indexed: boolean;
     }> => {
         const sweepStart = Date.now();
-        const entries = await sweep(options.root, false);
+        const { entries, unreadable } = await sweep(options.root, false);
         if (indexerAlive(indexDir)) {
             const db = openIndex(indexDir, "read");
-            return { db, generation: generationOf(db), sweepStart, entries, indexed: false };
+            return { db, generation: generationOf(db), sweepStart, entries, unreadable, indexed: false };
         }
         let db: ReturnType<typeof openIndex> | undefined;
         try {
             db = openIndex(indexDir, "write");
-            const { generation } = await revalidate(db, entries, parseEntry);
+            const pass = await revalidate(db, entries, parseEntry);
             syncModel(db, options.modelDir);
             compactIndex(db);
-            return { db, generation, sweepStart, entries, indexed: true };
+            return { db, generation: pass.generation, sweepStart, entries, unreadable: [...unreadable, ...pass.unreadable], indexed: true };
         } catch (error) {
             if (!isIndexBusy(error)) {
                 throw error;
@@ -169,13 +171,13 @@ export const createEngine = (options: EngineOptions): Engine => {
             // Whatever the write pass applied stays; this handle is dropped for a read-only one, refused the same way.
             db?.close();
             const reader = openIndex(indexDir, "read");
-            return { db: reader, generation: generationOf(reader), sweepStart, entries, indexed: false };
+            return { db: reader, generation: generationOf(reader), sweepStart, entries, unreadable, indexed: false };
         }
     };
 
     return {
         async run(request) {
-            const { db, generation, sweepStart, entries, indexed } = await opened();
+            const { db, generation, sweepStart, entries, unreadable, indexed } = await opened();
             try {
                 return await dispatch(
                     {
@@ -184,6 +186,7 @@ export const createEngine = (options: EngineOptions): Engine => {
                         db,
                         generation,
                         freshness: freshnessOf(db, entries, sweepStart, indexed),
+                        unreadable,
                         // In-thread: a one-shot process serves one query, so a worker would cost a second model load
                         // for nothing.
                         scorer: inThreadScorer({
@@ -221,9 +224,12 @@ export const createEngine = (options: EngineOptions): Engine => {
             }
             this.indexDrop();
             onProgress?.("rebuilding index from scratch");
-            const { db, generation, entries } = await opened();
+            const { db, generation, entries, unreadable } = await opened();
             try {
                 onProgress?.(`indexed ${entries.length} files`);
+                if (unreadable.length > 0) {
+                    onProgress?.(`unreadable, left out of the index: ${unreadable.join(", ")}`);
+                }
                 const embedder = await getEmbedder();
                 if (embedder !== undefined) {
                     // Full embedding pass: the boot-time warmup path, no cap.
@@ -259,6 +265,9 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
     });
 
     let entries: FileEntry[] = [];
+    // The last sweep's and the last index pass's unreadable paths, each replaced whole by its next report.
+    let sweptUnreadable: string[] = [];
+    let indexedUnreadable: string[] = [];
     let sweepStart = 0;
     let generation = 0;
     // True once the index has caught up with disk at least once; before that, queries report "building".
@@ -319,12 +328,14 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
     worker.on("message", (event: IndexWorkerEvent) => {
         if (event.type === "swept") {
             entries = event.entries;
+            sweptUnreadable = event.unreadable;
             sweepStart = event.sweepStart;
             publishFirstSweep();
             return;
         }
         if (event.type === "indexed") {
             generation = event.generation;
+            indexedUnreadable = event.unreadable;
             appliedSeq = event.seq;
             revalidatedOnce = true;
             invalidateHealth();
@@ -376,6 +387,7 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
                     db,
                     generation,
                     freshness: freshness(),
+                    unreadable: [...sweptUnreadable, ...indexedUnreadable],
                     scorer,
                     // Per-call features override the engine's own set: callers here have different deadline vs.
                     // rank-quality needs.

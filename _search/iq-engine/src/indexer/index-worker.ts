@@ -31,8 +31,9 @@ export interface IndexWorkerRequest {
 // Worker to daemon; `swept` lands before the index catches up, so queries filter against the current file list (with
 // live rg hits) while parsing is still in flight.
 export type IndexWorkerEvent =
-    | { readonly type: "swept"; readonly entries: FileEntry[]; readonly sweepStart: number }
-    | { readonly type: "indexed"; readonly generation: number; readonly seq: number }
+    | { readonly type: "swept"; readonly entries: FileEntry[]; readonly unreadable: string[]; readonly sweepStart: number }
+    // `unreadable`: swept files this pass could not read, whose content is missing from the index until one does.
+    | { readonly type: "indexed"; readonly generation: number; readonly seq: number; readonly unreadable: string[] }
     // How many chunks still lack a vector, published after each backlog slice; a cold index's only progress signal.
     | { readonly type: "embedding"; readonly remaining: number }
     | { readonly type: "warmed"; readonly status: IndexStatus }
@@ -72,12 +73,12 @@ const EMBED_SLICE_MS = 3_000;
 // Makes the index match disk; embedding is not here, so freshness never waits behind the backlog.
 const pass = async (target: number): Promise<void> => {
     const sweepStart = Date.now();
-    const entries = await sweep(root, false);
-    post({ type: "swept", entries, sweepStart });
-    const { generation } = await revalidate(db, entries, parseEntry);
+    const swept = await sweep(root, false);
+    post({ type: "swept", entries: swept.entries, unreadable: swept.unreadable, sweepStart });
+    const { generation, unreadable } = await revalidate(db, swept.entries, parseEntry);
     lastGeneration = generation;
     applied = target;
-    post({ type: "indexed", generation, seq: applied });
+    post({ type: "indexed", generation, seq: applied, unreadable });
 };
 
 // One bounded slice of the backlog; returns how many chunks still lack a vector. No model configured returns 0: an off

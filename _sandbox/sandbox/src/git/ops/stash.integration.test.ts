@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -116,6 +116,20 @@ test("an apply that conflicts reports it and leaves the entry in place", async (
     await git(dir, ["commit", "-am", "conflicting"]);
 
     expect(await stashApply(dir, "stash@{0}", true)).toEqual({ ok: false, reason: "conflict" });
+    expect(await stashList(dir)).toHaveLength(1);
+});
+
+test("an apply refused over local changes says so in git's words, not as a conflict, and moves nothing", async () => {
+    const dir = await repo();
+    await writeFile(join(dir, "a.txt"), "stashed line\n");
+    await stashPush(dir, { message: "wip" });
+    await writeFile(join(dir, "a.txt"), "uncommitted line\n");
+
+    expect(await stashApply(dir, "stash@{0}", true)).toEqual({
+        ok: false,
+        reason: "error: Your local changes to the following files would be overwritten by merge:",
+    });
+    expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("uncommitted line\n");
     expect(await stashList(dir)).toHaveLength(1);
 });
 

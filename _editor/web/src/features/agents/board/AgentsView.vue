@@ -48,7 +48,7 @@ const t = useT();
 const router = useRouter();
 const { mobile } = useDevice();
 const agents = useAgents();
-const { archived, archiveLoading, archive, restore, notice, dismissNotice } = agents;
+const { archived, archiveLoading, archiveFailure, archive, restore, notice, dismissNotice } = agents;
 // Read only while this board is mounted and the reader opted in (liveMetrics.ts); the cards take theirs from here.
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
@@ -311,11 +311,17 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                             @restore="restoreRun(run)"
                         />
                     </div>
+                    <!-- A failed read is said in place of "nothing archived", which would claim the archive is empty. -->
                     <p
                         v-if="lane.key === 'finished' && view.archive && archivedCards.length === 0 && runsFor('finished').length === 0"
-                        class="px-1 pb-3 text-2xs text-subtle"
+                        class="px-1 pb-3 text-2xs"
+                        :class="archiveFailure === undefined ? 'text-subtle' : 'text-danger'"
+                        :role="archiveFailure === undefined ? undefined : 'alert'"
                     >
-                        {{ view.purged ? t(`agents.agentsView.archiveEmptiedFinishedAgents`) : t(`agents.agentsView.nothingArchivedYetFinished`) }}
+                        {{
+                            archiveFailure ??
+                            (view.purged ? t(`agents.agentsView.archiveEmptiedFinishedAgents`) : t(`agents.agentsView.nothingArchivedYetFinished`))
+                        }}
                     </p>
                     <!-- An emptied lane keeps its header rather than collapsing: three columns shrinking to one mid-keystroke would jump the whole board under the cursor. -->
                     <p

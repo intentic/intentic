@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { mkdir, rename, rm, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { basename, dirname } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { BrowserConfig, Capability } from "@intentic/sandbox-contract";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { statePath } from "../../state-paths.js";
@@ -28,6 +29,14 @@ const markerPath = (root: string, id: string): string => statePath(root, ".inten
 // accounts.
 export const passkeyPath = (root: string, owner: string): string => statePath(root, ".intentic/local/browser/", `${owner}.passkeys.json`);
 
+// Every copy store/json-file.ts set aside of a passkey store this build could not read (`.corrupt`, `.corrupt.<ms>`);
+// private keys too, so each goes where the store goes. Suffixes, so a rename can carry each to the new owner.
+const setAsidePasskeySuffixes = async (root: string, owner: string): Promise<string[]> => {
+    const store = passkeyPath(root, owner);
+    const names = (await readdir(dirname(store)).catch(undefinedIfMissing)) ?? [];
+    return names.filter((name) => name.startsWith(`${basename(store)}.corrupt`)).map((name) => name.slice(basename(store).length));
+};
+
 export const hasSession = (root: string, id: string): boolean => existsSync(markerPath(root, id));
 
 // Drops an empty marker beside the profile dir; ensures the parent dir exists first.
@@ -44,15 +53,20 @@ export const clearSession = async (root: string, id: string): Promise<void> => {
     await rm(sessionDir(root, id), { recursive: true, force: true });
     await rm(markerPath(root, id), { force: true });
     await rm(passkeyPath(root, id), { force: true });
+    for (const suffix of await setAsidePasskeySuffixes(root, id)) {
+        await rm(`${passkeyPath(root, id)}${suffix}`, { force: true });
+    }
     publishRuntimeChange("capabilities");
 };
 
 // Renames a profile owner's whole session (dir, marker, passkeys) rather than removing it, carrying every cookie to the
-// new name.
-// Best-effort per part: an unused connection has nothing to move, which isn't a failure.
+// new name. A part that isn't there is skipped; one that won't move throws, or the rename would strand the login.
 export const moveSession = async (root: string, from: string, to: string): Promise<void> => {
     for (const path of [sessionDir, markerPath, passkeyPath]) {
-        await rename(path(root, from), path(root, to)).catch(() => undefined);
+        await rename(path(root, from), path(root, to)).catch(undefinedIfMissing);
+    }
+    for (const suffix of await setAsidePasskeySuffixes(root, from)) {
+        await rename(`${passkeyPath(root, from)}${suffix}`, `${passkeyPath(root, to)}${suffix}`);
     }
     publishRuntimeChange("capabilities");
 };
@@ -68,7 +82,7 @@ export const clearMarker = async (root: string, id: string): Promise<void> => {
 // Renames one entry's marker only; it stays connected, and the profile it borrows doesn't change.
 // Counterpart to clearMarker, as moveSession is to clearSession.
 export const moveMarker = async (root: string, from: string, to: string): Promise<void> => {
-    await rename(markerPath(root, from), markerPath(root, to)).catch(() => undefined);
+    await rename(markerPath(root, from), markerPath(root, to)).catch(undefinedIfMissing);
     publishRuntimeChange("capabilities");
 };
 

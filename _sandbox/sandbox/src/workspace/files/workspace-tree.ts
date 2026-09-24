@@ -159,7 +159,12 @@ export const listWorkspaceChildren = async (
     let walked = base;
     let rel = "";
     for (const segment of relPath.split("/").filter((part) => part !== "" && part !== ".")) {
-        parentScope = await parentScope.descend(walked, rel);
+        try {
+            parentScope = await parentScope.descend(walked, rel);
+        } catch {
+            // An ancestor's rules unknown, nothing under it lists, never with what it ignores shown as tracked.
+            return { entries: [], hidden: 0 };
+        }
         walked = join(walked, segment);
         rel = rel === "" ? segment : `${rel}/${segment}`;
         branchIgnored = branchIgnored || parentScope.isIgnored(segment, rel, true);
@@ -187,7 +192,13 @@ export const listWorkspaceChildren = async (
             if (budget <= 0) {
                 break;
             }
-            const scope = await job.parentScope.descend(job.abs, job.rel);
+            let scope: IgnoreScope;
+            try {
+                scope = await job.parentScope.descend(job.abs, job.rel);
+            } catch {
+                // Its rules unknown, the directory is skipped like an unreadable one.
+                continue;
+            }
             const dirents = await readdir(job.abs, { withFileTypes: true }).catch(() => undefined);
             if (dirents === undefined) {
                 continue;

@@ -122,17 +122,16 @@ export const createPanelUpstreamResolver = (deps: {
     };
     return async (key) => {
         const assigned = deps.portOf(key);
-        try {
-            const { repos, listeners } = await state();
-            return resolvePanelUpstream({
-                dir: panelDirOf(deps.workspaceRoot, repos, key),
-                siblings: repos.map((repo) => join(deps.workspaceRoot, repo)),
-                listeners,
-                assignedPort: assigned,
-            });
-        } catch {
-            // The scan enriches, not answers: without it, the assignment alone says whether the daemon runs this panel.
+        // The scan enriches, not answers: without it, the assignment alone says whether the daemon runs this panel.
+        const snapshot = await state().catch(() => undefined);
+        if (snapshot === undefined) {
             return assigned === undefined ? { state: "stopped" } : { state: "serving", port: assigned, assigned: true };
         }
+        return resolvePanelUpstream({
+            dir: panelDirOf(deps.workspaceRoot, snapshot.repos, key),
+            siblings: snapshot.repos.map((repo) => join(deps.workspaceRoot, repo)),
+            listeners: snapshot.listeners,
+            assignedPort: assigned,
+        });
     };
 };

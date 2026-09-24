@@ -1,4 +1,5 @@
 import { type EnrollHostInput, EnrollHostInputSchema } from "@intentic/sandbox-contract";
+import { ManagedRegionError } from "@intentic/scaffold";
 import { ORPCError } from "@orpc/server";
 import type { Context } from "hono";
 import { tokenEquals } from "../auth/auth.js";
@@ -26,6 +27,9 @@ export const createEnrollRoute =
         } catch (error) {
             if (error instanceof ORPCError && error.code === "PRECONDITION_FAILED") {
                 return c.json({ error: error.message }, 412);
+            }
+            if (error instanceof ManagedRegionError) {
+                return c.json({ error: error.message }, 409);
             }
             throw error;
         }

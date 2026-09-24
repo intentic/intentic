@@ -13,17 +13,25 @@ import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
 // intents have no deployment engine, nothing to be "down"); false = declared but didn't answer (the list is
 // desired config only, nothing is `live`); true = answered. Surfaced so the UI can say "your deploy engine is
 // down" without crying wolf on setups that never had one.
+// A run that failed, or ended without its result line, is a failed read: never an empty list of deployments.
 const fetchDeployments = async (): Promise<{ deployments: Deployment[]; komodoReachable: boolean | undefined }> => {
     const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `deployments`] }).catch((error: unknown) => {
-        throw error instanceof SandboxHttpError ? new Error(`Could not load your deployments (${error.status}).`) : error;
+        throw error instanceof SandboxHttpError ? new Error(`Could not load your deployments (${error.status}): ${error.message}`) : error;
     });
-    let deployments: unknown = [];
+    let deployments: unknown;
     let komodoReachable: boolean | undefined;
     for await (const line of readIntenticLines(lines)) {
+        if (line[`kind`] === `error`) {
+            const message = line[`message`];
+            throw new Error(typeof message === `string` ? message : `Listing your deployments failed.`);
+        }
         if (line[`kind`] === `result` && Array.isArray(line[`deployments`])) {
             deployments = line[`deployments`];
             komodoReachable = typeof line[`komodoReachable`] === `boolean` ? line[`komodoReachable`] : undefined;
         }
+    }
+    if (deployments === undefined) {
+        throw new Error(`Listing your deployments ended without an answer.`);
     }
     return { deployments: DeploymentSchema.array().parse(deployments), komodoReachable };
 };

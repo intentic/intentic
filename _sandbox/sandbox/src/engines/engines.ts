@@ -261,13 +261,14 @@ const checkAll = async (host: EngineHost): Promise<void> => {
 export const startEngineWatch = (host: EngineHost, role: BootRole): { stop: () => void } => {
     void refreshClaudeSdk()
         .then((status) => host.logger.info({ ...status }, "claude engine"))
-        .catch(() => undefined);
+        .catch((error: unknown) => host.logger.warn({ err: error }, "claude engine: could not resolve at boot"));
     if (!role.container) {
         return { stop: () => undefined };
     }
-    const initial = setTimeout(() => void checkAll(host).catch(() => undefined), INITIAL_DELAY_MS);
+    const check = (): void => void checkAll(host).catch((error: unknown) => host.logger.warn({ err: error }, "engine check could not run"));
+    const initial = setTimeout(check, INITIAL_DELAY_MS);
     initial.unref();
-    const timer = setInterval(() => void checkAll(host).catch(() => undefined), CHECK_INTERVAL_MS);
+    const timer = setInterval(check, CHECK_INTERVAL_MS);
     timer.unref();
     return {
         stop: () => {

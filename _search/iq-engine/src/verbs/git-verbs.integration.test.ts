@@ -1,8 +1,12 @@
-import { writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { createEngine, type Engine } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";
+
+const exec = promisify(execFile);
 
 let root: string;
 let cleanup: () => Promise<void>;
@@ -65,4 +69,24 @@ test("uncommitted edits show up in recent immediately", async () => {
     const outcome = await engine.run(request({ verb: "recent", query: "fresh" }));
     expect(outcome.text).toContain("alpha/src/fresh.ts");
     expect(outcome.text).toContain("uncommitted");
+});
+
+test("a git failure is an error, never an empty history", async () => {
+    // `-G(` is a regex git refuses; reading its exit as "no commit touched this" would send the caller looking elsewhere.
+    await expect(engine.run(request({ verb: "log", query: "(", options: { logRegex: true } }))).rejects.toThrow("invalid regex");
+});
+
+test("a repo with no commits yet reads as no history, not as a failure", async () => {
+    const gamma = join(root, "gamma");
+    await mkdir(gamma);
+    await exec("git", ["-C", gamma, "init", "-q"]);
+    await writeFile(join(gamma, "draft.ts"), "export const draft = 1;\n");
+    const recent = await engine.run(request({ verb: "recent", query: "draft" }));
+    expect(recent.result.groups.map((group) => group.path)).toEqual(["gamma/draft.ts"]);
+    expect(recent.text).toContain("uncommitted");
+    const log = await engine.run(request({ verb: "log", query: "draft", options: { path: "gamma/draft.ts" } }));
+    expect(log.exitCode).toBe(1);
+    // An unborn HEAD has no diff to take, so every untracked file seeds `impact` on its own.
+    const impact = await engine.run(request({ verb: "impact", query: "" }));
+    expect(impact.result.note).toMatch(/^one hop each way over the import graph, \d+ changed files?/);
 });

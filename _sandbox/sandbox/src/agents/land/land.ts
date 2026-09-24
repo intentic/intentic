@@ -1,8 +1,10 @@
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "../../path-exists.js";
 import type { AgentSpan, GitChange, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
+import type { Logger } from "pino";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../../git/changes/changes.js";
 import { pruneEmptiedDirs } from "../../git/changes/changes-index.js";
@@ -25,7 +27,21 @@ export interface LandOutcome extends LandResult {
     readonly diff: { files: number; insertions: number; deletions: number };
     // False unless a `measure` re-judged a stored refusal; true lets a fresh verdict replace a stale one.
     readonly adjudicated: boolean;
+    // Repos whose lockfile could not be regenerated for a manifest the delta changed; the land went ahead without it.
+    readonly lockfileFailures?: readonly LockfileFailure[];
 }
+
+export interface LockfileFailure {
+    readonly repo: string;
+    readonly reason: string;
+}
+
+// Said by every door a land goes through, since pnpm's reason is the only account of why the lockfile lags its manifest.
+export const reportLockfileFailures = (logger: Logger, id: string, outcome: LandOutcome): void => {
+    for (const { repo, reason } of outcome.lockfileFailures ?? []) {
+        logger.warn({ id, repo, reason }, "agents: lockfile could not be regenerated for a changed manifest");
+    }
+};
 
 // `git apply --check`, the exit code as a throw: undefined when the patch applies, else the stderr, which names every
 // file patch that failed since git checks the whole list before giving up. `reverse` tells a clash from content main
@@ -49,12 +65,12 @@ const stderrOf = (error: unknown): string => {
 };
 
 // Diff written straight to a file, never held as a string, since a giant patch would blow the git runner's output
-// ceiling. Returns the file's size, since that's all callers ever wanted.
+// ceiling. Returns the file's size, since that's all callers ever wanted; zero advances the tip as landed.
 const writePatch = async (main: string, patchPath: string, range: readonly string[], git: GitRunner): Promise<number> => {
     // `--no-textconv`/`--no-ext-diff`: a patch converted for reading (this image routes every binary extension through
     // fileq) carries no bytes `git apply` can use, and a document's diff would come out empty and land as nothing.
     await git(main, ["diff", `--output=${patchPath}`, "--binary", "--no-textconv", "--no-ext-diff", "-M", ...range]);
-    return (await stat(patchPath).catch(() => undefined))?.size ?? 0;
+    return (await stat(patchPath).catch(undefinedIfMissing))?.size ?? 0;
 };
 
 // One change of a delta with the complete path set its diff spans: a rename is one change across two paths, so naming
@@ -431,12 +447,18 @@ const conflictOf = async (main: string, repo: string, report: DeltaReport, git: 
 
 // Lockfile fixed ahead of the locks, so manifest and lockfile still land as one commit: a resolution can run for minutes
 // and touches only the worktree, and every repo's lock held through it would queue the board behind it.
-const reconcileLockfiles = async ({ worktrees, entry, git }: LandRun): Promise<void> => {
+const reconcileLockfiles = async ({ worktrees, entry, git }: LandRun): Promise<LockfileFailure[]> => {
+    const failures: LockfileFailure[] = [];
     for (const composed of entry.placement.repos) {
-        if (await worktrees.attached(entry.id, composed.repo)) {
-            await reconcileLockfile(worktrees.worktreeDir(entry.id, composed.repo), composed.landedTip ?? composed.base, git);
+        if (!(await worktrees.attached(entry.id, composed.repo))) {
+            continue;
+        }
+        const reconciled = await reconcileLockfile(worktrees.worktreeDir(entry.id, composed.repo), composed.landedTip ?? composed.base, git);
+        if (reconciled.outcome === "failed") {
+            failures.push({ repo: composed.repo, reason: reconciled.reason });
         }
     }
+    return failures;
 };
 
 // The branch tip to land, and where ref-only reads run: the worktree while attached, the main repo after. A retired
@@ -589,8 +611,8 @@ export const landAgent = async (
     };
     const adjudicated = mode !== "measure" || run.rejudging;
     try {
-        await reconcileLockfiles(run);
-        return await withRepoLocks(
+        const lockfileFailures = await reconcileLockfiles(run);
+        const outcome = await withRepoLocks<LandOutcome>(
             worktrees,
             entry.placement.repos.map(({ repo }) => repo),
             async () => {
@@ -624,6 +646,7 @@ export const landAgent = async (
                 return { landed: !held, changed, repos: written.repos, diff, adjudicated, ...resolving, ...(held ? { held: true } : {}) };
             },
         );
+        return lockfileFailures.length === 0 ? outcome : { ...outcome, lockfileFailures };
     } finally {
         await rm(run.patchDir, { recursive: true, force: true });
     }

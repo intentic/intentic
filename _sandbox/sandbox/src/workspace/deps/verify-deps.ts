@@ -121,7 +121,12 @@ export const checkCommandFor = async (root: string, dir: string, manager: string
 
 // The check's command as it will run: queued if the caller gave a queue, else as-is.
 const queuedCommand = async (command: string, deps: VerifyDeps): Promise<string> =>
-    deps.queue === undefined ? command : deps.queue(command).catch(() => command);
+    deps.queue === undefined
+        ? command
+        : deps.queue(command).catch((error: unknown) => {
+              deps.logger.warn({ err: error, command }, "dependency verify: could not queue the check, running it unqueued");
+              return command;
+          });
 
 // What the pane left behind. No status file is -1, the pane having died before the wrapper's echo, and unknown is not
 // green; no log is an empty tail.
@@ -310,7 +315,10 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
             );
             continue;
         }
-        const declared = await deps.landCheck?.(dir).catch(() => undefined);
+        const declared = await deps.landCheck?.(dir).catch((error: unknown) => {
+            deps.logger.warn({ err: error, project: dir }, "dependency verify: could not read the declared land check, running the project's own script");
+            return undefined;
+        });
         const command = declared?.run ?? (await checkCommandFor(deps.workspace.root, dir, status.recipe.manager));
         if (command === undefined) {
             activity(

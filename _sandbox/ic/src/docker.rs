@@ -421,19 +421,20 @@ pub fn container_env_value(container: &str, name: &str) -> Option<String> {
 }
 
 /// `docker ps [-a]` names matching a name filter.
-pub fn ps_names(all: bool, name_filter: &str) -> Vec<String> {
+pub fn ps_names(all: bool, name_filter: &str) -> Option<Vec<String>> {
     let filter = format!("name={name_filter}");
     let mut args = vec!["ps"];
     if all {
         args.push("-a");
     }
     args.extend_from_slice(&["--filter", &filter, "--format", "{{.Names}}"]);
-    try_capture(&args)
-        .unwrap_or_default()
-        .lines()
-        .map(str::to_string)
-        .filter(|line| !line.is_empty())
-        .collect()
+    try_capture(&args).map(|names| {
+        names
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(str::to_string)
+            .collect()
+    })
 }
 
 /// Run a command IN the container, true when it exited 0. A container that is not running — where exec is

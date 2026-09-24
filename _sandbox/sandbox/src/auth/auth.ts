@@ -56,11 +56,21 @@ const OwnerFileSchema = z.object({ email: z.string() });
 
 // On the daemon's JSON substrate like every other manifest: this file decides who may drive the sandbox.
 // An atomic rename prevents a read landing mid-write from seeing an empty owner and treating the next identity as
-// first.
+// first; an owner file that exists but cannot be read throws, since "no owner" would let the next identity bind.
 export const fileOwnerStore = (path: string): OwnerStore => {
-    const file = jsonFile<{ readonly email?: string }>(path, { parse: (raw) => OwnerFileSchema.safeParse(raw).data, fallback: () => ({}) });
+    const file = jsonFile<{ readonly email?: string }>(path, {
+        parse: (raw) => OwnerFileSchema.safeParse(raw).data,
+        fallback: () => ({}),
+        onUnreadable: "refuse",
+    });
     return {
-        read: async () => (await file.read()).email,
+        read: async () => {
+            const state = await file.state();
+            if (state.unreadable) {
+                throw new Error(`the sandbox owner file could not be read (${state.detail}), so nobody is recognized as owner until it is fixed`);
+            }
+            return state.value.email;
+        },
         write: async (email) => {
             await file.update(() => ({ email }));
         },

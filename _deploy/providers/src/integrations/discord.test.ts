@@ -160,3 +160,17 @@ test("apply reuses an existing guild instead of creating a new one", async () =>
     expect(channels.filter((ch) => ch.type === CHANNEL_TYPE_TEXT).length).toBeGreaterThanOrEqual(2);
     expect(webhooks.length).toBeGreaterThanOrEqual(2);
 });
+
+test("apply names the createGuild failure when the bot cannot create its guild", async () => {
+    const { api } = createFakeApi();
+    const provider = createDiscordProvider({
+        ...api,
+        createGuild: async () => {
+            throw new Error("Discord POST /guilds failed (HTTP 429): rate limited");
+        },
+    });
+    await expect(provider.apply(baseInputs, undefined, ctx)).rejects.toThrow(
+        'discord "discord": the bot is not in any guild and cannot create one (Discord POST /guilds failed (HTTP 429): rate limited). ' +
+            "Invite the bot to a Discord server first, then re-run apply.",
+    );
+});

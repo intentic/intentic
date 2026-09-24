@@ -148,7 +148,10 @@ fn marker_volumes() -> Vec<String> {
 /// describes nothing. Excluded here rather than at each reader, because the alternative reading — that those
 /// volumes are still the trash's to delete — is how a sweep would erase a running sandbox.
 pub fn list() -> Vec<Trashed> {
-    let live: Vec<String> = crate::sandbox::list_slugs();
+    recoverable(&crate::sandbox::list_slugs())
+}
+
+fn recoverable(live: &[String]) -> Vec<Trashed> {
     let mut entries: Vec<Trashed> = marker_volumes()
         .iter()
         .filter_map(|volume| parse_marker(volume))
@@ -170,8 +173,7 @@ fn markers_for(slug: &str) -> Vec<String> {
 }
 
 /// Markers whose slug has come back to life, so nothing keeps claiming a recovery that already happened.
-fn drop_superseded_markers() {
-    let live = crate::sandbox::list_slugs();
+fn drop_superseded_markers(live: &[String]) {
     for volume in marker_volumes() {
         let Some(entry) = parse_marker(&volume) else {
             continue;
@@ -244,9 +246,13 @@ pub fn purge(slug: &str) {
 /// so the disk comes back without anybody remembering to ask. `list` is what keeps a slug that is live again out
 /// of this: its volumes belong to the running sandbox, not to the removal they outlived.
 pub fn sweep() -> Vec<String> {
-    drop_superseded_markers();
+    let Some(live) = crate::sandbox::live_slugs() else {
+        eprintln!("intentic: docker could not list this machine's sandboxes, so nothing past its recovery window was deleted this time.");
+        return Vec::new();
+    };
+    drop_superseded_markers(&live);
     let now = now_secs();
-    let due: Vec<String> = list()
+    let due: Vec<String> = recoverable(&live)
         .into_iter()
         .filter(|entry| entry.expired(now))
         .map(|entry| entry.slug)

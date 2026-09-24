@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { ConnectorHook } from "./connector-hooks.js";
 
 // npm as a ConnectorHook: npm reads the registry token from ~/.npmrc, not a per-request header, so apply/restore upsert
@@ -23,8 +24,12 @@ export const stripNpmAuth = (content: string): string => {
     return kept.length > 0 ? `${kept.join("\n")}\n` : "";
 };
 
+// Only absence reads as empty: a ~/.npmrc that cannot be read is never rewritten as just the token line, nor left
+// holding a token its remove believed gone.
+const readNpmrc = async (): Promise<string> => (await readFile(npmrcPath(), "utf8").catch(undefinedIfMissing)) ?? "";
+
 const writeNpmAuth = async (token: string): Promise<void> => {
-    const current = await readFile(npmrcPath(), "utf8").catch(() => "");
+    const current = await readNpmrc();
     await writeFile(npmrcPath(), upsertNpmAuth(current, token), { mode: 0o600 });
 };
 
@@ -38,7 +43,7 @@ export const npmAccessHook: ConnectorHook = {
         return undefined;
     },
     remove: async () => {
-        const current = await readFile(npmrcPath(), "utf8").catch(() => "");
+        const current = await readNpmrc();
         if (current === "") {
             return;
         }

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MintedProvider, OauthAccount } from "@intentic/sandbox-contract";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { z } from "zod";
 
@@ -55,19 +56,29 @@ export interface MintedStore {
 
 const credentialPath = (dir: string, id: string): string => join(dir, `${id}.json`);
 
-const readCredential = async (dir: string, id: string): Promise<StoredKeyAccount | undefined> => {
+const jsonOrUndefined = (text: string): unknown => {
     try {
-        const parsed = StoredKeySchema.safeParse(JSON.parse(await readFile(credentialPath(dir, id), "utf8")));
-        return parsed.success ? parsed.data : undefined;
+        return JSON.parse(text) as unknown;
     } catch {
         return undefined;
     }
 };
 
+// Only a missing file is "no such account"; one that cannot be read throws, or a connected account would read as gone.
+// Content that is not a credential is skipped quietly, since the catalog cache shares this directory.
+const readCredential = async (dir: string, id: string): Promise<StoredKeyAccount | undefined> => {
+    const text = await readFile(credentialPath(dir, id), "utf8").catch(undefinedIfMissing);
+    if (text === undefined) {
+        return undefined;
+    }
+    const parsed = StoredKeySchema.safeParse(jsonOrUndefined(text));
+    return parsed.success ? parsed.data : undefined;
+};
+
 // Only the files with this shape count, so a stray JSON (e.g. the catalog cache) can't make an unconnected provider
 // report itself connected. Oldest first, matching connect order.
 export const readMintedCredentials = async (dir: string): Promise<StoredKeyAccount[]> => {
-    const entries = await readdir(dir).catch(() => [] as string[]);
+    const entries = (await readdir(dir).catch(undefinedIfMissing)) ?? [];
     const stored = await Promise.all(entries.filter((name) => name.endsWith(".json")).map((name) => readCredential(dir, name.slice(0, -5))));
     return stored.filter((account): account is StoredKeyAccount => account !== undefined).toSorted((a, b) => a.connectedAt - b.connectedAt);
 };

@@ -136,7 +136,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
     const port = Number(requireEnv("PORT", missing("PORT")));
     const workspaceRoot = process.env["INTENTIC_WORKSPACE"] ?? WORKSPACE_ROOT;
 
-    const daemon: DaemonClient<TConfig> = createDaemonClient(spec.provider, daemonBase, panelToken);
+    const daemon: DaemonClient<TConfig> = createDaemonClient(spec.provider, daemonBase, panelToken, log);
 
     // Which connection each slot holds, and the config key it was built from (to detect a token edit as a change).
     const wired = new Map<string, { key: string; handle: THandle }>();
@@ -290,6 +290,11 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
         await writeFile(urlFile, `http://127.0.0.1:${port}`);
     }
     server.listen(port, "127.0.0.1", () => log.info({ port }, `${spec.provider} gateway listening`));
+    // Once serving, one process holds every slot's connection: a stray rejection in one connector callback is logged,
+    // not fatal to all. Installed only now, so a gateway that cannot start still exits non-zero for its supervisor.
+    process.on("unhandledRejection", (reason) => {
+        log.error({ err: reason }, "unhandled rejection in the gateway");
+    });
 
     const shutdown = (): void => {
         const wind = async (): Promise<void> => {

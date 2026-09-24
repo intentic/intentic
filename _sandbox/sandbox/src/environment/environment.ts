@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import {
     DEV_SANDBOX_IMAGE,
     type Environment,
@@ -112,7 +113,8 @@ export const draftsDir = (services: Services): string => statePath(services.work
 
 const readDrafts = async (services: Services): Promise<string> => {
     const dir = draftsDir(services);
-    const names = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith(".Dockerfile")).toSorted();
+    // A listing that failed throws: read as "no drafts", it would drop the standing proposal.
+    const names = ((await readdir(dir).catch(undefinedIfMissing)) ?? []).filter((name) => name.endsWith(".Dockerfile")).toSorted();
     const drafts = await Promise.all(
         names.map(async (name) => {
             const content = ((await services.files.read(join(dir, name))) ?? "").trim();

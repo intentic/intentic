@@ -1,5 +1,5 @@
 import { type AgentEvent, profileOf, type SnapshotTurn } from "@intentic/sandbox-contract";
-import { landAgent } from "../../../agents/land/land.js";
+import { landAgent, reportLockfileFailures } from "../../../agents/land/land.js";
 import type { ConversationActors } from "../../../agents/actor/conversation-actors.js";
 import type { BeginTurn } from "../../../agents/actor/conversation-decide.js";
 import { isIsolated } from "../../../agents/registry/agents-store.js";
@@ -108,6 +108,7 @@ export const settleLandBooks = async (
         const measured = await deps.conversations.withLandLease(conversationId, () =>
             deps.perf.track("agent.land", { id: conversationId, mode: "measure", span: "outstanding" }, () => landAgent(deps.agentWorktrees, entry, "measure")),
         );
+        reportLockfileFailures(deps.logger, conversationId, measured);
         if (measured.changed) {
             await deps.agents.recordLanded(conversationId, measured);
         }

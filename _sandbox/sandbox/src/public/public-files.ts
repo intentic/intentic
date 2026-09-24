@@ -1,6 +1,7 @@
 import { open, realpath, stat } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { PUBLIC_DIR } from "@intentic/workspace-ignore";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { escapeHtml } from "@intentic/base/format";
 import type { Refusal } from "../panels/interstitial.js";
 import { walkTree } from "../platform/resources/storage/storage-walk.js";
@@ -101,14 +102,15 @@ export const blockByName = (relPath: string): PublicBlock | undefined => {
     return CREDENTIAL_NAMES.test(name) || CREDENTIAL_EXTS.has(extname(name).toLowerCase()) ? "credential-name" : undefined;
 };
 
-// Rule 5, on the bytes. Reads the head of the file, never the whole thing.
-const blockByContent = async (absPath: string, contentType: string): Promise<PublicBlock | undefined> => {
+// Rule 5, on the bytes. Reads the head of the file, never the whole thing. Fails closed: "gone" when the file vanished
+// after it was found, and any other open failure throws, since a sniff that can't read must never pass a file.
+const blockByContent = async (absPath: string, contentType: string): Promise<PublicBlock | "gone" | undefined> => {
     if (!sniffable(contentType)) {
         return undefined;
     }
-    const handle = await open(absPath, "r").catch(() => undefined);
+    const handle = await open(absPath, "r").catch(undefinedIfMissing);
     if (handle === undefined) {
-        return undefined;
+        return "gone";
     }
     try {
         const buffer = Buffer.alloc(SNIFF_BYTES);
@@ -202,6 +204,7 @@ export const resolvePublicFile = async (root: string, url: string | undefined): 
         };
     }
     const { type, inline } = contentTypeOf(realRel);
+    // "gone" too: the file vanished after the stat above.
     if ((await blockByContent(real, type)) !== undefined) {
         return notFound();
     }
@@ -257,6 +260,10 @@ export const listPublicFiles = async (root: string): Promise<PublicEntry[]> => {
         const realRel = relative(realRoot, real).split(sep).join("/");
         const blocked =
             blockByName(realRel) ?? (stats.size > MAX_BYTES ? ("too-large" as const) : await blockByContent(real, contentTypeOf(realRel).type));
+        // Deleted mid-walk, like a file whose stat found nothing above.
+        if (blocked === "gone") {
+            continue;
+        }
         entries.push(blocked === undefined ? entry : { ...entry, blocked });
     }
     return entries.toSorted((left, right) => left.path.localeCompare(right.path));

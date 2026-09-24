@@ -2,7 +2,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use crate::logfile::intentic_home;
-use crate::util::Result;
+use crate::util::{Fail, Result};
 
 /* The channel record: which tag this sandbox follows, what it was on before, and what is BUILT AND WAITING for it. */
 
@@ -49,16 +49,23 @@ pub fn record_path(slug: &str) -> PathBuf {
     intentic_home().join(format!("sandbox-{slug}.channel"))
 }
 
-pub fn read(slug: &str) -> ChannelRecord {
+pub fn read(slug: &str) -> Result<ChannelRecord> {
     read_file(&record_path(slug))
 }
 
 /// Parse a record file. Split from the path derivation so the format's rules — last occurrence wins, an
 /// absent file reads as "nothing recorded", an unknown key is ignored — are assertable without touching the
-/// process's environment.
-fn read_file(path: &std::path::Path) -> ChannelRecord {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return ChannelRecord::default();
+/// process's environment. A file that is there but unreadable is an error: every flow writes the record back.
+fn read_file(path: &std::path::Path) -> Result<ChannelRecord> {
+    let content = match std::fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(ChannelRecord::default()),
+        Err(err) => {
+            return Err(Fail(format!(
+                "could not read {}: {err}\n       It names this sandbox's rollback target, and writing over it would lose that, so nothing was changed.",
+                path.display()
+            )))
+        }
     };
     let mut record = ChannelRecord::default();
     for line in content.lines() {
@@ -80,7 +87,7 @@ fn read_file(path: &std::path::Path) -> ChannelRecord {
         };
         *field = Some(value.to_string());
     }
-    record
+    Ok(record)
 }
 
 /// Temp-then-rename, like every other record this repo writes: a reader landing mid-write must see the whole
@@ -139,7 +146,7 @@ mod tests {
             ),
         )
         .expect("write");
-        let record = read_file(&path);
+        let record = read_file(&path).expect("read");
         assert_eq!(record.channel.as_deref(), Some("stable"));
         assert_eq!(
             record.current.as_deref(),
@@ -167,7 +174,7 @@ mod tests {
             ..swap("ghcr.io/intentic/sandbox:stable", None)
         };
         write_file(&path, &staged).expect("write");
-        let read = read_file(&path);
+        let read = read_file(&path).expect("read");
         assert_eq!(
             read.staged.as_deref(),
             Some("intentic-sandbox-env-abc:0123456789ab")
@@ -215,16 +222,25 @@ mod tests {
         let written = std::fs::read_to_string(&path).expect("read");
         assert!(!written.contains("previous="));
         assert!(!written.contains("staged"));
-        assert_eq!(read_file(&path).previous, None);
+        assert_eq!(read_file(&path).expect("read").previous, None);
     }
 
     #[test]
     fn a_missing_record_reads_as_nothing_recorded() {
         // Every sandbox created before this file existed is in exactly this state — it must not error.
         let dir = tempfile::tempdir().expect("tempdir");
-        let record = read_file(&dir.path().join("absent.channel"));
+        let record = read_file(&dir.path().join("absent.channel")).expect("read");
         assert!(record.channel.is_none() && record.current.is_none() && record.previous.is_none());
         assert!(record.staged.is_none());
+    }
+
+    #[test]
+    fn a_record_that_is_there_but_unreadable_is_an_error_not_nothing_recorded() {
+        // Read as "nothing recorded", the next swap would write a record without the rollback target this one names.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sandbox-abc.channel");
+        std::fs::write(&path, [b'p', b'r', b'e', b'v', 0xff, 0xfe]).expect("write");
+        assert!(read_file(&path).is_err());
     }
 
     #[test]
@@ -234,8 +250,11 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("sandbox-abc.channel");
         std::fs::write(&path, "channel=stable\nchannel=core-stable\ncurrent=x\n").expect("write");
-        assert_eq!(read_file(&path).channel.as_deref(), Some("core-stable"));
-        assert_eq!(read_file(&path).previous, None);
+        assert_eq!(
+            read_file(&path).expect("read").channel.as_deref(),
+            Some("core-stable")
+        );
+        assert_eq!(read_file(&path).expect("read").previous, None);
     }
 
     #[test]
@@ -245,7 +264,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("sandbox-abc.channel");
         std::fs::write(&path, "channel=stable\nsomething_new=1\ncurrent=x\n").expect("write");
-        let record = read_file(&path);
+        let record = read_file(&path).expect("read");
         assert_eq!(record.channel.as_deref(), Some("stable"));
         assert_eq!(record.current.as_deref(), Some("x"));
     }

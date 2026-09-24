@@ -4,6 +4,7 @@ import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { SandboxHttpError } from "../client/sandboxHttpError";
 
 // Import chain touches a media query (UI barrel's useDevice) at module eval; hence jsdom.
 
@@ -29,12 +30,17 @@ const state = {
     calls: [] as { path: string; init?: RequestInit }[],
     adopted: [] as unknown[],
     supported: true,
+    // What the list read throws instead of answering, when set.
+    listFails: undefined as Error | undefined,
 };
 
 jest.mock(`../client/sandboxClient`, () => ({
     sandboxJson: async (path: string, init?: RequestInit) => {
         state.calls.push({ path, init });
         if (path === `/system/passkeys` && init === undefined) {
+            if (state.listFails !== undefined) {
+                throw state.listFails;
+            }
             return state.list;
         }
         if (path === `/system/passkeys/register/options`) {
@@ -92,6 +98,7 @@ afterEach(() => {
     state.calls = [];
     state.adopted = [];
     state.supported = true;
+    state.listFails = undefined;
     role.value = `owner`;
     app?.unmount();
     app = undefined;
@@ -175,4 +182,20 @@ it(`a member sees their own passkeys and no switch`, async () => {
     expect(shown()).toContain(`phone`);
     expect(shown()).not.toContain(`Require a passkey`);
     expect(shown()).not.toContain(`Recovery codes`);
+});
+
+it(`says the list could not be read, and draws no rule, rather than showing a sandbox that may require passkeys as "Off"`, async () => {
+    state.listFails = new SandboxHttpError(500, `The passkey store is unreadable.`);
+    await mount();
+    expect(shown()).toContain(`Couldn't read this sandbox's passkeys.`);
+    expect(shown()).toContain(`The passkey store is unreadable.`);
+    expect(shown()).not.toContain(`Off. A Google sign-in opens the sandbox`);
+    expect(buttonLabelled(`Require a passkey`)).toBeUndefined();
+});
+
+it(`reads a daemon without the route as having no passkeys, and says nothing about it`, async () => {
+    state.listFails = new SandboxHttpError(404, `Not found.`);
+    await mount();
+    expect(shown()).not.toContain(`Couldn't read this sandbox's passkeys.`);
+    expect(shown()).toContain(`Off. A Google sign-in opens the sandbox`);
 });

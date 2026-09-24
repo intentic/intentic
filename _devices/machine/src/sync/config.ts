@@ -96,8 +96,12 @@ export const readState = async (): Promise<SyncState> => {
     if (raw === undefined) {
         return { pairings: [] };
     }
-    const parsed = JSON.parse(raw) as Partial<SyncState> | undefined;
-    return { pairings: Array.isArray(parsed?.pairings) ? parsed.pairings : [] };
+    const parsed = JSON.parse(raw) as Partial<SyncState> | null;
+    // Another shape is as unreadable as bad bytes: "no pairings" stops sync and every writer would persist it.
+    if (!Array.isArray(parsed?.pairings)) {
+        throw new SyntaxError(`${configPath} has no "pairings" list`);
+    }
+    return { pairings: parsed.pairings };
 };
 
 // Read-modify-write the pairing list: every mutation re-reads first, so a caller mutates what is on disk now.

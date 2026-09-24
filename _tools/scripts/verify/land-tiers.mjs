@@ -12,13 +12,14 @@ import { judgeAgainstBase } from "./turn-findings.mjs";
 // What oxlint reads, the same set `pnpm lint` reads at the push.
 export const LINTABLE = /\.(m|c)?[jt]sx?$|\.vue$|\.astro$/;
 
-const LINT_LINE = /^(.+?):\d+:\d+: (.*) \[\w+\/(.+)\]$/;
+// `[Error/rule]` for a rule's finding, bare `[Error]` for a file oxlint could not parse at all.
+const LINT_LINE = /^(.+?):\d+:\d+: (.*) \[\w+(?:\/(.+))?\]$/;
 
 // oxlint's `unix` lines as units, line numbers dropped so an edit above a finding does not make it a new one.
 export const lintUnits = (output) =>
     output.split("\n").flatMap((line) => {
         const found = LINT_LINE.exec(line.trim());
-        return found === null ? [] : [`lint ${found[1]}: ${found[3]} ${found[2]}`];
+        return found === null ? [] : [`lint ${found[1]}: ${found[3] ?? "parse"} ${found[2]}`];
     });
 
 const lint = (root, files) => {
@@ -26,7 +27,14 @@ const lint = (root, files) => {
         return [];
     }
     const run = spawnSync("pnpm", ["lint", "--format=unix", ...files], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, shell: process.platform === "win32" });
-    return run.status === 0 ? [] : lintUnits(`${run.stdout ?? ""}${run.stderr ?? ""}`);
+    const output = `${run.stdout ?? ""}${run.stderr ?? ""}`;
+    // oxlint exits 1 with this when every path it was handed is one its config ignores: nothing to find.
+    if (run.status === 0 || /No files found to lint/.test(output)) {
+        return [];
+    }
+    const units = lintUnits(output);
+    // A red exit with no finding in it is a linter that did not run, and "nothing added" is not what it said.
+    return units.length > 0 ? units : [`lint could not run: ${run.error?.message ?? `exit ${run.status ?? "signal"} with no finding`}`];
 };
 
 // Tidy lines the tree holds that `from` did not; a code failure is the land verify's own `checkout gates` step's to refuse.
@@ -58,7 +66,7 @@ const rustfmt = (root, changed) =>
 // Every finding the tree added since `from`, lint and rustfmt over the files it touched, tidy and the ratchet over the range.
 export const landTiers = (root, from) => {
     const changed = changedSince(root, from) ?? [];
-    const { findings, declared } = weakenings(root, from);
+    const measured = weakenings(root, from);
     return [
         ...lint(
             root,
@@ -66,6 +74,10 @@ export const landTiers = (root, from) => {
         ),
         ...tidy(root, from),
         ...rustfmt(root, changed),
-        ...(declared ? [] : findings.map((finding) => `ratchet ${finding.replace(/ \(.*\)$/, "")}`)),
+        ...(measured === undefined
+            ? [`ratchet could not measure: git could not list the test files changed since ${from.slice(0, 9)}`]
+            : measured.declared
+              ? []
+              : measured.findings.map((finding) => `ratchet ${finding.replace(/ \(.*\)$/, "")}`)),
     ];
 };

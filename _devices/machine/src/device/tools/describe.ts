@@ -3,7 +3,7 @@ import { arch, homedir, hostname, platform, release, type } from "node:os";
 import { promisify } from "node:util";
 import type { DeviceFacts, DeviceScopes } from "@intentic/sandbox-contract";
 import { type LinkReading, readLinkStates, unreachableIn } from "../config.js";
-import { rootsOf } from "../policy.js";
+import { rootsOf, rootsText } from "../policy.js";
 import { shellFor } from "./shell.js";
 import { listDistros, WINDOWS_SIDE, wslEnvironment } from "../../wsl.js";
 
@@ -111,7 +111,7 @@ export const describeText = async (scopes: DeviceScopes): Promise<string> => {
             `Architecture: ${facts.arch}`,
             `Shell for run_command: ${facts.shell}`,
             `Home: ${facts.home}`,
-            `Folders you may read and write: ${facts.roots.join(", ")}`,
+            `Folders you may read and write: ${rootsText(facts.roots)}`,
             ...environmentLines(facts),
             `Permissions: run commands ${scopes.shell}, write files ${scopes.write}, see the screen ${scopes.screen}, manage sandboxes ${scopes.sandboxes}`,
             // All a sandbox can use, so a reshape is asked for in numbers this engine has.

@@ -8,9 +8,10 @@ import { createHostSecretStore, createLayeredSecretStore, createLocalSecretStore
 const HOST_PATH = `${HOST_STATE_ROOT}/secrets.json`;
 const target: SshTarget = { address: "10.0.0.1", user: "deploy", privateKey: "k", port: 22 };
 
-// A fake host with a single secrets file, interpreting the two shapes createHostSecretStore emits: a `cat`
-// read and a quoted-heredoc write. Counts SSH ops so we can assert the per-instance read cache.
-const createFakeHost = (initial?: Record<string, string>) => {
+// A fake host with a single secrets file, interpreting the two shapes createHostSecretStore emits: an
+// if-present `cat` read and a quoted-heredoc write. Counts SSH ops so we can assert the per-instance read cache.
+// `unreadable` makes the file exist but fail to read, the way a root-owned 0600 file fails for a deploy user.
+const createFakeHost = (initial?: Record<string, string>, opts: { readonly unreadable?: boolean } = {}) => {
     const files = new Map<string, string>();
     if (initial !== undefined) {
         files.set(HOST_PATH, JSON.stringify(initial));
@@ -21,11 +22,14 @@ const createFakeHost = (initial?: Record<string, string>) => {
         connect: () =>
             Promise.resolve({
                 exec: (command: string) => {
-                    if (command.startsWith(`cat ${HOST_PATH}`)) {
+                    if (command.startsWith(`if [ -e ${HOST_PATH} ]; then cat ${HOST_PATH}; fi`)) {
                         reads++;
-                        return Promise.resolve({ stdout: files.get(HOST_PATH) ?? "{}", stderr: "", code: 0 });
+                        if (opts.unreadable === true) {
+                            return Promise.resolve({ stdout: "", stderr: `cat: ${HOST_PATH}: Permission denied`, code: 1 });
+                        }
+                        return Promise.resolve({ stdout: files.get(HOST_PATH) ?? "", stderr: "", code: 0 });
                     }
-                    const written = command.match(/<<'INTENTIC_SECRETS_EOF'\n([\s\S]*?)\nINTENTIC_SECRETS_EOF/);
+                    const written = command.match(/<<'INTENTIC_SECRETS_EOF'[^\n]*\n([\s\S]*?)\nINTENTIC_SECRETS_EOF/);
                     if (written !== null) {
                         writes++;
                         files.set(HOST_PATH, written[1] ?? "");
@@ -78,6 +82,42 @@ describe("createHostSecretStore", () => {
         // A fresh store instance (fresh cache) reads the persisted value.
         expect(await createHostSecretStore(target, host.executor).get("KOMODO_ADMIN_PASSWORD")).toBe("xyz");
     });
+
+    it("rejects an existing file it cannot read, and never writes over it", async () => {
+        const host = createFakeHost({ FORGEJO_ADMIN_PASSWORD: "real" }, { unreadable: true });
+        const store = createHostSecretStore(target, host.executor);
+        await expect(store.get("FORGEJO_ADMIN_PASSWORD")).rejects.toThrow(`cannot read ${HOST_PATH} on 10.0.0.1: exited 1: cat: ${HOST_PATH}: Permission denied`);
+        await expect(store.set("KOMODO_ADMIN_PASSWORD", "minted")).rejects.toThrow(`cannot read ${HOST_PATH}`);
+        expect(host.ops().writes).toBe(0);
+        expect(JSON.parse(host.files.get(HOST_PATH) ?? "")).toEqual({ FORGEJO_ADMIN_PASSWORD: "real" });
+    });
+
+    it("rejects a garbled file by name, and never writes over it", async () => {
+        const host = createFakeHost();
+        host.files.set(HOST_PATH, '{"FORGEJO_ADMIN_PASSWORD": "re');
+        const store = createHostSecretStore(target, host.executor);
+        await expect(store.get("FORGEJO_ADMIN_PASSWORD")).rejects.toThrow(`${HOST_PATH} on 10.0.0.1 is not valid JSON`);
+        await expect(store.set("KOMODO_ADMIN_PASSWORD", "minted")).rejects.toThrow(`${HOST_PATH} on 10.0.0.1 is not valid JSON`);
+        expect(host.ops().writes).toBe(0);
+    });
+
+    it("rejects a write the host shell reports as failed", async () => {
+        const executor: SshExecutor = {
+            connect: () =>
+                Promise.resolve({
+                    exec: (command: string) =>
+                        Promise.resolve(
+                            command.startsWith("if [ -e")
+                                ? { stdout: "", stderr: "", code: 0 }
+                                : { stdout: "", stderr: "cat: write error: No space left on device", code: 1 },
+                        ),
+                    dispose: () => Promise.resolve(),
+                }),
+        };
+        await expect(createHostSecretStore(target, executor).set("K", "v")).rejects.toThrow(
+            `cannot write ${HOST_PATH} on 10.0.0.1: exited 1: cat: write error: No space left on device`,
+        );
+    });
 });
 
 describe("createLayeredSecretStore", () => {
@@ -129,6 +169,29 @@ describe("createLayeredSecretStore", () => {
         const local = memStore({ K: "cached" });
         const layered = createLayeredSecretStore([throwing, local], { backfill: false });
         expect(await layered.get("K")).toBe("cached");
+    });
+
+    it("get throws when a layer failed and no layer holds the key, so the caller never mints over it", async () => {
+        const throwing: SecretStore = {
+            get: () => Promise.reject(new Error("host unreachable")),
+            set: () => Promise.reject(new Error("host unreachable")),
+        };
+        const local = memStore();
+        const layered = createLayeredSecretStore([throwing, local], { backfill: true });
+        await expect(layered.get("K")).rejects.toThrow('cannot tell whether generated secret "K" exists: host unreachable');
+        expect(local.map.has("K")).toBe(false);
+    });
+
+    it("with backfill, never writes a value into a layer whose read failed", async () => {
+        const written: string[] = [];
+        const unreadable: SecretStore = {
+            get: () => Promise.reject(new Error("permission denied")),
+            set: (key) => Promise.resolve(void written.push(key)),
+        };
+        const local = memStore({ K: "cached" });
+        const layered = createLayeredSecretStore([unreadable, local], { backfill: true });
+        expect(await layered.get("K")).toBe("cached");
+        expect(written).toEqual([]);
     });
 
     it("set throws only when no layer accepts the write", async () => {

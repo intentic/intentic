@@ -22,6 +22,16 @@ test("roots are one per line, absolute, with ~ expanded and blanks ignored", () 
     expect(roots).toEqual([resolve("/srv/app"), resolve(join(homedir(), "projects"))]);
 });
 
+// The owner narrowed the device and wrote it in a form this machine cannot resolve: that must never read as "nothing
+// declared", which is the widest grant there is.
+test("declared roots none of which is a full path confine to no folder, not to the home directory", async () => {
+    const unusable = scopes({ roots: `projects\nDocuments/work` });
+    expect(rootsOf(unusable)).toEqual([]);
+    await expect(assertPath(join(homedir(), "projects", "notes.txt"), unusable, "read")).rejects.toThrow(
+        `it is outside the folders this device allows (none, since no line of "Folders it may touch" is a full path)`,
+    );
+});
+
 test("a sibling directory sharing a prefix is NOT inside the root", () => {
     // The trap a naive startsWith falls into: /home/meeting is not under /home/me.
     expect(withinRoots("/home/meeting/file.txt", ["/home/me"])).toBe(false);

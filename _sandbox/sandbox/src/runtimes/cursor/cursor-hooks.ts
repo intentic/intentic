@@ -1,6 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { type CommandGuard, consultWith, vendorSubject } from "../../guard/command-guard.js";
@@ -235,10 +236,11 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
                             answer(instructionsFor(payload as TurnScopedRequest));
                             return;
                         }
-                        // Answers allow on error, rather than stall the turn for the script's own timeout.
+                        // A gate that failed refuses at once, as the hook's failClosed does for a script that never answered.
                         const verdict = await verdictFor(payload as GateRequest).catch((error: unknown) => {
-                            logger.error({ err: error }, "cursor: command gate failed, allowing the command");
-                            return { permission: "allow" as const };
+                            logger.error({ err: error }, "cursor: command gate failed, refusing the command");
+                            const reason = `The command guard failed (${errorMessage(error)}), so this command was refused. Do not retry it: say plainly what you could not run.`;
+                            return { permission: "deny" as const, agent_message: reason, user_message: reason };
                         });
                         answer(verdict);
                     })();

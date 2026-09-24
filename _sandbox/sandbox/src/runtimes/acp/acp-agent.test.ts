@@ -115,6 +115,23 @@ test("resuming a session the process doesn't know without loadSession self-heals
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
 
+test("an agent that answers session/load with a refusal self-heals via session-not-found", async () => {
+    const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp(), { loadSession: true })), TIMEOUTS);
+    const events = await collect(agent, request("hello", { spec: { sessionId: "stale-id" } }));
+    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "session-not-found" }));
+});
+
+// session-not-found makes the client drop the id for good; a dropped connection has said nothing about the session.
+test("a connection that drops during session/load fails the turn without discarding the session", async () => {
+    const base = fakeAcpConnection(fakeAcpAgentApp(), { loadSession: true });
+    const closed = (async () => {
+        throw new Error("ACP connection closed");
+    }) as typeof base.agent.request;
+    const dropped: AcpConnection = { ...base, agent: Object.assign(Object.create(base.agent) as typeof base.agent, { request: closed }) };
+    const events = await collect(createAcpAgent(connectionsOf(dropped), TIMEOUTS), request("hello", { spec: { sessionId: "live-id" } }));
+    expect(events).toEqual([{ kind: "error", message: "ACP connection closed" }, { kind: "done" }]);
+});
+
 test("plan mode runs the two-phase emulation: captured plan → approval → execute on the same session", async () => {
     const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp())), TIMEOUTS);
     const events = await collect(agent, request("plan the work", { policy: { permissionMode: "plan" } }), () => ({ approve: true }));

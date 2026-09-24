@@ -48,11 +48,19 @@ const grabbers = (out: string): Grabber[] => {
     return isWayland() ? [...waylandTools, ...x11Tools] : [...x11Tools, ...waylandTools];
 };
 
-const attempt = (command: string, args: readonly string[]): Promise<boolean> =>
+// A grabber that is not installed, as `attempt` says it; every other failure is carried as what the tool said.
+const MISSING = "missing";
+
+// Undefined once the tool exited cleanly; otherwise MISSING, or the tail of what it said on the way out.
+const attempt = (command: string, args: readonly string[]): Promise<string | undefined> =>
     new Promise((resolvePromise) => {
         const child = spawn(command, [...args], { windowsHide: true });
-        child.on("error", () => resolvePromise(false));
-        child.on("close", (code) => resolvePromise(code === 0));
+        let said = "";
+        child.stderr?.on("data", (chunk: Buffer) => {
+            said += chunk.toString();
+        });
+        child.on("error", (error: NodeJS.ErrnoException) => resolvePromise(error.code === "ENOENT" ? MISSING : error.message));
+        child.on("close", (code) => resolvePromise(code === 0 ? undefined : said.trim() === "" ? `exited with code ${code}` : said.trim().slice(-300)));
     });
 
 export const hasGraphicalSession = (): boolean =>
@@ -63,15 +71,26 @@ export const capture = async (): Promise<Buffer> => {
         throw new DesktopError("This device has no graphical session right now (no DISPLAY or WAYLAND_DISPLAY), so there is no screen.");
     }
     const out = pngPath();
+    // An installed tool that failed is reported as itself: the install hint below is only for a device that has none.
+    const failures: string[] = [];
     try {
         for (const grabber of grabbers(out)) {
-            if (!(await attempt(grabber.command, grabber.args(out)))) {
+            const failed = await attempt(grabber.command, grabber.args(out));
+            if (failed === MISSING) {
+                continue;
+            }
+            if (failed !== undefined) {
+                failures.push(`${grabber.command}: ${failed}`);
                 continue;
             }
             const png = await readFile(out).catch(() => undefined);
             if (png !== undefined && png.length > 0) {
                 return png;
             }
+            failures.push(`${grabber.command}: exited cleanly without writing an image`);
+        }
+        if (failures.length > 0) {
+            throw new DesktopError(`Could not capture the screen. ${failures.join("; ")}`);
         }
         const installs = grabbers(out)
             .map((grabber) => grabber.install)

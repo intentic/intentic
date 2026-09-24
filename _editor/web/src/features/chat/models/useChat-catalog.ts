@@ -27,16 +27,18 @@ import { withConcurrency } from "../../../lib/concurrency";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 
-// A read whose failure is not news: apply what the daemon sent, and on any failure leave the ref holding its last
-// value. An answer from a sandbox the scope has since left is dropped the same way: it is not this one's record.
+// A read whose failure is not news: a failed read leaves the ref at its last value, as does an answer from a sandbox
+// the scope has since left. Only the read is forgiven: an `apply` that throws is a bug, not an unreachable daemon.
 export const readOrKeep = async <T>(read: Promise<T>, apply: (body: T) => void): Promise<void> => {
     const current = sandboxScopeGuard();
+    let body: T;
     try {
-        const body = await read;
-        if (current()) {
-            apply(body);
-        }
+        body = await read;
     } catch {
+        return;
+    }
+    if (current()) {
+        apply(body);
     }
 };
 

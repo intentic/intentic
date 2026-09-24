@@ -6,7 +6,7 @@ import { parseSidecarFront, sidecarBody, sidecarPathFor } from "@intentic/fileq/
 import type { DerivedSide } from "@intentic/sandbox-contract";
 import { readWorkspaceFileWindow } from "../workspace/files/workspace-files.js";
 import { statePath, stateRelPath } from "../state-paths.js";
-import { defaultExec, DERIVE_TIMEOUT_MS, FILEQ_MAX_BUFFER, isMissingBinary, stdoutOf, withFileqSlot, type ExecFn } from "./fileq.js";
+import { defaultExec, DERIVE_TIMEOUT_MS, FILEQ_MAX_BUFFER, isMissingBinary, runFailure, stdoutOf, withFileqSlot, type ExecFn } from "./fileq.js";
 
 // Text of bytes that are not a workspace file: a blob at a rev-spec, the before side of a document's diff. fileq keys
 // shadows by path and keeps only the current version's, so a past version is rendered here from a temporary copy and
@@ -86,6 +86,13 @@ const parseAnswer = (stdout: string): ReadAnswer | undefined => {
 // fileq's own reason for a refusal, from the one line it prints before exiting 1.
 const refusal = (stdout: string): string | undefined => /^fileq: cannot read .*?: (.+)$/m.exec(stdout)?.[1];
 
+const readerFailure = (error: unknown): string => {
+    if (isMissingBinary(error)) {
+        return "this sandbox has no fileq binary, so nothing can be rendered as text here";
+    }
+    return runFailure(error) ?? refusal(stdoutOf(error)) ?? "the reader failed on this version of the file";
+};
+
 // Same front matter a path shadow carries (fileq's sidecar.ts), so one parser reads both; fileq already neutralized the
 // body and the notes before they reached its saved file.
 const keep = async (path: string, sha: string, name: string, answer: ReadAnswer, body: string): Promise<void> => {
@@ -112,8 +119,15 @@ const render = async (root: string, bytes: Uint8Array, sha: string, name: string
     const copy = join(dir, basename(name) || "file");
     try {
         await writeFile(copy, bytes);
-        const { stdout } = await withFileqSlot(() => exec("fileq", ["read", "--json", "--budget", "0", copy], { timeout: DERIVE_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER }));
-        const answer = parseAnswer(stdout);
+        // Only the reader's own run answers "could not render"; a write or read of this daemon's failing throws instead.
+        const ran = await withFileqSlot(() => exec("fileq", ["read", "--json", "--budget", "0", copy], { timeout: DERIVE_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER })).then(
+            ({ stdout }) => ({ stdout }),
+            (error: unknown) => ({ failed: readerFailure(error) }),
+        );
+        if ("failed" in ran) {
+            return { present: false, reason: ran.failed };
+        }
+        const answer = parseAnswer(ran.stdout);
         if (answer === undefined) {
             return { present: false, reason: "the reader answered with nothing that could be read back" };
         }
@@ -121,11 +135,6 @@ const render = async (root: string, bytes: Uint8Array, sha: string, name: string
         await rm(answer.path, { force: true });
         await keep(cachePath(root, sha), sha, name, answer, body.replace(/\n$/, ""));
         return (await readKept(cachePath(root, sha))) ?? { present: false, reason: "the rendering could not be kept" };
-    } catch (error) {
-        if (isMissingBinary(error)) {
-            return { present: false, reason: "this sandbox has no fileq binary, so nothing can be rendered as text here" };
-        }
-        return { present: false, reason: refusal(stdoutOf(error)) ?? "the reader failed on this version of the file" };
     } finally {
         await rm(dir, { recursive: true, force: true });
     }

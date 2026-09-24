@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
@@ -23,6 +23,14 @@ describe("fileTranscriptRecord", () => {
         const record = fileTranscriptRecord(await dir());
         await record.append("c1", [said("mine")]);
         expect(await record.read("c2")).toEqual([]);
+    });
+
+    it("fails a record that exists but cannot be read, rather than answering a conversation with no history", async () => {
+        const root = await dir();
+        const record = fileTranscriptRecord(root);
+        await mkdir(transcriptFile(root, "c1"), { recursive: true });
+        await expect(record.read("c1")).rejects.toThrow(/EISDIR/);
+        await expect(record.truncate("c1", 0)).rejects.toThrow(/EISDIR/);
     });
 
     it("opens a branch with the source's first rows and leaves the source alone", async () => {

@@ -51,6 +51,10 @@ const fakeHistory = async () => {
     let tree = "tree-1";
     let commits = 0;
     const trees = new Map<string, string>();
+    // Whether the next read of the head ref fails as a git that could not run at all, rather than answering.
+    let headReadFails = false;
+    // `rev-parse -q --verify` on a name that resolves to nothing: silent, exit 1.
+    const unresolved = (): Error => Object.assign(new Error("Command failed: git rev-parse"), { code: 1 });
     const git: HistoryGitRunner = async (args) => {
         calls.push([...args]);
         const out = (stdout: string) => ({ stdout, stderr: "" });
@@ -60,14 +64,18 @@ const fakeHistory = async () => {
             case "rev-parse": {
                 const rev = args.at(-1) ?? "";
                 if (rev === "refs/snapshots/head") {
+                    if (headReadFails) {
+                        headReadFails = false;
+                        throw Object.assign(new Error("spawn git EAGAIN"), { code: "EAGAIN" });
+                    }
                     if (head === undefined) {
-                        throw new Error("unknown ref");
+                        throw unresolved();
                     }
                     return out(`${head}\n`);
                 }
                 const resolved = trees.get(rev.replace("^{tree}", "").replace("^", ""));
                 if (resolved === undefined) {
-                    throw new Error("unknown rev");
+                    throw unresolved();
                 }
                 return out(`${resolved}\n`);
             }
@@ -90,7 +98,13 @@ const fakeHistory = async () => {
         }
     };
     const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger }, git);
-    return { history, calls, setTree: (next: string) => (tree = next) };
+    return {
+        history,
+        calls,
+        setTree: (next: string) => (tree = next),
+        failHeadRead: () => (headReadFails = true),
+        head: () => head,
+    };
 };
 
 test("snapshot commits parentless first, skips an unchanged tree, then parents on the previous snapshot", async () => {
@@ -111,6 +125,22 @@ test("snapshot commits parentless first, skips an unchanged tree, then parents o
     expect(await history.snapshot("interval")).toEqual(expect.any(String));
     expect(commitCalls()).toHaveLength(2);
     expect(commitCalls()[1]?.join(" ")).toContain("-p c1");
+});
+
+test("a head ref git could not read leaves the timeline standing rather than restarting it parentless", async () => {
+    const { history, calls, setTree, failHeadRead, head } = await fakeHistory();
+    await history.snapshot("turn");
+    const commitCalls = () => calls.filter((call) => call.includes("commit-tree"));
+
+    setTree("tree-2");
+    failHeadRead();
+    expect(await history.snapshot("interval")).toBeUndefined();
+    expect(commitCalls()).toHaveLength(1);
+    expect(head()).toBe("c1");
+
+    expect(await history.snapshot("interval")).toEqual(expect.any(String));
+    expect(commitCalls()[1]?.join(" ")).toContain("-p c1");
+    expect(head()).toBe("c2");
 });
 
 test("groups are cached between reads and recomputed only after a changed snapshot", async () => {

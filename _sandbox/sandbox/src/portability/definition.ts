@@ -14,6 +14,8 @@ import {
 import { defaultGit } from "@intentic/scaffold";
 import { parse } from "smol-toml";
 import { ArrivalFormatError } from "../arrival-error.js";
+import { contributionRegistry } from "../capabilities/contributions.js";
+import { secretFieldsOf } from "../capabilities/credentials/secret-fields.js";
 import type { Services } from "../composition.js";
 import { baseImageOf, customPath } from "../environment/environment.js";
 import { remoteState } from "../git/remote/remote.js";
@@ -105,21 +107,17 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
     },
 ];
 
-// Sweeps vaults before manifests are read, so a hand-written secret cannot ride out in a definition; best-effort, never
-// fails the export.
-const sweptOut = async (run: () => Promise<readonly string[]>): Promise<void> => {
-    try {
-        await run();
-    } catch {
-        // Silent; the classification of what's read next is the second line of defense.
-    }
+// Moves every credential written into the capability manifest or extension settings since boot out to its vault. Both
+// files `carry` as bytes, so an export that must hold no secret cannot proceed past a failed sweep.
+export const sweepVaults = async (services: Pick<Services, "vaultManifestSecrets" | "vaultExtensionSettingSecrets">): Promise<void> => {
+    await Promise.all([services.vaultManifestSecrets(), services.vaultExtensionSettingSecrets()]);
 };
 
 // The remote a checkout can be referenced by, or why not; a broken git dir reports unreferenceable rather than failing.
 // Shared by repos and the workspace, which differ only in how the refusal reads.
 type Unreferenceable = { readonly problem: "none" | "unreadable"; readonly remoteName?: string };
 const referenceOf = async (dir: string): Promise<{ remote: string; ref?: string } | Unreferenceable> => {
-    const state = await remoteState(dir).catch(() => ({ ahead: 0, behind: 0 }) as Awaited<ReturnType<typeof remoteState>>);
+    const state = await remoteState(dir);
     if (state.remote === undefined) {
         return { problem: "none" };
     }
@@ -177,7 +175,8 @@ const settledSettings = (current: Record<string, unknown>): Record<string, unkno
 
 // Derives the definition from live stores, plus omitted: what could not be expressed, as lines the owner can act on.
 export const deriveDefinition = async (services: Services): Promise<{ definition: SandboxDefinition; omitted: NeedsAction[] }> => {
-    await Promise.all([sweptOut(() => services.vaultManifestSecrets()), sweptOut(() => services.vaultExtensionSettingSecrets())]);
+    // Hygiene only here: the capabilities below come from the vault-aware store, never the manifest's bytes.
+    await sweepVaults(services).catch((error: unknown) => services.logger.warn({ err: error }, "definition: vault sweep failed"));
     const omitted: NeedsAction[] = [];
     // Read first: this section decides whether the sandbox's own content travels at all.
     const { workspace, omitted: workspaceSkip } = await workspaceOf(services.workspace.root);
@@ -197,10 +196,24 @@ export const deriveDefinition = async (services: Services): Promise<{ definition
     const custom = ((await services.files.read(customPath(services))) ?? "").trim();
     // Each entry is validated on its own; one bad row costs just its line, never the whole export.
     const capabilities: Capability[] = [];
+    const connectors = await contributionRegistry(services);
     for (const entry of (await services.capabilities.list()).toSorted((left, right) => left.id.localeCompare(right.id))) {
         const parsed = CapabilitySchema.safeParse(entry);
         if (parsed.success) {
-            capabilities.push(parsed.data);
+            // The store hands entries back with their vaulted credentials; a definition carries the shape only.
+            const credentials = new Set(secretFieldsOf(parsed.data, connectors));
+            const shape = CapabilitySchema.safeParse({
+                ...parsed.data,
+                config: Object.fromEntries(Object.entries(parsed.data.config).filter(([key]) => !credentials.has(key))),
+            });
+            if (shape.success) {
+                capabilities.push(shape.data);
+            } else {
+                omitted.push({
+                    subject: `Connection ${entry.id}`,
+                    detail: "Its kind is not valid without the credential it holds, and a definition never carries one; re-add it on the Capabilities view.",
+                });
+            }
         } else {
             omitted.push({
                 subject: `Connection ${entry.id}`,

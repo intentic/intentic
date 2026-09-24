@@ -7,7 +7,7 @@ import { sshExecutor } from "../core/ssh.js";
 
 const KIND = "garage";
 // The garage binary path inside the dxflrs/garage image (its entrypoint).
-const BIN = "/garage";
+export const GARAGE_BIN = "/garage";
 
 const garageSchema = backingSchema.extend({
     region: z.string(),
@@ -52,20 +52,29 @@ const garageToml = (parsed: GarageInputs): string =>
         "",
     ].join("\n");
 
+// Runs a garage CLI subcommand in the instance container; throws on a non-zero exit (with stderr).
+export const runGarage = async (session: SshSession, cid: string, args: string): Promise<string> => {
+    const result = await session.exec(`docker exec ${cid} ${GARAGE_BIN} ${args}`);
+    if (result.code !== 0) {
+        throw new Error(`garage ${args.split(" ")[0]} failed (${result.code}): ${result.stderr.trim()}`);
+    }
+    return result.stdout.trim();
+};
+
 // Assign the single node a layout role on first boot (idempotent: skip once it already holds one). Without a
-// layout, Garage refuses bucket/key operations.
+// layout, Garage refuses bucket/key operations, so every step here must succeed for the instance to count as ready.
 const ensureLayout = async (session: SshSession, id: string): Promise<void> => {
     const cid = await containerId(session, id);
-    const nodeId = (await session.exec(`docker exec ${cid} ${BIN} node id -q`)).stdout.trim().split("@")[0] ?? "";
+    const nodeId = (await runGarage(session, cid, "node id -q")).split("@")[0] ?? "";
     if (nodeId === "") {
         throw new Error(`garage "${id}": could not read node id`);
     }
-    const layout = await session.exec(`docker exec ${cid} ${BIN} layout show`);
-    if (layout.stdout.includes(nodeId)) {
+    // `layout show` names a node by the first 16 hex digits of its id, never the whole id `node id` prints.
+    if ((await runGarage(session, cid, "layout show")).includes(nodeId.slice(0, 16))) {
         return;
     }
-    await session.exec(`docker exec ${cid} ${BIN} layout assign -z dc1 -c 1G ${nodeId}`);
-    await session.exec(`docker exec ${cid} ${BIN} layout apply --version 1`);
+    await runGarage(session, cid, `layout assign -z dc1 -c 1G ${nodeId}`);
+    await runGarage(session, cid, "layout apply --version 1");
 };
 
 // A Garage object-storage backing instance (i.want.objectStorage). Per-app buckets are the binding's job.
@@ -86,7 +95,7 @@ export const createGarageProvider = (executor: SshExecutor = sshExecutor): Provi
             prepare: async (session, _parsed, dir) => {
                 await session.exec(`test -f ${dir}/rpc_secret || { openssl rand -hex 32 > ${dir}/rpc_secret && chmod 600 ${dir}/rpc_secret; }`);
             },
-            probe: (_parsed, id) => execProbe(id, `${BIN} status`),
+            probe: (_parsed, id) => execProbe(id, `${GARAGE_BIN} status`),
             ready: (session, _parsed, id) => ensureLayout(session, id),
         },
         executor,

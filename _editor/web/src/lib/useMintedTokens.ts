@@ -17,11 +17,13 @@ export function useMintedTokens<Token, Request, Minted>(source: TokenSource<Toke
     const minted = shallowRef<Minted>();
     const { busy: minting, notice, run } = useAsyncAction();
 
+    // A list that didn't load is said, not shown as "no tokens": a live token nobody can see is one nobody revokes.
     const refresh = async (): Promise<void> => {
         try {
             tokens.value = await source.list();
-        } catch {
+        } catch (caught) {
             tokens.value = [];
+            notice.value ??= noticeFrom(caught, `Couldn't load the tokens.`);
         }
     };
 

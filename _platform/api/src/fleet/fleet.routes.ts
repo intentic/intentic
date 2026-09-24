@@ -101,7 +101,11 @@ export const fleetHttpRoutes = ({ config, prisma, now = () => new Date() }: Flee
         } catch (error) {
             // The row exists and cannot be claimed, which is worse than never having made it: take it back out rather
             // than leaving an unreachable name in the owner's switcher.
-            await prisma.sandbox.delete({ where: { id: sandbox.id } }).catch(() => undefined);
+            await prisma.sandbox
+                .delete({ where: { id: sandbox.id } })
+                .catch((deleteError: unknown) =>
+                    c.get(`logger`).error({ err: deleteError, sandboxId: sandbox.id }, `fleet provision: an unclaimable sandbox could not be taken back out`),
+                );
             if (error instanceof ReachabilityUnavailable) {
                 return c.json({ error: error.message }, 503);
             }

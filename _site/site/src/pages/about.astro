@@ -34,7 +34,10 @@ const n = (value: number) => value.toLocaleString(`en-GB`);
 
 /* Downloads are read from the registry at build time and are the whole argument of the open-source section: "shipped and got used on their own" is a claim. */
 const downloads = await npmDownloads(openSource.map((project) => project.name));
-const downloadTotal = Object.values(downloads).reduce<number>((sum, value) => sum + (value ?? 0), 0);
+// A package npm did not answer for makes the total unknown, not smaller: an understated figure is still a wrong one.
+const counted = Object.values(downloads);
+const known = counted.filter((value): value is number => value !== null);
+const downloadTotal = known.length === counted.length ? known.reduce((sum, value) => sum + value, 0) : 0;
 
 /* The claims, restyled for this page: three checkable ones in an even row, and the admission below them. */
 const claims = trustCards.filter((card) => card.href !== undefined);

@@ -1,10 +1,10 @@
 import { existsSync, mkdtempSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { waitFor } from "@intentic/testing/bun";
-import { armPasskeys, listPasskeys } from "./passkeys.js";
+import { armPasskeys, listPasskeys, upsertPasskey } from "./passkeys.js";
 
 // Skips when Chromium isn't installed on disk.
 const chromiumInstalled = async (): Promise<boolean> => {
@@ -61,13 +61,17 @@ test(
         const { chromium } = await import("playwright");
         const store = join(mkdtempSync(join(tmpdir(), "passkeys-")), "npmjs.passkeys.json");
         const site = await serve();
+        const saveFailures: unknown[] = [];
+        const onSaveFailure = (error: unknown): void => {
+            saveFailures.push(error);
+        };
         // executablePath is required: a bare headless launch needs the shell the image deletes after installing it.
         const browser = await chromium.launch({ headless: true, executablePath: chromium.executablePath(), args: ["--no-sandbox"] });
         try {
             // Virtual authenticator auto-approves create(); credentialAdded must persist it to the store.
             const first = await browser.newContext();
             const page = await first.newPage();
-            await armPasskeys(first, page, store);
+            await armPasskeys(first, page, store, onSaveFailure);
             await page.goto(site.url);
             const enrolledId = (await page.evaluate(CREATE)) as string;
             await waitFor(async () => expect((await listPasskeys(store)).length).toBe(1));
@@ -79,12 +83,13 @@ test(
             // Fresh context knows nothing; the store is the only carrier for the discoverable get().
             const second = await browser.newContext();
             const secondPage = await second.newPage();
-            await armPasskeys(second, secondPage, store);
+            await armPasskeys(second, secondPage, store, onSaveFailure);
             await secondPage.goto(site.url);
             expect((await secondPage.evaluate(ASSERT)) as string).toBe(enrolledId);
             // Sign counter must persist forward; a counter that runs backwards reads as a cloned key to relying parties.
             await waitFor(async () => expect((await listPasskeys(store))[0]?.signCount ?? 0).toBeGreaterThan(stored?.signCount ?? 0));
             await second.close();
+            expect(saveFailures).toEqual([]);
         } finally {
             await browser.close();
             site.close();
@@ -123,7 +128,7 @@ test(
         try {
             const context = await browser.newContext();
             const page = await context.newPage();
-            await expect(armPasskeys(context, page, store)).rejects.toThrow(/rpId/);
+            await expect(armPasskeys(context, page, store, () => undefined)).rejects.toThrow(/rpId/);
             // One refused credential must not unplug the authenticator; the origin must be secure, so not about:blank.
             await page.goto(site.url);
             expect(await page.evaluate<boolean>("PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()")).toBe(true);
@@ -151,8 +156,8 @@ test(
         try {
             const context = await browser.newContext();
             const page = await context.newPage();
-            await armPasskeys(context, page, store);
-            await armPasskeys(context, page, store);
+            await armPasskeys(context, page, store, () => undefined);
+            await armPasskeys(context, page, store, () => undefined);
             await page.goto(site.url);
             expect(await page.evaluate<boolean>("PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()")).toBe(true);
             await context.close();
@@ -169,4 +174,30 @@ test("an absent or corrupt store lists no passkeys: the browser still arms", asy
     const corrupt = join(mkdtempSync(join(tmpdir(), "passkeys-")), "x.json");
     await writeFile(corrupt, "{not json");
     expect(await listPasskeys(corrupt)).toEqual([]);
+});
+
+// Each stored entry is a private key a site still holds the public half of: an enrollment must never replace a store it
+// could not read with a one-entry one.
+test("an enrollment over a store this build cannot read sets it aside instead of writing over it", async () => {
+    const store = join(mkdtempSync(join(tmpdir(), "passkeys-")), "npmjs.passkeys.json");
+    const unreadable = '{"credentials": [{"credentialId": "old", "privateKey": "only-copy"';
+    await writeFile(store, unreadable);
+    const fresh = { credentialId: "new", isResidentCredential: true, rpId: "npmjs.com", privateKey: "k", signCount: 1 };
+
+    await upsertPasskey(store, fresh);
+
+    expect(await readFile(`${store}.corrupt`, "utf8")).toBe(unreadable);
+    expect(await listPasskeys(store)).toEqual([fresh]);
+});
+
+test("an enrollment keeps every credential already stored, and merges one it already holds", async () => {
+    const store = join(mkdtempSync(join(tmpdir(), "passkeys-")), "npmjs.passkeys.json");
+    const kept = { credentialId: "kept", isResidentCredential: true, rpId: "npmjs.com", privateKey: "a", signCount: 3 };
+    const bumped = { credentialId: "bumped", isResidentCredential: true, rpId: "github.com", privateKey: "b", signCount: 1 };
+    await upsertPasskey(store, kept);
+    await upsertPasskey(store, bumped);
+
+    await upsertPasskey(store, { credentialId: "bumped", isResidentCredential: true, privateKey: "b", signCount: 2 });
+
+    expect(await listPasskeys(store)).toEqual([kept, { ...bumped, signCount: 2 }]);
 });

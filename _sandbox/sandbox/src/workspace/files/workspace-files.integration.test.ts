@@ -1,7 +1,7 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MAX_TEXT_BYTES, readWorkspaceFileWindow } from "./workspace-files.js";
+import { MAX_TEXT_BYTES, readWorkspaceFile, readWorkspaceFileWindow } from "./workspace-files.js";
 
 // A temp file holding `content`, and the dir to clean up after.
 const fileWith = async (name: string, content: string | Uint8Array): Promise<{ dir: string; path: string }> => {
@@ -82,5 +82,19 @@ test("readWorkspaceFileWindow past the end serves nothing, and a missing file is
     const { dir, path } = await fileWith("small.ts", "ok\n");
     expect(await readWorkspaceFileWindow(path, 999)).toEqual({ content: "", size: 3, offset: 3, bytes: 0 });
     expect(await readWorkspaceFileWindow(join(dir, "nope.ts"))).toBeUndefined();
+    await rm(dir, { recursive: true, force: true });
+});
+
+// A caller that reads, merges and writes back (the imported memory file, the workspace identity) must never be handed
+// "absent" for a file that is there.
+test("readWorkspaceFile is undefined only for a missing path or a directory, and throws on any other failure", async () => {
+    const { dir, path } = await fileWith("kept.md", "owner's notes\n");
+    const looped = join(dir, "looped.md");
+    // A link to itself: a read that fails with ELOOP, not ENOENT, whoever runs the test.
+    await symlink(looped, looped);
+    expect(await readWorkspaceFile(path)).toBe("owner's notes\n");
+    expect(await readWorkspaceFile(join(dir, "nope.md"))).toBeUndefined();
+    expect(await readWorkspaceFile(dir)).toBeUndefined();
+    await expect(readWorkspaceFile(looped)).rejects.toMatchObject({ code: "ELOOP" });
     await rm(dir, { recursive: true, force: true });
 });

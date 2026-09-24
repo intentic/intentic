@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { EnvironmentDrift, RuntimeInstall, RuntimeInstallsFile } from "@intentic/sandbox-contract";
 import { utcDayOf } from "@intentic/sandbox-contract";
 import { installLive } from "./drift.js";
@@ -125,7 +126,7 @@ export const synthesizeAutoDrafts = async (deps: WorkspaceFiles, ledger: Runtime
 // and are excluded, so only the machine is told to stop repeating itself.
 export const autoDraftedTools = async (deps: WorkspaceFiles): Promise<string[]> => {
     const dir = draftsDirPath(deps.workspace.root);
-    const names = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith(".Dockerfile"));
+    const names = ((await readdir(dir).catch(undefinedIfMissing)) ?? []).filter((name) => name.endsWith(".Dockerfile"));
     const tools = await Promise.all(
         names.map(async (name) => {
             const content = (await deps.files.read(join(dir, name))) ?? "";

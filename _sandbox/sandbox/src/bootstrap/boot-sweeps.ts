@@ -90,8 +90,10 @@ const startRootSweeps = (phase: BootPhase): void => {
     void runGitMaintenance(services.workspace, logger);
     setInterval(() => void runGitMaintenance(services.workspace, logger), HOURLY_MS).unref();
     // Root-scoped: a guest sharing the history root prunes nothing.
-    void pruneLogFiles(logsRoot(config.historyRoot));
-    const logsSweep = setInterval(() => void pruneLogFiles(logsRoot(config.historyRoot)), HOURLY_MS);
+    const pruneLogs = (): Promise<void> =>
+        pruneLogFiles(logsRoot(config.historyRoot)).catch((error: unknown) => logger.warn({ err: error }, "logs: the retention sweep failed"));
+    void pruneLogs();
+    const logsSweep = setInterval(() => void pruneLogs(), HOURLY_MS);
     shutdown.push(() => clearInterval(logsSweep));
 };
 

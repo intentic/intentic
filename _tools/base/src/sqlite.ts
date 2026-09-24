@@ -29,7 +29,10 @@ export const wrapDb = (db: DatabaseSync): SqliteDb => ({
             fn();
             db.exec("COMMIT");
         } catch (error) {
-            db.exec("ROLLBACK");
+            // SQLite ends the transaction itself on a full disk or an I/O error; a ROLLBACK then would replace that error.
+            if (db.isTransaction) {
+                db.exec("ROLLBACK");
+            }
             throw error;
         }
     },

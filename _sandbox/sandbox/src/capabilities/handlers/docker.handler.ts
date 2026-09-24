@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { pollUntil } from "@intentic/base/async";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { CapabilityStatus, DockerConfig, IntenticLine } from "@intentic/sandbox-contract";
 import { packFragment } from "../../environment/packs.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
@@ -82,9 +83,9 @@ export const withEngineSettings = (current: Record<string, unknown>, config: unk
 };
 
 // Missing, empty or corrupt all read as {}; the merge then writes back a clean file, the only useful response to any of
-// the three.
+// the three. A file that exists but cannot be read throws, or the merge would drop what it holds (the GPU runtime).
 const readDaemonJson = async (): Promise<Record<string, unknown>> => {
-    const raw = await readFile(DAEMON_JSON, "utf8").catch(() => "");
+    const raw = (await readFile(DAEMON_JSON, "utf8").catch(undefinedIfMissing)) ?? "";
     try {
         const parsed: unknown = JSON.parse(raw);
         return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { EngineHit, FileEntry } from "../types.js";
 import { LANGUAGES, parseLang } from "../indexer/languages.js";
 import { langOf } from "../workspace/scan.js";
@@ -16,7 +17,8 @@ export const astSearch = async (pattern: string, lang: string, entries: readonly
         if (langOf(entry.path) !== lang || entry.size > MAX_FILE_BYTES) {
             continue;
         }
-        const content = await readFile(entry.abs, "utf8").catch(() => undefined);
+        // Gone since the sweep is skipped; an unreadable file fails the search rather than dropping its matches unsaid.
+        const content = await readFile(entry.abs, "utf8").catch(undefinedIfMissing);
         if (content === undefined) {
             continue;
         }

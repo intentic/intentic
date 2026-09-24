@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // The kernel's own answer to "what is mounted where": /proc/self/mountinfo, one line per mount. Read live on every
 // probe, never remembered, so a disk unmounted from a shell and one unmounted from the UI read identically.
@@ -50,4 +51,6 @@ export const isReadOnly = (entry: MountEntry): boolean => entry.mountOptions.inc
 export const mountAt = (entries: readonly MountEntry[], mountPoint: string): MountEntry | undefined =>
     entries.findLast((entry) => entry.mountPoint === mountPoint);
 
-export const readMountinfo = async (): Promise<MountEntry[]> => parseMountinfo(await readFile("/proc/self/mountinfo", "utf8").catch(() => ""));
+// Only a /proc without mountinfo reads as "nothing mounted"; a failed read (EMFILE) would make `unmount` a silent no-op.
+export const readMountinfo = async (): Promise<MountEntry[]> =>
+    parseMountinfo((await readFile("/proc/self/mountinfo", "utf8").catch(undefinedIfMissing)) ?? "");

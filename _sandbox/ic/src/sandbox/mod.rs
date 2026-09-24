@@ -18,11 +18,19 @@ pub const DIND_PREFIX: &str = "intentic-dind-host-";
 /// `ps -a`, not `ps`: a daemon that broke badly enough left its container EXITED, and requiring it to run
 /// made the one flow that could fix it the one flow you could not reach.
 pub fn list_slugs() -> Vec<String> {
-    docker::ps_names(true, &format!("^{CONTAINER_PREFIX}"))
-        .into_iter()
-        .filter(|name| !name.starts_with(TUNNEL_PREFIX))
-        .filter_map(|name| name.strip_prefix(CONTAINER_PREFIX).map(str::to_string))
-        .collect()
+    live_slugs().unwrap_or_default()
+}
+
+/// The same slugs, or None when docker could not list its containers: a flow that deletes must not read an
+/// unanswered question as "no sandbox is running".
+pub fn live_slugs() -> Option<Vec<String>> {
+    docker::ps_names(true, &format!("^{CONTAINER_PREFIX}")).map(|names| {
+        names
+            .into_iter()
+            .filter(|name| !name.starts_with(TUNNEL_PREFIX))
+            .filter_map(|name| name.strip_prefix(CONTAINER_PREFIX).map(str::to_string))
+            .collect()
+    })
 }
 
 /// An explicit slug names the sandbox; only its absence falls back to detecting the single one — never

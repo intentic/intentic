@@ -11,6 +11,7 @@ import {
     hasSession,
     isProfileOpen,
     markConnected,
+    moveSession,
     passkeyPath,
     profileOwner,
     releaseProfileLock,
@@ -63,6 +64,25 @@ test("the passkey store sits beside the profile and is cleared with the session"
     expect(existsSync(passkeyPath(root, "npmjs"))).toBe(true);
     await clearSession(root, "npmjs");
     expect(existsSync(passkeyPath(root, "npmjs"))).toBe(false);
+});
+
+test("every set-aside copy of the passkey store goes where the store goes", async () => {
+    const root = tempRoot();
+    await markConnected(root, "npmjs");
+    await writeFile(passkeyPath(root, "npmjs"), JSON.stringify({ credentials: [] }));
+    await writeFile(`${passkeyPath(root, "npmjs")}.corrupt`, `{"first"`);
+    await writeFile(`${passkeyPath(root, "npmjs")}.corrupt.1790000000000`, `{"second"`);
+
+    await moveSession(root, "npmjs", "npm-work");
+    expect(
+        [".corrupt", ".corrupt.1790000000000"].map((suffix) => [existsSync(`${passkeyPath(root, "npmjs")}${suffix}`), existsSync(`${passkeyPath(root, "npm-work")}${suffix}`)]),
+    ).toEqual([
+        [false, true],
+        [false, true],
+    ]);
+
+    await clearSession(root, "npm-work");
+    expect([".corrupt", ".corrupt.1790000000000"].map((suffix) => existsSync(`${passkeyPath(root, "npm-work")}${suffix}`))).toEqual([false, false]);
 });
 
 test("the login lock is exclusive per account", () => {

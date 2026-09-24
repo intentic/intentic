@@ -173,6 +173,40 @@ describe("the scan ceiling", () => {
     });
 });
 
+// Stand-ins for the rg binary, each reproducing one way a real one fails; the engine must never read either as an answer.
+describe("a failing ripgrep", () => {
+    let bin: string;
+    const fake = async (name: string, script: string): Promise<string> => {
+        const path = join(bin, name);
+        await writeFile(path, `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+        return path;
+    };
+
+    beforeAll(async () => {
+        bin = await mkdtemp(join(tmpdir(), "iq-fake-rg-"));
+    });
+    afterAll(() => rm(bin, { recursive: true, force: true }));
+
+    test("an unreadable file fails the search with rg's own reason, which --no-messages would silence", async () => {
+        // Real rg exits 2 on an unreadable file either way; only without --no-messages does it say which file and why.
+        const rgPath = await fake(
+            "rg-unreadable",
+            'case " $* " in *" --no-messages "*) exit 2;; esac\necho "rg: ./locked.md: Permission denied (os error 13)" >&2\nexit 2',
+        );
+        await expect(rgSearch({ root, pattern: "own", allowed, rgPath })).rejects.toThrow("ripgrep: rg: ./locked.md: Permission denied (os error 13)");
+    });
+
+    test("a scan killed from outside is an error, not the hits it printed before dying", async () => {
+        const match = JSON.stringify({
+            type: "match",
+            data: { path: { text: "./lines.md" }, line_number: 1, lines: { text: "own its own sandbox\n" }, submatches: [{ start: 0, end: 3 }] },
+        });
+        // printf, not echo: dash's echo would turn the JSON's own `\n` escape into a line break.
+        const rgPath = await fake("rg-killed", `printf '%s\\n' '{"type":"begin","data":{"path":{"text":"./lines.md"}}}' '${match}'\nkill -KILL $$`);
+        await expect(rgSearch({ root, pattern: "own", allowed, rgPath })).rejects.toThrow("ripgrep: killed by SIGKILL before the search finished");
+    });
+});
+
 test("offsets convert in one pass however many of them a line carries", async () => {
     // rg may hand back a single line up to 1 MB; every span still has to land on the word.
     const dense = "dense.md";

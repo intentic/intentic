@@ -19,7 +19,7 @@ export interface HostFile {
     readonly secret?: boolean;
 }
 
-const exec = async (session: SshSession, kind: string, command: string, what: string): Promise<void> => {
+export const execChecked = async (session: SshSession, kind: string, command: string, what: string): Promise<void> => {
     const result = await session.exec(command);
     if (result.code !== 0) {
         throw new Error(`${kind}: ${what} failed (exit ${result.code}): ${result.stderr.trim()}`);
@@ -34,15 +34,15 @@ export const writeHostFiles = async (
     dir: string,
     files: Readonly<Record<string, string | HostFile>>,
 ): Promise<void> => {
-    await exec(session, kind, `mkdir -p ${dir}`, `create ${dir}`);
+    await execChecked(session, kind, `mkdir -p ${dir}`, `create ${dir}`);
     const marker = `${kind.toUpperCase().replaceAll(/[^A-Z0-9]/gu, "_")}_FILE_EOF`;
     for (const [name, file] of Object.entries(files)) {
         const content = typeof file === "string" ? file : file.content;
         // oxlint-disable-next-line eslint/no-await-in-loop -- one session, one shell: the writes are sequential by construction
-        await exec(session, kind, `cat > ${dir}/${name} <<'${marker}'\n${content}${marker}`, `write ${dir}/${name}`);
+        await execChecked(session, kind, `cat > ${dir}/${name} <<'${marker}'\n${content}${marker}`, `write ${dir}/${name}`);
         if (typeof file !== "string" && file.secret === true) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- must land before the next file's write
-            await exec(session, kind, `chmod 600 ${dir}/${name}`, `chmod ${dir}/${name}`);
+            await execChecked(session, kind, `chmod 600 ${dir}/${name}`, `chmod ${dir}/${name}`);
         }
     }
 };
@@ -61,7 +61,7 @@ export const writeEnvOnce = async (session: SshSession, kind: string, dir: strin
               `"${entry.key}='$(openssl rand -hex 32)'"`
             : envArg(entry.key, entry.value),
     );
-    await exec(
+    await execChecked(
         session,
         kind,
         `test -f ${dir}/.env || { printf '%s\\n' ${args.join(" ")} > ${dir}/.env && chmod 600 ${dir}/.env; }`,

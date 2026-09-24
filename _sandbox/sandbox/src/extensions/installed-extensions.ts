@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { isMissing } from "@intentic/base/errors";
 import { type ExtensionManifest, extensionIdOf } from "@intentic/extension-manifest";
 import type { Capability, ExtensionSummary, InvalidWorkspaceExtension } from "@intentic/sandbox-contract";
 import {
@@ -57,8 +58,12 @@ const bakedExtensions = async (services: ExtensionHost, enabledOf: (manifest: Ex
     let names: string[];
     try {
         names = (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
-    } catch {
-        return [];
+    } catch (error) {
+        // Only an absent root is "none": an unlistable one read as empty would stop every extension it holds.
+        if (isMissing(error)) {
+            return [];
+        }
+        throw error;
     }
     const found: InstalledExtension[] = [];
     for (const name of names) {
@@ -86,8 +91,11 @@ const workspaceExtensions = async (
             .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
             .map((entry) => entry.name)
             .toSorted();
-    } catch {
-        return { extensions: [], invalid: [], pending: [] };
+    } catch (error) {
+        if (isMissing(error)) {
+            return { extensions: [], invalid: [], pending: [] };
+        }
+        throw error;
     }
     const extensions: InstalledExtension[] = [];
     const invalid: InvalidWorkspaceExtension[] = [];

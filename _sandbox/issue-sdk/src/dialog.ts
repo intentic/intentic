@@ -76,8 +76,7 @@ export class IssueDialogElement extends HTMLElement {
             }
             void client
                 .report({ description, ...(email?.value.trim() ? { email: email.value.trim() } : {}) })
-                // Same thanks either way: a resolved failure isn't the person's to fix; the owner sees it in the
-                // install panel.
+                // Same thanks either way: a resolved failure isn't the person's to fix; the page's console says why.
                 .then(() => this.#thanks(client.config.thanks));
         });
     }

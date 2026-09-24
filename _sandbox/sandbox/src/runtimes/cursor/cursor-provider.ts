@@ -148,9 +148,8 @@ const CURSOR_ADAPTER: AgentAdapter<"cursor", CursorAdapterDeps> = {
         if (sdk === undefined) {
             return false;
         }
-        return sdk.Agent.list({ runtime: "local", cwd })
-            .then((result) => result.items.some((agent) => agent.agentId === sessionId))
-            .catch(() => false);
+        // A listing that failed rejects: the caller resumes as asked rather than discarding a session it could not see.
+        return (await sdk.Agent.list({ runtime: "local", cwd })).items.some((agent) => agent.agentId === sessionId);
     },
 };
 

@@ -2,6 +2,7 @@
 // crawl4ai, Apache-2.0). Caps (max-pages, depth, robots.txt) are a contract: everything skipped returns as a per-reason
 // count. Shares `webq fetch`'s page pipeline and cache.
 import { setTimeout as sleep } from "node:timers/promises";
+import { errorMessage } from "@intentic/base/errors";
 import { tokenize } from "./bm25.js";
 import { closeBrowser } from "./browser.js";
 import { httpFetch } from "./http.js";
@@ -34,6 +35,8 @@ export interface CrawlPageReport extends IndexEntry {
 export interface CrawlReport {
     readonly pages: CrawlPageReport[];
     readonly skipped: Record<string, number>;
+    // Each page counted under `skipped.errors`, with what failed: a count alone cannot tell a flaky site from a full disk.
+    readonly failures: ReadonlyArray<{ readonly url: string; readonly reason: string }>;
     readonly indexMarkdown: string;
     readonly indexJson: string;
     readonly sitemapCapped: boolean;
@@ -106,6 +109,7 @@ export const crawl = async (startUrl: string, options: CrawlOptions): Promise<Cr
     }
 
     const pages: CrawlPageReport[] = [];
+    const failures: { url: string; reason: string }[] = [];
     const fetchedAt = new Date();
     let inFlight = 0;
     let landed = 0;
@@ -157,8 +161,9 @@ export const crawl = async (startUrl: string, options: CrawlOptions): Promise<Cr
                 for (const link of page.links) {
                     admit(link.url, candidate.depth + 1, link.text);
                 }
-            } catch {
+            } catch (error) {
                 skipped.errors += 1;
+                failures.push({ url: candidate.url, reason: errorMessage(error).split("\n")[0] ?? "" });
             }
         };
         pump();
@@ -166,7 +171,7 @@ export const crawl = async (startUrl: string, options: CrawlOptions): Promise<Cr
 
     await closeBrowser();
     const index = await saveIndex(options.outDir, startUrl, pages, skipped);
-    return { pages, skipped, indexMarkdown: index.markdownPath, indexJson: index.jsonPath, sitemapCapped };
+    return { pages, skipped, failures, indexMarkdown: index.markdownPath, indexJson: index.jsonPath, sitemapCapped };
 };
 
 const takeBest = (pending: Map<string, Candidate>): Candidate => {

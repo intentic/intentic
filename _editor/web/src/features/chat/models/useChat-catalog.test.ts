@@ -17,7 +17,7 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({ providers: { list: providersList, models: providerModels }, endpoints: { models: endpointModels, trial } }),
 }));
 
-const { loadActiveProviderModels, loadRunnableProviders, loadProviderModels } = await import("./useChat-catalog");
+const { loadActiveProviderModels, loadRunnableProviders, loadProviderModels, readOrKeep } = await import("./useChat-catalog");
 const { NATIVE_PROVIDERS } = await import("@intentic/sandbox-contract");
 const { acpProviders, endpointProviders, endpointsLoaded, nativeReady } = await import("../accounts/providerCatalog");
 const { setConversations } = await import("../tabs/useChat-tabs");
@@ -175,4 +175,20 @@ test(`reads one provider's catalog against that provider's chats only`, async ()
 
     expect(elsewhere.selection.model.value).toBe(`claude-opus-5`);
     expect(elsewhere.selection.displacedModel.value).toBeUndefined();
+});
+
+// A read that fails keeps what was shown; an answer the app then mishandles is a bug, and must not pass for the former.
+test(`forgives a failed read by keeping the last value, and never forgives the apply after it`, async () => {
+    const applied: string[] = [];
+    await readOrKeep(Promise.reject(new TypeError(`Failed to fetch`)), (body: string) => applied.push(body));
+    expect(applied).toEqual([]);
+
+    await readOrKeep(Promise.resolve(`answer`), (body) => applied.push(body));
+    expect(applied).toEqual([`answer`]);
+
+    await expect(
+        readOrKeep(Promise.resolve(`answer`), () => {
+            throw new TypeError(`body.commands is undefined`);
+        }),
+    ).rejects.toThrow(`body.commands is undefined`);
 });

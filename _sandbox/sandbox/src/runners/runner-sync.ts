@@ -38,6 +38,12 @@ const git = async (identity: RunnerIdentity, cwd: string, args: string[]): Promi
     return stdout.trim();
 };
 
+// git's refusal for a ref the remote does not have; every other fetch failure is a failure to learn the answer.
+const isMissingRemoteRef = (error: unknown): boolean => {
+    const stderr = typeof error === "object" && error !== null ? (error as { stderr?: unknown }).stderr : undefined;
+    return typeof stderr === "string" && stderr.includes("couldn't find remote ref");
+};
+
 // The working dir a composition entry means locally; "" is the workspace root itself.
 const workingDirOf = (deps: RunnerSyncDeps, dir: string): string => (dir === "" ? deps.workspaceRoot : join(deps.workspaceRoot, dir));
 
@@ -65,10 +71,16 @@ export const syncFromParent = async (deps: RunnerSyncDeps, identity: RunnerIdent
         await git(identity, workingDir, ["fetch", "--no-tags", url, `+refs/heads/${mainBranch}:${PARENT_MAIN_REF}`]);
         // Moves this mirror onto the parent's own branch name, converging rather than growing a second history.
         await git(identity, workingDir, ["checkout", "-B", mainBranch, PARENT_MAIN_REF]);
-        // Tolerates a branch the parent hasn't created yet: this repo just starts at main instead of failing.
+        // Tolerates a branch the parent hasn't created yet: this repo just starts at main instead of failing. Any other
+        // failure fails the sync, since the parent hard-resets onto what comes back and main lacks the earlier turns.
         const fetched = await git(identity, workingDir, ["fetch", "--no-tags", url, `+refs/heads/${input.branch}:${PARENT_TURN_REF}`])
             .then(() => true)
-            .catch(() => false);
+            .catch((error: unknown) => {
+                if (isMissingRemoteRef(error)) {
+                    return false;
+                }
+                throw error;
+            });
         if (!fetched) {
             onLine(`${repo}: the parent has no ${input.branch} yet, starting it at ${mainBranch}`);
             continue;

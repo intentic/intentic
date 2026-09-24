@@ -385,7 +385,9 @@ const watchExtensionHealth = (services: Services, id: string, identity: string, 
             void previous;
             return health === undefined ? rest : { ...rest, health };
         });
-    const armed = record({ state: "watching", fromRef, at: new Date().toISOString() }).catch(() => undefined);
+    // A watch whose record or probe fails would otherwise sit at "watching" forever with nobody told why.
+    const failed = (error: unknown): void => services.logger.warn({ err: error, extension: id }, "extension update: health watch failed");
+    const armed = record({ state: "watching", fromRef, at: new Date().toISOString() }).catch(failed);
     const probe = async (final: boolean): Promise<void> => {
         const problem = await healthProblem(services, id);
         if (problem === "stop") {
@@ -409,11 +411,11 @@ const watchExtensionHealth = (services: Services, id: string, identity: string, 
         if (final) {
             await record({ state: "healthy", fromRef, at: new Date().toISOString() });
         } else {
-            const timer = setTimeout(() => void probe(true).catch(() => undefined), FINAL_PROBE_MS - EARLY_PROBE_MS);
+            const timer = setTimeout(() => void probe(true).catch(failed), FINAL_PROBE_MS - EARLY_PROBE_MS);
             timer.unref();
         }
     };
-    const timer = setTimeout(() => void probe(false).catch(() => undefined), EARLY_PROBE_MS);
+    const timer = setTimeout(() => void probe(false).catch(failed), EARLY_PROBE_MS);
     timer.unref();
     return armed;
 };
@@ -488,8 +490,17 @@ const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const inFlight = new Map<string, Promise<string>>();
 
+// Thrown by a check pass once everything reachable is recorded; names each registry it could not read and why.
+export class RegistryUnreachableError extends Error {
+    constructor(unreached: readonly string[]) {
+        super(`could not reach ${unreached.join(", ")}: its extensions keep what the last check found`);
+        this.name = "RegistryUnreachableError";
+    }
+}
+
 // One pass: reads every registry an installed extension resolves to (one clone per registry, not per extension).
-// Folds each row into an update/advisory record. Unreachable keeps previous records; delisted clears them.
+// Folds each row into an update/advisory record. Unreachable keeps previous records and fails the pass once the rest
+// is recorded, so a check that could not look never answers as all-clear; delisted clears them.
 export const checkExtensionUpdates = (services: Services): Promise<string> => {
     const root = services.workspace.root;
     const running = inFlight.get(root);
@@ -506,6 +517,7 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
         const now = new Date().toISOString();
         const rows = new Map<string, RegistryEntry | undefined>();
         const unreachable = new Set<string>();
+        const unreached: string[] = [];
         for (const [registryUrl, group] of byRegistry) {
             try {
                 const market = await browseMarketplace(services, registryUrl, undefined, ".update-check.tmp");
@@ -517,6 +529,7 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
                 }
             } catch (error) {
                 services.logger.warn({ err: error, registry: registryUrl }, "extension update check: registry unreachable");
+                unreached.push(`${registryUrl} (${errorMessage(error)})`);
                 for (const target of group) {
                     unreachable.add(target.identity);
                 }
@@ -601,6 +614,9 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
             } else if (policy === "agent") {
                 prepareAgentReview(services, target, update);
             }
+        }
+        if (unreached.length > 0) {
+            throw new RegistryUnreachableError(unreached);
         }
         return now;
     })();

@@ -1,5 +1,6 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { errnoCode, errorMessage, isMissing } from "@intentic/base/errors";
 import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore";
 import type { FileClass, FileEntry, Scope } from "../types.js";
 import { isIqDenied } from "./floor.js";
@@ -8,13 +9,44 @@ import { globToRegExp } from "./glob.js";
 // Runaway guard, well above any real workspace; the tree route caps at 5k entries.
 const MAX_FILES = 100_000;
 
+export interface Sweep {
+    readonly entries: FileEntry[];
+    // `path (CODE)` per directory or file the walk could not read; nothing under one is in `entries`, so no engine
+    // can see it. A path that vanished mid-walk is a race with a writer, not listed.
+    readonly unreadable: string[];
+}
+
 // Stat-sweeps every file the ignore model admits, sorted by path for determinism; the single authority engines filter
 // ripgrep/git results against. Walked and stat'd concurrently; the sort keeps output order-independent.
-export const sweep = async (root: string, includeIgnored: boolean): Promise<FileEntry[]> => {
+export const sweep = async (root: string, includeIgnored: boolean): Promise<Sweep> => {
     const entries: FileEntry[] = [];
+    const unreadable: string[] = [];
+    const skip = (relPath: string, error: unknown): undefined => {
+        if (!isMissing(error)) {
+            unreadable.push(`${relPath} (${errnoCode(error) ?? errorMessage(error)})`);
+        }
+        return undefined;
+    };
     const walk = async (dir: string, rel: string, scope: IgnoreScope, repo: string | undefined): Promise<void> => {
-        const here = await scope.descend(dir, rel);
-        const dirents = await readdir(dir, { withFileTypes: true }).catch(() => []);
+        const here = await scope.descend(dir, rel).catch((error: unknown) => {
+            // Its ignore rules unknown, nothing under it is admitted: an ignored file must never read as tracked.
+            if (rel === "") {
+                throw error;
+            }
+            skip(`${rel}/.gitignore`, error);
+            return undefined;
+        });
+        if (here === undefined) {
+            return;
+        }
+        const dirents = await readdir(dir, { withFileTypes: true }).catch((error: unknown) => {
+            // An unreadable root is no sweep at all, never an empty one.
+            if (rel === "") {
+                throw error;
+            }
+            skip(rel, error);
+            return [];
+        });
         // A `.git` file marks a repo boundary same as a `.git` dir: worktrees, submodules, --separate-git-dir.
         const ownsGit = dirents.some((d) => d.name === ".git");
         const repoHere = ownsGit ? rel : repo;
@@ -37,7 +69,7 @@ export const sweep = async (root: string, includeIgnored: boolean): Promise<File
                 if (!dirent.isFile() || entries.length >= MAX_FILES) {
                     return;
                 }
-                const stats = await stat(join(dir, dirent.name)).catch(() => undefined);
+                const stats = await stat(join(dir, dirent.name)).catch((error: unknown) => skip(relPath, error));
                 if (stats === undefined) {
                     return;
                 }
@@ -53,7 +85,7 @@ export const sweep = async (root: string, includeIgnored: boolean): Promise<File
     };
     await walk(root, "", createIgnoreScope(), undefined);
     // Re-applied here: concurrent pushes can overshoot MAX_FILES; the sorted prefix is the slice kept.
-    return entries.toSorted((a, b) => (a.path < b.path ? -1 : 1)).slice(0, MAX_FILES);
+    return { entries: entries.toSorted((a, b) => (a.path < b.path ? -1 : 1)).slice(0, MAX_FILES), unreadable: unreadable.toSorted() };
 };
 
 const CLASS_TESTS = /(^|\/)((__tests__|tests?)\/|test_[^/]*$)|\.(test|spec)\.[^/.]+$/;

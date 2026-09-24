@@ -1,6 +1,8 @@
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createTurnGate } from "../../guard/turn-gate.js";
 import { humanizeModelId } from "@intentic/sandbox-contract";
 import { SEED_XAI_MODELS } from "./grok-models.js";
@@ -16,6 +18,8 @@ const cards = parkedCards(memoryFleet().conversations);
 const serverSpawns = [] as { config?: unknown }[];
 const permissionReplies = [] as { id: string; permissionID: string; directory: string | undefined; response: string | undefined }[];
 const streamEvents = [] as unknown[];
+// Every event subscription asked for, by directory; `refused` makes each one fail the way a dead server's does.
+const subscriptions = { refused: false, asked: [] as (string | undefined)[] };
 jest.mock("@opencode-ai/sdk", () => ({
     createOpencodeServer: async (options: { config?: unknown }) => {
         serverSpawns.push(options);
@@ -23,7 +27,12 @@ jest.mock("@opencode-ai/sdk", () => ({
     },
     createOpencodeClient: () => ({
         event: {
-            subscribe: async () => ({
+            subscribe: async (options?: { query?: { directory?: string } }) => {
+                subscriptions.asked.push(options?.query?.directory);
+                if (subscriptions.refused) {
+                    throw new Error("connect ECONNREFUSED");
+                }
+                return {
                 stream: {
                     async *[Symbol.asyncIterator]() {
                         yield* streamEvents;
@@ -32,7 +41,8 @@ jest.mock("@opencode-ai/sdk", () => ({
                         await new Promise(() => {});
                     },
                 },
-            }),
+                };
+            },
         },
         postSessionIdPermissionsPermissionId: async (options: {
             path: { id: string; permissionID: string };
@@ -76,6 +86,9 @@ afterEach(async () => {
     streamEvents.length = 0;
     permissionReplies.length = 0;
     serverSpawns.length = 0;
+    subscriptions.refused = false;
+    subscriptions.asked.length = 0;
+    jest.useRealTimers();
 });
 
 test("connected('xai') reflects a persisted OAuth token in auth.json, not OpenCode's cached snapshot", async () => {
@@ -206,6 +219,24 @@ test("a permission ask on a watched directory is answered with a standing yes", 
     // The watcher reads its stream detached from the boot that started it, so let its first read land.
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(permissionReplies).toEqual([{ id: "ses_1", permissionID: "per_1", directory: "/work", response: "always" }]);
+});
+
+// A watcher that exhausted its retries answers nothing more; a directory still marked watched would leave every later
+// permission ask there unanswered until the turn's watchdog killed it.
+test("a permission watcher that gave up is reopened by the next turn in its directory", async () => {
+    jest.useFakeTimers();
+    const xdg = await scratch();
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
+    await service.client();
+    subscriptions.refused = true;
+    const worktree = `${WORKSPACE_ROOT}/worktree`;
+    await service.watch(worktree);
+    await advanceTimersByTimeAsync(20_000);
+    expect(subscriptions.asked).toEqual([worktree, worktree, worktree]);
+
+    subscriptions.refused = false;
+    await service.watch(worktree);
+    expect(subscriptions.asked).toHaveLength(4);
 });
 
 // A registered session's permission goes through the same pipeline every other runtime uses; unregistered keeps the

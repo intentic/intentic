@@ -333,7 +333,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun): Promise
         services.logger.error({ err: error, runId }, "workflow run failed");
         await services.workflowRuns
             .settle(runId, "error", Date.now(), error instanceof Error ? error.message : "the run failed")
-            .catch(() => undefined);
+            .catch((settleError: unknown) => services.logger.warn({ err: settleError, runId }, "workflow run: its error state was not recorded, it reads as running"));
     } finally {
         workflowSlots.give();
         running.delete(runId);

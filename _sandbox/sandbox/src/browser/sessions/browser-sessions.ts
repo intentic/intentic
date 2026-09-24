@@ -133,9 +133,9 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
     const entry: PageRecord = { id: `p${record.nextPageId}`, page, url: page.url(), title: undefined, closed: false, dialog: undefined };
     record.nextPageId += 1;
     record.pages.set(entry.id, entry);
-    // Best-effort: arm failures are swallowed silently here (no logger), unlike the logged guided-login path.
+    // Unreported: no logger reaches this module (agent.ts and codex-agent.ts open sessions without one).
     if (record.passkeyStore !== undefined && record.context !== undefined) {
-        void armPasskeys(record.context, page, record.passkeyStore).catch(() => undefined);
+        void armPasskeys(record.context, page, record.passkeyStore, () => undefined).catch(() => undefined);
     }
     // Held, never answered here: a Playwright client dismisses any dialog nobody listens for, which is what this
     // daemon's attach did to every alert the agent's page opened, taking browser_handle_dialog with it. The owner

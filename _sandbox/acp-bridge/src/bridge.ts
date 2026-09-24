@@ -223,9 +223,7 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
             });
             // Replays the transcript (role/text only, no persisted tool calls) as chunks before returning, per spec.
             if (stored.providerSessionId !== undefined && stored.agent === "claude") {
-                const messages = await daemonFor(config)
-                    .getSession(stored.providerSessionId)
-                    .catch(() => []);
+                const messages = await daemonFor(config).getSession(stored.providerSessionId);
                 for (const message of messages) {
                     await ctx.notify(methods.client.session.update, {
                         sessionId: params.sessionId,

@@ -3,6 +3,7 @@ import { realpathSync } from "node:fs";
 import { readdir, readFile, readlink, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { mapPool } from "@intentic/base/async";
+import { isMissing } from "@intentic/base/errors";
 import type { WorkspaceLink } from "@intentic/sandbox-contract";
 import { isUnder, realPathOf } from "./workspace-files-paths.js";
 
@@ -95,9 +96,15 @@ export const followEntries = async (dirAbs: string, realDir: string, realRoot: s
     return out.sort(byKind);
 };
 
-const gitignoreOf = (abs: string, dirents: readonly Dirent[]): Promise<string | undefined> =>
+// A .gitignore that is there but cannot be read leaves the folder's rules unknown, so the whole read is unknown: listed
+// without them, what it ignores would show as tracked and be offered for deletion.
+const UNREADABLE = Symbol(`unreadable .gitignore`);
+const gitignoreOf = (abs: string, dirents: readonly Dirent[]): Promise<string | undefined | typeof UNREADABLE> =>
     dirents.some((dirent) => dirent.name === ".gitignore" && !dirent.isDirectory())
-        ? readFile(join(abs, ".gitignore"), "utf8").catch(() => undefined)
+        ? readFile(join(abs, ".gitignore"), "utf8").then(
+              (text) => text,
+              (error: unknown) => (isMissing(error) ? undefined : UNREADABLE),
+          )
         : Promise.resolve(undefined);
 
 const readListing = async (abs: string, real: string, realRoot: string): Promise<DirListing | undefined> => {
@@ -105,10 +112,14 @@ const readListing = async (abs: string, real: string, realRoot: string): Promise
     if (dirents === undefined) {
         return undefined;
     }
+    const gitignore = await gitignoreOf(abs, dirents);
+    if (gitignore === UNREADABLE) {
+        return undefined;
+    }
     let followed: Promise<Entry[]> | undefined;
     return {
         size: dirents.length,
-        gitignore: await gitignoreOf(abs, dirents),
+        gitignore,
         entries: () => {
             followed ??= followEntries(abs, real, realRoot, dirents);
             return followed;
@@ -121,8 +132,12 @@ const readNames = async (abs: string): Promise<DirNames | undefined> => {
     if (dirents === undefined) {
         return undefined;
     }
+    const gitignore = await gitignoreOf(abs, dirents);
+    if (gitignore === UNREADABLE) {
+        return undefined;
+    }
     const dirs = dirents.filter((dirent) => dirent.isDirectory()).map((dirent) => dirent.name);
-    return { dirs, others: dirents.length - dirs.length, gitignore: await gitignoreOf(abs, dirents) };
+    return { dirs, others: dirents.length - dirs.length, gitignore };
 };
 
 // Runs at most `size` tasks at once, the rest queued in arrival order; a finishing task hands its slot to the next.

@@ -1,15 +1,18 @@
 import { createHash } from "node:crypto";
 import { cp, mkdir, open, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { errnoCode, isMissing } from "@intentic/base/errors";
 
-// Reads a workspace file's text whole; undefined when missing.
-// For callers that already bound their read size (diff sides, untracked summaries, .intentic manifests); the browser
-// route uses readWorkspaceFileWindow instead.
+// A workspace file's text whole, for callers that bound their own read size; undefined only when missing or a
+// directory, and any other failure throws, so a read-modify-write never replaces content it could not read.
 export const readWorkspaceFile = async (absPath: string): Promise<string | undefined> => {
     try {
         return await readFile(absPath, "utf8");
-    } catch {
-        return undefined;
+    } catch (error) {
+        if (isMissing(error) || errnoCode(error) === "EISDIR") {
+            return undefined;
+        }
+        throw error;
     }
 };
 

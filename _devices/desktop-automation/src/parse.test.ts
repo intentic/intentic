@@ -1,4 +1,5 @@
 import { focusRefusal, looksLikeUrl, parseSessionJson, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";
+import { DesktopError } from "./types.js";
 
 /* Reading a platform's window list. */
 
@@ -77,9 +78,11 @@ test("sway windows carry app id or X11 class, whichever they have", () => {
     expect(windows.find((window) => window.focused)?.title).toBe("Firefox — Gmail");
 });
 
-test("unparseable output is an empty list, not a crash", () => {
-    expect(parseSwayTree("not json")).toEqual([]);
-    expect(parseWindowsJson("not json")).toEqual([]);
+// An empty list tells the agent nothing is open; a lister that answered garbage has said no such thing.
+test("unparseable output is a DesktopError quoting it, not an empty desktop", () => {
+    expect(() => parseSwayTree("not json")).toThrow(new DesktopError("swaymsg answered something that is not a window list: not json"));
+    expect(() => parseWindowsJson("")).toThrow(new DesktopError("PowerShell answered something that is not a window list: nothing"));
+    expect(parseWindowsJson("[]")).toEqual([]);
 });
 
 /* PowerShell emits one pipeline row as an object and multiple rows as an array. */

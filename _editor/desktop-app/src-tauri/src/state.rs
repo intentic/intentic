@@ -50,9 +50,8 @@ pub struct ParkedSetup {
     /// Unix seconds. The point of writing it down: after a restart there is nothing else left that knows how
     /// long ago this was, and the setup code inside expires.
     pub saved_at: u64,
-    /// Which way the session ended on this setup's behalf. Absent on a file an older build wrote.
-    #[serde(default)]
-    pub how: Option<SessionEnd>,
+    /// Which way the session ended on this setup's behalf.
+    pub how: SessionEnd,
 }
 
 /// The colour scheme the workspace is in, as its page last announced it — the one fact the app's own faces
@@ -211,7 +210,7 @@ impl AppState {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|since| since.as_secs())
                 .unwrap_or(0),
-            how: Some(how),
+            how,
         };
         write_json(&self.parked_setup_path(), &parked);
     }
@@ -266,13 +265,46 @@ impl AppState {
     }
 }
 
+/// The file's value, or None when it is absent or unusable. A file that won't parse is set aside as
+/// `<name>.json.unreadable` rather than left for the next write to replace; every failure but absence is logged.
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {
-    serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            eprintln!("intentic: could not read {}: {error}", path.display());
+            return None;
+        }
+    };
+    match serde_json::from_str(&text) {
+        Ok(value) => Some(value),
+        Err(error) => {
+            let aside = path.with_extension("json.unreadable");
+            eprintln!(
+                "intentic: {} does not parse ({error}); set aside as {}",
+                path.display(),
+                aside.display()
+            );
+            if let Err(error) = std::fs::rename(path, &aside) {
+                eprintln!("intentic: could not set {} aside: {error}", path.display());
+            }
+            None
+        }
+    }
 }
 
+/// Written whole or not at all: a sibling temp file renamed over the old one, so a crash mid-write cannot leave
+/// half a file for the next launch to read.
 fn write_json<T: Serialize>(path: &Path, value: &T) {
-    if let Ok(serialized) = serde_json::to_string_pretty(value) {
-        let _ = std::fs::write(path, serialized);
+    let written = serde_json::to_string_pretty(value)
+        .map_err(std::io::Error::from)
+        .and_then(|serialized| {
+            let temp = path.with_extension("json.tmp");
+            std::fs::write(&temp, serialized)?;
+            std::fs::rename(&temp, path)
+        });
+    if let Err(error) = written {
+        eprintln!("intentic: could not save {}: {error}", path.display());
     }
 }
 
@@ -298,7 +330,29 @@ mod tests {
         }
     }
 
-    /* THE FILE A RESTART LEAVES BEHIND has to say which way the session ended, and survive an older one that did not. */
+    /* A FILE THIS APP CANNOT PARSE is kept, not written over by the default that stood in for it. */
+    #[test]
+    fn an_unparseable_file_is_set_aside_before_a_write_replaces_it() {
+        let dir =
+            std::env::temp_dir().join(format!("intentic-unreadable-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("temp config dir");
+        let path = dir.join("sandboxes.json");
+        std::fs::write(&path, r#"{"ab"#).expect("write");
+
+        assert_eq!(read_json::<BTreeMap<String, String>>(&path), None);
+        let names = BTreeMap::from([("a".to_string(), "Alpha".to_string())]);
+        write_json(&path, &names);
+
+        assert_eq!(
+            std::fs::read_to_string(dir.join("sandboxes.json.unreadable")).expect("set aside"),
+            r#"{"ab"#
+        );
+        assert_eq!(read_json::<BTreeMap<String, String>>(&path), Some(names));
+        assert!(!dir.join("sandboxes.json.tmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /* THE FILE A RESTART LEAVES BEHIND has to say which way the session ended. */
     #[test]
     fn a_parked_setup_remembers_how_the_session_ended() {
         let dir = std::env::temp_dir().join(format!("intentic-parked-{}", uuid::Uuid::new_v4()));
@@ -313,17 +367,8 @@ mod tests {
         };
         state_in(&dir).park_setup(&args, SessionEnd::SignOut);
         let parked = state_in(&dir).parked_setup().expect("parked");
-        assert_eq!(parked.how, Some(SessionEnd::SignOut));
+        assert_eq!(parked.how, SessionEnd::SignOut);
         assert_eq!(parked.args.code, "abc");
-
-        // A file written before `how` existed still resumes; it just cannot say which way it went.
-        std::fs::write(
-            dir.join("resume-setup.json"),
-            r#"{"args":{"code":"old","name":null,"cfToken":null,"syncDir":null,"platformUrl":null},"savedAt":1}"#,
-        )
-        .expect("write");
-        let older = state_in(&dir).parked_setup().expect("older file parses");
-        assert_eq!(older.how, None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

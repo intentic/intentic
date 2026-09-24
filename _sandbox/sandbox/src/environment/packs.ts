@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { packageRoot } from "@intentic/constants/node";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
@@ -35,8 +36,9 @@ const packOf = (name: string, raw: string): Pack => {
     };
 };
 
+// Undefined only for a pack that does not exist; one that failed to read throws, or the overlay would be composed without it.
 export const readPack = async (name: string): Promise<Pack | undefined> => {
-    const raw = await readFile(join(packsDir, `${name}.Dockerfile`), "utf8").catch(() => undefined);
+    const raw = await readFile(join(packsDir, `${name}.Dockerfile`), "utf8").catch(undefinedIfMissing);
     return raw === undefined ? undefined : packOf(name, raw);
 };
 

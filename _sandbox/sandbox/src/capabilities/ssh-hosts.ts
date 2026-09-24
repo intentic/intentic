@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // Managed ssh-config shared by the `ssh` capability and git-provider key access: `<alias>.conf` plus a 0600 key/pass
 // file per alias. Resolved per call, not cached; symlinked onto /history so credentials survive container recreates.
@@ -20,7 +21,8 @@ const INCLUDE = "Include intentic-hosts/*.conf";
 const ensureInclude = async (): Promise<void> => {
     const sshDir = join(homeDir(), ".ssh");
     const userConfig = join(sshDir, "config");
-    const current = await readFile(userConfig, "utf8").catch(() => "");
+    // Only absence reads as empty: the user's config that cannot be read is never rewritten as just the Include.
+    const current = (await readFile(userConfig, "utf8").catch(undefinedIfMissing)) ?? "";
     if (current.includes(INCLUDE)) {
         return;
     }
@@ -38,7 +40,7 @@ export const linkSshHosts = async (historyRoot: string): Promise<void> => {
     const link = hostsDir();
     await mkdir(target, { recursive: true, mode: 0o700 });
     await mkdir(dirname(link), { recursive: true, mode: 0o700 });
-    const existing = await lstat(link).catch(() => undefined);
+    const existing = await lstat(link).catch(undefinedIfMissing);
     if (existing !== undefined && !existing.isSymbolicLink()) {
         throw new Error(`${link} exists and is not a symlink: leaving the local ssh hosts alone`);
     }

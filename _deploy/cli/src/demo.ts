@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { packageRoot, repoRoot } from "@intentic/constants/node";
 import { cloudflareApi, forgejoApi, sshExecutor } from "@intentic/providers";
 import { deploymentId, deploymentPort } from "@intentic/state-resolver";
@@ -118,13 +119,20 @@ const ssh = async (command: string): Promise<string> => {
 
 let privateKey = "";
 
+// Env-first, as ensureGeneratedSecrets resolved it for apply: a set env var is what bootstrapped the platform.
+const adminPassword = (secrets: Readonly<Record<string, string>>, key: string): string => {
+    const fromEnv = process.env[key];
+    const value = fromEnv !== undefined && fromEnv !== "" ? fromEnv : secrets[key];
+    if (value === undefined) {
+        throw new Error(`${key} is neither set in the environment nor in desired-state/.secrets.json after apply`);
+    }
+    return value;
+};
+
 const up = async (): Promise<void> => {
     const apiToken = await readToken();
     const keys = utils.generateKeyPairSync("ed25519");
     privateKey = keys.private;
-    // Filled after the platform apply, from desired-state/.secrets.json.
-    let forgejoPassword = "";
-    let komodoPassword = "";
 
     log(`▶ building the demo host image (${CONTAINER}) from @intentic/dind-host …`);
     await run("docker", ["build", "-t", CONTAINER, hostContext]);
@@ -212,8 +220,8 @@ const up = async (): Promise<void> => {
 
     // Reads back the admin passwords resolve/apply generated, to sign in with what actually bootstrapped the platform.
     const secrets = await readGeneratedSecrets(join(workspace, "desired-state"));
-    forgejoPassword = secrets["FORGEJO_ADMIN_PASSWORD"] ?? "";
-    komodoPassword = secrets["KOMODO_ADMIN_PASSWORD"] ?? "";
+    const forgejoPassword = adminPassword(secrets, "FORGEJO_ADMIN_PASSWORD");
+    const komodoPassword = adminPassword(secrets, "KOMODO_ADMIN_PASSWORD");
 
     const running = await ssh("docker ps --format '{{.Names}}'");
     for (const name of ["intentic-forgejo", "intentic-forgejo-runner", "komodo-core"]) {
@@ -299,9 +307,9 @@ const down = async (): Promise<void> => {
 // Full teardown: removes the host container, purges the Cloudflare tunnel and DNS records this demo created, and drops
 // the local state.
 const clear = async (): Promise<void> => {
-    const state: Partial<DemoState> = await readFile(stateFile, "utf8")
-        .then((text) => JSON.parse(text) as DemoState)
-        .catch(() => ({}));
+    // Only a missing state file falls back to the configured zone: an unreadable one may name a different zone to purge.
+    const text = await readFile(stateFile, "utf8").catch(undefinedIfMissing);
+    const state: Partial<DemoState> = text === undefined ? {} : (JSON.parse(text) as DemoState);
     const zoneName = state.zone ?? zone;
     const apiToken = state.apiToken ?? (await readToken());
 
@@ -309,31 +317,38 @@ const clear = async (): Promise<void> => {
     await quiet("docker", ["rm", "-f", CONTAINER]);
 
     log("▶ deleting the Cloudflare tunnel + DNS records …");
-    // Account and zone id come from resolving the zone name; teardown needs only the name and token.
-    const cfZone = await cloudflareApi.getZone({ apiToken, zone: zoneName }).catch(() => undefined);
-    if (cfZone !== undefined) {
-        const tunnel = await cloudflareApi.findTunnel({ accountId: cfZone.accountId, apiToken, name: TUNNEL }).catch(() => undefined);
-        if (tunnel !== undefined) {
-            await fetch(`https://api.cloudflare.com/client/v4/accounts/${cfZone.accountId}/cfd_tunnel/${tunnel.id}/connections`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${apiToken}` },
-            }).catch(() => {});
-            await cloudflareApi
-                .deleteTunnel({ accountId: cfZone.accountId, apiToken, tunnelId: tunnel.id })
-                .catch((error) => log(`  tunnel: ${String(error)}`));
+    // Account and zone id come from resolving the zone name; teardown needs only the name and token. A lookup that
+    // fails aborts before .demo/ is dropped, so a re-run still knows what to purge.
+    const cfZone = await cloudflareApi.getZone({ apiToken, zone: zoneName });
+    if (cfZone === undefined) {
+        throw new Error(`Cloudflare zone "${zoneName}" is not visible to this API token: its tunnel and DNS records were not purged`);
+    }
+    const leftovers: string[] = [];
+    const tunnel = await cloudflareApi.findTunnel({ accountId: cfZone.accountId, apiToken, name: TUNNEL });
+    if (tunnel !== undefined) {
+        // Best-effort: Cloudflare refuses to delete a tunnel with live connections, and deleteTunnel reports that.
+        await fetch(`https://api.cloudflare.com/client/v4/accounts/${cfZone.accountId}/cfd_tunnel/${tunnel.id}/connections`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${apiToken}` },
+        }).catch(() => {});
+        await cloudflareApi.deleteTunnel({ accountId: cfZone.accountId, apiToken, tunnelId: tunnel.id }).catch((error: unknown) => {
+            leftovers.push(`tunnel ${TUNNEL}: ${errorMessage(error)}`);
+        });
+    }
+    for (const name of [`git.${zoneName}`, `deploy.${zoneName}`, `app.${zoneName}`]) {
+        const record = await cloudflareApi.findDnsRecord({ apiToken, zoneId: cfZone.id, name });
+        if (record !== undefined) {
+            await cloudflareApi.deleteDnsRecord({ apiToken, zoneId: cfZone.id, recordId: record.id }).catch((error: unknown) => {
+                leftovers.push(`dns ${name}: ${errorMessage(error)}`);
+            });
         }
-        for (const name of [`git.${zoneName}`, `deploy.${zoneName}`, `app.${zoneName}`]) {
-            const record = await cloudflareApi.findDnsRecord({ apiToken, zoneId: cfZone.id, name }).catch(() => undefined);
-            if (record !== undefined) {
-                await cloudflareApi
-                    .deleteDnsRecord({ apiToken, zoneId: cfZone.id, recordId: record.id })
-                    .catch((error) => log(`  dns ${name}: ${String(error)}`));
-            }
-        }
+    }
+    if (leftovers.length > 0) {
+        throw new Error(`demo clear left Cloudflare resources behind (.demo/ kept for a re-run):\n  ${leftovers.join("\n  ")}`);
     }
 
     // intent/ and desired-state/ hold .secrets.json; left in place so `deploy adopt` still works.
-    await rm(stateDir, { recursive: true, force: true }).catch(() => {});
+    await rm(stateDir, { recursive: true, force: true });
     log("✅ demo cleared: host container, tunnel, and DNS records removed (intent/ + desired-state/ kept).");
 };
 

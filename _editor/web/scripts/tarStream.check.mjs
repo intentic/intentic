@@ -89,8 +89,8 @@ assert.ok(isZero(packed, packed.length - 512) && isZero(packed, packed.length - 
 assert.deepEqual(started, ["a.txt", "dir/b.txt", "empty.txt", longPath]);
 assert.equal(bytes, 14);
 
-// A File whose declared `.size` disagrees with what `.stream()` yields; the packer must still emit exactly `.size`
-// body bytes so framing stays aligned. `errorAtEnd` makes the read throw partway through.
+// A File whose declared `.size` disagrees with what `.stream()` yields. One that grew is cut to `.size`; one that can't
+// supply `.size` errors the archive rather than landing zero-filled. `errorAtEnd` makes the read throw partway through.
 const enc = new TextEncoder();
 const driftFile = (size, chunks, errorAtEnd = false) => ({
     size,
@@ -134,9 +134,20 @@ const checkDrift = async (label, file, expectedSize, expectedPrefix, expectedByt
 
 // File grew since scan: declared 3, stream yields 5 → truncated to 3, only 3 counted.
 await checkDrift("grew", driftFile(3, [enc.encode("XXXXX")]), 3, "XXX", 3);
-// File shrank: declared 8, stream yields 2 → zero-filled to 8, 2 counted; content is "ab" then NULs.
-await checkDrift("shrank", driftFile(8, [enc.encode("ab")]), 8, "ab", 2);
-// Read throws mid-file: declared 6, yields 2 then errors → packer warns, zero-fills to 6, does NOT reject.
-await checkDrift("threw", driftFile(6, [enc.encode("ab")], true), 6, "ab", 2);
+
+// File shrank, or the read threw mid-file: the archive rejects naming the path, and onUnreadable hears it first.
+const checkUnreadable = async (label, file) => {
+    const unreadable = [];
+    await assert.rejects(
+        drain(packTar([{ path: "drift.bin", file }, sentinel], { onUnreadable: (path) => unreadable.push(path) })),
+        { message: "drift.bin could not be read in full mid-upload" },
+        `${label}: must reject rather than zero-fill`,
+    );
+    assert.deepEqual(unreadable, ["drift.bin"], `${label}: onUnreadable must name the entry`);
+};
+// Declared 8, stream yields 2.
+await checkUnreadable("shrank", driftFile(8, [enc.encode("ab")]));
+// Declared 6, yields 2 then errors.
+await checkUnreadable("threw", driftFile(6, [enc.encode("ab")], true));
 
 console.log("tarStream.check: OK");

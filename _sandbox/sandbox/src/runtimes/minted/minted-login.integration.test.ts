@@ -270,6 +270,33 @@ test("Z.ai's international sign-in polls to completion and provisions the plan's
     expect(vendor.calls.find((call) => call.url.endsWith(KEYS_PATH))?.headers.get("authorization")).toBe("Bearer biz-token");
 });
 
+test("an international Z.ai sign-in whose key secret cannot be read connects nothing rather than a bare key", async () => {
+    const vendor = fakeVendor({
+        [`${ZAI_HOSTS.oauthBase}/oauth/cli/init`]: () =>
+            envelope({ flow_id: "flow-1", poll_token: "server-poll-token", authorize_url: "https://z.ai/authorize?flow=1", poll_interval_sec: 2 }),
+        [`${ZAI_HOSTS.oauthBase}/oauth/cli/poll/`]: () =>
+            envelope({ status: "ready", token: "zc-token", user: { email: "plan@example.com", name: "" }, zai: { access_token: "z-access" } }),
+        [`${ZAI_HOSTS.zaiBiz}/api/auth/z/login`]: () => envelope({ access_token: "biz-token" }),
+        ...zaiBusinessRoutes(ZAI_HOSTS.zaiBiz),
+        [`${ZAI_HOSTS.zaiBiz}${KEYS_PATH}/copy/`]: () => ({ code: 1002, msg: "permission denied", data: undefined }),
+    });
+    const store = memoryMintedStore("Z.ai");
+    await startMintedLogin({
+        provider: "zai",
+        variant: "zai",
+        driver: zaiLoginDriver(ZAI_HOSTS),
+        store,
+        logger,
+        onConnected: () => {},
+        fetchImpl: vendor.fetchImpl,
+    });
+
+    await advanceTimersByTimeAsync(5_000);
+
+    expect(vendor.calls.some((call) => call.url.includes(`${KEYS_PATH}/copy/`))).toBe(true);
+    expect(await connected(store)).toEqual([]);
+});
+
 /* --- Z.ai mainland: the redirect that dead-ends, and comes back through the user ------------------------- */
 
 const startBigModel = async (vendor: ReturnType<typeof fakeVendor>) => {

@@ -100,7 +100,8 @@ export const rgSearch = async (options: RgOptions): Promise<RgResult> => {
     if (options.paths?.length === 0) {
         return { hits: [], capped: new Set(), ceiling: false };
     }
-    const args = ["--json", "--hidden", "--max-filesize", "1M", "--max-count", String(MAX_PER_FILE + 1), "--no-config", "--no-messages"];
+    // No --no-messages: rg still exits 2 on an unreadable file, and its message is the only reason a caller can be given.
+    const args = ["--json", "--hidden", "--max-filesize", "1M", "--max-count", String(MAX_PER_FILE + 1), "--no-config"];
     // Pruning only, `allowed` is the authority; DENIED_GLOBS never lift, even with --ignored.
     for (const glob of [...scannerPruneGlobs(options.ignored === true), ...DENIED_GLOBS]) {
         args.push("-g", glob);
@@ -136,7 +137,7 @@ export const rgSearch = async (options: RgOptions): Promise<RgResult> => {
         cwd: options.root,
         ...(options.signal !== undefined ? { signal: options.signal } : {}),
     });
-    // Reached the ceiling: kill the child; the `close` handler treats a signal-killed child as the caller's own abort.
+    // Reached the ceiling: kill the child; `ceiling` is what tells the `close` handler this kill was a planned stop.
     const stop = (): void => {
         ceiling = true;
         child.kill();
@@ -203,14 +204,19 @@ export const rgSearch = async (options: RgOptions): Promise<RgResult> => {
         child.on("error", (error: Error & { code?: unknown }) => {
             reject(error.code === "ENOENT" ? new Error("iq: ripgrep (rg) not found on PATH, install ripgrep or set IQ_RG_PATH") : error);
         });
-        child.on("close", (code) => {
+        child.on("close", (code, signal) => {
             if (carry !== "") {
                 onLine(carry);
             }
-            // Exit 1 means no matches; anything higher is a real error; a null code means a signal, the caller's own
-            // abort.
+            // Exit 1 means no matches; anything higher is a real error.
             if (code !== null && code > 1) {
                 reject(new Error(`ripgrep: ${stderr.trim() || "search failed"}`));
+                return;
+            }
+            // A signal is the ceiling's own kill, or the caller's abort (already rejected by `error`); any other kill
+            // cut the scan short, and its hits must not read as the whole answer.
+            if (code === null && !ceiling) {
+                reject(new Error(`ripgrep: killed by ${signal ?? "a signal"} before the search finished`));
                 return;
             }
             resolve();

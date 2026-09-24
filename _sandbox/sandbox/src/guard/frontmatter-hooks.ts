@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { errnoCode } from "@intentic/base/errors";
 import { parse } from "yaml";
 
 /* Hooks a skill, subagent or command declares in its frontmatter, under one Claude Code config root (~/.claude, or a
@@ -15,10 +16,21 @@ export interface FrontmatterHooks {
 const FENCE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u;
 const HOOKS_KEY = /^hooks\s*:/mu;
 
+// Failures the CLI, reading the same path as the same user, meets too and so loads nothing from. Any other (EMFILE, EIO)
+// is this process's alone and throws: read as "no hooks", it would let a set nobody approved run.
+const CLI_SEES_NOTHING = new Set(["ENOENT", "ENOTDIR", "EISDIR", "EACCES", "EPERM", "ELOOP"]);
+
+export const undefinedIfCliSeesNothing = (error: unknown): undefined => {
+    if (CLI_SEES_NOTHING.has(errnoCode(error) ?? "")) {
+        return undefined;
+    }
+    throw error;
+};
+
 // The definition files under one root: a skill's SKILL.md per directory (a symlinked one included), and every markdown
 // file of the flat subagent and command folders.
 const definitionFiles = async (root: string, readable: (path: string) => string): Promise<string[]> => {
-    const names = (dir: string): Promise<string[]> => readdir(readable(join(root, dir))).catch(() => []);
+    const names = async (dir: string): Promise<string[]> => (await readdir(readable(join(root, dir))).catch(undefinedIfCliSeesNothing)) ?? [];
     const [skills, agents, commands] = await Promise.all([names("skills"), names("agents"), names("commands")]);
     return [
         ...skills.map((name) => join(root, "skills", name, "SKILL.md")),
@@ -45,7 +57,7 @@ const hooksOf = (text: string): unknown => {
 export const frontmatterHooks = async (root: string, readable: (path: string) => string): Promise<FrontmatterHooks[]> => {
     const found = await Promise.all(
         (await definitionFiles(root, readable)).map(async (file) => {
-            const text = await readFile(readable(file), "utf8").catch(() => undefined);
+            const text = await readFile(readable(file), "utf8").catch(undefinedIfCliSeesNothing);
             const hooks = text === undefined ? undefined : hooksOf(text);
             return hooks === undefined || hooks === null ? [] : [{ file, hooks }];
         }),

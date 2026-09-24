@@ -1,5 +1,6 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { type UsageRollupRow, type UsageTurn, UsageTurnSchema, utcDayOf } from "@intentic/sandbox-contract";
 
 // Durable spend-and-outcome ledger (historyRoot/usage.jsonl): one append-only line per turn, daemon-written only,
@@ -41,10 +42,9 @@ export const fileUsageStore = (path: string, now: () => number = Date.now): Usag
     let queue: Promise<unknown> = Promise.resolve();
 
     const read = async (): Promise<UsageTurn[]> => {
-        let raw: string;
-        try {
-            raw = await readFile(path, "utf8");
-        } catch {
+        // Only an absent ledger is empty: one that cannot be read answers with the error, not with no rows.
+        const raw = await readFile(path, "utf8").catch(undefinedIfMissing);
+        if (raw === undefined) {
             return [];
         }
         return raw

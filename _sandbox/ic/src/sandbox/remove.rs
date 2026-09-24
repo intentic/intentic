@@ -155,7 +155,10 @@ fn aftermath(now: bool) -> String {
 /// sync and the agent-auth volume are not per-slug, and the volume stays docker-locked while any container
 /// references it — which a trashed sandbox's container still does.
 fn finish(args: &Args) {
-    let remaining = list_slugs();
+    let Some(remaining) = crate::sandbox::live_slugs() else {
+        eprintln!("intentic: docker could not list this machine's sandboxes, so the host-wide state they share was kept.");
+        return;
+    };
     let recoverable = trash::list();
     if remaining.is_empty() && recoverable.is_empty() {
         remove_sync_state();

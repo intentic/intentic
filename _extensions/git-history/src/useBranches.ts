@@ -60,7 +60,10 @@ export function useBranches(repo: Ref<string>) {
     const push = (name: string): Promise<void> =>
         run(async () => {
             await api.sandbox.rpc.git.push({ repo: repo.value, branch: name });
-            const settled = await followCommandRun(() => api.sandbox.rpc.git.pushState({ repo: repo.value }), { intervalMs: PUSH_POLL_MS });
+            const settled = await followCommandRun(() => api.sandbox.rpc.git.pushState({ repo: repo.value }), {
+                intervalMs: PUSH_POLL_MS,
+                onError: (cause) => console.warn(`git-history: could not read the push's progress, asking again`, cause),
+            });
             if (settled === undefined || settled.status !== `passed`) {
                 throw new Error(settled?.reason === undefined ? `Push was refused.` : `Push was refused: ${settled.reason}`);
             }

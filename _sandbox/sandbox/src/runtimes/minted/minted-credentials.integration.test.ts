@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "../../logger.js";
@@ -105,4 +105,12 @@ test("foreign JSON in the auth directory is not mistaken for a credential", asyn
 test("an auth directory that does not exist reads as no accounts", async () => {
     const dir = join(await mkdtemp(join(tmpdir(), "minted-missing-")), "never-created");
     expect(await readMintedCredentials(dir)).toEqual([]);
+});
+
+// Signed out is only a missing file: an account the daemon cannot read must not show as never connected.
+test("a credential file that cannot be read is an error, not a missing account", async () => {
+    const { dir, store } = await storeIn();
+    await mkdir(join(dir, "acct-1.json"), { recursive: true });
+    await expect(store.list()).rejects.toThrow("EISDIR");
+    expect(await store.rename("never-connected", "x")).toBeUndefined();
 });

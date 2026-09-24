@@ -55,7 +55,15 @@ export const createDaemonClient = (url: string, token: string): DaemonClient => 
             await post("/agent/reply", reply);
         },
         getSession: async (id) => {
-            const response = await request(`/sessions/${encodeURIComponent(id)}`);
+            const response = await fetch(`${url}/sessions/${encodeURIComponent(id)}`, { headers });
+            // No transcript under that id is nothing to replay; a refused token or a failing sandbox is not that.
+            if (response.status === 404) {
+                await response.body?.cancel();
+                return [];
+            }
+            if (!response.ok) {
+                raise(response.status, await response.text());
+            }
             const body = (await response.json()) as { messages?: TranscriptRow[] };
             return body.messages ?? [];
         },

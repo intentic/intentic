@@ -77,6 +77,21 @@ test("a registered turn's denial reaches Cursor as a deny, with the reason in bo
     });
 });
 
+// The hook is failClosed for a script that never answers; a gate that answered with an error must not be looser.
+test("a gate that fails refuses the command rather than letting it outrun its rules", async () => {
+    const { service: hooks, dir } = await started();
+    const gate: CommandGuard = {
+        enforcing: true,
+        // eslint-disable-next-line require-yield
+        async *consult() {
+            throw new Error("the card store is unwritable");
+        },
+    };
+    hooks.register({ conversationId: "agent-1", gate, push: () => {} });
+    const reason = "The command guard failed (the card store is unwritable), so this command was refused. Do not retry it: say plainly what you could not run.";
+    expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1" })).toEqual({ permission: "deny", agent_message: reason, user_message: reason });
+});
+
 test("an allowed command comes back as a bare allow", async () => {
     const { service: hooks, dir } = await started();
     hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {} });

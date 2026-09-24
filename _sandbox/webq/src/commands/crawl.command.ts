@@ -8,6 +8,9 @@ import { crawl } from "../lib/crawl.js";
 import { sharedFlagParameters, type SharedFlags, urlParser } from "../lib/flags.js";
 import { slugFor } from "../lib/output.js";
 
+// Failed pages named one per line before the rest are counted; the JSON report carries all of them.
+const FAILURES_SHOWN = 10;
+
 type CrawlFlags = SharedFlags & {
     readonly maxPages: number;
     readonly depth: number;
@@ -70,6 +73,12 @@ export const crawlCommand = buildCommand({
         this.process.stdout.write(
             `webq crawl: ${url} · ${report.pages.length} pages · ${totalTokens} tokens${skipLine === "" ? "" : ` · skipped: ${skipLine}`}\n`,
         );
+        for (const { url: failed, reason } of report.failures.slice(0, FAILURES_SHOWN)) {
+            this.process.stdout.write(`failed: ${failed}: ${reason}\n`);
+        }
+        if (report.failures.length > FAILURES_SHOWN) {
+            this.process.stdout.write(`…and ${report.failures.length - FAILURES_SHOWN} more failed pages (--json lists every one)\n`);
+        }
         if (report.sitemapCapped) {
             this.process.stdout.write("note: sitemap larger than the seed cap, frontier seeded from a prefix of it\n");
         }

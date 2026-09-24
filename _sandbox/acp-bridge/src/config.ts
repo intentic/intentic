@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { agentHome } from "@intentic/local-agent";
 import { z } from "zod";
@@ -55,17 +55,39 @@ export const writeConfig = (config: { url: string; token: string; agent?: string
 const SessionMapSchema = z.record(z.string(), z.object({ conversationId: z.string(), agent: z.string(), providerSessionId: z.string().optional() }));
 export type SessionMap = z.infer<typeof SessionMapSchema>;
 
+// Every write rewrites the whole map, so a file that cannot be parsed is set aside and said on stderr (stdout carries
+// the protocol) before the empty map replaces it; any other read failure throws rather than being written over.
 export const readSessions = (dir: string = CONFIG_DIR): SessionMap => {
+    const path = join(dir, "sessions.json");
+    let text: string;
     try {
-        const parsed = SessionMapSchema.safeParse(JSON.parse(readFileSync(join(dir, "sessions.json"), "utf8")));
-        return parsed.success ? parsed.data : {};
-    } catch {
-        return {};
+        text = readFileSync(path, "utf8");
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return {};
+        }
+        throw error;
     }
+    let parsed: ReturnType<typeof SessionMapSchema.safeParse> | undefined;
+    try {
+        parsed = SessionMapSchema.safeParse(JSON.parse(text));
+    } catch {
+        parsed = undefined;
+    }
+    if (parsed?.success === true) {
+        return parsed.data;
+    }
+    const aside = `${path}.unreadable-${Date.now()}`;
+    renameSync(path, aside);
+    process.stderr.write(`intentic acp: ${path} could not be read as a session map; kept it as ${aside} and started a fresh one\n`);
+    return {};
 };
 
+// Temp-then-rename: a second bridge reading mid-write sees the whole previous map or the whole next one.
 export const writeSessions = (sessions: SessionMap, dir: string = CONFIG_DIR): void => {
     const path = join(dir, "sessions.json");
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${JSON.stringify(sessions, undefined, 2)}\n`);
+    const staged = `${path}.${process.pid}.tmp`;
+    writeFileSync(staged, `${JSON.stringify(sessions, undefined, 2)}\n`);
+    renameSync(staged, path);
 };

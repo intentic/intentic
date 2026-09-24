@@ -1,5 +1,6 @@
 import { readdirSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative } from "node:path";
+import { isMissing } from "@intentic/base/errors";
 import { readLines } from "../transcript/line-reader.js";
 import { aiTitleOf, assistantTextOf, fileTouchesOf, parseLine, timestampOf, typedPromptOf, uuidOf } from "../transcript/lines.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
@@ -185,10 +186,15 @@ const applyDelta = (db: SqliteDb, transcriptPath: string, sessionId: string, del
 // files resume from their stored byte offset. `deadlineMs` bounds how long a pass may run; absent, it walks everything.
 export const ingest = async (db: SqliteDb, options: { root: string; projectsDir: string; deadlineMs?: number }): Promise<IngestStats> => {
     const onDisk = new Map<string, { mtimeMs: number; size: number }>();
+    // What is not listed below is deleted from the index, so only a dir that is not there may read as empty; one that
+    // failed to list (EACCES, EIO, EMFILE) would otherwise erase every session it holds.
     let entries: string[];
     try {
         entries = readdirSync(options.projectsDir);
-    } catch {
+    } catch (error) {
+        if (!isMissing(error)) {
+            throw error;
+        }
         entries = [];
     }
     for (const entry of entries) {

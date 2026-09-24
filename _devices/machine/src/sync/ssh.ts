@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
 import { STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
@@ -118,7 +119,8 @@ export const stripManagedIncludes = (config: string): string =>
 export const ensureSshKey = async (): Promise<string> => {
     await mkdir(baseDir, { recursive: true });
     const pub = `${sshKeyPath}.pub`;
-    const existing = await readFile(pub, "utf8").catch(() => undefined);
+    // Only an absent key is generated: ssh-keygen over an unreadable one replaces the key its enrollments trust.
+    const existing = await readFile(pub, "utf8").catch(undefinedIfMissing);
     if (existing !== undefined) {
         return existing.trim();
     }
@@ -151,7 +153,8 @@ export const pairingSshConfig = (pairings: readonly { readonly sandboxId: string
 export const writeManagedSshConfig = async (fragment: string): Promise<void> => {
     await mkdir(sshDir, { recursive: true, mode: 0o700 });
     await writeFile(sshConfigPath, fragment, { mode: 0o600 });
-    const current = await readFile(userSshConfigPath, "utf8").catch(() => "");
+    // Only an absent config starts empty: the rename below replaces the file, and one that could not be read is the user's.
+    const current = (await readFile(userSshConfigPath, "utf8").catch(undefinedIfMissing)) ?? "";
     const desired = `${INCLUDE_MARKER}\n${stripManagedIncludes(current)}`;
     if (desired === current) {
         return;

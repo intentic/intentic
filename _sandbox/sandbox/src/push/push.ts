@@ -42,8 +42,10 @@ export const createPushSender = (store: PushStore, logger: Logger): PushSender =
                 // A dead channel is dropped rather than retried, so the toggle stops claiming a device that can't be
                 // reached.
                 if (outcome.dead === true) {
-                    await store.remove(id).catch(() => undefined);
-                    logger.debug({ id, kind: channel.kind }, "push: dropped a channel we can no longer send to");
+                    await store.remove(id).then(
+                        () => logger.debug({ id, kind: channel.kind }, "push: dropped a channel we can no longer send to"),
+                        (error: unknown) => logger.warn({ err: error, id, kind: channel.kind }, "push: could not drop a channel we can no longer send to"),
+                    );
                 }
                 // Any other failure is transient; log a warning and move on, not worth failing the caller over.
                 if (outcome.dead !== true && outcome.error !== undefined) {

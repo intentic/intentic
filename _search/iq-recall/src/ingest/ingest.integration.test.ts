@@ -1,5 +1,5 @@
 import { statSync } from "node:fs";
-import { appendFile, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { makeRecallFixture } from "../testing.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
@@ -158,6 +158,16 @@ test("a deleted transcript loses its rows", async () => {
     expect(stats.transcripts).toBe(1);
     expect(stats.sessions).toBe(1);
     expect(db.get("SELECT COUNT(*) AS n FROM sessions WHERE session_id = ?", SESSION_B)?.["n"]).toBe(0);
+});
+
+// Everything unlisted is deleted, so a listing that failed must not read as empty. A symlink loop stands in for
+// EACCES/EIO, which a root test run cannot provoke.
+test("a transcript dir that fails to list is an error, and every indexed session survives it", async () => {
+    const loop = join(root, "projects-loop");
+    await symlink(loop, loop);
+    await expect(ingest(db, { root, projectsDir: loop })).rejects.toThrow("ELOOP");
+    expect(Number(db.get("SELECT COUNT(*) AS n FROM sessions")?.["n"])).toBe(1);
+    await rm(loop);
 });
 
 /* THE BUDGET, and the contract that makes stopping early safe: byte offsets mean unfinished work is deferred. */

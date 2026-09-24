@@ -3,6 +3,7 @@ import { rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { embedPending } from "../engines/semantic.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import { openIndex } from "../store/db.js";
@@ -140,6 +141,23 @@ test("compaction evicts least-recently-used rows past the ceiling", async () => 
     const kept = cache!.get(["a", "b", "c"]);
     expect([...kept.keys()].toSorted()).toEqual(["a", "c"]);
     cache!.close();
+});
+
+// Waits out the open's own 5 s busy_timeout, since the lock has to outlast it to be a refusal at all.
+test("a cache another process is writing is left alone, not dropped as corrupt", () => {
+    const cachePath = vectorCachePath(join(root, "busy", "iq"));
+    const owner = openVectorCache(cachePath, "fake");
+    owner!.put(new Map([["kept", new Uint8Array(4).fill(3)]]));
+    owner!.close();
+    // Another process mid-write: the lock the next open's meta upsert has to wait on.
+    const writer = new DatabaseSync(cachePath);
+    writer.exec("BEGIN IMMEDIATE");
+    expect(openVectorCache(cachePath, "fake")).toBeUndefined();
+    writer.exec("ROLLBACK");
+    writer.close();
+    const reopened = openVectorCache(cachePath, "fake");
+    expect([...reopened!.get(["kept"]).keys()]).toEqual(["kept"]);
+    reopened!.close();
 });
 
 test("a corrupt cache file is dropped and reopened empty", async () => {

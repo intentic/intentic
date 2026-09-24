@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { lstat, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
@@ -93,4 +93,19 @@ test("a stale managed link is swept by the next write", async () => {
     await writeLoadedSkill(FILES, root, "kept", SKILL);
     await expect(lstat(join(root, ".claude", "skills", "gone"))).rejects.toThrow();
     expect((await lstat(join(root, ".claude", "skills", "kept"))).isSymbolicLink()).toBe(true);
+});
+
+// The sweep removes every managed link the canonical listing does not name, so a listing that failed must not read as
+// "no skills".
+test("a canonical folder that cannot be listed fails the converge instead of sweeping every link", async () => {
+    const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
+    await writeLoadedSkill(FILES, root, "quill", SKILL);
+    await writeLoadedSkill(FILES, root, "apple", SKILL);
+    const canonical = join(root, ".agents", "skills");
+    await rename(canonical, `${canonical}-moved`);
+    // A link to itself: listing it fails with ELOOP, not ENOENT, whoever runs the test.
+    await symlink(canonical, canonical);
+
+    await expect(removeLoadedSkill({ ...FILES, remove: async () => undefined }, root, "quill")).rejects.toMatchObject({ code: "ELOOP" });
+    expect((await lstat(join(root, ".claude", "skills", "apple"))).isSymbolicLink()).toBe(true);
 });

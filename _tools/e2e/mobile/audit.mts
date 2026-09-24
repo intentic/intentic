@@ -366,17 +366,18 @@ interface Result extends Measured {
     readonly error?: string;
 }
 
-/* Brings the route to the state the surface describes: loaded, its demo chrome hidden, its anchor rendered, its switches pressed. */
+/* Brings the route to the state the surface describes: loaded, demo chrome hidden, anchor rendered, switches pressed.
+   A step that cannot happen throws into `audit`'s error, never a pass measured over whatever is on screen. */
 const arrive = async (page: Page, surface: Surface): Promise<void> => {
     await page.goto(`${ORIGIN}${BASE}${surface.path}`, { waitUntil: "domcontentloaded" });
     // The demo's own switcher is a fixed bar across the bottom and is not the product — it would be
     // measured as an off-screen overflow and as three undersized tabs on every single route.
     await page.addStyleTag({ content: "#demo-switcher { display: none !important; }" });
     if (surface.waitFor !== undefined) {
-        await page.waitForSelector(surface.waitFor, { timeout: 20_000 }).catch(() => undefined);
+        await page.waitForSelector(surface.waitFor, { timeout: 20_000 });
     }
     for (const target of surface.click ?? []) {
-        await page.click(target, { timeout: 20_000 }).catch(() => undefined);
+        await page.click(target, { timeout: 20_000 });
         await page.waitForTimeout(600);
     }
     await page.waitForTimeout(surface.settleMs ?? 1_000);
@@ -386,7 +387,7 @@ const arrive = async (page: Page, surface: Surface): Promise<void> => {
 const sweepSurface = async (page: Page, cdp: CDPSession, surface: Surface): Promise<Stuck[]> => {
     const stuck = [...(await sweepScrollers(page, cdp, undefined))];
     if (surface.sheet !== undefined) {
-        await page.tap(surface.sheet, { timeout: 20_000 }).catch(() => undefined);
+        await page.tap(surface.sheet, { timeout: 20_000 });
         await page.waitForTimeout(1_300);
         stuck.push(...(await sweepScrollers(page, cdp, ".p-drawer")).map((entry) => ({ ...entry, label: `sheet ${entry.label}` })));
     }

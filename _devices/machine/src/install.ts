@@ -96,12 +96,35 @@ const WINDOWS_ENV_BROADCAST = [
     `[void][Intentic.Native]::SendMessageTimeout([IntPtr]0xffff,0x1A,[UIntPtr]::Zero,'Environment',2,5000,[ref]$r)`,
 ].join(";");
 
+// The per-user PATH out of `reg query HKCU\Environment` rows; only no row named Path (case-insensitively) is empty.
+// The value is written back whole, so one this cannot read throws rather than being replaced by the folder added.
+export const windowsPathFrom = (listing: string): { readonly kind: string; readonly stored: string } => {
+    const row = listing
+        .split(/\r?\n/)
+        .map((line) => /^\s+(.+?)\s{2,}(REG_[A-Z_]+)(?:\s{2,}(.*))?$/.exec(line))
+        .find((match) => match?.[1]?.toLowerCase() === "path");
+    if (row === undefined || row === null) {
+        return { kind: "REG_EXPAND_SZ", stored: "" };
+    }
+    const [, , kind = "", data = ""] = row;
+    if (kind !== "REG_SZ" && kind !== "REG_EXPAND_SZ") {
+        throw new Error(`your PATH is stored as ${kind}, which this installer does not rewrite`);
+    }
+    return { kind, stored: data.trimEnd() };
+};
+
 // HKCU\Environment is read and written through reg.exe, which neither expands REG_EXPAND_SZ on query nor
-// changes a value's kind on add, the property [Environment]::SetEnvironmentVariable lacks.
+// changes a value's kind on add, the property [Environment]::SetEnvironmentVariable lacks. The whole key is listed,
+// since `/v Path` exits 1 alike for a value that is absent and for a query that failed.
 const readWindowsPath = (): { readonly kind: string; readonly stored: string } => {
-    const query = spawnSync("reg", ["query", "HKCU\\Environment", "/v", "Path"], { encoding: "utf8", windowsHide: true, timeout: 15_000 });
-    const match = query.status === 0 ? /^\s*Path\s+(REG_SZ|REG_EXPAND_SZ)\s+(.*)$/m.exec(query.stdout) : null;
-    return { kind: match?.[1] ?? "REG_EXPAND_SZ", stored: match?.[2]?.trimEnd() ?? "" };
+    const query = spawnSync("reg", ["query", "HKCU\\Environment"], { encoding: "utf8", windowsHide: true, timeout: 15_000 });
+    if (query.error !== undefined) {
+        throw query.error;
+    }
+    if (query.status !== 0) {
+        throw new Error(query.stderr.trim() === "" ? `reg query exited ${String(query.status)}` : query.stderr.trim());
+    }
+    return windowsPathFrom(query.stdout);
 };
 
 const writeWindowsPath = (kind: string, value: string): void => {

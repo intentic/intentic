@@ -262,6 +262,22 @@ it(`asks one question with one answer, and arms it for this conversation alone`,
     expect(armedAnswer()).toBe(`Keep trying`);
 });
 
+// A refused write snaps the pill back, which alone is easy to miss: the reader would walk away believing it armed.
+it(`keeps the old answer when the write is refused, and says why`, async () => {
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `stopped`, held: { ran: true } };
+    setBreakPolicy.mockImplementation(async () => {
+        throw new Error(`The conversation record is read-only.`);
+    });
+    await mountPanel();
+
+    answerPill(`Keep trying`)!.click();
+    await settle();
+
+    expect(armedAnswer()).toBe(`Wait for me`);
+    expect(composerText()).toContain(`The conversation record is read-only.`);
+});
+
 // A chat that answers the way the sandbox already does holds no override, rather than a frozen copy of a default it
 // would then quietly stop following.
 it(`clears the override when the answer is the sandbox's own`, async () => {

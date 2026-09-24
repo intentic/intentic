@@ -27,3 +27,6 @@ credential/session/artifact exclusion floor enforce those concerns independently
 
 - Browser profiles and agent worktrees stay ignored even when a nested `.gitignore` would otherwise include
   them. The files remain readable on demand; ignored means out of focus, not inaccessible.
+- `descend()` reads a directory without a `.gitignore` as adding no rules, and rejects when one is there but
+  cannot be read: read as "no rules", everything under it would count as tracked, and a walk or an export would
+  act on that.

@@ -108,21 +108,43 @@ test("beforeSend can rewrite a report or drop it entirely", async () => {
     expect(kept?.["message"]).toBe("Error: order <n> failed");
 });
 
-test("a throwing beforeSend drops the report instead of the page", async () => {
+test("a throwing beforeSend drops the report instead of the page, and says so where the site owner looks", async () => {
     const sent = fakeDaemon();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    const bug = new Error("host bug");
     const live = await started({
         beforeSend: () => {
-            throw new Error("host bug");
+            throw bug;
         },
     });
     await expect(live.captureException(new Error("boom"))).resolves.toBeUndefined();
     expect(sent).toEqual([]);
+    expect(warn.mock.calls).toEqual([["[intentic] the bug reporter dropped a report:", bug]]);
+    warn.mockRestore();
 });
 
-test("a refused or failed send resolves quietly", async () => {
+// The offline exemption is for the network's TypeError, not a site's: `report.context.user` undefined is the usual bug.
+test("a beforeSend that throws a TypeError still reaches the console", async () => {
+    const sent = fakeDaemon();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    const bug = new TypeError("Cannot read properties of undefined (reading 'user')");
+    const live = await started({
+        beforeSend: () => {
+            throw bug;
+        },
+    });
+    await expect(live.captureException(new Error("boom"))).resolves.toBeUndefined();
+    expect(sent).toEqual([]);
+    expect(warn.mock.calls).toEqual([["[intentic] the bug reporter dropped a report:", bug]]);
+    warn.mockRestore();
+});
+
+test("a refused or failed send resolves; only the refusal, which the site owner can act on, reaches the console", async () => {
     fakeDaemon({}, 429);
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
     const live = await started();
     await expect(live.captureException(new Error("boom"))).resolves.toBeUndefined();
+    expect(warn.mock.calls).toEqual([["[intentic] the bug reporter dropped a report:", expect.objectContaining({ status: 429 })]]);
 
     stubGlobal(
         "fetch",
@@ -131,6 +153,8 @@ test("a refused or failed send resolves quietly", async () => {
         }),
     );
     await expect(live.report({ description: "offline" })).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
 });
 
 test("the puzzle is solved for a written report and skipped for a crash", async () => {

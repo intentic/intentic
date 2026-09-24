@@ -23,6 +23,7 @@ import {
     readExtensionUpdateState,
     readUpdatePolicies,
     refreshUpdatesIfStale,
+    RegistryUnreachableError,
     resolveUpdatePolicy,
     revertExtensionUpdate,
     writeUpdatePolicy,
@@ -271,8 +272,15 @@ export const createExtensionsRoutes = (services: Services) => {
             return { checks };
         }),
         checkUpdates: i.checkUpdates.handler(async () => {
-            const checkedAt = await checkExtensionUpdates(services);
-            return { ok: true, checkedAt } as const;
+            try {
+                const checkedAt = await checkExtensionUpdates(services);
+                return { ok: true, checkedAt } as const;
+            } catch (error) {
+                if (error instanceof RegistryUnreachableError) {
+                    throw new ORPCError("BAD_GATEWAY", { message: error.message });
+                }
+                throw error;
+            }
         }),
         updatePreview: i.updatePreview.handler(async ({ input }) => {
             try {

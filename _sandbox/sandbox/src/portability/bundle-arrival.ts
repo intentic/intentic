@@ -18,6 +18,7 @@ import { ArrivalFormatError } from "../arrival-error.js";
 import { drain, extractAll } from "../tar-extract.js";
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { sizeLabel } from "@intentic/base/format";
 import { nodeStream } from "../web-stream.js";
 
@@ -296,7 +297,9 @@ const healGitPointers = async (
 ): Promise<string[]> => {
     const healed: string[] = [];
     const gitsDir = join(historyRoot, "gits");
-    const present = new Set((await readdir(gitsDir, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory()).map((e) => e.name));
+    // No gits/ means no git dir arrived; an unreadable one throws, since read as empty every repo would land pointerless.
+    const arrived = (await readdir(gitsDir, { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
+    const present = new Set(arrived.filter((e) => e.isDirectory()).map((e) => e.name));
     for (const repo of landed) {
         if (!present.has(encodeURIComponent(repo))) {
             continue;

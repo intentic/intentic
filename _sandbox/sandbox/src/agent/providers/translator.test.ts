@@ -627,6 +627,23 @@ describe("translator subscription usage", () => {
         ]);
     });
 
+    // A credential the proxy kept in its rotation keeps catching turns, so a refused bench is a failure, never a name.
+    test("reports a bench the proxy refused as a failure rather than as a credential taken out", async () => {
+        const client = createCliProxyClient({
+            managementUrl: "http://cliproxy.test",
+            token: "management-secret",
+            configPath: "/tmp/config",
+            authDir: "/tmp/does-not-exist-authdir",
+            usageStore: memoryStore().store,
+            fetchFn: (async (input: string | URL): Promise<Response> =>
+                String(input).endsWith("/auth-files")
+                    ? Response.json({ files: [{ name: "no-project.json", provider: "antigravity" }] })
+                    : new Response("", { status: 404 })) as typeof fetch,
+        });
+
+        await expect(client.benchUnusable()).rejects.toThrow("The translator refused to bench no-project.json (404).");
+    });
+
     // The proxy lists such a file as active and never benches it itself, so the row and the fleet tally have to.
     test("counts a Google account with no project as serving nothing, however healthy the proxy calls it", async () => {
         const { store } = memoryStore();

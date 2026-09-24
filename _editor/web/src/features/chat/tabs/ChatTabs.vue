@@ -36,7 +36,7 @@ const emit = defineEmits<{
     open: [id: string];
 }>();
 
-const { conversations, active, activeId, panes, openBeside, closePane, sessions, loadSessions, keepChat } = useChat();
+const { conversations, active, activeId, panes, openBeside, closePane, sessions, sessionsFailure, loadSessions, keepChat } = useChat();
 const { agentById, rename } = useAgents();
 const { floats } = useChatFloating();
 const router = useRouter();
@@ -536,6 +536,7 @@ const openHistory = (event: Event): void => {
                     <PastChatList
                         :sessions="sessions"
                         :query="query"
+                        :failure="sessionsFailure"
                         @open="
                             emit(`open`, $event);
                             historyOpen = false;

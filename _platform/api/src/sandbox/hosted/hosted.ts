@@ -215,7 +215,14 @@ export const startAfterUpdate = async (
     let lastError: unknown;
     for (let attempt = 1; attempt <= SETTLE_ATTEMPTS; attempt += 1) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- settling is sequential by definition
-        const machine = await getMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch(() => undefined);
+        const machine = await getMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) => {
+            lastError = error;
+            return undefined;
+        });
+        // A read that answered supersedes an earlier failure: the cause named at the end is the latest one.
+        if (machine !== undefined) {
+            lastError = undefined;
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- cancellation must stop the settling loop before another start
         await assertActive?.();
         if (machine !== undefined && RUNNING_STATES.has(machine.state)) {
@@ -234,6 +241,7 @@ export const startAfterUpdate = async (
     // Settled but still won't run: broken, not busy; the claim must fail rather than hand over a dead machine.
     throw new Error(
         `fly machine ${hosted.machineId} did not start after its config was replaced${lastError === undefined ? `` : `: ${String(lastError)}`}`,
+        { cause: lastError },
     );
 };
 

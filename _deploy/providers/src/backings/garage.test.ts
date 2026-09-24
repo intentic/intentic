@@ -8,8 +8,11 @@ const IMAGE = "dxflrs/garage:v2.3.0@sha256:aaaa";
 
 // Drives the garage instance provider: `garage status` reports readiness, docker inspect reports the image,
 // the layout commands drive the one-time bootstrap, and docker compose up can be made to fail.
+// `garage node id -q` prints the full 64-hex id; `layout show` prints only its first 16.
+const NODE_ID = "563e1ac825ee3323aa441e72c26d1030d6d4414aeb3dd25287c531e7fc2bc95d";
+
 const fakeSsh = (
-    opts: { ready?: boolean; upFails?: boolean; image?: string; layout?: string } = {},
+    opts: { ready?: boolean; upFails?: boolean; image?: string; layout?: string; assignFails?: boolean } = {},
 ): { executor: SshExecutor; commands: string[] } => {
     const commands: string[] = [];
     const session: SshSession = {
@@ -19,10 +22,13 @@ const fakeSsh = (
                 return res("", opts.ready ? 0 : 1);
             }
             if (command.includes("garage node id")) {
-                return res("nodehex@10.0.0.5:3901");
+                return res(`${NODE_ID}@10.0.0.5:3901`);
             }
             if (command.includes("garage layout show")) {
                 return res(opts.layout ?? "");
+            }
+            if (command.includes("garage layout assign") && opts.assignFails === true) {
+                return { stdout: "", stderr: "Error: unknown node", code: 1 };
             }
             if (command.includes(".Config.Labels")) {
                 return res("");
@@ -83,20 +89,30 @@ test("instance apply writes compose (pinned image + S3 port) + garage.toml + a o
     expect(ssh.commands.some((c) => c.includes("cat > /opt/intentic/garage/store/garage.toml") && c.includes("rpc_secret_file"))).toBe(true);
     expect(ssh.commands.some((c) => c.includes("test -f /opt/intentic/garage/store/rpc_secret") && c.includes("openssl rand -hex 32"))).toBe(true);
     expect(ssh.commands.some((c) => c.includes("docker compose") && c.includes("up -d"))).toBe(true);
-    expect(ssh.commands.some((c) => c.includes("garage layout assign") && c.includes("nodehex"))).toBe(true);
+    expect(ssh.commands.some((c) => c.includes("garage layout assign") && c.includes(NODE_ID))).toBe(true);
     expect(ssh.commands.some((c) => c.includes("garage layout apply"))).toBe(true);
 });
 
 test("instance apply skips the layout assign when the node already holds a role", async () => {
-    const ssh = fakeSsh({ ready: true, layout: "Role for node nodehex: zone=dc1 capacity=1G" });
+    // As Garage prints it: the current layout's table names the node by its id's first 16 hex digits.
+    const ssh = fakeSsh({
+        ready: true,
+        layout: `==== CURRENT CLUSTER LAYOUT ====\nID                Tags  Zone  Capacity  Usable capacity\n${NODE_ID.slice(0, 16)}        dc1   1000.0 MB  1000.0 MB (100.0%)\n\nCurrent cluster layout version: 1`,
+    });
     await createGarageProvider(ssh.executor).apply(inputs, undefined, ctx());
     expect(ssh.commands.some((c) => c.includes("garage layout assign"))).toBe(false);
+});
+
+test("instance apply fails when the layout assign fails, instead of reporting a store that refuses every bucket", async () => {
+    const ssh = fakeSsh({ ready: true, assignFails: true });
+    await expect(createGarageProvider(ssh.executor).apply(inputs, undefined, ctx())).rejects.toThrow("garage layout failed (1): Error: unknown node");
+    expect(ssh.commands.some((c) => c.includes("garage layout apply"))).toBe(false);
 });
 
 // --- The per-app binding provider (garage-bucket) ---
 
 const keyInfo = "Key name: app\nKey ID: GKtestaccesskey\nSecret key: deadbeefsecret\n";
-const bindingSsh = (opts: { container?: boolean; bucket?: boolean } = {}): { executor: SshExecutor; commands: string[] } => {
+const bindingSsh = (opts: { container?: boolean; bucket?: boolean; keyInfo?: string } = {}): { executor: SshExecutor; commands: string[] } => {
     const commands: string[] = [];
     const session: SshSession = {
         exec: async (command) => {
@@ -108,7 +124,7 @@ const bindingSsh = (opts: { container?: boolean; bucket?: boolean } = {}): { exe
                 return res("", opts.bucket ? 0 : 1);
             }
             if (command.includes("key info")) {
-                return res(keyInfo);
+                return res(opts.keyInfo ?? keyInfo);
             }
             return res("");
         },
@@ -136,6 +152,13 @@ test("binding read returns the endpoint + the read-back key pair once the bucket
     expect(await createGarageBucketProvider(bindingSsh({ bucket: true }).executor).read(bindingInputs, ctx("app-uses-store"))).toEqual({
         outputs: bindingOutputs,
     });
+});
+
+test("binding read fails on a key info without a secret, instead of handing the app an empty credential", async () => {
+    const ssh = bindingSsh({ bucket: true, keyInfo: "Key name: app\nKey ID: GKtestaccesskey\n" });
+    await expect(createGarageBucketProvider(ssh.executor).read(bindingInputs, ctx("app-uses-store"))).rejects.toThrow(
+        'garage key info app: no "Secret key:" line in its output',
+    );
 });
 
 test("binding apply creates the bucket + key, grants read+write, and returns the key pair", async () => {

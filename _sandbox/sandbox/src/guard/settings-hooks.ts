@@ -4,7 +4,7 @@ import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { HookScript, SettingsHook } from "@intentic/sandbox-contract";
-import { frontmatterHooks } from "./frontmatter-hooks.js";
+import { frontmatterHooks, undefinedIfCliSeesNothing } from "./frontmatter-hooks.js";
 
 /* The hooks Claude Code loads from the user and project sources for one turn (`settingSources: ["user", "project"]`),
  * folded to one sha256: each settings file's and each skill, subagent or command frontmatter's `hooks` as canonical JSON,
@@ -65,10 +65,8 @@ const sha256Text = (text: string): string => createHash("sha256").update(text).d
 // A settings file's `hooks` value; undefined for a file that is absent or not strict JSON, which Claude Code also
 // loads nothing from.
 const hooksIn = async (path: string): Promise<unknown> => {
-    let text: string;
-    try {
-        text = await readFile(path, "utf8");
-    } catch {
+    const text = await readFile(path, "utf8").catch(undefinedIfCliSeesNothing);
+    if (text === undefined) {
         return undefined;
     }
     try {

@@ -33,9 +33,25 @@ const agoText = (ms: number): string => {
 
 const reposOf = (entries: readonly FileEntry[]): string[] => [...new Set(entries.map((entry) => entry.repo).filter((repo) => repo !== undefined))];
 
+// `rev-parse --verify` exits 1 exactly when HEAD names no commit yet; anything else (not a repo, no git) is not that.
+const unborn = (cwd: string): Promise<boolean> =>
+    exec("git", ["-C", cwd, "rev-parse", "--verify", "--quiet", "HEAD"]).then(
+        () => false,
+        (error: unknown) => (error as { code?: unknown }).code === 1,
+    );
+
+// A repo with no commits has no history, so its failure reads as empty output; every other failure (a bad pattern,
+// output past maxBuffer, a repo git refuses) propagates, since an empty answer would claim the history has nothing.
 const git = async (root: string, repo: string, args: string[]): Promise<string> => {
-    const { stdout } = await exec("git", ["-C", join(root, repo), ...args], { maxBuffer: 16 * 1024 * 1024 }).catch(() => ({ stdout: "" }));
-    return stdout;
+    const cwd = join(root, repo);
+    try {
+        return (await exec("git", ["-C", cwd, ...args], { maxBuffer: 16 * 1024 * 1024 })).stdout;
+    } catch (error) {
+        if (await unborn(cwd)) {
+            return "";
+        }
+        throw error;
+    }
 };
 
 const toWorkspacePath = (repo: string, repoRel: string): string => (repo === "" ? repoRel : `${repo}/${repoRel}`);
@@ -217,14 +233,15 @@ export const whoAnchor = async (
         throw new Error(`iq who: ${anchor.path} is not inside a git repo the sweep admits`);
     }
     const to = anchor.endLine ?? anchor.line;
-    const stdout = await git(root, entry.repo, [
-        "blame",
-        "-L",
-        `${anchor.line},${to}`,
-        "--line-porcelain",
-        "--",
-        toRepoPath(entry.repo, anchor.path),
-    ]);
+    const stdout = await git(root, entry.repo, ["blame", "-L", `${anchor.line},${to}`, "--line-porcelain", "--", toRepoPath(entry.repo, anchor.path)]).catch(
+        (error: unknown) => {
+            // A file never committed has no authors yet, the same answer as a repo with no commits.
+            if (/no such path .* in HEAD/.test(String((error as { stderr?: unknown }).stderr))) {
+                return "";
+            }
+            throw error;
+        },
+    );
     if (stdout === "") {
         return [];
     }

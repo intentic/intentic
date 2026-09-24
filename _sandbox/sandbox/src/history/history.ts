@@ -226,8 +226,13 @@ export const createWorkspaceHistory = (
     const revParse = async (scope: Scope, rev: string): Promise<string | undefined> => {
         try {
             return (await git(["rev-parse", "-q", "--verify", rev], bare(scope))).stdout.trim();
-        } catch {
-            return undefined;
+        } catch (error) {
+            // Exit 1 is `-q --verify` saying the name resolves to nothing; a git that failed to run is no such answer, and
+            // reading it as "no previous snapshot" would commit a parentless head over the whole timeline.
+            if ((error as { code?: unknown }).code === 1) {
+                return undefined;
+            }
+            throw error;
         }
     };
 

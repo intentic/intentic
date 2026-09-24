@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
-import { heldDirReads } from "./dir-reads.js";
+import { freshDirReads, heldDirReads } from "./dir-reads.js";
 import { walkWorkspaceTree } from "./workspace-tree.js";
 
 /* Reads held between walks against real folders: the walk answers from what it read until the watcher names a change. */
@@ -98,4 +98,15 @@ test(`a .gitignore is honoured when it arrives, through the folder that holds it
     reads.changed([`app/.gitignore`]);
     const app = (await walkWorkspaceTree(root, { reads })).tree.find((entry) => entry.name === `app`);
     expect(app?.children?.find((entry) => entry.name === `src`)).toMatchObject({ ignored: true });
+});
+
+// Listed without its rules, what the folder ignores would show as tracked and be offered for deletion.
+test(`a folder whose .gitignore is there but cannot be read reads as unknown, not as one with no rules`, async () => {
+    const root = await workspace();
+    // A link to itself: listed as a file, and reading it fails with ELOOP rather than "not there".
+    await symlink(join(root, "app", ".gitignore"), join(root, "app", ".gitignore"));
+    const reads = freshDirReads();
+    expect(await reads.listing(join(root, "app"), join(root, "app"), root)).toBeUndefined();
+    expect(await reads.names(join(root, "app"))).toBeUndefined();
+    expect(await reads.names(join(root, "app", "src"))).toEqual({ dirs: [], others: 1, gitignore: undefined });
 });

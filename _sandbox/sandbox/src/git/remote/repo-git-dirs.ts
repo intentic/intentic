@@ -1,5 +1,6 @@
 import { cp, lstat, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
@@ -12,7 +13,7 @@ import type { WorkspacePaths } from "../../workspace/workspace.js";
 // Shape of this repo's `.git`: a file is already the target shape, a dir must move; anything else (missing, dangling
 // symlink) is not handled here.
 const gitEntryKind = async (repoDir: string): Promise<"dir" | "file" | undefined> => {
-    const stats = await lstat(join(repoDir, ".git")).catch(() => undefined);
+    const stats = await lstat(join(repoDir, ".git")).catch(undefinedIfMissing);
     if (stats === undefined) {
         return undefined;
     }
@@ -22,15 +23,24 @@ const gitEntryKind = async (repoDir: string): Promise<"dir" | "file" | undefined
 // `core.worktree` is an absolute path shared by every worktree; pinned to /work/<repo> it would misdirect an isolated
 // turn's own worktree to the main checkout. Unset, git resolves the worktree relative to the caller instead.
 const unpinWorktree = async (repoDir: string, git: GitRunner): Promise<void> => {
-    // Exits non-zero when the key was already absent; that's the steady state, not a failure.
-    await git(repoDir, ["config", "--unset", "core.worktree"]).catch(() => undefined);
+    // Exit 5 is the key already absent, the steady state; any other failure leaves the pin in place.
+    await git(repoDir, ["config", "--unset", "core.worktree"]).catch((error: unknown) => {
+        if ((error as { code?: unknown }).code !== 5) {
+            throw error;
+        }
+    });
 };
 
 // core.bare lives in the git dir's shared config: true blocks the main checkout while linked worktrees still work,
 // which hides it. Every repo here has a real directory, so `false` is always correct here.
 const unbare = async (repoDir: string, git: GitRunner): Promise<void> => {
-    // Exits non-zero when the key is absent; that already matches the default (false).
-    const current = await git(repoDir, ["config", "--get", "core.bare"]).catch(() => undefined);
+    // Exit 1 is the key absent, which already matches the default (false).
+    const current = await git(repoDir, ["config", "--get", "core.bare"]).catch((error: unknown) => {
+        if ((error as { code?: unknown }).code !== 1) {
+            throw error;
+        }
+        return undefined;
+    });
     if (current?.stdout.trim() !== "true") {
         return;
     }
@@ -54,7 +64,7 @@ const relocateOne = async (repo: string, workspace: WorkspacePaths, historyRoot:
         return;
     }
     const target = repoGitDir(historyRoot, repo);
-    if ((await lstat(target).catch(() => undefined)) !== undefined) {
+    if ((await lstat(target).catch(undefinedIfMissing)) !== undefined) {
         // Target already has a git dir; moving would destroy one of them, so this repo just keeps its in-tree git dir.
         logger.warn({ repo, target }, "git dirs: target already occupied, repo left with an in-tree git dir");
         return;
@@ -87,7 +97,9 @@ export const ensureRepoGitDirs = async (
         await relocateOne(repo, workspace, historyRoot, logger, git).catch((error: unknown) =>
             logger.warn({ err: error, repo }, "git dirs: relocation failed, repo keeps its in-tree git dir"),
         );
-        await unpinWorktree(join(workspace.root, repo), git);
+        await unpinWorktree(join(workspace.root, repo), git).catch((error: unknown) =>
+            logger.warn({ err: error, repo }, "git dirs: could not unpin core.worktree, an isolated turn's checkout may resolve to the main one"),
+        );
         await unbare(join(workspace.root, repo), git).catch((error: unknown) =>
             logger.warn({ err: error, repo }, "git dirs: could not clear core.bare, the main checkout stays unreadable to git"),
         );

@@ -16,11 +16,26 @@ const flush = async (): Promise<void> => {
 // The smallest api a poll or a ledger touches. `reachable` is a field so a test can take the daemon away.
 // `onDidChangeFiles` is present only when a test asks for it (`watching: true`): an older host lacks it, so a test that
 // omits it also checks that a poll still runs on its timer.
-const fakeApi = (over: { reachable?: boolean; file?: unknown; watching?: boolean; write?: (path: string, body: string) => void } = {}) => {
+// `refused` fails the typed file read the ledger writes from, the way a refused or unreachable read does.
+const fakeApi = (
+    over: { reachable?: boolean; file?: unknown; refused?: boolean; watching?: boolean; write?: (path: string, body: string) => void } = {},
+) => {
     const written: { path: string; body: string }[] = [];
     const listeners = new Set<(paths: readonly string[]) => void>();
     const api = {
-        sandbox: { reachable: () => over.reachable !== false },
+        sandbox: {
+            reachable: () => over.reachable !== false,
+            rpc: {
+                workspace: {
+                    file: async () => {
+                        if (over.refused === true) {
+                            throw new Error(`refused`);
+                        }
+                        return over.file === undefined ? { present: false } : { present: true, content: JSON.stringify(over.file) };
+                    },
+                },
+            },
+        },
         workspace: {
             readJson: () => Promise.resolve(over.file),
             write: (path: string, body: string) => {
@@ -381,6 +396,14 @@ describe(`sandboxLedger`, () => {
 
     // No write when nothing moved: the daemon pushes every workspace write to every connected browser as a change, so a
     // ledger rewriting itself on every open would cost all of them a refetch for identical content.
+    // `readJson` answers a refused read as absent; a write computed from that would replace every acknowledgement.
+    it(`refuses to write over a ledger it could not read`, async () => {
+        const { api, written } = fakeApi({ refused: true });
+
+        await expect(sandboxLedger(() => api, `seen.json`).mark({ second: `two` })).rejects.toThrow(`refused`);
+        expect(written).toEqual([]);
+    });
+
     it(`writes nothing when the mark is already recorded`, async () => {
         const { api, written } = fakeApi({ file: { first: `one` } });
 
@@ -415,12 +438,18 @@ describe(`sandboxLedger`, () => {
         });
         const written: string[] = [];
         const api = {
-            sandbox: { reachable: () => true },
-            workspace: {
-                readJson: async () => {
-                    await held;
-                    return {};
+            sandbox: {
+                reachable: () => true,
+                rpc: {
+                    workspace: {
+                        file: async () => {
+                            await held;
+                            return { present: false };
+                        },
+                    },
                 },
+            },
+            workspace: {
                 write: (path: string) => {
                     written.push(path);
                     return Promise.resolve();

@@ -316,6 +316,20 @@ test("a declared submodule survives the untrack convergence; a stray gitlink bes
     expect(await sh(work, "ls-tree", "--name-only", "HEAD")).toBe(".gitmodules\nlib");
 });
 
+test("a .gitmodules git cannot parse stops the convergence, and the submodule it declares stays committed", async () => {
+    const { work, historyRoot } = await tempBase();
+    const { work: elsewhere } = await tempBase();
+    const upstream = await nestedRepo(elsewhere, "lib");
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    await commitRootBaseline(workspacePaths(work));
+    await declareSubmodule(work, upstream, "lib");
+    await writeFile(join(work, ".gitmodules"), '[submodule "lib"\n\tpath = lib\n');
+
+    await expect(ensureRootRepo(workspacePaths(work), historyRoot)).rejects.toThrow("bad config line");
+
+    expect(await sh(work, "ls-tree", "--name-only", "HEAD")).toBe(".gitmodules\nlib");
+});
+
 test("a conversation's root worktree commit spares declared submodules too", async () => {
     const { work, historyRoot } = await tempBase();
     const { work: elsewhere } = await tempBase();

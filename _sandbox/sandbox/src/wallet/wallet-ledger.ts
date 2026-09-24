@@ -5,7 +5,7 @@ import { jsonFile } from "../store/json-file.js";
 
 // One row per payment attempt that reached a signature request, plus declines and expiries; what the history command,
 // status meter and daily-cap arithmetic read.
-// A row opens pending before the signature and settles after the endpoint answers; an unwritable ledger fails closed,
+// A row opens pending before the signature and settles after the endpoint answers; an unreadable or unwritable ledger fails closed,
 // and a pending row counts against the cap while in flight.
 // This is the sandbox's own record, not the platform signer's unfakeable one; amounts are USD strings, converted
 // through atomic units, never floats.
@@ -51,6 +51,7 @@ export interface WalletLedgerStore {
     readonly settle: (id: string, outcome: PaymentRow["outcome"], transaction?: string) => Promise<void>;
     // A no-signature outcome (declined, unanswered, policy-refused), recorded in one write, no pending row.
     readonly record: (payment: OpenedPayment, outcome: "declined" | "unanswered" | "refused") => Promise<void>;
+    // Throws when the ledger exists but cannot be read: an empty history would reopen the whole daily cap.
     readonly all: () => Promise<readonly PaymentRow[]>;
 }
 
@@ -80,6 +81,8 @@ export const fileWalletLedger = (path: string, now: () => number = Date.now): Wa
         },
         fallback: () => [],
         mode: 0o600,
+        // The cap's only memory of today's spend: a fresh ledger over an unreadable one would forget it.
+        onUnreadable: "refuse",
     });
     const append = async (row: PaymentRow): Promise<void> => {
         await file.update((current) => [...current, row].slice(-ROWS_CAP));
@@ -120,6 +123,12 @@ export const fileWalletLedger = (path: string, now: () => number = Date.now): Wa
                 ...(payment.why !== undefined ? { why: payment.why.slice(0, WHY_MAX) } : {}),
             });
         },
-        all: () => file.read(),
+        all: async () => {
+            const state = await file.state();
+            if (state.unreadable) {
+                throw new Error(`the wallet ledger could not be read (${state.detail}), so today's spending is unknown`);
+            }
+            return state.value;
+        },
     };
 };

@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/p
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import type { BundleExport } from "@intentic/sandbox-contract";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import type { Services } from "../composition.js";
@@ -45,21 +45,21 @@ const statusOf = (file: string): { readonly name: string; readonly status: Bundl
 };
 
 // Directory contents, newest first. createdAt is mtime: pack-end time for a finished bundle, last-progress time for a
-// `.part` (a stalled pack stops moving).
+// `.part` (a stalled pack stops moving). No directory is no exports yet, and a file gone mid-listing is left out.
 export const listExports = async (historyRoot: string): Promise<BundleExport[]> => {
     const dir = exportsDir(historyRoot);
-    const files = await readdir(dir).catch(() => []);
+    const files = (await readdir(dir).catch(undefinedIfMissing)) ?? [];
     const entries = await Promise.all(
         files.map(async (file): Promise<BundleExport[]> => {
             const parsed = statusOf(file);
             if (parsed === undefined) {
                 return [];
             }
-            const stats = await stat(join(dir, file)).catch(() => undefined);
+            const stats = await stat(join(dir, file)).catch(undefinedIfMissing);
             if (stats === undefined) {
                 return [];
             }
-            const error = parsed.status === "failed" ? await readFile(join(dir, file), "utf8").catch(() => undefined) : undefined;
+            const error = parsed.status === "failed" ? await readFile(join(dir, file), "utf8").catch(undefinedIfMissing) : undefined;
             return [
                 {
                     name: parsed.name,
@@ -109,7 +109,7 @@ export const removeExport = async (historyRoot: string, name: string): Promise<b
 // status-is-the-filename true across a crash.
 export const sweepStaleExports = async (historyRoot: string): Promise<void> => {
     const dir = exportsDir(historyRoot);
-    for (const file of await readdir(dir).catch(() => [])) {
+    for (const file of (await readdir(dir).catch(undefinedIfMissing)) ?? []) {
         if (!file.endsWith(PACKING)) {
             continue;
         }

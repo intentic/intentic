@@ -325,8 +325,9 @@ const sendAgain = async (): Promise<void> => {
     resending.value = true;
     try {
         await useAgents().resumeHeldTurn(props.agent.id);
-    } catch {
-        // Left as-is: the commonest failure is a hold the daemon lost, and the words are still safe in the composer.
+    } catch (caught) {
+        // The card is left as it was and the words are still safe in the composer; the strip says why nothing moved.
+        agentsNotice.value = errorMessage(caught, `Couldn't send that again.`);
     } finally {
         resending.value = false;
     }

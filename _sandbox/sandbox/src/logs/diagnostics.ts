@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { lineAligned, logsRoot } from "./log-files.js";
 
 // Reads the daemon's own historyRoot/logs files back: filtered by level, time, and substring, newest-first, unlike a
@@ -37,10 +38,9 @@ export interface LogLineResult {
 // Tail of a file as text, and whether that was the whole file. Undefined when the file does not exist (a normal answer,
 // e.g. perf.jsonl before anything was slow).
 const tailText = async (path: string, bytes: number): Promise<{ text: string; whole: boolean } | undefined> => {
-    let raw: Buffer;
-    try {
-        raw = await readFile(path);
-    } catch {
+    // Only absence is a quiet log; one that failed to read (too large, EACCES) throws rather than answering "no entries".
+    const raw = await readFile(path).catch(undefinedIfMissing);
+    if (raw === undefined) {
         return undefined;
     }
     if (raw.length <= bytes) {

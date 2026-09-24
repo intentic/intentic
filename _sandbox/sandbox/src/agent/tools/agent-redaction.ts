@@ -1,6 +1,7 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { errnoCode } from "@intentic/base/errors";
 import { classifyCommand, maskCredentialMaterial } from "@intentic/sandbox-contract";
-import { type NamedSecret, secretReference, surfaceForms } from "../../secrets/secret-registry.js";
+import { type NamedSecret, SecretStoreUnreadableError, secretReference, surfaceForms } from "../../secrets/secret-registry.js";
 
 // Masks every tool's PostToolUse output, not just Bash's, closing the gap where masking depended on how a value was
 // fetched. Values mask to `{{secret:name}}`, not a blank, so a read-then-rewrite round-trips. A second, shape-based
@@ -86,6 +87,14 @@ const mapStrings = (value: unknown, transform: (text: string) => string): unknow
 
 export const maskDeep = (value: unknown, targets: readonly MaskTarget[]): unknown => mapStrings(value, (text) => maskString(text, targets));
 
+export const WITHHELD =
+    "[intentic withheld this tool's output: the sandbox's secrets could not be read to mask it. Check the secrets stores (desired-state .env and secrets file, the capability vault) and try again.]";
+
+// Names what failed without quoting it: only the registry's own error is worded to be shown, any other message could
+// carry a slice of the secrets file it choked on.
+export const withheld = (error: unknown): string =>
+    `${WITHHELD} (${error instanceof SecretStoreUnreadableError ? error.message : (errnoCode(error) ?? (error instanceof Error ? error.name : "unknown failure"))})`;
+
 export const redactionHooks = (secrets: () => Promise<readonly NamedSecret[]>): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     // No matcher: covers every tool, including ones nobody has written yet, rather than a remembered list.
     PostToolUse: [
@@ -95,8 +104,8 @@ export const redactionHooks = (secrets: () => Promise<readonly NamedSecret[]>): 
                     if (input.hook_event_name !== "PostToolUse") {
                         return {};
                     }
-                    // Guarded whole: an unreadable vault is a reason to leave a result alone, never to fail the tool
-                    // call.
+                    // Guarded whole and failing closed: a result that could not be checked against the secrets is
+                    // withheld, never shown as it came.
                     try {
                         const targets = maskTargets(await secrets());
                         // Exact pass first, so a stored value becomes its reference before the shape pass runs;
@@ -113,8 +122,8 @@ export const redactionHooks = (secrets: () => Promise<readonly NamedSecret[]>): 
                         return masked === input.tool_response
                             ? {}
                             : { hookSpecificOutput: { hookEventName: "PostToolUse" as const, updatedToolOutput: masked } };
-                    } catch {
-                        return {};
+                    } catch (error) {
+                        return { hookSpecificOutput: { hookEventName: "PostToolUse" as const, updatedToolOutput: withheld(error) } };
                     }
                 },
             ],

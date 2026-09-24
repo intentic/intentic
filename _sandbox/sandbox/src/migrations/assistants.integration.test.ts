@@ -1,9 +1,17 @@
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Readable } from "node:stream";
+import { parseEnv } from "node:util";
 import { createGzip } from "node:zlib";
 import type { Capability, SkillDraft } from "@intentic/sandbox-contract";
 import { pack } from "tar-stream";
+import { services } from "../harness/route-services.testing.js";
+import { testConfig } from "../testing.js";
+import { workspacePaths } from "../workspace/workspace.js";
 import type { MigratedAutomation } from "./adapter-shared.js";
 import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archive.js";
+import { type AssistantSetup, applyAssistantSetup } from "./assistants.js";
 import { applyMigration, type MigrationDeps } from "./apply.js";
 import { planHermes } from "./hermes.js";
 import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
@@ -184,4 +192,31 @@ test("one item failing is one failed row, not a dead migration", async () => {
     const report = await applyMigration(deps, plan, { items: ["memory:soul", "capability:mcp:linear"], includeSecrets: true });
     expect(report.applied.map((entry) => entry.id)).toEqual(["memory:soul"]);
     expect(report.failed).toEqual([{ id: "capability:mcp:linear", label: "MCP server, linear", error: expect.stringContaining("already exists") }]);
+});
+
+test("imported secrets join desired-state/.env beside what it already holds, even when two arrivals land at once", async () => {
+    const root = await mkdtemp(join(tmpdir(), "assistant-secrets-"));
+    await mkdir(join(root, "desired-state"), { recursive: true });
+    await writeFile(join(root, "desired-state/.env"), "EXISTING_KEY=kept\n");
+    const target = services({ workspace: workspacePaths(root), config: { ...testConfig, workspaceRoot: root } });
+    const arrival = (key: string): AssistantSetup => ({
+        source: "hermes",
+        files: new Map([
+            ["config.yaml", Buffer.from("model: {}\n")],
+            [".env", Buffer.from(`${key}=value-of-${key}\n`)],
+        ]),
+        skipped: [],
+    });
+
+    const reports = await Promise.all(
+        ["FIRST_KEY", "SECOND_KEY"].map((key) => applyAssistantSetup(target, arrival(key), { items: [`secret:${key}`], includeSecrets: true })),
+    );
+
+    expect(reports.flatMap((report) => report.failed)).toEqual([]);
+    expect(parseEnv(await readFile(join(root, "desired-state/.env"), "utf8"))).toEqual({
+        EXISTING_KEY: "kept",
+        FIRST_KEY: "value-of-FIRST_KEY",
+        SECOND_KEY: "value-of-SECOND_KEY",
+    });
+    await rm(root, { recursive: true, force: true });
 });

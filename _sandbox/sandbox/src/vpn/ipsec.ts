@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { pollUntil } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import type { IpsecVpnConfig, VpnConfig } from "@intentic/sandbox-contract";
 import { activeResolvers, toolMissing } from "../tunnel/net-probe.js";
 import type { VpnDriver, VpnProbe } from "./vpn-driver.js";
@@ -209,7 +210,7 @@ export const ipsecDriver: VpnDriver = {
         await writeFile("/etc/ipsec.conf", IPSEC_CONF, { mode: 0o644 });
         await writeFile("/etc/ipsec.secrets", IPSEC_SECRETS, { mode: 0o600 });
         if (ipsec.ikeVersion === "1" && ipsec.aggressive === "on") {
-            await mkdir("/etc/strongswan.d", { recursive: true }).catch(() => undefined);
+            await mkdir("/etc/strongswan.d", { recursive: true });
             await writeFile(AGGRESSIVE_DROPIN_PATH, AGGRESSIVE_DROPIN, { mode: 0o644 });
         }
         await writeFile(ipsecConnPath(id), ipsecConnConfig(id, ipsec), { mode: 0o644 });
@@ -270,8 +271,16 @@ export const ipsecDriver: VpnDriver = {
                     : `Connected ${id}. ${networks} now rides the IPsec tunnel; everything else keeps going out directly.`,
         };
     },
+    // charon not running, or the conn never loaded, leave nothing up; a failure that leaves an SA behind throws.
     disconnect: async (id) => {
-        await exec("ipsec", ["down", connName(id)]).catch(() => undefined);
+        const conn = connName(id);
+        await exec("ipsec", ["down", conn]).catch(async (error: unknown) => {
+            const { stdout } = await exec("ipsec", ["statusall", conn]).catch(() => ({ stdout: "" }));
+            const status = parseIpsecStatus(conn, stdout);
+            if (status.established || status.negotiating) {
+                throw new Error(`strongSwan could not take ${id} down: ${errorMessage(error)}`, { cause: error });
+            }
+        });
     },
     probe: async (id): Promise<VpnProbe> => {
         if (await toolMissing("ipsec", ["--version"])) {

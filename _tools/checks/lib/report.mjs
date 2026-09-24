@@ -10,14 +10,16 @@ export const cannotMeasure = (why) => {
     process.exit(2);
 };
 
-// `sections` is `[heading, lines[]]` pairs; `vouched` is what to print when nothing is wrong.
+// `sections` is `[heading, lines[]]` pairs; `vouched` is what to print when nothing is wrong. A failure sets the exit code
+// and returns rather than exiting: stderr into a pipe drains after the write, and `process.exit` would cut it off.
 export const finish = (sections, vouched) => {
     const failing = sections.filter(([, lines]) => lines.length > 0);
     if (failing.length > 0) {
         for (const [heading, lines] of failing) {
             console.error(`${heading}:\n${lines.map((line) => `  - ${line}`).join("\n")}`);
         }
-        process.exit(1);
+        process.exitCode = 1;
+        return;
     }
     for (const line of vouched) {
         console.log(line);

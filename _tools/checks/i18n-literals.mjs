@@ -6,10 +6,9 @@
 // standalone extension repositories, none of which render through vue-i18n.
 // Best-effort before an install, like vue-templates.mjs: vouches for less when vue/compiler-sfc cannot be resolved.
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { join } from "node:path";
 import { finish } from "./lib/report.mjs";
-import { packages, root, subjectFiles } from "./lib/repo.mjs";
+import { installedModule, packages, root, subjectFiles } from "./lib/repo.mjs";
 import { visibleLiterals } from "./lib/visible-text.mjs";
 
 // Every surface that mounts vue-i18n. A .vue file outside them (the seed template an extension author copies) has no
@@ -30,12 +29,9 @@ const parsers = (() => {
     if (files.length === 0 || vueHost === undefined) {
         return undefined;
     }
-    try {
-        const load = createRequire(join(vueHost.dir, "package.json"));
-        return { sfc: load("vue/compiler-sfc"), ts: load("typescript") };
-    } catch {
-        return undefined;
-    }
+    const sfc = installedModule(vueHost.dir, "vue/compiler-sfc");
+    const ts = installedModule(vueHost.dir, "typescript");
+    return sfc === undefined || ts === undefined ? undefined : { sfc, ts };
 })();
 
 const untranslatable = [];

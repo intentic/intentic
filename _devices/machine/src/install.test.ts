@@ -1,5 +1,5 @@
 import { UPGRADE_ENV } from "./environments/machine-upgrade.js";
-import { addToWindowsPathValue, selfUpdateBeforeSetup, type SelfUpdateIo } from "./install.js";
+import { addToWindowsPathValue, selfUpdateBeforeSetup, type SelfUpdateIo, windowsPathFrom } from "./install.js";
 import type { UpgradeOutcome } from "./upgrade.js";
 
 const io = (
@@ -96,5 +96,35 @@ describe("addToWindowsPathValue", () => {
 
     it("starts a PATH that was empty or unset", () => {
         expect(addToWindowsPathValue("", String.raw`C:\bin`)).toBe(String.raw`C:\bin`);
+    });
+});
+
+// What is read here is written back whole, so every reading that is not the user's PATH as stored would replace it.
+describe("windowsPathFrom", () => {
+    const listing = (...rows: string[]): string => ["", String.raw`HKEY_CURRENT_USER\Environment`, ...rows, ""].join("\r\n");
+
+    it("reads the value and keeps its kind", () => {
+        expect(
+            windowsPathFrom(listing(String.raw`    TEMP    REG_EXPAND_SZ    %USERPROFILE%\AppData\Local\Temp`, String.raw`    Path    REG_EXPAND_SZ    %USERPROFILE%\bin;C:\tools`)),
+        ).toEqual({ kind: "REG_EXPAND_SZ", stored: String.raw`%USERPROFILE%\bin;C:\tools` });
+    });
+
+    it("finds a value spelled PATH, since Windows names are case-insensitive and reg add /v Path would replace it", () => {
+        expect(windowsPathFrom(listing(String.raw`    PATH    REG_SZ    C:\tools`))).toEqual({ kind: "REG_SZ", stored: String.raw`C:\tools` });
+    });
+
+    it("does not take a value whose name only starts with Path for the PATH", () => {
+        expect(windowsPathFrom(listing(String.raw`    Path Backup    REG_SZ    C:\old`))).toEqual({ kind: "REG_EXPAND_SZ", stored: "" });
+    });
+
+    it("reads an empty value as empty and an absent one as an empty REG_EXPAND_SZ", () => {
+        expect(windowsPathFrom(listing("    Path    REG_SZ    "))).toEqual({ kind: "REG_SZ", stored: "" });
+        expect(windowsPathFrom(listing())).toEqual({ kind: "REG_EXPAND_SZ", stored: "" });
+    });
+
+    it("refuses a PATH of a kind it would not write back the same", () => {
+        expect(() => windowsPathFrom(listing(String.raw`    Path    REG_MULTI_SZ    C:\one\0C:\two`))).toThrow(
+            "your PATH is stored as REG_MULTI_SZ, which this installer does not rewrite",
+        );
     });
 });

@@ -122,7 +122,10 @@ export const startFrontDoor = async (phase: BootPhase, host: string): Promise<Re
     const createServer = ((options: object, listener: RequestListener) =>
         createHttpServer(options, (request, response) => {
             if (isHandedBackPreview(request)) {
-                answerPreview(request, response, preview).catch(() => response.destroy());
+                answerPreview(request, response, preview).catch((error: unknown) => {
+                    logger.warn({ err: error, host: request.headers.host }, "front door: a handed-back preview could not be answered");
+                    response.destroy();
+                });
                 return;
             }
             listener(request, response);

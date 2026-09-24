@@ -140,14 +140,10 @@ export const createServiceProcesses = (logsDir: string, logger: Logger, timing: 
         entry.state = "running";
         entry.since = Date.now();
         entry.spawnedAt = entry.since;
-        child.on("error", (error) => {
-            // Spawn itself failing (no `sh`?) is treated like an instant exit; the backoff handles it.
-            logger.error({ err: error, service: key }, "service process failed to spawn");
-        });
-        child.on("exit", (code, signal) => {
-            const tracked = current.get(key);
-            if (tracked !== entry) {
-                return; // stop() untracked it, or a fresh start() replaced it — nothing to respawn
+        const exited = (code: number | null, signal: NodeJS.Signals | null): void => {
+            // stop() untracked it, a fresh start() replaced it, or this child's end was already handled: nothing to respawn.
+            if (current.get(key) !== entry || entry.child !== child) {
+                return;
             }
             entry.child = undefined;
             entry.lastExitCode = code ?? undefined;
@@ -165,7 +161,15 @@ export const createServiceProcesses = (logsDir: string, logger: Logger, timing: 
                     publishRuntimeChange("panels", "terminals");
                 }
             }, retryInMs);
+        };
+        child.on("error", (error) => {
+            logger.error({ err: error, service: key }, "service process failed to spawn");
+            // A child that never started (a missing cwd, EAGAIN) emits no 'exit': its backoff starts here or never.
+            if (child.pid === undefined) {
+                exited(null, null);
+            }
         });
+        child.on("exit", exited);
     };
 
     return {

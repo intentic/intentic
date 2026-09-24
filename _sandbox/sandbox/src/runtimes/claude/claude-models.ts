@@ -43,6 +43,8 @@ const withTierCapabilities = (model: Model, aliases: readonly Model[]): Model =>
 
 const ANTHROPIC_MODELS_URL = "https://api.anthropic.com/v1/models?limit=100";
 
+const RestCatalogSchema = z.object({ data: z.array(z.object({ id: z.string().min(1), display_name: z.string().optional() })) });
+
 // Stays open, yielding nothing, until aborted. supportedModels() is a control request available only while streaming
 // input, so the session must be kept open without a user turn.
 async function* pendingInput(signal: AbortSignal): AsyncGenerator<SDKUserMessage> {
@@ -118,8 +120,13 @@ const fetchApiModels = async (oauthToken: string, fetchImpl: typeof fetch, logge
         logger.warn({ status: response.status, body: body.slice(0, 300) }, "claude models: REST catalog refused");
         return undefined;
     }
-    const json = (await response.json().catch(() => undefined)) as { data?: { id: string; display_name?: string }[] } | undefined;
-    return (json?.data ?? []).map((model) => ({ id: model.id, label: model.display_name ?? humanizeModelId(model.id) }));
+    // An unreadable 200 is a refusal, not an empty catalog: filed as live, [] would shrink the picker to the CLI's rows.
+    const catalog = RestCatalogSchema.safeParse(await response.json().catch(() => undefined));
+    if (!catalog.success) {
+        logger.warn({ status: response.status, issues: catalog.error.issues.slice(0, 3) }, "claude models: REST catalog unreadable");
+        return undefined;
+    }
+    return catalog.data.data.map((model) => ({ id: model.id, label: model.display_name ?? humanizeModelId(model.id) }));
 };
 
 // The first credential the REST catalog answers for, tried in order. One account's org can forbid OAuth REST
@@ -195,7 +202,12 @@ export const createClaudeCatalog = (
         // Both sources run concurrently; either alone still yields a usable list.
         discover: async (accountId?: string) => {
             const tokens = await oauthTokens(accountId);
-            const [aliases, versioned] = await Promise.all([discover(tokens[0], cwd).catch(() => []), discoverApiModels(tokens, fetchImpl, logger)]);
+            const cliModels = discover(tokens[0], cwd).catch((error: unknown) => {
+                // Without the CLI's aliases every versioned row loses its effort levels and badges.
+                logger.warn({ err: error }, "claude models: CLI discovery failed");
+                return [];
+            });
+            const [aliases, versioned] = await Promise.all([cliModels, discoverApiModels(tokens, fetchImpl, logger)]);
             if (versioned !== undefined) {
                 return mergeCatalogs(aliases, versioned);
             }

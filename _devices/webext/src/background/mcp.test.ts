@@ -145,6 +145,27 @@ test("a switch that is off refuses by name, even on a site that is allowed", asy
     expect(result.text).toContain("Take screenshots");
 });
 
+// A stored grant this build cannot parse still holds the owner's choices, and the defaults turn reading and acting on:
+// read as the defaults, a switch the owner turned off would come back on.
+test("a stored grant that no longer parses refuses every switch rather than falling back to the defaults", async () => {
+    install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
+    await chrome.storage.local.set({ scopes: { read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "sometimes" } });
+    expect(await store.scopes()).toEqual({ read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "always" });
+    const result = await call("snapshot");
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain(`"Read the page" is switched off`);
+});
+
+test("a stored pause that is not a boolean holds as paused, and nothing stored is running", async () => {
+    install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
+    expect(await store.paused()).toBe(false);
+    await chrome.storage.local.set({ paused: "yes" });
+    expect(await store.paused()).toBe(true);
+    const result = await call("snapshot");
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("This browser is paused");
+});
+
 test("handing a session over is refused outright while its switch is off", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
     await store.setScopes({ read: "on", act: "on", screenshot: "on", cookies: "off", confirm: "sensitive" });

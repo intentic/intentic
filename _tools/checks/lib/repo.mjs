@@ -2,9 +2,11 @@
 // on a bare checkout (no node_modules, no YAML parser), since checks run before `pnpm install`. Resolves imports by
 // file, not package name, so a moved file fails loudly rather than silently.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { repoRoot } from "../../constants/src/node.mjs";
+import { cannotMeasure } from "./report.mjs";
 
 export const root = repoRoot(import.meta.url);
 
@@ -94,6 +96,19 @@ export const sourceOf = (file, specifier) => {
     return [path.replace(/\.[cm]?js$/, ".ts"), path.replace(/\.[cm]?js$/, ".tsx"), `${path}.ts`].find((candidate) => existsSync(candidate));
 };
 
+// `specifier` resolved from the package at `dir`, or undefined when it is not installed there (a check run before
+// `pnpm install`). Installed and failing to load is a broken install, which no check can measure past.
+export const installedModule = (dir, specifier) => {
+    try {
+        return createRequire(join(dir, "package.json"))(specifier);
+    } catch (error) {
+        if (error.code === "MODULE_NOT_FOUND") {
+            return undefined;
+        }
+        return cannotMeasure(`${specifier} is installed under ${dir} but did not load (${error.message}): the install is broken, so nothing that needs it was read`);
+    }
+};
+
 // Whether this checkout is a linked worktree (git dir differs from common dir): `pnpm build`'s node_modules hardlinking
 // dies EXDEV there. `--path-format=absolute` keeps the comparison valid regardless of cwd.
 export const isLinkedWorktree = () => {
@@ -149,14 +164,21 @@ export const subjectScope = () => {
 // subject just because a caller named it.
 export const subjectFiles = (...patterns) => {
     const scope = subjectScope();
-    return (git("ls-files", "-z", ...patterns) ?? "")
-        .split("\0")
-        .filter((path) => path !== "" && (scope === undefined || scope.has(path)) && existsSync(join(root, path)));
+    const listed = git("ls-files", "-z", ...patterns);
+    // An empty list is a check that read nothing and vouches for everything.
+    if (listed === undefined) {
+        throw new Error(`git ls-files failed in ${root}: a check cannot judge a tree it cannot list`);
+    }
+    return listed.split("\0").filter((path) => path !== "" && (scope === undefined || scope.has(path)) && existsSync(join(root, path)));
 };
 
 // Every path git sees, untracked and not ignored: a land's brand-new package before `git add`. Lets a ghost
 // (all-ignored or empty) be told apart from a directory merely not yet committed.
-export const untrackedFiles = () =>
-    (git("ls-files", "--others", "--exclude-standard", "-z") ?? "")
-        .split("\0")
-        .filter((path) => path !== "");
+export const untrackedFiles = () => {
+    const listed = git("ls-files", "--others", "--exclude-standard", "-z");
+    // An empty list reads a directory of uncommitted work as a ghost, and layout.mjs removes ghosts.
+    if (listed === undefined) {
+        throw new Error(`git ls-files --others failed in ${root}: a check cannot tell new work from a ghost without it`);
+    }
+    return listed.split("\0").filter((path) => path !== "");
+};

@@ -172,6 +172,27 @@ describe("the free trial", () => {
         unstubAllGlobals();
     });
 
+    /* A REFUND THAT DID NOT LAND IS A CHARGE FOR NOTHING: said in the log, while the caller still gets its own answer. */
+    it("logs a refund the database refused, and still answers the unserved turn with its 502", async () => {
+        const { prisma, trialUsage, spent } = fakePrisma();
+        trialUsage.update.mockRejectedValueOnce(new Error(`connection terminated`));
+        (logger.error as ReturnType<typeof jest.fn>).mockClear();
+        stubGlobal(
+            `fetch`,
+            jest.fn(async () => new Response(`{}`, { status: 503 })),
+        );
+
+        const response = await chat(baseConfig, prisma);
+
+        expect(response.status).toBe(502);
+        expect(spent()).toBe(1);
+        expect(logger.error).toHaveBeenCalledWith(
+            { err: expect.any(Error), userId: `user-1`, day: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) },
+            `trial: refunding an unserved message failed; it stays spent`,
+        );
+        unstubAllGlobals();
+    });
+
     it("gives the message back when upstream rejects the model or request", async () => {
         const { prisma, spent } = fakePrisma();
         const fetchFn = jest.fn(async () => new Response(`{"error":{"message":"model not supported"}}`, { status: 404 }));

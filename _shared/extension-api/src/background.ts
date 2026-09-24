@@ -154,7 +154,8 @@ export const sandboxPoll = <T>(options: SandboxPollOptions<T>): SandboxPoll<T> =
 };
 
 // Key → mark map of what the owner has already seen, stored as JSON under `.intentic`. Missing or unparseable reads as
-// nothing acknowledged; a write's `false` return means only that the sandbox scope moved mid-write.
+// nothing acknowledged; a write's `false` return means only that the sandbox scope moved mid-write, and a write over a
+// ledger that could not be read at all (refused, unreachable) rejects rather than dropping every acknowledgement in it.
 export interface SandboxLedger {
     // Everything acknowledged so far. Absent, unparseable or not-an-object all read as nothing.
     read(): Promise<Readonly<Record<string, string>>>;
@@ -168,17 +169,34 @@ const sameEntries = (left: Readonly<Record<string, string>>, right: Readonly<Rec
     Object.keys(left).length === Object.keys(right).length && Object.entries(left).every(([key, mark]) => right[key] === mark);
 
 export const sandboxLedger = (host: () => IntenticApi, path: string): SandboxLedger => {
-    const read = async (): Promise<Readonly<Record<string, string>>> => {
-        const parsed = await host().workspace.readJson<Record<string, unknown>>(path);
-        // Non-string values are dropped, not coerced: a mark is always a string.
-        return Object.fromEntries(Object.entries(parsed ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === `string`));
+    // Non-string values are dropped, not coerced: a mark is always a string.
+    const marksOf = (parsed: unknown): Readonly<Record<string, string>> =>
+        typeof parsed === `object` && parsed !== null && !Array.isArray(parsed)
+            ? Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === `string`))
+            : {};
+
+    const read = async (): Promise<Readonly<Record<string, string>>> => marksOf(await host().workspace.readJson<Record<string, unknown>>(path));
+
+    // Through the contract's own read, which throws for a refused or unreachable read where `readJson` answers absent:
+    // a write computed from that absence would drop every acknowledgement the file really holds.
+    const readToWrite = async (): Promise<Readonly<Record<string, string>>> => {
+        const answer = await host().sandbox.rpc.workspace.file({ path });
+        if (!answer.present) {
+            return {};
+        }
+        try {
+            return marksOf(JSON.parse(answer.content));
+        } catch {
+            // silent-catch: an unparseable ledger holds nothing acknowledged, the contract `read` states.
+            return {};
+        }
     };
 
     // One writer for both mark and replace; the scope guard lives here, not at the call site, since a sandbox switch
     // mid-write would file the acknowledgement into the workspace the owner just left.
     const settle = async (next: (seen: Readonly<Record<string, string>>) => Readonly<Record<string, string>>): Promise<boolean> => {
         const current = sandboxScopeGuard();
-        const seen = await read();
+        const seen = await readToWrite();
         const wanted = next(seen);
         // Already saying it: nothing to write, and the caller's fold stays correct.
         if (sameEntries(seen, wanted)) {

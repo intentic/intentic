@@ -25,7 +25,14 @@ export const daemonStopFindings = async (deps: Pick<Services, "logger">, turn: D
     try {
         // The checks read the tree that would land, as the hook path's Stop does.
         const commits = await syncForChecks(request);
-        const changed = request.hooks.changedPaths === undefined ? [] : await request.hooks.changedPaths().catch((): readonly string[] => []);
+        // Unread, the rules judge only the paths the turn's own tools edited, so a rule scoped to a shell's edits stays quiet.
+        const changed =
+            request.hooks.changedPaths === undefined
+                ? []
+                : await request.hooks.changedPaths().catch((error: unknown): readonly string[] => {
+                      deps.logger.warn({ err: error, conversationId: turn.conversationId }, "turn-ending checks: the branch's changed paths could not be read");
+                      return [];
+                  });
         const rules = request.policy.turnEndingRules ?? [];
         const paths = [...new Set([...turn.edited.map((path) => workspaceRelative(path, turn.cwd)), ...changed])];
         const findings = await commandRuleFindings(

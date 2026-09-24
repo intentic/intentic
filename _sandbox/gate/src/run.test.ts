@@ -114,6 +114,12 @@ test("the card reader takes a schema-valid summary and maps every status onto an
     expect(settledOf({ status: "ready" })).toBe("completed");
     expect(settledOf({ status: "error" })).toBe("failed");
     expect(settledOf({ status: "interrupted" })).toBe("failed");
+    expect(settledOf({ status: "landing" })).toBeUndefined();
+    expect(settledOf({ status: "landed" })).toBe("completed");
+    expect(settledOf({ status: "conflict" })).toBe("failed");
+    expect(settledOf({ status: "stopped" })).toBe("failed");
+    // A status this gate was never taught is a newer daemon, and it must not read as a pass.
+    expect(() => settledOf({ status: "reviewing" })).toThrow(`the agent card has a status this gate does not know: "reviewing"`);
     expect(readCard({ nope: true })).toBeUndefined();
     // The parked summary names the card a person has to open.
     expect(summaryOfCard(card as NonNullable<typeof card>, "parked")).toContain("a question");
@@ -129,7 +135,7 @@ test("the exit is 0 for completed, 1 for parked or failed, 2 for a deadline that
 });
 
 // A scripted daemon: the calls the exchange makes, in order, with the answers a real one would give.
-const scripted = (answers: { readonly cards: readonly object[]; readonly land?: object; readonly startStatus?: number }) => {
+const scripted = (answers: { readonly cards: readonly object[]; readonly land?: object; readonly startStatus?: number; readonly receipt?: object }) => {
     const calls: { url: string; method: string; headers: Record<string, string>; body?: string }[] = [];
     let polls = 0;
     let clock = 0;
@@ -142,7 +148,7 @@ const scripted = (answers: { readonly cards: readonly object[]; readonly land?: 
                     ok: status < 400,
                     status,
                     text: async () =>
-                        status < 400 ? JSON.stringify({ run: "r1" }) : JSON.stringify({ error: "control token not valid for this route" }),
+                        status < 400 ? JSON.stringify(answers.receipt ?? { delivered: "started", run: "r1" }) : JSON.stringify({ error: "control token not valid for this route" }),
                 };
             }
             if (url.endsWith("/land")) {
@@ -184,6 +190,28 @@ test("a land is asked for after completion and its answer is the outcome's; a re
     await expect(runExchange({ ...call, land: true }, refused.deps)).rejects.toThrow(/land scope/);
 });
 
+test("a land the daemon refused fails the step, and one the owner's rules hold stays completed and not landed", async () => {
+    const refused = scripted({
+        cards: [{ status: "ready", branch: "agent/ci-1-1" }],
+        land: { landed: false, changed: false, conflicts: [{ repo: "intent", paths: [], clean: 0 }] },
+    });
+    expect(await runExchange({ ...call, land: true }, refused.deps)).toEqual({
+        status: "failed",
+        conversationId: "ci-1-1",
+        branch: "agent/ci-1-1",
+        landed: false,
+        summary: "The turn completed, but its land was refused in intent: open the conversation to see what would not apply.",
+    });
+    const held = scripted({ cards: [{ status: "ready", branch: "agent/ci-1-1", title: "Fixed it" }], land: { landed: false, changed: false, held: true } });
+    expect(await runExchange({ ...call, land: true }, held.deps)).toEqual({
+        status: "completed",
+        conversationId: "ci-1-1",
+        branch: "agent/ci-1-1",
+        landed: false,
+        summary: "Fixed it",
+    });
+});
+
 test("a parked card and a failed card are endings; a refused start is the wiring's failure", async () => {
     const parked = scripted({ cards: [{ status: "awaiting", attention: { plan: true } }] });
     expect(await runExchange(call, parked.deps)).toMatchObject({ status: "parked", summary: expect.stringContaining("a plan") });
@@ -191,6 +219,14 @@ test("a parked card and a failed card are endings; a refused start is the wiring
     expect(await runExchange(call, failed.deps)).toMatchObject({ status: "failed", summary: "the plan is spent" });
     const refused = scripted({ cards: [], startStatus: 403 });
     await expect(runExchange(call, refused.deps)).rejects.toBeInstanceOf(RunExchangeError);
+});
+
+test("a prompt that did not start its own turn is refused rather than reported with another turn's ending", async () => {
+    const queued = scripted({ cards: [{ status: "ready", title: "Someone else's work" }], receipt: { delivered: "queued" } });
+    await expect(runExchange(call, queued.deps)).rejects.toThrow(
+        "conversation ci-1-1 already has a turn under way (this prompt was queued), so its ending would not be this prompt's: give the step a conversation of its own",
+    );
+    expect(queued.calls).toHaveLength(1);
 });
 
 test("the deadline ends the wait with a timeout, and the agent is left working", async () => {

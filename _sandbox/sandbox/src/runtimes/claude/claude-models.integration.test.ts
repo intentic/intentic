@@ -268,11 +268,46 @@ test("a refused REST read is logged with its status, never swallowed", async () 
     const warned: unknown[] = [];
     const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
 
-    await createClaudeCatalog(storeOf("forbidden-org"), noContainerToken, dir, join(dir, "models.json"), discoveryFails, apiServing("other", []), {
+    await createClaudeCatalog(storeOf("forbidden-org"), noContainerToken, dir, join(dir, "models.json"), async () => [], apiServing("other", []), {
         warn: (payload: unknown) => {
             warned.push(payload);
         },
     }).models();
 
     expect(warned).toEqual([expect.objectContaining({ status: 403 })]);
+});
+
+test("a failed CLI discovery is logged with its error, since every versioned row loses its efforts without it", async () => {
+    const warned: unknown[] = [];
+    const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+
+    await createClaudeCatalog(emptyStore, containerToken, dir, join(dir, "models.json"), discoveryFails, apiReturns([{ id: "claude-opus-5", display_name: "Claude Opus 5" }]), {
+        warn: (payload: unknown) => {
+            warned.push(payload);
+        },
+    }).models();
+
+    expect(warned).toEqual([{ err: new Error("claude code cli unavailable") }]);
+});
+
+test("an unreadable 200 from REST descends the ladder instead of filing the CLI's rows as the whole catalog", async () => {
+    const fable: Model = { id: "claude-fable-5-1", label: "Fable" };
+    const recorded: Model[] = [
+        { id: "claude-opus-5", label: "Claude Opus 5" },
+        { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
+    ];
+    const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+    const persistPath = join(dir, "models.json");
+    await writeFile(persistPath, JSON.stringify(recorded));
+    const warned: unknown[] = [];
+    const captivePortal = (async () => new Response("<html>sign in to the wifi</html>", { status: 200 })) as unknown as typeof fetch;
+
+    const catalog = await createClaudeCatalog(emptyStore, containerToken, dir, persistPath, async () => [fable], captivePortal, {
+        warn: (payload: unknown) => {
+            warned.push(payload);
+        },
+    }).models();
+
+    expect(catalog.models).toEqual([fable, ...recorded]);
+    expect(warned).toEqual([expect.objectContaining({ status: 200 })]);
 });

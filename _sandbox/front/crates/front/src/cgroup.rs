@@ -47,6 +47,7 @@ pub async fn govern(node: watch::Receiver<Option<u32>>) {
     let leaves = leaves();
     let front = std::process::id();
     let mut reniced: HashSet<u32> = HashSet::new();
+    let mut refused: HashSet<u32> = HashSet::new();
     let mut tick = tokio::time::interval(POLL);
     loop {
         tick.tick().await;
@@ -58,6 +59,7 @@ pub async fn govern(node: watch::Receiver<Option<u32>>) {
                     .into_iter()
                     .flatten()
                     .collect::<Vec<_>>(),
+                &mut refused,
             );
         }
         if let Some(node) = node {
@@ -66,13 +68,20 @@ pub async fn govern(node: watch::Receiver<Option<u32>>) {
     }
 }
 
-// One pid per write, as cgroup.procs takes them; a process that exits mid-move is no loss.
-fn move_strays(leaves: &Leaves, keep: &[u32]) {
+// One pid per write, as cgroup.procs takes them; a process that exits mid-move (ESRCH) is no loss. Any other refusal
+// leaves it in the daemon's leaf every tick after, so it is said once per pid rather than retried in silence.
+fn move_strays(leaves: &Leaves, keep: &[u32], refused: &mut HashSet<u32>) {
     let Ok(procs) = std::fs::read_to_string(&leaves.daemon) else {
         return;
     };
-    for pid in strays(&procs, keep) {
-        let _ = std::fs::write(&leaves.workload, pid.to_string());
+    let found = strays(&procs, keep);
+    refused.retain(|pid| found.contains(pid));
+    for pid in found {
+        if let Err(error) = std::fs::write(&leaves.workload, pid.to_string()) {
+            if error.raw_os_error() != Some(libc::ESRCH) && refused.insert(pid) {
+                tracing::warn!(%error, pid, "a stray process stays in the daemon's cgroup: moving it was refused");
+            }
+        }
     }
 }
 

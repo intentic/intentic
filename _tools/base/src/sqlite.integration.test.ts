@@ -35,6 +35,19 @@ test("a throw inside a transaction rolls back, leaving no half-written rows", ()
     db.close();
 });
 
+test("a transaction SQLite already ended throws its own error, not the rollback's", () => {
+    const db = wrapDb(openTemp());
+    db.run("CREATE TABLE u (n INTEGER PRIMARY KEY)");
+    expect(() =>
+        db.transaction(() => {
+            db.run("INSERT INTO u (n) VALUES (?)", 1);
+            db.run("INSERT OR ROLLBACK INTO u (n) VALUES (?)", 1);
+        }),
+    ).toThrow("UNIQUE constraint failed: u.n");
+    expect(db.all("SELECT n FROM u")).toEqual([]);
+    db.close();
+});
+
 test("a fresh database is stamped; the same version reopens; a different one is refused", () => {
     const db = wrapDb(openTemp());
     guardSchemaVersion(db, "2", "iq recall");

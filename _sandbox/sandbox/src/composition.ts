@@ -929,7 +929,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the ACP connection pool implements ACP terminal/* over the same runner, so both share one instance.
     const terminalRun = createTerminalRunner();
     const acpConnections = createAcpConnections(logger, terminalRun);
-    const processes = createManagedProcesses();
+    const processes = createManagedProcesses(undefined, { logger });
     const serviceProcesses = createServiceProcesses(join(config.historyRoot, "logs", "services"), logger);
     const dependencies = createDependencyCoordinator({
         workspace,
@@ -1218,7 +1218,14 @@ export const createServices = (config: Config, logger: Logger): Services => {
         portForwards: createPortForwards(portSlotsFromToken(config.connectToken)),
         // Pane listing rides with the scan rather than behind it: both are cheap, and an unowned port is unactionable.
         scanPorts: async () => {
-            const [listeners, panes] = await Promise.all([scanListeningPorts(), panePids()]);
+            const [listeners, panes] = await Promise.all([
+                scanListeningPorts(),
+                // The ports list never fails for want of owners: unknown panes leave each port unowned, said in the log.
+                panePids().catch((error: unknown) => {
+                    logger.warn({ err: error }, "ports: terminal panes could not be listed, ports show no owning session");
+                    return new Map<number, string>();
+                }),
+            ]);
             return withOwningSessions(listeners, panes);
         },
         terminalRun,

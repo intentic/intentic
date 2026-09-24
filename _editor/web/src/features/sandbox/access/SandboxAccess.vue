@@ -101,6 +101,9 @@ const inviteRole = ref<GrantedRole>(`collaborator`);
 const inviteAreas = ref<string[] | undefined>(undefined);
 // The daemon's own roster, the one copy that knows a fence; the platform's records above carry the tier only.
 const grants = ref<readonly AccessGrant[]>([]);
+// Why that roster could not be read. While set no row's fence is known, and a grant replaces the whole row, so a
+// re-grade sent now would drop the areas it holds and widen what the member sees: no grant is rewritten until it clears.
+const grantsUnread = ref<NoticeModel>();
 // Undefined, not an empty list: a row with no areas reaches the whole workspace, which is what every grant means
 // until somebody narrows it.
 const areasOf = (address: string): readonly string[] | undefined => grants.value.find((grant) => grant.email === address.toLowerCase())?.areas;
@@ -195,13 +198,21 @@ const load = async (): Promise<void> => {
     clearNotice();
     try {
         // Both rosters, since only the daemon's says which cards a guest holds; a daemon that isn't answering leaves the
-        // chips blank rather than the list.
+        // list up and says the fences are unknown, rather than drawing every row as unfenced.
         const [invited, granted] = await Promise.all([
             apiClient.invite.list({ sandboxId: id }),
-            sandboxJson<{ members: AccessGrant[] }>(`/members`).catch((): { members: AccessGrant[] } => ({ members: [] })),
+            sandboxJson<{ members: AccessGrant[] }>(`/members`).catch((err: unknown): undefined => {
+                grantsUnread.value = noticeFrom(err, `Couldn't read which areas each member holds, so roles and areas can't be changed until the sandbox answers.`, {
+                    tone: `warning`,
+                });
+                return undefined;
+            }),
         ]);
         members.value = invited.members;
-        grants.value = granted.members;
+        if (granted !== undefined) {
+            grants.value = granted.members;
+            grantsUnread.value = undefined;
+        }
     } catch (err) {
         notice.value = noticeFrom(err, `Couldn't load the access list.`);
     } finally {
@@ -260,6 +271,8 @@ const invite = async (): Promise<void> => {
             grants.value = (
                 await sandboxJson<{ members: AccessGrant[] }>(`/members`, jsonBody(`POST`, grantBody(value, inviteRole.value, inviteAreas.value)))
             ).members;
+            // The answer is the whole roster, so every fence is known again.
+            grantsUnread.value = undefined;
         } catch (err) {
             notice.value = noticeFrom(err, `Couldn't grant access on the sandbox: is it online?`);
             return;
@@ -333,6 +346,10 @@ const revokeSessions = async (): Promise<void> => {
 const setRole = async (target: string, role: GrantedRole, areas: readonly string[] | undefined = areasOf(target)): Promise<boolean> => {
     const id = sandbox.activeSandboxId.value;
     if (id === undefined || busy.value || !sendable(role, areas)) {
+        return false;
+    }
+    if (grantsUnread.value !== undefined) {
+        notice.value = grantsUnread.value;
         return false;
     }
     busy.value = true;
@@ -455,7 +472,7 @@ const revoke = async (target: string): Promise<void> => {
                                 :model-value="rowRole(member)"
                                 :options="ROLE_OPTIONS"
                                 variant="ghost"
-                                :disabled="busy"
+                                :disabled="busy || grantsUnread !== undefined"
                                 class="shrink-0"
                                 :aria-label="t(`sandbox.sandboxAccess.role`, { email: member.email })"
                                 :header="t(`sandbox.sandboxAccess.role`, { email: member.email })"
@@ -468,7 +485,7 @@ const revoke = async (target: string): Promise<void> => {
                                 size="small"
                                 severity="secondary"
                                 :text="true"
-                                :disabled="busy"
+                                :disabled="busy || grantsUnread !== undefined"
                                 @click="fenceOpen = fenceOpen === member.email ? undefined : member.email"
                             />
                             <Button
@@ -508,6 +525,7 @@ const revoke = async (target: string): Promise<void> => {
                 <!-- Invite affordance as the group's footer row (mirrors the Secrets \"add\" pattern). -->
                 <RowNote variant="block">
                     <div class="flex flex-col gap-2">
+                        <Notice v-if="grantsUnread" :of="grantsUnread" />
                         <!-- Links use the slot so long values can wrap. -->
                         <Notice v-if="notice" :of="notice">
                             <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>

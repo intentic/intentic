@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
@@ -169,4 +169,16 @@ test("the vault reports every value it holds: what the output filter masks by va
     expect((await vault.values()).toSorted()).toEqual(["K7mNp2qR8tVw3xYz5aBc", "Xk4!mQ2pRt7@wZ9aBc1_", "conf-body-aaaa"]);
     await vault.remove("vpnbox");
     expect(await vault.values()).toEqual(["Xk4!mQ2pRt7@wZ9aBc1_"]);
+});
+
+// An unreadable vault reads as empty, so a save on top of it would write the other connections' credentials out of
+// existence and, for an unrehydrated re-save, vault the marker itself as the value.
+test("a vault that cannot be read refuses every save and is left exactly as it was", async () => {
+    const { store, vaultPath } = vaulted();
+    await store.upsert(mcp("linear", "mcp_tok_9f2b1c7e4a0d"));
+    const garbled = `{"linear": {"token": "mcp_tok_9f2b1c7e4a0d"`;
+    await writeFile(vaultPath, garbled, "utf8");
+    await expect(store.upsert(mcp("sentry", "mcp_tok_0011223344ff"))).rejects.toThrow("capability-secrets.json could not be read by this build");
+    await expect(store.upsert(mcp("linear", VAULTED))).rejects.toThrow("capability-secrets.json could not be read by this build");
+    expect(await onDisk(vaultPath)).toBe(garbled);
 });

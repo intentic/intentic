@@ -130,6 +130,23 @@ test("a missing output file reads as not-done rather than as done, the safe dire
     expect(settled?.iterations[0]?.detail).toContain("No output file");
 });
 
+test("an output file that is not valid JSON is named as such, never as a file the iteration did not write", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    await mkdir(join(root, LOOP_DIR, "c5"), { recursive: true });
+    const turn: TurnStarter["stream"] = async function* torn(input: AgentTurn) {
+        const n = /iteration-(\d+)\.json/.exec(input.prompt)?.[1] ?? "1";
+        await writeFile(join(root, LOOP_DIR, "c5", `iteration-${n}.json`), `{"done": true, "reason": "finished"`);
+        yield { kind: "done" } as AgentEvent;
+    };
+    const record = await services.loops.start({ ...baseLoop("c5"), maxIterations: 1 }, 1);
+    await runLoop(drivenBy(services, turn), record);
+
+    const settled = await services.loops.get("c5");
+    expect(settled?.state).toBe("exhausted");
+    expect(settled?.iterations[0]?.detail).toContain("The output file iteration-1.json is not valid JSON");
+});
+
 test("consecutive iterations that change nothing trip the stall limit before the iteration ceiling", async () => {
     const root = tempRoot();
     const services = fakeServices(root);

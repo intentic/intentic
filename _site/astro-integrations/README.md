@@ -31,4 +31,5 @@ and versioned apart from the pages they process.
   make every page look edited today.
 - **Every figure here is measured, and every one fails to `null`.** A shallow clone, a build with no network, an
   API that moved: each returns nothing rather than a guess, and the page renders its sentence without the
-  number. A trust section showing a wrong figure costs more than one showing none.
+  number. A trust section showing a wrong figure costs more than one showing none. The network readers say so in
+  the build log when they fall to `null`, so a figure that went missing on every deploy is findable.

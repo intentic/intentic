@@ -1,5 +1,6 @@
 import type { LimitResetStatus } from "@intentic/sandbox-contract";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 
 // Pins what the strip may ask and how often: once per account, never on a timer, and a failure isn't cached as an
 // answer. The daemon's probe rate-limits reads hard enough to cost neighboring meters their freshness.
@@ -83,6 +84,15 @@ it(`retires the offer on an answer about the account, and keeps it when the clai
     claims.mockRejectedValue(new Error(`unreachable`));
     expect(await claimLimitReset(account)).toMatchObject({ result: `error` });
     expect(limitResetFor(account)).toEqual(AVAILABLE);
+});
+
+it(`hands back the daemon's own words for a refused claim, and "didn't answer" only when nothing answered`, async () => {
+    const account = fresh();
+    claims.mockRejectedValueOnce(new SandboxHttpError(500, `No account named ${account} on this sandbox.`));
+    expect(await claimLimitReset(account)).toEqual({ result: `error`, detail: `No account named ${account} on this sandbox.` });
+
+    claims.mockRejectedValueOnce(new TypeError(`Failed to fetch`));
+    expect(await claimLimitReset(account)).toEqual({ result: `error`, detail: `Your sandbox didn't answer.` });
 });
 
 it(`says which kind of nothing happened, and says nothing at all about a reset that worked`, () => {

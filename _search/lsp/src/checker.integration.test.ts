@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkProject, findTsconfig } from "./checker.js";
+import { type CheckPlacement, checkProject, findTsconfig } from "./checker.js";
 
 // Real compiler runs against throwaway fixture projects: the checker's whole job is what it relays and what
 // it refuses, and only the real compiler can vouch for that.
@@ -139,4 +139,42 @@ test("a test file with no tsconfig.test.json beside its config is checked agains
     const testFile = join(dir, "a.test.ts");
     writeFileSync(testFile, "export {};\n");
     expect(findTsconfig(testFile)).toBe(join(dir, "tsconfig.json"));
+});
+
+// `placement` is how a check reaches another namespace; here it swaps the compiler for a process failing the named way.
+const standIn = (script: string): CheckPlacement => ({ enter: () => ({ command: "/bin/sh", args: ["-c", script] }) });
+
+describe("a checker run that is no verdict is refused, never read as a clean file", () => {
+    const brokenFile = (): { tsconfig: string; file: string } => {
+        const dir = fixture();
+        writeFileSync(join(dir, "tsconfig.json"), TSCONFIG);
+        const file = join(dir, "a.ts");
+        writeFileSync(file, 'export const n: number = "nope";\n');
+        return { tsconfig: join(dir, "tsconfig.json"), file };
+    };
+
+    test("a crash", async () => {
+        const { tsconfig, file } = brokenFile();
+        const report = await checkProject(tsconfig, [file], standIn("echo 'panic: runtime error: index out of range' >&2; exit 2"));
+        expect(report).toEqual({
+            diagnostics: [],
+            unavailable: [{ file, reason: "the checker exited with code 2: panic: runtime error: index out of range" }],
+        });
+    });
+
+    test("a kill that was not this checker's own timeout", async () => {
+        const { tsconfig, file } = brokenFile();
+        const report = await checkProject(tsconfig, [file], standIn("kill -KILL $$"));
+        expect(report).toEqual({ diagnostics: [], unavailable: [{ file, reason: "the checker was killed by SIGKILL" }] });
+    });
+
+    test("errors announced by the exit code in a form the reader does not parse", async () => {
+        const { tsconfig, file } = brokenFile();
+        // The --pretty layout, standing in for whatever shape a compiler release moves the machine format to.
+        const report = await checkProject(tsconfig, [file], standIn("echo 'a.ts:1:14 - error TS2322: not this shape'; exit 1"));
+        expect(report).toEqual({
+            diagnostics: [],
+            unavailable: [{ file, reason: "the checker reported errors in a form this reader does not parse: a.ts:1:14 - error TS2322: not this shape" }],
+        });
+    });
 });

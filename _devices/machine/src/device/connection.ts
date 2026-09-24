@@ -1,4 +1,5 @@
 import { createBackoff } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { HOST_HEARTBEAT_MS, hostConnectUrl, type DeviceScopes } from "@intentic/sandbox-contract";
 import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
@@ -49,7 +50,9 @@ export const connect = (
                 scopes = next;
                 // The persistence for this link's cache alone, written by the connection, which owns the link's entry
                 // in the file. Unawaited: the live grant above already enforces.
-                void rememberScopes(config.sandboxUrl, next);
+                void rememberScopes(config.sandboxUrl, next).catch((error: unknown) =>
+                    linkLog(`could not save the permissions it pushed (${errorMessage(error)}); this connection enforces them regardless.`),
+                );
             },
             log,
         }),

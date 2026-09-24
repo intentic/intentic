@@ -1,5 +1,4 @@
 import { type SafetyLogEntry, SafetyLogEntrySchema } from "@intentic/sandbox-contract";
-import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
 // What the safety policy actually decided, newest first: an owner could see a rule was set to "ask me" but not how
@@ -31,7 +30,19 @@ export const fileSafetyLog = (path: string): SafetyLog => {
     const file = jsonFile<SafetyLogEntry[]>(path, {
         // A single unreadable entry drops itself, not the whole log: one row from a newer build shouldn't cost a week
         // of evidence.
-        parse: (raw) => z.array(SafetyLogEntrySchema).catch([]).parse(raw),
+        parse: (raw, report) => {
+            if (!Array.isArray(raw)) {
+                return undefined;
+            }
+            return raw.flatMap((candidate: unknown, index) => {
+                const entry = SafetyLogEntrySchema.safeParse(candidate);
+                if (entry.success) {
+                    return [entry.data];
+                }
+                report({ kind: "invalidEntry", detail: `entry ${index + 1} is not a verdict this build can read` });
+                return [];
+            });
+        },
         fallback: () => [],
     });
     return {

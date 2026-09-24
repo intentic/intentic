@@ -30,12 +30,14 @@ export async function latestRelease() {
             signal: AbortSignal.timeout(TIMEOUT_MS),
         });
         if (!response.ok) {
+            console.warn(`[latest-release] ${API} answered ${response.status}: the download page ships without its version line`);
             return cached;
         }
         const body = await response.json();
         // `tag_name` is `v1.15.1` (the .releaserc.json format); anything else means the tag scheme moved.
         const version = /^v(?<version>\d+\.\d+\.\d+.*)$/u.exec(body?.tag_name ?? ``)?.groups?.version;
         if (version === undefined || typeof body?.published_at !== `string`) {
+            console.warn(`[latest-release] ${API} answered a release with no v<semver> tag or no date: the download page ships without its version line`);
             return cached;
         }
         cached = {
@@ -44,7 +46,8 @@ export async function latestRelease() {
             date: body.published_at.split(`T`)[0],
             notes: body.html_url ?? `https://github.com/intentic/intentic/releases/latest`,
         };
-    } catch {
+    } catch (error) {
+        console.warn(`[latest-release] ${API} could not be read (${String(error)}): the download page ships without its version line`);
     }
     return cached;
 }

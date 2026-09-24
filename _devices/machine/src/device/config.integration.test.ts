@@ -100,9 +100,24 @@ test("a config file that cannot be parsed is a fault, not an empty machine", asy
     await writeFile(config.configPath, '{"links": [ this is not json');
 
     await expect(config.readLinks()).rejects.toThrow(SyntaxError);
-    // Best-effort by contract, so it stays quiet — but quietly writing `{links: []}` here is the whole bug.
-    await config.rememberScopes("https://one.example", scopes("on"));
+    // It rejects for the connection to log, and writing `{links: []}` here instead is the whole bug.
+    await expect(config.rememberScopes("https://one.example", scopes("on"))).rejects.toThrow(SyntaxError);
     expect(await readFile(config.configPath, "utf8")).toBe('{"links": [ this is not json');
+
+    await writeFile(config.configPath, held);
+    expect((await config.readLinks()).map((entry) => entry.sandboxUrl)).toEqual(["https://one.example"]);
+});
+
+// Valid JSON of the wrong shape says nothing about which sandboxes are linked, so it may not say "none" either: that
+// answer retires this machine's login entry, and every writer would persist it over whatever the file did hold.
+test("a config file of another shape is a fault, not an empty machine", async () => {
+    const held = await readFile(config.configPath, "utf8");
+    await writeFile(config.configPath, '{"link": {"sandboxUrl": "https://one.example"}}');
+
+    await expect(config.readLinks()).rejects.toThrow(`${config.configPath} has no "links" list`);
+    await expect(config.removeLinks("https://one.example")).rejects.toThrow(SyntaxError);
+    await expect(config.rememberScopes("https://one.example", scopes("on"))).rejects.toThrow(SyntaxError);
+    expect(await readFile(config.configPath, "utf8")).toBe('{"link": {"sandboxUrl": "https://one.example"}}');
 
     await writeFile(config.configPath, held);
     expect((await config.readLinks()).map((entry) => entry.sandboxUrl)).toEqual(["https://one.example"]);

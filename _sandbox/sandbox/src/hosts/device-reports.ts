@@ -109,13 +109,13 @@ export const callTool = async (
 const DeviceSandboxRowsSchema = z.array(DeviceSandboxSchema);
 
 // Containers come only through an approved host capability, never the sync agent. Reads the machine's own
-// list_sandboxes tool; a refusal or too-old agent reads as no sandboxes.
-export const sandboxesFromTool = (text: string, refused: boolean): DeviceSandbox[] => {
+// list_sandboxes tool; a refusal, a too-old agent or an answer this build cannot read is no reading, never "none there".
+export const sandboxesFromTool = (text: string, refused: boolean): DeviceSandbox[] | undefined => {
     if (refused) {
-        return [];
+        return undefined;
     }
     const rows = DeviceSandboxRowsSchema.safeParse(safeJson(text.trim()));
-    return rows.success ? rows.data : [];
+    return rows.success ? rows.data : undefined;
 };
 
 // FORBIDDEN is the "Run commands" switch, any other refusal an agent without the call; a transport failure throws.
@@ -147,7 +147,8 @@ const pull = async (services: Services, id: string): Promise<PullResult> => {
     ]);
     // Absent, not empty, when the machine wouldn't answer: "none there" is a reading, and this isn't one.
     // Report's agent block is left as stated; version rides the row (agentVersion) instead, not merged here.
-    return { ...described, ...(fleet.refused ? {} : { sandboxes: sandboxesFromTool(fleet.text, false) }) };
+    const sandboxes = sandboxesFromTool(fleet.text, fleet.refused);
+    return { ...described, ...(sandboxes === undefined ? {} : { sandboxes }) };
 };
 
 const gapOf = (result: PullResult): DeviceGap | undefined => ("gap" in result ? result.gap : undefined);
@@ -389,9 +390,8 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
                         .then(() => settingsDefinition(services))
                         .then((settings) => (Object.keys(settings.settings).length === 0 ? undefined : emitDefinitionToml(settings)))
                         .catch(() => undefined);
-                    const overlay = await Promise.resolve()
-                        .then(() => services.files.read(approvedPath(services)))
-                        .catch(() => undefined);
+                    // Absent is no overlay; a read that failed throws, or the runner would be built without it.
+                    const overlay = await services.files.read(approvedPath(services));
                     return {
                         ...input,
                         parentUrl,

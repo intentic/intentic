@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { extensionRuntimeDir, type ListenerPairing } from "@intentic/sandbox-contract";
 import { type GatewayHooks, GatewayRefusal, runConnectorGateway } from "@intentic/connector-runtime";
 import {
@@ -121,7 +122,13 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                     if (connection === undefined) {
                         return { status: 503, body: "WhatsApp is not connected, pair the device from the capability card first." };
                     }
-                    const chats = await connection.listChats();
+                    let chats: Awaited<ReturnType<WhatsAppConnection["listChats"]>>;
+                    try {
+                        chats = await connection.listChats();
+                    } catch (error) {
+                        ctx.log.warn({ err: error }, "whatsapp chat listing failed");
+                        return { status: 502, body: `WhatsApp would not list this number's groups: ${errorMessage(error)}` };
+                    }
                     return {
                         body:
                             chats.length === 0

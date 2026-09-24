@@ -121,7 +121,12 @@ export const useCapabilityPairing = ({ hosts, browsers, contributionOf, refetch,
         openPairing: (entry: CapabilityCatalogEntry, instance: CapabilitySummary): void =>
             entry.kind === `webext` ? openBrowserConnect(instance) : openConnect(instance),
         removePairedAccess: async (entry: CapabilityCatalogEntry, id: string): Promise<void> => {
-            await (entry.kind === `webext` ? browsers.revoke(id) : hosts.revoke(id));
+            try {
+                await (entry.kind === `webext` ? browsers.revoke(id) : hosts.revoke(id));
+            } catch (caught) {
+                // A refused revoke leaves the access in place; the row must not read as removed.
+                error.value = noticeFrom(caught, `Access could not be removed.`);
+            }
             void refetch();
         },
         onBrowserExtConnected: (): void => {

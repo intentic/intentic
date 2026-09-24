@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { softwareAuthenticator } from "../../harness/passkey-authenticator.testing.js";
@@ -383,5 +383,17 @@ describe("the file store", () => {
         await reopened.setRecovery([]);
         expect(await filePasskeys(path).required()).toBe(false);
         expect(await filePasskeys(path).recovery()).toEqual([]);
+    });
+
+    // The file holds the owner's require-a-passkey switch and recovery hashes: a fresh one written over what could not be
+    // read would switch the requirement off for good.
+    test("a file that cannot be read refuses every write and is left exactly as it was", async () => {
+        const path = await storePath();
+        const garbled = `{"required": true, "credentials": [], "recovery": [{"hash": "ab"`;
+        await writeFile(path, garbled, "utf8");
+        const store = filePasskeys(path);
+        await expect(store.setRequired(true)).rejects.toThrow("passkeys.json could not be read by this build");
+        await expect(store.setRecovery([])).rejects.toThrow("passkeys.json could not be read by this build");
+        expect(await readFile(path, "utf8")).toBe(garbled);
     });
 });

@@ -3,10 +3,12 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import type { Logger } from "pino";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { SHELL } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
 import { PANEL_SESSION_PREFIX } from "../terminal/terminal-session.js";
+import { isNoTmuxServer } from "../terminal/tmux-server.js";
 import { freePort } from "./free-port.js";
 
 const execFileAsync = promisify(execFile);
@@ -38,7 +40,7 @@ export const panelKeyOf = (session: string): string | undefined =>
     session.startsWith(PANEL_SESSION_PREFIX) ? session.slice(PANEL_SESSION_PREFIX.length) : undefined;
 
 // The tmux side of the manager, injectable so tests need no tmux binary. `states` reports every pane's foreground
-// command in one call; absence means dead.
+// command in one call; absence means dead, so a listing that failed throws rather than answering empty.
 export interface ProcessRunner {
     readonly launch: (session: string, spec: ProcessSpec & { port: number }) => Promise<void>;
     readonly kill: (session: string) => void | Promise<void>;
@@ -51,6 +53,7 @@ const POLL_MS = 2000;
 export interface ManagedProcessesOptions {
     // Injectable in tests; production uses the image zsh's /run/intentic/shell watcher.
     readonly onPromptWatch?: (onSignal: () => void) => () => void;
+    readonly logger?: Pick<Logger, "warn">;
 }
 
 /* THE ENVIRONMENT A MANAGED COMMAND IS TYPED INTO, as one pure function so the switches below can be asserted. */
@@ -98,16 +101,17 @@ const defaultRunner: ProcessRunner = {
     // destroys the session, reporting as absence; no tmux server means no sessions.
     states: async () => {
         const states = new Map<string, string>();
-        try {
-            const { stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", "#{session_name}\t#{pane_current_command}"]);
-            for (const line of stdout.split("\n")) {
-                const [name, command] = line.split("\t");
-                if (name !== undefined && name !== "" && command !== undefined) {
-                    states.set(name, command);
-                }
+        const listed = await execFileAsync("tmux", ["list-panes", "-a", "-F", "#{session_name}\t#{pane_current_command}"]).catch((error: unknown) => {
+            if (isNoTmuxServer(error)) {
+                return undefined;
             }
-        } catch {
-            // no tmux server ⇒ nothing running
+            throw error;
+        });
+        for (const line of listed?.stdout.split("\n") ?? []) {
+            const [name, command] = line.split("\t");
+            if (name !== undefined && name !== "" && command !== undefined) {
+                states.set(name, command);
+            }
         }
         return states;
     },
@@ -200,9 +204,13 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
         unwatchPrompts = undefined;
     };
 
+    // A sweep that could not list the panes changes nothing: untracking on it would report every live run as finished.
+    const sweepLogged = (fromPrompt: boolean): void =>
+        void sweep(fromPrompt).catch((error: unknown) => options.logger?.warn({ err: error }, "managed processes: tmux panes could not be listed"));
+
     const ensureWatching = (): void => {
-        timer ??= setInterval(() => void sweep(false), POLL_MS);
-        unwatchPrompts ??= watchPrompts(() => void sweep(true));
+        timer ??= setInterval(() => sweepLogged(false), POLL_MS);
+        unwatchPrompts ??= watchPrompts(() => sweepLogged(true));
     };
 
     const sweep = async (fromPrompt = false): Promise<void> => {

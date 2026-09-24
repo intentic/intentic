@@ -1,5 +1,6 @@
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // One text file, read whole and written whole: the `jsonFile` guarantees for content that isn't JSON (`.env`).
 // - atomicity: writes go to a sibling temp file and rename over the target, so a reader never sees a half-written file
@@ -59,13 +60,8 @@ export const writeTextFile = async (path: string, content: string, mode?: number
 };
 
 export const textFile = (path: string, mode?: number): TextFile => {
-    const read = async (): Promise<string> => {
-        try {
-            return await readFile(path, "utf8");
-        } catch {
-            return "";
-        }
-    };
+    // Only absence reads as empty: a file that exists but cannot be read would otherwise be replaced by `change("")`.
+    const read = async (): Promise<string> => (await readFile(path, "utf8").catch(undefinedIfMissing)) ?? "";
     return {
         read,
         update: (change) =>

@@ -49,3 +49,16 @@ test("a declaration that is not even JSON is the same answer, not a crash", asyn
     expect(declaration?.checks).toEqual([]);
     expect(declaration?.error).toEqual(expect.any(String));
 });
+
+test("a declaration that exists but cannot be read is that repository's error row, and the others still read", async () => {
+    const root = setup();
+    mkdirSync(join(root, "intentic", ".git"), { recursive: true });
+    // A directory where the file belongs: readFile fails with EISDIR, which is neither "declares nothing" nor JSON.
+    mkdirSync(join(root, "intentic", REPO_CHECKS_FILE), { recursive: true });
+    declare(root, "root", JSON.stringify({ checks: [{ when: "turn", run: "pnpm lint" }] }));
+    const found = await declaredRepoChecks(root);
+    expect(found.map(({ repo, checks, error }) => ({ repo, checks: checks.length, error }))).toEqual([
+        { repo: "root", checks: 1, error: undefined },
+        { repo: "intentic", checks: 0, error: "the file could not be read (EISDIR)" },
+    ]);
+});

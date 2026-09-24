@@ -1,4 +1,5 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
+import { authentikApi } from "./auth/authentik-api.js";
 import { forgejoApi } from "./forgejo/forgejo-api.js";
 import { type AlerterConfig, komodoApi } from "./komodo/komodo-api.js";
 import { cloudflareApi } from "./network/cloudflare-api.js";
@@ -108,4 +109,51 @@ test("komodo getDeployment throws a boundary error when the config is malformed"
     await expect(komodoApi.getDeployment({ baseUrl: "https://deploy.example.com", jwt: "j", deployment: "my-app.production" })).rejects.toThrow(
         /returned an unexpected response/,
     );
+});
+
+// Answers each authentik call by method + path, recording the order, so deleteClient's two deletes can differ.
+const stubAuthentik = (answers: Readonly<Record<string, { readonly status: number; readonly body?: unknown }>>): string[] => {
+    const calls: string[] = [];
+    stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+        const call = `${init?.method ?? "GET"} ${url.replace("https://auth.example.com/api/v3", "")}`;
+        calls.push(call);
+        const answer = answers[call];
+        if (answer === undefined) {
+            throw new Error(`unstubbed authentik call: ${call}`);
+        }
+        return {
+            ok: answer.status >= 200 && answer.status < 300,
+            status: answer.status,
+            json: async () => answer.body,
+            text: async () => JSON.stringify(answer.body ?? ""),
+        };
+    });
+    return calls;
+};
+
+const authentik = { baseUrl: "https://auth.example.com", token: "t", slug: "my-app" };
+
+test("authentik deleteClient treats an already-gone application and provider as deleted", async () => {
+    const calls = stubAuthentik({
+        "DELETE /core/applications/my-app/": { status: 404, body: { detail: "Not found." } },
+        "GET /providers/oauth2/?name=my-app": { status: 200, body: { results: [{ pk: 7 }] } },
+        "DELETE /providers/oauth2/7/": { status: 404, body: { detail: "Not found." } },
+    });
+    await authentikApi.deleteClient(authentik);
+    expect(calls).toEqual(["DELETE /core/applications/my-app/", "GET /providers/oauth2/?name=my-app", "DELETE /providers/oauth2/7/"]);
+});
+
+test("authentik deleteClient fails on a rejected application delete instead of reporting the client removed", async () => {
+    const calls = stubAuthentik({ "DELETE /core/applications/my-app/": { status: 403, body: { detail: "forbidden" } } });
+    await expect(authentikApi.deleteClient(authentik)).rejects.toThrow('authentik DELETE /core/applications/my-app/ failed (403): {"detail":"forbidden"}');
+    expect(calls).toEqual(["DELETE /core/applications/my-app/"]);
+});
+
+test("authentik deleteClient fails on a rejected provider delete", async () => {
+    stubAuthentik({
+        "DELETE /core/applications/my-app/": { status: 204 },
+        "GET /providers/oauth2/?name=my-app": { status: 200, body: { results: [{ pk: 7 }] } },
+        "DELETE /providers/oauth2/7/": { status: 500, body: "boom" },
+    });
+    await expect(authentikApi.deleteClient(authentik)).rejects.toThrow('authentik DELETE /providers/oauth2/7/ failed (500): "boom"');
 });

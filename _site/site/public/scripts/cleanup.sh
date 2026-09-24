@@ -269,8 +269,11 @@ for s in "$@"; do
 done
 
 # Desktop sync and the agent-auth volume are host-wide, not per-slug (and the volume stays docker-locked while any
-# sandbox container references it): tear them down only once every sandbox is gone.
-if [ -n "$(list_sandboxes)" ]; then
+# sandbox container references it): tear them down only once every sandbox is gone. A docker that cannot list its
+# containers has not said that, and list_sandboxes alone would read its silence as "none left".
+if ! docker ps -a >/dev/null 2>&1; then
+    echo "intentic: docker could not list this machine's sandboxes, so the host-wide state they share was kept." >&2
+elif [ -n "$(list_sandboxes)" ]; then
     if [ "$AUTH" = 1 ]; then
         echo "intentic: kept shared dev agent-auth volume '$AUTH_VOLUME' — other sandboxes still reference it." >&2
     fi

@@ -24,7 +24,13 @@ export interface BackgroundProcessRow {
 
 // Delayed relist after an action, to catch a service that reports running then crashes instantly.
 const SETTLE_MS = 1500;
-const processOf = (row: BackgroundProcessRow): { id: string; name: string } => ({ id: row.extensionId ?? ``, name: row.processName ?? `` });
+// Only a declared row addresses the extensions routes; a session-only row has no process to name.
+const processOf = (row: BackgroundProcessRow): { id: string; name: string } => {
+    if (row.extensionId === undefined || row.processName === undefined) {
+        throw new Error(`Background process ${row.id} is not an extension's declared process, so it can't be started or stopped by name.`);
+    }
+    return { id: row.extensionId, name: row.processName };
+};
 
 // Opens a row's read-only logs via the global panel channel rather than a local tab call, so it works with no panel
 // mounted.

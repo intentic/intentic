@@ -586,6 +586,21 @@ describe(`the reconcile`, () => {
         expect(prisma.hostedBuild.updateMany).toHaveBeenCalledTimes(0);
     });
 
+    /* AN UNREADABLE BUILDER STILL TIMES OUT: otherwise the row stays `building` and the owner's guard is held forever. */
+    it(`fails a build past its timeout even while Fly cannot be asked about the builder`, async () => {
+        const calls = stubFetch([
+            graphqlRoute(),
+            appMachines([`m1`, `mb1`]),
+            { match: (method, url) => method === `GET` && url.endsWith(`/machines/mb1`), respond: () => json({ error: `boom` }, 500) },
+            { match: (method) => method === `DELETE`, respond: () => json({ ok: true }) },
+        ]);
+        const prisma = building({ createdAt: new Date(Date.now() - 50 * 60_000) });
+        await reconcileHostedBuilds(prisma, config(), logger);
+        const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
+        expect(verdict.data).toMatchObject({ state: `failed`, error: `the build ran past 30 minutes and was stopped`, minutes: 31 });
+        expect(calls.some((call) => call.method === `DELETE` && call.url.endsWith(`/machines/mb1?force=true`))).toBe(true);
+    });
+
     // While a build's token is alive, its app should hold only the sandbox and this build's builder.
     it(`destroys a machine nobody made inside a building app`, async () => {
         const calls = stubFetch([

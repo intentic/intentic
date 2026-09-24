@@ -88,4 +88,11 @@ describe("sync state round-trip", () => {
         await writeSyncState(root, state);
         expect(await readSyncState(root)).toEqual(state);
     });
+
+    // Read as empty, a torn record means "never adopted", and every later push skips every secret without a word.
+    it("a record it cannot parse throws instead of reading as never adopted", async () => {
+        const root = await dir({ ".secrets-sync.json": `{"K": {"digest": "ab` });
+        await expect(readSyncState(root)).rejects.toThrow(SyntaxError);
+        await expect(collectSecretInventory(root)).rejects.toThrow(SyntaxError);
+    });
 });

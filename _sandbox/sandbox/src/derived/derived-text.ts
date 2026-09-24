@@ -5,7 +5,7 @@ import { detectFormat } from "@intentic/fileq/formats";
 import { parseSidecarFront, sha256OfFile, sidecarBody, sidecarPathFor } from "@intentic/fileq/sidecar";
 import type { WorkspaceDerived } from "@intentic/sandbox-contract";
 import { readWorkspaceFileWindow } from "../workspace/files/workspace-files.js";
-import { defaultExec, DERIVE_TIMEOUT_MS, FILEQ_MAX_BUFFER, isMissingBinary, stdoutOf, withFileqSlot, type ExecFn } from "./fileq.js";
+import { defaultExec, DERIVE_TIMEOUT_MS, FILEQ_MAX_BUFFER, isMissingBinary, runFailure, stdoutOf, withFileqSlot, type ExecFn } from "./fileq.js";
 import { sidecarStateOf, sidecarStatus } from "./sidecar-service.js";
 
 // Reading a file's shadow for a person rather than an agent: the same markdown `fileq read` serves, plus the front
@@ -94,7 +94,6 @@ const inFlight = new Map<string, Promise<WorkspaceDerived>>();
 const deriveOnce = async (root: string, relPath: string, exec: ExecFn): Promise<WorkspaceDerived> => {
     try {
         await withFileqSlot(() => exec("fileq", ["derive", "--json", relPath], { timeout: DERIVE_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER }));
-        return await readDerivedText(root, relPath);
     } catch (error) {
         if (isMissingBinary(error)) {
             // `broken`, not `undeliverable`: the format may well be readable, this sandbox just has nothing to read it.
@@ -108,8 +107,9 @@ const deriveOnce = async (root: string, relPath: string, exec: ExecFn): Promise<
             };
         }
         // Exit 1 is fileq's "nothing derivable here", and the line it printed says which of its reasons applied.
-        return await readDerivedText(root, relPath, skipReason(stdoutOf(error)));
+        return await readDerivedText(root, relPath, runFailure(error) ?? skipReason(stdoutOf(error)));
     }
+    return await readDerivedText(root, relPath);
 };
 
 /**

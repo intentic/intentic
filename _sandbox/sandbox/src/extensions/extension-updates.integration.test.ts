@@ -188,6 +188,7 @@ test("an unreachable registry keeps the previous records: offline never reads as
 
     // Simulates the registry vanishing (deleted, or the network down); both read the same way.
     await exec("rm", ["-rf", registry]);
-    await checkExtensionUpdates(svc);
+    // The pass fails naming the registry, so an owner's "check now" can't answer as all-clear.
+    await expect(checkExtensionUpdates(svc)).rejects.toThrow(`could not reach ${registry} (`);
     expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.update?.ref).toBe(author.v2);
 });

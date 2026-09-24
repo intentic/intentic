@@ -98,6 +98,30 @@ test("a session killed externally (vanished from tmux) drops out of running", as
     expect(panels.running("app")).toBe(false);
 });
 
+test("a tmux listing that fails leaves every run tracked and logs why, rather than reporting them finished", async () => {
+    jest.useFakeTimers();
+    const { runner } = fakeRunner();
+    const warned: unknown[] = [];
+    const failure = new Error("tmux: server busy");
+    const panels = createManagedProcesses(
+        {
+            ...runner,
+            states: async () => {
+                throw failure;
+            },
+        },
+        { logger: { warn: (payload: unknown) => void warned.push(payload) } },
+    );
+    await panels.start("job", { ...SPEC, oneShot: true });
+    await panels.start("app", SPEC);
+    await advanceTimersByTimeAsync(6100);
+    expect(panels.running("job")).toBe(true);
+    expect(panels.runOf("job")).toEqual({ running: true });
+    expect(panels.running("app")).toBe(true);
+    expect(warned).toEqual([{ err: failure }, { err: failure }, { err: failure }]);
+    panels.stopAll();
+});
+
 test("a dev panel sitting at its shell prompt (Ctrl+C'd server) stays running", async () => {
     jest.useFakeTimers();
     const { runner, cmd } = fakeRunner();

@@ -42,8 +42,8 @@ export const runRequestBody = (call: RunCall): Record<string, unknown> => ({
     ...(call.agent === undefined ? {} : { agent: call.agent }),
 });
 
-// One conversation per workflow run and attempt, so a re-run continues it and two jobs of one run do not collide;
-// outside a runner, a random id.
+// One conversation per workflow run and attempt; outside a runner, a random id. Two jobs of one run share it, and the
+// second is refused by runExchange rather than reporting the first one's turn.
 export const conversationIdFor = (env: Readonly<Record<string, string | undefined>>, random: () => string): string => {
     const runId = env["GITHUB_RUN_ID"] ?? "";
     if (runId === "") {
@@ -82,11 +82,14 @@ export const readCard = (body: unknown): AgentCard | undefined => {
     };
 };
 
-// Statuses under which the turn is still doing something; anything else is a settled card.
-const IN_FLIGHT = new Set(["running", "stopping", "dismissing", "resuming"]);
+// Statuses under which the turn is still doing something, including a land the daemon started on its own.
+const IN_FLIGHT = new Set(["running", "stopping", "dismissing", "resuming", "landing"]);
+// A turn that ended without finishing its work: a person's Stop is not a pass either.
+const FAILED = new Set(["error", "interrupted", "conflict", "stopped"]);
+const COMPLETED = new Set(["idle", "ready", "landed"]);
 
 // `awaiting` settles as parked: a pipeline cannot answer a card waiting on a person, so this ends the step rather than
-// stall until the job's own timeout does. Other terminal statuses: failed (error, interrupted, conflict) or completed.
+// stall until the job's own timeout does. A status none of these name is a daemon newer than this gate, never a pass.
 export const settledOf = (card: AgentCard): RunStatus | undefined => {
     if (IN_FLIGHT.has(card.status)) {
         return undefined;
@@ -94,7 +97,13 @@ export const settledOf = (card: AgentCard): RunStatus | undefined => {
     if (card.status === "awaiting") {
         return "parked";
     }
-    return card.status === "error" || card.status === "interrupted" || card.status === "conflict" ? "failed" : "completed";
+    if (FAILED.has(card.status)) {
+        return "failed";
+    }
+    if (COMPLETED.has(card.status)) {
+        return "completed";
+    }
+    throw new RunExchangeError(`the agent card has a status this gate does not know: "${card.status}"`);
 };
 
 // What the card asked for, named, so the step's message says which card a person has to open.
@@ -300,11 +309,17 @@ const answerOf = async (
 // the agent's own; even a timeout comes back as an outcome.
 export const runExchange = async (call: RunCall, deps: RunDeps): Promise<RunOutcome> => {
     const cardUrl = `${call.origin}/agents/${encodeURIComponent(call.conversationId)}`;
-    await answerOf(deps, "the agent", `${call.origin}/agent`, {
+    const receipt = (await answerOf(deps, "the agent", `${call.origin}/agent`, {
         method: "POST",
         headers: headersFor(call),
         body: JSON.stringify(runRequestBody(call)),
-    });
+    })) as { delivered?: unknown };
+    // Steered into or queued behind another turn, the card this polls would settle on a turn this prompt did not start.
+    if (receipt.delivered !== "started") {
+        throw new RunExchangeError(
+            `conversation ${call.conversationId} already has a turn under way (this prompt was ${String(receipt.delivered)}), so its ending would not be this prompt's: give the step a conversation of its own`,
+        );
+    }
     const deadline = deps.now() + call.waitS * 1_000;
     let card: AgentCard | undefined;
     let status: RunStatus | undefined;
@@ -330,8 +345,27 @@ export const runExchange = async (call: RunCall, deps: RunDeps): Promise<RunOutc
     if (!call.land || status !== "completed") {
         return outcome;
     }
-    const landed = (await answerOf(deps, "the land", `${cardUrl}/land`, { method: "POST", headers: headersFor(call), body: "{}" })) as {
+    const land = (await answerOf(deps, "the land", `${cardUrl}/land`, { method: "POST", headers: headersFor(call), body: "{}" })) as {
         landed?: unknown;
+        held?: unknown;
+        conflicts?: unknown;
     };
-    return { ...outcome, landed: landed.landed === true };
+    if (land.landed === true) {
+        return { ...outcome, landed: true };
+    }
+    // Held is the owner's own rule keeping the work for a deliberate merge; anything else asked to land and was refused.
+    if (land.held === true) {
+        return { ...outcome, landed: false };
+    }
+    const repos = Array.isArray(land.conflicts)
+        ? land.conflicts.flatMap((conflict: unknown) =>
+              typeof conflict === "object" && conflict !== null && typeof (conflict as { repo?: unknown }).repo === "string" ? [(conflict as { repo: string }).repo] : [],
+          )
+        : [];
+    return {
+        ...outcome,
+        status: "failed",
+        landed: false,
+        summary: `The turn completed, but its land was refused${repos.length === 0 ? "" : ` in ${repos.join(", ")}`}: open the conversation to see what would not apply.`,
+    };
 };

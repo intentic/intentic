@@ -143,17 +143,20 @@ export const pushPlan = async (dir: string, options: { readonly branch?: string 
     if (branch === undefined || branch === "") {
         return { ok: false, reason: "no branch checked out" };
     }
-    // The state read covers only the checked-out branch; naming another branch re-reads its own upstream.
-    const tracking =
-        options.branch === undefined || options.branch === state.branch
-            ? { upstream: state.upstream, remote: state.remote }
-            : await upstreamOf(dir, branch, git).catch(() => undefined);
+    // Read here, not taken from remoteState (which reads a failure as "no upstream"): a failed read planned as a first
+    // push would send the branch with `-u` to another remote and repoint its upstream there.
+    let tracking: Awaited<ReturnType<typeof upstreamOf>>;
+    try {
+        tracking = await upstreamOf(dir, branch, git);
+    } catch (error) {
+        return { ok: false, reason: gitFailureReason(error, "could not read the branch's upstream") };
+    }
     // A never-pushed branch has no remote of its own; it publishes to the repo's configured one.
-    const remote = tracking?.remote ?? state.remote;
+    const remote = tracking.remote ?? state.remote;
     if (remote === undefined) {
         return { ok: false, reason: "no remote configured" };
     }
-    const publish = tracking?.upstream === undefined || tracking.upstream === "";
+    const publish = tracking.upstream === undefined;
     return { ok: true, args: ["push", ...(publish ? ["-u"] : []), remote, branch], remote, branch };
 };
 

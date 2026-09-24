@@ -33,7 +33,7 @@ import { commitsCarrying, historySpanStart } from "./land/landed-history.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent, type RepoRecord } from "./registry/agents-store.js";
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { archivable, archiveAgents, forgetConversations, purgeArchived } from "./registry/archive.js";
-import { landAgent, outstandingConflicts } from "./land/land.js";
+import { landAgent, outstandingConflicts, reportLockfileFailures } from "./land/land.js";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
 import { syncBeforeLand } from "./land/sync.js";
@@ -669,6 +669,7 @@ export const createAgentsRoutes = (services: Services) => {
                 const result = await services.perf.track("agent.land", { id: entry.id, mode, span: rung }, () =>
                     landAgent(services.agentWorktrees, { ...entry, placement: { ...entry.placement, repos: composition } }, mode, rung),
                 );
+                reportLockfileFailures(services.logger, entry.id, result);
                 // Stores the tips and conflict report, re-derives standing, and clears the prior ending without a turn.
                 await services.agents.recordLanded(input.id, result);
                 // Only on a resting agent: a running turn would have its mutex freed and its ending overwritten.

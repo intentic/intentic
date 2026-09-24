@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { collectSecretUsage, type DesiredStateGraph } from "@intentic/graph";
@@ -15,27 +15,49 @@ export const secretDigest = (value: string): string => createHash("sha256").upda
 
 export type SyncState = Readonly<Record<string, { readonly digest: string; readonly pushedAt: string }>>;
 
-const readJson = async <T>(path: string): Promise<T | undefined> => {
+// Undefined only for a file that is not there; one that cannot be read or parsed throws, since "absent" here means
+// "never adopted" or "nothing set", and a push or an inventory built on that would silently skip every secret.
+const readText = async (path: string): Promise<string | undefined> => {
     try {
-        return JSON.parse(await readFile(path, "utf8")) as T;
-    } catch {
+        return await readFile(path, "utf8");
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return undefined;
+        }
+        throw error;
+    }
+};
+
+const readJson = async <T>(path: string): Promise<T | undefined> => {
+    const text = await readText(path);
+    if (text === undefined) {
         return undefined;
+    }
+    try {
+        return JSON.parse(text) as T;
+    } catch {
+        // Named, never quoted: the parse error's own message carries the text around the fault, which is secret values.
+        throw new SyntaxError(`${path} is not valid JSON`);
     }
 };
 
 export const readSyncState = async (dir: string): Promise<SyncState> => (await readJson<SyncState>(join(dir, SYNC_FILE))) ?? {};
 
+// Temp-then-rename: a push reading while another writes sees a whole record, never a torn one it cannot parse.
 export const writeSyncState = async (dir: string, state: SyncState): Promise<void> => {
-    await writeFile(join(dir, SYNC_FILE), `${JSON.stringify(state, undefined, 4)}\n`, { mode: 0o600 });
+    const path = join(dir, SYNC_FILE);
+    const staged = `${path}.${process.pid}.tmp`;
+    await writeFile(staged, `${JSON.stringify(state, undefined, 4)}\n`, { mode: 0o600 });
+    await rename(staged, path);
 };
 
 // Aggregates the secrets inventory: what the artifact requires, what .env/.secrets.json set (digest-compared against
 // CI, never returned), and CI staleness. Keys set in .env but unreferenced still appear, with an empty requiredBy.
 export const collectSecretInventory = async (dir: string): Promise<SecretInventoryEntry[]> => {
-    // Four independent reads, each already degrading to a default on absence; resolved concurrently.
+    // Four independent reads, each degrading to a default on absence only; resolved concurrently.
     const [graph, envRaw, generated, sync] = await Promise.all([
         readJson<DesiredStateGraph>(join(dir, ARTIFACT_FILE)),
-        readFile(join(dir, ENV_FILE), "utf8").catch(() => ""),
+        readText(join(dir, ENV_FILE)).then((text) => text ?? ""),
         readJson<Record<string, string>>(join(dir, SECRETS_FILE)),
         readSyncState(dir),
     ]);

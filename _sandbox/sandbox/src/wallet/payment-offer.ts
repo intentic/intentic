@@ -1,8 +1,9 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { PaymentOffer, WalletConfig } from "@intentic/sandbox-contract";
 import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, type SettledCard, whyOf } from "../agents/actor/card-offers.js";
 import type { RelayedAnswer } from "../platform/platform-relay.js";
 import type { SignRequest } from "./wallet-signer.js";
-import { type OpenedPayment, spentTodayAtomic, type WalletLedgerStore } from "./wallet-ledger.js";
+import { type OpenedPayment, type PaymentRow, spentTodayAtomic, type WalletLedgerStore } from "./wallet-ledger.js";
 import {
     atomicToUsd,
     mintAuthorization,
@@ -160,6 +161,17 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         auto: false,
         why: request.why,
     };
+    // Read before any refusal is recorded: a ledger that cannot be read cannot take a row either.
+    let rows: readonly PaymentRow[];
+    try {
+        rows = await deps.ledger.all();
+    } catch (error) {
+        return refusal(
+            500,
+            "ledger_unreadable",
+            `This payment cannot be checked against the daily cap, so nothing was spent: ${errorMessage(error)}. Tell the owner.`,
+        );
+    }
     if (hostsOf(config.deny).some((entry) => hostMatches(host, entry))) {
         await deps.ledger.record(opened, "refused");
         return refusal(403, "denied_host", `${host} is on the wallet's deny list: nothing was spent.`);
@@ -175,7 +187,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     if (request.maxUsd !== undefined && quote.amountAtomic > usdToAtomic(request.maxUsd)) {
         return refusal(403, "over_own_max", `This costs $${amountUsd}, over the $${request.maxUsd} ceiling you passed with --max. Nothing was spent.`);
     }
-    const spentToday = spentTodayAtomic(await deps.ledger.all(), now(), usdToAtomic);
+    const spentToday = spentTodayAtomic(rows, now(), usdToAtomic);
     const dailyCap = usdToAtomic(config.dailyCapUsd);
     if (spentToday + quote.amountAtomic > dailyCap) {
         await deps.ledger.record(opened, "refused");

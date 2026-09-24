@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
@@ -33,6 +33,18 @@ test("the first arrival opens a group; the id is the filename and never in the b
     expect(first.issue).toMatchObject({ id: "abc123", count: 1, status: "open", firstSeen: 1_000, lastSeen: 1_000, origin: "https://shop.example" });
     expect(first.issue.title).toBe("TypeError: x is not a function");
     expect(JSON.parse(await readFile(join(dir, "abc123.json"), "utf8"))).not.toHaveProperty("id");
+});
+
+test("a group file this build cannot read is set aside and the arrival opens a fresh group", async () => {
+    const { store, dir } = tempStore();
+    await store.record(arriving());
+    await writeFile(join(dir, "abc123.json"), `{"count":`);
+
+    const next = await store.record(arriving({ now: 2_000 }));
+    expect(next.fresh).toBe(true);
+    expect(next.issue).toMatchObject({ id: "abc123", count: 1, firstSeen: 2_000 });
+    expect(await readFile(join(dir, "abc123.json.corrupt"), "utf8")).toBe(`{"count":`);
+    expect((await readdir(dir)).toSorted()).toEqual(["abc123.json", "abc123.json.corrupt"]);
 });
 
 // Nine more browsers on one bug must be nine silent counts, not nine wakes, or a crash loop becomes a bill. The tenth

@@ -197,9 +197,9 @@ export const createBrowserProfileRoute = (services: Services) =>
                     // cookies.
                     const storePath = passkeyPath(services.workspace.root, profile);
                     const arm = (target: Page): void => {
-                        void armPasskeys(ctx, target, storePath).catch((err: unknown) =>
-                            services.logger.warn({ err }, "browser-profile: passkey arm failed"),
-                        );
+                        void armPasskeys(ctx, target, storePath, (err: unknown) =>
+                            services.logger.error({ err, store: storePath }, "browser-profile: a passkey could not be saved"),
+                        ).catch((err: unknown) => services.logger.warn({ err }, "browser-profile: passkey arm failed"));
                         // A sign-in popup (an OAuth window) goes over the page it came from, where the owner looks.
                         void placeWindow(ctx, target).catch(() => undefined);
                     };

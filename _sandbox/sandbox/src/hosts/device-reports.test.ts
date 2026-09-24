@@ -66,10 +66,11 @@ test("a container's resources ride through the fleet reading untouched", () => {
     expect(sandboxesFromTool(JSON.stringify(fleet), false)).toEqual(fleet);
 });
 
-test("an agent without the tool, or an answer that is not the fleet, contributes no sandboxes", () => {
-    expect(sandboxesFromTool(`This device has no tool called "list_sandboxes".`, true)).toEqual([]);
-    expect(sandboxesFromTool("not json", false)).toEqual([]);
-    expect(sandboxesFromTool(`{"slug":"work"}`, false)).toEqual([]);
+test("an agent without the tool, or an answer that is not the fleet, is no reading rather than an empty fleet", () => {
+    expect(sandboxesFromTool(`This device has no tool called "list_sandboxes".`, true)).toBeUndefined();
+    expect(sandboxesFromTool("not json", false)).toBeUndefined();
+    expect(sandboxesFromTool(`{"slug":"work"}`, false)).toBeUndefined();
+    expect(sandboxesFromTool("[]", false)).toEqual([]);
 });
 
 test("keeps an enrolled machine that has never reported, and says why it is empty", () => {

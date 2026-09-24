@@ -6,7 +6,8 @@ import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { effectScope, ref } from "vue";
 
 // The ticket mint is an HTTP round trip; only the socket's URL matters to this suite.
-jest.mock(`../sandbox/session/wsTicket`, () => ({ socketUrl: async () => `wss://sandbox.test/system/browser-view` }));
+const socketUrl = jest.fn(async (): Promise<string | undefined> => `wss://sandbox.test/system/browser-view`);
+jest.mock(`../sandbox/session/wsTicket`, () => ({ socketUrl }));
 
 const { useBrowserView } = await import(`./useBrowserView`);
 
@@ -97,6 +98,28 @@ const connected = async (): Promise<{
     sockets[0]!.deliver({ type: `ready`, kind: `frames`, width: 1280, height: 800 });
     return { view, wire: () => sockets[0]!.sent.map((message) => JSON.parse(message) as unknown), socket: () => sockets[0]! };
 };
+
+test("a view whose socket couldn't be authorized says why and asks again, rather than hanging on reconnecting", async () => {
+    socketUrl.mockRejectedValueOnce(new Error(`The sandbox did not finish signing in within 10 seconds.`));
+    const warn = jest.spyOn(console, `warn`).mockImplementation(() => undefined);
+    const sockets: FakeSocket[] = [];
+    stubGlobal(
+        `WebSocket`,
+        class extends FakeSocket {
+            constructor() {
+                super();
+                sockets.push(this);
+            }
+        },
+    );
+    const view = effectScope().run(() => useBrowserView(ref(`browser-abc12345`)))!;
+    await waitFor(() =>
+        expect(view.status.value).toBe(`Couldn't authorize the browser view (The sandbox did not finish signing in within 10 seconds.); retrying.`),
+    );
+    // The retry waits out the backoff's one-second floor; five is a hang bound, not a latency.
+    await waitFor(() => expect(sockets).toHaveLength(1), { timeout: 5_000 });
+    warn.mockRestore();
+});
 
 test("a paste from the user's own machine arrives as text the remote page can receive", async () => {
     const { view, wire } = await connected();

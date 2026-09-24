@@ -1,5 +1,6 @@
 import { createStreamingPainter, failureNotice, framePainter, type GatewayCtx, GatewayRefusal, type ListenerMessage, recentKeys, typingHeartbeat } from "@intentic/connector-runtime";
 import type { Client, Message } from "discord.js";
+import { visibleChannel } from "./client.js";
 
 // Text side of the gateway: builds a normalized listener message from every human-authored message a subscribed bot
 // sees, and POSTs it to the daemon's dispatch route. On a mention, holds the stream and paints the reply back live, one
@@ -58,9 +59,17 @@ export const toHistory = (newestFirst: readonly Message[], selfIds: ReadonlySet<
 
 // The gateway's /deliver door: posts one message outside any live turn, whichever connected bot can see the channel
 // (the first subscribed, matching inbound dedup order). Chunked at the same ceiling a streamed reply spills at.
+// A bot whose lookup failed outright does not stop the others; its error is the answer only if none of them could post.
 export const deliverToChannel = async (subscribed: ReadonlyMap<string, Client>, channelId: string, text: string): Promise<void> => {
+    let failure: Error | undefined;
     for (const client of subscribed.values()) {
-        const channel = await client.channels.fetch(channelId).catch(() => null);
+        let channel: Awaited<ReturnType<typeof visibleChannel>>;
+        try {
+            channel = await visibleChannel(client, channelId);
+        } catch (error) {
+            failure ??= error instanceof Error ? error : new Error(String(error));
+            continue;
+        }
         if (channel === null || !("send" in channel)) {
             continue;
         }
@@ -68,6 +77,9 @@ export const deliverToChannel = async (subscribed: ReadonlyMap<string, Client>, 
             await (channel as unknown as StreamChannel).send(text.slice(base, base + DISCORD_MAX));
         }
         return;
+    }
+    if (failure !== undefined) {
+        throw new Error(`no connected Discord bot could look up channel ${channelId}: ${failure.message}`, { cause: failure });
     }
     throw new GatewayRefusal("no connected Discord bot can post in this channel");
 };

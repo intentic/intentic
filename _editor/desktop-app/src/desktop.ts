@@ -380,6 +380,6 @@ export interface ResumableSetup {
     readonly args: SetupArgs;
     /** Seconds since it was saved. Setup codes last 30 minutes, and a restart can eat most of that. */
     readonly agedSeconds: number;
-    /** How the session ended for it; null for a setup an older build parked. */
-    readonly how: SessionEnd | null;
+    /** How the session ended for it. */
+    readonly how: SessionEnd;
 }

@@ -79,3 +79,22 @@ test("a fenced conversation's session files are its unit's to take: the shared s
     expect(await readFile(join(shared, "projects", "-work", "removed-session.jsonl"), "utf8")).toBe("someone else's");
     expect(await readFile(join(mine, "projects", "removed-session.jsonl"), "utf8")).toBe("removed");
 });
+
+test("a retained transcript that cannot be read stops the purge before any upload it might name is removed", async () => {
+    const root = await mkdtemp(join(tmpdir(), "conversation-purge-"));
+    roots.push(root);
+    const workspace = join(root, "work");
+    const history = join(root, "history");
+    const attachments = join(workspace, `${STATE_DIR}`, "records", "artifacts", "attachments");
+    await mkdir(join(attachments, "shared"), { recursive: true });
+    await writeFile(join(attachments, "shared", "b.png"), "kept");
+    await writeTranscript(history, "removed", [{ role: "user", text: "y", attachments: [`${STATE_DIR}/records/artifacts/attachments/shared/b.png`] }]);
+    // Exists but reads as EISDIR: nothing here says which uploads the retained conversation still names.
+    await mkdir(transcriptFile(history, "kept"), { recursive: true });
+
+    await expect(purgeConversationState(workspace, history, [conversation("removed", "removed-session")], [conversation("kept", "kept-session")])).rejects.toThrow(
+        /EISDIR/,
+    );
+
+    expect(await readFile(join(attachments, "shared", "b.png"), "utf8")).toBe("kept");
+});

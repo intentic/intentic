@@ -18,7 +18,7 @@ const t = useT();
 const open = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ select: [id: string]; close: [ids: ReadonlySet<string>]; open: [id: string]; new: [] }>();
 
-const { conversations, activeId, sessions, loadSessions } = useChat();
+const { conversations, activeId, sessions, sessionsFailure, loadSessions } = useChat();
 
 // Archiving closes an agent's chat (see the archive note in useAgents), but one opened from the archive is still
 // off the board, so the sheet marks those: the host's own line only speaks for whichever chat is open.
@@ -106,7 +106,7 @@ const startNew = (): void => {
                 :placeholder="t(`shared.searchChats2`)"
                 class="mx-1 mb-1 mt-2"
             />
-            <PastChatList :sessions="sessions" :query="query" touch @open="openFromHistory" />
+            <PastChatList :sessions="sessions" :query="query" :failure="sessionsFailure" touch @open="openFromHistory" />
         </div>
     </BottomSheet>
 </template>

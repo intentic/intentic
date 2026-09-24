@@ -60,7 +60,9 @@ export const startAgent = (prompt?: string, actsAs?: string): string => {
     // The card exists before the first prompt goes, or the daemon would answer an unknown persona with an ordinary
     // chat; a daemon that refuses the card leaves the conversation unpinned rather than pinned to nothing.
     void fitted
-        .catch(() => {
+        .catch((error: unknown) => {
+            // The turn still goes, unfenced: the one trace of why is this line.
+            console.warn(`startAgent: project persona for ${project} was refused; the conversation runs unfenced`, error);
             conversation.selection.apply({ kind: `set`, picks: { actsAs: undefined } });
         })
         .then(() => (prompt === undefined ? undefined : summonTurn(conversation, prompt)));

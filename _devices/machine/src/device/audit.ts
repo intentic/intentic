@@ -1,4 +1,5 @@
 import { appendFile, mkdir } from "node:fs/promises";
+import { errorMessage } from "@intentic/base/errors";
 import { baseDir } from "../config.js";
 import { auditPath } from "./config.js";
 
@@ -8,7 +9,8 @@ export const audit = async (entry: { tool: string; ok: boolean; detail: string }
     try {
         await mkdir(baseDir, { recursive: true, mode: 0o700 });
         await appendFile(auditPath, `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`, { encoding: "utf8", mode: 0o600 });
-    } catch {
-        // Best-effort: a failed write here must not block anything else.
+    } catch (error) {
+        // A failed write must not block the call it records, but the gap in the record lands in the agent's log.
+        process.stderr.write(`audit: could not record ${entry.tool} in ${auditPath} (${errorMessage(error)})\n`);
     }
 };

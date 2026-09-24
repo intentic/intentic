@@ -20,7 +20,7 @@ const STALL_MS = 120_000;
 
 export function usePlanPreview() {
     const queryClient = useQueryClient();
-    const { hasKey } = useSecretKeys();
+    const { hasKey, keysError } = useSecretKeys();
     const { openFocused } = useTerminalPanel();
 
     const running = ref(false);
@@ -139,6 +139,10 @@ export function usePlanPreview() {
     const run = (): Promise<void> =>
         guarded(async (signal) => {
             await resolve(signal);
+            // Unread keys would list every required secret as missing and ask for values the sandbox already holds.
+            if (keysError.value !== undefined && requiredEnv.value.length > 0) {
+                throw new Error(`Couldn't read which secrets this sandbox holds: ${keysError.value}`);
+            }
             if (missingSecrets.value.length > 0) {
                 awaitingSecrets.value = true;
                 return;

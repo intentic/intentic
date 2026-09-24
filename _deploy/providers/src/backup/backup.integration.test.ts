@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { createBackupProvider } from "./backup.js";
 
@@ -10,12 +11,15 @@ const SEP = "|";
 // Drives the backup provider over SSH: docker ps reports the container, docker inspect reports the create-time
 // image + schedule/repo labels, `command -v docker` finds the host CLI, docker run can fail.
 const fakeSsh = (
-    opts: { running?: boolean; image?: string; schedule?: string; repo?: string; runFails?: boolean } = {},
+    opts: { running?: boolean; image?: string; schedule?: string; repo?: string; runFails?: boolean; failWrite?: string } = {},
 ): { executor: SshExecutor; commands: string[] } => {
     const commands: string[] = [];
     const session: SshSession = {
         exec: async (command) => {
             commands.push(command);
+            if (opts.failWrite !== undefined && command.startsWith(`cat > ${opts.failWrite} `)) {
+                return { stdout: "", stderr: "No space left on device", code: 1 };
+            }
             if (command.includes("docker inspect")) {
                 const image = opts.image ?? IMAGE;
                 const schedule = opts.schedule ?? "0 3 * * *";
@@ -149,6 +153,14 @@ test("apply writes a chmod-600 once-guarded restic.env, the script + crontab, an
                 c.includes("--entrypoint crond"),
         ),
     ).toBe(true);
+});
+
+test("apply fails when the crontab cannot be written, before restarting the container on a stale schedule", async () => {
+    const ssh = fakeSsh({ failWrite: `${HOST_STATE_ROOT}/backup/crontab` });
+    await expect(createBackupProvider(ssh.executor).apply(inputs, undefined, ctx())).rejects.toThrow(
+        `backup: write ${HOST_STATE_ROOT}/backup/crontab failed (exit 1): No space left on device`,
+    );
+    expect(ssh.commands.some((c) => c.includes("docker run"))).toBe(false);
 });
 
 // This provider writes a file, a shell script and a crontab on a host, over SSH, as root, from operator-typed

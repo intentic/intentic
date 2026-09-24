@@ -60,7 +60,7 @@ const gitHosts = async (services: Services): Promise<GitHost[]> =>
 // A repo's remote URL, or undefined; every failure here (no remote, unreadable URL) is an ordinary state, not an
 // exception.
 const remoteUrlOf = async (dir: string, git: GitRunner): Promise<{ remote?: string; branch?: string }> => {
-    const state = await remoteState(dir, {}, git).catch(() => ({ ahead: 0, behind: 0 }) as Awaited<ReturnType<typeof remoteState>>);
+    const state = await remoteState(dir, {}, git);
     const branch = state.branch === undefined || state.branch === "" ? undefined : state.branch;
     if (state.remote === undefined) {
         return branch === undefined ? {} : { branch };

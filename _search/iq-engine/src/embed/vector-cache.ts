@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { isIndexBusy } from "../store/db.js";
 
 // Vectors outlive the index: a pure function of (model, chunk text), unlike the index itself. Dropped index dirs
 // rebuild from this sidecar, keyed by the same sha256-of-chunk-text the chunks table carries, so only new text reaches
@@ -34,9 +35,7 @@ export interface VectorCache {
 /** The cache file for the index at `indexDir`, a sibling path, so dropping the index dir never touches it. */
 export const vectorCachePath = (indexDir: string): string => `${indexDir}-vectors.db`;
 
-const open = (path: string, modelId: string, maxRows: number): VectorCache => {
-    mkdirSync(dirname(path), { recursive: true });
-    const db = new DatabaseSync(path);
+const prepare = (db: DatabaseSync, modelId: string): void => {
     // Same open order as the index: busy_timeout, then auto_vacuum only while still empty, then WAL.
     db.exec("PRAGMA busy_timeout = 5000;");
     const pageCount = Number((db.prepare("PRAGMA page_count").get() as { page_count?: number | bigint } | undefined)?.page_count ?? 0);
@@ -52,7 +51,6 @@ const open = (path: string, modelId: string, maxRows: number): VectorCache => {
     };
     const version = meta("cache_version");
     if (version !== undefined && version !== CACHE_SCHEMA) {
-        db.close();
         throw new Error(`iq vector cache schema ${version} != ${CACHE_SCHEMA}`);
     }
     setMeta("cache_version", CACHE_SCHEMA);
@@ -60,6 +58,18 @@ const open = (path: string, modelId: string, maxRows: number): VectorCache => {
     if (meta("model_id") !== modelId) {
         db.exec("DELETE FROM vectors");
         setMeta("model_id", modelId);
+    }
+};
+
+const open = (path: string, modelId: string, maxRows: number): VectorCache => {
+    mkdirSync(dirname(path), { recursive: true });
+    const db = new DatabaseSync(path);
+    try {
+        prepare(db, modelId);
+    } catch (error) {
+        // Never returned, so nothing else would close it; a caller that carries on without the cache must not hold it.
+        db.close();
+        throw error;
     }
     return {
         get(hashes) {
@@ -111,12 +121,15 @@ const open = (path: string, modelId: string, maxRows: number): VectorCache => {
     };
 };
 
-// Treats any open failure as cache loss: deletes the file and retries once. Failing twice returns undefined; the
-// semantic tier still works, just re-embedding everything.
+// Treats an open failure as cache loss: deletes the file and retries once. Failing twice returns undefined; the
+// semantic tier still works, just re-embedding everything. A lock held by another process is not loss: undefined, kept.
 export const openVectorCache = (path: string, modelId: string, maxRows = MAX_ROWS): VectorCache | undefined => {
     try {
         return open(path, modelId, maxRows);
-    } catch {
+    } catch (error) {
+        if (isIndexBusy(error)) {
+            return undefined;
+        }
         for (const suffix of ["", "-wal", "-shm"]) {
             if (existsSync(`${path}${suffix}`)) {
                 rmSync(`${path}${suffix}`, { force: true });

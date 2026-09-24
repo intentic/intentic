@@ -154,7 +154,10 @@ export function useApplyProgress() {
     // A refresh/navigation during a run: the tmux job survived it. Recovers "Applying…" from the terminals list,
     // re-attaches the event stream, and arms `sawSession` so a later SIGKILL still ends the run.
     const recover = async (): Promise<void> => {
-        const listed = await listTerminals().catch(() => undefined);
+        const listed = await listTerminals().catch((failure: unknown) => {
+            console.warn(`infrastructure: couldn't check for an apply still running`, failure);
+            return undefined;
+        });
         if (listed?.some((session) => session.name === APPLY_SESSION && session.running)) {
             applying.value = true;
             attachGeneration += 1;

@@ -11,7 +11,7 @@ import { downloadFile } from "@huggingface/hub";
 import type { Client, VoiceBasedChannel, VoiceState } from "discord.js";
 import { OpusEncoder } from "mediaplex";
 import { createTranscriber, MIN_UTTERANCE_BYTES, type Transcriber, WHISPER_MISSING, whisperCliMissing } from "./audio.js";
-import { ensureDiscordClient, releaseDiscordClient } from "./client.js";
+import { ensureDiscordClient, releaseDiscordClient, visibleChannel } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";
 import type { DiscordConnectorConfig } from "./client.js";
 
@@ -174,6 +174,13 @@ const endSession = async (s: VoiceSession, reason: string): Promise<string | und
     return relPath;
 };
 
+// A session Discord ended rather than a command: nobody awaits it, so a transcript that failed to land is logged here.
+const endInBackground = (s: VoiceSession, reason: string): void => {
+    void endSession(s, reason).catch((error: unknown) =>
+        s.ctx.log.error({ err: error, channel: s.channel.name, reason }, "voice session end failed; its transcript may not have been dispatched"),
+    );
+};
+
 // The CLI-facing surface (human-readable strings, `discord-voice` prints them for the model to read).
 export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: DiscordConnectorConfig): Promise<string> => {
     if (session !== undefined) {
@@ -190,7 +197,14 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
         releaseDiscordClient(config.botToken, "voice");
         return `Discord login failed: ${errorMessage(error)}`;
     }
-    const channel = await client.channels.fetch(channelId).catch(() => null);
+    let channel: Awaited<ReturnType<typeof visibleChannel>>;
+    try {
+        channel = await visibleChannel(client, channelId);
+    } catch (error) {
+        // A sentence for the agent, as a failed login is: the gateway's catch-all would answer only "500".
+        releaseDiscordClient(config.botToken, "voice");
+        return `Couldn't look up channel ${channelId}: ${errorMessage(error)}`;
+    }
     if (channel === null || !channel.isVoiceBased()) {
         releaseDiscordClient(config.botToken, "voice");
         return `Channel ${channelId} is not a voice channel the bot can see: check the id and the bot's Connect permission.`;
@@ -249,7 +263,7 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
                 return;
             }
             if (channel.members.filter((member) => !member.user.bot).size === 0) {
-                void endSession(s, "everyone left the channel");
+                endInBackground(s, "everyone left the channel");
             }
         },
         ended: false,
@@ -261,7 +275,7 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
         void Promise.race([
             entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
             entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
-        ]).catch(() => endSession(s, "voice connection lost"));
+        ]).catch(() => endInBackground(s, "voice connection lost"));
     });
     client.on("voiceStateUpdate", s.onVoiceState);
     return (

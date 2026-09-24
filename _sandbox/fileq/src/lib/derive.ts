@@ -1,7 +1,8 @@
+import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
 import { estimateTokens } from "@intentic/base/format";
-import { errorMessage } from "@intentic/base/errors";
+import { errnoCode, errorMessage, isMissing } from "@intentic/base/errors";
 import { IGNORED_DIRS, isAgentWorktreePath, isReferencePath } from "@intentic/workspace-ignore";
 import { STATE_DIR } from "@intentic/constants";
 import { detectFormat, type Format } from "./formats.js";
@@ -90,7 +91,15 @@ export const ensureSidecar = async (workspaceRoot: string, absPath: string, now:
         return { kind: "skipped", relPath, reason: "ignored-path" };
     }
     const sidecarPath = sidecarPathFor(workspaceRoot, relPath);
-    const source = await stat(absPath).catch(() => undefined);
+    let source: Stats | undefined;
+    try {
+        source = await stat(absPath);
+    } catch (error) {
+        // Only a source that is gone takes its sidecar with it; one this process cannot stat is still there.
+        if (!isMissing(error)) {
+            return { kind: "skipped", relPath, reason: `unreadable (${errnoCode(error) ?? errorMessage(error)})` };
+        }
+    }
     if (source === undefined || !source.isFile()) {
         const removed = await removeSidecar(workspaceRoot, relPath);
         return removed ? { kind: "removed", relPath, sidecarPath } : { kind: "skipped", relPath, reason: "missing" };

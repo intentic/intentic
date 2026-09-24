@@ -109,6 +109,17 @@ test("every way of having nothing to offer answers the same way, so no button is
     });
 });
 
+test("a credential that could not be renewed leaves eligibility unanswered rather than answering no", async () => {
+    const available = provider({ "/api/oauth/usage": { body: { juniper_tide: eligible } } });
+    const unreadable = unstubbed<ClaudeStore>("unreadable store", {
+        read: async () => {
+            throw new Error("EIO: i/o error, open 'claude-accounts.json'");
+        },
+    });
+    expect(await readLimitReset(gate(unreadable), "a", available.fetchFn)).toBeUndefined();
+    expect(available.calls).toEqual([]);
+});
+
 test("a busy or malformed status endpoint leaves eligibility unanswered and a later probe can recover", async () => {
     for (const answer of [{ status: 429 }, { status: 503 }, { body: {} }, { body: null }, { body: { juniper_tide: {} } }]) {
         expect(await readLimitReset(gate(store()), "a", provider({ "/api/oauth/usage": answer }).fetchFn)).toBeUndefined();

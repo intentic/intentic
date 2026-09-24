@@ -1,6 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { basename } from "node:path";
 import type { BrowserContext, CDPSession, Page } from "playwright";
+import { type JsonFile, jsonFile } from "../../store/json-file.js";
 
 // Sandbox-held WebAuthn passkeys over the daemon's CDP window: an owner's hardware key can't reach this container.
 // Each connected account gets a virtual authenticator restored from its own store, beside its Chromium profile.
@@ -29,22 +29,24 @@ const AUTHENTICATOR = {
     automaticPresenceSimulation: true,
 } as const;
 
-export const listPasskeys = async (storePath: string): Promise<PasskeyCredential[]> => {
-    const raw = await readFile(storePath, "utf8").catch(() => undefined);
-    if (raw === undefined) {
-        return [];
-    }
-    try {
-        const parsed = JSON.parse(raw) as { credentials?: PasskeyCredential[] };
-        return parsed.credentials ?? [];
-    } catch {
-        // An unreadable store must not take the browser down; the cost is just re-enrolling.
-        return [];
-    }
-};
+interface PasskeyFile {
+    readonly credentials: readonly PasskeyCredential[];
+}
 
-// Writes serialized per store: two pages of one account could race an enrollment against an assertion.
-const writing = new Map<string, Promise<void>>();
+// Private keys a site will ask for again, which nothing can regrow: writes are atomic and queued per path (two pages of
+// one account race enrollment against assertion), and content this build can't read is set aside, never written over.
+const passkeyFile = (storePath: string): JsonFile<PasskeyFile> =>
+    jsonFile<PasskeyFile>(storePath, {
+        // Entries are kept verbatim, never filtered: one dropped on read would be dropped from disk by the next write.
+        parse: (raw) => {
+            const credentials = typeof raw === "object" && raw !== null ? (raw as { credentials?: unknown }).credentials : undefined;
+            return Array.isArray(credentials) ? { credentials: credentials as PasskeyCredential[] } : undefined;
+        },
+        fallback: () => ({ credentials: [] }),
+        mode: 0o600,
+    });
+
+export const listPasskeys = async (storePath: string): Promise<readonly PasskeyCredential[]> => (await passkeyFile(storePath).read()).credentials;
 
 // Merges onto what's already stored, never replaces it: a dropped field (rpId especially) can never be plugged in
 // again.
@@ -58,21 +60,16 @@ export const mergePasskey = (existing: PasskeyCredential | undefined, incoming: 
     return { ...existing, ...learned } as PasskeyCredential;
 };
 
-const upsertPasskey = async (storePath: string, credential: PasskeyCredential): Promise<void> => {
-    const queued = (writing.get(storePath) ?? Promise.resolve()).then(async () => {
-        const stored = await listPasskeys(storePath);
-        const kept = stored.filter((entry) => entry.credentialId !== credential.credentialId);
-        const previous = stored.find((entry) => entry.credentialId === credential.credentialId);
-        await mkdir(dirname(storePath), { recursive: true });
-        await writeFile(storePath, JSON.stringify({ credentials: [...kept, mergePasskey(previous, credential)] }, null, 4), {
-            mode: 0o600,
-        });
-    });
-    writing.set(
-        storePath,
-        queued.catch(() => undefined),
-    );
-    return queued;
+export const upsertPasskey = async (storePath: string, credential: PasskeyCredential): Promise<void> => {
+    await passkeyFile(storePath).update(({ credentials }) => ({
+        credentials: [
+            ...credentials.filter((entry) => entry.credentialId !== credential.credentialId),
+            mergePasskey(
+                credentials.find((entry) => entry.credentialId === credential.credentialId),
+                credential,
+            ),
+        ],
+    }));
 };
 
 // CDP session is the authenticator's whole lifetime: Chromium destroys it silently when the session detaches.
@@ -81,35 +78,45 @@ interface Arm {
     readonly cdp: CDPSession;
     // Credentials Chromium would not take back; empty is the only good answer (see armPasskeys).
     readonly refused: readonly string[];
+    // Why the store could not be read, when it couldn't: the authenticator is up, holding none of its passkeys.
+    readonly unreadable: string | undefined;
 }
 
 const armings = new WeakMap<Page, Promise<Arm>>();
 
-const plugIn = async (context: BrowserContext, page: Page, storePath: string): Promise<Arm> => {
+const plugIn = async (context: BrowserContext, page: Page, storePath: string, onSaveFailure: (error: unknown) => void): Promise<Arm> => {
     const cdp = await context.newCDPSession(page);
     await cdp.send("WebAuthn.enable");
     const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", { options: AUTHENTICATOR });
+    const stored = await passkeyFile(storePath).state();
     const refused: string[] = [];
-    for (const credential of await listPasskeys(storePath)) {
+    for (const credential of stored.value.credentials) {
         // One rotten credential must not unplug the rest; refusals are collected here and raised together below.
         await cdp.send("WebAuthn.addCredential", { authenticatorId, credential }).catch(() => refused.push(credential.credentialId));
     }
-    cdp.on("WebAuthn.credentialAdded", (event) => void upsertPasskey(storePath, event.credential).catch(() => undefined));
-    cdp.on("WebAuthn.credentialAsserted", (event) => void upsertPasskey(storePath, event.credential).catch(() => undefined));
-    return { cdp, refused };
+    // A save that fails loses a key the site now holds the public half of, so it is always reported.
+    const save = (credential: PasskeyCredential): void => void upsertPasskey(storePath, credential).catch(onSaveFailure);
+    cdp.on("WebAuthn.credentialAdded", (event) => save(event.credential));
+    cdp.on("WebAuthn.credentialAsserted", (event) => save(event.credential));
+    return { cdp, refused, unreadable: stored.unreadable ? stored.detail : undefined };
 };
 
 // Plugs stored credentials into one page's authenticator and wires enrollment/assertion events back to the store.
-// Rejects if a stored credential didn't load, instead of swallowing it: the rest stay usable regardless.
-export const armPasskeys = async (context: BrowserContext, page: Page, storePath: string): Promise<void> => {
+// Rejects if the store or a stored credential didn't load, instead of swallowing it: the authenticator stays up.
+export const armPasskeys = async (context: BrowserContext, page: Page, storePath: string, onSaveFailure: (error: unknown) => void): Promise<void> => {
     let arming = armings.get(page);
     if (arming === undefined) {
-        arming = plugIn(context, page, storePath);
+        arming = plugIn(context, page, storePath, onSaveFailure);
         armings.set(page, arming);
         // A failed arm isn't remembered, so the page can retry; a refused credential differs: the authenticator is up.
         arming.catch(() => armings.delete(page));
     }
-    const { refused } = await arming;
+    const { refused, unreadable } = await arming;
+    if (unreadable !== undefined) {
+        throw new Error(
+            `the passkey store ${storePath} could not be read (${unreadable}), so none of its passkeys are loaded; the next enrollment sets it aside as ${basename(storePath)}.corrupt`,
+        );
+    }
     if (refused.length > 0) {
         throw new Error(`passkeys Chromium would not restore (a credential with no rpId cannot be): ${refused.join(", ")}`);
     }

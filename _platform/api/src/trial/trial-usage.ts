@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@intentic/prisma";
+import type { Logger } from "pino";
 import type { Config } from "../config.js";
 
 // Trial allowance is metered per signed-in account, not per visitor: an account cap costs an attacker a fresh Google
@@ -41,9 +42,11 @@ export const trialStatus = async (prisma: PrismaClient, config: Config, userId: 
 };
 
 // Written after the fact: the spend must happen before the upstream call, and the model isn't known until after.
-// Non-throwing — a status line matters less than the answer, and the row can legitimately be gone by a same-day refund.
-export const recordServedModel = async (prisma: PrismaClient, userId: string, now: Date, model: string): Promise<void> => {
-    await prisma.trialUsage.update({ where: { userId_day: { userId, day: trialDay(now) } }, data: { lastModel: model } }).catch(() => undefined);
+// Non-throwing, since a status line matters less than the answer; a failure is logged, never raised.
+export const recordServedModel = async (prisma: PrismaClient, logger: Logger, userId: string, now: Date, model: string): Promise<void> => {
+    await prisma.trialUsage
+        .update({ where: { userId_day: { userId, day: trialDay(now) } }, data: { lastModel: model } })
+        .catch((error: unknown) => logger.warn({ err: error, userId, model }, `trial: recording the served model failed`));
 };
 
 // One atomic upsert, not read-then-write: two concurrent reads of "11 used" would both proceed and leak an allowance.
@@ -67,10 +70,16 @@ export const spendTrialMessage = async (
 };
 
 // Gives back an optimistically-spent slot for a turn that never got an answer; floored at zero, since a refund can race
-// the daily reset.
-export const refundTrialMessage = async (prisma: PrismaClient, userId: string, now: Date): Promise<void> => {
+// the daily reset. Non-throwing, since the caller still owes its reply; a refund that did not land is logged.
+export const refundTrialMessage = async (prisma: PrismaClient, logger: Logger, userId: string, now: Date): Promise<void> => {
+    const day = trialDay(now);
+    try {
+        await prisma.trialUsage.update({ where: { userId_day: { userId, day } }, data: { messages: { decrement: 1 } } });
+    } catch (error) {
+        logger.error({ err: error, userId, day }, `trial: refunding an unserved message failed; it stays spent`);
+        return;
+    }
     await prisma.trialUsage
-        .update({ where: { userId_day: { userId, day: trialDay(now) } }, data: { messages: { decrement: 1 } } })
-        .catch(() => undefined);
-    await prisma.trialUsage.updateMany({ where: { userId, day: trialDay(now), messages: { lt: 0 } }, data: { messages: 0 } }).catch(() => undefined);
+        .updateMany({ where: { userId, day, messages: { lt: 0 } }, data: { messages: 0 } })
+        .catch((error: unknown) => logger.warn({ err: error, userId, day }, `trial: flooring a refunded count at zero failed`));
 };

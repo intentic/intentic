@@ -58,8 +58,8 @@ export const fileCredentialGates = (path: string): CredentialGatesStore => {
         let raw: unknown;
         try {
             raw = JSON.parse(text);
-        } catch {
-            throw new Error(`the credential gate policy at ${path} could not be read`);
+        } catch (error) {
+            throw new Error(`the credential gate policy at ${path} could not be read`, { cause: error });
         }
         const parsed = CredentialGatesSchema.safeParse(raw);
         if (!parsed.success) {

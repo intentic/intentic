@@ -6,10 +6,12 @@ import { recordNewestRun } from "../store/newest-run.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // All warmed off the request path; none blocks anything.
-export const startVersionWatches = ({ config, traits, role, services, shutdown }: BootPhase): void => {
+export const startVersionWatches = ({ config, logger, traits, role, services, shutdown }: BootPhase): void => {
     // Forward-only, so a post-rollback manifest issue reads as "written by a newer intentic".
     if (role.roots) {
-        void recordNewestRun(config.workspaceRoot).catch(() => undefined);
+        void recordNewestRun(config.workspaceRoot).catch((error: unknown) =>
+            logger.warn({ err: error }, "newest-run stamp not recorded, a later rollback's manifest problems will read as damage"),
+        );
     }
 
     // Meaningless for a local daemon.

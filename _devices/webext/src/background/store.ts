@@ -44,6 +44,10 @@ const read = async <T>(key: string, fallback: T, parse: (raw: unknown) => T | un
     return parse(stored[key]) ?? fallback;
 };
 
+// Every switch off and every action asked: a stored grant that no longer parses holds a choice the owner made, which
+// the defaults may be wider than. The sandbox's next push replaces it.
+const LOCKED_SCOPES: WebExtScopes = { read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "always" };
+
 export const store = {
     sandbox: async (): Promise<PairedSandbox | undefined> =>
         await read<PairedSandbox | undefined>(KEY_SANDBOX, undefined, (raw) => {
@@ -54,8 +58,19 @@ export const store = {
     forgetSandbox: async (): Promise<void> => await chrome.storage.local.remove([KEY_SANDBOX, KEY_SCOPES]),
 
     // Defaults come from the contract's own schema, not a second list here, so a switch added there can't be silently
-    // absent from enforcement.
-    scopes: async (): Promise<WebExtScopes> => await read(KEY_SCOPES, WebExtScopesSchema.parse({}), (raw) => WebExtScopesSchema.safeParse(raw).data),
+    // absent from enforcement. They answer only for nothing stored; a stored grant that does not parse is locked.
+    scopes: async (): Promise<WebExtScopes> => {
+        const raw: unknown = (await chrome.storage.local.get([KEY_SCOPES]))[KEY_SCOPES];
+        if (raw === undefined) {
+            return WebExtScopesSchema.parse({});
+        }
+        const parsed = WebExtScopesSchema.safeParse(raw);
+        if (!parsed.success) {
+            console.warn("intentic: the stored permissions do not parse, so every switch is off until the sandbox sends them again", parsed.error);
+            return LOCKED_SCOPES;
+        }
+        return parsed.data;
+    },
     setScopes: async (scopes: WebExtScopes): Promise<void> => await chrome.storage.local.set({ [KEY_SCOPES]: scopes }),
 
     modes: async (): Promise<Record<string, WebExtGrant["mode"]>> =>
@@ -72,7 +87,8 @@ export const store = {
         await chrome.storage.local.set({ [KEY_MODES]: modes });
     },
 
-    paused: async (): Promise<boolean> => await read(KEY_PAUSED, false, (raw) => (typeof raw === "boolean" ? raw : undefined)),
+    // The owner's kill switch: only nothing stored is running, and a stored value that is not a boolean holds as paused.
+    paused: async (): Promise<boolean> => await read(KEY_PAUSED, false, (raw) => (typeof raw === "boolean" || raw === undefined ? raw : true)),
     setPaused: async (paused: boolean): Promise<void> => await chrome.storage.local.set({ [KEY_PAUSED]: paused }),
 
     log: async (): Promise<ActivityEntry[]> =>

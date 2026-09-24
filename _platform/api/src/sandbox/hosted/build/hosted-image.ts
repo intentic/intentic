@@ -110,9 +110,16 @@ export const resolveHostedImage = async (config: Config, logger?: Logger, now: (
     if (remembered !== undefined) {
         return remembered;
     }
-    const digest = await digestOf(parsed).catch(() => undefined);
+    let failure: unknown;
+    const digest = await digestOf(parsed).catch((error: unknown) => {
+        failure = error;
+        return undefined;
+    });
     if (digest === undefined) {
-        logger?.warn({ image: configured }, `hosted image: could not resolve a digest; using the tag, so a claim may have to pull`);
+        logger?.warn(
+            { image: configured, ...(failure === undefined ? {} : { err: failure }) },
+            `hosted image: could not resolve a digest; using the tag, so a claim may have to pull`,
+        );
         return configured;
     }
     const pinned = `${parsed.registry}/${parsed.repository}@${digest}`;

@@ -1,6 +1,7 @@
 import { type FSWatcher, watch } from "node:fs";
 import { type FileHandle, mkdir, open, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { isMissing } from "@intentic/base/errors";
 import type { IntenticLine } from "@intentic/sandbox-contract";
 import { parseIntenticLine } from "./intentic-runner.js";
 
@@ -31,8 +32,12 @@ export const applyRunLive = async (path: string): Promise<boolean> => {
     let content: string;
     try {
         content = await readFile(path, "utf8");
-    } catch {
-        return false; // never ran (or cleaned up): nothing to protect.
+    } catch (error) {
+        // Never ran (or cleaned up): nothing to protect. Any other failure throws, since "not live" would kill a live run.
+        if (isMissing(error)) {
+            return false;
+        }
+        throw error;
     }
     let started = false;
     for (const raw of content.split("\n")) {

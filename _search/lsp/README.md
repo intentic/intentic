@@ -25,8 +25,10 @@ confident, specific, and wrong. Every surface here treats that as *unanswerable*
 renaming the subset of usages a blind program can see. One refusal is native-era new: the native compiler does
 not auto-include @types from PARENT node_modules directories the way the JS one does, so a program tripping over
 missing node globals while an ancestor `node_modules/@types` exists is refused: the caller's own toolchain
-would have loaded them, and relaying the errors would gaslight it. "Checked, and clean" and "could not check"
-are never conflated.
+would have loaded them, and relaying the errors would gaslight it. A compiler that crashes, is killed, or exits
+saying errors exist without one this reader can parse is refused the same way: none of that is a verdict, and
+reading it as an empty list would call every file clean. "Checked, and clean" and "could not check" are never
+conflated.
 
 **.vue imports go unchecked, not falsely broken.** Resolving `.vue` modules is the Vue toolchain's job
 (vue-tsc); the checker drops the module-shape errors those imports produce and keeps every other diagnostic in

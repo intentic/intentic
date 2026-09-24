@@ -1,5 +1,5 @@
 import type { AgentEvent, Rule, WorkspaceEvent } from "@intentic/sandbox-contract";
-import { landAgent, type LandOutcome } from "../../../agents/land/land.js";
+import { landAgent, type LandOutcome, reportLockfileFailures } from "../../../agents/land/land.js";
 import { landingPaths } from "../../../agents/land/landing-paths.js";
 import { type LandVerifier, verifyLandedTree } from "../../../agents/land/verify-landed.js";
 import { wakesItself } from "../../tools/background-jobs.js";
@@ -122,7 +122,9 @@ const landUnderLease = async (deps: LandingDeps, turn: LandingTurn, finished: Is
     }
     const resynced = deps.agents.entry(id);
     const landing = resynced !== undefined && isIsolated(resynced) ? resynced : finished;
-    return deps.perf.track("agent.land", { id, mode, span: "outstanding" }, () => landAgent(deps.agentWorktrees, landing, mode));
+    const outcome = await deps.perf.track("agent.land", { id, mode, span: "outstanding" }, () => landAgent(deps.agentWorktrees, landing, mode));
+    reportLockfileFailures(deps.logger, id, outcome);
+    return outcome;
 };
 
 // What a land decision reads: the span's repos, the paths only where a rule narrows by them (a git pass per repo), and

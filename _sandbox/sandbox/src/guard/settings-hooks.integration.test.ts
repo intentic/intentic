@@ -33,6 +33,19 @@ describe("settingsHookSet", () => {
         expect(await settingsHookSet(place)).toBeUndefined();
     });
 
+    // /proc/self/mem answers every read with EIO: a failure of this process's read, not of the file the CLI will open.
+    test("a settings file this daemon failed to read is an error, never an empty set the CLI would disagree with", async () => {
+        const base = mkdtempSync(join(tmpdir(), "settings-hooks-"));
+        const place = placeIn(base, (path) => (path === join(base, "work", ".claude", "settings.json") ? "/proc/self/mem" : path));
+        await expect(settingsHookSet(place)).rejects.toThrow("EIO");
+    });
+
+    test("a definitions folder that is not a folder declares nothing, as the CLI finds nothing in it either", async () => {
+        const base = mkdtempSync(join(tmpdir(), "settings-hooks-"));
+        const place = placeIn(base, (path) => (path === join(base, "work", ".claude", "skills") ? "/proc/self/mem" : path));
+        expect(await settingsHookSet(place)).toBeUndefined();
+    });
+
     test("a file that is not strict JSON loads nothing, as it loads nothing in Claude Code", async () => {
         const place = fresh();
         await writeText(join(place.cwd, ".claude", "settings.json"), `{ // a comment\n "hooks": { "Stop": [${JSON.stringify(hook("echo x"))}] } }`);

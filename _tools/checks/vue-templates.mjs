@@ -3,25 +3,14 @@
 // doesn't parse templates, and an extension is consumed as source. Uses the real compiler, not a quote-scanner.
 // Best-effort before an install: passes with a note when the compiler can't be resolved.
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { join } from "node:path";
 import { finish } from "./lib/report.mjs";
-import { packages, root, VUE_FILE, walk } from "./lib/repo.mjs";
+import { installedModule, packages, root, VUE_FILE, walk } from "./lib/repo.mjs";
 
 // From the root, not per package: the extension-example seed belongs to no workspace package.
 const templates = walk(root, VUE_FILE);
 const vueHost = packages.find(({ pkg }) => pkg.dependencies?.vue !== undefined || pkg.devDependencies?.vue !== undefined);
 const uncompilable = [];
-const compiler = (() => {
-    if (templates.length === 0 || vueHost === undefined) {
-        return undefined;
-    }
-    try {
-        return createRequire(join(vueHost.dir, "package.json"))("vue/compiler-sfc");
-    } catch {
-        return undefined;
-    }
-})();
+const compiler = templates.length === 0 || vueHost === undefined ? undefined : installedModule(vueHost.dir, "vue/compiler-sfc");
 if (templates.length > 0 && vueHost === undefined) {
     // Unreachable while any package renders a template: it's compiled via that package's own vue dependency.
     uncompilable.push(`${templates.length} templates, and no package declares vue: nothing here can compile them`);

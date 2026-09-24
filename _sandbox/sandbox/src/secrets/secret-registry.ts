@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 
@@ -81,18 +82,31 @@ export const hasSecretReferences = (text: string): boolean => {
     return REFERENCE.test(text);
 };
 
+// A store the registry could not read; its message names the file and never quotes it, so it may reach a reader.
+export class SecretStoreUnreadableError extends Error {
+    override name = "SecretStoreUnreadableError";
+}
+
+// Only an absent store holds nothing: one that cannot be read or parsed holds values nobody could then mask.
 const readJson = async (path: string): Promise<Record<string, unknown>> => {
-    try {
-        return JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-    } catch {
+    const text = await readFile(path, "utf8").catch(undefinedIfMissing);
+    if (text === undefined) {
         return {};
+    }
+    try {
+        return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+        // The parse error is not kept: its message quotes the text around the fault, which is secret values.
+        throw new SecretStoreUnreadableError(`${path} is not valid JSON`);
     }
 };
 
 export const secretRegistryOf = (vault: SecretVault, desiredStateRepo: () => string) => async (): Promise<readonly NamedSecret[]> => {
     const [vaulted, envRaw, generated] = await Promise.all([
-        vault.all().catch(() => ({})),
-        readFile(join(desiredStateRepo(), ENV_FILE), "utf8").catch(() => ""),
+        vault.all(),
+        readFile(join(desiredStateRepo(), ENV_FILE), "utf8")
+            .catch(undefinedIfMissing)
+            .then((text) => text ?? ""),
         readJson(join(desiredStateRepo(), SECRETS_FILE)),
     ]);
     const byName = new Map<string, NamedSecret>();

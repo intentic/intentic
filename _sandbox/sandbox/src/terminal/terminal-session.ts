@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import { isNoTmuxServer } from "./tmux-server.js";
 
 // Tmux session-name charset for the WebSocket route and control-plane list/kill routes: alnum, underscore, dash only,
 // first char not `-` (tmux reads it as a flag). Prefixes are contract vocabulary from session-names.ts.
@@ -129,14 +130,16 @@ export const panePidSessions = (stdout: string): Map<number, string> => {
     return panes;
 };
 
-// Every live pane's root pid to its session name; empty when there is no tmux server.
+// Every live pane's root pid to its session name; empty when there is no tmux server, and a failed listing throws, since
+// the reaper spares exactly the processes under these pids.
 export const panePids = async (): Promise<Map<number, string>> => {
-    try {
-        const { stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", "#{session_name} #{pane_pid}"]);
-        return panePidSessions(stdout);
-    } catch {
-        return new Map();
-    }
+    const listed = await execFileAsync("tmux", ["list-panes", "-a", "-F", "#{session_name} #{pane_pid}"]).catch((error: unknown) => {
+        if (isNoTmuxServer(error)) {
+            return undefined;
+        }
+        throw error;
+    });
+    return listed === undefined ? new Map() : panePidSessions(listed.stdout);
 };
 
 export const reapFinishedSessions = async (policy: ReapPolicy): Promise<void> => {

@@ -1,4 +1,5 @@
 import type { WorkflowRun } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/ui/async";
 import { ref, type Ref, watch } from "vue";
 import type { Router } from "vue-router";
 import { synthesizeSessions } from "../../fleet/synthesizeSessions";
@@ -36,13 +37,14 @@ export const useBoardPresses = (host: PressesHost) => {
         rest.delete(runId);
         stoppingRuns.value = rest;
     };
+    // The daemon answers a stop on an ended run as done, so a refusal means the run may still be spending.
     const stopRun = async (run: WorkflowRun): Promise<void> => {
         stoppingRuns.value = new Set([...stoppingRuns.value, run.runId]);
         try {
             await workflows.stop.mutateAsync(run.runId);
-        } catch {
-            // Usually it ended between render and press; either way a stop that didn't take must not leave the card stuck.
+        } catch (error) {
             forgetStopping(run.runId);
+            agents.notice.value = errorMessage(error, `Couldn't stop that run.`);
         }
     };
     // Held until the ledger says the run stopped, not until the request returns: steps keep finishing for minutes after.
@@ -54,11 +56,16 @@ export const useBoardPresses = (host: PressesHost) => {
         }
     });
     // Files an ended run away, sessions and all, unasked: archiving is lossless and the archive itself is the way back.
+    // A refusal puts the row back (useWorkflowRuns), so the strip is what says why it moved twice.
     const archiveRun = async (run: WorkflowRun): Promise<void> => {
-        await workflows.archive.mutateAsync(run.runId).catch(() => undefined);
+        await workflows.archive.mutateAsync(run.runId).catch((error: unknown) => {
+            agents.notice.value = errorMessage(error, `Couldn't archive that run.`);
+        });
     };
     const restoreRun = async (run: WorkflowRun): Promise<void> => {
-        await workflows.unarchive.mutateAsync(run.runId).catch(() => undefined);
+        await workflows.unarchive.mutateAsync(run.runId).catch((error: unknown) => {
+            agents.notice.value = errorMessage(error, `Couldn't restore that run.`);
+        });
     };
     // A run's design and its history live on the workflows page; this board only answers what it is doing.
     const openRunGraph = (run: WorkflowRun): void => {

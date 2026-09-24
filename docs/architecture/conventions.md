@@ -33,6 +33,13 @@ what may ship, and how an import names its target.
 - **Imports:** import from the true source (no re-exports/aliases). The `@intentic/src` package export
   condition resolves workspace imports straight to `src/`, so agents can edit across packages without
   building.
+- **Failures:** a catch names the one failure it expects and lets the rest through: `undefinedIfMissing` /
+  `isMissing` from [`@intentic/base/errors`](../../_tools/base/src/errors.ts) for "not created yet", a status
+  check for "not found". A read that failed is never written back as a default: the daemon's persisted files go
+  through `jsonFile` / `textFile` ([_sandbox/sandbox/src/store/](../../_sandbox/sandbox/src/store/json-file.ts)),
+  which set aside or refuse what they could not read, and a guard (redaction, a policy, a permission) fails
+  closed. [`silent-catch.mjs`](../../_tools/checks/silent-catch.mjs) ratchets the handlers that throw an error
+  away unnarrowed; a discard that is right says why with `// silent-catch: <reason>`.
 - The compiled shape of the example/fixture is pinned by
   [_deploy/sdk/src/deploy.config.test.ts](../../_deploy/sdk/src/deploy.config.test.ts) against
   [_deploy/sdk/src/__fixtures__/deploy.graph.ts](../../_deploy/sdk/src/__fixtures__/deploy.graph.ts).

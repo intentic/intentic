@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { type StoredSymbol, symbolRows } from "../engines/symbols.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import type { RankedGroup } from "../types.js";
@@ -121,7 +122,7 @@ const refMatches = (db: SqliteDb, ref: SymbolRef, allowed: ReadonlySet<string>):
 
 // One symbol's live body off disk, grown by -C. Undefined when the file has gone since it was indexed.
 const bodyOf = async (root: string, symbol: StoredSymbol, grow: number, rank: number): Promise<RankedGroup | undefined> => {
-    const content = await readFile(join(root, symbol.path), "utf8").catch(() => undefined);
+    const content = await readFile(join(root, symbol.path), "utf8").catch(undefinedIfMissing);
     if (content === undefined) {
         return undefined;
     }
@@ -183,7 +184,7 @@ export const parseAnchor = (anchor: string): { path: string; line: number; endLi
 // `iq context <path:line>`, the smallest enclosing symbol's live body (fallback: ±20 lines), grown by -C.
 export const contextOf = async (db: SqliteDb, root: string, anchor: string, grow: number): Promise<{ groups: RankedGroup[]; label: string }> => {
     const { path, line } = parseAnchor(anchor);
-    const content = await readFile(join(root, path), "utf8").catch(() => undefined);
+    const content = await readFile(join(root, path), "utf8").catch(undefinedIfMissing);
     if (content === undefined) {
         throw new Error(`iq: no such file: ${path}`);
     }

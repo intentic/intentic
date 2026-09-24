@@ -42,18 +42,20 @@ if (parsed.kind === "error") {
 }
 const { inputs } = parsed;
 
-// Event payload the runner wrote to disk, the same JSON a webhook would deliver; unreadable means no payload.
-const eventText = ((): string => {
+// Event payload the runner wrote to disk, the same JSON a webhook would deliver: empty when none was named, the read's
+// own error when one was named and could not be read, since the fire door would otherwise post an empty wake.
+const eventFile = ((): { readonly text: string } | { readonly failure: string } => {
     const path = process.env["GITHUB_EVENT_PATH"];
     if (path === undefined || path === "") {
-        return "";
+        return { text: "" };
     }
     try {
-        return readFileSync(path, "utf8");
-    } catch {
-        return "";
+        return { text: readFileSync(path, "utf8") };
+    } catch (error) {
+        return { failure: `the runner's event payload at ${path} could not be read: ${errorMessage(error)}` };
     }
 })();
+const eventText = "text" in eventFile ? eventFile.text : "";
 
 // API with a control token, no door: starts the turn, waits for the card to settle, lands if asked.
 // Reports how it ended in the runner's own vocabulary; run.ts in @intentic/gate is the exchange itself.
@@ -85,6 +87,9 @@ if (inputs.door === "run") {
 }
 
 if (inputs.door === "fire") {
+    if (inputs.request === "" && "failure" in eventFile) {
+        wiring(eventFile.failure);
+    }
     const body = inputs.request !== "" ? inputs.request : eventText;
     let response: Response;
     try {

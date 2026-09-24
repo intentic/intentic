@@ -2,6 +2,7 @@
 // - every assertion has its own deadline, no fixed sleep
 // - a failure doesn't stop the run: a second failure often explains the first
 // - the failure count is the only input to the exit code
+import { errorMessage } from "@intentic/base/errors";
 
 export interface HarnessOptions {
     /** Where the transcript goes; defaults to stdout/stderr. */
@@ -54,12 +55,15 @@ export const createHarness = (options: HarnessOptions = {}): Harness => {
         detail: (text) => writeError(text.replace(/^/gm, `       `)),
         untilTrue: async (seconds, description, predicate) => {
             const deadline = now() + seconds * 1_000;
+            // A probe that throws is a "no" until the deadline, and the last throw is what the failure names: a broken
+            // probe must not read as the app never getting there.
+            let lastError: unknown;
             for (;;) {
                 let held = false;
                 try {
                     held = await predicate();
-                } catch {
-                    held = false;
+                } catch (error) {
+                    lastError = error;
                 }
                 if (held) {
                     pass(description);
@@ -67,7 +71,7 @@ export const createHarness = (options: HarnessOptions = {}): Harness => {
                 }
                 // Checked after the probe, so a zero-second deadline still gets one attempt.
                 if (now() >= deadline) {
-                    fail(`${description} (waited ${seconds}s)`);
+                    fail(`${description} (waited ${seconds}s)`, lastError === undefined ? undefined : `the probe last threw: ${errorMessage(lastError)}`);
                     return false;
                 }
                 await sleep(POLL_INTERVAL_MS);

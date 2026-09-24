@@ -7,7 +7,7 @@ import { fileSecretVault } from "../capabilities/credentials/secret-vault.js";
 import { resolveSecretReferences, secretReference, secretRegistryOf } from "./secret-registry.js";
 
 // Secrets live in three stores (capability vault, DevOps .env, deploy-generated values); pins that the registry unions
-// all three, each value keeps its reference name, and one store failing does not drop the others.
+// all three, each value keeps its reference name, and a store that fails fails the read: its values could not be masked.
 
 const withStores = () => {
     const root = mkdtempSync(join(tmpdir(), "secret-registry-"));
@@ -38,7 +38,7 @@ test("a vault capability holding several fields names each one", async () => {
     expect((await registry()).map((secret) => secret.name).toSorted()).toEqual(["vpnbox/config", "vpnbox/presharedKey"]);
 });
 
-test("an unreadable vault still yields the repo stores' values", async () => {
+test("an unreadable vault fails the whole read rather than answering without its values", async () => {
     const root = mkdtempSync(join(tmpdir(), "secret-registry-"));
     const repo = join(root, "desired-state");
     await mkdir(repo, { recursive: true });
@@ -55,7 +55,7 @@ test("an unreadable vault still yields the repo stores' values", async () => {
         },
         () => repo,
     );
-    expect(await broken()).toEqual([{ name: "CLOUDFLARE_API_TOKEN", value: "cf_live_0011223344ff", source: "env" }]);
+    await expect(broken()).rejects.toThrow("EACCES");
 });
 
 test("nothing stored anywhere is an empty registry, not a throw", async () => {

@@ -129,7 +129,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         });
         if (attempt === undefined || poolRefused(attempt.response.status)) {
             await attempt?.response.body?.cancel().catch(() => undefined);
-            await refundTrialMessage(prisma, ownerId, at);
+            await refundTrialMessage(prisma, c.get(`logger`), ownerId, at);
             c.get(`logger`).warn(
                 { tried: attempt?.tried ?? 0, status: attempt?.response.status ?? 0, candidates },
                 `trial: no key answered on any model`,
@@ -141,14 +141,14 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         }
         // A failed completion is preserved for the sandbox to explain, but never consumes allowance.
         if (!attempt.response.ok) {
-            await refundTrialMessage(prisma, ownerId, at);
+            await refundTrialMessage(prisma, c.get(`logger`), ownerId, at);
         }
         // Body streamed through untouched, since owning this wire format means re-shipping the service on every
         // upstream change. Remaining-allowance stays off it deliberately; the translator would mangle it, so the daemon
         // reads it from /status instead.
         // Not awaited: a database round trip here would delay the user's first token for a label.
         if (attempt.model !== undefined) {
-            void recordServedModel(prisma, ownerId, at, attempt.model);
+            void recordServedModel(prisma, c.get(`logger`), ownerId, at, attempt.model);
         }
         return new Response(attempt.response.body, {
             status: attempt.response.status,

@@ -17,7 +17,7 @@ import {
     setPanes,
     tabReveal,
 } from "../tabs/useChat-tabs";
-import { attachStarted, loadSessions, sessions } from "./useChat-sessions";
+import { attachStarted, loadSessions, sessions, sessionsFailure } from "./useChat-sessions";
 import {
     accountBusy,
     accountUsage,
@@ -97,6 +97,7 @@ export function useChat() {
         collapsePanes,
         setPanes,
         sessions,
+        sessionsFailure,
         messages,
         streaming,
         availableCommands,

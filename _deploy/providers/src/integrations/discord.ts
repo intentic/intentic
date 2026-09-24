@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { parseInputs } from "../core/inputs.js";
@@ -140,10 +141,11 @@ export const createDiscordProvider = (api: DiscordApi = discordApi): Provider =>
             try {
                 ctx.log(`discord "${ctx.id}": creating guild "${name}"`);
                 guild = await api.createGuild(parsed.botToken, name);
-            } catch {
+            } catch (error) {
                 throw new Error(
-                    `discord "${ctx.id}": the bot is not in any guild and cannot create one. ` +
+                    `discord "${ctx.id}": the bot is not in any guild and cannot create one (${errorMessage(error)}). ` +
                         "Invite the bot to a Discord server first, then re-run apply.",
+                    { cause: error },
                 );
             }
         }

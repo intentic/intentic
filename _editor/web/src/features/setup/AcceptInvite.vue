@@ -23,13 +23,23 @@ const sandbox = useSandbox();
 const token = String(route.params[`token`]);
 const preview = ref<InvitePreview>();
 const loading = ref(true);
+const previewFailed = ref(false);
 const busy = ref(false);
 const error = ref<NoticeModel>();
 
 onMounted(async () => {
-    // Session refresh and token preview are independent (preview needs no session): resolve them together.
-    const [, previewed] = await Promise.all([refresh(), apiClient.invite.preview({ token }).catch(() => ({ status: `invalid` as const }))]);
-    preview.value = previewed;
+    // Session refresh and token preview are independent (preview needs no session): resolve them together. The platform
+    // answers a bad token in-band, so a preview that throws is an unanswered question, never an invalid invite.
+    const [session, previewed] = await Promise.allSettled([refresh(), apiClient.invite.preview({ token })]);
+    if (previewed.status === `fulfilled`) {
+        preview.value = previewed.value;
+    } else {
+        previewFailed.value = true;
+        error.value = noticeFrom(previewed.reason, `Couldn't check this invite. Reload the page to try again.`);
+    }
+    if (session.status === `rejected`) {
+        error.value ??= noticeFrom(session.reason, `Couldn't check who's signed in. Reload the page to try again.`);
+    }
     loading.value = false;
 });
 
@@ -61,6 +71,9 @@ const emailMatches = computed(() => invitedEmail.value !== undefined && user.val
 const view = computed(() => {
     if (loading.value) {
         return `loading`;
+    }
+    if (previewFailed.value) {
+        return `unchecked`;
     }
     const status = preview.value?.status ?? `invalid`;
     if (status === `invalid` || status === `expired`) {
@@ -111,6 +124,9 @@ const switchAccount = async (): Promise<void> => {
                 <Icon name="spinner" spin />
                 <span>{{ t(`setup.acceptInvite.loadingInvite`) }}</span>
             </div>
+
+            <!-- Nothing to say about the invite itself; the notice below says why. -->
+            <template v-else-if="view === 'unchecked'" />
 
             <template v-else-if="view === 'invalid'">
                 <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.inviteNotFound`) }}</h2>

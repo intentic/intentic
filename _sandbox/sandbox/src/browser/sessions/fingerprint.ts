@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { link, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { SingleFlight } from "@intentic/base/async";
+import { errnoCode } from "@intentic/base/errors";
 import { statePath } from "../../state-paths.js";
 
 // Deterministic per-(sandbox seed, profile owner) device: same owner gets the same GPU, cores, memory, locale and
@@ -23,15 +24,19 @@ const SEED_SHAPE = /^[0-9a-f]{64}$/;
 
 // Exclusive create (wx) isn't atomic; staging then linking keeps a concurrent reader from ever seeing a half-written or
 // empty seed.
-// link fails with EEXIST if another writer already published, keeping the mint exclusive.
+// link fails with EEXIST if another writer already published, keeping the mint exclusive; any other failure throws, since
+// a seed that was never written would hand every profile a new device on the next restart.
 const publishSeed = async (path: string, seed: string): Promise<boolean> => {
     const staging = `${path}.${randomBytes(6).toString("hex")}`;
     try {
         await writeFile(staging, seed, { mode: 0o600 });
         await link(staging, path);
         return true;
-    } catch {
-        return false;
+    } catch (error) {
+        if (errnoCode(error) === "EEXIST") {
+            return false;
+        }
+        throw error;
     } finally {
         await rm(staging, { force: true });
     }
@@ -44,8 +49,9 @@ const mintSeed = async (root: string): Promise<string> => {
     if (await publishSeed(path, minted)) {
         return minted;
     }
-    // Either another writer won or the read failed; falls back to this mint, stable for the daemon's life.
-    const onDisk = (await readFile(path, "utf8").catch(() => "")).trim();
+    // Another writer won. A seed that exists but can't be read throws, rather than hand every profile a new device.
+    const onDisk = (await readFile(path, "utf8")).trim();
+    // Malformed content falls back to this mint, stable for the daemon's life.
     return SEED_SHAPE.test(onDisk) ? onDisk : minted;
 };
 

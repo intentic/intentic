@@ -135,7 +135,9 @@ export const judgeHostCommand = async (
         machine: input.machine,
     };
     const record = (outcome: "allowed" | "asked" | "refused", answer?: "allowed" | "declined"): void => {
-        void services.safetyLog.record({ at, ...entry, outcome, ...(answer === undefined ? {} : { answer }) }).catch(() => undefined);
+        void services.safetyLog
+            .record({ at, ...entry, outcome, ...(answer === undefined ? {} : { answer }) })
+            .catch((error: unknown) => services.logger.warn({ err: error, machine: input.machine }, "safety log: a judged device command was not recorded"));
     };
     if (decision === "allow") {
         // Nothing was judged at "off", so no row is written: it would only repeat the setting back to the log.
@@ -164,6 +166,8 @@ export const judgeHostCommand = async (
         );
     }
     record("asked");
+    const answerNotRecorded = (error: unknown): void =>
+        services.logger.warn({ err: error, machine: input.machine }, "safety log: the owner's answer on a device command was not recorded");
     const { reply } = await raiseRequest(
         { observe: actorObserver(services.conversations), cards: services.cards },
         { conversationId, push: (event) => run.push(event) },
@@ -187,12 +191,12 @@ export const judgeHostCommand = async (
         },
     );
     if (reply.decision === "deny") {
-        void services.safetyLog.answered(at, "declined", "refused").catch(() => undefined);
+        void services.safetyLog.answered(at, "declined", "refused").catch(answerNotRecorded);
         return refusal(
             reply.feedback?.trim() ||
                 `The user declined this. Do not run it on "${input.machine}", and do not look for another way to achieve the same thing.`,
         );
     }
-    void services.safetyLog.answered(at, "allowed", "allowed").catch(() => undefined);
+    void services.safetyLog.answered(at, "allowed", "allowed").catch(answerNotRecorded);
     return undefined;
 };

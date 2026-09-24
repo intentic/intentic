@@ -1,5 +1,6 @@
 import { cp, mkdir, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { basename, join, sep } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { publicContract, publicUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { SHARE_DIR } from "@intentic/sandbox-contract/share-paths";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -57,7 +58,7 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
             if (isPublicPath(toRelPath(services.workspace.root, source))) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${input.path}" is already published` });
             }
-            const stats = await stat(source).catch(() => undefined);
+            const stats = await stat(source).catch(undefinedIfMissing);
             if (stats === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: `"${input.path}" does not exist` });
             }

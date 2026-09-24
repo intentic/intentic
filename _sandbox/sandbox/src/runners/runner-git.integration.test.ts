@@ -91,6 +91,28 @@ test("pull materializes the mirror: main line checked out, branch landed, git di
     expect(lines.some((line) => line.includes("up to date"))).toBe(true);
 });
 
+const freshRunner = (): { workspaceRoot: string; historyRoot: string; worktrees: AgentWorktrees } => ({
+    workspaceRoot: mkdtempSync(join(tmpdir(), "runner-work-")),
+    historyRoot: mkdtempSync(join(tmpdir(), "runner-hist-")),
+    worktrees: worktreesStub,
+});
+
+test("a conversation branch the parent has not created yet starts at main", async () => {
+    const said: string[] = [];
+    await syncFromParent(freshRunner(), identity, { ...sync("pull"), branch: "agent/not-yet" }, (line) => said.push(line));
+    expect(said).toContain(`root: the parent has no agent/not-yet yet, starting it at ${mainBranch}`);
+});
+
+// The parent hard-resets the conversation onto what a runner pushes back, so a runner that silently started from main
+// would hand back a branch without the conversation's earlier turns.
+test("a conversation branch that failed to fetch for any other reason fails the sync instead of starting at main", async () => {
+    const said: string[] = [];
+    await expect(syncFromParent(freshRunner(), identity, { ...sync("pull"), branch: "agent/not a ref" }, (line) => said.push(line))).rejects.toThrow(
+        "invalid refspec",
+    );
+    expect(said.some((line) => line.includes("starting it at"))).toBe(false);
+});
+
 test("push lands on the incoming ref, and the checked-out main branch refuses a push outright", async () => {
     await git(runnerWork, ["switch", "agent/conv1"]);
     await writeFile(join(runnerWork, "work.md"), "what the runner did\n");

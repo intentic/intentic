@@ -199,6 +199,17 @@ describe(`a paired machine or browser`, () => {
             2,
         ]);
     });
+
+    it(`says so when the revoke is refused, and still re-reads the list`, async () => {
+        const { state, pair } = pairing();
+        state.hosts.revoke.mockRejectedValueOnce(new Error(`that machine is offline`));
+
+        await pair.removePairedAccess(DEVICE, `linux`);
+        expect([state.error.value, state.refetch.mock.calls.length]).toEqual([
+            { tone: `danger`, title: `Access could not be removed.`, detail: `that machine is offline` },
+            1,
+        ]);
+    });
 });
 
 describe(`the sign-in windows`, () => {

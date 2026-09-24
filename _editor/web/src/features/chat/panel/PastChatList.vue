@@ -13,12 +13,14 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-defineProps<{ sessions: readonly ChatSession[]; query: string; touch?: boolean }>();
+// `failure`: why the last read failed; it replaces the rows, which answer an earlier question if any.
+defineProps<{ sessions: readonly ChatSession[]; query: string; failure?: string | undefined; touch?: boolean }>();
 const emit = defineEmits<{ open: [id: string] }>();
 </script>
 
 <template>
-    <template v-if="sessions.length > 0">
+    <p v-if="failure !== undefined" role="alert" class="px-2 py-3 text-center text-2xs text-danger">{{ failure }}</p>
+    <template v-else-if="sessions.length > 0">
         <button
             v-for="session in sessions"
             :key="session.id"

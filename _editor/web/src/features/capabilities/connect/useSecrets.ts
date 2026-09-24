@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../../setup/devFill";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { rpcQuery } from "../../sandbox/client/rpcQuery";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { rpcKey, SANDBOX_MEMBERS } from "../../../lib/queryKeys";
@@ -17,14 +18,21 @@ import { useSandboxSession } from "../../sandbox/session/sandboxSession";
 export const reveal = async (key: string): Promise<string> => (await sandboxRpc.secrets.reveal({ key })).value;
 
 export function useSecretKeys() {
-    const { query } = useSandboxQuery({
+    const { query, error } = useSandboxQuery({
         queryKey: rpcKey(`secrets.list`),
-        // 412 until DevOps is active, treat as "no keys yet" rather than surfacing an error.
-        queryFn: () => sandboxRpc.secrets.list().catch(() => ({ keys: [] })),
+        // 412 until DevOps is active: no .env holds keys yet. Any other refusal is a failed read, never "no keys".
+        queryFn: () =>
+            sandboxRpc.secrets.list().catch((failure: unknown) => {
+                if (failure instanceof SandboxHttpError && failure.status === 412) {
+                    return { keys: [] };
+                }
+                throw failure;
+            }),
     });
     return {
-        keys: computed<string[]>(() => query.data.value?.keys ?? []),
         hasKey: (key: string): boolean => (query.data.value?.keys ?? []).includes(key),
+        // Why the keys are unknown after a failed read, while hasKey answers false for every key.
+        keysError: error,
     };
 }
 

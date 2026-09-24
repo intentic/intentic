@@ -1,8 +1,7 @@
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { open, mkdir, rm } from "node:fs/promises";
-import { promisify } from "node:util";
 import type { FortinetVpnConfig, VpnConfig } from "@intentic/sandbox-contract";
-import { activeResolvers, interfaceAddress, interfaceRoutes, livePid as livePidOf, logTail, toolMissing } from "../tunnel/net-probe.js";
+import { activeResolvers, halt, interfaceAddress, interfaceRoutes, livePid as livePidOf, logTail, toolMissing } from "../tunnel/net-probe.js";
 import type { VpnDialOptions, VpnDriver, VpnProbe } from "./vpn-driver.js";
 import { interfaceName, logPath, pidPath, vpnDir } from "./vpn-paths.js";
 
@@ -11,7 +10,6 @@ import { interfaceName, logPath, pidPath, vpnDir } from "./vpn-paths.js";
 // openconnect backgrounds itself only after the tunnel is up, so its foreground exit code is the dial's verdict: 0
 // connected, anything else means the log holds the reason.
 
-const exec = promisify(execFile);
 const config = (raw: VpnConfig): FortinetVpnConfig => raw as FortinetVpnConfig;
 
 // A dial that hasn't resolved by now is wedged (an unreachable gateway, an unanswerable prompt) and is killed rather
@@ -119,14 +117,9 @@ export const fortinetDriver: VpnDriver = {
         }
         yield { kind: "log", message: `Connected ${id} on ${interfaceName(id)}. Routes pushed by the gateway now ride the tunnel.` };
     },
+    // SIGTERM is openconnect's clean shutdown: it tears down routes via vpnc-script; a hard kill would strand routing.
     disconnect: async (id) => {
-        const pid = await livePid(id);
-        if (pid !== undefined) {
-            // SIGTERM is openconnect's clean shutdown: it tears down routes via vpnc-script and removes its pidfile; a
-            // hard kill would strand routing.
-            await exec("kill", ["-TERM", String(pid)]).catch(() => undefined);
-        }
-        await rm(pidPath(id), { force: true });
+        await halt(pidPath(id), "openconnect");
     },
     probe: async (id): Promise<VpnProbe> => {
         const name = interfaceName(id);

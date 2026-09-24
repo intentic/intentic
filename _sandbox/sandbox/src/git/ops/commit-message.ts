@@ -98,8 +98,9 @@ const untrackedFiles = async (
         if (size === undefined) {
             continue;
         }
-        const content = size > MAX_UNTRACKED_BYTES ? undefined : await readWorkspaceFile(join(dir, path));
-        // A file too large, unreadable, or binary still earns its line, the path is the part the subject needs.
+        // A file too large, unreadable, or binary still earns its line, the path is the part the subject needs; nothing
+        // is written from this read, so a failed one costs only the content.
+        const content = size > MAX_UNTRACKED_BYTES ? undefined : await readWorkspaceFile(join(dir, path)).catch(() => undefined);
         blocks.push({
             path,
             text: content === undefined || content.includes(`\0`) ? `new file: ${path} (${size} bytes, not shown)` : `new file: ${path}\n${content}`,

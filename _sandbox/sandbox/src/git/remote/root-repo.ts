@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "../../path-exists.js";
 import { STATE_DIR } from "@intentic/constants";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
@@ -31,9 +32,15 @@ const trackedGitlinks = async (root: string, git: GitRunner): Promise<string[]> 
         .map((entry) => entry.slice(entry.indexOf("\t") + 1));
 
 // A gitlink declared in .gitmodules is the user's own submodule, never dropped by this convergence. Uses `git config
-// -f` (git's own parser, spaces survive); no .gitmodules is an empty set, not an error.
+// -f` (git's own parser, spaces survive); exit 1 is no .gitmodules or no path in it, an empty set. Any other failure (a
+// .gitmodules git cannot parse) throws: read as empty, it would drop every submodule it declares.
 const submodulePaths = async (root: string, git: GitRunner): Promise<Set<string>> => {
-    const listing = await git(root, ["config", "-f", ".gitmodules", "-z", "--get-regexp", "^submodule\\..*\\.path$"]).catch(() => undefined);
+    const listing = await git(root, ["config", "-f", ".gitmodules", "-z", "--get-regexp", "^submodule\\..*\\.path$"]).catch((error: unknown) => {
+        if ((error as { code?: unknown }).code === 1) {
+            return undefined;
+        }
+        throw error;
+    });
     if (listing === undefined) {
         return new Set();
     }
@@ -170,7 +177,8 @@ const ensureLocalStateExcluded = async (root: string, git: GitRunner): Promise<v
     const printed = (await git(root, ["rev-parse", "--git-common-dir"])).stdout.trim();
     const gitDir = isAbsolute(printed) ? printed : join(root, printed);
     const target = join(gitDir, "info", "exclude");
-    const existing = await readFile(target, "utf8").catch(() => "");
+    // Only absence reads as empty: the write below replaces the file, and these are the user's own excludes.
+    const existing = (await readFile(target, "utf8").catch(undefinedIfMissing)) ?? "";
     if (existing.includes(`/${STATE_DIR}/`)) {
         return;
     }

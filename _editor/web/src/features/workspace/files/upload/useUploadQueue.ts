@@ -272,7 +272,8 @@ const uploadParallel = async (items: readonly QueueFile[], signal: AbortSignal):
 // onFileStart's count indexes the chunk. A private AbortController also races a stall watchdog (TAR_STALL_MS).
 // Returns:
 // - done: the chunk landed.
-// - fallback: the browser refused a streaming body (HTTP/1.1); caller falls back to the XHR pool.
+// - fallback: the browser refused a streaming body (HTTP/1.1), or a file couldn't be read; caller falls back to the
+//   XHR pool, which fails an unreadable file alone.
 // - failed: a stall or a genuine mid-stream/daemon error; caller retries the chunk.
 const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): Promise<"done" | "fallback" | "failed"> => {
     const control = new AbortController();
@@ -285,6 +286,8 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
     };
     let index = -1;
     let streamed = 0;
+    // The archive died on this browser's side, so it says nothing about whether the transport can stream.
+    let unreadable = false;
     const body = packTar(
         items.map((item) => ({ file: item.file, path: item.path })),
         {
@@ -301,6 +304,10 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
                 bytesDone.value += delta;
                 arm();
             },
+            onUnreadable: (path, error) => {
+                unreadable = true;
+                console.warn(`upload: ${path} failed its archive`, error);
+            },
         },
     );
     arm();
@@ -315,9 +322,12 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
         if (signal.aborted) {
             return `done`;
         }
-        // No bytes streamed + a TypeError means HTTP/1.1 refused the body; reset to queued for the XHR fallback.
-        if (streamed === 0 && error instanceof TypeError) {
-            canStreamRequestBody = false;
+        // No bytes streamed + a TypeError means HTTP/1.1 refused the body; an unreadable file fails only this archive.
+        // Either way the chunk resets to queued for the XHR pool, which fails an unreadable file on its own.
+        if (unreadable || (streamed === 0 && error instanceof TypeError)) {
+            if (!unreadable) {
+                canStreamRequestBody = false;
+            }
             for (const item of items) {
                 if (item.status === `uploading`) {
                     setStatus(item, `queued`);
@@ -341,6 +351,8 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
 // Uploads one bounded chunk with retry and exponential backoff. Each attempt resends the whole chunk (idempotent);
 // after RETRY_ATTEMPTS, whatever hasn't landed is marked failed.
 const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Promise<void> => {
+    // Once an archive fell back, this chunk stays on the per-file pool: re-packing it would resend what already landed.
+    let archive = true;
     for (let attempt = 0; attempt < RETRY_ATTEMPTS; attempt++) {
         if (signal.aborted) {
             return;
@@ -359,7 +371,7 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
                 return;
             }
         }
-        if (chunk.length > TAR_THRESHOLD && canStreamRequestBody) {
+        if (archive && chunk.length > TAR_THRESHOLD && canStreamRequestBody) {
             const result = await uploadViaTar(chunk, signal);
             if (result === `done` || signal.aborted) {
                 return;
@@ -367,7 +379,10 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
             if (result === `failed`) {
                 continue;
             }
-            // "fallback" means HTTP/1.1: fall through to the per-file pool for this chunk, and later ones via the flag.
+            // "fallback" (HTTP/1.1, or a file the archive could not read): the per-file pool takes this chunk, and later
+            // ones via the flag when the transport refused; the archive's streamed bytes are not the pool's progress.
+            archive = false;
+            recomputeBytesDone();
         }
         await uploadParallel(chunk, signal);
         if (signal.aborted || chunk.every((item) => item.status === `done`)) {

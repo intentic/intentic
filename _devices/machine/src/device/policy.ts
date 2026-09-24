@@ -9,18 +9,28 @@ import type { DeviceScopes } from "@intentic/sandbox-contract";
 
 export class ScopeError extends Error {}
 
-// The directories reads and writes are confined to. Empty config means the user's home.
+// The directories reads and writes are confined to. Empty config means the user's home; a line that is not a full
+// path confines to nothing, so a config whose every line is unusable allows no folder rather than the whole home.
 export const rootsOf = (scopes: DeviceScopes): string[] => {
-    const declared = (scopes.roots ?? "")
+    const lines = (scopes.roots ?? "")
         .split(/\r?\n/)
         .map((line) => line.trim())
-        .filter((line) => line !== "")
-        // A leading ~ is what a user types; nothing expands it for us here (it arrives as data from a form).
-        .map((line) => (line.startsWith("~") ? join(homedir(), line.slice(1)) : line))
-        .filter((line) => isAbsolute(line))
-        .map((line) => resolve(line));
-    return declared.length > 0 ? declared : [resolve(homedir())];
+        .filter((line) => line !== "");
+    if (lines.length === 0) {
+        return [resolve(homedir())];
+    }
+    return (
+        lines
+            // A leading ~ is what a user types; nothing expands it for us here (it arrives as data from a form).
+            .map((line) => (line.startsWith("~") ? join(homedir(), line.slice(1)) : line))
+            .filter((line) => isAbsolute(line))
+            .map((line) => resolve(line))
+    );
 };
+
+// The roots as a refusal or a description names them, never an empty list a reader cannot act on.
+export const rootsText = (roots: readonly string[]): string =>
+    roots.length === 0 ? `none, since no line of "Folders it may touch" is a full path` : roots.join(", ");
 
 // A separator-aware prefix test on normalized paths, so `/home/me/../etc/passwd` normalizes first and
 // `/home/meeting` isn't treated as inside `/home/me`. Links are assertPath's to resolve, before this is asked.
@@ -61,7 +71,7 @@ export const assertPath = async (
     if (!withinRoots(real, await Promise.all(roots.map(realPathOf)))) {
         const leads = real === absolute ? "" : ` (it leads to ${real})`;
         throw new ScopeError(
-            `Refused to ${intent} "${path}"${leads}: it is outside the folders this device allows (${roots.join(", ")}). ` +
+            `Refused to ${intent} "${path}"${leads}: it is outside the folders this device allows (${rootsText(roots)}). ` +
                 `Widen "Folders it may touch" on this device's capability card to change that.`,
         );
     }

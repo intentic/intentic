@@ -27,8 +27,8 @@ The third road is not a door: with a control token (`token`, minted on Sandbox â
 `drive` scope, `land` to merge as well) the step drives the agent at the sandbox's own address: it starts an
 isolated turn with `prompt`, polls the agent's card until it settles, and lands the branch when `land: true`
 (`@intentic/gate`'s `run.ts` is the exchange). It ends as `completed` (green), `parked` on a card only a
-person can answer or `failed` (red, with the card's own sentence), or `timeout` (exit 2: the deadline decided,
-the agent keeps working). Outputs: `status`, `conversation-id`, `branch`, `summary`, `landed`. On the wire
+person can answer or `failed` (red, with the card's own sentence; a stopped turn and a refused land are failures
+too), or `timeout` (exit 2: the deadline decided, the agent keeps working). Outputs: `status`, `conversation-id`, `branch`, `summary`, `landed`. On the wire
 every door token leaves the URL for a bearer header (`dialOf`), so the address that reaches the logs names the
 door alone.
 

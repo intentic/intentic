@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { errorMessage } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
 // A manifest edit and its lockfile must leave the worktree in the same patch: reconciled here, before the land commits
@@ -13,7 +14,8 @@ const MANIFEST = /(^|\/)(package\.json|pnpm-workspace\.yaml)$/;
 // A resolution reads the registry for whatever is new; three minutes is far past what one manifest edit costs.
 const RESOLVE_TIMEOUT_MS = 180_000;
 
-export type LockfileReconciliation = "current" | "regenerated" | "failed";
+// What the resolution did; a failure carries pnpm's own reason, since the land goes ahead without the lockfile.
+export type LockfileReconciliation = { readonly outcome: "current" | "regenerated" } | { readonly outcome: "failed"; readonly reason: string };
 
 export type InstallRunner = (dir: string) => Promise<void>;
 
@@ -58,12 +60,12 @@ export const reconcileLockfile = async (
     install: InstallRunner = defaultInstall,
 ): Promise<LockfileReconciliation> => {
     if (!(await lockfileBehind(dir, from, git))) {
-        return "current";
+        return { outcome: "current" };
     }
     try {
         await install(dir);
-        return "regenerated";
-    } catch {
-        return "failed";
+        return { outcome: "regenerated" };
+    } catch (error) {
+        return { outcome: "failed", reason: errorMessage(error) };
     }
 };

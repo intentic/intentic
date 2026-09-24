@@ -1,5 +1,6 @@
 import type { LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract";
 import { ref } from "vue";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { t } from "@intentic/ui/i18n";
 
@@ -46,7 +47,13 @@ const RETRYABLE = new Set([`unavailable`, `error`]);
 export const claimLimitReset = async (account: string, at?: string): Promise<LimitResetClaim> => {
     const claim = await sandboxRpc.usage
         .claimLimitReset({ account }, { context: { at } })
-        .catch((): LimitResetClaim => ({ result: `error`, detail: t(`chat.limitReset.sandboxDidntAnswer`) }));
+        // A refusal is the daemon's answer and says why; only a call that got no answer at all is "didn't answer".
+        .catch(
+            (error: unknown): LimitResetClaim => ({
+                result: `error`,
+                detail: error instanceof SandboxHttpError ? error.message : t(`chat.limitReset.sandboxDidntAnswer`),
+            }),
+        );
     if (!RETRYABLE.has(claim.result)) {
         answers.value.delete(account);
     }

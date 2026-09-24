@@ -27,15 +27,18 @@ const CONTAINER_TO_SANDBOX = "host.docker.internal";
 const json = (status: number, body: unknown): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-// Generated once per workspace, shared with the container as its JWT secret.
+// Generated once per workspace, shared with the container as its JWT secret. Only an absent file is minted over: one
+// that could not be read would be replaced, and the container holding it recreated.
 const loadSecret = async (file: string): Promise<string> => {
     try {
         const existing = (await readFile(file, "utf8")).trim();
         if (existing !== "") {
             return existing;
         }
-    } catch {
-        // Absent: minted below.
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            throw error;
+        }
     }
     await mkdir(posix.dirname(file), { recursive: true });
     const secret = randomBytes(32).toString("hex");

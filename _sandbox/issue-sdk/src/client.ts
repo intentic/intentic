@@ -39,6 +39,9 @@ export interface IssueClient {
     readonly stop: () => void;
 }
 
+// A report the network never carried: the visitor is offline or the sandbox asleep.
+class OfflineError extends Error {}
+
 // The intake as the daemon resolved it, plus the two handles a page-long client keeps.
 export const createClient = async (options: InitOptions): Promise<IssueClient> => {
     const endpoint: EmbedEndpoint = { base: options.base.replace(/\/$/, ""), automationId: options.automationId };
@@ -47,6 +50,13 @@ export const createClient = async (options: InitOptions): Promise<IssueClient> =
     // A per-browser id in localStorage, namespaced per intake: the rate-limit key, and what a proof of work binds.
     const clientId = storedId(`intentic.issues.${options.automationId}.client`);
     const crumbs = createBreadcrumbs();
+
+    // An offline visitor or an asleep sandbox fails the fetch itself (a TypeError) and is nobody's to fix; only the two
+    // network calls are read that way, so a TypeError from a site's beforeSend still reaches its owner.
+    const quietOffline = <T>(call: Promise<T>): Promise<T> =>
+        call.catch((error: unknown) => {
+            throw error instanceof TypeError ? new OfflineError() : error;
+        });
 
     const deliver = async (report: IssueReport): Promise<string | undefined> => {
         try {
@@ -60,12 +70,20 @@ export const createClient = async (options: InitOptions): Promise<IssueClient> =
                 ...(options.key !== undefined ? { key: options.key } : {}),
                 // Only a written report needs a proof, never a crash: a crash handler has no second to spend on it.
                 ...(shaped.kind === "report" && config.antiBot === "pow"
-                    ? { powNonce: await solveProofOfWork(await fetchChallenge(endpoint, clientId), "This page must be served over HTTPS to send a report.") }
+                    ? {
+                          powNonce: await solveProofOfWork(
+                              await quietOffline(fetchChallenge(endpoint, clientId)),
+                              "This page must be served over HTTPS to send a report.",
+                          ),
+                      }
                     : {}),
             };
-            return (await send(endpoint, body)).id;
-        } catch {
-            // Swallowed silently: an offline visitor or asleep sandbox must not be noisy about it.
+            return (await quietOffline(send(endpoint, body))).id;
+        } catch (error) {
+            // A refusal (origin, size, daily limit), an http:// page or a throwing beforeSend is the site owner's to act on.
+            if (!(error instanceof OfflineError)) {
+                console.warn(`[intentic] the bug reporter dropped a report:`, error);
+            }
             return undefined;
         }
     };

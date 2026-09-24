@@ -1,4 +1,4 @@
-import { readDevRebuildLog } from "@intentic/sandbox-contract";
+import { type DeviceCommandResult, readDevRebuildLog } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, onScopeDispose, reactive, ref } from "vue";
 import { type DevRebuildLayers, type DevRebuildStage, rebuildFraction, readRebuildProgress, stageStart } from "./devRebuildStages";
 import { runDeviceCommand } from "../devices/useDevices";
@@ -313,24 +313,26 @@ const follow = (slug: string, hostId: string): void => {
 // be about.
 const probe = async (slug: string, hostId: string): Promise<void> => {
     const run = runFor(slug);
+    let result: DeviceCommandResult;
     try {
-        const result = await runDeviceCommand(hostId, `dev-rebuild-log`);
-        if (!result.ok) {
-            return;
-        }
-        const log = readDevRebuildLog(result.message);
-        if (log.missing || log.exitCode !== undefined || log.quietFor === undefined || log.quietFor > ADOPT_WITHIN_S) {
-            return;
-        }
-        // No `startedAt`: the log's age says when this build last printed, not when it began, and the card would rather
-        // show no clock than one counting from the wrong moment.
-        Object.assign(run, idle(), { phase: "building", lines: log.lines, quietFor: log.quietFor, heardAt: Date.now() });
-        noteProgress(run, log.lines);
-        mark(slug);
-        follow(slug, hostId);
+        result = await runDeviceCommand(hostId, `dev-rebuild-log`);
     } catch {
-        // Nothing to report, and nobody asked.
+        // Nothing to report, and nobody asked; only the read is forgiven, not what is made of its answer.
+        return;
     }
+    if (!result.ok) {
+        return;
+    }
+    const log = readDevRebuildLog(result.message);
+    if (log.missing || log.exitCode !== undefined || log.quietFor === undefined || log.quietFor > ADOPT_WITHIN_S) {
+        return;
+    }
+    // No `startedAt`: the log's age says when this build last printed, not when it began, and the card would rather
+    // show no clock than one counting from the wrong moment.
+    Object.assign(run, idle(), { phase: "building", lines: log.lines, quietFor: log.quietFor, heardAt: Date.now() });
+    noteProgress(run, log.lines);
+    mark(slug);
+    follow(slug, hostId);
 };
 
 export interface DevRebuildFollower {

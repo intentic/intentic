@@ -178,7 +178,12 @@ export const startTranslator = (services: Services): void => {
         // Waits for the platform tunnel to settle, so the rendered address is deterministic.
         await services.platformTunnel.ready;
         // Resolved before spawn so the proxy serves these at once; a down server keeps its persisted entry.
-        const compat = compatYaml(await endpointCompatEntries(services).catch(() => []));
+        const compat = compatYaml(
+            await endpointCompatEntries(services).catch((error: unknown) => {
+                logger.warn({ err: error }, "translator: endpoint list unavailable, starting without the owner's own endpoints");
+                return [];
+            }),
+        );
         await writeFile(configPath, renderConfig({ port, authDir, token: config.translator.token, compat }), { mode: 0o600 });
         const startedAt = Date.now();
         // The proxy logs its exit reason on stdout, not stderr; both streams are captured, in order.
@@ -333,13 +338,18 @@ export const createCliProxyClient = (params: {
     };
 
     // Takes a credential out of the proxy's rotation and leaves it on the row to be seen; the switch persists into the
-    // credential file, so a restart keeps it benched. Best-effort: the caller's error is the report that matters.
+    // credential file, so a restart keeps it benched. Rejects when the proxy did not take it, so nothing reports it out.
     const bench = async (name: string): Promise<void> => {
-        await fetchFn(`${managementUrl}/auth-files/status`, {
+        const response = await fetchFn(`${managementUrl}/auth-files/status`, {
             method: "PATCH",
             headers: { ...auth, "content-type": "application/json" },
             body: JSON.stringify({ name, disabled: true }),
-        }).catch(() => undefined);
+        }).catch(async (err: unknown) => {
+            throw await unreachable(err);
+        });
+        if (!response.ok) {
+            throw new Error(`The translator refused to bench ${name} (${response.status}).`);
+        }
     };
 
     // The proxy's listing plus any credential in the auth dir it has not picked up yet. A sign-in has to judge the file
@@ -375,7 +385,8 @@ export const createCliProxyClient = (params: {
         // account to fix, and a re-sign-in overwrites it.
         const dead = deadFiles(await listedAndOnDisk(), input.provider);
         if (dead.length > 0) {
-            await Promise.all(dead.map((file) => bench(file.name)));
+            // The sign-in's own error is the report; a bench that fails here is retried and logged by benchUnusable.
+            await Promise.allSettled(dead.map((file) => bench(file.name)));
             throw new Error(noProjectSignIn(dead[0]?.email));
         }
     };

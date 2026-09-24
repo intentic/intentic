@@ -1,4 +1,5 @@
 import type { IconName } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import { type LoopDesign, loopFromDesign, type Workflow } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, type Ref, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -181,8 +182,12 @@ export const useRunThrough = (
             if (!composer.reachable.value) {
                 return;
             }
-            // Stops the loop, not the turn: the running iteration finishes and lands before it stops.
-            await stopLoop(conversation.value.conversationId).catch(() => undefined);
+            // Stops the loop, not the turn: the running iteration finishes and lands before it stops. A refused stop leaves
+            // it spending unattended, so it is said under the box rather than dropped.
+            loopFailure.value = undefined;
+            await stopLoop(conversation.value.conversationId).catch((error: unknown) => {
+                loopFailure.value = errorMessage(error, `The loop could not be stopped.`);
+            });
         },
         clear: (): void => {
             conversation.value.workflowId.value = undefined;

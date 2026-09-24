@@ -1,4 +1,4 @@
-import { type ContentBlock, type McpServer, methods, type PromptResponse, type SessionNotification } from "@agentclientprotocol/sdk";
+import { type ContentBlock, type McpServer, methods, type PromptResponse, RequestError, type SessionNotification } from "@agentclientprotocol/sdk";
 import { ACP, type AcpAgentConfig, type AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { whenAborted } from "../../abort.js";
@@ -75,13 +75,24 @@ async function* sessionFor(
             };
             return undefined;
         }
-        try {
-            await connection.agent.request(methods.agent.session.load, {
+        // Only the agent's own refusal means the session is gone: a connection that dropped mid-load throws on, so the
+        // client keeps the id instead of discarding a session nobody said was lost.
+        const refused = await connection.agent
+            .request(methods.agent.session.load, {
                 sessionId,
                 cwd: request.spec.cwd,
                 mcpServers: mcpServersOf(request, connection),
-            });
-        } catch {
+            })
+            .then(
+                () => false,
+                (error: unknown) => {
+                    if (error instanceof RequestError) {
+                        return true;
+                    }
+                    throw error;
+                },
+            );
+        if (refused) {
             yield { kind: "error", code: "session-not-found", message: "The agent no longer has this chat's session. Send again to start fresh." };
             return undefined;
         }

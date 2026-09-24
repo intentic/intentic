@@ -48,16 +48,20 @@ const fetchText = async (path: string): Promise<string | undefined> => {
 };
 
 export const loadGallery = async (): Promise<Gallery> => {
+    // Only the fetch falls back: live data this checkout cannot parse is schema drift, and fails the build that has it.
+    let live: { file: string; facts: string | undefined } | undefined;
     try {
         const rawFile = await fetchText(REGISTRY_FILE);
         if (rawFile === undefined) {
             throw new Error(`no ${REGISTRY_FILE} at ${RAW_BASE}`);
         }
-        return { ...fromFiles(rawFile, await fetchText(REGISTRY_FACTS_FILE)), stale: false };
+        live = { file: rawFile, facts: await fetchText(REGISTRY_FACTS_FILE) };
     } catch (error) {
         console.warn(`[registry] live read failed (${String(error)}): building the gallery from the vendored copy`);
-        return { ...fromFiles(JSON.stringify(fallback.file), JSON.stringify(fallback.facts)), stale: true };
     }
+    return live === undefined
+        ? { ...fromFiles(JSON.stringify(fallback.file), JSON.stringify(fallback.facts)), stale: true }
+        : { ...fromFiles(live.file, live.facts), stale: false };
 };
 
 // github.com/owner/repo for the card's "source" link: the resolved pointer minus git's .git suffix.

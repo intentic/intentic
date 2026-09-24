@@ -3,8 +3,7 @@ import { z } from "zod";
 import { bindingSchema, createInstanceBindingProvider } from "../core/instance-binding.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
-
-const BIN = "/garage";
+import { GARAGE_BIN, runGarage } from "./garage.js";
 
 const bucketSchema = bindingSchema.extend({
     // The instance's host-internal S3 endpoint, surfaced to the app as S3_ENDPOINT.
@@ -15,20 +14,17 @@ const bucketSchema = bindingSchema.extend({
 });
 type BucketInputs = z.infer<typeof bucketSchema>;
 
-// Run a garage CLI subcommand in the instance container; throws on a non-zero exit (with stderr).
-const garage = async (session: SshSession, cid: string, args: string): Promise<string> => {
-    const result = await session.exec(`docker exec ${cid} ${BIN} ${args}`);
-    if (result.code !== 0) {
-        throw new Error(`garage ${args.split(" ")[0]} failed (${result.code}): ${result.stderr.trim()}`);
-    }
-    return result.stdout.trim();
-};
-
 // The access key id + secret of the named key, read back from `garage key info --show-secret` (Garage generates
-// the pair on `key create`). Returns "" for a field not found.
+// the pair on `key create`). Both are required: an empty one would reach the app as its S3 credential.
 const readKey = async (session: SshSession, cid: string, keyName: string): Promise<{ accessKey: string; secretKey: string }> => {
-    const info = (await session.exec(`docker exec ${cid} ${BIN} key info --show-secret ${keyName}`)).stdout;
-    const field = (label: string): string => info.match(new RegExp(`${label}:\\s*(\\S+)`))?.[1] ?? "";
+    const info = await runGarage(session, cid, `key info --show-secret ${keyName}`);
+    const field = (label: string): string => {
+        const value = info.match(new RegExp(`${label}:\\s*(\\S+)`))?.[1];
+        if (value === undefined) {
+            throw new Error(`garage key info ${keyName}: no "${label}:" line in its output`);
+        }
+        return value;
+    };
     return { accessKey: field("Key ID"), secretKey: field("Secret key") };
 };
 
@@ -48,21 +44,23 @@ export const createGarageBucketProvider = (executor: SshExecutor = sshExecutor):
             schema: bucketSchema,
             // The S3 endpoint comes from the instance, so during plan it can still be the PENDING placeholder.
             pendingRefs: ["endpoint"],
+            // Present only with both halves: a bucket whose key is gone reads as absent, so create makes and grants it.
             present: async (session, cid, parsed) => {
-                const info = await session.exec(`docker exec ${cid} ${BIN} bucket info ${parsed.bucket}`);
-                return info.code === 0 ? outputsFor(parsed, await readKey(session, cid, parsed.keyName)) : undefined;
+                const bucket = await session.exec(`docker exec ${cid} ${GARAGE_BIN} bucket info ${parsed.bucket}`);
+                const key = bucket.code === 0 ? await session.exec(`docker exec ${cid} ${GARAGE_BIN} key info ${parsed.keyName}`) : undefined;
+                return key?.code === 0 ? outputsFor(parsed, await readKey(session, cid, parsed.keyName)) : undefined;
             },
             create: async (session, cid, parsed) => {
                 // bucket create + key create error if the resource already exists, so tolerate that; the grant is
                 // idempotent.
-                await session.exec(`docker exec ${cid} ${BIN} bucket create ${parsed.bucket} 2>/dev/null || true`);
-                await session.exec(`docker exec ${cid} ${BIN} key create ${parsed.keyName} 2>/dev/null || true`);
-                await garage(session, cid, `bucket allow --read --write ${parsed.bucket} --key ${parsed.keyName}`);
+                await session.exec(`docker exec ${cid} ${GARAGE_BIN} bucket create ${parsed.bucket} 2>/dev/null || true`);
+                await session.exec(`docker exec ${cid} ${GARAGE_BIN} key create ${parsed.keyName} 2>/dev/null || true`);
+                await runGarage(session, cid, `bucket allow --read --write ${parsed.bucket} --key ${parsed.keyName}`);
                 return outputsFor(parsed, await readKey(session, cid, parsed.keyName));
             },
             drop: async (session, cid, parsed) => {
-                await session.exec(`docker exec ${cid} ${BIN} bucket delete --yes ${parsed.bucket} 2>/dev/null || true`);
-                await session.exec(`docker exec ${cid} ${BIN} key delete --yes ${parsed.keyName} 2>/dev/null || true`);
+                await session.exec(`docker exec ${cid} ${GARAGE_BIN} bucket delete --yes ${parsed.bucket} 2>/dev/null || true`);
+                await session.exec(`docker exec ${cid} ${GARAGE_BIN} key delete --yes ${parsed.keyName} 2>/dev/null || true`);
             },
         },
         executor,

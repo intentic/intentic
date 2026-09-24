@@ -54,3 +54,7 @@ been written five times.
   lost live update must never crash the turn that produced it.
 - Shutdown is capped at three seconds: a wedged provider close must not hold the process hostage, since the
   daemon's supervisor SIGTERMs the process group and follows with SIGKILL after a grace of its own.
+- One process holds every slot, so once it is serving a stray rejection in one connector's fire-and-forget call is
+  logged (`unhandled rejection in the gateway`) rather than taking every connection down with it; a gateway that
+  cannot start still exits non-zero. The failure and status
+  reports to the daemon never reject either: one the daemon did not take is a warning in the gateway's log.

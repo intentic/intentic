@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
-import { noticeOf } from "@intentic/ui/async";
+import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { FRAME_WEBP, videoTag } from "../../browsers/frameUrls";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "../../browsers/keyIntent";
@@ -170,7 +170,15 @@ const connect = async (): Promise<void> => {
     status.value = "connecting";
     errorMsg.value = undefined;
     painting.value = false;
-    const url = await wsSocketUrl(`/system/browser-profile`, { capability: props.capability, mode: props.mode });
+    let url: string | undefined;
+    try {
+        url = await wsSocketUrl(`/system/browser-profile`, { capability: props.capability, mode: props.mode });
+    } catch (error) {
+        // A session that couldn't be minted is a failed start, said as one rather than left connecting forever.
+        status.value = "error";
+        errorMsg.value = noticeFrom(error, t(`capabilities.browserProfileDialog.couldntStartBrowser`));
+        return;
+    }
     if (url === undefined) {
         status.value = "error";
         errorMsg.value = noticeOf(t(`capabilities.browserProfileDialog.couldntStartBrowser`));

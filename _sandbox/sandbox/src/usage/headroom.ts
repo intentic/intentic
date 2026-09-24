@@ -184,7 +184,15 @@ export const createHeadroomService = (deps: {
     const sweep = async (options: RefreshOptions): Promise<void> => {
         const maxAgeMs = options.maxAgeMs ?? FRESH_MS;
         const [targets, stored] = await Promise.all([
-            Promise.all(deps.sources.map((source) => source.targets().catch(() => []))).then((lists) => lists.flat()),
+            // One source that cannot list its accounts must not starve the others; its numbers stop moving, so it says why.
+            Promise.all(
+                deps.sources.map((source) =>
+                    source.targets().catch((error: unknown) => {
+                        deps.logger.warn({ err: error }, "headroom: a source could not list its accounts, their readings stand still");
+                        return [];
+                    }),
+                ),
+            ).then((lists) => lists.flat()),
             deps.store.read(),
             seed(),
         ]);

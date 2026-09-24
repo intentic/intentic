@@ -51,7 +51,7 @@ const listed = (runs: readonly PipelineRun[]) => ({
     })),
 });
 
-const harness = async (forge: { jobs: object; runs: readonly PipelineRun[] }, autoRepair = true) => {
+const harness = async (forge: { jobs: object; runs: readonly PipelineRun[]; refuseList?: true }, autoRepair = true) => {
     const root = mkdtempSync(join(tmpdir(), "ci-repair-"));
     const dir = join(root, "web");
     await mkdir(dir, { recursive: true });
@@ -60,6 +60,7 @@ const harness = async (forge: { jobs: object; runs: readonly PipelineRun[] }, au
     const capabilities = fileCapabilitiesStore(join(root, STATE_DIR, "config", "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "T" } });
     const told: string[] = [];
+    const warned: string[] = [];
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
@@ -74,7 +75,13 @@ const harness = async (forge: { jobs: object; runs: readonly PipelineRun[] }, au
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
-        logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", {
+            info: () => {},
+            warn: (...args: unknown[]) => {
+                warned.push(String(args[1]));
+            },
+            error: () => {},
+        }),
         conversations: memoryFleet().conversations,
         events: createDomainEvents(() => {}),
     });
@@ -93,9 +100,12 @@ const harness = async (forge: { jobs: object; runs: readonly PipelineRun[] }, au
         if (path.includes("/logs")) {
             return new Response("FAIL src/a.test.ts > adds");
         }
+        if (forge.refuseList === true && path.includes("/actions/runs?")) {
+            return new Response("upstream unavailable", { status: 503 });
+        }
         return new Response(JSON.stringify(path.includes("/jobs") ? forge.jobs : listed(forge.runs)));
     }) as unknown as FetchFn;
-    return { services: drivenBy(services, wake), fetchFn, started, told, reruns };
+    return { services: drivenBy(services, wake), fetchFn, started, told, reruns, warned };
 };
 
 beforeEach(resetRepairGate);
@@ -125,6 +135,15 @@ test("a newer run standing on main holds the fix back: its own result decides", 
     await observeCiRun(services, run(41, "failed"), fetchFn);
     await observeCiRun(services, run(42, "failed"), fetchFn);
     expect(started).toEqual([]);
+});
+
+test("a runs list the forge refuses holds the fix back, since nothing shows this is still main's newest word", async () => {
+    const forge = { jobs: CODE_JOBS, runs: [run(42, "failed"), run(41, "failed")], refuseList: true as const };
+    const { services, fetchFn, started, warned } = await harness(forge);
+    await observeCiRun(services, run(41, "failed"), fetchFn);
+    await observeCiRun(services, run(42, "failed"), fetchFn);
+    expect(started).toEqual([]);
+    expect(warned).toEqual(["ci repair: runs not listed, the fix waits for the next red run"]);
 });
 
 test("a run that died on the fleet is re-run once, and a second death is said instead of re-run", async () => {

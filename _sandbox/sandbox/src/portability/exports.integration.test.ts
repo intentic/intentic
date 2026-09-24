@@ -29,12 +29,15 @@ const cleanup = async (): Promise<void> => {
     }
 };
 
-const exportServices = (work: string, history: string): Services =>
+const exportServices = (work: string, history: string, overrides: Partial<Pick<Services, "vaultManifestSecrets">> = {}): Services =>
     services({
         workspace: workspacePaths(work),
         config: { ...testConfig, workspaceRoot: work, historyRoot: history, sandbox: { ...testConfig.sandbox, name: "intentic-sandbox-demo" } },
         capabilities: memoryCapabilitiesStore(),
         files: fakeFiles({ read: async (absPath) => readFile(absPath, "utf8").catch(() => undefined) }),
+        vaultManifestSecrets: async () => [],
+        vaultExtensionSettingSecrets: async () => [],
+        ...overrides,
     } as Parameters<typeof services>[0]);
 
 // Polls the directory for the named export's status, since the pack runs detached; checking the named entry, not the
@@ -88,6 +91,30 @@ test("a bundle carrying secrets says so in its own filename, on any machine it e
     expect(name).toContain("-with-secrets");
     await settled(source.history, name);
     expect((await listExports(source.history))[0]?.secrets).toBe(true);
+    await cleanup();
+});
+
+test("a secrets-off export whose credential sweep fails ends failed and says why, never packing the unswept manifest", async () => {
+    const source = await makeRoots();
+    const refused = { vaultManifestSecrets: async (): Promise<readonly string[]> => { throw new Error("the vault could not be written"); } };
+
+    const name = await startExport(exportServices(source.work, source.history, refused), { secrets: false, now: 1_700_000_000_000 });
+    await settled(source.history, name);
+
+    const [entry] = await listExports(source.history);
+    expect(entry?.status).toBe("failed");
+    expect(entry?.error).toBe("the vault could not be written\n");
+    await cleanup();
+});
+
+test("an export that carries secrets packs past a failed sweep, since every vault travels with it anyway", async () => {
+    const source = await makeRoots();
+    const refused = { vaultManifestSecrets: async (): Promise<readonly string[]> => { throw new Error("the vault could not be written"); } };
+
+    const name = await startExport(exportServices(source.work, source.history, refused), { secrets: true, now: 1_700_000_000_000 });
+    await settled(source.history, name);
+
+    expect((await listExports(source.history))[0]?.status).toBe("ready");
     await cleanup();
 });
 

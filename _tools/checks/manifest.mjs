@@ -66,6 +66,14 @@ export const CHECKS = [
     { id: "paths", file: "path-literals.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "no hand-spelled roots and no counted ones (ratcheted)" },
     { id: "vocabulary", file: "vocabulary.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "a word this repo retired is not spelled again (ratcheted)" },
     {
+        id: "silent-catch",
+        file: "silent-catch.mjs",
+        needs: "checkout",
+        gate: "tidy",
+        scoped: true,
+        about: "no new handler throws an error away unnarrowed and unexplained (ratcheted)",
+    },
+    {
         id: "time-zones",
         file: "time-zones.mjs",
         needs: "checkout",

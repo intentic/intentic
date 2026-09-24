@@ -25,63 +25,90 @@ afterAll(async () => {
 });
 
 test("revalidate: initial build, touch-only skip, content change, delete", async () => {
-    const first = await revalidate(db, await sweep(root, false));
+    const first = await revalidate(db, (await sweep(root, false)).entries);
     expect(first.changed).toBeGreaterThan(0);
     expect(listFiles(db).has("alpha/src/widget.ts")).toBe(true);
 
     // No changes → same generation.
-    const second = await revalidate(db, await sweep(root, false));
+    const second = await revalidate(db, (await sweep(root, false)).entries);
     expect(second.changed).toBe(0);
     expect(second.generation).toBe(first.generation);
 
     // Touch (mtime bump, same content) → hash confirms, no generation bump.
     const widget = join(root, "alpha/src/widget.ts");
     await utimes(widget, new Date(), new Date(Date.now() + 5000));
-    const touched = await revalidate(db, await sweep(root, false));
+    const touched = await revalidate(db, (await sweep(root, false)).entries);
     expect(touched.generation).toBe(first.generation);
 
     // Content change → generation bumps, hash updates.
     const before = listFiles(db).get("alpha/src/widget.ts")!.hash;
     await writeFile(widget, "export const createWidget = (name: string): { name: string } => ({ name });\n");
-    const changed = await revalidate(db, await sweep(root, false));
+    const changed = await revalidate(db, (await sweep(root, false)).entries);
     expect(changed.generation).toBeGreaterThan(first.generation);
     expect(listFiles(db).get("alpha/src/widget.ts")!.hash).not.toBe(before);
 
     // Delete → row cascades away.
     await rm(join(root, "notes.md"));
-    await revalidate(db, await sweep(root, false));
+    await revalidate(db, (await sweep(root, false)).entries);
     expect(listFiles(db).has("notes.md")).toBe(false);
 });
 
 // One index serves every agent worktree of a repo, and `git worktree add` stamps a fresh mtime on every file it
 // checks out. The reported lag has to survive that, or every answer in a worktree opens with a false alarm.
 test("indexLag: a checkout's fresh mtimes are not lag; a real edit and a new file are", async () => {
-    await revalidate(db, await sweep(root, false));
-    expect(indexLag(db, await sweep(root, false))).toBe(0);
+    await revalidate(db, (await sweep(root, false)).entries);
+    expect(indexLag(db, (await sweep(root, false)).entries)).toBe(0);
 
     // The worktree signature: every mtime moved, no content did.
     const future = new Date(Date.now() + 60_000);
-    for (const entry of await sweep(root, false)) {
+    for (const entry of (await sweep(root, false)).entries) {
         await utimes(entry.abs, future, future);
     }
-    expect(indexLag(db, await sweep(root, false))).toBe(0);
+    expect(indexLag(db, (await sweep(root, false)).entries)).toBe(0);
 
     await writeFile(join(root, "alpha/src/widget.ts"), `export const createWidget = (): string => \`grown\`;\n${"// filler\n".repeat(20)}`);
     await writeFile(join(root, "alpha/src/fresh.ts"), "export const fresh = 1;\n");
-    expect(indexLag(db, await sweep(root, false))).toBe(2);
+    expect(indexLag(db, (await sweep(root, false)).entries)).toBe(2);
 
-    await revalidate(db, await sweep(root, false));
+    await revalidate(db, (await sweep(root, false)).entries);
     await rm(join(root, "alpha/src/fresh.ts"));
-    expect(indexLag(db, await sweep(root, false))).toBe(1);
-    await revalidate(db, await sweep(root, false));
+    expect(indexLag(db, (await sweep(root, false)).entries)).toBe(1);
+    await revalidate(db, (await sweep(root, false)).entries);
 });
 
 test("binary files get a bare marker row, not derived data", async () => {
     await writeFile(join(root, "blob.bin"), Buffer.from([0x89, 0x50, 0x00, 0x47, 0x0d, 0x0a]));
-    await revalidate(db, await sweep(root, false));
+    await revalidate(db, (await sweep(root, false)).entries);
     const row = listFiles(db).get("blob.bin");
     expect(row?.hash).toBe("-");
     // A second pass must not re-read it (mtime+size short-circuit → no generation bump).
-    const generation = (await revalidate(db, await sweep(root, false))).generation;
-    expect((await revalidate(db, await sweep(root, false))).generation).toBe(generation);
+    const generation = (await revalidate(db, (await sweep(root, false)).entries)).generation;
+    expect((await revalidate(db, (await sweep(root, false)).entries)).generation).toBe(generation);
+});
+
+// EISDIR stands in for EACCES/EIO, which a root test run cannot provoke. A bare row in its place would short-circuit
+// every later pass on mtime+size, blanking the file's symbols and chunks until its next edit.
+test("a file that is there but fails to read keeps its indexed content and is reported", async () => {
+    const { entries } = await sweep(root, false);
+    await revalidate(db, entries);
+    const widget = entries.find((entry) => entry.path === "alpha/src/widget.ts")!;
+    const before = listFiles(db).get(widget.path);
+    // A size change forces the read; a directory in the file's place fails it with something other than "gone".
+    const broken = { ...widget, abs: root, size: widget.size + 1 };
+    const pass = await revalidate(
+        db,
+        entries.map((entry) => (entry.path === widget.path ? broken : entry)),
+    );
+    expect(pass.unreadable).toEqual(["alpha/src/widget.ts (EISDIR)"]);
+    expect(listFiles(db).get(widget.path)).toEqual(before);
+});
+
+test("a file gone between the sweep and its read gets the bare row, and is not reported", async () => {
+    const { entries } = await sweep(root, false);
+    await writeFile(join(root, "vanishing.ts"), "export const vanishing = 1;\n");
+    const vanishing = (await sweep(root, false)).entries.find((entry) => entry.path === "vanishing.ts")!;
+    await rm(join(root, "vanishing.ts"));
+    const pass = await revalidate(db, [...entries, vanishing]);
+    expect(pass.unreadable).toEqual([]);
+    expect(listFiles(db).get("vanishing.ts")?.hash).toBe("-");
 });

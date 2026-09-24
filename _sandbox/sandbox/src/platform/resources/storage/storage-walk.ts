@@ -46,8 +46,13 @@ export const isAbortError = (error: unknown): boolean => error instanceof DOMExc
 
 // Walks everything below `root`, which the caller has already read as `context`; the root itself is never reported.
 export const walkTree = async <T>(root: string, context: T, visitor: TreeVisitor<T>, limits: WalkLimits = {}): Promise<WalkOutcome> => {
-    const top = await lstat(root).catch(() => undefined);
-    if (top?.isDirectory() !== true) {
+    let top: Stats;
+    try {
+        top = await lstat(root);
+    } catch (error) {
+        return { complete: true, unreadable: codeOf(error) === "ENOENT" ? 0 : 1 };
+    }
+    if (!top.isDirectory()) {
         return { complete: true, unreadable: 0 };
     }
     const pending: { readonly dir: string; readonly context: T }[] = [{ dir: root, context }];

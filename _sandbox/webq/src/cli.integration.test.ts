@@ -40,6 +40,11 @@ const routes = (): Record<string, { body: string; type?: string }> => ({
 
 beforeAll(async () => {
     server = createServer((req, res) => {
+        // A connection cut before any answer: the one failure a crawl can only name, never count as a status.
+        if (req.url === "/cut") {
+            req.socket.destroy();
+            return;
+        }
         const route = routes()[(req.url ?? "/").split("?")[0] ?? "/"];
         if (route === undefined) {
             res.writeHead(404, { "content-type": "text/html" });
@@ -139,6 +144,13 @@ describe("webq crawl", () => {
 
     it("exits 1 when nothing could be crawled", async () => {
         const { exitCode } = await webq("crawl", `${base}/gone`, "--max-pages", "2", "--out", join(home, "crawl-empty"), "--fresh");
+        expect(exitCode).toBe(1);
+    });
+
+    it("names each page that failed, and why, beside the count", async () => {
+        const { out, exitCode } = await webq("crawl", `${base}/cut`, "--max-pages", "1", "--out", join(home, "crawl-cut"), "--fresh");
+        expect(out).toContain("skipped: errors 1");
+        expect(out).toMatch(new RegExp(`failed: ${base}/cut: \\S`));
         expect(exitCode).toBe(1);
     });
 });

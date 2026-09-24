@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { type ActivityEvent, ActivityEventSchema } from "@intentic/sandbox-contract";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 
@@ -24,10 +25,9 @@ export const fileActivityStore = (path: string): ActivityStore => {
     // Strictly monotonic `at`; equal ms-resolution stamps would break newest-first order and the `before` cursor.
     let lastAt = 0;
     const read = async (): Promise<ActivityEvent[]> => {
-        let raw: string;
-        try {
-            raw = await readFile(path, "utf8");
-        } catch {
+        // Only an absent log is empty: one that cannot be read answers with the error, not with no events.
+        const raw = await readFile(path, "utf8").catch(undefinedIfMissing);
+        if (raw === undefined) {
             return [];
         }
         return raw

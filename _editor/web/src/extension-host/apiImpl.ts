@@ -362,9 +362,10 @@ export const createExtensionApi = (
                     const answer = await rpc.workspace.file({ path });
                     // Absent is the ordinary first state, not an error (see IntenticApi.workspace.file).
                     return answer.present ? answer.content : undefined;
-                } catch {
+                } catch (error) {
                     // A refused or unreachable read; still undefined, since an extension polling a file it lacks a
-                    // grant for must not crash its own view.
+                    // grant for must not crash its own view, but logged, since the extension reads it as absent.
+                    console.warn(`extension ${extensionId}: reading ${path} failed, answered as absent`, error);
                     return undefined;
                 }
             },

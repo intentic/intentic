@@ -1,4 +1,5 @@
 import { type Backoff, createBackoff } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -124,7 +125,22 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
     if (s.closing) {
         return;
     }
-    const url = await socketUrl(s);
+    let url: string | undefined;
+    try {
+        url = await socketUrl(s);
+    } catch (error) {
+        // A session that couldn't be minted (sandbox restarting, network down) retries like a drop; nothing else would.
+        console.warn(`terminal ${s.name}: authorizing the socket failed`, error);
+        if (s.closing) {
+            return;
+        }
+        if (!s.down) {
+            s.down = true;
+            s.term.writeln(`\r\n\x1b[31mCouldn't authorize the terminal (${errorMessage(error)}); retrying.\x1b[0m`);
+        }
+        scheduleRetry(s);
+        return;
+    }
     // Disposed during the token fetch; don't resurrect a socket for a dead session.
     if (s.closing) {
         return;

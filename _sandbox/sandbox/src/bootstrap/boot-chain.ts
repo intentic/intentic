@@ -49,17 +49,29 @@ interface BootChainStep {
 // Kills a previous daemon's panel, agent and job tmux sessions, re-adopting a live infra apply, dockerd or model server;
 // the tmux server is container-wide, so they are the container owner's to sweep.
 const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promise<void> => {
+    // An events log that cannot be read spares whatever apply session exists: killing a live infra apply mid-run is the
+    // costlier mistake.
+    // A session that could not be adopted is swept as stale below, so the refusal is said, not dropped.
+    const adopted = (key: string, options: { oneShot?: true }): Promise<boolean> =>
+        services.processes.adopt(key, options).catch((error: unknown) => {
+            logger.warn({ err: error, key }, "boot: a managed session could not be adopted, so it is swept as stale");
+            return false;
+        });
     const applyLive =
-        (await applyRunLive(applyEventsPath(config.historyRoot)).catch(() => false)) &&
-        (await services.processes.adopt(INFRA_APPLY_KEY, { oneShot: true }).catch(() => false));
-    const dockerAlive = await services.processes.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
+        (await applyRunLive(applyEventsPath(config.historyRoot)).catch((error: unknown) => {
+            logger.warn({ err: error }, "boot: the infra apply's event log could not be read, its session is spared if one is alive");
+            return true;
+        })) && (await adopted(INFRA_APPLY_KEY, { oneShot: true }));
+    const dockerAlive = await adopted(DOCKER_PANEL_KEY, {});
     // Killing a live model server discards a loaded model, minutes to reload.
-    const modelKeys = (await services.capabilities.list().catch(() => [])).flatMap((capability) =>
-        capability.kind === "localmodel" ? [localModelPanelKey(capability.id)] : [],
-    );
+    const capabilities = await services.capabilities.list().catch((error: unknown) => {
+        logger.warn({ err: error }, "boot: capabilities could not be listed, so no local model server is spared the stale sweep");
+        return [];
+    });
+    const modelKeys = capabilities.flatMap((capability) => (capability.kind === "localmodel" ? [localModelPanelKey(capability.id)] : []));
     const modelsAlive: string[] = [];
     for (const key of modelKeys) {
-        if (await services.processes.adopt(key, {}).catch(() => false)) {
+        if (await adopted(key, {})) {
             modelsAlive.push(panelSession(key));
         }
     }
@@ -120,7 +132,12 @@ const vaultLooseSecrets = async ({ logger, services }: BootRun): Promise<void> =
         logger.info({ extensions: settings }, "extension setting secrets moved out of the tracked settings file into the private store");
     }
     // Masking (agent-redaction.ts) has a length floor below which a stored value passes unmasked.
-    const unmaskable = unmaskableSecrets(await services.secretRegistry().catch(() => []));
+    const unmaskable = unmaskableSecrets(
+        await services.secretRegistry().catch((error: unknown) => {
+            logger.warn({ err: error }, "secrets: the stores could not be read, so every tool result is withheld until they can");
+            return [];
+        }),
+    );
     if (unmaskable.length > 0) {
         logger.warn(
             { secrets: unmaskable },

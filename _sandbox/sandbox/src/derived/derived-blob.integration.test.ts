@@ -100,6 +100,14 @@ test("a sandbox without the binary blames the sandbox, not the file", async () =
     expect(side).toEqual({ present: false, reason: "this sandbox has no fileq binary, so nothing can be rendered as text here" });
 });
 
+test("a render that ran out of time says so, instead of blaming this version of the file", async () => {
+    const exec: ExecFn = async () => {
+        throw Object.assign(new Error("Command failed: fileq read"), { code: null, killed: true, signal: "SIGTERM", stdout: "" });
+    };
+    const side = await deriveBytes(root, Buffer.from("scan"), { name: "scan.pdf" }, exec);
+    expect(side).toEqual({ present: false, reason: "fileq ran past its 120s limit and was stopped" });
+});
+
 test("two asks for one version in flight share a single render", async () => {
     const calls: string[][] = [];
     const exec = reader("shared", calls);

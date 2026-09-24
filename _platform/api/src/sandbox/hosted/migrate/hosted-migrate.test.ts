@@ -137,9 +137,14 @@ const built = (fly: ReturnType<typeof stubFly>, seeded: { machineId: string; vol
  * under the ids the row names. A local stub could answer each call, but not the rules these cases turn on: that a
  * fork carries the source's bytes, that a snapshot must finish before it can be restored from, and that a machine
  * somebody stopped does not answer `started`. */
-const stubFly = (over: { snapshotNeverFinishes?: boolean } = {}) => {
+const stubFly = (over: { snapshotNeverFinishes?: boolean; stopRefused?: boolean } = {}) => {
+    // A refused stop is the one fault the shared fake has no switch for; it is answered here, before the fake sees it.
+    const refusingStop =
+        (fetchFn: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) =>
+        async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
+            init?.method === `POST` && String(input).endsWith(`/stop`) ? new Response(JSON.stringify({ error: `machine is busy` }), { status: 412 }) : fetchFn(input, init);
     const fly = installFakeFly(
-        (name, value) => stubGlobal(name, value),
+        (name, value) => stubGlobal(name, over.stopRefused === true ? refusingStop(value as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) : value),
         over.snapshotNeverFinishes === true ? { faults: { snapshotNeverFinishes: true } } : {},
     );
     const seeded = machine();
@@ -318,6 +323,21 @@ describe(`moving to another machine`, () => {
         // The original is started again, and the row still names it.
         expect(fly.called(`POST`, `/machines/m1/start`).length).toBeGreaterThan(0);
         expect(state).toMatchObject({ machineId: `m1`, volumeId: `vol_1`, region: `iad`, tier: FREE_TIER.id, migratingId: null });
+        expect(migrations[0]?.state).toBe(`rolledBack`);
+    });
+});
+
+describe(`a move whose original will not stop`, () => {
+    /* THE COPY COMES FROM A DISK NOBODY IS WRITING TO, or not at all: a fork of a running machine's volume is torn. */
+    it(`builds nothing and starts the original again when Fly refuses to stop a running machine`, async () => {
+        const fly = stubFly({ stopRefused: true });
+        const { prisma, migrations, state } = fakePrisma();
+        await expect(migrateHosted(prisma, config(), logger, machine(), { tier: `standard`, region: `arn` }, `platform`, noSleep)).rejects.toThrow(
+            /machine is busy/u,
+        );
+        expect(fly.called(`POST`, `/volumes`)).toEqual([]);
+        expect(fly.called(`POST`, `/apps/intentic-sbx-abc/machines`)).toEqual([]);
+        expect(state).toMatchObject({ machineId: `m1`, volumeId: `vol_1`, region: `iad`, migratingId: null });
         expect(migrations[0]?.state).toBe(`rolledBack`);
     });
 });

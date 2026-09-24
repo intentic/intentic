@@ -3,7 +3,7 @@ import { RunnerSummarySchema, runnerSlug } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { z } from "zod";
 import { RUNNERS } from "../../../../lib/queryKeys";
-import { sandboxJson, sandboxRequest } from "../../client/sandboxClient";
+import { sandboxError, sandboxJson, sandboxRequest } from "../../client/sandboxClient";
 import { manageDeviceSandbox } from "../useDevices";
 
 // This sandbox's runners (docs/remote-runners-plan.md): one list read by the Devices view and the
@@ -43,11 +43,17 @@ export const updateRunner = (hostId: string, name: string, onLine?: (line: strin
 // Drops this runner's enrollment and closes its socket from this side alone, for when the machine itself
 // is gone for good.
 export const forgetRunner = async (id: string): Promise<void> => {
-    await sandboxRequest(`/system/runners/${encodeURIComponent(id)}`, { method: `DELETE` });
+    const response = await sandboxRequest(`/system/runners/${encodeURIComponent(id)}`, { method: `DELETE` });
+    if (!response.ok) {
+        throw await sandboxError(response);
+    }
 };
 
 // Pushes this sandbox's settings onto the runner over its live link, settings only. An overlay change
-// needs a remove-and-re-add instead, since that rebuilds the container.
+// needs a remove-and-re-add instead, since that rebuilds the container. A refusal (an offline runner's 409) throws.
 export const syncRunnerSettings = async (id: string): Promise<void> => {
-    await sandboxRequest(`/system/runners/${encodeURIComponent(id)}/definition/sync`, { method: `POST` });
+    const response = await sandboxRequest(`/system/runners/${encodeURIComponent(id)}/definition/sync`, { method: `POST` });
+    if (!response.ok) {
+        throw await sandboxError(response);
+    }
 };

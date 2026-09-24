@@ -50,6 +50,9 @@ const MAX_VALIDITY_S = 600;
 
 const utcDay = (at: Date): string => at.toISOString().slice(0, 10);
 
+// The one refusal the cap transaction raises on purpose; anything else it throws is the database failing.
+class DailyCapExceeded extends Error {}
+
 export interface WalletDeps {
     readonly config: Config;
     readonly prisma: PrismaClient;
@@ -160,7 +163,7 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
                     const today = await tx.walletPayment.findMany({ where: { walletId: wallet.id, day }, select: { amountUsd: true } });
                     const spent = today.reduce((total, row) => total + usdToAtomic(row.amountUsd), 0n);
                     if (spent + value > cap) {
-                        throw new Error(`$${amountUsd} would pass this wallet's $${wallet.dailyCapUsd} daily cap: $${atomicToUsd(spent)} is already spent today`);
+                        throw new DailyCapExceeded(`$${amountUsd} would pass this wallet's $${wallet.dailyCapUsd} daily cap: $${atomicToUsd(spent)} is already spent today`);
                     }
                     return tx.walletPayment.create({
                         data: { walletId: wallet.id, userId: ownerId, day, amountUsd, host, payTo: authorization.to },
@@ -170,7 +173,11 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
                 { isolationLevel: `Serializable` },
             );
         } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : `the daily cap check failed` }, 403);
+            if (error instanceof DailyCapExceeded) {
+                return c.json({ error: error.message }, 403);
+            }
+            c.get(`logger`).error({ err: error, walletId: wallet.id }, `wallet sign: the daily cap could not be checked`);
+            return c.json({ error: `the daily cap could not be checked; nothing was signed, try again` }, 503);
         }
 
         // EIP-3009 TransferWithAuthorization in the token's own domain. name/version come from the relayed challenge
@@ -197,7 +204,11 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
         } catch (error) {
             // Row is deleted, not left as a phantom spend: no authorization exists to ever settle it, and leaving it
             // would eat the daily cap for a payment that never happened.
-            await prisma.walletPayment.delete({ where: { id: payment.id } }).catch(() => undefined);
+            await prisma.walletPayment
+                .delete({ where: { id: payment.id } })
+                .catch((deleteError: unknown) =>
+                    c.get(`logger`).error({ err: deleteError, paymentId: payment.id }, `wallet sign: an unsigned payment row could not be dropped; it counts against today's cap`),
+                );
             c.get(`logger`).warn({ err: error }, `wallet sign failed`);
             return c.json({ error: error instanceof Error ? error.message : `the signature could not be produced` }, 502);
         }

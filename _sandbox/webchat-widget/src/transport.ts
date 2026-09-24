@@ -60,6 +60,10 @@ export interface ReplySink {
     readonly failed: (notice: string) => void;
 }
 
+// The daemon ends every turn with a `done` frame, so a stream that closes without one was cut (a restart, a proxy's idle
+// timeout): what arrived is kept, and the visitor is told the rest will not.
+const CUT_SHORT = "The connection closed before the reply finished. Try again.";
+
 // Sends one message and pumps the reply into `sink` until the stream ends; resolves when the turn is over. A thrown
 // EmbedError means the message never reached an agent.
 export const sendMessage = async (endpoint: EmbedEndpoint, message: WebchatMessage, sink: ReplySink): Promise<void> => {
@@ -110,5 +114,7 @@ export const sendMessage = async (endpoint: EmbedEndpoint, message: WebchatMessa
         }
     }
     buffer += decoder.decode();
-    drain();
+    if (!drain()) {
+        sink.failed(CUT_SHORT);
+    }
 };

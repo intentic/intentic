@@ -1,4 +1,4 @@
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import type { CliConfig } from "@intentic/sandbox-contract";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -53,18 +53,22 @@ const fileExists = (path: string): Promise<boolean> =>
 // HOME is the home directory of record, read per call so a test can point it at a temp dir.
 const credentialsPath = (): string => join(process.env["HOME"] ?? homedir(), ".git-credentials");
 
+// Only absence reads as empty: a store that cannot be read is never rewritten as this host's line alone, dropping every
+// other host's credential.
+const readCredentials = async (): Promise<string> => (await readFile(credentialsPath(), "utf8").catch(undefinedIfMissing)) ?? "";
+
 // Upserts the https credential line for this host (rewrites any prior line, e.g. a rotated token); a plain fs write
 // (0600), never a visible command.
 const ensureHttpsCredential = async (host: GitHost, exec: ExecInTerminal): Promise<void> => {
     await exec("git", ["config", "--global", "credential.helper", "store"]);
     const line = `https://${host.httpsUser}:${encodeURIComponent(host.token)}@${host.host}`;
-    const current = await readFile(credentialsPath(), "utf8").catch(() => "");
+    const current = await readCredentials();
     const kept = current.split("\n").filter((entry) => entry.trim() !== "" && !entry.endsWith(`@${host.host}`));
     await writeFile(credentialsPath(), `${[...kept, line].join("\n")}\n`, { mode: 0o600 });
 };
 
 const removeHttpsCredential = async (host: GitHost): Promise<void> => {
-    const current = await readFile(credentialsPath(), "utf8").catch(() => "");
+    const current = await readCredentials();
     if (current === "") {
         return;
     }

@@ -1,6 +1,6 @@
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import { type NamedSecret, surfaceForms } from "../../secrets/secret-registry.js";
-import { maskDeep, maskTargets, redactionHooks, unmaskableSecrets } from "./agent-redaction.js";
+import { type NamedSecret, surfaceForms,SecretStoreUnreadableError } from "../../secrets/secret-registry.js";
+import { WITHHELD, maskDeep, maskTargets, redactionHooks, unmaskableSecrets } from "./agent-redaction.js";
 
 // Masking must not depend on which tool fetched the value (it used to be Bash-only); a value masks to
 // `{{secret:name}}`, which the write path resolves back, so a read-then-rewrite round-trips.
@@ -148,12 +148,21 @@ test("nothing stored, or nothing matching, leaves the result untouched by refere
     expect(await fire(held(named("linear/token", TOKEN)), "Read", { file: { content: "ordinary source code" } })).toEqual({});
 });
 
-test("an unreadable vault leaves the result alone rather than failing the tool call", async () => {
-    // An unreadable vault is a reason to skip masking, never to break the tool call that produced output.
+test("a result that cannot be checked against the secrets is withheld, never shown unmasked", async () => {
+    // The error is not echoed either: a parse failure's message can quote the secrets file it choked on.
     const failing = async (): Promise<readonly NamedSecret[]> => {
-        throw new Error("EACCES");
+        throw new SyntaxError(`Unexpected token in JSON at position 9: {"TOKEN":"${TOKEN}`);
     };
-    expect(await fire(failing, "Read", { file: { content: `token ${TOKEN}` } })).toEqual({});
+    expect(await fire(failing, "Read", { file: { content: `token ${TOKEN}` } })).toEqual({
+        hookSpecificOutput: { hookEventName: "PostToolUse", updatedToolOutput: `${WITHHELD} (SyntaxError)` },
+    });
+    // The registry's own refusal is worded to be shown, so it names the file.
+    const refusing = async (): Promise<readonly NamedSecret[]> => {
+        throw new SecretStoreUnreadableError("desired-state/.secrets.json is not valid JSON");
+    };
+    expect(await fire(refusing, "Read", "ok")).toEqual({
+        hookSpecificOutput: { hookEventName: "PostToolUse", updatedToolOutput: `${WITHHELD} (desired-state/.secrets.json is not valid JSON)` },
+    });
 });
 
 test("every credential the sandbox holds is masked, under any field name a connector invents", async () => {

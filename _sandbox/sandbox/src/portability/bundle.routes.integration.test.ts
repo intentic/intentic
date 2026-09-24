@@ -26,6 +26,9 @@ const appOn = async (options: { readonly authed?: true } = {}): Promise<{ app: R
         services({
             workspace: workspacePaths(join(dir, "work")),
             config: { ...testConfig, workspaceRoot: join(dir, "work"), historyRoot: join(dir, "history") },
+            // Nothing to vault; a secrets-off export refuses to pack past a sweep that fails.
+            vaultManifestSecrets: async () => [],
+            vaultExtensionSettingSecrets: async () => [],
             // Most tests run without auth; the ticket test needs a real check, since download skips auth when it's off
             // (like /workspace/media). A header-less request is refused exactly as the real bearer refuses it.
             ...(options.authed === true

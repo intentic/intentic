@@ -201,6 +201,30 @@ it("refuses when the day's cap is already committed, counting in-flight payments
     expect(signed).toEqual([]);
 });
 
+// An empty history would read as nothing spent today, reopening the whole cap inside the auto-approve band.
+it("refuses when the ledger cannot be read, even inside the auto-approve band: the cap cannot be checked", async () => {
+    const ledger = memoryLedger();
+    const unreadable: WalletLedgerStore = {
+        ...ledger,
+        all: async () => {
+            throw new Error("the wallet ledger could not be read (the file is not valid JSON), so today's spending is unknown");
+        },
+    };
+    const { deps, signed, frames } = fake({ ledger: unreadable, wallet: async () => wallet({ autoApproveUnderUsd: "0.25" }) });
+    const answer = await gatedPaidFetch(deps, asked());
+    expect(answer.status).toBe(500);
+    expect(JSON.parse(answer.body)).toEqual({
+        error: {
+            type: "ledger_unreadable",
+            message:
+                "This payment cannot be checked against the daily cap, so nothing was spent: the wallet ledger could not be read (the file is not valid JSON), so today's spending is unknown. Tell the owner.",
+        },
+    });
+    expect(frames).toEqual([]);
+    expect(signed).toEqual([]);
+    expect(ledger.rows).toEqual([]);
+});
+
 it("honours the agent's own --max as a narrowing bound", async () => {
     const { deps, signed } = fake();
     const answer = await gatedPaidFetch(deps, asked({ maxUsd: "0.05" }));

@@ -35,7 +35,7 @@ export interface OpenCodeService {
     // provider.list().connected (computed once at server-init, never refreshed).
     readonly connected: (providerID: string) => Promise<boolean>;
     // Whether OpenCode still holds this session (resume pre-flight, as every other provider has); false on a lost
-    // session or unreachable server, so the next turn starts fresh instead of resending into a dead id forever.
+    // session, a rejection when the server could not be asked, since the probe's caller resumes rather than guessing.
     readonly sessionExists: (sessionId: string, directory: string) => Promise<boolean>;
     // xAI's model catalog plus a default id, always non-empty: live discovery with the OAuth token, else the last
     // persisted catalog, else the compile-time seed. Cached briefly, but never the seed, so a freshened token is
@@ -170,8 +170,9 @@ const subscribeEvents = async (client: OpencodeClient, directory: string): Retur
 
 // Watches one directory's session events for the daemon's life, detached; answerPermission answers the permission asks
 // raised on this stream. Per directory, not server-wide, since that's the only stream the server gives
-// (subscribeEvents).
-const watchSessionEvents = (client: OpencodeClient, directory: string): void => {
+// (subscribeEvents). `ended` runs once it gives up, so the next turn there opens a new watch rather than trusting a dead
+// one with its permission asks.
+const watchSessionEvents = (client: OpencodeClient, directory: string, ended: () => void): void => {
     void (async () => {
         for (let failures = 0; failures < STREAM_RETRIES; failures += 1) {
             try {
@@ -191,7 +192,7 @@ const watchSessionEvents = (client: OpencodeClient, directory: string): void => 
                 setTimeout(resolve, STREAM_RETRY_MS).unref();
             });
         }
-    })();
+    })().finally(ended);
 };
 
 // What a Gemini turn needs declared at server spawn; absent means no Gemini provider registered. `models` is a thunk
@@ -319,7 +320,7 @@ export const createOpenCodeService = (
         // isolated turn's worktree registers itself via watch().
         if (workspaceRoot !== undefined) {
             watched.add(workspaceRoot);
-            watchSessionEvents(client, workspaceRoot);
+            watchSessionEvents(client, workspaceRoot, () => watched.delete(workspaceRoot));
         }
         return client;
     };
@@ -394,7 +395,7 @@ export const createOpenCodeService = (
             // Added before the await, so two turns starting in the same worktree in the same tick cannot both get past
             // the guard and open a stream each.
             watched.add(directory);
-            watchSessionEvents(await ensure(), directory);
+            watchSessionEvents(await ensure(), directory, () => watched.delete(directory));
         },
         connected: async (providerID) => {
             // Reads the persisted credential directly, not provider.list().connected, which OpenCode computes once at
@@ -403,12 +404,8 @@ export const createOpenCodeService = (
             return entry?.type === "oauth" && typeof entry.access === "string";
         },
         sessionExists: async (sessionId, directory) => {
-            try {
-                const client = await ensure();
-                return (await client.session.get({ path: { id: sessionId }, query: { directory } })).data !== undefined;
-            } catch {
-                return false;
-            }
+            const client = await ensure();
+            return (await client.session.get({ path: { id: sessionId }, query: { directory } })).data !== undefined;
         },
         xaiModels: models.models,
         // Ids xAI named while rejecting something else, filtered/deduped here since a vendor's error can name anything

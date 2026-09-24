@@ -66,7 +66,11 @@ export default function llmsText(options) {
                     let html;
                     try {
                         html = readFileSync(htmlPath, "utf8");
-                    } catch {
+                    } catch (error) {
+                        // The 404 page is built as dist/404.html, not under its pathname; any other miss is a mirror lost.
+                        if (!/^404\/?$/.test(page.pathname)) {
+                            logger.warn(`${htmlPath} could not be read (${error.message}); ${pathname} has no Markdown mirror.`);
+                        }
                         continue;
                     }
 

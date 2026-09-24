@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { promisify } from "node:util";
+import { errorMessage } from "@intentic/base/errors";
 import { toolMissing } from "./net-probe.js";
 
 // wg-quick, shared by both tunnel kinds. A dial is synchronous, so no client process to supervise: the interface is the
@@ -34,7 +35,13 @@ export const wireguardDial = async (confPath: string): Promise<void> => {
     await exec("wg-quick", ["up", confPath]);
 };
 
-// Already down, no conf, no wg-quick: all reduce to "not up", the goal state.
+// Already down, no conf, no wg-quick: all reduce to "not up", the goal state. A failure that leaves the interface up
+// throws, since every caller goes on to act as if the tunnel were gone (wg-quick names it after the conf file).
 export const wireguardDrop = async (confPath: string): Promise<void> => {
-    await exec("wg-quick", ["down", confPath]).catch(() => undefined);
+    await exec("wg-quick", ["down", confPath]).catch(async (error: unknown) => {
+        const name = basename(confPath, ".conf");
+        if (await wireguardUp(name)) {
+            throw new Error(`wg-quick could not take ${name} down: ${errorMessage(error)}`, { cause: error });
+        }
+    });
 };

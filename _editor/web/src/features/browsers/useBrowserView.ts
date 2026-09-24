@@ -1,4 +1,5 @@
 import { createBackoff } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import { onScopeDispose, ref, type Ref, shallowRef, watch } from "vue";
 import { FRAME_WEBP, frameUrls, videoTag } from "./frameUrls";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "./keyIntent";
@@ -296,7 +297,19 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         if (closing || session === undefined) {
             return;
         }
-        const url = await socketUrl(session);
+        let url: string | undefined;
+        try {
+            url = await socketUrl(session);
+        } catch (error) {
+            // A session that couldn't be minted (sandbox restarting, network down) retries like a drop; nothing else would.
+            console.warn(`browser ${session}: authorizing the view's socket failed`, error);
+            if (closing || session !== name.value) {
+                return;
+            }
+            status.value = `Couldn't authorize the browser view (${errorMessage(error)}); retrying.`;
+            reconnect = window.setTimeout(() => void connect(), ladder.next());
+            return;
+        }
         // The session may have changed while the token was in flight; that switch now owns the socket.
         if (closing || session !== name.value) {
             return;

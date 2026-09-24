@@ -13,6 +13,8 @@ const tempCtx = (capabilities: Capability[] = []): { ctx: CapabilityCtx; root: s
     const root = mkdtempSync(join(tmpdir(), "identity-cap-"));
     const ctx = {
         workspace: { root },
+        // No baked extensions: removing an identity re-renders account skills from every installed extension.
+        extensionsDir: "",
         files: { write: writeWorkspaceFile, read: readWorkspaceFile, remove: removeWorkspacePath },
         capabilities: { list: async () => capabilities, get: async (id: string) => capabilities.find((entry) => entry.id === id) },
     } as unknown as CapabilityCtx;

@@ -155,16 +155,18 @@ if (changed === undefined || lintable.length > LINT_FILE_CEILING) {
 if (base === undefined) {
     say("assertion ratchet: no main-line base to measure the changed test files against");
 } else {
-    const { findings, declared } = weakenings(root, base);
-    if (findings.length === 0) {
+    const measured = weakenings(root, base);
+    if (measured === undefined) {
+        fail("assertion ratchet", `git could not list the test files changed since ${base.slice(0, 9)}, so none was measured`);
+    } else if (measured.findings.length === 0) {
         say("assertion ratchet: no test file got weaker");
-    } else if (declared) {
-        say(`assertion ratchet: ${findings.length} test file(s) got weaker, declared by a \`test!:\` subject or \`Test-Note:\` trailer in the turn's commits`);
+    } else if (measured.declared) {
+        say(`assertion ratchet: ${measured.findings.length} test file(s) got weaker, declared by a \`test!:\` subject or \`Test-Note:\` trailer in the turn's commits`);
     } else {
         fail(
             "assertion ratchet",
             "a test file got weaker than on the main line: restore the assertions (update the expected value, not the matcher), or commit the weakening with a `Test-Note: <why>` trailer and end your final message with the same line",
-            findings,
+            measured.findings,
         );
     }
 }

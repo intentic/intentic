@@ -11,7 +11,7 @@ let entries: FileEntry[];
 
 beforeAll(async () => {
     ({ root, cleanup } = await makeFixtureWorkspace());
-    entries = await sweep(root, false);
+    entries = (await sweep(root, false)).entries;
 });
 afterAll(() => cleanup());
 
@@ -32,7 +32,7 @@ test("sweep enforces .gitignore + junk dirs (incl. .git) by default and always s
     expect(paths()).toContain(".env.example");
     expect(paths().some((path) => path.startsWith(".intentic/local/cache/iq"))).toBe(false);
 
-    const full = await sweep(root, true);
+    const full = (await sweep(root, true)).entries;
     const fullPaths = full.map((entry) => entry.path);
     expect(fullPaths).toContain("alpha/dist/decoy.js");
     expect(fullPaths.some((path) => path.includes(".git/"))).toBe(true);
@@ -42,10 +42,10 @@ test("sweep enforces .gitignore + junk dirs (incl. .git) by default and always s
 test("the reference shelf is skipped by default and reachable via --ignored, like the junk layer", async () => {
     await mkdir(join(root, "refs/react/src"), { recursive: true });
     await writeFile(join(root, "refs/react/src/scheduler.ts"), "export const schedule = 1;\n");
-    const swept = (await sweep(root, false)).map((entry) => entry.path);
+    const swept = (await sweep(root, false)).entries.map((entry) => entry.path);
     expect(swept).not.toContain("refs/react/src/scheduler.ts");
     // An attention boundary, not a floor: --ignored reaches it.
-    const full = (await sweep(root, true)).map((entry) => entry.path);
+    const full = (await sweep(root, true)).entries.map((entry) => entry.path);
     expect(full).toContain("refs/react/src/scheduler.ts");
 });
 
@@ -55,13 +55,13 @@ test("a .git worktree pointer file is junk like a .git dir, and still liftable w
     await mkdir(join(root, "gamma/src"), { recursive: true });
     await writeFile(join(root, "gamma/src/main.ts"), "export const main = 1;\n");
     await writeFile(join(root, "gamma/.git"), "gitdir: /elsewhere/gits/gamma\n");
-    const swept = await sweep(root, false);
+    const swept = (await sweep(root, false)).entries;
     expect(swept.map((entry) => entry.path)).not.toContain("gamma/.git");
     expect(swept.map((entry) => entry.path)).toContain("gamma/src/main.ts");
     // churn, hotspots, recent, log and who all key off `repo`; an unattributed entry goes silently blank in each.
     expect(swept.find((entry) => entry.path === "gamma/src/main.ts")?.repo).toBe("gamma");
 
-    const full = (await sweep(root, true)).map((entry) => entry.path);
+    const full = (await sweep(root, true)).entries.map((entry) => entry.path);
     expect(full).toContain("gamma/.git");
 });
 
@@ -86,13 +86,13 @@ test("the agent plane's byproducts are excluded, its manifests are not", async (
             await writeFile(join(root, path), "private state\n");
         }),
     );
-    const swept = (await sweep(root, false)).map((entry) => entry.path);
+    const swept = (await sweep(root, false)).entries.map((entry) => entry.path);
     for (const path of excluded) {
         expect(swept).not.toContain(path);
     }
     // Manifests are user-authored config, unlike the byproducts above.
     expect(swept).toContain(".intentic/config/settings.json");
-    const full = (await sweep(root, true)).map((entry) => entry.path);
+    const full = (await sweep(root, true)).entries.map((entry) => entry.path);
     for (const path of excluded) {
         expect(full).not.toContain(path);
     }
@@ -118,7 +118,7 @@ test("filterScope narrows by path, lang, glob, and file class", () => {
 // that leaves files unattributed for every git-backed verb that reads `repo`.
 test("a .git pointer file bounds a repo exactly like a .git directory", async () => {
     await writeFile(join(root, "beta/.git"), "gitdir: /elsewhere/beta.git\n");
-    const swept = await sweep(root, false);
+    const swept = (await sweep(root, false)).entries;
     expect(swept.find((entry) => entry.path === "beta/app.py")?.repo).toBe("beta");
     expect(swept.find((entry) => entry.path === "alpha/src/widget.ts")?.repo).toBe("alpha");
     expect(swept.find((entry) => entry.path === "notes.md")?.repo).toBeUndefined();

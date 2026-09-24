@@ -5,11 +5,10 @@
 // typo'd key is not a build error — it is a dotted path drawn in front of a reader. A message the compiler refuses
 // (`@` is its link syntax, `|` its plural separator, `{` its placeholder) throws at the first render instead.
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { parseCatalog } from "./lib/catalog.mjs";
 import { cannotMeasure, finish } from "./lib/report.mjs";
-import { root, subjectFiles, subjectScope, trackedFiles, untrackedFiles } from "./lib/repo.mjs";
+import { installedModule, root, subjectFiles, subjectScope, trackedFiles, untrackedFiles } from "./lib/repo.mjs";
 
 // Where a catalog mounts in the one message tree, which decides the keys its messages answer to. The editor's own
 // catalog is at the root; everything else is namespaced away from it, so two packages cannot claim one key.
@@ -48,6 +47,8 @@ const catalogs = [
 ];
 if (unreadable.length > 0) {
     finish([["A message catalog that cannot be parsed, so none of its keys can be checked", unreadable]], []);
+    // One line per catalog is far below a pipe's buffer, so stopping here cannot cut the report short.
+    process.exit();
 }
 
 const reachableFrom = (path) => catalogs.filter((catalog) => catalog.owns.some((dir) => path.startsWith(dir)));
@@ -103,13 +104,7 @@ const dead =
 
 // The message compiler is vue-i18n's own, so what this accepts is exactly what a render accepts.
 const uncompilable = [];
-const compiler = (() => {
-    try {
-        return createRequire(join(root, "_editor/web/package.json"))("vue-i18n");
-    } catch {
-        return undefined;
-    }
-})();
+const compiler = installedModule(join(root, "_editor/web"), "vue-i18n");
 if (compiler !== undefined) {
     for (const { dir, tree } of catalogs) {
         const i18n = compiler.createI18n({ legacy: false, locale: "en", fallbackLocale: "en", messages: { en: tree }, missingWarn: false, fallbackWarn: false });

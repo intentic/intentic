@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
 import { promisify } from "node:util";
+import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
 
 // Reads a live tunnel back off the machine: address, routes, and whether a backgrounded client is alive. iproute2 ships
 // in the base image, so this works before VPN tooling is rebuilt in; a missing interface just reads as absent.
@@ -56,16 +57,21 @@ export const activeResolvers = async (): Promise<string[]> => {
         .slice(0, 4);
 };
 
-// Whether a pidfile's pid is still that client; the cmdline check stops a recycled pid from reading as a connected
-// tunnel.
+// Whether a pidfile's pid is still that client; the cmdline check stops a recycled pid from reading as connected. Only a
+// gone process reads as dead: an unreadable /proc (EMFILE) read as dead would let `halt` orphan a live client.
 export const processAlive = async (pid: number, expectedCommand: string): Promise<boolean> => {
-    const cmdline = await readFile(`/proc/${pid}/cmdline`, "utf8").catch(() => undefined);
+    const cmdline = await readFile(`/proc/${pid}/cmdline`, "utf8").catch((error: unknown) => {
+        if (isMissing(error) || errnoCode(error) === "ESRCH") {
+            return undefined;
+        }
+        throw error;
+    });
     return cmdline !== undefined && cmdline.includes(expectedCommand);
 };
 
-// Pid a client wrote to its pidfile, or undefined when absent or garbage.
+// Pid a client wrote to its pidfile, or undefined when absent or garbage; a pidfile that exists but can't be read throws.
 export const readPid = async (path: string): Promise<number | undefined> => {
-    const raw = await readFile(path, "utf8").catch(() => undefined);
+    const raw = await readFile(path, "utf8").catch(undefinedIfMissing);
     const pid = raw === undefined ? Number.NaN : Number.parseInt(raw.trim(), 10);
     return Number.isInteger(pid) && pid > 0 ? pid : undefined;
 };
@@ -77,12 +83,16 @@ export const livePid = async (pidFile: string, command: string): Promise<number 
     return pid !== undefined && (await processAlive(pid, command)) ? pid : undefined;
 };
 
-// Stops the client and forgets its pidfile. TERM, not KILL, lets the client tear down its own interface and routes; the
-// pidfile is removed either way so a stale one can't fool the next dial.
+// Stops the client and forgets its pidfile; TERM, not KILL, lets it tear down its own interface and routes. A failed kill
+// of a still-live client throws with the pidfile kept, or the tunnel runs on with nothing left to find it by.
 export const halt = async (pidFile: string, command: string): Promise<void> => {
     const pid = await livePid(pidFile, command);
     if (pid !== undefined) {
-        await exec("kill", ["-TERM", String(pid)]).catch(() => undefined);
+        await exec("kill", ["-TERM", String(pid)]).catch(async (error: unknown) => {
+            if (await processAlive(pid, command)) {
+                throw new Error(`could not stop ${command} (pid ${pid}): ${errorMessage(error)}`, { cause: error });
+            }
+        });
     }
     await rm(pidFile, { force: true });
 };

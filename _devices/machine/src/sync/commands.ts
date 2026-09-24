@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
@@ -114,10 +115,16 @@ export const enrollKey = async (
     return { syncToken: body.syncToken, mode: body.mode ?? "sync" };
 };
 
-// Self-revoke this machine's enrollment (uninstall): DELETE /system/authorized-key authed by the sync token.
-// Best-effort, the caller ignores failures.
+// Self-revoke this machine's enrollment (uninstall): DELETE /system/authorized-key authed by the sync token. A 404 is
+// an enrollment the sandbox no longer holds; any other refusal leaves this machine's key authorized there.
 const revokeEnrollment = async (sandboxUrl: string, syncToken: string): Promise<void> => {
-    await fetch(`${sandboxUrl.replace(/\/$/, "")}/system/authorized-key`, { method: "DELETE", headers: { "x-intentic-sync": syncToken } });
+    const response = await fetch(`${sandboxUrl.replace(/\/$/, "")}/system/authorized-key`, {
+        method: "DELETE",
+        headers: { "x-intentic-sync": syncToken },
+    });
+    if (!response.ok && response.status !== 404) {
+        throw new Error(`HTTP ${response.status}`);
+    }
 };
 
 interface SetupFlags {
@@ -514,12 +521,16 @@ export const syncUninstall = async (out: Log, sandbox?: string): Promise<void> =
     const mutagen = await ensureMutagen();
     const remaining = state.pairings.filter((held) => !dropped.some((pairing) => pairing.sandboxId === held.sandboxId));
 
-    // Self-revoke each dropped enrollment so its sandbox drops the key + token. Best-effort, an unreachable sandbox
-    // shouldn't block local teardown.
+    // Self-revoke each dropped enrollment so its sandbox drops the key + token. An unreachable sandbox doesn't block
+    // local teardown, but the owner is told the key is still authorized there.
     for (const pairing of dropped) {
         if (pairing.syncToken !== undefined) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- Drops are sequenced so failures identify one sandbox.
-            await revokeEnrollment(pairing.sandboxUrl, pairing.syncToken).catch(() => {});
+            await revokeEnrollment(pairing.sandboxUrl, pairing.syncToken).catch((error: unknown) =>
+                out(
+                    `note: ${pairing.sandboxUrl} could not be told to forget this machine (${errorMessage(error)}), so its sync key is still authorized there. Remove this machine from that sandbox's Devices view.`,
+                ),
+            );
         }
         if (pairing.mode === "sync") {
             // The pair goes together: a surviving backup session would keep mirroring a sandbox this machine has just

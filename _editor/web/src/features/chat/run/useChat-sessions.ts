@@ -1,5 +1,6 @@
 import type { MatchSnippet, TranscriptRow } from "@intentic/sandbox-contract";
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
+import { errorMessage } from "@intentic/ui/async";
 import { watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { agentTranscript, type AgentTranscript } from "../transcript/agentTranscript";
@@ -22,6 +23,8 @@ const { reachable } = useSandbox();
 
 // Past conversations from the sandbox's session store, loaded on demand for the history menu.
 export const sessions = sandboxRef<ChatSession[]>(() => []);
+// Why the last history read failed; the menu says it instead of "no previous chats" over a list it never got.
+export const sessionsFailure = sandboxRef<string | undefined>(() => undefined);
 
 // Refreshes the history list from the session store; a query filters by title or content server-side. Each
 // call aborts the one before it, so a burst of keystroke-driven searches can't land out of order, and so does a
@@ -36,8 +39,12 @@ export const loadSessions = async (query?: string): Promise<void> => {
     sessionsLoad.value = controller;
     try {
         sessions.value = (await sandboxRpc.sessions.list(query ? { query } : {}, { signal: controller.signal })).sessions;
-    } catch {
-        // Non-fatal (a refusal, or our own abort); the menu shows whatever was loaded last.
+        sessionsFailure.value = undefined;
+    } catch (error) {
+        // Our own abort means a newer read owns the menu; anything else is this read's failure to say.
+        if (!controller.signal.aborted) {
+            sessionsFailure.value = errorMessage(error, `Couldn't read your past chats.`);
+        }
     }
 };
 
@@ -157,9 +164,10 @@ export const hydrateOnce = (conversation: Conversation): void => {
                 hydrating.delete(conversation);
             }
         })
-        // Unreachable daemon leaves the tab as-is; caught so it doesn't surface as an unhandled rejection.
-        .catch(() => {
+        // Leaves the tab as-is for the next reachability flip to retry; logged, since a tab that never fills says nothing.
+        .catch((error: unknown) => {
             hydrating.delete(conversation);
+            console.warn(`hydrateOnce: ${conversation.conversationId} did not hydrate`, error);
         })
         .finally(() => hydrateInFlight.delete(conversation));
     hydrateInFlight.set(conversation, pass);

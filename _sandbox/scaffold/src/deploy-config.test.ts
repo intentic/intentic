@@ -104,6 +104,24 @@ describe("deploy-config managed region", () => {
         const src = scaffoldDeployConfig([]).replace(`// </intentic>`, `    const x = i.have.mystery("x", { foo: "bar" });\n    // </intentic>`);
         expect(readManagedRegion(src)).toEqual([]);
     });
+
+    test("refuses to rewrite a region holding a line it cannot read, instead of deleting that line", () => {
+        const src = scaffoldDeployConfig([hostEntry]).replace(`// </intentic>`, `    const x = i.have.mystery("x", { foo: "bar" });\n    // </intentic>`);
+        expect(() => writeManagedRegion(src, [...readManagedRegion(src), cfEntry])).toThrow(`const x = i.have.mystery("x", { foo: "bar" });`);
+    });
+
+    test("a declaration a formatter wrapped across lines is refused too, not rewritten without it", () => {
+        const wrapped = scaffoldDeployConfig([hostEntry]).replace(`i.have.host("self", {`, `i.have.host("self", {\n       `);
+        expect(readManagedRegion(wrapped)).toEqual([]);
+        expect(() => writeManagedRegion(wrapped, [cfEntry])).toThrow(`const self = i.have.host("self", {`);
+    });
+
+    test("a required value missing from an entry refuses instead of rendering an empty literal over the real one", () => {
+        const addressless: InventoryEntry = { kind: "backend", provider: "host", name: "self", values: { user: "deploy", port: 22 } };
+        expect(() => scaffoldDeployConfig([addressless])).toThrow(`deploy.config.ts: "self" has no address, so its declaration cannot be written.`);
+        const domainless: InventoryEntry = { kind: "app", name: "shop", on: "self", expose: "cf", values: {} };
+        expect(() => scaffoldDeployConfig([domainless])).toThrow(`deploy.config.ts: "shop" has no domain, so its declaration cannot be written.`);
+    });
 });
 
 describe("app entries", () => {

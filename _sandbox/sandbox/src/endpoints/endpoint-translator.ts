@@ -40,7 +40,11 @@ export const endpointCompatEntries = async (services: Services): Promise<CompatE
     const endpoints = translatedEndpoints(await services.capabilities.list());
     const entries = await Promise.all(
         endpoints.map(async ({ id, config }) => {
-            const catalog = await services.endpointModels.models(id, config).catch(() => ({ models: [], default: "" }));
+            const catalog = await services.endpointModels.models(id, config).catch((error: unknown) => {
+                // Still emitted, empty, so the other endpoints sync; the log is the only trace of why its models vanished.
+                services.logger.warn({ err: error, endpoint: id }, "translator: endpoint models could not be read, synced with none");
+                return { models: [], default: "" };
+            });
             return {
                 name: id,
                 prefix: id,

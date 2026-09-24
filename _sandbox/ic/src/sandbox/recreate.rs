@@ -158,7 +158,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     // The tag this sandbox follows. An explicit --channel wins and is remembered; otherwise the remembered
     // one, and `stable` for a sandbox that predates the record. SANDBOX_IMAGE still overrides everything:
     // it is how a pinned or locally-built image is passed in, and a channel is a default, not a policy.
-    let saved = record::read(&slug);
+    let saved = record::read(&slug)?;
     let channel = match &mode {
         Mode::Update {
             channel: Some(chosen),
@@ -236,7 +236,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         Mode::Update { .. } => {
             /* The approved overlay comes out FIRST here, ahead of the decision below. */
             stage_overlay(&container, &overlay_path)?;
-            let approved = std::fs::read(&overlay_path).unwrap_or_default();
+            let approved = std::fs::read(&overlay_path)?;
             let approved_hash = (!approved.is_empty()).then(|| sha256_hex(&approved));
 
             /* WHAT `prepare` LEFT READY, when it is still the right thing to swap onto — the whole point of preparing. */
@@ -334,7 +334,8 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         }
     }
 
-    let overlay = std::fs::read_to_string(&overlay_path).unwrap_or_default();
+    // Every arm above staged this file; read as empty, it would recreate the sandbox without its environment.
+    let overlay = std::fs::read_to_string(&overlay_path)?;
 
     // The base the overlay extends, checked belt-and-braces (the daemon already enforced it at approval):
     // any OFFICIAL sandbox image, the exact base this container was created from (SANDBOX_BASE_IMAGE, set
@@ -574,7 +575,15 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     /* The cutover PARKS the old container instead of destroying it: stop, rename aside, and only a replacement that answers health earns the rm. */
     docker::quiet(&["rm", "-f", &parked]);
     docker::quiet(&["stop", &container]);
-    docker::quiet(&["rename", &container, &parked]);
+    // Unparked, the old container still holds the name, and the launch retry below removes whatever holds it.
+    if let Err(refusal) = docker::capture(&["rename", &container, &parked]) {
+        docker::quiet(&["start", &container]);
+        rewind_record(&slug, &saved);
+        bail!(
+            "the sandbox could not be set aside for the swap ({}) — it was started again as it was, and nothing was replaced.",
+            refusal.0
+        );
+    }
     log.section("run command");
 
     /* THE PORT THIS CUTOVER JUST FREED IS NOT FREE YET, and that is a race rather than a refusal. */
@@ -975,8 +984,22 @@ fn restore_parked(container: &str, parked: &str, slug: &str, saved: &record::Cha
         return;
     }
     docker::quiet(&["rm", "-f", container]);
-    docker::quiet(&["rename", parked, container]);
+    rewind_record(slug, saved);
+    // Still parked, it is what the next swap's first step removes, so the way back is said rather than assumed.
+    if let Err(refusal) = docker::capture(&["rename", parked, container]) {
+        println!(
+            "intentic: the previous sandbox is kept as {parked} but could not take its name back ({}).\n          Restore it by hand before anything else: docker rename {parked} {container} && docker start {container}",
+            refusal.0
+        );
+        return;
+    }
     docker::quiet(&["start", container]);
+    println!("intentic: the previous sandbox container was restored and is starting again.");
+}
+
+/// Rewind the channel record to what it said before a swap that did not happen. Best-effort: this runs on the
+/// failure path, where the one job is to leave the machine as close to "before" as it can reach.
+fn rewind_record(slug: &str, saved: &record::ChannelRecord) {
     match saved.current {
         // Byte for byte what was there, staged keys included: the swap this record described did not happen,
         // and a prepared image that was never applied is still sitting on this machine waiting to be.
@@ -988,7 +1011,6 @@ fn restore_parked(container: &str, parked: &str, slug: &str, saved: &record::Cha
             let _ = std::fs::remove_file(record::record_path(slug));
         }
     }
-    println!("intentic: the previous sandbox container was restored and is starting again.");
 }
 
 /// Whether this container follows the official registry — the question an UNATTENDED prepare asks before

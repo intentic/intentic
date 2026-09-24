@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { errorMessage } from "@intentic/base/errors";
+import { errnoCode, errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { statePath } from "../state-paths.js";
 
@@ -18,13 +18,20 @@ export const workspaceExtensionsRoot = (root: string): string => statePath(root,
 export const extensionRootOf = (dir: string, path: string | undefined): string => (path === undefined ? dir : join(dir, path));
 
 // Raw read of a daemon-owned extension file (manifest/skill/fragment): real filesystem paths (checkout under /work, or
-// /opt/extensions), never agent-supplied, so no path-escape guard.
-export const extensionRead = async (absPath: string): Promise<string | undefined> => readFile(absPath, "utf8").catch(() => undefined);
+// /opt/extensions), never agent-supplied, so no path-escape guard. Undefined only when absent: a file that exists but
+// cannot be read throws, so a skill sweep or environment compose stops instead of acting as though it were gone.
+export const extensionRead = async (absPath: string): Promise<string | undefined> => readFile(absPath, "utf8").catch(undefinedIfMissing);
 
 // Reads and validates intentic-extension.json, keeping the failure: a checkout treats it as a filter, but a workspace
-// extension (no install moment) surfaces it as the author's only feedback.
+// extension (no install moment) surfaces it as the author's only feedback. Per extension, so one unreadable folder
+// never sinks the others.
 export const parseExtensionManifest = async (dir: string): Promise<{ manifest: ExtensionManifest } | { error: string }> => {
-    const raw = await extensionRead(join(dir, "intentic-extension.json"));
+    let raw: string | undefined;
+    try {
+        raw = await extensionRead(join(dir, "intentic-extension.json"));
+    } catch (error) {
+        return { error: `intentic-extension.json could not be read (${errnoCode(error) ?? errorMessage(error)})` };
+    }
     if (raw === undefined) {
         return { error: "no intentic-extension.json at the extension root" };
     }

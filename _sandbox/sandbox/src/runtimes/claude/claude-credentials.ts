@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SingleFlight, sleep } from "@intentic/base/async";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { OauthAccount } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
@@ -234,17 +235,27 @@ export interface ClaudeStore {
     readonly logger: Logger;
 }
 
+const jsonOrUndefined = (text: string): unknown => {
+    try {
+        return JSON.parse(text) as unknown;
+    } catch {
+        return undefined;
+    }
+};
+
 // A JSON file store: one <id>.json per account under <workspace>/.intentic/secrets/auth/claude/ (outside the three repos).
 export const fileClaudeStore = (dir: string, logger: Logger): ClaudeStore => {
     const path = (id: string): string => join(dir, `${id}.json`);
     const lockPath = (id: string): string => join(dir, `${id}.refresh.lock`);
+    // Only a missing file is "not connected"; an unreadable one throws, or a connected account would read as signed out.
+    // Content that is not an account is skipped quietly: the catalog's models.json shares this directory.
     const readStored = async (id: string): Promise<StoredAccount | undefined> => {
-        try {
-            const parsed = StoredAccountSchema.safeParse(JSON.parse(await readFile(path(id), "utf8")));
-            return parsed.success ? parsed.data : undefined;
-        } catch {
+        const text = await readFile(path(id), "utf8").catch(undefinedIfMissing);
+        if (text === undefined) {
             return undefined;
         }
+        const parsed = StoredAccountSchema.safeParse(jsonOrUndefined(text));
+        return parsed.success ? parsed.data : undefined;
     };
     // Takes the lock file, or explains why it proceeds without it. Exclusive create is the lock: two processes racing
     // `wx` on one path, exactly one wins.
@@ -293,7 +304,7 @@ export const fileClaudeStore = (dir: string, logger: Logger): ClaudeStore => {
             await rm(lockPath(id), { force: true });
         },
         list: async () => {
-            const entries = await readdir(dir).catch(() => [] as string[]);
+            const entries = (await readdir(dir).catch(undefinedIfMissing)) ?? [];
             const stored = await Promise.all(entries.filter((name) => name.endsWith(".json")).map((name) => readStored(name.slice(0, -5))));
             return stored
                 .filter((account): account is StoredAccount => account !== undefined)
@@ -415,19 +426,30 @@ const rotateWhileQuiet = async (store: ClaudeStore, id: string, refresh: Refresh
 // Refreshes every connected account before a turn needs it, via each turn's release (catches short gaps) plus a slow
 // timer backstop that also runs the lazy path for a token nearing REFRESH_AHEAD_MS.
 export const startClaudeRefresh = (store: ClaudeStore, intervalMs = 5 * 60_000, refresh: RefreshFn = refreshTokens): (() => void) => {
+    const quietly = (id: string): Promise<void> =>
+        rotateWhileQuiet(store, id, refresh).catch((error: unknown) =>
+            store.logger.warn({ err: error, account: id }, "claude quiet-moment refresh could not read the account, the next gap retries"),
+        );
     const tick = async (): Promise<void> => {
-        for (const account of await store.list()) {
+        let accounts: readonly OauthAccount[];
+        try {
+            accounts = await store.list();
+        } catch (error) {
+            store.logger.warn({ err: error }, "claude proactive refresh: the accounts could not be listed, the next tick retries");
+            return;
+        }
+        for (const account of accounts) {
             if (account.needsReauth === true) {
                 continue;
             }
-            await rotateWhileQuiet(store, account.id, refresh);
+            await quietly(account.id);
             await ensureFreshToken(store, account.id, refresh).catch((error: unknown) =>
                 store.logger.warn({ err: error, account: account.id }, "claude proactive refresh failed, the next turn retries"),
             );
         }
     };
     // Fire-and-forget: a turn's finally must not wait on an HTTPS round-trip for a result it wouldn't use.
-    releaseQuiet = (id) => void rotateWhileQuiet(store, id, refresh);
+    releaseQuiet = (id) => void quietly(id);
     const timer = setInterval(() => void tick(), intervalMs);
     // A background refresh must never hold the process open.
     timer.unref();

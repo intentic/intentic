@@ -193,7 +193,15 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
         if (group === undefined || process.platform !== "linux") {
             return;
         }
-        const [scanned, panes] = await Promise.all([scanProcesses(), deps.panePids().catch(() => new Map<number, string>())]);
+        let panes: Map<number, string>;
+        try {
+            panes = await deps.panePids();
+        } catch (error) {
+            // Unknown panes are not "no panes": every process under a live terminal would lose its exemption.
+            logger.warn({ err: error }, "reaper: could not list terminal panes, skipping the process sweep this pass");
+            return;
+        }
+        const scanned = await scanProcesses();
         const leftovers = leftoverProcesses(scanned, {
             group,
             ownerLive: deps.ownerLive,
@@ -362,7 +370,8 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
             await closeBrowserSessionsFor(owner);
             if (group !== undefined && process.platform === "linux") {
                 // The conversation is over: SIGTERM its processes now; survivors meet SIGKILL on the interval sweep.
-                const [scanned, panes] = await Promise.all([scanProcesses(), deps.panePids().catch(() => new Map<number, string>())]);
+                // A pane listing that fails rejects to the catch below rather than exempting nothing.
+                const [scanned, panes] = await Promise.all([scanProcesses(), deps.panePids()]);
                 const mineToo = leftoverProcesses(scanned, {
                     group,
                     ownerLive: (candidate) => candidate !== owner && deps.ownerLive(candidate),

@@ -231,15 +231,20 @@ export const startWatcher = (
         await save({ ...mark, announced });
     };
 
+    // The mark is read under the guard: a read that failed is logged and retried next tick, never polled past.
     const tick = async (what: "mail" | "calendar", poll: () => Promise<void>): Promise<void> => {
         if (!running) {
             return;
         }
-        if (!loaded) {
-            mark = await readWatermark(path);
-            loaded = true;
-        }
-        await guard(what, poll);
+        await guard(what, async () => {
+            if (!loaded) {
+                mark = await readWatermark(path, (detail) =>
+                    ctx.log.warn({ account: connection.name, path, detail }, "google watch mark unreadable; re-baselining from now"),
+                );
+                loaded = true;
+            }
+            await poll();
+        });
     };
 
     const timers = [

@@ -82,6 +82,12 @@ test("a missing file is a normal empty answer, not a failure", async () => {
     expect(await readLogLines(dir, { file: "perf.jsonl", limit: 10 })).toMatchObject({ lines: [], matched: 0, readBytes: 0 });
 });
 
+test("a log that exists but cannot be read is a failure, never a quiet empty answer", async () => {
+    const dir = await root();
+    await mkdir(join(dir, "logs", "daemon.log"));
+    await expect(readLogLines(dir, { file: "daemon.log", level: "error", limit: 10 })).rejects.toThrow("EISDIR");
+});
+
 test("a torn line loses one line, never the read", async () => {
     const dir = await root();
     await write(dir, "daemon.log", ["{not json", line({ level: "error", message: "survivor" }), "[1,2,3]"]);

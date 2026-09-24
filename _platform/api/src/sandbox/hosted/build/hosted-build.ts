@@ -172,7 +172,10 @@ const provisionArgsOf = (config: Config, row: BuildRow[`machine`]): HostedProvis
 const applyHostedBuild = async (prisma: PrismaClient, config: Config, logger: Logger, build: BuildRow, digest: string): Promise<void> => {
     const { machine } = build;
     const image = `${REGISTRY}/${machine.appName}@${digest}`;
-    const before = await getMachine(config.hosted.flyApiToken, machine.appName, machine.machineId).catch(() => undefined);
+    const before = await getMachine(config.hosted.flyApiToken, machine.appName, machine.machineId).catch((error: unknown) => {
+        logger.warn({ err: error, app: machine.appName, build: build.id }, `hosted build: the machine's state could not be read; applying as if stopped`);
+        return undefined;
+    });
     const running = before !== undefined && RUNNING_STATES.has(before.state);
     await updateMachine(
         config.hosted.flyApiToken,
@@ -231,7 +234,10 @@ const finishHostedBuild = async (
     }
     await chargeMinutes(prisma, { sandboxId: build.machine.sandboxId, ownerId: build.machine.sandbox.owner.id }, usageMonth(now), minutes);
     await destroyMachine(flyApiToken, build.machine.appName, build.builderMachineId, { force: true }).catch((err: unknown) =>
-        logger.warn({ err, build: build.id }, `hosted build: destroying the builder failed; the reconcile retries`),
+        logger.error(
+            { err, build: build.id, app: build.machine.appName, machine: build.builderMachineId },
+            `hosted build: destroying the builder failed; it stays until the next build's app-shape check removes it`,
+        ),
     );
     if (build.tokenId !== null) {
         await revokeDeployToken(flyApiToken, build.tokenId)
@@ -479,7 +485,10 @@ export const hostedBuildStatus = async (prisma: PrismaClient, hostedMachineId: s
 // The fleet invariant while a build's token is alive: the app holds only its sandbox machine and this build's builder.
 // Anything else is what a leaked token would have made; destroyed and logged.
 const enforceAppShape = async (config: Config, logger: Logger, build: BuildRow): Promise<void> => {
-    const machines = await listMachines(config.hosted.flyApiToken, build.machine.appName).catch(() => undefined);
+    const machines = await listMachines(config.hosted.flyApiToken, build.machine.appName).catch((error: unknown) => {
+        logger.warn({ err: error, app: build.machine.appName, build: build.id }, `hosted build: the app's machines could not be listed; its shape goes unchecked this tick`);
+        return undefined;
+    });
     if (machines === undefined) {
         return;
     }
@@ -508,19 +517,19 @@ export const reconcileHostedBuilds = async (prisma: PrismaClient, config: Config
         // oxlint-disable-next-line eslint/no-await-in-loop -- one small read per build in flight
         await enforceAppShape(config, logger, build);
         // oxlint-disable-next-line eslint/no-await-in-loop -- as above
-        const detail = await getMachineDetail(flyApiToken, build.machine.appName, build.builderMachineId).catch((error: unknown) =>
-            isFlyGone(error) ? (`gone` as const) : undefined,
-        );
-        if (detail === undefined) {
-            // Fly couldn't be asked: not a verdict, retried next tick.
-            continue;
-        }
+        const detail = await getMachineDetail(flyApiToken, build.machine.appName, build.builderMachineId).catch((error: unknown) => {
+            if (isFlyGone(error)) {
+                return `gone` as const;
+            }
+            logger.warn({ err: error, build: build.id, app: build.machine.appName }, `hosted build: the builder's state could not be read`);
+            return undefined;
+        });
         if (detail === `gone`) {
             // oxlint-disable-next-line eslint/no-await-in-loop
             await finishHostedBuild(prisma, config, logger, build, { error: `the builder disappeared before it reported` });
             continue;
         }
-        if (ENDED_STATES.has(detail.state)) {
+        if (detail !== undefined && ENDED_STATES.has(detail.state)) {
             // A builder stopped this long and still `building` has no report coming; its exit event is next best.
             if (age < REPORT_GRACE_MS) {
                 continue;
@@ -536,6 +545,7 @@ export const reconcileHostedBuilds = async (prisma: PrismaClient, config: Config
             });
             continue;
         }
+        // Reached with no reading too: the timeout is the platform's own and needs no answer from Fly to hold.
         if (age > buildTimeoutMinutes * 60_000 + TIMEOUT_GRACE_MS) {
             logger.warn({ build: build.id, app: build.machine.appName }, `hosted build: builder past its timeout; destroying it`);
             // oxlint-disable-next-line eslint/no-await-in-loop

@@ -361,8 +361,8 @@ pub struct ResumableSetup {
     /// and this is the only thing on either side of a restart that knows how much of that is left.
     pub aged_seconds: u64,
     /// Which way the session ended for it, so the card can tell a sign-out that did not take from a first
-    /// ask. Absent for a file an older build parked.
-    pub how: Option<SessionEnd>,
+    /// ask.
+    pub how: SessionEnd,
 }
 
 #[tauri::command]
@@ -711,15 +711,21 @@ pub async fn sandbox_power(slug: String, action: String) -> CommandResult<()> {
         // Stopping fells the tunnel first so nothing routes into a container on its way down; starting and
         // restarting raise it last. The same order the machine agent uses for the same three verbs.
         // The sidecar is optional (a sandbox reached over the user's own proxy has none), so its absence is
-        // not a failure of the operation the user asked for.
+        // not a failure of the operation the user asked for; any other refusal is, reported after the sandbox's.
+        let power_sidecar = || match scripts::docker_output(&[&action, &sidecar]) {
+            Err(error) if !error.contains("No such container") => {
+                Err(format!("the sandbox's tunnel did not {action}: {error}"))
+            }
+            _ => Ok(()),
+        };
         if action == "stop" {
-            let _ = scripts::docker_output(&[&action, &sidecar]);
+            let tunnel = power_sidecar();
             scripts::docker_output(&[&action, &container])?;
+            tunnel
         } else {
             scripts::docker_output(&[&action, &container])?;
-            let _ = scripts::docker_output(&[&action, &sidecar]);
+            power_sidecar()
         }
-        Ok(())
     })
     .await
     .map_err(|error| error.to_string())?

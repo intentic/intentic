@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { createBackoff } from "@intentic/base/async";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 // oxlint-disable-next-line import/no-named-as-default -- Baileys exports the factory in both forms.
 import makeWASocket, { DisconnectReason, downloadMediaMessage, jidNormalizedUser, useMultiFileAuthState } from "baileys";
 import type { ListenerPairing } from "@intentic/sandbox-contract";
@@ -82,16 +82,18 @@ const extensionOf = (mimetype: string | undefined): string => {
 // Extensions sendFile sends as an image; everything else goes as a document with its filename intact.
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
 
-// Whether a session dir holds a session worth resuming, rather than leftovers from an unfinished pairing. A missing or
-// unreadable creds file reads as nothing to resume.
-const sessionRegistered = async (sessionDir: string): Promise<boolean> => {
-    const raw = await readFile(join(sessionDir, "creds.json"), "utf8").catch(() => undefined);
+// Whether a session dir holds a session worth resuming, rather than leftovers from an unfinished pairing. Only a missing
+// creds file means nothing to resume: a read that failed throws, because the caller wipes whatever this calls unpaired.
+const sessionRegistered = async (sessionDir: string, log: Logger, capabilityId: string): Promise<boolean> => {
+    const raw = await readFile(join(sessionDir, "creds.json"), "utf8").catch(undefinedIfMissing);
     if (raw === undefined) {
         return false;
     }
     try {
         return (JSON.parse(raw) as { registered?: unknown }).registered === true;
-    } catch {
+    } catch (error) {
+        // Torn creds hold no identity baileys could resume from; the session is lost either way, and said so here.
+        log.warn({ err: error, capabilityId, sessionDir }, "whatsapp session creds do not parse; starting a fresh pairing");
         return false;
     }
 };
@@ -100,7 +102,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
     const { capabilityId, sessionDir, log } = options;
     const phone = digitsOf(options.phoneNumber);
     // A stored session is kept only once the phone completed pairing; otherwise it's wiped and restarted clean.
-    if (!(await sessionRegistered(sessionDir))) {
+    if (!(await sessionRegistered(sessionDir, log, capabilityId))) {
         await rm(sessionDir, { recursive: true, force: true });
     }
     await mkdir(sessionDir, { recursive: true });
@@ -163,7 +165,8 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
         }
         let pairingRequested = false;
 
-        socket.ev.on("creds.update", () => void auth.saveCreds());
+        // A save that failed leaves the session on disk behind the one in memory; the next update retries it.
+        socket.ev.on("creds.update", () => void auth.saveCreds().catch((error: unknown) => log.error({ err: error, capabilityId }, "whatsapp creds save failed")));
         socket.ev.on("connection.update", (update) => {
             // `qr` signals the socket is ready to pair; request a phone-number code instead of ever rendering the QR.
             if (update.qr !== undefined && !auth.state.creds.registered && !pairingRequested) {
@@ -263,10 +266,9 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
             await live().sendPresenceUpdate(state, chat);
         },
         listChats: async () => {
-            // Groups come from the API; DMs come only from what this session has observed.
-            const groups = await live()
-                .groupFetchAllParticipating()
-                .catch(() => ({}) as Record<string, { subject?: string }>);
+            // Groups come from the API; DMs come only from what this session has observed. A failed group read throws:
+            // answering with the DMs alone would tell the reader this number is in no groups.
+            const groups = await live().groupFetchAllParticipating();
             const entries = new Map<string, ChatEntry>();
             for (const [jid, meta] of Object.entries(groups)) {
                 entries.set(jid, { jid, name: meta.subject ?? jid, kind: "group" });

@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { notice, type Notice, type NoticeEvents } from "@intentic/desktop-automation";
 import type { Log } from "@intentic/local-agent";
 import { baseDir } from "../config.js";
@@ -21,8 +21,9 @@ export const IDLE_MS = 30_000;
 // Exists while paused, and outlives the agent on purpose: a restart, which a sandbox can ask for, must not lift it.
 const pausePath = join(baseDir, "paused");
 
-// When the person paused, or undefined when nothing is paused.
-export const readPausedAt = async (): Promise<Date | undefined> => (await stat(pausePath).catch(() => undefined))?.mtime;
+// When the person paused, or undefined when nothing is paused. Only an absent file is unpaused: a stat that fails
+// otherwise throws, and `control` refuses the action rather than reading the person's pause as lifted.
+export const readPausedAt = async (): Promise<Date | undefined> => (await stat(pausePath).catch(undefinedIfMissing))?.mtime;
 
 // The link a tool call arrived on, set around each MCP message by the router: the sandbox the notice names, the link
 // whose disconnect takes it down, and the log that hears about it.

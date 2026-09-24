@@ -13,6 +13,7 @@ import {
     destroyVolume,
     extendVolume,
     flySandboxRole,
+    getMachine,
     getVolume,
     isFlyCapacity,
     listVolumeSnapshots,
@@ -310,13 +311,20 @@ interface Built {
 const applyMove = async (
     prisma: PrismaClient,
     config: Config,
+    logger: Logger,
     machine: MigratableMachine,
     plan: MigrationPlan,
     snapshotId: string | undefined,
     sleep: Sleep,
 ): Promise<Built> => {
     const { flyApiToken } = config.hosted;
-    await stopMachine(flyApiToken, machine.appName, machine.machineId).catch(() => undefined);
+    // A refused stop is fine only for a machine already stopped; forking a disk still being written copies it torn.
+    await stopMachine(flyApiToken, machine.appName, machine.machineId).catch(async (error: unknown) => {
+        const { state } = await getMachine(flyApiToken, machine.appName, machine.machineId);
+        if (state !== `stopped`) {
+            throw error;
+        }
+    });
     const sameRegion = plan.to.region === machine.region;
     if (!sameRegion && snapshotId === undefined) {
         throw new Error(`a move to another region needs the pre-flight snapshot, and this run has none`);
@@ -343,7 +351,12 @@ const applyMove = async (
         return { machineId, volumeId };
     } catch (error) {
         // The volume is this run's alone and holds a copy, never the original; dropping it loses nothing.
-        await destroyVolume(flyApiToken, machine.appName, volumeId).catch(() => undefined);
+        await destroyVolume(flyApiToken, machine.appName, volumeId).catch((cleanupError: unknown) =>
+            logger.error(
+                { err: cleanupError, app: machine.appName, volumeId },
+                `hosted migrate: the copy this failed move made would not go away; nothing else collects it`,
+            ),
+        );
         throw error;
     }
 };
@@ -392,7 +405,7 @@ export const migrateHosted = async (
             }
 
             applied = true;
-            const built = await applyMove(prisma, config, machine, plan, snapshotId, sleep);
+            const built = await applyMove(prisma, config, logger, machine, plan, snapshotId, sleep);
             await setState(prisma, row.id, `verifying`, { newMachineId: built.machineId, newVolumeId: built.volumeId });
             // The swap, and only now: the new machine has said it is up on the new disk.
             await commitMigration(prisma, machine.id, row.id, plan, built);

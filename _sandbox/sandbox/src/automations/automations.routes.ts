@@ -11,6 +11,7 @@ import { ensureVisitorChatPersona } from "../personas/visitor-chat.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { sandboxZone, zoneOf } from "./schedule-zone.js";
 import { fireAutomation, nextRunOf, runHeldWake } from "./scheduler.js";
+import { ManifestUnreadableError } from "../store/json-file.js";
 
 // A moment already gone cannot be waited for. Refused at both doors that could arm one — saving a new automation, and
 // flipping a spent one back on — since the tick fires an overdue `once` on its next pass, so arming one dated
@@ -203,12 +204,21 @@ export const createAutomationsRoutes = (services: Services) => {
         // drop the queue entry.
         // Detached like the /fire webhook: the turn outlives this request.
         approve: i.approve.handler(async ({ input }) => {
-            const pending = await services.heldWakes.get(input.id);
+            const pending = await services.heldWakes.get(input.id).catch((error: unknown) => {
+                // A hold this build cannot read is never run on a guess at what it snapshotted; the message names the file.
+                if (error instanceof ManifestUnreadableError) {
+                    throw new ORPCError("CONFLICT", { message: error.message });
+                }
+                throw error;
+            });
             if (pending === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no pending approval with that id" });
             }
             const automation = await services.automations.get(pending.automationId);
-            await services.heldWakes.remove(input.id);
+            // Only the caller whose remove took the entry runs it: a second approval, or the countdown release, already did.
+            if (!(await services.heldWakes.remove(input.id))) {
+                throw new ORPCError("NOT_FOUND", { message: "that approval was already released" });
+            }
             if (automation === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "the automation for that approval no longer exists" });
             }

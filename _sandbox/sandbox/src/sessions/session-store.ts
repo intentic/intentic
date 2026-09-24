@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { statePath, stateRelPath } from "../state-paths.js";
 import { conversationUnit } from "../store/conversation-units.js";
 
@@ -16,11 +17,11 @@ export const SESSION_STATE = ["projects", "plans", "backups", "tasks", "sessions
 const RETENTION_DAYS = 3650;
 
 // Merges one key into settings.json rather than replacing it, since the user's own settings load from the same file.
-// Unparseable JSON propagates rather than being clobbered; losing user settings costs more than the sweep this key
-// prevents.
+// Unreadable or unparseable content propagates rather than being clobbered; losing user settings costs more than the
+// sweep this key prevents.
 const persistRetention = async (claudeHome: string): Promise<void> => {
     const path = join(claudeHome, "settings.json");
-    const raw = await readFile(path, "utf8").catch(() => undefined);
+    const raw = await readFile(path, "utf8").catch(undefinedIfMissing);
     const settings: { cleanupPeriodDays?: number } & Record<string, unknown> = raw === undefined ? {} : JSON.parse(raw);
     if (settings.cleanupPeriodDays === RETENTION_DAYS) {
         return;

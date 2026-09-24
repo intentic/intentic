@@ -87,11 +87,12 @@ it), and the step waits for it to settle:
 - **completed**: green. `summary` is the conversation's title; `branch` is where the work sits.
 - **parked**: the agent asked a person for something (a plan to approve, a question, a permission). The step is
   red with a warning naming the card; open the conversation in your sandbox to answer it.
-- **failed**: red, with the sentence the turn died on.
+- **failed**: red, with the sentence the turn died on. A turn someone stopped is a failure too.
 - **timeout**: the deadline decided, not the work; exit 2, and the agent keeps working in the sandbox.
 
 `land: true` merges the branch into the sandbox's main tree once the turn completes (a `land`-scoped token), and
-`landed` says whether the whole change applied.
+`landed` says whether the whole change applied. A land the sandbox refuses makes the step **failed**; one your own
+land rules hold for a deliberate merge stays **completed** with `landed` false.
 
 ## Inputs
 

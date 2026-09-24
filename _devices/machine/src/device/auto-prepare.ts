@@ -114,7 +114,8 @@ export const startAutoPrepare = (log: Log): { stop: () => void } => {
     };
     const tick = async (): Promise<void> => {
         try {
-            if ((await readMachineConfig().catch(() => ({ sandboxUpdates: true }))).sandboxUpdates !== false) {
+            // A config that does not read skips the round below, since it may be the one holding the switch off.
+            if ((await readMachineConfig()).sandboxUpdates !== false) {
                 await runTick(state, await fleet(), async (slug) => await runIc(autoPrepareArgs(slug), () => undefined), log);
             }
         } catch (error) {

@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { ArrivalHost, ArrivalReport, AssistantSource, Capability, ModelPin } from "@intentic/sandbox-contract";
 import { spawnableProviders } from "../agent/subagents/spawn-catalog.js";
 import { ENV_FILE } from "@intentic/scaffold";
@@ -11,6 +10,7 @@ import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { upsertEnv } from "../secrets/secrets.routes.js";
 import { switchOwnSkill, writeOwnSkill } from "../settings/skills.js";
+import { textFile } from "../store/text-file.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import type { Files, SourcePlan } from "./adapter-shared.js";
 import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archive.js";
@@ -152,17 +152,14 @@ const migrationDeps = (services: Services): MigrationDeps => {
             }
             await services.capabilities.upsert(capability);
         },
-        // Secrets route's own write, byte for byte: parses and re-serializes into desired-state/.env at mode 0600,
-        // gated the same way (no DevOps checkout, no store).
+        // Secrets route's own write: the same queued textFile over desired-state/.env at mode 0600, gated the same way
+        // (no DevOps checkout, no store).
         setSecret: async (key, value) => {
             const desiredState = services.workspace.repos["desired-state"];
             if (!existsSync(desiredState)) {
                 throw new SecretsInactiveError();
             }
-            const path = join(desiredState, ENV_FILE);
-            await mkdir(dirname(path), { recursive: true });
-            const existing = await readFile(path, "utf8").catch(() => "");
-            await writeFile(path, upsertEnv(existing, key, value), { mode: 0o600 });
+            await textFile(join(desiredState, ENV_FILE), 0o600).update((current) => upsertEnv(current, key, value));
         },
     };
 };

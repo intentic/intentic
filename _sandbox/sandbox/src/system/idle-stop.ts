@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Logger } from "pino";
+import { isNoTmuxServer } from "../terminal/tmux-server.js";
 import { connectedCount } from "./presence.js";
 
 // Stops the daemon (SIGTERM to self) when nobody is connected and nothing is running for a full window, since a hosted
@@ -11,19 +12,20 @@ import { connectedCount } from "./presence.js";
 
 const exec = promisify(execFile);
 
-// Freshest tmux session_activity across all panes, in ms; 0 when tmux has no server or listing fails, both read as no
-// activity rather than an error.
+// Freshest tmux session_activity across all panes, in ms; 0 when tmux has no server. A listing that failed throws, so
+// the check skips its pass instead of reading a terminal it could not see as idle and stopping the machine under it.
 const lastTerminalActivity = async (): Promise<number> => {
-    try {
-        const { stdout } = await exec("tmux", ["list-panes", "-a", "-F", "#{session_activity}"]);
-        const stamps = stdout
-            .split("\n")
-            .map((line) => Number(line.trim()))
-            .filter((value) => Number.isFinite(value) && value > 0);
-        return stamps.length === 0 ? 0 : Math.max(...stamps) * 1000;
-    } catch {
-        return 0;
-    }
+    const listed = await exec("tmux", ["list-panes", "-a", "-F", "#{session_activity}"]).catch((error: unknown) => {
+        if (isNoTmuxServer(error)) {
+            return undefined;
+        }
+        throw error;
+    });
+    const stamps = (listed?.stdout ?? "")
+        .split("\n")
+        .map((line) => Number(line.trim()))
+        .filter((value) => Number.isFinite(value) && value > 0);
+    return stamps.length === 0 ? 0 : Math.max(...stamps) * 1000;
 };
 
 export interface IdleStopProbes {

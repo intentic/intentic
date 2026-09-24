@@ -12,6 +12,8 @@ export interface PackHooks {
     readonly onFileStart?: (path: string) => void;
     // Fired per content chunk with the byte delta, drives the aggregate byte progress + throughput.
     readonly onBytes?: (delta: number) => void;
+    // Fired just before the archive errors on an entry that can't supply the bytes its header promised.
+    readonly onUnreadable?: (path: string, error: Error) => void;
 }
 
 const enc = new TextEncoder();
@@ -96,8 +98,8 @@ async function* tarChunks(entries: readonly TarEntry[], hooks: PackHooks): Async
                 yield new Uint8Array(pad);
             }
         }
-        // file.size is captured at scan time; if the file changed by upload time, the body is truncated or zero-filled
-        // to match exactly, keeping 512-byte framing aligned.
+        // file.size is captured at scan time and fixed by the header: a file that grew since is cut to it, and one that
+        // can no longer supply it errors the archive, since zero-filling would land a corrupt file as uploaded.
         yield header(path, file.size, mtimeSec, "0");
         let sent = 0;
         try {
@@ -115,12 +117,13 @@ async function* tarChunks(entries: readonly TarEntry[], hooks: PackHooks): Async
                 hooks.onBytes?.(slice.byteLength);
                 yield slice;
             }
-        } catch (error) {
-            console.warn(`Padding ${path}: read failed mid-upload`, error);
-        }
-        const shortfall = file.size - sent;
-        if (shortfall > 0) {
-            yield new Uint8Array(shortfall);
+            if (sent < file.size) {
+                throw new Error(`it shrank from ${file.size} to ${sent} bytes`);
+            }
+        } catch (cause) {
+            const error = new Error(`${path} could not be read in full mid-upload`, { cause });
+            hooks.onUnreadable?.(path, error);
+            throw error;
         }
         const pad = padding(file.size);
         if (pad > 0) {

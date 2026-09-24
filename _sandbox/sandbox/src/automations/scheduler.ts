@@ -718,8 +718,8 @@ const releaseCountdownHolds = async (services: Services, now: number): Promise<v
         if (!heldWakeQuiet(automation?.trigger.kind, now, fleetFor(services, automation?.trigger.kind, held.autoRunAt))) {
             continue;
         }
-        await services.heldWakes.remove(held.id);
-        if (automation === undefined || !resumable(automation)) {
+        // Only the release whose remove took the entry runs it: an approval racing this pass has already fired it.
+        if (!(await services.heldWakes.remove(held.id)) || automation === undefined || !resumable(automation)) {
             continue;
         }
         void runHeldWake(services, automation, held).catch((error: unknown) =>

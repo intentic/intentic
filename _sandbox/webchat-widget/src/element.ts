@@ -392,9 +392,11 @@ export class VisitorChatElement extends HTMLElement {
                     this.notice(notice, "notice");
                 },
                 // Empty replies surface here too; a silently dropped bubble would leave the visitor wondering if it
-                // sent.
+                // sent. Text that did arrive stays, as it does in `turns`, with the notice under it.
                 failed: (notice) => {
-                    bubble.remove();
+                    if (reply.text === "") {
+                        bubble.remove();
+                    }
                     this.notice(notice, "failed");
                 },
             });

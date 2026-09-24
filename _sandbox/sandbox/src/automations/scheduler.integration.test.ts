@@ -428,6 +428,34 @@ test("a holdForSeconds fire is held with a deadline, and the tick releases it on
     expect(prompts).toEqual(["wake:fixer\n\n--- Event payload ---\nchecks broke"]);
 });
 
+test("a countdown hold another door released first is not run a second time", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automationConfig("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }));
+    const prompts: string[] = [];
+    const record = (await services.automations.get("fixer")) as AutomationRecord;
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), record, { payload: "checks broke" });
+    expect(await services.heldWakes.list()).toHaveLength(1);
+    const store = services.heldWakes;
+    // An approval takes the hold between this pass listing it and removing it.
+    const raced = unstubbed<Services>("services", {
+        ...services,
+        heldWakes: {
+            ...store,
+            list: async () => {
+                const listed = await store.list();
+                await Promise.all(listed.map((held) => store.remove(held.id)));
+                return listed;
+            },
+        },
+    });
+
+    await createAutomationsScheduler(drivenBy(raced, fakeWake(prompts))).tick(Date.now() + 2_000);
+    await automationIdle("fixer");
+
+    expect(prompts).toEqual([]);
+    expect((await services.automations.get("fixer"))?.runs).toEqual([]);
+});
+
 test("cancelling is just removing the hold, and disabling the automation mid-countdown counts as the cancel", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automationConfig("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }));

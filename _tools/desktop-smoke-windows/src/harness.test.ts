@@ -59,13 +59,15 @@ test("a predicate that becomes true before the deadline passes", async () => {
 test("a throwing probe counts as 'no', not as a crash", async () => {
     // Every probe here shells out; "the command failed" and "the command said no" are the same answer to the
     // question being asked, and a tier must not die because docker was briefly unreachable.
-    const { harness } = collected();
+    const { harness, err } = collected();
     expect(
         await harness.untilTrue(1, `docker answers`, () => {
             throw new Error(`ENOENT`);
         }),
     ).toBe(false);
     expect(harness.failures()).toBe(1);
+    // Named at the deadline, so a broken probe does not read as the app never getting there.
+    expect(err).toEqual([`  FAIL docker answers (waited 1s)`, `       the probe last threw: ENOENT`]);
 });
 
 test("a failure does not stop the run, and the count is the exit code's only input", async () => {

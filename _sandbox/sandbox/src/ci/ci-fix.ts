@@ -1,5 +1,6 @@
 import { ciFixConversationId, type PipelineRun } from "@intentic/sandbox-contract";
 import { isInfraStep } from "@intentic/constants/ci-infra-steps";
+import type { Logger } from "pino";
 import { archiveAgents } from "../agents/registry/archive.js";
 import type { Services } from "../composition.js";
 import type { TurnInput } from "../seams/turn-starter.js";
@@ -39,12 +40,19 @@ export interface CiFailureEvidence {
 }
 
 // What a fix conversation is handed about a failed run, and whether the run failed on the fleet rather than the code.
-export const ciFailureEvidence = async (project: CiProject, runId: number, fetchFn: FetchFn = fetch): Promise<CiFailureEvidence> => {
+// Each read that fails is logged and left out; missing evidence never reads as the fleet's failure.
+export const ciFailureEvidence = async (project: CiProject, runId: number, logger: Logger, fetchFn: FetchFn = fetch): Promise<CiFailureEvidence> => {
     const client = ciClientFor(project.account.provider, fetchFn);
+    const missing =
+        <T>(what: string, empty: T) =>
+        (error: unknown): T => {
+            logger.warn({ err: error, repo: project.repo, runId }, `ci fix: the run's ${what} could not be read`);
+            return empty;
+        };
     const [failedJobs, failedSteps, logs] = await Promise.all([
-        client.failedJobs(project, runId).catch(() => []),
-        client.failedSteps(project, runId).catch((): FailedStep[] => []),
-        client.failedJobLogs(project, runId, FIX_LOG_BYTES).catch(() => ""),
+        client.failedJobs(project, runId).catch(missing<readonly string[]>("failed jobs", [])),
+        client.failedSteps(project, runId).catch(missing<readonly FailedStep[]>("failed steps", [])),
+        client.failedJobLogs(project, runId, FIX_LOG_BYTES).catch(missing("failed job logs", "")),
     ]);
     const stepsOnly = failedSteps.length > 0 && failedSteps.every(({ step }) => step !== undefined && isInfraStep(step));
     return {

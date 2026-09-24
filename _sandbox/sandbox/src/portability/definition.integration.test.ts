@@ -13,7 +13,7 @@ import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { applyDefinitionItems } from "./apply-definition.js";
 import { createArrivals } from "./arrival.js";
-import { deriveDefinition, parseDefinitionToml } from "./definition.js";
+import { deriveDefinition, emitDefinitionToml, parseDefinitionToml } from "./definition.js";
 import { rootExcludes } from "../workspace/layout/git-layout.js";
 import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/remote/root-repo.js";
 import { workspaceRemoteUrl } from "./workspace-repo.js";
@@ -164,6 +164,22 @@ test("derive reads the live stores: remotes become references, a remoteless repo
     // Definition settings include only non-default values.
     expect(definition.settings).toEqual({ workspaceMap: true });
     expect(definition.environment.dockerfile).toBe("RUN apt-get install -y ffmpeg\n");
+    await cleanup();
+});
+
+test("a connection travels by shape: the credential it holds is never in the definition", async () => {
+    const source = await makeRoots();
+    const sourceServices = servicesFor(source, {
+        capabilities: memoryCapabilitiesStore([
+            { id: "tools", kind: "plugin", config: { url: "https://github.com/example/tools.git", token: "ghp_live_0011223344556677" } } as Capability,
+        ]),
+        sandboxSettings: { get: async () => SandboxSettingsSchema.parse({}) },
+        secretRegistry: async () => [],
+    });
+    const { definition, omitted } = await deriveDefinition(sourceServices);
+
+    expect(definition.capabilities).toEqual([{ id: "tools", kind: "plugin", config: { url: "https://github.com/example/tools.git" } }]);
+    expect(emitDefinitionToml(definition, omitted)).not.toContain("ghp_live_0011223344556677");
     await cleanup();
 });
 

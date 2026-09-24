@@ -78,14 +78,15 @@ export const pushRelayRoutes = (build: (config: Config) => ApnsForwarder = creat
         if (!secretsMatch(input.secret, row.secretHash)) {
             throw new ORPCError("FORBIDDEN", { message: "this send capability has been rotated" });
         }
-        const verdict = await forwarder.send(row.token, input.notification);
-        if (verdict === "dead") {
+        const outcome = await forwarder.send(row.token, input.notification);
+        if (outcome.verdict === "dead") {
             // Apple says this device can never be reached again; drop our half too, so no half-dead channel lingers.
             await context.prisma.pushDevice.delete({ where: { id: row.id } }).catch(() => undefined);
             throw new ORPCError("GONE", { status: 410, message: "the device is no longer reachable" });
         }
-        if (verdict === "transient") {
-            // Our problem or a passing one, never the device's; the daemon logs this and keeps the channel.
+        if (outcome.verdict === "transient") {
+            // Our problem or a passing one, never the device's; the daemon keeps the channel, and only this log says which.
+            context.logger.warn({ deviceId: row.id, reason: outcome.reason }, "push relay: APNs did not take the send");
             throw new ORPCError("BAD_GATEWAY", { status: 502, message: "the push service refused the send" });
         }
         return { delivered: true };

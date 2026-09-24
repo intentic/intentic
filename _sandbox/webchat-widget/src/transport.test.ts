@@ -79,9 +79,10 @@ test(`an error frame reaches the sink, the turn answered with nothing, which is 
     expect(text).toBe(``);
 });
 
-test(`a stream that ends without a done frame still delivers what arrived`, async () => {
-    const { text } = await collect([`event: delta\ndata: partial\n\n`]);
+test(`a stream that ends without a done frame still delivers what arrived, and says the rest was cut off`, async () => {
+    const { text, failed } = await collect([`event: delta\ndata: partial\n\n`]);
     expect(text).toBe(`partial`);
+    expect(failed).toEqual([`The connection closed before the reply finished. Try again.`]);
 });
 
 test(`a refusal surfaces the daemon's own sentence and its status, not a generic failure`, async () => {

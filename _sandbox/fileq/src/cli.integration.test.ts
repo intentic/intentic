@@ -2,9 +2,9 @@
 // floor, and forged markers dying in the sidecar's bytes.
 // Driven in-process through the same `run(app, …)` seam cli.ts calls (@intentic/agent-cli/testing); no build
 // artifact, no child process.
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { captureCli, type CliOutcome } from "@intentic/agent-cli/testing";
 import { app } from "./app.js";
 import { deriverStamp } from "./lib/derivers/deriver.js";
@@ -48,6 +48,17 @@ describe("derive", () => {
         const gone = await fileq("derive", "plan.docx");
         expect(gone.out).toContain("removed plan.docx");
         expect(existsSync(sidecarOf("plan.docx"))).toBe(false);
+    });
+
+    it("a source that is there but cannot be stat'd is skipped with the reason, and keeps its shadow", async () => {
+        mkdirSync(dirname(sidecarOf("loop.docx")), { recursive: true });
+        writeFileSync(sidecarOf("loop.docx"), "---\nsource: loop.docx\n---\n# Loop\n");
+        symlinkSync("loop.docx", join(root, "loop.docx"));
+        const looped = await fileq("derive", "loop.docx");
+        expect(looped.out).toContain("skipped loop.docx: unreadable (ELOOP)");
+        expect(existsSync(sidecarOf("loop.docx"))).toBe(true);
+        rmSync(join(root, "loop.docx"));
+        rmSync(sidecarOf("loop.docx"));
     });
 
     it("refuses the ignore floor and says why", async () => {

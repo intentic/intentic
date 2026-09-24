@@ -1,12 +1,14 @@
-import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, symlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathExists } from "../../path-exists.js";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { keyedLock } from "@intentic/base/async";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { gitDirOf } from "../../git/git-dir.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { PerfTracker } from "../../platform/resources/perf.js";
+import { textFile, writeTextFile } from "../../store/text-file.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { dropAgentRef, parkAgentRefs, unparkAgentRef } from "../land/agent-refs.js";
@@ -150,7 +152,7 @@ export const createAgentWorktrees = (
     // lookup above so a caller that already has the gitDir (and so already knows a checkout stands here at all) can
     // tell a detached HEAD from no checkout, which the branch alone cannot say.
     const headBranchIn = async (gitDir: string): Promise<string | undefined> =>
-        (await readFile(join(gitDir, "HEAD"), "utf8").catch(() => ``)).match(/^ref:\s*refs\/heads\/(\S+)$/m)?.[1];
+        ((await readFile(join(gitDir, "HEAD"), "utf8").catch(undefinedIfMissing)) ?? ``).match(/^ref:\s*refs\/heads\/(\S+)$/m)?.[1];
 
     // Which branch a checkout is on, read off the files rather than through git: `attached` asks this once per repo on
     // every diff read, and a subprocess per ask is a cost the review would pay on every refresh. Undefined for a
@@ -181,22 +183,35 @@ export const createAgentWorktrees = (
         });
     };
 
-    const headSha = async (dir: string): Promise<string | undefined> => {
+    // What a name resolves to, undefined when nothing: exit 1 is `-q --verify`'s own "no such thing". Any other failure
+    // throws, since a git that could not run has said nothing about the name.
+    const verifiedSha = async (dir: string, name: string): Promise<string | undefined> => {
         try {
-            return (await git(dir, ["rev-parse", "-q", "--verify", "HEAD"])).stdout.trim();
-        } catch {
+            return (await git(dir, ["rev-parse", "-q", "--verify", name])).stdout.trim();
+        } catch (error) {
+            if ((error as { code?: unknown }).code === 1) {
+                return undefined;
+            }
+            throw error;
+        }
+    };
+
+    // Main's HEAD for a new composition, undefined to leave the repo out: an unborn HEAD has nothing to branch from, and
+    // a repo git cannot read (a `.git` pointer to nothing) must not stop the rest of the workspace's conversation.
+    const composableHead = async (repo: string): Promise<string | undefined> => {
+        try {
+            const head = await verifiedSha(mainDir(repo), "HEAD");
+            if (head === undefined) {
+                logger.warn({ repo }, "agents: unborn HEAD, repo excluded from worktree composition");
+            }
+            return head;
+        } catch (error) {
+            logger.warn({ err: error, repo }, "agents: repo unreadable, excluded from worktree composition");
             return undefined;
         }
     };
 
-    const branchExists = async (dir: string, branch: string): Promise<boolean> => {
-        try {
-            await git(dir, ["rev-parse", "-q", "--verify", `refs/heads/${branch}`]);
-            return true;
-        } catch {
-            return false;
-        }
-    };
+    const branchExists = async (dir: string, branch: string): Promise<boolean> => (await verifiedSha(dir, `refs/heads/${branch}`)) !== undefined;
 
     // Which of a composition's checkouts are standing off `agent/<id>`, in composition order. Two small file reads per
     // repo, so a turn's opening pays nothing measurable for an answer it would otherwise never get.
@@ -221,9 +236,8 @@ export const createAgentWorktrees = (
 
     const createOne = async (id: string, repo: string, pinned?: string): Promise<{ repo: string; base: string } | undefined> => {
         const main = mainDir(repo);
-        const base = pinned ?? (await headSha(main));
+        const base = pinned ?? (await composableHead(repo));
         if (base === undefined) {
-            logger.warn({ repo }, "agents: unborn HEAD, repo excluded from worktree composition");
             return undefined;
         }
         const branch = `agent/${id}`;
@@ -238,15 +252,48 @@ export const createAgentWorktrees = (
         return { repo, base };
     };
 
+    // Whether the conversation's branch stands on refs/heads/ now. One still parked is never built over: `worktree add`
+    // would stand on it detached, `-b` would fork a fresh branch beside it, and the next park would shelve that instead.
+    const unparked = async (id: string, repo: string): Promise<boolean> => {
+        try {
+            await unparkAgentRef(mainDir(repo), `agent/${id}`, git);
+            return true;
+        } catch (error) {
+            logger.warn({ err: error, id, repo }, "agents: branch unpark failed, its checkout waits for the next ensure");
+            return false;
+        }
+    };
+
+    // Drops a checkout from its repo's admin area; a dir already gone leaves only a stale admin entry, which prune drops.
+    const removeCheckout = async (main: string, target: string): Promise<void> => {
+        await git(main, ["worktree", "remove", "--force", target]).catch(async (error: unknown) => {
+            if (await pathExists(target)) {
+                logger.warn({ err: error, target }, "agents: worktree remove failed, the checkout is still on disk");
+            }
+            await git(main, ["worktree", "prune"]).catch((pruneError: unknown) => logger.warn({ err: pruneError, main }, "agents: worktree prune failed"));
+        });
+    };
+
+    // Drops one mirror symlink, answering whether it went; what follows each call relies on the link being gone.
+    const removedLink = async (target: string, repo: string, mirror: string): Promise<boolean> => {
+        try {
+            await rm(target, { force: true });
+            return true;
+        } catch (error) {
+            logger.warn({ err: error, repo, mirror }, "agents: could not remove a mirror link");
+            return false;
+        }
+    };
+
     const repairOne = async (id: string, repo: string): Promise<void> => {
         const target = worktreeDir(id, repo);
         if (await pathExists(join(target, ".git"))) {
             return;
         }
         // Unparking comes first: `worktree add` on a parked name would check it out detached, losing resumed commits.
-        await unparkAgentRef(mainDir(repo), `agent/${id}`, git).catch((error: unknown) =>
-            logger.warn({ err: error, repo }, "agents: branch unpark failed"),
-        );
+        if (!(await unparked(id, repo))) {
+            return;
+        }
         // Analogous to history's healGitPointer; a deleted worktree dir instead re-attaches from its surviving branch.
         if (await pathExists(target)) {
             await git(mainDir(repo), ["worktree", "repair", target]).catch((error: unknown) =>
@@ -266,7 +313,13 @@ export const createAgentWorktrees = (
         if (links.length === 0) {
             return new Set();
         }
-        const { stdout } = await git(worktree, ["check-ignore", ...links]).catch(() => ({ stdout: "" }));
+        const { stdout } = await git(worktree, ["check-ignore", ...links]).catch((error: unknown) => {
+            // A failed check answers "none ignored" too, which drops the links: tooling lost, never a mirror committed.
+            if ((error as { code?: unknown }).code !== 1) {
+                logger.warn({ err: error, worktree }, "agents: could not ask git which mirror links it ignores");
+            }
+            return { stdout: "" };
+        });
         return new Set(stdout.split("\n").filter((path) => path !== ""));
     };
 
@@ -277,7 +330,10 @@ export const createAgentWorktrees = (
     const MIRROR_EXCLUDE_NOTE = "# intentic: dependency and build dirs mirrored into agent worktrees.";
 
     const excludeFileOf = async (main: string): Promise<string | undefined> => {
-        const { stdout } = await git(main, ["rev-parse", "--git-common-dir"]).catch(() => ({ stdout: "" }));
+        const { stdout } = await git(main, ["rev-parse", "--git-common-dir"]).catch((error: unknown) => {
+            logger.warn({ err: error, main }, "agents: could not locate the repo's exclude file for its mirror links");
+            return { stdout: "" };
+        });
         const common = stdout.trim();
         return common === "" ? undefined : join(resolve(main, common), "info", "exclude");
     };
@@ -290,7 +346,16 @@ export const createAgentWorktrees = (
         if (path === undefined) {
             return;
         }
-        const current = await readFile(path, "utf8").catch(() => "");
+        // The owner's own exclude lines live here too: content that exists but cannot be read is never written over.
+        const current = await textFile(path)
+            .read()
+            .catch((error: unknown) => {
+                logger.warn({ err: error, main }, "agents: mirror exclude unreadable, left as it is");
+                return undefined;
+            });
+        if (current === undefined) {
+            return;
+        }
         const written = new Set(current.split("\n").map((line) => line.trim()));
         const missing = mirrors.map((rel) => `/${rel}`).filter((pattern) => !written.has(pattern));
         if (missing.length === 0) {
@@ -298,8 +363,7 @@ export const createAgentWorktrees = (
         }
         const kept = current.replace(/\n+$/, "");
         const body = [...(kept === "" ? [] : [kept]), MIRROR_EXCLUDE_NOTE, ...missing, ""].join("\n");
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, body).catch((error: unknown) => logger.warn({ err: error, main }, "agents: mirror exclude write failed"));
+        await writeTextFile(path, body).catch((error: unknown) => logger.warn({ err: error, main }, "agents: mirror exclude write failed"));
     };
 
     // Mirrors one repo's untracked dependency/build-output dirs from main checkout into the worktree; idempotent, safe
@@ -325,8 +389,9 @@ export const createAgentWorktrees = (
                 // resolves nothing outside one.
                 const entry = await lstat(target).catch(() => undefined);
                 if (isolated) {
-                    if (entry?.isSymbolicLink()) {
-                        await rm(target).catch(() => undefined);
+                    // A symlink left standing under the mount point would loop back into /work from inside the namespace.
+                    if (entry?.isSymbolicLink() && !(await removedLink(target, repo, rel))) {
+                        return;
                     }
                     await mkdir(target, { recursive: true }).catch((error: unknown) =>
                         logger.warn({ err: error, repo, mirror: rel }, "agents: mirror mount point failed"),
@@ -374,7 +439,7 @@ export const createAgentWorktrees = (
                         return;
                     }
                     logger.warn({ repo, mirror: rel }, "agents: mirror left unlinked, this repo un-ignores it");
-                    await rm(target).catch(() => undefined);
+                    await removedLink(target, repo, rel);
                 }),
         );
     };
@@ -441,9 +506,7 @@ export const createAgentWorktrees = (
     const releaseOne = (id: string, repo: string): Promise<void> =>
         withRepoLock(repo, async () => {
             const main = mainDir(repo);
-            await git(main, ["worktree", "remove", "--force", worktreeDir(id, repo)]).catch(() =>
-                git(main, ["worktree", "prune"]).catch(() => undefined),
-            );
+            await removeCheckout(main, worktreeDir(id, repo));
             await parkAgentRefs(main, new Set([id]), git).catch((error: unknown) =>
                 logger.warn({ err: error, repo, id }, "agents: branch park failed"),
             );
@@ -454,12 +517,7 @@ export const createAgentWorktrees = (
     // A repo that was never here has no branch to unpark and gets a fresh one at main's head (or the pinned base a
     // snapshot supplied).
     const joinOne = async (id: string, repo: string, pinned: string | undefined): Promise<{ repo: string; base: string } | undefined> =>
-        withRepoLock(repo, async () => {
-            await unparkAgentRef(mainDir(repo), `agent/${id}`, git).catch((error: unknown) =>
-                logger.warn({ err: error, repo }, "agents: branch unpark failed"),
-            );
-            return createOne(id, repo, pinned);
-        });
+        withRepoLock(repo, async () => ((await unparked(id, repo)) ? createOne(id, repo, pinned) : undefined));
 
     // Brings a recorded composition to `want`: repos it lacks join, ones it doesn't name leave; root is never a leaver.
     // Leaving is preserve then release so uncommitted edits land on agent/<id>; join and leave run concurrently.
@@ -505,7 +563,7 @@ export const createAgentWorktrees = (
         elsewhere: elsewhereIn,
         snapshot: async () => {
             const repos = await liveRepos();
-            const heads = await Promise.all(repos.map(async (repo) => ({ repo, base: await headSha(mainDir(repo)) })));
+            const heads = await Promise.all(repos.map(async (repo) => ({ repo, base: await composableHead(repo) })));
             return heads
                 .filter((entry): entry is { repo: string; base: string } => entry.base !== undefined)
                 .map(({ repo, base }) => ({ repo, base }));
@@ -555,10 +613,7 @@ export const createAgentWorktrees = (
             await eachRepo(recorded, "root-last", (repo) =>
                 withRepoLock(repo, async () => {
                     const main = mainDir(repo);
-                    await git(main, ["worktree", "remove", "--force", worktreeDir(id, repo)]).catch(() =>
-                        // Dir already gone, drop the stale admin entry instead.
-                        git(main, ["worktree", "prune"]).catch(() => undefined),
-                    );
+                    await removeCheckout(main, worktreeDir(id, repo));
                     // Both spellings: archived commits sit on the parked shelf; `branch -D` alone leaves them
                     // unreachable.
                     await dropAgentRef(main, `agent/${id}`, git);

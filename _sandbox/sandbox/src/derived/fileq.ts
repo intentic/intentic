@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { errorMessage } from "@intentic/base/errors";
 
 // The one place the daemon spawns the fileq binary, shared by the background service that converges shadows, the
 // route that derives a single file on demand and the diff route that derives a past version's bytes, so every caller
@@ -30,6 +31,21 @@ export const FILEQ_MAX_BUFFER = 16 * 1024 * 1024;
 // An interactive derive: long enough for a scanned pdf's OCR, short enough that a browser is not left holding a
 // request nobody will wait for.
 export const DERIVE_TIMEOUT_MS = 120_000;
+
+/**
+ * What ended a run that was not fileq's own exit-1 refusal (the time limit, a crash, an overflowing answer), worded for
+ * a reader; undefined for a refusal, whose reason each caller reads from the stdout it printed.
+ */
+export const runFailure = (error: unknown): string | undefined => {
+    const failed = error as { code?: unknown; killed?: unknown };
+    if (failed.code === 1) {
+        return undefined;
+    }
+    if (failed.killed === true) {
+        return `fileq ran past its ${String(DERIVE_TIMEOUT_MS / 1000)}s limit and was stopped`;
+    }
+    return `fileq failed: ${errorMessage(error).split("\n")[0] ?? ""}`;
+};
 
 // Interactive derivations run right now, across every caller. Opening a file or a diff asks for one without anyone
 // pressing a button, so a reader walking a folder of documents would otherwise have a child process per file, all at

@@ -1,5 +1,6 @@
 import { readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { capabilitiesOf, isConversationId } from "@intentic/sandbox-contract";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import { claudeStoreOf } from "./session-store.js";
@@ -16,7 +17,8 @@ export type PurgeConversation = Pick<PersistedAgent, "id" | "profile" | "session
 
 const ATTACHMENT_DIR = /\.intentic\/records\/artifacts\/attachments\/([a-zA-Z0-9_-]+)\//g;
 
-const rawTranscript = async (path: string): Promise<string> => readFile(path, "utf8").catch(() => "");
+// Only absence reads as naming nothing: a retained transcript that could not be read would orphan every upload it names.
+const rawTranscript = async (path: string): Promise<string> => (await readFile(path, "utf8").catch(undefinedIfMissing)) ?? "";
 
 const attachmentDirs = (raw: string): Set<string> =>
     new Set([...raw.matchAll(ATTACHMENT_DIR)].flatMap((match) => (match[1] === undefined ? [] : [match[1]])));
@@ -40,7 +42,7 @@ const purgeClaudeSession = async (store: string, sessionId: string): Promise<voi
 // Uploads the removed conversations' transcripts name and no other conversation's does.
 const orphanedAttachments = async (historyRoot: string, removed: readonly PurgeConversation[]): Promise<Set<string>> => {
     const removedIds = new Set(removed.map((entry) => entry.id));
-    const units = await readdir(conversationsRoot(historyRoot), { withFileTypes: true }).catch(() => []);
+    const units = (await readdir(conversationsRoot(historyRoot), { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
     const retainedRaw = await Promise.all(
         units
             .filter((unit) => unit.isDirectory() && isConversationId(unit.name) && !removedIds.has(unit.name))

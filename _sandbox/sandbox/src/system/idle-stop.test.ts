@@ -151,6 +151,18 @@ describe("startIdleStop", () => {
         dispose();
     });
 
+    it("a terminal probe that fails holds the machine up and says why, rather than reading as no activity", async () => {
+        const stop = jest.fn();
+        const warned: unknown[] = [];
+        const failure = new Error("tmux: server busy");
+        const watching = pino({ level: "warn" }, { write: (line: string) => void warned.push(JSON.parse(line).msg) });
+        const dispose = startIdleStop({ minutes: 3, logger: watching }, probesOf({ terminalActivityAt: () => Promise.reject(failure) }), stop);
+        await minutes(6);
+        expect(stop).not.toHaveBeenCalled();
+        expect(warned).toEqual(Array.from({ length: 6 }, () => "idle-stop check failed"));
+        dispose();
+    });
+
     it("terminal output advances the streak's start, one window after the last line, not two", async () => {
         const stop = jest.fn();
         let lastOutput = 0;

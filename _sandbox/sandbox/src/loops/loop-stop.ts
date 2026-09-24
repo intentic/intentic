@@ -1,6 +1,7 @@
 import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
+import { errorMessage, isMissing } from "@intentic/base/errors";
 import { fieldsValidator, type Loop, type LoopCheck, type LoopDocument, LoopDocumentSchema } from "@intentic/sandbox-contract";
 import type { RoleAnswer } from "../agent/models/role-answer.js";
 import { askRoleModel } from "../agent/models/role-model.js";
@@ -45,11 +46,22 @@ const readDocument = async (services: Services, loop: Loop, iteration: number): 
         return { done: true };
     }
     const path = verdictPathIn(services.workspace.root, loop.conversationId, iteration);
+    let text: string;
+    try {
+        text = await readFile(path, "utf8");
+    } catch (error) {
+        return {
+            done: false,
+            detail: isMissing(error)
+                ? `No output file, the iteration ended without writing iteration-${iteration}.json.`
+                : `The output file iteration-${iteration}.json could not be read: ${errorMessage(error)}.`,
+        };
+    }
     let raw: unknown;
     try {
-        raw = JSON.parse(await readFile(path, "utf8"));
-    } catch {
-        return { done: false, detail: `No output file, the iteration ended without writing iteration-${iteration}.json.` };
+        raw = JSON.parse(text);
+    } catch (error) {
+        return { done: false, detail: `The output file iteration-${iteration}.json is not valid JSON: ${errorMessage(error)}.` };
     }
     const parsed = LoopDocumentSchema.safeParse(raw);
     if (!parsed.success) {

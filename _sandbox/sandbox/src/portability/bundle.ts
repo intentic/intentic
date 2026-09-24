@@ -2,8 +2,9 @@ import { createReadStream } from "node:fs";
 import { lstat, mkdtemp, readdir, readlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { Readable } from "node:stream";
+import { pipeline, Readable } from "node:stream";
 import { createGzip } from "node:zlib";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { type BundleManifest, HISTORY_STATE_FILES, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
 import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore";
 import { pack, type Pack } from "tar-stream";
@@ -12,7 +13,7 @@ import type { SandboxPresentation } from "../platform/platform-client.js";
 import { conversationsDbPath } from "../store/conversations-db.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { carries, historyMayContain, historyPortability, IGNORE_SCOPE_EXCLUSIONS, workspaceMayContain, workspacePortability } from "./classify.js";
-import { deriveDefinition } from "./definition.js";
+import { deriveDefinition, sweepVaults } from "./definition.js";
 import { webStream } from "../web-stream.js";
 
 // Packs a gzipped tar of the sandbox's two volumes, driven by the state manifests so adding a store is what adds it to
@@ -50,8 +51,12 @@ const packTree = async (
     let files = 0;
     let bytes = 0;
 
+    // Only a path that vanished mid-walk is skipped; an unreadable one fails the export rather than packing it as empty.
     const walk = async (absDir: string, relDir: string, ignore: IgnoreScope | undefined): Promise<boolean> => {
-        const entries = await readdir(absDir, { withFileTypes: true }).catch(() => []);
+        const entries = await readdir(absDir, { withFileTypes: true }).catch(undefinedIfMissing);
+        if (entries === undefined) {
+            return false;
+        }
         let wrote = false;
         for (const entry of entries) {
             const relPath = relDir === "" ? entry.name : `${relDir}/${entry.name}`;
@@ -78,7 +83,7 @@ const packTree = async (
                 // Sockets, fifos and device nodes have no meaning on the other side of a restore.
                 continue;
             }
-            const stats = await lstat(absPath).catch(() => undefined);
+            const stats = await lstat(absPath).catch(undefinedIfMissing);
             if (stats === undefined) {
                 continue;
             }
@@ -152,29 +157,21 @@ const sourceBlocks = (
     };
 };
 
-// One credential sweep, best-effort in both directions: a seam that throws (a fake never given this member) becomes a
-// caught rejection, so an export can never fail while protecting itself.
-const sweptOut = async (run: () => Promise<readonly string[]>): Promise<void> => {
-    try {
-        await run();
-    } catch {
-        // Deliberately silent: classification already keeps an unswept file out of a secrets-off bundle.
-    }
-};
-
 // `secrets` is the owner's export-dialog choice, the only thing that varies what's packed; everything else follows the
 // manifests. `now` is injected so the manifest is deterministic under test.
 export const packBundle = (services: Services, options: { readonly secrets: boolean; readonly now: number }): ReadableStream<Uint8Array> => {
     const packer = pack();
     const gzip = createGzip();
-    packer.pipe(gzip);
+    // The error itself reaches the reader through gzip, which pipeline destroys with it.
+    pipeline(packer, gzip, () => undefined);
 
     void (async () => {
         try {
-            // Capability manifests and settings `carry` now only while nothing has rewritten a credential into them
-            // since boot; an agent session can. Swept first, or "without secrets" is broken by the bytes, not the
-            // classification.
-            await Promise.all([sweptOut(() => services.vaultManifestSecrets()), sweptOut(() => services.vaultExtensionSettingSecrets())]);
+            // Capability manifests and settings `carry` as bytes, and an agent session can write a credential into them
+            // after boot: a secrets-off bundle is refused when the sweep fails; one with secrets carries every vault.
+            await (options.secrets
+                ? sweepVaults(services).catch((error: unknown) => services.logger.warn({ err: error }, "bundle: vault sweep failed"))
+                : sweepVaults(services));
             // Manifest embeds the same definition GET /definition emits, so a bundle is definition + state. `repos` is
             // the same list the pack below is filtered by, so the manifest and the tar can never disagree about what's
             // inside.

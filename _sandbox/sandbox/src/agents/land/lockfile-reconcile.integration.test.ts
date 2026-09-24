@@ -53,17 +53,17 @@ describe("the lockfile leaves the worktree with the manifest it records", () => 
     test("reconcile runs the resolution in the worktree exactly when it is behind, and a failed one leaves the tree alone", async () => {
         const behind = await tree({ lockfile: true, dirty: ["package.json"] });
         const install = jest.fn(async () => undefined);
-        expect(await reconcileLockfile(behind.dir, undefined, behind.git, install)).toBe("regenerated");
+        expect(await reconcileLockfile(behind.dir, undefined, behind.git, install)).toEqual({ outcome: "regenerated" });
         expect(install).toHaveBeenCalledWith(behind.dir);
 
         const current = await tree({ lockfile: true, dirty: ["src/a.ts"] });
         const untouched = jest.fn(async () => undefined);
-        expect(await reconcileLockfile(current.dir, undefined, current.git, untouched)).toBe("current");
+        expect(await reconcileLockfile(current.dir, undefined, current.git, untouched)).toEqual({ outcome: "current" });
         expect(untouched).toHaveBeenCalledTimes(0);
 
         const failing = jest.fn(async () => {
             throw new Error("ERR_PNPM_NO_MATCHING_VERSION");
         });
-        expect(await reconcileLockfile(behind.dir, undefined, behind.git, failing)).toBe("failed");
+        expect(await reconcileLockfile(behind.dir, undefined, behind.git, failing)).toEqual({ outcome: "failed", reason: "ERR_PNPM_NO_MATCHING_VERSION" });
     });
 });

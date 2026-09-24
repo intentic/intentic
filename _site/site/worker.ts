@@ -94,9 +94,12 @@ async function liveContent(): Promise<LiveContent | undefined> {
         const response = await fetch(LIVE_CONTENT_URL, { cf: { cacheTtl: LIVE_CACHE_SECONDS, cacheEverything: true } });
         if (response.ok) {
             content = parseLiveContent(await response.json());
+        } else {
+            console.warn(`live content: ${LIVE_CONTENT_URL} answered ${response.status}; the built page stands and no switch applies`);
         }
-    } catch {
-        // Unreachable, rate-limited, or not JSON at all. The built page stands.
+    } catch (error) {
+        // Unreachable, rate-limited, or not JSON at all: the built page stands, and `wrangler tail` says why.
+        console.warn(`live content: ${LIVE_CONTENT_URL} could not be read (${String(error)}); the built page stands and no switch applies`);
     }
     liveCache = { content, at: Date.now() };
     return content;

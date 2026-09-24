@@ -235,6 +235,7 @@ const startMediated = async (context: MintedLoginContext, hosts: ZaiLoginHosts):
                 // Internationally the OAuth token has to be swapped for a business one first; the swap lives with the
                 // estate that needs it.
                 exchangeForBusinessToken: true,
+                secretRequired: true,
                 oauthBase: hosts.oauthBase,
             });
         }
@@ -262,6 +263,7 @@ const startBigModel = async (context: MintedLoginContext, hosts: ZaiLoginHosts):
             identity,
             // BigModel's own OAuth token authorizes the business API directly, so there is nothing to swap.
             exchangeForBusinessToken: false,
+            secretRequired: false,
             oauthBase: hosts.oauthBase,
         });
     };
@@ -313,12 +315,14 @@ const mintKey = async (input: {
     readonly estate: string;
     readonly identity: ZaiIdentity;
     readonly exchangeForBusinessToken: boolean;
+    // The international Anthropic endpoint refuses the bare key; only `<apiKey>.<secretKey>` authenticates there.
+    readonly secretRequired: boolean;
     readonly oauthBase: string;
 }): Promise<MintedCredential> => {
     const authorization = await businessAuthorization(input);
     const keysUrl = await resolveKeysUrl({ fetchImpl: input.fetchImpl, host: input.host, estate: input.estate, authorization });
     const apiKey = await findOrCreateKey({ fetchImpl: input.fetchImpl, keysUrl, authorization });
-    const secretKey = await copySecret({ fetchImpl: input.fetchImpl, keysUrl, authorization, apiKey });
+    const secretKey = await copySecret({ fetchImpl: input.fetchImpl, keysUrl, authorization, apiKey, required: input.secretRequired });
     return {
         apiKey: secretKey === "" ? apiKey : `${apiKey}.${secretKey}`,
         ...(input.identity.email !== "" ? { email: input.identity.email } : {}),
@@ -422,13 +426,14 @@ const findOrCreateKey = async (input: { readonly fetchImpl: typeof fetch; readon
     return created.data.apiKey;
 };
 
-// The secret half. Absent is tolerated here and refused by the caller's estate rule, since only the international
-// endpoint requires the pair.
+// The secret half, blank when an estate that accepts the bare key could not read it; a required one that cannot be read
+// fails the sign-in, since the bare key would be stored as a connected row that refuses every turn.
 const copySecret = async (input: {
     readonly fetchImpl: typeof fetch;
     readonly keysUrl: string;
     readonly authorization: string;
     readonly apiKey: string;
+    readonly required: boolean;
 }): Promise<string> => {
     const copied = await envelope({
         fetchImpl: input.fetchImpl,
@@ -436,7 +441,16 @@ const copySecret = async (input: {
         method: "GET",
         authorization: input.authorization,
         step: "reading this sandbox's key",
-    }).catch(() => undefined);
+    }).catch((error: unknown) => {
+        if (input.required) {
+            throw error;
+        }
+        return undefined;
+    });
     const parsed = ApiKeyCopySchema.safeParse(copied);
-    return parsed.success ? parsed.data.secretKey : "";
+    const secretKey = parsed.success ? parsed.data.secretKey : "";
+    if (secretKey === "" && input.required) {
+        throw new Error("Signed in, but Z.ai sent no secret for this sandbox's key.");
+    }
+    return secretKey;
 };

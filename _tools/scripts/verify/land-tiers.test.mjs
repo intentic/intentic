@@ -16,6 +16,10 @@ test("oxlint's unix lines become units without positions, and its summary is not
     ]);
 });
 
+test("a file oxlint could not parse is a unit too, not a linter that did not run", () => {
+    assert.deepEqual(lintUnits("_tools/a.ts:1:11: Unexpected token [Error]\n\n1 problem"), ["lint _tools/a.ts: parse Unexpected token"]);
+});
+
 test("the lintable set is the push's, .astro included", () => {
     assert.deepEqual(
         ["a.ts", "b.mjs", "c.vue", "d.astro", "e.json", "f.md"].filter((path) => LINTABLE.test(path)),

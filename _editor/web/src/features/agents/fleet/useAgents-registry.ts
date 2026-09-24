@@ -1,5 +1,6 @@
 import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contract";
 import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, watch } from "vue";
 import { invalidateAgentTranscript } from "../../chat/transcript/agentTranscript";
 import { useChat } from "../../chat/run/useChat";
@@ -8,7 +9,7 @@ import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { onScreen } from "../../../shell/window/onScreen";
 import { AGENT_REVIEW, rpcKey, rpcKeyAt } from "../../../lib/queryKeys";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
-import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import type { FleetAgent } from "./useAgents-fleet";
 
@@ -22,6 +23,8 @@ export const registry = sandboxShallowRef<AgentSummary[]>(() => []);
 // Archive half of the fleet; shallow like `registry`, and unbounded in size unlike the live roster.
 export const archived = sandboxShallowRef<FleetAgent[]>(() => []);
 export const archiveLoading = sandboxRef(() => false);
+// Why the last archive read failed, cleared by the next one that lands.
+export const archiveFailure = sandboxRef<string | undefined>(() => undefined);
 
 // Daemon's approvals queue as last read; kept separate since the stream never carries holds.
 const heldRead = sandboxShallowRef<AutomationApproval[]>(() => []);
@@ -313,19 +316,21 @@ export const refreshAgents = async (): Promise<void> => refresh();
 export const refresh = async (): Promise<void> => {
     const issuedAt = epoch;
     const current = sandboxScopeGuard();
+    let body: ProcedureOutput<`agents.list`>;
     try {
-        const body = await sandboxRpc.agents.list();
-        // Stale: issued to a connection since replaced (`epoch`) or to another sandbox; its revision can't be trusted as
-        // a high-water mark.
-        if (issuedAt !== epoch || !current()) {
-            return;
-        }
-        // Goes through setAgents, not a raw assignment, so a slow read can't undo a newer frame from the stream.
-        setAgents(body.agents, body.rev);
-        setHeldWakes(body.held);
+        body = await sandboxRpc.agents.list();
     } catch {
         // Leave the last roster; the events stream repaints on reconnect.
+        return;
     }
+    // Stale: issued to a connection since replaced (`epoch`) or to another sandbox; its revision can't be trusted as
+    // a high-water mark.
+    if (issuedAt !== epoch || !current()) {
+        return;
+    }
+    // Goes through setAgents, not a raw assignment, so a slow read can't undo a newer frame from the stream.
+    setAgents(body.agents, body.rev);
+    setHeldWakes(body.held);
 };
 
 // Re-reads the roster when this window regains focus (onScreen) while the daemon is reachable: connection gaps at
@@ -364,22 +369,27 @@ export const loadArchived = async (): Promise<void> => {
     const current = sandboxScopeGuard();
     archiveInFlight.value ??= (async () => {
         archiveLoading.value = true;
+        let agents: ProcedureOutput<`agents.archived`>[`agents`];
         try {
-            const { agents } = await sandboxRpc.agents.archived();
-            if (!current()) {
-                return;
+            ({ agents } = await sandboxRpc.agents.archived());
+        } catch (error) {
+            // Leave whatever was listed last, and say why: an empty archive view would claim nothing was ever filed.
+            if (current()) {
+                archiveFailure.value = errorMessage(error, `Couldn't read the archive.`);
             }
-            // Widened to FleetAgent here: nothing archived is unread; an open entry gets its live fields from `fleet`
-            // instead.
-            archived.value = agents.map((agent) => Object.assign(agent, { open: false, unread: false, unsent: false }));
-        } catch {
-            // Leave whatever was listed last; the view reports its own emptiness.
+            return;
         } finally {
             if (current()) {
                 archiveLoading.value = false;
                 archiveInFlight.value = undefined;
             }
         }
+        if (!current()) {
+            return;
+        }
+        archiveFailure.value = undefined;
+        // Widened to FleetAgent here: nothing archived is unread; an open entry gets its live fields from `fleet` instead.
+        archived.value = agents.map((agent) => Object.assign(agent, { open: false, unread: false, unsent: false }));
     })();
     await archiveInFlight.value;
 };

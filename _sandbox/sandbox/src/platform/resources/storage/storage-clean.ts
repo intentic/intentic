@@ -46,7 +46,7 @@ const measure = async (path: string): Promise<Measured | undefined> => {
         return { folder: false, bytes: size, freeable: stats.nlink === 1 ? size : 0, newestMs: stats.mtimeMs, busy: inFlight(path) };
     }
     const tally = { folder: true, bytes: 0, freeable: 0, newestMs: 0, files: 0, busy: false };
-    await walkTree(path, undefined, {
+    const walked = await walkTree(path, undefined, {
         folder: () => undefined,
         file: (file) => {
             tally.bytes += file.size;
@@ -61,7 +61,14 @@ const measure = async (path: string): Promise<Measured | undefined> => {
     });
     // Aged by what it holds, as the scan ages it; a folder with nothing in it yet by its own clock, since it was made
     // for something about to be written.
-    return { folder: true, bytes: tally.bytes, freeable: tally.freeable, newestMs: tally.files === 0 ? stats.mtimeMs : tally.newestMs, busy: tally.busy };
+    return {
+        folder: true,
+        bytes: tally.bytes,
+        freeable: tally.freeable,
+        newestMs: tally.files === 0 ? stats.mtimeMs : tally.newestMs,
+        // A part the walk could not read may hold the fresh file or the lock that would have kept it.
+        busy: tally.busy || walked.unreadable > 0,
+    };
 };
 
 // Every path exactly one item deep below the category's folders, as the table reads it now; links are never entered.

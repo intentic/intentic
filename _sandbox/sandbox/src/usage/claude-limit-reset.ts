@@ -82,11 +82,12 @@ export const readLimitReset = async (deps: LimitResetDeps, id: string, fetchFn: 
     if (await deps.headroom.parked(id)) {
         return undefined;
     }
-    const token = await ensureFreshToken(deps.store, id).catch(() => undefined);
-    if (token === undefined) {
-        return NOTHING;
-    }
     try {
+        // Undefined is an account unconnected or revoked, a known absence; a renewal that failed throws, and is no answer.
+        const token = await ensureFreshToken(deps.store, id);
+        if (token === undefined) {
+            return NOTHING;
+        }
         const response = await fetchFn(USAGE_ENDPOINT, { headers: headers(token), signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
         if (response.status === 429) {
             // Armed from this reader's own refusal: a 429 is the endpoint's word to every caller, not just the sweep's.

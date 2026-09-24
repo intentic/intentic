@@ -38,9 +38,12 @@ export const run = async (file: string, args: readonly string[], options: RunOpt
         return { code: 0, stdout, stderr };
     } catch (error) {
         const failure = error as NodeJS.ErrnoException & { code?: number | string; stdout?: string; stderr?: string };
-        // `code` is a number for a process that ran, an errno string for one that never started; both are failures.
-        const code = typeof failure.code === `number` ? failure.code : 127;
-        return { code, stdout: failure.stdout ?? ``, stderr: failure.stderr ?? String(failure.message ?? error) };
+        // `code` is a number for a process that exited; a timeout's kill, a missing binary and an overflowed buffer
+        // carry none, and their message is the only thing that says which it was.
+        if (typeof failure.code === `number`) {
+            return { code: failure.code, stdout: failure.stdout ?? ``, stderr: failure.stderr ?? `` };
+        }
+        return { code: 127, stdout: failure.stdout ?? ``, stderr: `${failure.stderr ?? ``}${String(failure.message ?? error)}` };
     }
 };
 

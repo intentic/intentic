@@ -65,11 +65,12 @@ export const reconnectVpns = async (
         if (entry.config.autoConnect !== "on") {
             continue;
         }
-        const probe = await vpnDrivers[entry.config.provider].probe(entry.id, entry.config);
-        if (probe.state === "connected" || probe.state === "connecting") {
-            continue;
-        }
+        // Probed inside the try: one VPN whose state can't be read must not strand every one after it.
         try {
+            const probe = await vpnDrivers[entry.config.provider].probe(entry.id, entry.config);
+            if (probe.state === "connected" || probe.state === "connecting") {
+                continue;
+            }
             for await (const line of connectVpn(entry)) {
                 void line;
             }

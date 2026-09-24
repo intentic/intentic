@@ -40,14 +40,18 @@ export function useStashes(repo: Ref<string>) {
         files,
         busy,
         actionError,
-        // `pop` consumes the entry, `apply` keeps it; a conflict comes back as `ok: false` with the entry intact, worth
-        // reporting rather than throwing.
+        // `pop` consumes the entry, `apply` keeps it; a refusal comes back as `ok: false` with the entry intact. Only a
+        // conflict left markers to resolve: any other reason is git refusing before it moved anything.
         apply: (ref: string, pop: boolean): Promise<void> =>
             run(async () => {
                 const result = await api.sandbox.rpc.git.stashApply({ repo: repo.value, ref, pop });
                 await invalidate();
                 if (!result.ok) {
-                    throw new Error(`Could not apply cleanly: resolve the conflict in the Changes panel. The stash is still there.`);
+                    throw new Error(
+                        result.reason === `conflict`
+                            ? `Could not apply cleanly: resolve the conflict in the Changes panel. The stash is still there.`
+                            : `Nothing was applied: ${result.reason}. The stash is still there.`,
+                    );
                 }
             }, `Could not apply that stash.`),
         drop: (ref: string): Promise<void> =>

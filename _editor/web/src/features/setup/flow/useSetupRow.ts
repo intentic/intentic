@@ -84,7 +84,7 @@ export const useSetupRow = ({ sandbox, enter }: SetupRowHost) => {
         }
         createdHere.value = false;
         created.value = null;
-        void sandbox.remove(draft.id).catch(() => undefined);
+        void sandbox.remove(draft.id).catch((failure: unknown) => console.warn(`setup: discarding draft sandbox ${draft.id} failed`, failure));
     };
 
     // A new machine is expected on the row: what the old one said about itself no longer describes it.

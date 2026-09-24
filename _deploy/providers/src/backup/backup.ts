@@ -1,7 +1,9 @@
+import { basename } from "node:path";
 import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { dockerEnvLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
+import { execChecked, writeHostFiles } from "../core/host-files.js";
 import { parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
@@ -122,9 +124,14 @@ const observe = async (session: SshSession): Promise<{ image: string; schedule: 
 };
 
 // Write restic.env once (the encryption password + backend creds must survive recreation); always rewrite the
-// script + crontab so a schedule/repo/retention change reconciles.
+// script + crontab so a schedule/repo/retention change reconciles. Every write is checked: a failed one would leave
+// crond running a stale or empty script behind a container reported applied.
 const ensureFiles = async (session: SshSession, parsed: BackupInputs): Promise<void> => {
-    await session.exec(`mkdir -p ${STATE_DIR}`);
+    await writeHostFiles(session, "backup", STATE_DIR, {
+        [basename(SCRIPT_FILE)]: backupScript(parsed),
+        [basename(CRONTAB_FILE)]: `${parsed.schedule} /bin/sh ${SCRIPT_FILE}\n`,
+    });
+    await execChecked(session, "backup", `chmod +x ${SCRIPT_FILE}`, `chmod ${SCRIPT_FILE}`);
     // dockerEnvLine renders the file's line; shellQuote carries it through the host shell as one printf argument.
     const envLines = [
         dockerEnvLine("RESTIC_PASSWORD", parsed.password),
@@ -132,10 +139,12 @@ const ensureFiles = async (session: SshSession, parsed: BackupInputs): Promise<v
     ]
         .map((line) => shellQuote(line))
         .join(" ");
-    await session.exec(`test -f ${ENV_FILE} || { printf '%s' ${envLines} > ${ENV_FILE} && chmod 600 ${ENV_FILE}; }`);
-    await session.exec(`cat > ${SCRIPT_FILE} <<'BACKUP_EOF'\n${backupScript(parsed)}BACKUP_EOF`);
-    await session.exec(`chmod +x ${SCRIPT_FILE}`);
-    await session.exec(`cat > ${CRONTAB_FILE} <<'CRON_EOF'\n${parsed.schedule} /bin/sh ${SCRIPT_FILE}\nCRON_EOF`);
+    await execChecked(
+        session,
+        "backup",
+        `test -f ${ENV_FILE} || { printf '%s' ${envLines} > ${ENV_FILE} && chmod 600 ${ENV_FILE}; }`,
+        `write ${ENV_FILE}`,
+    );
 };
 
 // The read-only volume mounts + the host script/crontab/socket/docker-cli mounts the container runs with.

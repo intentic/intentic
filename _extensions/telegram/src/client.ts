@@ -61,8 +61,13 @@ export interface TelegramConnection {
     // Bot's own id and @username: how the listener recognizes a mention or self-reply and ignores its own messages.
     readonly selfId: number;
     readonly username: string;
-    // Starts the poll loop; `onFatal` fires once, after the connection has already left the pool.
-    readonly listen: (onUpdate: (update: TelegramUpdate) => void, onFatal: (error: Error) => void) => void;
+    // Starts the poll loop; `onFatal` fires once, after the connection has already left the pool; `onRetry` on every
+    // failed poll the loop waits out, the only trace a bot that has stopped hearing anything leaves.
+    readonly listen: (
+        onUpdate: (update: TelegramUpdate) => void,
+        onFatal: (error: Error) => void,
+        onRetry: (error: unknown, waitMs: number) => void,
+    ) => void;
 }
 
 const connections = new Map<string, TelegramConnection>();
@@ -164,7 +169,7 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
         selfId: identity.id,
         username: identity.username,
         call: (method, body) => callWith(botToken, method, body, undefined),
-        listen: (onUpdate, onFatal) => {
+        listen: (onUpdate, onFatal, onRetry) => {
             const ladder = createBackoff({ floorMs: RETRY_MIN_MS, capMs: RETRY_MAX_MS });
             const loop = async (): Promise<void> => {
                 for (;;) {
@@ -200,7 +205,9 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
                             return;
                         }
                         const rung = ladder.next();
-                        await sleep(error instanceof TelegramApiError ? (error.retryAfterMs ?? rung) : rung);
+                        const wait = error instanceof TelegramApiError ? (error.retryAfterMs ?? rung) : rung;
+                        onRetry(error, wait);
+                        await sleep(wait);
                     }
                 }
             };

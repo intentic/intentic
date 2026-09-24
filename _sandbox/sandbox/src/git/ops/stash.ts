@@ -1,6 +1,7 @@
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { GitChange, StashEntry } from "@intentic/sandbox-contract";
 import { parseNameStatusZ, parseNumstatZ } from "../changes/changes-porcelain.js";
+import { gitFailureReason } from "../git.js";
 
 // A stash entry is a real commit (sha, author, subject, diff) that `refs/stash` points at, so it belongs on the history
 // graph; its parents are HEAD and the index at the time, so it hangs off the graph rather than any branch's ancestry.
@@ -12,10 +13,8 @@ const US = "\x1f";
 // handle every other verb takes. US/RS delimited since a message is free text.
 export const stashList = async (dir: string, git: GitRunner = defaultGit): Promise<StashEntry[]> => {
     const format = `${RS}%gd${US}%H${US}%h${US}%P${US}%at${US}%gs`;
-    const out = await git(dir, ["stash", "list", `--pretty=format:${format}`]).catch(() => undefined);
-    if (out === undefined) {
-        return [];
-    }
+    // No stash (and an unborn HEAD) is an empty listing with exit 0; a failure is not an empty list.
+    const out = await git(dir, ["stash", "list", `--pretty=format:${format}`]);
     const entries: StashEntry[] = [];
     for (const record of out.stdout.split(RS)) {
         if (record === "") {
@@ -71,13 +70,14 @@ export const stashPush = async (
     try {
         const { stdout } = await git(dir, args);
         return stdout.includes("No local changes") ? { ok: false, reason: "nothing to stash" } : { ok: true };
-    } catch {
-        return { ok: false, reason: "could not stash" };
+    } catch (error) {
+        return { ok: false, reason: gitFailureReason(error, "could not stash") };
     }
 };
 
 // `apply` keeps the entry, `pop` drops it on a clean apply — git's own distinction, kept rather than collapsed. A
-// conflict leaves markers and (for pop) keeps the entry too; reported as `ok: false`, not lost work.
+// conflict leaves markers and (for pop) keeps the entry too; reported as `ok: false`, not lost work. Any other refusal
+// (local changes the apply would overwrite, an unknown ref) moved nothing, and carries git's own reason.
 export const stashApply = async (
     dir: string,
     ref: string,
@@ -87,8 +87,11 @@ export const stashApply = async (
     try {
         await git(dir, ["stash", pop ? "pop" : "apply", ref]);
         return { ok: true };
-    } catch {
-        return { ok: false, reason: "conflict" };
+    } catch (error) {
+        const stdout = (error as { stdout?: unknown }).stdout;
+        return typeof stdout === "string" && /^CONFLICT/m.test(stdout)
+            ? { ok: false, reason: "conflict" }
+            : { ok: false, reason: gitFailureReason(error, "could not apply the stash") };
     }
 };
 

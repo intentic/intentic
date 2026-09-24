@@ -8,7 +8,8 @@ Every check that reads the checkout and nothing else, listed once and run everyw
 - Run them side by side, each in its own process, from a clone that has never installed (`run.mjs`).
 - Hold the repository's structural promises: the lockfile records the manifests, every test file is in a
   type-check program and under a budget, the workflows keep the fork boundary and the permission ceilings, a
-  shrunk wire contract arrives declared, the daemon's module seams stay where they are and no value import closes
+  shrunk wire contract arrives declared, no new handler throws an error away without narrowing it or saying why,
+  the daemon's module seams stay where they are and no value import closes
   a new cycle between its subsystems, nothing in `_shared/` reaches back into another part, every third-party
   package something intentic ships carries may be handed on under its licence, no build script removes
   a directory agent turns have mounted over, the UI draws from its design system, a mark beside a run of text is

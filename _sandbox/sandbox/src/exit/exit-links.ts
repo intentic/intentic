@@ -88,16 +88,16 @@ export async function* startExit(entry: ExitEntry, country: string | undefined):
     try {
         seen = await observeWithRetry(entry);
     } catch (error) {
-        await stopExit(entry);
+        const outcome = await takeDown(entry, "Stopped it rather than leave it running unverified.");
         throw new Error(
-            `${entry.id} came up but its public address could not be read, so there is no way to say where it comes out. Stopped it rather than leave it running unverified.\n${errorMessage(error)}`,
+            `${entry.id} came up but its public address could not be read, so there is no way to say where it comes out. ${outcome}\n${errorMessage(error)}`,
             { cause: error },
         );
     }
     if (wanted !== undefined && seen.country !== undefined && seen.country !== wanted.toUpperCase()) {
-        await stopExit(entry);
+        const outcome = await takeDown(entry, "Stopped it: an exit in the wrong country is worse than none, because everything pointed at it would believe otherwise.");
         throw new Error(
-            `${entry.id} was asked for ${countryName(wanted)} but came out in ${seen.countryName ?? seen.country} (${seen.ip}). Stopped it: an exit in the wrong country is worse than none, because everything pointed at it would believe otherwise.${
+            `${entry.id} was asked for ${countryName(wanted)} but came out in ${seen.countryName ?? seen.country} (${seen.ip}). ${outcome}${
                 entry.config.provider === "tor"
                     ? ` Tor could not hold a circuit through ${wanted.toUpperCase()}; that usually means the country has too little exit capacity right now.`
                     : ""
@@ -161,12 +161,20 @@ export async function* rotateExit(entry: ExitEntry): AsyncGenerator<IntenticLine
 
 export const checkExit = async (entry: ExitEntry): Promise<ExitObservation> => await observeWithRetry(entry);
 
-// Tolerant by contract: an already-down exit is a success. Clears the remembered observation too, or a stale
-// reading would let `list` claim a country nothing comes out of any more.
+// An already-down exit is a success (every driver's `stop` tolerates one); a stop that fails throws and keeps the
+// observation, which still says truthfully where the exit comes out. Clearing it on success stops `list` claiming a
+// country nothing comes out of any more.
 export const stopExit = async (entry: ExitEntry): Promise<void> => {
-    await exitDrivers[entry.config.provider].stop(entry.id, entry.config).catch(() => undefined);
+    await exitDrivers[entry.config.provider].stop(entry.id, entry.config);
     await forgetLiveState(entry.id);
 };
+
+// Takes down an exit that failed its proof and says which happened: the caller's error must not claim a failed stop.
+const takeDown = async (entry: ExitEntry, stopped: string): Promise<string> =>
+    await stopExit(entry).then(
+        () => stopped,
+        (error: unknown) => `Stopping it failed too (${errorMessage(error)}), so it may still be running at ${proxyUrl(entry.id)}.`,
+    );
 
 // Boot restore, plus a repair the vpn subsystem has no equivalent of: a tunnel-based exit's client process
 // survives a daemon restart, but its SOCKS proxy lived in the daemon and does not, so a live tunnel can end up
@@ -178,7 +186,10 @@ export const restoreExits = async (
 ): Promise<void> => {
     for (const entry of tunnelEntries(await capabilities.list(), "exit")) {
         const driver = exitDrivers[entry.config.provider];
-        const probe = await driver.probe(entry.id, entry.config).catch(() => undefined);
+        const probe = await driver.probe(entry.id, entry.config).catch((error: unknown) => {
+            logger.warn(`exit ${entry.id}: could not read its state, so it was neither restored nor started: ${errorMessage(error)}`);
+            return undefined;
+        });
         if (probe === undefined) {
             continue;
         }

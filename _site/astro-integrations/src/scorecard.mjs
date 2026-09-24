@@ -25,11 +25,13 @@ export async function scorecard() {
     try {
         const response = await fetch(API, { signal: AbortSignal.timeout(TIMEOUT_MS) });
         if (!response.ok) {
+            console.warn(`[scorecard] ${API} answered ${response.status}: the site ships without its Scorecard figure`);
             return cached;
         }
         const body = await response.json();
         // `score` is 0-10 with one decimal; any other shape is untrusted.
         if (typeof body?.score !== `number` || typeof body?.date !== `string`) {
+            console.warn(`[scorecard] ${API} answered without a numeric score and a date: the site ships without its Scorecard figure`);
             return cached;
         }
         cached = {
@@ -41,7 +43,8 @@ export async function scorecard() {
             date: body.date.split(`T`)[0],
             url: `https://scorecard.dev/viewer/?uri=github.com/intentic/intentic`,
         };
-    } catch {
+    } catch (error) {
+        console.warn(`[scorecard] ${API} could not be read (${String(error)}): the site ships without its Scorecard figure`);
     }
     return cached;
 }

@@ -7,7 +7,7 @@ import { repoRoot } from "@intentic/constants/node";
 
 // Runs this checkout's own ic binary, not the wizard's fetch-latest-release one, so this lane tests this branch, not
 // the last release. Checked in order, all from this checkout:
-// - IC_BIN: handed in by CI, cross-built with the Rust toolchain.
+// - IC_BIN: handed in by CI, cross-built with the Rust toolchain; named and missing, it fails rather than stands down.
 // - _sandbox/ic/dist-bin/…: what build-ic.sh left, for a developer who already built one.
 // - target/release/ic: a previous cargo build --release in this tree.
 // - cargo: build it now, if the toolchain is here.
@@ -43,7 +43,11 @@ const haveCargo = async (): Promise<boolean> => {
 
 export const findIcBinary = async (): Promise<IcBinary> => {
     const handedIn = process.env[`IC_BIN`];
-    if (handedIn !== undefined && handedIn !== `` && (await executable(handedIn))) {
+    // Named, it is the binary this lane exists to test: one that is not there fails the lane instead of standing it down.
+    if (handedIn !== undefined && handedIn !== ``) {
+        await access(handedIn, constants.X_OK).catch((cause: unknown) => {
+            throw new Error(`IC_BIN names ${handedIn}, which is not an executable here: ${errorMessage(cause)}`, { cause });
+        });
         return { path: handedIn };
     }
     for (const candidate of [BUILT, CARGO_BUILT]) {

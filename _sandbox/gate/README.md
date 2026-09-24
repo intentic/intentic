@@ -40,7 +40,9 @@ INTENTIC_URL=https://sandbox-….intentic.dev INTENTIC_TOKEN=ict_… \
 ```
 
 - `completed` exits 0; `parked` (the agent asked a person for something) and `failed` exit 1, with the card's
-  own sentence; `timeout` exits 2, the deadline decided and the agent keeps working in the sandbox.
+  own sentence; `timeout` exits 2, the deadline decided and the agent keeps working in the sandbox. A turn someone
+  stopped is `failed`, so is a `--land` the sandbox refused (one the owner's rules hold stays `completed`, not
+  landed), and a card status this gate does not know is an exchange failure (exit 2), never a pass.
 - One conversation per CI run and attempt (`--conversation` to pin one), its own branch, landed only with
   `--land`. `--agent` picks the runtime, `--wait` the patience.
 

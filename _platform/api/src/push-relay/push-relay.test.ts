@@ -1,7 +1,7 @@
 import { call, ORPCError } from "@orpc/server";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
-import type { ApnsForwarder, ApnsVerdict } from "./apns.js";
+import type { ApnsForwarder, ApnsOutcome } from "./apns.js";
 import { pushRelayRoutes } from "./push-relay.routes.js";
 
 // The plaintext secret exists once (the register response); refusals speak the daemon's dead-channel codes, and a
@@ -12,9 +12,9 @@ const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null 
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof jest.fn>>>) => overrides as unknown as OrpcContext[`prisma`];
 
 // Each test builds its own forwarder; a fresh config per context keeps the module's per-config cache from leaking.
-const forwarder = (verdict: ApnsVerdict): ApnsForwarder & { send: ReturnType<typeof jest.fn> } => ({
+const forwarder = (verdict: ApnsOutcome[`verdict`], reason = `ExpiredProviderToken`): ApnsForwarder & { send: ReturnType<typeof jest.fn> } => ({
     enabled: true,
-    send: jest.fn().mockResolvedValue(verdict),
+    send: jest.fn().mockResolvedValue((verdict === `transient` ? { verdict, reason } : { verdict }) satisfies ApnsOutcome),
 });
 
 const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
@@ -131,9 +131,11 @@ describe(`send`, () => {
         });
 
         await expect(
-            call(pushRelayRoutes(() => forwarder(`transient`)).send, { deviceId: `d1`, secret, notification }, { context: ctx }),
+            call(pushRelayRoutes(() => forwarder(`transient`, `APNs answered 403 InvalidProviderToken`)).send, { deviceId: `d1`, secret, notification }, { context: ctx }),
         ).rejects.toMatchObject({ status: 502 });
         // The row survives: the device is fine, we are not.
         expect(remove).not.toHaveBeenCalled();
+        // And the platform says why, since the daemon only ever hears "refused".
+        expect(ctx.logger.warn).toHaveBeenCalledWith({ deviceId: `d1`, reason: `APNs answered 403 InvalidProviderToken` }, `push relay: APNs did not take the send`);
     });
 });

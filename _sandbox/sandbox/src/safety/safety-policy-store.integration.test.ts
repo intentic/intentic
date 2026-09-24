@@ -1,4 +1,4 @@
-import { readFile, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
@@ -30,6 +30,16 @@ test("an emptied file is the owner's own policy, not a fallback to the default",
     const { path, policy } = await store();
     await writeFile(path, ``, "utf8");
     expect(await policy.get()).toEqual({ text: ``, custom: true });
+});
+
+// Only absence means the shipped default: an owner's policy that is there but cannot be read would otherwise be judged
+// by the default's rules, and an Always click would write the default over it.
+test("a policy that exists but cannot be read is an error, never the shipped default", async () => {
+    const { path, policy } = await store();
+    await mkdir(path);
+    await expect(policy.get()).rejects.toThrow("EISDIR");
+    await expect(policy.append(`Deleting build directories under /work is fine.`)).rejects.toThrow("EISDIR");
+    expect((await stat(path)).isDirectory()).toBe(true);
 });
 
 // Every write ends in exactly one newline: a document that gets appended to has to know where its last line ended, and

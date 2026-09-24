@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { DEFAULT_SAFETY_POLICY, type SafetyPolicy } from "@intentic/sandbox-contract";
 import { queueOnFile, writeTextFile } from "../store/text-file.js";
 
@@ -43,7 +44,9 @@ export const withAddedLine = (text: string, line: string): string => {
 
 export const fileSafetyPolicyStore = (path: string): SafetyPolicyStore => {
     const read = async (): Promise<SafetyPolicy> => {
-        const text = await readFile(path, "utf8").catch(() => undefined);
+        // Only absence is the default: an owner's file that cannot be read must not be judged by, or appended over as,
+        // the shipped text.
+        const text = await readFile(path, "utf8").catch(undefinedIfMissing);
         // An empty file is a policy (ask about nothing beyond the hard rule), not the absence of one.
         return text === undefined ? { text: DEFAULT_SAFETY_POLICY, custom: false } : { text, custom: true };
     };

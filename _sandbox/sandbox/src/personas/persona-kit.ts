@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { parseSkillFile, skillDocument } from "../skill-file.js";
 import { statePath } from "../state-paths.js";
 
@@ -40,12 +41,13 @@ export const removePersonaKit = async (root: string, id: string): Promise<void> 
 // Plugin dir for the turn wearing this persona, gated on the manifest, not the directory: an empty folder the loader would
 // refuse must read as "no kit yet", not "broken".
 export const personaKitPlugin = async (root: string, id: string): Promise<string | undefined> =>
-    (await readFile(manifestPath(root, id), "utf8").catch(() => undefined)) === undefined ? undefined : personaKitDir(root, id);
+    (await readFile(manifestPath(root, id), "utf8").catch(undefinedIfMissing)) === undefined ? undefined : personaKitDir(root, id);
 
-// Undefined until the persona has one, the state the resolver reads as "follow the sandbox". Trims trailing whitespace,
-// since a textarea-edited prompt otherwise reads as a permanently unsaved change.
+// Undefined until the persona has one, the state the resolver reads as "follow the sandbox"; a prompt that exists but
+// cannot be read throws rather than speak as the sandbox. Trims trailing whitespace, since a textarea-edited prompt
+// otherwise reads as a permanently unsaved change.
 export const readPersonaPrompt = async (root: string, id: string): Promise<string | undefined> => {
-    const text = await readFile(personaPromptPath(root, id), "utf8").catch(() => undefined);
+    const text = await readFile(personaPromptPath(root, id), "utf8").catch(undefinedIfMissing);
     return text?.trimEnd();
 };
 

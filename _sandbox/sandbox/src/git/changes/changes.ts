@@ -10,13 +10,16 @@ import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
 // Rest of the review sits beside this file: porcelain parsers, index moves, diffs, and the commit graph.
 // Runs against the real git dir; each function takes an injectable GitRunner (defaultGit shells out).
 
-// HEAD's sha; undefined on an unborn HEAD, where everything reads as added and index-reset needs a different spelling.
-// Exported for land/origins, which re-check it to see whether landed work is still uncommitted.
+// HEAD's sha; undefined when git answers with an exit status (unborn HEAD, no repository at `dir`). A git that never
+// answered (spawn failure, kill, a dead forker) throws: read as unborn, a discard would untrack and clean every file.
 export const headSha = async (dir: string, git: GitRunner = defaultGit): Promise<string | undefined> => {
     try {
         return (await git(dir, ["rev-parse", "-q", "--verify", "HEAD"])).stdout.trim();
-    } catch {
-        return undefined;
+    } catch (error) {
+        if (typeof (error as { code?: unknown }).code === "number") {
+            return undefined;
+        }
+        throw error;
     }
 };
 
@@ -43,7 +46,8 @@ const untrackedLineStats = async (dir: string, path: string): Promise<{ addition
     if (size === undefined || size > MAX_FILE_DIFF_BYTES) {
         return undefined;
     }
-    const content = await readWorkspaceFile(abs);
+    // silent-catch: a count is display only; one unreadable file shows none rather than failing the repo's whole list.
+    const content = await readWorkspaceFile(abs).catch(() => undefined);
     if (content === undefined || content.includes("\0")) {
         return undefined;
     }

@@ -37,6 +37,7 @@ import {
     SERVICE_SESSION_PREFIX,
 } from "../terminal/terminal-session.js";
 import { settleTerminalHelpFor, terminalHelpFor } from "../terminal/terminal-help.js";
+import { isNoTmuxServer } from "../terminal/tmux-server.js";
 import { isNewer, latestVersion } from "../platform/boot/version-check.js";
 import { breakingNotes, MAX_UPDATE_NOTES, updateNotes } from "../platform/boot/release-notes.js";
 import { stagedUpdate } from "../platform/boot/staged-update.js";
@@ -364,64 +365,68 @@ export const createSystemRoutes = (services: Services) => {
                 ...(service.state === "backoff" && service.lastExitCode !== undefined ? { exitCode: service.lastExitCode } : {}),
                 ...extensionProcesses.get(service.key),
             }));
-            try {
-                const { stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]);
-                const states = paneStates(stdout);
-                const liveAgentSessions = new Set(
-                    services.conversations.liveSessionIds().flatMap((sessionId) => {
-                        const session = agentSessionName(sessionId);
-                        return session === undefined ? [] : [session];
-                    }),
-                );
-                const sessions = [...states].flatMap(([name, { command, live, exitCode, activityAt, liveCommand }]): TerminalsList["sessions"] => {
-                    // Every row carries its activity clock, exit status, and a command if busy; `running` differs per
-                    // kind.
-                    const busy = foreground(liveCommand);
-                    const seen = {
-                        activityAt,
-                        ...(exitCode !== undefined ? { exitCode } : {}),
-                        ...(busy !== undefined ? { command: busy } : {}),
-                    };
-                    if (name.startsWith(WEB_SESSION_PREFIX)) {
-                        return [{ name, kind: "shell" as const, running: true, ...seen }];
-                    }
-                    if (name.startsWith(PANEL_SESSION_PREFIX)) {
-                        const key = name.slice(PANEL_SESSION_PREFIX.length);
-                        return [{ name, label: key, ...panelState(services.processes, key, command), ...seen }];
-                    }
-                    if (name.startsWith(AGENT_SESSION_PREFIX)) {
-                        // `help` isn't tmux's own state: the agent is parked on a prompt; rides this list since the
-                        // panel polls it.
-                        const help = terminalHelpFor(name);
-                        return [
-                            {
-                                name,
-                                label: name.slice(AGENT_SESSION_PREFIX.length),
-                                kind: "agent" as const,
-                                running: live || liveAgentSessions.has(name),
-                                ...seen,
-                                ...(help === undefined ? {} : { help }),
-                            },
-                        ];
-                    }
-                    if (name.startsWith(JOB_SESSION_PREFIX)) {
-                        return [
-                            {
-                                name,
-                                label: jobSessionLabel(name),
-                                kind: "job" as const,
-                                running: services.terminalRun.running(name),
-                                ...seen,
-                            },
-                        ];
-                    }
-                    return [];
-                });
-                return { sessions: [...sessions, ...serviceRows] };
-            } catch {
-                // No tmux server yet, nothing has opened a shell in this sandbox; the services don't need one.
+            // No tmux server is no sessions; any other failed listing is the route's error, not an empty panel.
+            const listed = await execFileAsync("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]).catch((error: unknown) => {
+                if (isNoTmuxServer(error)) {
+                    return undefined;
+                }
+                throw error;
+            });
+            if (listed === undefined) {
                 return { sessions: serviceRows };
             }
+            const states = paneStates(listed.stdout);
+            const liveAgentSessions = new Set(
+                services.conversations.liveSessionIds().flatMap((sessionId) => {
+                    const session = agentSessionName(sessionId);
+                    return session === undefined ? [] : [session];
+                }),
+            );
+            const sessions = [...states].flatMap(([name, { command, live, exitCode, activityAt, liveCommand }]): TerminalsList["sessions"] => {
+                // Every row carries its activity clock, exit status, and a command if busy; `running` differs per
+                // kind.
+                const busy = foreground(liveCommand);
+                const seen = {
+                    activityAt,
+                    ...(exitCode !== undefined ? { exitCode } : {}),
+                    ...(busy !== undefined ? { command: busy } : {}),
+                };
+                if (name.startsWith(WEB_SESSION_PREFIX)) {
+                    return [{ name, kind: "shell" as const, running: true, ...seen }];
+                }
+                if (name.startsWith(PANEL_SESSION_PREFIX)) {
+                    const key = name.slice(PANEL_SESSION_PREFIX.length);
+                    return [{ name, label: key, ...panelState(services.processes, key, command), ...seen }];
+                }
+                if (name.startsWith(AGENT_SESSION_PREFIX)) {
+                    // `help` isn't tmux's own state: the agent is parked on a prompt; rides this list since the
+                    // panel polls it.
+                    const help = terminalHelpFor(name);
+                    return [
+                        {
+                            name,
+                            label: name.slice(AGENT_SESSION_PREFIX.length),
+                            kind: "agent" as const,
+                            running: live || liveAgentSessions.has(name),
+                            ...seen,
+                            ...(help === undefined ? {} : { help }),
+                        },
+                    ];
+                }
+                if (name.startsWith(JOB_SESSION_PREFIX)) {
+                    return [
+                        {
+                            name,
+                            label: jobSessionLabel(name),
+                            kind: "job" as const,
+                            running: services.terminalRun.running(name),
+                            ...seen,
+                        },
+                    ];
+                }
+                return [];
+            });
+            return { sessions: [...sessions, ...serviceRows] };
         }),
         // The agent's Chromiums and open pages; records this daemon keeps itself, not shelled out for.
         browsers: i.browsers.handler(() => ({ sessions: listBrowserSessions() })),

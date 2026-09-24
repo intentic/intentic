@@ -7,7 +7,7 @@ import { join } from "node:path";
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-config-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { readState, removePairing, setMirrorOff, setPortIgnored, updateState, upsertPairing } = await import("./config.js");
-const { rm, writeFile } = await import("node:fs/promises");
+const { readFile, rm, writeFile } = await import("node:fs/promises");
 const { agentHome } = await import("@intentic/local-agent");
 const syncStatePath = join(agentHome("machine").dir, "sync.json");
 
@@ -58,12 +58,14 @@ describe("upsertPairing", () => {
         expect((await readState()).pairings).toEqual([local]);
     });
 
-    it("treats a state file with missing or non-array pairings as empty", async () => {
-        await writeFile(syncStatePath, JSON.stringify({}), "utf8");
-        expect((await readState()).pairings).toEqual([]);
+    // Valid JSON of another shape says nothing about what is paired: read as empty, it stops sync, and the next write
+    // would persist that emptiness over whatever the file held.
+    it("propagates a state file with missing or non-array pairings instead of treating it as empty", async () => {
+        await writeFile(syncStatePath, JSON.stringify({ pairing: local }), "utf8");
+        await expect(readState()).rejects.toThrow(`${syncStatePath} has no "pairings" list`);
 
-        await upsertPairing(local);
-        expect((await readState()).pairings).toEqual([local]);
+        await expect(upsertPairing(web)).rejects.toThrow(SyntaxError);
+        expect(await readFile(syncStatePath, "utf8")).toEqual(JSON.stringify({ pairing: local }));
     });
 
     // A file that EXISTS and is malformed is a real fault, not an empty machine: silently starting from scratch

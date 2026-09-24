@@ -21,7 +21,8 @@ export interface CleanCandidate {
     readonly freeable: number;
     // The newest modification anywhere inside it, in milliseconds.
     readonly newestMs: number;
-    // Held by something running: an open browser's lock, a file still being written, a program naming it.
+    // Held by something running (an open browser's lock, a file still being written, a program naming it), or partly
+    // unreadable, which rules none of those out.
     readonly busy: boolean;
 }
 
