@@ -20,6 +20,7 @@ const box = (limitGib: number, usedGib: number, stalledPercent = 0): MemoryHeadr
     swapBytes: 0,
     freeBytes: (limitGib - usedGib) * GIB,
     stalledPercent,
+    oomKills: undefined,
 });
 
 // Headroom off a cgroup reading in GiB, on a machine with as much memory as given, or unbounded.
@@ -34,6 +35,7 @@ const headroom = (
             workingSetBytes: residentGib === undefined ? undefined : residentGib * GIB,
             memoryLimitBytes: limitGib === undefined ? undefined : limitGib * GIB,
             swapBytes: swapGib === undefined ? undefined : swapGib * GIB,
+            memoryEvents: {},
             pressure: { cpu: undefined, memory: undefined, io: undefined },
         },
         machineGib * GIB,
@@ -138,7 +140,7 @@ test("a cap past the engine is measured against the engine, and an uncapped box 
 
 // Unknown ceiling (no cgroup, cgroup v1, hosted) admits rather than refuses on ignorance.
 test("a sandbox with no measurable ceiling admits rather than refusing on ignorance", () => {
-    const unknown: MemoryHeadroom = { limitBytes: undefined, usedBytes: undefined, swapBytes: 0, freeBytes: undefined, stalledPercent: 0 };
+    const unknown: MemoryHeadroom = { limitBytes: undefined, usedBytes: undefined, swapBytes: 0, freeBytes: undefined, stalledPercent: 0, oomKills: undefined };
     expect(admitTurn(unknown)).toEqual({ admit: true });
     expect(admitTurn(unknown, true)).toEqual({ admit: true });
     // Stalling still admits: without a ceiling, pressure reads the whole machine's, not this sandbox's.
@@ -147,8 +149,8 @@ test("a sandbox with no measurable ceiling admits rather than refusing on ignora
 
 const SHORT = box(10, 9.5);
 const ROOMY = box(10, 4);
-const person = (actor: string | undefined) => ({ unattended: false, actor });
-const background = { unattended: true, actor: undefined };
+const person = (actor: string | undefined) => ({ unattended: false, actor, conversationId: undefined });
+const background = { unattended: true, actor: undefined, conversationId: undefined };
 
 // The hard stop this replaces: the same message refused press after press until the box happened to recover.
 test("a person is held once on a short box, and every turn after that goes ahead", () => {
@@ -192,6 +194,88 @@ test("background work is refused on every short reading and warns nobody", () =>
     expect(warnings.admit(SHORT, person(undefined)).admit).toBe(false);
     // A person going ahead does not wave background work through behind them.
     expect(warnings.admit(SHORT, background).admit).toBe(false);
+});
+
+// A burst of spawns lands before any of them shows in the cgroup, so without claims every one passes the same reading.
+const spawned = (conversationId: string) => ({ unattended: true, actor: undefined, conversationId });
+
+test("a burst of background turns on one reading admits only as many as the room holds, and says what is held", () => {
+    const warnings = createMemoryWarnings(() => 0);
+    const threeFree = box(16, 13);
+    expect(["a", "b", "c"].map((id) => warnings.admit(threeFree, spawned(id)).admit)).toEqual([true, true, true]);
+    const fourth = warnings.admit(threeFree, spawned("d"));
+    expect(fourth.admit).toBe(false);
+    expect(refusal(fourth)).toBe(
+        "Sandbox memory is low: 13.0 GiB of 16.0 GiB used, and 1.5 GiB held for agents that just started. This background turn did not start: turns people send get the room first.",
+    );
+});
+
+test("a conversation's own claim never counts against its next turn", () => {
+    const warnings = createMemoryWarnings(() => 0);
+    const twoFree = box(16, 14);
+    expect(warnings.admit(twoFree, spawned("a")).admit).toBe(true);
+    expect(warnings.admit(twoFree, spawned("a")).admit).toBe(true);
+    expect(warnings.admit(twoFree, spawned("b")).admit).toBe(false);
+});
+
+test("a claim ages out after ninety seconds, once the reading itself can show what it held", () => {
+    let now = 0;
+    const warnings = createMemoryWarnings(() => now);
+    const twoFree = box(16, 14);
+    warnings.admit(twoFree, spawned("a"));
+    now = 89_999;
+    expect(warnings.admit(twoFree, spawned("b")).admit).toBe(false);
+    now = 90_000;
+    expect(warnings.admit(twoFree, spawned("b")).admit).toBe(true);
+});
+
+test("a person's admission claims its share too, so the background turn behind it sees the room it took", () => {
+    const warnings = createMemoryWarnings(() => 0);
+    const twoFree = box(16, 14);
+    expect(warnings.admit(twoFree, { unattended: false, actor: "ada@example.com", conversationId: "chat" }).admit).toBe(true);
+    expect(warnings.admit(twoFree, spawned("child")).admit).toBe(false);
+});
+
+test("two children waiting on one reading: the first claims the room and the second keeps waiting", async () => {
+    const warnings = createMemoryWarnings(() => 0);
+    const read = (): Promise<MemoryHeadroom> => Promise.resolve({ ...box(16, 13.6), freeBytes: 2.4 * GIB });
+    const [first, second] = await Promise.all([
+        warnings.waitForRoom("a", { read, intervalMs: 1, deadlineMs: 20 }),
+        warnings.waitForRoom("b", { read, intervalMs: 1, deadlineMs: 20 }),
+    ]);
+    expect(first).toEqual({ admitted: true, waitedMs: 0 });
+    expect(second.admitted).toBe(false);
+    expect(second.message).toBe("Sandbox memory is low: 13.6 GiB of 16.0 GiB used, and 0.5 GiB held for agents that just started");
+    // The claim the wait made is what the door then honours for that conversation.
+    expect(warnings.admit({ ...box(16, 13.6), freeBytes: 2.4 * GIB }, spawned("a")).admit).toBe(true);
+});
+
+test("a waiter is told once what is short, and starts the moment the room is there", async () => {
+    const warnings = createMemoryWarnings(() => 0);
+    const readings = [box(10, 9.5), box(10, 9.5), box(10, 4)];
+    const told: string[] = [];
+    const wait = await warnings.waitForRoom("a", {
+        read: () => Promise.resolve(readings.shift() ?? box(10, 4)),
+        intervalMs: 1,
+        onShort: (diagnosis) => told.push(diagnosis),
+    });
+    expect(wait.admitted).toBe(true);
+    expect(told).toEqual(["Sandbox memory is low: 9.5 GiB of 10.0 GiB used"]);
+});
+
+test("the OOM killer's count rides the reading", () => {
+    const reading = headroomFrom(
+        {
+            workingSetBytes: 4 * GIB,
+            memoryLimitBytes: 16 * GIB,
+            swapBytes: 0,
+            memoryEvents: { oom: 3, oom_kill: 2 },
+            pressure: { cpu: undefined, memory: undefined, io: undefined },
+        },
+        32 * GIB,
+    );
+    expect(reading.oomKills).toBe(2);
+    expect(headroom(16, 4, 0).oomKills).toBeUndefined();
 });
 
 test("reading headroom degrades to an admitting verdict instead of throwing", async () => {

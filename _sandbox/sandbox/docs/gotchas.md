@@ -357,6 +357,13 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   after the first kill — and silent on the first sample after a restart, which has nothing to compare against.
   The series also gets its own retention (`FILE_CAPS` in `src/logs/log-files.ts`): at ~4KB a minute the shared
   5MB ceiling was about 21 hours, so it could not answer "what did memory do yesterday" no matter who asked.
+- **Who the OOM killer takes is decided, not left to size.** With every process at `oom_score_adj` 0 the kernel
+  takes the biggest, and on a busy box the biggest were the search engine and the daemon itself (resident, since
+  its cgroup never swaps): losing the daemon ends every turn and the in-memory child ledger with it, so a parent
+  cannot even `wait` on its children again. `oom-priority.ts` ranks what may go first, raising scores and never
+  lowering them. And the counter that alarm reads is not the only killer: earlyoom and the host's own act from
+  userspace and never move `event_oom_kill`, which is why a killed child is also judged by whether the box is short
+  when it dies (`child-death.ts`).
 - **This process is the control plane, so weight is kept out of it.** Every browser request, agent turn and git
   poll goes through one event loop, and what makes them slow is usually not their own work but the daemon's
   resident size: `fork()` copies page tables in proportion to it (1.5 ms from 55 MB, 27 ms at the 1.8 GB this

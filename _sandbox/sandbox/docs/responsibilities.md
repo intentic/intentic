@@ -113,7 +113,15 @@ Every surface this one process owns, and the reason each one lives here rather t
   to. A row in the chat says so at the moment the job starts, because the whole failure it replaces was invisible.
 - Tell a parent what its spawned child did. A child keeps working after its parent's turn ends; a settled child
   turn a parked `wait` did not take is delivered to the parent like any wake (src/agent/subagents/child-report.ts),
-  drawn in the parent's chat as the child's report rather than as the owner's words.
+  drawn in the parent's chat as the child's report rather than as the owner's words. A child whose runtime was killed
+  under it settles `killed`, not `failed`, naming memory when the OOM count moved or the box is short, and saying its
+  session is intact so `send` continues it (src/agent/subagents/child-death.ts): a parent told only "exited with code
+  137" respawned into the same wall or redid the work itself.
+- Start a child only when the box has room for it. A child turn is unattended, so the door refuses it on a short box,
+  and a door refusal waits for a person's press that nobody watching a child's chat will give; the child instead
+  waits as `pending` ("Waiting for memory: …") until there is room (`waitForRoom`,
+  src/platform/resources/memory-admission.ts). Every admission holds its share off free memory for other
+  conversations while its runtime grows into it, so a burst of spawns cannot all pass on one reading.
 - Say something to another conversation in this workspace. What a person does by typing into its chat, an agent
   could not do at all: `agents send` reaches only a conversation's own children, and the SDK's cross-session
   messaging reaches only sessions with a live process, which an idle conversation here does not have. The gap

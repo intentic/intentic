@@ -309,7 +309,7 @@ describe("spawned children", () => {
     it("settles with the head of the child's closing text, and wakes a parked wait", async () => {
         openSpawnedChild(turn(), birth);
         const parked = waitForSubagent(actors, "conv-1", { target: birth.id, until: ["finished"], timeoutMs: 5_000 });
-        settleSpawnedChild(actors, birth.id, { failed: false, report: "The parser now handles nested arrays. Two files changed." });
+        settleSpawnedChild(actors, birth.id, { status: "completed", report: "The parser now handles nested arrays. Two files changed." });
         await expect(parked).resolves.toMatchObject({
             outcome: "finished",
             matched: { id: birth.id, status: "completed", summary: "The parser now handles nested arrays. Two files changed." },
@@ -318,7 +318,7 @@ describe("spawned children", () => {
 
     it("keeps a failure's error beside whatever it managed to say", () => {
         openSpawnedChild(turn(), birth);
-        settleSpawnedChild(actors, birth.id, { failed: true, report: "Got as far as the lexer.", error: "provider refused the model" });
+        settleSpawnedChild(actors, birth.id, { status: "failed", report: "Got as far as the lexer.", error: "provider refused the model" });
         expect(listSubagentSessions(actors)[0]).toMatchObject({
             status: "failed",
             summary: "Got as far as the lexer.",
@@ -333,7 +333,7 @@ describe("spawned children", () => {
 
     it("reopens a settled child for a follow-up turn, and never replaces a live one", () => {
         openSpawnedChild(turn(), birth);
-        settleSpawnedChild(actors, birth.id, { failed: false, report: "first pass done" });
+        settleSpawnedChild(actors, birth.id, { status: "completed", report: "first pass done" });
         openSpawnedChild(turn(), { ...birth, description: "also handle nested arrays" });
         expect(listSubagentSessions(actors)[0]).toMatchObject({ id: birth.id, status: "running", description: "also handle nested arrays" });
         openSpawnedChild(turn(), { ...birth, description: "a third ask" });
@@ -342,7 +342,7 @@ describe("spawned children", () => {
 
     it("drops a late move from a child already settled", () => {
         openSpawnedChild(turn(), birth);
-        settleSpawnedChild(actors, birth.id, { failed: false, report: "done" });
+        settleSpawnedChild(actors, birth.id, { status: "completed", report: "done" });
         noteSpawnedChild(actors, birth.id, { status: "blocked", summary: "too late" });
         expect(listSubagentSessions(actors)[0]).toMatchObject({ status: "completed", summary: "done" });
     });
@@ -357,7 +357,7 @@ describe("waitForSubagent", () => {
 
     it("resolves immediately when the target already satisfies the wait", async () => {
         spawn("bash-1");
-        settleSpawnedChild(actors, "bash-1", { failed: false, report: "done" });
+        settleSpawnedChild(actors, "bash-1", { status: "completed", report: "done" });
         const result = await waitForSubagent(actors, "conv-1", { target: "bash-1", until: ["finished"], timeoutMs: 5_000 });
         expect(result).toMatchObject({ outcome: "finished", matched: { id: "bash-1", status: "completed" } });
     });
@@ -411,7 +411,7 @@ describe("waitForSubagent", () => {
     it("answers immediately when nothing live could ever satisfy the wait", async () => {
         expect(await waitForSubagent(actors, "conv-1", { until: ["blocked"], timeoutMs: 5_000 })).toMatchObject({ outcome: "unknown-target" });
         spawn("bash-1");
-        settleSpawnedChild(actors, "bash-1", { failed: false, report: "done" });
+        settleSpawnedChild(actors, "bash-1", { status: "completed", report: "done" });
         expect(await waitForSubagent(actors, "conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 5_000 })).toMatchObject({
             outcome: "unknown-target",
             matched: { id: "bash-1", status: "completed" },
@@ -421,20 +421,20 @@ describe("waitForSubagent", () => {
     it("still waits while the child is live", async () => {
         spawn("bash-1");
         const wait = waitForSubagent(actors, "conv-1", { target: "bash-1", until: ["finished"], timeoutMs: 5_000 });
-        settleSpawnedChild(actors, "bash-1", { failed: false, report: "done" });
+        settleSpawnedChild(actors, "bash-1", { status: "completed", report: "done" });
         expect(await wait).toMatchObject({ outcome: "finished" });
     });
 
     it("with no target, moves on to the next child rather than answering again with one already reported", async () => {
         spawn("fan-1");
         spawn("fan-2");
-        settleSpawnedChild(actors, "fan-1", { failed: false, report: "first" });
+        settleSpawnedChild(actors, "fan-1", { status: "completed", report: "first" });
         expect(await waitForSubagent(actors, "conv-1", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({
             outcome: "finished",
             matched: { id: "fan-1" },
         });
         const next = waitForSubagent(actors, "conv-1", { until: ["finished"], timeoutMs: 5_000 });
-        settleSpawnedChild(actors, "fan-2", { failed: false, report: "second" });
+        settleSpawnedChild(actors, "fan-2", { status: "completed", report: "second" });
         expect(await next).toMatchObject({ outcome: "finished", matched: { id: "fan-2" } });
         expect(await waitForSubagent(actors, "conv-1", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({ outcome: "unknown-target" });
         expect(await waitForSubagent(actors, "conv-1", { target: "fan-1", until: ["finished"], timeoutMs: 5_000 })).toMatchObject({
@@ -444,7 +444,7 @@ describe("waitForSubagent", () => {
 
     it("knows a child's ending reached its parent only once a wait handed it over", async () => {
         spawn("told");
-        settleSpawnedChild(actors, "told", { failed: false, report: "done" });
+        settleSpawnedChild(actors, "told", { status: "completed", report: "done" });
         expect(subagentEndingReported(actors, "told")).toBe(false);
         await waitForSubagent(actors, "conv-1", { target: "told", until: ["finished"], timeoutMs: 5_000 });
         expect(subagentEndingReported(actors, "told")).toBe(true);
@@ -472,7 +472,7 @@ describe("how a subagent ends", () => {
             "sub-verify-1",
         );
         expect(listSubagentSessions(actors)[0]?.verification).toBeUndefined();
-        settleSpawnedChild(actors, "sub-verify-1", { failed: false, report: "Ported it." });
+        settleSpawnedChild(actors, "sub-verify-1", { status: "completed", report: "Ported it." });
         expect(listSubagentSessions(actors)[0]?.verification).toEqual({ state: "unproven", paths: ["src/parser.ts"] });
     });
 
@@ -537,11 +537,11 @@ describe("how a subagent ends", () => {
 
     it("does not re-end a finished child, but does let a late failure through", () => {
         openSpawnedChild(turn(), { id: "sub-late-1", description: "go" });
-        settleSpawnedChild(actors, "sub-late-1", { failed: false, report: "All done." });
+        settleSpawnedChild(actors, "sub-late-1", { status: "completed", report: "All done." });
         expect(listSubagentSessions(actors)).toMatchObject([{ id: "sub-late-1", status: "completed" }]);
-        settleSpawnedChild(actors, "sub-late-1", { failed: false, report: "" });
+        settleSpawnedChild(actors, "sub-late-1", { status: "completed", report: "" });
         expect(listSubagentSessions(actors)).toMatchObject([{ id: "sub-late-1", status: "completed" }]);
-        settleSpawnedChild(actors, "sub-late-1", { failed: true, report: "", error: "exit 1" });
+        settleSpawnedChild(actors, "sub-late-1", { status: "failed", report: "", error: "exit 1" });
         expect(listSubagentSessions(actors)).toMatchObject([{ id: "sub-late-1", status: "failed", summary: "All done.", error: "exit 1" }]);
     });
 });

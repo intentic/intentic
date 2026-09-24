@@ -21,15 +21,18 @@ export interface ChildReportDeps {
     ) => { readonly startedBy?: string | undefined; readonly title?: string | undefined; readonly archivedAt?: number | undefined } | undefined;
     // What the parent runs as now, which the report's turn continues.
     readonly profileOf: (conversationId: string) => TurnProfile | undefined;
+    // The ending a parent reads for a child whose runtime was killed under it; undefined for a failure of its own.
+    readonly killNote: (childId: string, failure: string) => Promise<string | undefined>;
 }
 
 // Characters of the child's answer a report carries, from the head where the answer is; the rest stays in its chat.
 const REPORT_CHARS = 4_000;
 
-const reportText = (settled: DomainEventMap["run.settled"]): string => {
+const reportText = (settled: DomainEventMap["run.settled"], killed: string | undefined): string => {
     const answer =
         settled.closing.length <= REPORT_CHARS ? settled.closing : `${settled.closing.slice(0, REPORT_CHARS)}… (the rest is in its own chat)`;
-    return [answer, ...(settled.failure === undefined ? [] : [`The turn failed: ${settled.failure}`])].filter((part) => part !== "").join("\n\n");
+    const ending = killed ?? (settled.failure === undefined ? undefined : `The turn failed: ${settled.failure}`);
+    return [answer, ...(ending === undefined ? [] : [ending])].filter((part) => part !== "").join("\n\n");
 };
 
 // Nobody when a person started the turn in the child's own chat, a wait already took it, or the parent is off the board.
@@ -64,7 +67,7 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             child: settled.conversationId,
             title: target.title,
             failed: settled.failure !== undefined,
-            report: reportText(settled),
+            report: reportText(settled, settled.failure === undefined ? undefined : await deps.killNote(settled.conversationId, settled.failure)),
             verification: childVerification(deps.conversations, settled.conversationId),
         });
         const receipt = await deliverWake(deps.doors, { conversationId: target.parent, prompt, voice: "sandbox", profile: target.profile });

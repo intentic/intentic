@@ -29,7 +29,7 @@ const GIB = 1024 ** 3;
 
 // Every seam but the memory gate's is left to name itself, so a read past the hold fails by that seam's name.
 test("a held turn reads nothing past the memory gate", async () => {
-    const short: MemoryHeadroom = { limitBytes: 16 * GIB, usedBytes: 15 * GIB, swapBytes: 0, freeBytes: GIB, stalledPercent: 0 };
+    const short: MemoryHeadroom = { limitBytes: 16 * GIB, usedBytes: 15 * GIB, swapBytes: 0, freeBytes: GIB, stalledPercent: 0, oomKills: undefined };
     const services = unstubbed<Services>("services", { memoryHeadroom: async () => short, memoryWarnings: createMemoryWarnings() });
 
     expect(await gatherTurnFacts(services, turn({ unattended: true }), context)).toEqual({

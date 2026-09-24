@@ -140,7 +140,13 @@ A reader's tour of `src/`: which directory answers which question, and the file 
 - The two things that keep a busy sandbox from eating itself, both keyed on the fact that a child inherits from
   its parent without anyone propagating anything:
   the front ([_sandbox/front](../../front), `cgroup.rs`) renices every direct child of the daemon so the
-  control plane outranks the work it started, and
+  control plane outranks the work it started, while the daemon itself
+  ([src/platform/resources/oom-scorer.ts](../src/platform/resources/oom-scorer.ts), since only it can name the
+  conversation a child runs for) ranks each for the kernel's OOM killer by the tiers in
+  [src/platform/resources/oom-priority.ts](../src/platform/resources/oom-priority.ts) (a build before an agent's command,
+  that before a restartable helper, that before any agent runtime, a child's runtime before its parent's, the daemon
+  last; agent commands hang off the tmux server rather than a runtime, so the Bash hook ranks them itself with
+  `choom`), and
   [src/platform/boot/reaper.ts](../src/platform/boot/reaper.ts) reclaims everything a STOPPED conversation still holds, on
   one clock: how long since its turn settled. The provider CLI's MCP servers and headless browsers (three
   levels down, nothing here holds a handle on them) carry the conversation's stamp

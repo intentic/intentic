@@ -1,4 +1,5 @@
-import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentTurn, SubagentSession } from "@intentic/sandbox-contract";
+import type { MemoryHeadroom } from "../../platform/resources/memory-admission.js";
 import { listSubagentSessions, resetSubagents, waitForSubagent } from "./subagents.js";
 import type { Services } from "../../composition.js";
 import { spawnServices } from "../../harness/spawn-services.testing.js";
@@ -775,5 +776,117 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         const message = held.ok === false ? held.message : "";
         expect(message).toContain("outside a live turn");
         expect(message).toContain("agents.spawn");
+    });
+});
+
+describe("on a box short of memory", () => {
+    const GIB = 1024 ** 3;
+    // 15 of 16 GiB used: short of the two a background turn needs; `oomKills` is the kernel's running count.
+    const box = (freeGib: number, oomKills = 0) => async (): Promise<MemoryHeadroom> => ({
+        limitBytes: 16 * GIB,
+        usedBytes: (16 - freeGib) * GIB,
+        swapBytes: 0,
+        freeBytes: freeGib * GIB,
+        stalledPercent: 0,
+        oomKills,
+    });
+
+    // Polls the roster until the child reads `status`, so an assertion never races the detached start.
+    const rosterReads = async (id: string, status: string): Promise<SubagentSession | undefined> => {
+        for (let attempt = 0; attempt < 400; attempt += 1) {
+            const row = listSubagentSessions(actors).find((session) => session.id === id);
+            if (row?.status === status) {
+                return row;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        return listSubagentSessions(actors).find((session) => session.id === id);
+    };
+
+    it("a child waits as pending, saying why, and its turn runs once there is room", async () => {
+        let free = 1;
+        const turns: AgentTurn[] = [];
+        const services = drivenBy(
+            spawnServices({}, [], actors, async () => box(free)()),
+            fakeTurn(turns),
+        );
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        expect(await rosterReads(result.id, "pending")).toMatchObject({
+            status: "pending",
+            summary: "Waiting for memory: Sandbox memory is low: 15.0 GiB of 16.0 GiB used.",
+        });
+        expect(turns).toEqual([]);
+        // Queued is not mid-turn: there is nothing to steer yet, and it says what to do instead.
+        expect(await sendToChild(services, parent, result.id, "also do the docs")).toEqual({
+            ok: false,
+            message: "It is waiting for memory and has not started: wait for it, then send again.",
+        });
+        free = 8;
+        await settled(result.id);
+        expect(turns.map((turn) => turn.prompt)).toEqual(["go"]);
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)?.status).toBe("completed");
+    });
+
+    // The runtime's death as the SDK reports it; the fake bumps the kernel's count mid-turn, as an OOM kill does.
+    const killedBy = (kills: { count: number }, message: string): TurnStarter["stream"] =>
+        async function* killed() {
+            kills.count += 1;
+            yield { kind: "error", message };
+            yield { kind: "done" };
+        };
+
+    it("a runtime killed while the OOM killer moved settles killed, with the way back", async () => {
+        const kills = { count: 3 };
+        const services = drivenBy(
+            spawnServices({}, [], actors, async () => box(8, kills.count)()),
+            killedBy(kills, "Claude Code process terminated by signal SIGKILL"),
+        );
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        const row = listSubagentSessions(actors).find((session) => session.id === result.id);
+        expect(row?.status).toBe("killed");
+        expect(row?.error).toBe(
+            "Killed when the sandbox ran out of memory (Claude Code process terminated by signal SIGKILL). Its session is intact: " +
+                "`send` it a message and it carries on from where it stopped, once there is room for it. Starting more agents now " +
+                "meets the same wall; have fewer run at once, and their builds and tests one at a time.",
+        );
+    });
+
+    it("a runtime killed with memory to spare is named killed from outside, still with the way back", async () => {
+        const services = drivenBy(
+            spawnServices({}, [], actors, box(8)),
+            fakeTurn([], [{ kind: "error", message: "Claude Code process exited with code 143" }, { kind: "done" }]),
+        );
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
+            status: "killed",
+            error: "Killed from outside its turn (Claude Code process exited with code 143). Its session is intact: `send` it a message and it carries on from where it stopped.",
+        });
+    });
+
+    it("a failure of the child's own stays failed, in its own words", async () => {
+        const roomy = drivenBy(
+            spawnServices({}, [], actors, box(8)),
+            fakeTurn([], [{ kind: "error", message: "Claude Code process exited with code 1" }, { kind: "done" }]),
+        );
+        const result = await spawnChild(roomy, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
+            status: "failed",
+            error: "Claude Code process exited with code 1",
+        });
     });
 });

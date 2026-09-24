@@ -19,7 +19,12 @@ interface Doors extends FakeTurns {
 }
 
 const doorsOf = (
-    over: { live?: boolean; parentArchived?: boolean; entries?: Record<string, { startedBy?: string; title?: string }> } = {},
+    over: {
+        live?: boolean;
+        parentArchived?: boolean;
+        entries?: Record<string, { startedBy?: string; title?: string }>;
+        killNote?: ChildReportDeps["killNote"];
+    } = {},
 ): Doors => {
     const entries: Record<string, { startedBy?: string; title?: string; archivedAt?: number }> = {
         "parent-1": { title: "Refactor the parser", ...(over.parentArchived === true ? { archivedAt: 1 } : {}) },
@@ -34,6 +39,7 @@ const doorsOf = (
             conversations: actors,
             entryOf: (conversationId: string) => entries[conversationId],
             profileOf: (conversationId: string) => (entries[conversationId] === undefined ? undefined : { agent: "claude", model: "opus" }),
+            killNote: over.killNote ?? (async () => undefined),
         },
     });
 };
@@ -48,6 +54,20 @@ const settledOf = (over: Partial<DomainEventMap["run.settled"]> = {}): DomainEve
 
 describe("a spawned child's report", () => {
     beforeEach(() => resetSubagents(actors));
+
+    it("tells the parent a killed child can be continued, in place of a bare failure", async () => {
+        const asked: [string, string][] = [];
+        const doors = doorsOf({
+            killNote: async (childId, failure) => {
+                asked.push([childId, failure]);
+                return "Killed when the sandbox ran out of memory. Its session is intact.";
+            },
+        });
+        await reportChildTurn(doors.deps, settledOf({ failure: "Claude Code process terminated by signal SIGKILL", closing: "Halfway through." }));
+        expect(asked).toEqual([["sub-1", "Claude Code process terminated by signal SIGKILL"]]);
+        expect(doors.started[0]?.prompt).toContain("Halfway through.\n\nKilled when the sandbox ran out of memory. Its session is intact.");
+        expect(doors.started[0]?.prompt).not.toContain("The turn failed");
+    });
 
     it("wakes a parent whose turn is over with the child's own answer, drawn as the child's", async () => {
         const doors = doorsOf();
@@ -89,7 +109,7 @@ describe("a spawned child's report", () => {
             { id: "sub-1", description: "port" },
         );
         const parked = waitForSubagent(actors, "parent-1", { target: "sub-1", until: ["finished"], timeoutMs: 5_000 });
-        settleSpawnedChild(actors, "sub-1", { failed: false, report: "done" });
+        settleSpawnedChild(actors, "sub-1", { status: "completed", report: "done" });
         await parked;
         const doors = doorsOf();
         await reportChildTurn(doors.deps, settledOf());

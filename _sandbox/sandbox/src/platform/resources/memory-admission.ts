@@ -15,6 +15,8 @@ export interface MemoryHeadroom {
     readonly freeBytes: number | undefined;
     // Memory PSI `full avg10`: percent of the last 10s every task was stalled on memory; 0 when healthy.
     readonly stalledPercent: number;
+    // memory.events `oom_kill`: processes the kernel's OOM killer has taken in this cgroup, cumulative since it began.
+    readonly oomKills: number | undefined;
 }
 
 // Pure, so the arithmetic swap broke is testable without a cgroup; a cap past the machine's memory never binds.
@@ -23,8 +25,9 @@ export const headroomFrom = (
         workingSetBytes,
         memoryLimitBytes,
         swapBytes,
+        memoryEvents,
         pressure,
-    }: Pick<CgroupReading, "workingSetBytes" | "memoryLimitBytes" | "swapBytes" | "pressure">,
+    }: Pick<CgroupReading, "workingSetBytes" | "memoryLimitBytes" | "swapBytes" | "memoryEvents" | "pressure">,
     machineBytes: number,
 ): MemoryHeadroom => {
     // Unaccounted swap (cgroup v1, swapaccount off) is none, never unknown: it must not blank a measurable ceiling.
@@ -37,6 +40,7 @@ export const headroomFrom = (
         swapBytes: swapped,
         freeBytes: ceiling === undefined || usedBytes === undefined ? undefined : Math.max(0, ceiling - usedBytes),
         stalledPercent: pressure.memory?.full ?? 0,
+        oomKills: memoryEvents["oom_kill"],
     };
 };
 
@@ -47,6 +51,11 @@ const GIB = 1024 ** 3;
 // Free bytes a turn needs to start unasked; unattended turns need double, losing ties to interactive ones.
 const TURN_RESERVE_BYTES = GIB;
 const UNATTENDED_RESERVE_BYTES = 2 * GIB;
+
+// Held off free memory for each turn admitted within FRESH_TURN_MS: a runtime and its MCP servers, about a quarter GiB
+// each here, before the cgroup reading shows them. What a burst of spawns would otherwise all pass on one reading.
+const FRESH_TURN_BYTES = 512 * 1024 ** 2;
+const FRESH_TURN_MS = 90_000;
 
 // Percent of full avg10 PSI at which a box counts as grinding, regardless of freeBytes.
 const STALL_PERCENT = 20;
@@ -67,8 +76,8 @@ interface Shortfall {
     readonly memory?: ShortMemory;
 }
 
-// An unknown ceiling has no opinion: only a measured box can come up short.
-const shortfallOf = (headroom: MemoryHeadroom, reserveBytes: number): Shortfall | undefined => {
+// An unknown ceiling has no opinion: only a measured box can come up short. `heldBytes` is already off `freeBytes`.
+const shortfallOf = (headroom: MemoryHeadroom, reserveBytes: number, heldBytes = 0): Shortfall | undefined => {
     const { freeBytes, limitBytes, usedBytes, swapBytes } = headroom;
     if (freeBytes === undefined || limitBytes === undefined || usedBytes === undefined) {
         return undefined;
@@ -88,11 +97,17 @@ const shortfallOf = (headroom: MemoryHeadroom, reserveBytes: number): Shortfall 
         swapBytes > 0
             ? `${gib(usedBytes - swapBytes)} resident + ${gib(swapBytes)} swapped, against ${gib(limitBytes)}`
             : `${gib(usedBytes)} of ${gib(limitBytes)} used`;
+    // Named, or a box reading 3 GiB free would seem to refuse a turn that needs 2.
+    const held = heldBytes > 0 ? `, and ${gib(heldBytes)} held for agents that just started` : "";
     return {
-        diagnosis: `Sandbox memory is low: ${used}`,
+        diagnosis: `Sandbox memory is low: ${used}${held}`,
         memory: { limitBytes, residentBytes: usedBytes - swapBytes, swapBytes },
     };
 };
+
+// The reading with `heldBytes` taken off what is free.
+const lessHeld = (headroom: MemoryHeadroom, heldBytes: number): MemoryHeadroom =>
+    headroom.freeBytes === undefined || heldBytes === 0 ? headroom : { ...headroom, freeBytes: Math.max(0, headroom.freeBytes - heldBytes) };
 
 export type TurnAdmission = { readonly admit: true } | { readonly admit: false; readonly message: string; readonly memory?: ShortMemory };
 
@@ -101,8 +116,8 @@ const STAKES = "Starting another agent now can slow the running ones down, and i
 
 // The box's own verdict for one audience, pure so the policy is testable without a cgroup. Whether a person is asked
 // at all is MemoryWarnings' call, not this one's.
-export const admitTurn = (headroom: MemoryHeadroom, unattended: boolean = false): TurnAdmission => {
-    const short = shortfallOf(headroom, unattended ? UNATTENDED_RESERVE_BYTES : TURN_RESERVE_BYTES);
+export const admitTurn = (headroom: MemoryHeadroom, unattended: boolean = false, heldBytes = 0): TurnAdmission => {
+    const short = shortfallOf(lessHeld(headroom, heldBytes), unattended ? UNATTENDED_RESERVE_BYTES : TURN_RESERVE_BYTES, heldBytes);
     if (short === undefined) {
         return { admit: true };
     }
@@ -112,37 +127,6 @@ export const admitTurn = (headroom: MemoryHeadroom, unattended: boolean = false)
             ? `${short.diagnosis}. This background turn did not start: turns people send get the room first.`
             : `${short.diagnosis}. ${STAKES}`,
         ...(short.memory === undefined ? {} : { memory: short.memory }),
-    };
-};
-
-// A person's turn on a short box is held once per spell, so they can decide, and admitted from then on, because the
-// decision is theirs. The spell ends at the first reading with room for a person's turn. Held in memory only: a restart
-// is a fresh spell.
-export interface MemoryWarnings {
-    readonly admit: (headroom: MemoryHeadroom, turn: { readonly unattended: boolean; readonly actor: string | undefined }) => TurnAdmission;
-}
-
-export const createMemoryWarnings = (): MemoryWarnings => {
-    // Who has been told this spell, by actor; "" is a caller the daemon could not name.
-    const warned = new Set<string>();
-    return {
-        admit: (headroom, { unattended, actor }) => {
-            const person = admitTurn(headroom);
-            if (person.admit) {
-                warned.clear();
-            }
-            // Nobody is there to be told, so background work is refused on every short reading, and never warns anyone.
-            if (unattended) {
-                return admitTurn(headroom, true);
-            }
-            // Keyed by person: one member's choice to go ahead does not answer for another who has not been told.
-            const who = actor ?? "";
-            if (person.admit || warned.has(who)) {
-                return { admit: true };
-            }
-            warned.add(who);
-            return person;
-        },
     };
 };
 
@@ -158,27 +142,116 @@ export interface HeadroomWait {
 const WAIT_INTERVAL_MS = 5_000;
 const WAIT_DEADLINE_MS = 5 * 60_000;
 
-export const waitForMemoryHeadroom = async (
-    options: {
-        readonly signal?: AbortSignal;
-        readonly intervalMs?: number;
-        readonly deadlineMs?: number;
-        readonly read?: () => Promise<MemoryHeadroom>;
-    } = {},
+export interface HeadroomWaitOptions {
+    readonly signal?: AbortSignal;
+    readonly intervalMs?: number;
+    readonly deadlineMs?: number;
+    // Told once, on the first reading that comes up short, with what is short.
+    readonly onShort?: (diagnosis: string) => void;
+}
+
+// Polls `judge` until it finds nothing short, the deadline passes or the signal fires; whatever `judge` admits, it claims.
+const pollForRoom = async (
+    judge: () => Promise<Shortfall | undefined>,
+    { signal, intervalMs = WAIT_INTERVAL_MS, deadlineMs = WAIT_DEADLINE_MS, onShort }: HeadroomWaitOptions,
 ): Promise<HeadroomWait> => {
-    const { signal, intervalMs = WAIT_INTERVAL_MS, deadlineMs = WAIT_DEADLINE_MS, read = readMemoryHeadroom } = options;
     const startedAt = Date.now();
-    // Held to the unattended reserve: queued work loses ties to whoever is typing.
-    let short = shortfallOf(await read(), UNATTENDED_RESERVE_BYTES);
+    let short = await judge();
     if (short === undefined) {
         // First reading admits without touching the interval.
         return { admitted: true, waitedMs: 0 };
     }
+    onShort?.(short.diagnosis);
     // oxlint-disable-next-line no-unmodified-loop-condition -- AbortController changes signal.aborted.
     while (short !== undefined && Date.now() - startedAt < deadlineMs && signal?.aborted !== true) {
         await sleep(intervalMs, { signal });
-        short = shortfallOf(await read(), UNATTENDED_RESERVE_BYTES);
+        short = await judge();
     }
     const waitedMs = Date.now() - startedAt;
     return short === undefined ? { admitted: true, waitedMs } : { admitted: false, waitedMs, message: short.diagnosis };
+};
+
+// Held to the unattended reserve: queued work loses ties to whoever is typing.
+export const waitForMemoryHeadroom = async (
+    options: HeadroomWaitOptions & { readonly read?: () => Promise<MemoryHeadroom> } = {},
+): Promise<HeadroomWait> => {
+    const { read = readMemoryHeadroom } = options;
+    return pollForRoom(async () => shortfallOf(await read(), UNATTENDED_RESERVE_BYTES), options);
+};
+
+// A person's turn on a short box is held once per spell, so they can decide, and admitted from then on, because the
+// decision is theirs. The spell ends at the first reading with room for a person's turn. Every admission holds its share
+// off free memory for other conversations while it grows into it. Held in memory only: a restart is a fresh spell.
+export interface MemoryWarnings {
+    readonly admit: (
+        headroom: MemoryHeadroom,
+        turn: { readonly unattended: boolean; readonly actor: string | undefined; readonly conversationId: string | undefined },
+    ) => TurnAdmission;
+    // Parks until an unattended turn on this conversation would be admitted, claiming its share the moment it would, so
+    // two waiters never pass on one reading.
+    readonly waitForRoom: (
+        conversationId: string,
+        options: HeadroomWaitOptions & { readonly read: () => Promise<MemoryHeadroom> },
+    ) => Promise<HeadroomWait>;
+}
+
+export const createMemoryWarnings = (now: () => number = Date.now): MemoryWarnings => {
+    // Who has been told this spell, by actor; "" is a caller the daemon could not name.
+    const warned = new Set<string>();
+    // When each conversation last claimed its share; a claim ages out after FRESH_TURN_MS.
+    const claims = new Map<string, number>();
+    // What every other conversation's fresh claim holds off free memory.
+    const heldFor = (conversationId: string | undefined): number => {
+        const at = now();
+        let held = 0;
+        for (const [id, claimedAt] of claims) {
+            if (at - claimedAt >= FRESH_TURN_MS) {
+                claims.delete(id);
+            } else if (id !== conversationId) {
+                held += FRESH_TURN_BYTES;
+            }
+        }
+        return held;
+    };
+    const claim = (conversationId: string | undefined): void => {
+        if (conversationId !== undefined) {
+            claims.set(conversationId, now());
+        }
+    };
+    return {
+        admit: (headroom, { unattended, actor, conversationId }) => {
+            const held = heldFor(conversationId);
+            const person = admitTurn(headroom, false, held);
+            if (person.admit) {
+                warned.clear();
+            }
+            // Nobody is there to be told, so background work is refused on every short reading, and never warns anyone.
+            if (unattended) {
+                const verdict = admitTurn(headroom, true, held);
+                if (verdict.admit) {
+                    claim(conversationId);
+                }
+                return verdict;
+            }
+            // Keyed by person: one member's choice to go ahead does not answer for another who has not been told.
+            const who = actor ?? "";
+            if (person.admit || warned.has(who)) {
+                claim(conversationId);
+                return { admit: true };
+            }
+            warned.add(who);
+            return person;
+        },
+        waitForRoom: (conversationId, options) =>
+            pollForRoom(async () => {
+                const reading = await options.read();
+                // No await between the verdict and the claim: the next waiter's verdict already counts this one.
+                const held = heldFor(conversationId);
+                const short = shortfallOf(lessHeld(reading, held), UNATTENDED_RESERVE_BYTES, held);
+                if (short === undefined) {
+                    claim(conversationId);
+                }
+                return short;
+            }, options),
+    };
 };

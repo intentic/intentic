@@ -4,6 +4,7 @@ import type { AgentRequest, TurnHooks, TurnTools } from "../../agent/providers/a
 import { formatAnswers } from "../../agent/tools/question-answers.js";
 import type { SubagentWaitUntil } from "../../agent/subagents/subagents.js";
 import { workWaitAnswer } from "../../agent/subagents/work-wait.js";
+import { spawnedNote } from "../../agent/subagents/children.js";
 import { type CommandGuard, consultWith, JS_SUBJECT } from "../../guard/command-guard.js";
 import { outsideSourceOf, sealResult } from "../../guard/outside-results.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
@@ -136,7 +137,7 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
             ...(effort !== undefined ? { effort } : {}),
         });
         return JSON.stringify(
-            result.ok ? { ok: true, child: result.id, note: `Running. Supervise it with wait(target: "${result.id}").` } : result,
+            result.ok ? { ok: true, child: result.id, note: spawnedNote(result.id) } : result,
         );
     },
 });

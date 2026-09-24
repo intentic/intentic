@@ -55,6 +55,7 @@ const reading = (limitGib: number, residentGib: number, swapGib: number) => asyn
     swapBytes: swapGib * GIB,
     freeBytes: Math.max(0, limitGib - residentGib - swapGib) * GIB,
     stalledPercent: 0,
+    oomKills: undefined,
 });
 
 // A warning the next press cannot get past is a wall: the send after the hold has to run.

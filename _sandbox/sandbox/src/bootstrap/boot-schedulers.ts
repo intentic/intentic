@@ -1,6 +1,7 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
 import { adoptBackgroundJobs } from "../agent/tools/background-adoption.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
+import { childKillNote } from "../agent/subagents/children.js";
 import { conversationProfile } from "../agents/registry/agents-store.js";
 import { startVerifyNudges } from "../agent/verification/verify-nudge.js";
 import { startWatchers } from "../agent/verification/watchers.js";
@@ -35,6 +36,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
             const entry = services.agents.entry(conversationId);
             return entry === undefined ? undefined : conversationProfile(entry);
         },
+        killNote: (childId, failure) => childKillNote(services, childId, failure),
     };
     shutdown.push(services.events.subscribe("run.settled", (settled) => reportChildTurn(childReports, settled)));
 

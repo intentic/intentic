@@ -68,7 +68,7 @@ describe("waitForWork", () => {
             { id: "sub-w4", description: "port it" },
         );
         const wait = waitForWork(actors, "conv-w4", { until: ["finished"], timeoutMs: 5_000 });
-        settleSpawnedChild(actors, "sub-w4", { failed: false, report: "ported" });
+        settleSpawnedChild(actors, "sub-w4", { status: "completed", report: "ported" });
         expect(await wait).toMatchObject({ outcome: "finished", agent: { id: "sub-w4" } });
     });
 

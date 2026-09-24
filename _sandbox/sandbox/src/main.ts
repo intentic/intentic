@@ -24,6 +24,9 @@ import { listenHost, profileTraits, requireLocalContract } from "./platform/boot
 import { checks as containerChecks, owner as containerOwner } from "./platform/invariant.js";
 import { readCgroup } from "./platform/resources/cgroup.js";
 import { startLoopWatchdog } from "./platform/resources/loop-watchdog.js";
+import { oomScoreResolver } from "./platform/resources/oom-priority.js";
+import { startOomScorer } from "./platform/resources/oom-scorer.js";
+import { spawnDepthOf } from "./agent/subagents/children.js";
 import { answers } from "./ports/port-probe.js";
 import { runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { appPanelKey } from "./workspace/layout/app-previews.js";
@@ -51,6 +54,9 @@ const main = async (): Promise<void> => {
     const loopWatchdog = startLoopWatchdog(logger);
     shutdown.push(() => loopWatchdog.stop());
     const services = createServices(config, logger);
+    // Ranks the daemon's children for the OOM killer by role and spawn depth; the front renices them.
+    const oomScorer = startOomScorer(oomScoreResolver((owner) => spawnDepthOf(services.conversations, owner)));
+    shutdown.push(() => oomScorer.stop());
     shutdown.push(() => services.perf.stop());
     shutdown.push(() => services.ciHooks.stop());
     shutdown.push(() => services.announcer.stop());

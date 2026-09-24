@@ -29,6 +29,7 @@ export const ROOMY_MEMORY = async (): Promise<MemoryHeadroom> => ({
     swapBytes: 0,
     freeBytes: 12 * 1024 ** 3,
     stalledPercent: 0,
+    oomKills: undefined,
 });
 
 export const base: TurnBase = {

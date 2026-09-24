@@ -174,7 +174,11 @@ export type TurnFactsDeps = Pick<
 
 export const gatherTurnFacts = async (services: TurnFactsDeps, input: TurnInput, context: TurnContext): Promise<TurnFacts> => {
     // First, so a held turn costs no settings read, capability list, dependency probe or persona load.
-    const admission = services.memoryWarnings.admit(await services.memoryHeadroom(), { unattended: input.unattended === true, actor: input.actor });
+    const admission = services.memoryWarnings.admit(await services.memoryHeadroom(), {
+        unattended: input.unattended === true,
+        actor: input.actor,
+        conversationId: input.conversationId,
+    });
     if (!admission.admit) {
         return { held: admission };
     }

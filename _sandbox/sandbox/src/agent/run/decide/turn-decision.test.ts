@@ -68,8 +68,8 @@ const conversationIn = (salt: string, arm: boolean): string => {
 
 const GIB = 1024 ** 3;
 // 12 GiB resident and 7 swapped against a 16 GiB cap: short for a person and for background work alike.
-const SHORT: MemoryHeadroom = { limitBytes: 16 * GIB, usedBytes: 19 * GIB, swapBytes: 7 * GIB, freeBytes: 0, stalledPercent: 0 };
-const ROOMY: MemoryHeadroom = { limitBytes: 16 * GIB, usedBytes: 4 * GIB, swapBytes: 0, freeBytes: 12 * GIB, stalledPercent: 0 };
+const SHORT: MemoryHeadroom = { limitBytes: 16 * GIB, usedBytes: 19 * GIB, swapBytes: 7 * GIB, freeBytes: 0, stalledPercent: 0, oomKills: undefined };
+const ROOMY: MemoryHeadroom = { limitBytes: 16 * GIB, usedBytes: 4 * GIB, swapBytes: 0, freeBytes: 12 * GIB, stalledPercent: 0, oomKills: undefined };
 
 const factsAfter = (admission: TurnAdmission): TurnFacts => (admission.admit ? FACTS : { held: admission });
 
@@ -79,12 +79,12 @@ test.each([
     ["a box with room holds nobody", ROOMY, false, [true, true]],
 ] as const)("the memory gate: %s", (_case, reading, unattended, expected) => {
     const spell = createMemoryWarnings();
-    const presses = expected.map(() => decideTurn(factsAfter(spell.admit(reading, { unattended, actor: "ada@example.com" })), turn(), context).ok);
+    const presses = expected.map(() => decideTurn(factsAfter(spell.admit(reading, { unattended, actor: "ada@example.com", conversationId: undefined })), turn(), context).ok);
     expect(presses).toEqual([...expected]);
 });
 
 test("a held turn is refused with the reading behind it, and owes the log nothing", () => {
-    const held = createMemoryWarnings().admit(SHORT, { unattended: false, actor: "ada@example.com" });
+    const held = createMemoryWarnings().admit(SHORT, { unattended: false, actor: "ada@example.com", conversationId: undefined });
     if (held.admit) {
         throw new Error("the fixture's box is meant to be short");
     }

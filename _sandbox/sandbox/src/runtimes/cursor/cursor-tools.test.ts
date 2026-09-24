@@ -212,7 +212,7 @@ describe("what the pair does", () => {
         openSpawnedChild(turn, { id: "sub-child-1", description: "port it", provider: "claude" });
         const tools = cursorCustomTools(request({ hooks: { children: supervisor() } }), guard(allowing()), push());
         const parked = tools["wait"]?.execute?.({ target: "sub-child-1", timeoutSeconds: 5 }, {} as never) as Promise<string>;
-        settleSpawnedChild(actors, "sub-child-1", { failed: false, report: "done: two files changed" });
+        settleSpawnedChild(actors, "sub-child-1", { status: "completed", report: "done: two files changed" });
         const answer = JSON.parse(await parked) as { outcome: string; agent?: { summary?: string } };
         expect(answer.outcome).toBe("finished");
         expect(answer.agent?.summary).toBe("done: two files changed");

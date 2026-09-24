@@ -6,6 +6,7 @@ import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { syncHookOutput, memoryFleet } from "../../testing.js";
 import { DEFAULT_HEAVY_COMMANDS, type HeavyCommands, HeavyCommandsSchema } from "../../platform/resources/heavy-commands.js";
+import { OOM_SCORE } from "../../platform/resources/oom-priority.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { bashTmuxHooks, PIPESTATUS_TRAP } from "./agent-terminals.js";
 import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./background-jobs.js";
@@ -16,8 +17,9 @@ const actors = memoryFleet().conversations;
 // The `bash -c` the pane runs: the command behind the trap that records its last pipeline's statuses.
 const shell = (command: string): string => `bash -c ${shellQuote(`${PIPESTATUS_TRAP}${command}`)}`;
 
-// Demotes a command via nice/ionice and runs it as one `bash -c` tree, before tmux-run sees it.
-const demoted = (command: string): string => `nice -n 10 ionice -c 2 -n 7 ${shell(command)}`;
+// Demotes a command via nice/ionice, ranks it for the OOM killer, and runs it as one `bash -c` tree, before tmux-run sees
+// it.
+const demoted = (command: string): string => `nice -n 10 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- ${shell(command)}`;
 
 // Carries the conversation id; every forked process inherits it, marking the run as agent-started, not the sandbox's
 // own.
@@ -255,9 +257,10 @@ const heavy = (over: Partial<HeavyCommands> = {}) => {
     return () => Promise.resolve(config);
 };
 
-// The demoted form, with the queue between demotion and shell: position is the assertion.
+// The demoted form, with the queue between demotion and shell and the heavy rank inside the queue: position is the
+// assertion.
 const queued = (command: string, label: string, pool = "heavy", limit = 2, onDeadline = DEFAULT_HEAVY_COMMANDS.onDeadline): string =>
-    `nice -n 10 ionice -c 2 -n 7 /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${onDeadline} --label ${shellQuote(label)} -- ${shell(command)}`;
+    `nice -n 10 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${onDeadline} --label ${shellQuote(label)} -- choom -n ${String(OOM_SCORE.heavy)} -- ${shell(command)}`;
 
 test("a rule's deadline answer reaches the wrapper, so the one shipped rule that skips is the only one that does", async () => {
     const command = await rewritten({ command: "pnpm verify:turn" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));

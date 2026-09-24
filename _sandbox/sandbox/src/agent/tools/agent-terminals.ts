@@ -10,6 +10,7 @@ import { resolveCommandSecrets, type SecretAccess } from "../../secrets/secret-a
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
 import { type HeavyCommands, matchHeavyCommand } from "../../platform/resources/heavy-commands.js";
+import { choomPrefix, OOM_SCORE } from "../../platform/resources/oom-priority.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type BackgroundJob, type BackgroundJobSeed, jobCommandLine, openBackgroundJob } from "./background-jobs.js";
 import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
@@ -65,15 +66,16 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
         .map((key) => `-e ${key} `)
         .join("");
 
-// Demotes every agent command (nice +10, ionice); `bash -c` wraps it since `nice` execs a binary not a keyword.
-const POLITE_PREFIX = "nice -n 10 ionice -c 2 -n 7 ";
+// Demotes every agent command (nice +10, ionice) and ranks it for the OOM killer above every runtime; `bash -c` wraps it
+// since `nice` execs a binary not a keyword. Panes hang off the tmux server, so no runtime's score reaches them by fork.
+const POLITE_PREFIX = `nice -n 10 ionice -c 2 -n 7 ${choomPrefix(OOM_SCORE.command)}`;
 
 // Leaves the last pipeline's per-stage statuses where bin/tmux-run's pane exports INTENTIC_PIPESTATUS_FILE. An EXIT
 // trap on the command's first line: its text, line numbers and exit status stay the agent's own.
 export const PIPESTATUS_TRAP = `trap 'printf "%s " "\${PIPESTATUS[@]}" 2>/dev/null >"\${INTENTIC_PIPESTATUS_FILE:-/dev/null}"' EXIT; `;
 
-// Bounds concurrent heavy commands via bin/queue-run, since demotion rations CPU but not memory. Spliced inside the
-// namespace hop and the demotion, so the slot covers the whole forked tree.
+// Bounds concurrent heavy commands via bin/queue-run, since demotion rations CPU but not memory, and makes each the
+// first thing the OOM killer takes. Spliced inside the namespace hop and the demotion, so both cover the forked tree.
 const queuePrefix = (command: string, config: HeavyCommands | undefined): string => {
     if (config === undefined) {
         return "";
@@ -91,7 +93,7 @@ const queuePrefix = (command: string, config: HeavyCommands | undefined): string
         `--on-deadline ${match.onDeadline}`,
         `--label ${shellQuote(match.id)}`,
     ].join(" ");
-    return `${QUEUE_RUN_BIN} ${flags} -- `;
+    return `${QUEUE_RUN_BIN} ${flags} -- ${choomPrefix(OOM_SCORE.heavy)}`;
 };
 
 // Wraps a whole command line behind the queue, for a caller that runs one command directly rather than rewriting an

@@ -8,6 +8,7 @@ import { steerTurn } from "../checkpoints/agent-steering.js";
 import { childSpawn } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";
 import { conversationTaintSource, markConversationTaint } from "../../guard/turn-taint.js";
+import { killCauseOf, killNote, runtimeKilled } from "./child-death.js";
 import { noteChildWork } from "./child-verification.js";
 import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
 import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTurn, type SubagentWaitOptions } from "./subagents.js";
@@ -19,8 +20,12 @@ import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.j
 import { runnerSummaries } from "../../runners/runner-peer.js";
 
 // Spawns, steers and answers full agents from inside a turn, on any connected provider; a child is an ordinary
-// conversation on the same turn pump. A parked question is the parent's to answer; a permission or plan hold is the
-// owner's alone. A child outlives its parent's own turn.
+// conversation on the same turn pump, queued until the box has memory for it. A parked question is the parent's to
+// answer; a permission or plan hold is the owner's alone. A child outlives its parent's own turn.
+
+/** What a parent is told as its child starts: a box short of memory queues it first, and `wait` covers that too. */
+export const spawnedNote = (id: string): string =>
+    `Started; on a box short of memory it waits as pending until there is room. Supervise it with wait(target: "${id}").`;
 
 // Chars of the child's closing text kept inline on the roster row; the full text is in its own transcript.
 const REPORT_KEPT = 2_000;
@@ -72,6 +77,10 @@ interface ChildRecord {
     // When `running` was last set; invariant.ts compares this to tell a not-yet-started record from a stale one.
     startedAt: number;
     pending: PendingChildCard | undefined;
+    // Waiting for memory before its turn starts: `running`, with no turn yet to steer.
+    queued: boolean;
+    // The OOM killer's count as its current turn started, so its ending can tell a kill from its own failure.
+    oomKillsAtStart: number | undefined;
 }
 
 // A spawned child's record, held by its parent and filed about the child, so either one's dispose takes it.
@@ -98,7 +107,7 @@ export const supervisorFor = (actors: Actors, conversationId: string): ChildSupe
 export const isSpawnedChild = (actors: Actors, conversationId: string): boolean => actors.holdings(CHILDREN).has(conversationId);
 
 // How deep a conversation sits under the spawns above it; 0 for one nobody spawned.
-const depthOf = (actors: Actors, conversationId: string): number => actors.holdings(CHILDREN).get(conversationId)?.depth ?? 0;
+export const spawnDepthOf = (actors: Actors, conversationId: string): number => actors.holdings(CHILDREN).get(conversationId)?.depth ?? 0;
 
 // Every child this daemon knows of, for invariant.ts to cross-check against live turns. Settled children stay listed
 // since a follow-up `send` resumes them.
@@ -155,18 +164,25 @@ export const pendingQuestionOf = (actors: Actors, childId: string): PendingChild
     return pending?.kind === "question" ? pending : undefined;
 };
 
-// Pumps one child turn onto the roster; shared by spawn and follow-up send. Detached: returns once the turn is running,
-// and folds a throw into an error frame plus done.
-const runChildTurn = (
-    services: Services,
+// How long a child waits for memory before starting anyway, to meet the door's own answer.
+const ROOM_DEADLINE_MS = 10 * 60_000;
+
+/** Why a child's runtime was killed under it, as the ending its parent reads; undefined for a failure of its own. */
+export const childKillNote = async (
+    services: Pick<Services, "conversations" | "memoryHeadroom">,
     childId: string,
-    parent: string,
-    turn: TurnInput & { conversationId: string },
-): { readonly ok: true } | { readonly ok: false; readonly message: string } => {
-    const run = services.turns.run(turn);
-    if (run === undefined) {
-        return { ok: false, message: "A turn is already running on that conversation." };
+    failure: string,
+): Promise<string | undefined> => {
+    if (!runtimeKilled(failure)) {
+        return undefined;
     }
+    const before = services.conversations.holdings(CHILDREN).get(childId)?.oomKillsAtStart;
+    return killNote(killCauseOf(await services.memoryHeadroom(), before), failure);
+};
+
+// Pumps one child turn onto the roster once the box has room for it; shared by spawn and follow-up send. Detached: the
+// caller returns with the child queued, and every ending, a refusal included, settles the record and frees its seat.
+const runChildTurn = (services: Services, childId: string, parent: string, turn: TurnInput & { conversationId: string }): void => {
     void (async () => {
         const kid = services.conversations.holdings(CHILDREN).get(childId);
         let bubble = "";
@@ -175,6 +191,27 @@ const runChildTurn = (
         let tokens = 0;
         let failure: string | undefined;
         try {
+            if (kid !== undefined) {
+                kid.queued = true;
+            }
+            const room = await services.memoryWarnings.waitForRoom(childId, {
+                read: services.memoryHeadroom,
+                deadlineMs: ROOM_DEADLINE_MS,
+                onShort: (diagnosis) =>
+                    noteSpawnedChild(services.conversations, childId, { status: "pending", summary: `Waiting for memory: ${diagnosis}.` }),
+            });
+            if (room.waitedMs > 0) {
+                noteSpawnedChild(services.conversations, childId, { status: "running", summary: "" });
+            }
+            if (kid !== undefined) {
+                kid.queued = false;
+                kid.oomKillsAtStart = (await services.memoryHeadroom()).oomKills;
+            }
+            const run = services.turns.run(turn);
+            if (run === undefined) {
+                failure = "A turn is already running on that conversation.";
+                return;
+            }
             for await (const event of run.frames()) {
                 // Normalized frames make this work across providers; a child's own sub-delegations still count as its
                 // proof.
@@ -228,14 +265,18 @@ const runChildTurn = (
             failure = errorMessage(error);
         } finally {
             const closing = (bubble.trim() !== "" ? bubble : report).trim().slice(0, REPORT_KEPT);
+            // Read while the record still says running, so a `send` cannot start a follow-up this settle then overwrites.
+            const killed = failure === undefined ? undefined : await childKillNote(services, childId, failure);
+            const error = killed ?? failure;
             if (kid !== undefined) {
                 kid.running = false;
+                kid.queued = false;
                 kid.pending = undefined;
             }
             settleSpawnedChild(services.conversations, childId, {
-                failed: failure !== undefined,
+                status: killed !== undefined ? "killed" : failure !== undefined ? "failed" : "completed",
                 report: closing,
-                ...(failure !== undefined ? { error: failure } : {}),
+                ...(error !== undefined ? { error } : {}),
             });
             const seats = services.conversations.holdings(SEATS);
             const now = seats.get(parent);
@@ -244,7 +285,6 @@ const runChildTurn = (
             }
         }
     })();
-    return { ok: true };
 };
 
 // Consulted before every supervisor mutation (spawn, send, answer): the owner's action rules plus the taint floor. A
@@ -417,12 +457,12 @@ const childPlacement = async (
           ).runner;
 
 /**
- * Starts a child agent and returns once it is running. Budget/depth refusals come back immediately; a provider refusal
- * (nothing connected) surfaces later as the child's own failure.
+ * Starts a child agent and returns once it is queued; on a box short of memory it waits as `pending` before its turn
+ * runs. Budget/depth refusals come back immediately; a provider refusal surfaces later as the child's own failure.
  */
 export const spawnChild = async (services: Services, parent: ChildParent, spec: ChildSpawnSpec): Promise<ChildSpawnResult> => {
     const settings = await services.sandboxSettings.get();
-    const depth = depthOf(services.conversations, parent.conversationId) + 1;
+    const depth = spawnDepthOf(services.conversations, parent.conversationId) + 1;
     if (depth > settings.subagentDepth) {
         return { ok: false, message: `Spawn depth ${settings.subagentDepth} reached: this agent is itself a spawned child and may not go deeper.` };
     }
@@ -468,6 +508,8 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
                 running: true,
                 startedAt: Date.now(),
                 pending: undefined,
+                queued: false,
+                oomKillsAtStart: undefined,
             },
             id,
         );
@@ -489,14 +531,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
             spawnDepth: depth,
             ...(spec.model !== undefined ? { model: spec.model } : {}),
         });
-        const started = runChildTurn(services, id, parent.conversationId, turn);
-        if (!started.ok) {
-            children.drop(id);
-            settleSpawnedChild(services.conversations, id, { failed: true, report: "", error: started.message });
-            // A fresh id colliding with a live run should be impossible; report that rather than pretend the child
-            // exists.
-            return { ok: false, message: "The child's conversation could not be started." };
-        }
+        runChildTurn(services, id, parent.conversationId, turn);
         handedOff = true;
         return { ok: true, id };
     } finally {
@@ -520,6 +555,9 @@ export const sendToChild = async (services: Services, parent: ChildParent, child
         return allowed;
     }
     composeRuntimeFloor(parent.conversationId, kid.spec.provider, kid.spec.harness ?? "native");
+    if (kid.queued) {
+        return { ok: false, message: "It is waiting for memory and has not started: wait for it, then send again." };
+    }
     if (kid.running) {
         // Mid-turn, the only door is the runtime's own steering seam; a runtime without one cannot take words yet.
         return steerTurn(services.conversations, childId, { text: message, voice: "agent" })
@@ -562,14 +600,9 @@ export const sendToChild = async (services: Services, parent: ChildParent, child
         });
         kid.running = true;
         kid.startedAt = Date.now();
-        const started = runChildTurn(services, childId, parent.conversationId, turn);
-        if (!started.ok) {
-            kid.running = false;
-            settleSpawnedChild(services.conversations, childId, { failed: true, report: "", error: started.message });
-            return started;
-        }
+        runChildTurn(services, childId, parent.conversationId, turn);
         handedOff = true;
-        return { ok: true, note: "Sent: the child is running a follow-up turn. Supervise it with wait." };
+        return { ok: true, note: "Sent: the child runs a follow-up turn, once there is memory for it. Supervise it with wait." };
     } finally {
         if (!handedOff) {
             admitted.release();

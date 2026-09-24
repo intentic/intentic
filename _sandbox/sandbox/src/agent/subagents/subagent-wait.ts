@@ -3,7 +3,7 @@ import { sdk } from "../../engines/claude-sdk.js";
 import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
-import type { ChildSupervisor } from "./children.js";
+import { type ChildSupervisor, spawnedNote } from "./children.js";
 import type { SubagentWaitUntil } from "./subagents.js";
 import { waitForWork, workWaitAnswer } from "./work-wait.js";
 import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
@@ -66,7 +66,8 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               "Composer models) to work on a task of its own. It runs as a separate conversation in its own isolated " +
                               "worktree, visible on the board, and keeps working after your turn ends; its finished work lands the way " +
                               "any agent's does. Returns the child's id immediately: supervise it with the wait tool (target: that id), " +
-                              "which returns when it is blocked on input or finished, with its report. If your turn ends first, its " +
+                              "which returns when it is blocked on input or finished, with its report. On a sandbox short of memory it " +
+                              "holds as pending until there is room, and wait covers that too. If your turn ends first, its " +
                               "report wakes this conversation when it finishes. Give it a self-contained prompt " +
                               "with every path, requirement, and constraint — it sees none of this conversation. You must name the " +
                               "provider AND the model: this spends a real allowance and nothing is chosen for you. Call the providers " +
@@ -109,7 +110,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               });
                               return answer(
                                   result.ok
-                                      ? { ok: true, child: result.id, note: `Running. Supervise it with wait(target: "${result.id}").` }
+                                      ? { ok: true, child: result.id, note: spawnedNote(result.id) }
                                       : { ok: false, message: result.message },
                               );
                           },

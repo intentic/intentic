@@ -657,8 +657,9 @@ export const noteSpawnedChild = (
     actors: Actors,
     id: string,
     move: {
-        readonly status?: "running" | "blocked";
-        // On `blocked`, what it waits on; unset source so the real report replaces it once unblocked.
+        // `pending` is a child queued for memory before its turn starts.
+        readonly status?: "pending" | "running" | "blocked";
+        // On `blocked` or `pending`, what it waits on; unset source so the real report replaces it once unblocked.
         readonly summary?: string;
         readonly lastTool?: string;
         readonly toolUses?: number;
@@ -672,11 +673,14 @@ export const noteSpawnedChild = (
     pushToParentRun(actors, record.conversationId, patch(actors, id, move));
 };
 
-/** The child's turn ended; its closing text becomes the report, cut at the head where the answer is. */
+/**
+ * The child's turn ended; its closing text becomes the report, cut at the head where the answer is. `killed` is a runtime
+ * that died under it, whose session a follow-up can still continue.
+ */
 export const settleSpawnedChild = (
     actors: Actors,
     id: string,
-    outcome: { readonly failed: boolean; readonly report: string; readonly error?: string },
+    outcome: { readonly status: "completed" | "failed" | "killed"; readonly report: string; readonly error?: string },
 ): void => {
     const record = actors.holdings(ROSTER).get(id);
     if (record === undefined) {
@@ -690,7 +694,7 @@ export const settleSpawnedChild = (
             actors,
             id,
             ending(record, {
-                status: outcome.failed ? "failed" : "completed",
+                status: outcome.status,
                 source: "report",
                 ...(summary !== "" ? { summary } : {}),
                 ...(outcome.error !== undefined && outcome.error !== "" ? { error: outcome.error } : {}),

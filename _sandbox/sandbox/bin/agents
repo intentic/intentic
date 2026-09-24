@@ -448,7 +448,7 @@ const spawn = async (argv) => {
     }
     const { id } = JSON.parse(text);
     process.stdout.write(`${id}\n`);
-    process.stderr.write(`Running. Follow it with: agents wait ${id}\n`);
+    process.stderr.write(`Started; on a box short of memory it waits as pending until there is room. Follow it with: agents wait ${id}\n`);
 };
 
 const wait = async (argv) => {

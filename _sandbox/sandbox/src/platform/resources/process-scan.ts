@@ -165,6 +165,9 @@ const ROLE_RULES: readonly (readonly [ProcessRole, (value: string) => boolean])[
     ["terminal", (value) => TERMINAL.test(value)],
 ];
 
+// What classifyProcess reads: the kernel's name for the process, then its NUL-separated argv.
+export const commandOf = (comm: string, cmdline: string): string => `${comm} ${cmdline.replaceAll("\0", " ")}`;
+
 // A nested container's process is the container's whatever it runs, by the cgroup it sits in.
 export const classifyProcess = (command: string, cgroup = ""): ProcessRole => {
     if (CONTAINER_CGROUP.test(cgroup)) {
@@ -204,7 +207,7 @@ export const createProcessScanner = (source: ProcSource = { listPids, readText }
             source.readText(`/proc/${pid}/cmdline`),
             source.readText(`/proc/${pid}/cgroup`),
         ]);
-        const command = `${stat.comm} ${(cmdline ?? "").replaceAll("\0", " ")}`;
+        const command = commandOf(stat.comm, cmdline ?? "");
         const identity = { key, owner: ownerOf(environ ?? ""), role: classifyProcess(command, cgroup ?? ""), program: programOf(command) };
         identities.set(pid, identity);
         return identity;

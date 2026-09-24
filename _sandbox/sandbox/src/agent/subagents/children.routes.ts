@@ -54,7 +54,7 @@ const WaitBodySchema = z.object({
 });
 
 export const createChildrenRoutes = (services: Services) => ({
-    /** POST /children/spawn — start a child; answers `{ok:true,id}` the moment it is running. */
+    /** POST /children/spawn — start a child; answers `{ok:true,id}` the moment it is queued, before any wait for memory. */
     spawn: async (c: Context<AppEnv>): Promise<Response> => {
         const conversationId = conversationOf(services, c);
         if (conversationId === undefined) {
