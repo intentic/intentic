@@ -88,7 +88,8 @@ export const DEFAULT_HEAVY_COMMANDS: HeavyCommands = HeavyCommandsSchema.parse({
         // Never two at once, not even after the wait: overlapping is the measured peak (24.9 GiB against a 16 GiB cap),
         // and a verification that did not run costs a check the next land repeats.
         { id: "repo-verify", pattern: "\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?verify(:\\S+)?\\b", limit: 1, onDeadline: "skip" },
-        // A program's name joined to `.` or `-` is a file or another word (`vitest.config.ts`, `check-tsc.mjs`), not the program.
+        // A program's name joined to `.` or `-` is part of a file name or another word (a `vitest.config` file, a
+        // `check-tsc` script), not the program.
         { id: "vitest", pattern: "(?<![-.])\\bvitest\\b(?![-.])" },
         { id: "typechecker", pattern: "(?<![-.])\\b(tsc|tsgo|vue-tsc)\\b(?![-.])" },
         { id: "turbo-fanout", pattern: "\\bturbo\\b[^&|;]*\\brun\\b[^&|;]*\\b(build|test|typecheck|check)\\b" },
