@@ -456,6 +456,7 @@ const shared = (): Device => {
             home: `/home/ada`,
             roots: [`/home/ada`],
             engine: { memoryBytes: 20 * GIB, cpus: 12 },
+            features: [`reshape-later`],
         },
         sandboxes: [
             {
@@ -528,6 +529,19 @@ it(`saves the Resources form for the next restart instead of applying it`, async
     dialogButton(`Save for next restart`)?.click();
     await nextTick();
     expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape`, resources: { memoryGib: 18 }, later: true }]);
+});
+
+// An agent older than `later` drops it and reshapes at once, so a Save sent to it would restart the sandbox: not offered.
+it(`offers no Save for next restart on a device whose agent does not announce it`, async () => {
+    granted();
+    const device = shared();
+    const el = mount([{ ...device, facts: { ...device.facts!, features: [] } }]);
+    el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
+    await nextTick();
+    menuRow(`Resources…`)?.click();
+    await nextTick();
+    expect(everything()).toContain(`Resources for work`);
+    expect(dialogButton(`Save for next restart`)).toBeUndefined();
 });
 
 // A share already saved: the form opens on it, says so, and Apply now with nothing typed applies it as it is.

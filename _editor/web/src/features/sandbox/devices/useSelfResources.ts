@@ -1,4 +1,4 @@
-import { hostRunningSandbox } from "@intentic/sandbox-contract";
+import { DEVICE_FEATURE_RESHAPE_LATER, deviceSupports, hostRunningSandbox } from "@intentic/sandbox-contract";
 import type { DeviceSandboxResources, DeviceSandboxRow, EngineFacts, ResourcesAsk } from "@intentic/ui";
 import { computed, type ComputedRef, ref, type Ref } from "vue";
 import { manageDeviceSandbox, useDevices } from "./useDevices";
@@ -24,6 +24,11 @@ export interface SelfResources {
     readonly engine: ComputedRef<EngineFacts | undefined>;
     /** Whether a reshape could be sent at all: a reachable door, a slug, and a reported share to change. */
     readonly reshapable: ComputedRef<boolean>;
+    /**
+     * Whether the machine's agent can save a share for the next restart. An older one would drop `later` and restart
+     * the sandbox now, so Save is not offered for it at all.
+     */
+    readonly canSave: ComputedRef<boolean>;
     /** True while an apply is in flight; both callers disable their control on it. */
     readonly applying: Ref<boolean>;
     /**
@@ -58,6 +63,7 @@ export function useSelfResources(): SelfResources {
     const row = computed(() => door.value?.sandboxes?.find((box) => box.slug === slug.value));
     const current = computed(() => row.value?.resources);
     const engine = computed(() => door.value?.facts?.engine);
+    const canSave = computed(() => deviceSupports(door.value?.facts, DEVICE_FEATURE_RESHAPE_LATER));
 
     const applying = ref(false);
     // A share the machine never reported leaves the form nothing to open on, so there is nothing to offer either.
@@ -68,6 +74,9 @@ export function useSelfResources(): SelfResources {
         const name = slug.value;
         if (sendTo === undefined || name === undefined) {
             throw new Error(`This sandbox's machine is not connected, so its share can't be changed from here.`);
+        }
+        if (later && !canSave.value) {
+            throw new Error(`This machine's agent is too old to save a change for the next restart. Update its agent first.`);
         }
         applying.value = true;
         try {
@@ -83,5 +92,5 @@ export function useSelfResources(): SelfResources {
     const apply = async (ask: ResourcesAsk | undefined): Promise<string> => await send(ask, false);
     const save = async (ask: ResourcesAsk | undefined): Promise<string> => await send(ask, true);
 
-    return { hostId, slug, row, current, engine, reshapable, applying, apply, save, refetch };
+    return { hostId, slug, row, current, engine, canSave, reshapable, applying, apply, save, refetch };
 }

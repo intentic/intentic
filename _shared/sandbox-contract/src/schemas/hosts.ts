@@ -35,8 +35,16 @@ export const DeviceFactsSchema = z.object({
     // the rest are other sandboxes' addresses, and a sandbox has no business learning its siblings'. Absent from an
     // agent older than this field, which is why "none unreachable" is not the same value as "did not say".
     links: z.object({ total: z.number(), unreachable: z.number(), unreachableSince: z.number().optional() }).optional(),
+    // What this agent understands beyond the ops every agent has, so a caller can refuse up front rather than send a
+    // field an older agent drops without a word. Absent from an agent older than this field: it supports none of them.
+    features: z.array(z.string()).optional(),
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
+
+// `reshape` with `later`: save the change for the next restart. An agent without it strips `later` from the request and
+// reshapes NOW, restarting the sandbox and interrupting everyone in it, which is why a later-reshape is never sent to one.
+export const DEVICE_FEATURE_RESHAPE_LATER = "reshape-later";
+export const deviceSupports = (facts: Pick<DeviceFacts, "features"> | undefined, feature: string): boolean => facts?.features?.includes(feature) === true;
 
 // Docker Desktop's own distros: `wsl -l -q` lists them like any other, and none ever runs an agent or holds a checkout.
 export const WSL_SYSTEM_DISTROS: ReadonlySet<string> = new Set(["docker-desktop", "docker-desktop-data"]);

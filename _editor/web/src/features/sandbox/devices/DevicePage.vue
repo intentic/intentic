@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { hostEntryOf } from "@intentic/sandbox-contract";
+import { DEVICE_FEATURE_RESHAPE_LATER, deviceSupports, hostEntryOf } from "@intentic/sandbox-contract";
 import {
     Button,
     ConfirmDialog,
@@ -698,7 +698,7 @@ const confirmRemoval = (): void => {
             :current="ops.reshaping.value?.group.sandbox?.resources"
             :engine="manager?.device.facts?.engine"
             :self-warning="ops.reshaping.value !== undefined && ops.selfGroup(ops.reshaping.value.group)"
-            :can-save="true"
+            :can-save="deviceSupports(manager?.device.facts, DEVICE_FEATURE_RESHAPE_LATER)"
             @cancel="ops.reshaping.value = undefined"
             @apply="applyReshape"
             @save="saveReshape"

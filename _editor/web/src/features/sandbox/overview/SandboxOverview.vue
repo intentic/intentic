@@ -340,7 +340,7 @@ const removeLogo = async (): Promise<void> => {
             :current="selfResources.current.value"
             :engine="selfResources.engine.value"
             :self-warning="true"
-            :can-save="true"
+            :can-save="selfResources.canSave.value"
             @cancel="resizing = false"
             @apply="applyResize"
             @save="saveResize"

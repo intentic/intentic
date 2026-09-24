@@ -488,7 +488,14 @@ test("carries no container list at all when the machine refuses to list them", a
 
 // Fixture exposing both the flow sent to the machine and what this side minted, revoked or disconnected.
 const runnerServices = (
-    overrides: { publicUrl?: string; platformUrl?: string; online?: boolean; approved?: string; settings?: Record<string, unknown> } = {},
+    overrides: {
+        publicUrl?: string;
+        platformUrl?: string;
+        online?: boolean;
+        approved?: string;
+        settings?: Record<string, unknown>;
+        features?: string[];
+    } = {},
 ): { services: Services; sent: DeviceSandboxFlow[]; minted: string[]; revoked: string[]; disconnected: string[] } => {
     const sent: DeviceSandboxFlow[] = [];
     const minted: string[] = [];
@@ -516,6 +523,7 @@ const runnerServices = (
         },
         runnerHub: { disconnect: (id: string) => disconnected.push(id) },
         hostHub: {
+            state: () => ({ online: true, ...(overrides.features === undefined ? {} : { facts: { features: overrides.features } }) }),
             client:
                 overrides.online === false
                     ? () => undefined
@@ -554,6 +562,24 @@ test("a sandbox with no public address refuses rather than leaving a container w
     await expect(drain(manageDeviceSandbox(services, "rog", { op: "runner-up", slug: "rig" }))).rejects.toThrow(/public address/i);
     expect(minted).toEqual([]);
     expect(sent).toEqual([]);
+});
+
+// An agent that predates `later` strips it and reshapes at once: the save would restart the sandbox under everyone in it.
+test("saving a reshape for later is refused before it reaches an agent that does not say it can", async () => {
+    const { services, sent } = runnerServices();
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "reshape", slug: "work", resources: { gpu: true }, later: true }))).rejects.toThrow(
+        /too old.*Nothing was changed/,
+    );
+    expect(sent).toEqual([]);
+});
+
+test("saving a reshape for later reaches an agent that announces it, and an immediate reshape needs no announcement", async () => {
+    const { services, sent } = runnerServices({ features: ["reshape-later"] });
+    await drain(manageDeviceSandbox(services, "rog", { op: "reshape", slug: "work", resources: { gpu: true }, later: true }));
+    const old = runnerServices();
+    await drain(manageDeviceSandbox(old.services, "rog", { op: "reshape", slug: "work", resources: { gpu: true } }));
+    expect(sent).toEqual([{ op: "reshape", slug: "work", resources: { gpu: true }, later: true }]);
+    expect(old.sent).toEqual([{ op: "reshape", slug: "work", resources: { gpu: true } }]);
 });
 
 // Pairing injection applies only to `runner-up`; every other op passes through untouched.

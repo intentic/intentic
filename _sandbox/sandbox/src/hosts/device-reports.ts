@@ -9,6 +9,8 @@ import {
     type DeviceSandbox,
     type DeviceSandboxFlow,
     DeviceSandboxSchema,
+    DEVICE_FEATURE_RESHAPE_LATER,
+    deviceSupports,
     differentEnvironment,
     environmentOf,
     REPORT_QUIET_AFTER_MS,
@@ -369,6 +371,13 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
     if (client === undefined) {
         throw new ORPCError("CONFLICT", {
             message: `"${id}" is not connected right now, the device is asleep, offline, or its agent isn't running.`,
+        });
+    }
+    // An agent that predates `later` drops it and reshapes at once, restarting the sandbox under everyone working in it:
+    // the exact opposite of what Save promised. Refused here, before anything reaches the machine.
+    if (input.op === "reshape" && input.later === true && !deviceSupports(services.hostHub.state(id).facts, DEVICE_FEATURE_RESHAPE_LATER)) {
+        throw new ORPCError("CONFLICT", {
+            message: `The agent on "${id}" is too old to save a change for the next restart: it would restart the sandbox now instead. Nothing was changed. Update that device's agent, then save again.`,
         });
     }
     // Daemon-filled over the caller: reconnect/create name the minting platform, runner-up a dial URL and a pairing.

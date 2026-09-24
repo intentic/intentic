@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { arch, homedir, hostname, platform, release, type } from "node:os";
 import { promisify } from "node:util";
-import type { DeviceFacts, DeviceScopes } from "@intentic/sandbox-contract";
+import { DEVICE_FEATURE_RESHAPE_LATER, type DeviceFacts, type DeviceScopes } from "@intentic/sandbox-contract";
 import { type LinkReading, readLinkStates, unreachableIn } from "../config.js";
 import { rootsOf, rootsText } from "../policy.js";
 import { shellFor } from "./shell.js";
@@ -80,6 +80,7 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         ...(wsl === undefined ? {} : { wsl }),
         ...(distros === undefined ? {} : { wslDistros: distros }),
         ...(links === undefined ? {} : { links }),
+        features: [DEVICE_FEATURE_RESHAPE_LATER],
     };
 };
 
