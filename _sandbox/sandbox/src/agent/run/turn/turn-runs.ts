@@ -2,8 +2,9 @@ import { type AgentEvent, isTurnFact, type ParkedRequest, type TranscriptPatch, 
 import { TranscriptFold, type TurnEnding } from "@intentic/sandbox-contract/transcript-fold";
 import type { ConversationActors } from "../../../agents/actor/conversation-actors.js";
 import { type AttachEntry, type AttachHead, type LiveRun, RUN_RETAINED_MS, RUNS } from "../../../agents/actor/conversation-holdings.js";
+import type { BeginRefusal } from "../../../agents/actor/conversation-decide.js";
 import type { AwaitingKind, DomainEvents } from "../../../seams/domain-events.js";
-import type { TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
+import type { SentTurn, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import type { JournalledTurn } from "./turn-journal.js";
 import { recordCommands } from "../../providers/agent-commands.js";
 import { type FrameBacklog, frameBacklog } from "../../../seams/frame-backlog.js";
@@ -283,17 +284,20 @@ export interface RunDeps {
     readonly events: Pick<DomainEvents, "publish">;
 }
 
-// Starts a detached run for the conversation's turn, or undefined if one is already live (caller 409s). Owns the
-// generator: a thrown turn folds into the transcript as an error, so followers always see the run settle.
+// Starts a detached run for the conversation's turn, or names why not: one is live, or it is archived and no person sent
+// this turn, which leaves no run behind. A thrown turn folds into the transcript as an error, so followers see it settle.
 export function startTurnRun(
     deps: RunDeps,
     turnFn: TurnStarter["stream"],
-    input: TurnInput & { readonly conversationId: string },
+    input: SentTurn & { readonly conversationId: string },
     { observer, journalled = false, opening, transcript, before, attempts = 0, holdTurnedAway }: RunOptions = {},
-): TurnRun | undefined {
+): TurnRun | BeginRefusal {
+    if (!deps.conversations.send(input.conversationId, { kind: "open-asked", byPerson: input.byPerson }).reply) {
+        return "archived";
+    }
     const runs = deps.conversations.holdings(RUNS);
     if (runs.get(input.conversationId)?.done === false) {
-        return undefined;
+        return "busy";
     }
     const startedAt = Date.now();
     const run = new TurnRun(opening?.(startedAt) ?? [], startedAt);

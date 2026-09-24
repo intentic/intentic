@@ -6,8 +6,9 @@ import type { MenuItem } from "primevue/menuitem";
 import { type ComponentPublicInstance, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { startAgent } from "../../agents/fleet/agentActions";
-import { turnInFlight } from "../../agents/fleet/agentStatus";
+import { laneOf, turnInFlight } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
+import { canArchive } from "../../agents/fleet/useAgents-fleet";
 import OriginMark from "../../../components/OriginMark.vue";
 import RailColumn from "../../../components/RailColumn.vue";
 import { statusIcon, statusLabel, statusTabClass } from "../models/catalog";
@@ -36,14 +37,28 @@ const emit = defineEmits<{
     open: [id: string];
 }>();
 
-const { conversations, active, activeId, panes, openBeside, closePane, sessions, sessionsFailure, loadSessions, keepChat } = useChat();
-const { agentById, rename } = useAgents();
+const {
+    conversations,
+    active,
+    activeId,
+    panes,
+    openBeside,
+    closePane,
+    sessions,
+    sessionsFailure,
+    loadSessions,
+    keepChat,
+    setPinned,
+    reopenClosed,
+    hasClosed,
+} = useChat();
+const { agentById, rename, archive, fleet, open: openAgent } = useAgents();
 const { floats } = useChatFloating();
 const router = useRouter();
 // Tooltip and accessible name in one string; hidden where the panel already floats.
-const floatHint = computed(() => withShortcut(`Move chat into new window`, `chat.toggleFloating`));
+const floatHint = computed(() => withShortcut(t(`shared.moveChatIntoNewWindow`), `chat.toggleFloating`));
 // Moves the chat's home to the rail (a tile); return paths live on the tile itself and this bar's own menu.
-const railHint = computed(() => withShortcut(`Dock chat to rail: full window, behind a rail tile`, `chat.toggleHome`));
+const railHint = computed(() => withShortcut(t(`chat.chatTabs.dockChatToRailHint`), `chat.toggleHome`));
 
 // On a wide surface the bar stands up as a left rail with the list always open, trading width the chat has for
 // the height it's short of. Docked (~22rem) is too narrow for a permanent rail, so the list lives in a sheet.
@@ -174,19 +189,30 @@ const barVerbs = (): MenuItem[] => [
         command: () => emit(`close`, tabsInLane(`finished`)),
     },
     { label: t(`shared.closeAll2`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
+    { label: t(`shared.reopenClosedChat`), disabled: !hasClosed.value, shortcut: commandShortcut(`chat.reopenClosed`), command: () => reopenClosed() },
     { separator: true },
     // The chat's other two homes, in the header buttons' own order: move within this window, then leave it.
     {
-        label: chatOnRail.value ? `Dock chat back to the side` : `Dock chat to rail`,
+        label: chatOnRail.value ? t(`shell.shellDesktop.dockChatBackTo`) : t(`shared.dockChatToRail`),
         shortcut: commandShortcut(`chat.toggleHome`),
         command: (): void => toggleChatHome(router),
     },
     {
-        label: floats.value ? `Dock chat back` : `Move chat into new window`,
+        label: floats.value ? t(`shared.dockChatBack`) : t(`shared.moveChatIntoNewWindow`),
         shortcut: commandShortcut(`chat.toggleFloating`),
         command: (): void => toggleChatFloating(),
     },
 ];
+
+// The next chat waiting on the reader after the focused one, open or not, in the board's own attention order.
+const nextNeedsYou = (): void => {
+    const waiting = fleet.value.filter((agent) => agent.sandboxId === undefined && laneOf(agent) === `attention`);
+    const at = waiting.findIndex((agent) => agent.id === activeId.value);
+    const next = waiting[(at + 1) % Math.max(waiting.length, 1)];
+    if (next !== undefined && next.id !== activeId.value) {
+        openAgent(next);
+    }
+};
 // One array for every closed menu, and the verbs above are read only while it is up: built unconditionally they
 // rebuild on every conversation change — a keystroke's worth — and a rebuilt model redraws the menu and its portal.
 const NO_ITEMS: MenuItem[] = [];
@@ -304,6 +330,39 @@ onMounted(() => {
             keybinding: `Ctrl+Shift+Backspace`,
             when: `tabSurface == 'chat'`,
             handler: () => emit(`close`, allTabs()),
+        },
+        {
+            // Unbound, like Close Finished: palette and Keybindings reach it, and no chord is left free for it.
+            command: `chat.togglePin`,
+            title: t(`chat.chatTabs.togglePin`),
+            icon: `pin`,
+            when: `tabSurface == 'chat'`,
+            handler: () => setPinned(activeId.value, !active.value.pinned.value),
+        },
+        {
+            command: `chat.archive`,
+            title: t(`chat.chatTabs.archiveChat`),
+            icon: `box`,
+            when: `tabSurface == 'chat'`,
+            handler: (): void => {
+                const agent = agentById(activeId.value);
+                if (active.value.box.value === undefined && agent !== undefined && canArchive(agent)) {
+                    void archive([agent.id]);
+                }
+            },
+        },
+        {
+            command: `chat.reopenClosed`,
+            title: t(`shared.reopenClosedChat`),
+            icon: `history`,
+            when: `tabSurface == 'chat'`,
+            handler: () => void reopenClosed(),
+        },
+        {
+            command: `chat.nextNeedsYou`,
+            title: t(`chat.chatTabs.nextNeedsYou`),
+            icon: `exclamation-circle`,
+            handler: () => nextNeedsYou(),
         },
         { command: `chat.nextTab`, title: t(`ui.action.next`), keybinding: `Alt+PageDown`, when: `tabSurface == 'chat'`, handler: () => cycleTab(1) },
         {

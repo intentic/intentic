@@ -701,6 +701,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         startTurnRun({ conversations: actors, events: createDomainEvents(() => {}) }, forever, {
             conversationId: parent.conversationId,
             prompt: "parent",
+            byPerson: true,
         });
         return { release };
     };

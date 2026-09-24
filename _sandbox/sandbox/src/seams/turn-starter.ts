@@ -15,6 +15,7 @@ import type {
     StopResult,
     StopTurn,
 } from "@intentic/sandbox-contract";
+import type { BeginRefusal } from "../agents/actor/conversation-decide.js";
 import type { QueueChange } from "../agents/actor/conversation-queue.js";
 
 // How a subsystem starts or drives a conversation's turn without importing the turn engine: it names this port in its
@@ -35,6 +36,10 @@ export type TurnInput = AgentTurn & {
     readonly resume?: ResumeReason | undefined;
 };
 
+// A turn as a door starts it: `byPerson` is the say-so that opens an archived conversation. Off TurnInput, so a held,
+// journalled or queued copy of a turn never replays a person's say-so: whoever sends it again decides.
+export type SentTurn = TurnInput & { readonly byPerson: boolean };
+
 // Who is speaking into a live turn; only a person proves somebody is at the composer.
 export type SteerVoice = "person" | "sandbox" | "agent";
 
@@ -54,6 +59,10 @@ export interface Steer {
 // Why a person's words reached no turn: none that takes words is live (`why` says which way), or a reference escapes the
 // workspace (`invalid` names it).
 export type Unsteered = { readonly why: string } | { readonly invalid: string };
+
+// Why words went nowhere, not even the queue: a reference escapes the workspace (`invalid` names it), or the conversation
+// is archived and they are not a person's (`why` says so).
+export type Unsaid = { readonly invalid: string } | { readonly why: string };
 
 // Words for a conversation from whoever speaks, and the turn they start should they start one.
 export interface Said {
@@ -80,21 +89,22 @@ export interface StartOptions {
 }
 
 export interface TurnStarter {
-    // The detached start every daemon-started turn takes: journalled, recorded, announced; undefined while a turn
-    // already runs on the conversation.
-    readonly start: (turn: TurnInput & { readonly conversationId: string }, options?: StartOptions) => Promise<StartedRun | undefined>;
-    // Re-runs the turn a wall holds for the conversation, re-routed where `routing` names it; undefined when none is held.
-    readonly resume: (conversationId: string, routing?: ResumeRouting) => Promise<StartedRun | undefined>;
+    // The detached start every daemon-started turn takes: journalled, recorded, announced; the refusal instead while a
+    // turn already runs on the conversation, or while it is archived and no person sent this one.
+    readonly start: (turn: SentTurn & { readonly conversationId: string }, options?: StartOptions) => Promise<StartedRun | BeginRefusal>;
+    // Re-runs the turn a wall holds for the conversation, re-routed where `routing` names it; undefined when none is held
+    // or its start was refused.
+    readonly resume: (conversationId: string, byPerson: boolean, routing?: ResumeRouting) => Promise<StartedRun | undefined>;
     // A detached run its starter reads, recorded to the conversation but neither journalled, pinned nor announced: a
     // loop keeps those books itself.
-    readonly run: (turn: TurnInput & { readonly conversationId: string }) => StartedRun | undefined;
+    readonly run: (turn: SentTurn & { readonly conversationId: string }) => StartedRun | BeginRefusal;
     // The turn itself, for a caller folding its own frames (an automation's fire, a runner's dispatched turn).
-    readonly stream: (turn: TurnInput, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
+    readonly stream: (turn: SentTurn, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
     // Words into the live turn: `invalid` names a reference escaping the workspace, false means no steerable turn.
     readonly steer: (conversationId: string, steer: Steer) => Promise<boolean | { readonly invalid: string }>;
-    // Words for the conversation: said into the live turn where it takes them, a turn of their own when nothing runs, and
-    // otherwise queued for the next; the same message id twice gets the first answer back.
-    readonly say: (said: Said) => Promise<MessageReceipt | { readonly invalid: string }>;
+    // Words said into the live turn, a turn of their own, or queued for the next; one message id twice gets the first
+    // answer back, and only a person's words reach an archived conversation.
+    readonly say: (said: Said) => Promise<MessageReceipt | Unsaid>;
     // A person's message into the live turn and nowhere else, drawn as their row and answered the same way.
     readonly steerIn: (conversationId: string, steer: Omit<Steer, "voice" | "outside">) => Promise<MessageReceipt | Unsteered>;
     // Lets out what waits in the conversation's queue, as far as anything can take it now.

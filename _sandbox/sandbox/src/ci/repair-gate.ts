@@ -83,6 +83,7 @@ const act = async (services: Services, key: string, fetchFn: FetchFn): Promise<v
             project: entry.project,
             runId: entry.streak.firstRunId,
             evidence: entry.evidence,
+            byPerson: false,
             preface: `Nobody pressed Fix: ${entry.branch} has stayed red on this failure for ${entry.streak.runs} run(s) and nothing newer is running, so this is the failure ${entry.branch} stands on. The logs are from its newest run, ${entry.streak.runId}.`,
         },
         fetchFn,

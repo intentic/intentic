@@ -52,6 +52,10 @@ export interface StoredTab {
     readonly forkOf?: ForkLink;
     // Only being looked at (Conversation.peek); also read by the docked/popped-window handoff, not just reload.
     readonly peek?: boolean;
+    // Held on purpose (Conversation.pinned); reopening a closed pinned chat keeps it held.
+    readonly pinned?: boolean;
+    // When focus last left the chat, so the tidy clock survives a reload (Conversation.leftAt).
+    readonly leftAt?: number;
     // The panel's fallback blank; losing it on handoff boards a fresh, selected "New agent" card.
     readonly standIn?: boolean;
     // The daemon's account of the agent when its card opened this chat, so a window whose roster hasn't answered
@@ -86,6 +90,8 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     session: conversation.session.value,
     forkOf: conversation.pendingForkOf.value,
     peek: conversation.peek.value,
+    pinned: conversation.pinned.value,
+    leftAt: conversation.leftAt.value,
     standIn: conversation.standIn.value,
     standing: conversation.standing.value,
     title: conversation.title.value ?? undefined,
@@ -147,6 +153,8 @@ const StoredTabSchema: z.ZodType<StoredTab> = z.object({
     session: maybe(SessionSchema),
     forkOf: maybe(z.object({ conversationId: z.string().min(1), keep: z.number().int().nonnegative(), files: z.enum([`then`, `now`]) })),
     peek: flag,
+    pinned: flag,
+    leftAt: maybe(z.number()),
     standIn: flag,
     // A status and the whole attention block, since `laneOf` reads every flag; the rest rides along as stored.
     standing: maybe(z.looseObject({ status: z.string().min(1), attention: z.looseObject({}) }).transform((raw) => raw as unknown as AgentStanding)),

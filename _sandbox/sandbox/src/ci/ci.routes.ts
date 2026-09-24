@@ -110,6 +110,7 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                         ...opt("areas", areasOf(context.identity)),
                     },
                     picked: input.pick !== undefined,
+                    byPerson: true,
                     resume: input.mode,
                 },
                 fetchFn,

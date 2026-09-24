@@ -32,6 +32,8 @@ export interface TabFacts {
     readonly unsent: boolean;
     // When the composer first held something (Conversation.draftAt), for an age readout.
     readonly draftAt?: number;
+    // When focus last left the chat (Conversation.leftAt), for the rail's tidy clock.
+    readonly leftAt?: number;
     // What this browser knows about an unfiled turn; present only while `starting`.
     readonly turn?: TurnFacts;
 }
@@ -101,6 +103,7 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
         model: conversation.selection.model.value,
         unsent: conversation.unsent.value,
         draftAt: conversation.draftAt.value,
+        leftAt: conversation.leftAt.value,
         turn: standing === `starting` ? turnFacts(conversation) : undefined,
     };
 };

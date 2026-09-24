@@ -2,7 +2,7 @@ import type { AutomationApproval, WorkflowRun } from "@intentic/sandbox-contract
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref } from "vue";
 import type { FleetLane } from "../../fleet/agentStatus";
-import { FINISHED_WINDOW, type FleetAgent, windowFinished } from "../../fleet/useAgents-fleet";
+import { canArchive, FINISHED_WINDOW, type FleetAgent, windowFinished, withKeptWords } from "../../fleet/useAgents-fleet";
 import { insideRun, runMatches, runsInLane, runsNeedingYou } from "../../fleet/useWorkflowRuns";
 import type { DropTarget } from "../laneDrop";
 import { type BoardView, windowedIn } from "./boardView";
@@ -93,7 +93,9 @@ export const useBoardLanes = (host: LanesHost) => {
         return runsInLane(liveRuns.value, lane, windowed.value ? FINISHED_WINDOW : Number.POSITIVE_INFINITY, needingYou.value);
     };
     // A run's steps are filed away with the run, or the archive would show one run row plus its five conversations.
-    const archivedCards = computed(() => agents.archived.value.filter((agent) => !insideRun(agent, scope.ledgerRunIds.value)));
+    const archivedCards = computed(() =>
+        agents.archived.value.filter((agent) => !insideRun(agent, scope.ledgerRunIds.value)).map(withKeptWords),
+    );
     // How many rows the archive would draw: a run with four steps counts as one row there, not five.
     const archiveSize = computed(() => archivedCards.value.length + scope.archivedRunRows.value.length);
     // Filters the whole pile first, then pages the result, never the reverse, or a match nine hundred rows down reads as none.
@@ -160,8 +162,8 @@ export const useBoardLanes = (host: LanesHost) => {
     const noMatches = computed(
         () => filter.active.value && !filter.partial.value && !view.value.archive && kept.value === 0 && beyondCount.value === 0,
     );
-    // Finished holds exactly the archivable set by construction, so Clear shows only when it would do something.
-    const clearable = computed(() => agents.lanes.value.finished.length);
+    // Counted off the very ids Clear sends, so the button never offers a sweep that would move nothing.
+    const clearable = computed(() => agents.lanes.value.finished.filter(canArchive).length);
     const screen = computed(() => boardScreen(started.value, total.value, view.value.archive));
     const paneOrder = computed(() => LANE_ORDER.flatMap((lane) => cardsFor(lane)));
     const laneDropClass = (lane: FleetLane): string =>

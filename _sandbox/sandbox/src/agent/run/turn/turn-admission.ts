@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
 import { MENTION_LIMIT, type MessageReceipt } from "@intentic/sandbox-contract";
+import type { BeginRefusal } from "../../../agents/actor/conversation-decide.js";
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../agents/actor/conversation-holdings.js";
 import type { QueuedItem } from "../../../agents/actor/conversation-queue.js";
 import { cardsParkedOn } from "../../../agents/actor/parked-cards.js";
 import { worktreeOf } from "../../../agents/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
-import type { Said, Steer, TurnInput, TurnStarter, Unsteered } from "../../../seams/turn-starter.js";
+import type { Said, Steer, TurnInput, TurnStarter, Unsaid, Unsteered } from "../../../seams/turn-starter.js";
 import { recordConversationPrompt, recordPrompt } from "../../../sessions/transcript-search.js";
 import { steerTurn } from "../../checkpoints/agent-steering.js";
 import { checkpointSteeredMessage } from "../../checkpoints/steer-checkpoints.js";
@@ -25,6 +26,8 @@ type Turn = TurnInput & { readonly conversationId: string };
 type PersonSteer = Omit<Steer, "voice" | "outside">;
 
 const NOT_STEERABLE: Unsteered = { why: "no steerable turn running for that conversation" };
+
+const ARCHIVED: Unsaid = { why: "the conversation is archived, and only a person's message reopens it" };
 
 // Hands the words to the live turn wherever it runs: composed against this workspace for a local one, uncomposed to a
 // runner's, whose paths resolve only in its own workspace.
@@ -205,16 +208,28 @@ export const createAdmission = (
         }
     };
 
-    // Starts the turn a batch makes; a person's is watched until it settles, since a refusal at the door hands its words
-    // back to the queue rather than the sandbox holding the turn.
-    const startWith = async (batch: readonly Omit<QueuedItem, "revision">[], turn: Turn): Promise<string | undefined> => {
+    // Starts the turn a batch makes, a person's only if its words are; a person's is watched until it settles, since a
+    // refusal at the door hands its words back to the queue rather than the sandbox holding the turn.
+    const startWith = async (batch: readonly Omit<QueuedItem, "revision">[], turn: Turn): Promise<string | BeginRefusal> => {
         const person = batch[0]?.voice === "person";
-        const started = await start(turn, { senderKeeps: person });
-        const run = started === undefined ? undefined : turnRunOf(services().conversations, turn.conversationId);
-        if (person && run?.id === started?.id && run !== undefined) {
+        const started = await start({ ...turn, byPerson: person }, { senderKeeps: person });
+        if (typeof started === "string") {
+            return started;
+        }
+        const run = turnRunOf(services().conversations, turn.conversationId);
+        if (person && run?.id === started.id && run !== undefined) {
             carrying.set(turn.conversationId, [...(carrying.get(turn.conversationId) ?? []), { run, batch }]);
         }
-        return started?.id;
+        return started.id;
+    };
+
+    // The sandbox's words a conversation archived since they were queued: dropped, since only a person reopens it.
+    const dropArchived = (conversationId: string, batch: readonly QueuedItem[]): void => {
+        const daemon = services();
+        for (const item of batch) {
+            daemon.conversations.send(conversationId, { kind: "queue-removed", id: item.id, revision: item.revision });
+        }
+        daemon.logger.info({ conversationId, messages: batch.length }, "admission: the conversation is archived, the sandbox's waiting words were dropped");
     };
 
     // Whether anything waiting may go out now: a hold keeps it, and so does a recovery the daemon runs by itself or a rewind
@@ -244,7 +259,11 @@ export const createAdmission = (
         }
         const batch = together(items);
         const run = await startWith(batch, turnOf(daemon, batch));
-        if (run === undefined) {
+        if (run === "archived") {
+            dropArchived(conversationId, batch);
+            return new Map();
+        }
+        if (run === "busy") {
             return undefined;
         }
         daemon.conversations.send(conversationId, { kind: "queue-taken", ids: batch.map((item) => item.id) });
@@ -267,7 +286,7 @@ export const createAdmission = (
     };
 
     // A message said into the live turn, when it takes words now; undefined when it has to wait.
-    const intoLive = async (item: Omit<QueuedItem, "revision">, live: LiveRun | undefined): Promise<MessageReceipt | { readonly invalid: string } | undefined> => {
+    const intoLive = async (item: Omit<QueuedItem, "revision">, live: LiveRun | undefined): Promise<MessageReceipt | Unsaid | undefined> => {
         const daemon = services();
         if (!takesWords(daemon, item.turn.conversationId)) {
             return undefined;
@@ -280,8 +299,8 @@ export const createAdmission = (
     };
 
     // Where a message goes when nothing waits ahead of it: into the live turn where it takes words, a turn of its own when
-    // nothing runs; undefined when it has to wait, `invalid` when its references escape the workspace.
-    const deliverNow = async (item: Omit<QueuedItem, "revision">): Promise<MessageReceipt | { readonly invalid: string } | undefined> => {
+    // nothing runs; undefined when it has to wait, `Unsaid` when it can go nowhere.
+    const deliverNow = async (item: Omit<QueuedItem, "revision">): Promise<MessageReceipt | Unsaid | undefined> => {
         const daemon = services();
         const { conversationId } = item.turn;
         if (goesFirst(daemon, conversationId)) {
@@ -293,13 +312,20 @@ export const createAdmission = (
         }
         // Its own turn, as its sender asked for it, session and all.
         const run = await startWith([item], requestOf(item));
-        return run === undefined ? undefined : { delivered: "started", run };
+        if (run === "archived") {
+            return ARCHIVED;
+        }
+        return run === "busy" ? undefined : { delivered: "started", run };
     };
 
     // A message nothing waits ahead of goes straight where it can; any other joins the queue, which then lets out what it
-    // can, this message among it or not.
-    const admit = async (item: Omit<QueuedItem, "revision">): Promise<MessageReceipt | { readonly invalid: string }> => {
+    // can, this message among it or not. The sandbox's words for an archived conversation join nothing.
+    const admit = async (item: Omit<QueuedItem, "revision">): Promise<MessageReceipt | Unsaid> => {
         const { conversationId } = item.turn;
+        if (!services().conversations.send(conversationId, { kind: "open-asked", byPerson: item.voice === "person" }).reply) {
+            services().logger.info({ conversationId, voice: item.voice }, "admission: the conversation is archived, the sandbox's words go nowhere");
+            return ARCHIVED;
+        }
         const queue = services().conversations.queued(conversationId);
         const now = queue.items.length === 0 && queue.paused === undefined ? await deliverNow(item) : undefined;
         if (now !== undefined) {
@@ -344,7 +370,7 @@ export const createAdmission = (
                 }
                 const item = named(said);
                 const receipt = await admit(item);
-                if (!("invalid" in receipt)) {
+                if ("delivered" in receipt) {
                     kept(conversationId, new Map([[item.id, receipt]]));
                 }
                 return receipt;

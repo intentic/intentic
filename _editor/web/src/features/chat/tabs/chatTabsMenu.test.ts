@@ -168,6 +168,7 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
     // Right-click the second tab: "Close to the Right" takes the two after it, leaving the first two.
     await openMenuOn(1);
     expect(labels()).toEqual([
+        `Pin`,
         `Rename`,
         `Share…`,
         `Close`,
@@ -217,7 +218,7 @@ it(`offers the card-less rows from the bar's own menu instead of popping out on 
     // Right-click used to toggle the pop-out on the spot; it opens this menu instead, carrying the rows that need
     // no tab under the pointer.
     await openBarMenu();
-    expect(labels()).toEqual([`Close Finished`, `Close All`, `Dock chat to rail`, `Move chat into new window`]);
+    expect(labels()).toEqual([`Close Finished`, `Close All`, `Reopen closed chat`, `Dock chat to rail`, `Move chat into new window`]);
     expect(open).not.toHaveBeenCalled();
 
     // Close All means here what it means on a tab: the strip comes back as one fresh conversation.
@@ -252,7 +253,7 @@ it(`opens the tab menu from the ✚ / history pair beside the strip, not the bro
     await nextTick();
 
     expect(await openMenuOnNewChatButton()).toBe(true);
-    expect(labels()).toEqual([`Close Finished`, `Close All`, `Dock chat to rail`, `Move chat into new window`]);
+    expect(labels()).toEqual([`Close Finished`, `Close All`, `Reopen closed chat`, `Dock chat to rail`, `Move chat into new window`]);
 });
 
 // "Clear the done ones" can't be said by Close Others or Close to the Right, since finished tabs are scattered
@@ -293,4 +294,60 @@ it(`mass closes past a running agent with no confirm: closing detaches from the 
 
     expect(document.querySelector(`.p-dialog`)).toBeNull();
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!]);
+});
+
+// A pinned chat is the one no sweep takes: Close Others and Close All pass it by, and it says so at rest.
+it(`pins a chat from its menu, and every sweep leaves the pinned one standing`, async () => {
+    const chat = useChat();
+    const ids = openTabs(3);
+    await nextTick();
+
+    await openMenuOn(0);
+    await clickRow(`Pin`);
+    expect(chat.conversations.value[0]!.pinned.value).toBe(true);
+    expect(tabs()[0]!.querySelector(`[aria-label="Pinned"]`)).not.toBeNull();
+
+    await openMenuOn(2);
+    await clickRow(`Close Others`);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!, ids[2]!]);
+
+    await openBarMenu();
+    await clickRow(`Close All`);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!]);
+
+    await openMenuOn(0);
+    expect(labels()).toContain(`Unpin`);
+});
+
+// The row's own Close still takes a pinned chat: pinning guards against sweeps, not against the reader.
+it(`closes a pinned chat from its own Close`, async () => {
+    const chat = useChat();
+    const ids = openTabs(2);
+    chat.setPinned(ids[0]!, true);
+    await nextTick();
+
+    await openMenuOn(0);
+    await clickRow(`Close`);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[1]!]);
+});
+
+it(`reopens the chat closed last, words and pin included, and disables the row once nothing is left`, async () => {
+    const chat = useChat();
+    const ids = openTabs(2);
+    chat.setPinned(ids[0]!, true);
+    await nextTick();
+
+    await openMenuOn(0);
+    await clickRow(`Close`);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[1]!]);
+
+    await openBarMenu();
+    await clickRow(`Reopen closed chat`);
+    const back = chat.conversations.value.find((c) => c.conversationId === ids[0]!);
+    expect(back?.draft.value).toBe(`pinned 0`);
+    expect(back?.pinned.value).toBe(true);
+    expect(chat.activeId.value).toBe(ids[0]!);
+
+    await openBarMenu();
+    expect(row(`Reopen closed chat`).className).toContain(`p-disabled`);
 });

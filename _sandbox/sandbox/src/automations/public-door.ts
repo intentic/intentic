@@ -87,7 +87,7 @@ const admission = <Config>(spec: PublicDoorSpec<Config>, automation: AutomationR
 };
 
 export const createPublicDoor = <Config>(
-    services: Pick<Services, "automations" | "threadSessions" | "workspace" | "doorTokens">,
+    services: Pick<Services, "agents" | "automations" | "threadSessions" | "workspace" | "doorTokens">,
     spec: PublicDoorSpec<Config>,
     installs: InstallsStore = fileInstallsStore(spec.installs(services.workspace.root)),
 ): PublicDoor<Config> => {
@@ -113,6 +113,15 @@ export const createPublicDoor = <Config>(
         return { automation, config };
     };
 
+    // The thread's own conversation, unless it was archived: only a person reopens that one, so the thread starts afresh.
+    const mintedOn = (conversationId: string, now: number): string => {
+        if (services.agents.entry(conversationId)?.archivedAt === undefined) {
+            return conversationId;
+        }
+        const suffix = now.toString(36);
+        return `${conversationId.slice(0, CONVERSATION_ID_MAX - suffix.length - 1)}-${suffix}`;
+    };
+
     const thread = (automationId: string, channelId: string): { key: string; conversationId: string } => ({
         key: threadKey(spec.provider, automationId, channelId),
         conversationId: `${spec.conversationPrefix}-${automationId}-${channelId}`.replaceAll(/[^a-zA-Z0-9_-]/g, "-").slice(0, CONVERSATION_ID_MAX),
@@ -126,7 +135,7 @@ export const createPublicDoor = <Config>(
         thread,
         fireOnThread: async (automation, threadOf, ttlMs, options, onOpened) => {
             const now = Date.now();
-            const session = await services.threadSessions.open(threadOf.key, () => threadOf.conversationId, ttlMs, now);
+            const session = await services.threadSessions.open(threadOf.key, () => mintedOn(threadOf.conversationId, now), ttlMs, now);
             await onOpened?.(session.conversationId);
             const settled = await fireAutomation(services as Services, automation, {
                 ...options,

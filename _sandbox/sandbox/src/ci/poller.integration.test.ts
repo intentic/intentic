@@ -70,7 +70,7 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         ciHooks: unstubbed<Services["ciHooks"]>("ciHooks", {
             warnings: () => new Map(warned ? [["web", { reason: "Pipeline webhooks are off: this sandbox has no public URL." }]] : []),
         }),
-        threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
+        threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json"), () => false),
         senders: fileSendersStore(join(root, `${STATE_DIR}`, "records", "senders.json")),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),

@@ -979,9 +979,19 @@
             "notSignedInYet": ", sin sesión iniciada todavía"
         },
         "chatPersonaRail": {
-            "newChat": "Chat nuevo como",
-            "open": "Abrir {conversation}",
-            "showSChats": "Mostrar los chats de {label}"
+            "archiveFinishedOf": "Archivar los agentes terminados de {label}",
+            "chats": "{count} chat | {count} chats",
+            "closeAllOf": "Cerrar todos los chats de {label}",
+            "closeFinishedOf": "Cerrar los chats terminados de {label}",
+            "editPersona": "Editar persona…",
+            "more": "Más de {label}",
+            "moreOnBoard": "{count} más en el tablero",
+            "needsYou": "{count} te necesita | {count} te necesitan",
+            "newChatAs": "Chat nuevo como {label}",
+            "notOpen": "{count} sin abrir | {count} sin abrir",
+            "showSChats": "Mostrar los chats de {label}",
+            "startAs": "Empezar un chat como {label}",
+            "working": "{count} en curso | {count} en curso"
         },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "Esta conversación ya se ejecuta {placedAt}. Inicia un agente nuevo para trabajar en otro sitio.",
@@ -1106,29 +1116,43 @@
         },
         "chatTabList": {
             "anotherSandbox": "otro sandbox",
+            "archive": "Archivar",
+            "clearActive": "Cerrar {count} chat en curso | Cerrar los {count} chats en curso",
+            "clearAttention": "Cerrar {count} chat en espera | Cerrar los {count} chats en espera",
+            "clearFinished": "Cerrar {count} chat terminado | Cerrar los {count} chats terminados",
             "closeAll": "Cerrar todos los {size}: {keeps}",
             "everyConversationWindowHolds": "Todas las conversaciones que sostiene esta ventana, por lo que te necesita",
             "filterChatsByMessages": "Filtrar chats por tus mensajes",
+            "keepsActive": "sus turnos siguen en marcha",
+            "keepsAttention": "siguen esperando en el tablero",
+            "keepsFinished": "se quedan en los chats anteriores",
             "noMatches": "Sin coincidencias",
             "notOpen": "No abierto",
             "openBeside": "Abrir al lado",
             "openWorkflowRun": "Abrir la ejecución del flujo de trabajo {name}",
             "peopleSandboxPickOne": "Las personas que puede ser este sandbox: elige una y habla con ella",
+            "pin": "Fijar",
+            "pinned": "Fijado",
             "runsIn": "Se ejecuta en {sandbox}",
             "runsInQuoted": "Se ejecuta en «{sandbox}»",
             "share": "Compartir…",
-            "steps": "pasos"
+            "steps": "pasos",
+            "unpin": "Dejar de fijar"
         },
         "chatTabs": {
+            "archiveChat": "Archivar el chat",
             "chatHistory": "Historial del chat",
+            "dockChatToRailHint": "Acoplar el chat a la barra: ventana completa, tras un mosaico de la barra",
             "history": "Historial",
             "need": "{attentionCount} te necesitan",
+            "nextNeedsYou": "Siguiente chat que te necesita",
             "openNextBeside": "Abrir el siguiente al lado",
             "pastChats": "Chats anteriores",
             "previous": "Anterior",
             "running": "{runningCount} en marcha",
             "switch": "Cambiar…",
             "switchChatOpen": "Cambiar de chat: {count} abiertos",
+            "togglePin": "Fijar o dejar de fijar el chat",
             "waiting": "{attentionCount} te esperan"
         },
         "chatTodoList": {
@@ -3599,7 +3623,11 @@
         "worthBetterModelThan": "Merece un modelo mejor que el resto de tareas automáticas: lee el comando como datos, y en un turno que ha absorbido algo de fuera, ese texto puede estar argumentando a favor de su propia aprobación.",
         "worthKnowing": "Conviene saber",
         "writeSkill": "Escribir una skill",
-        "you": "tú"
+        "you": "tú",
+        "moveChatIntoNewWindow": "Mover el chat a una ventana nueva",
+        "dockChatBack": "Volver a acoplar el chat",
+        "dockChatToRail": "Acoplar el chat a la barra",
+        "reopenClosedChat": "Reabrir el chat cerrado"
     },
     "shell": {
         "accountPanel": {

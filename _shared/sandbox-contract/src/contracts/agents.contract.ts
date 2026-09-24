@@ -1,7 +1,6 @@
 import { procedure } from "../protocol/route-meta.js";
 import { AgentToolChildrenSchema, AgentTranscriptSchema } from "../events/transcript.js";
 import {
-    AgentArchiveSchema,
     AgentAssignSchema,
     AgentAutoLandSchema,
     AgentBreakPolicySchema,
@@ -319,7 +318,7 @@ export const agentsContract = {
                 "The gentle counterpart to discarding. Commits whatever the conversation still has in progress onto its own branch, releases its working copy, and keeps the entry and the record. Its scratch is not committed and goes with the copy. It leaves the live fleet and joins the archive. Refused for a conversation that is running.",
         })
         .meta({ floor: "collaborator", guest: true })
-        .input(AgentArchiveSchema)
+        .input(AgentIdsSchema)
         .output(AgentsArchivedSchema),
     unarchive: procedure
         .route({

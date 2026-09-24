@@ -424,6 +424,34 @@ describe("the conversation's queue", () => {
     });
 });
 
+// Only a person reopens an archived conversation: the sandbox's own words go nowhere, and a person's message brings it back.
+describe("an archived conversation", () => {
+    it("takes the sandbox's words nowhere, not even into its queue, and stays archived", async () => {
+        const daemon = services();
+        const client = clientFor(createApp(daemon));
+        await runAgentTurn(client, { prompt: "draft the release notes", conversationId: "conv-filed" });
+        await client.agents.archive({ ids: ["conv-filed"] });
+
+        expect(await daemon.turns.say({ voice: "sandbox", turn: { prompt: "The watch fired.", conversationId: "conv-filed" } })).toEqual({
+            why: "the conversation is archived, and only a person's message reopens it",
+        });
+        expect(daemon.conversations.running("conv-filed")).toBe(false);
+        expect(daemon.conversations.queued("conv-filed").items).toEqual([]);
+        expect((await client.agents.archived()).agents.map((agent) => agent.id)).toEqual(["conv-filed"]);
+    });
+
+    it("comes back onto the board with a person's message, which starts its turn", async () => {
+        const daemon = services();
+        const client = clientFor(createApp(daemon));
+        await runAgentTurn(client, { prompt: "draft the release notes", conversationId: "conv-reopened" });
+        await client.agents.archive({ ids: ["conv-reopened"] });
+
+        await runAgentTurn(client, { prompt: "and the changelog", conversationId: "conv-reopened" });
+        expect((await client.agents.archived()).agents).toEqual([]);
+        expect((await client.agents.list()).agents.map((agent) => agent.id)).toEqual(["conv-reopened"]);
+    });
+});
+
 test("a chat turn without a conversationId is refused: the run registry has nothing to key it on", async () => {
     const client = clientFor(createApp(services()));
     expect(await errorCode(client.agent.run({ prompt: "hi" }))).toBe("BAD_REQUEST");

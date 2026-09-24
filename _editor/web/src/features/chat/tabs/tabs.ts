@@ -42,34 +42,47 @@ export const laneOfTab = (conversation: Conversation, agent: FleetAgent | undefi
     return laneOf(conversation.standing.value ?? { status: here, attention: NO_ATTENTION });
 };
 
-// Close sets read the live conversation list at call time, not a snapshot, so a chat arriving while the menu
-// is open is still included. No close confirms: a chat's turn is detached daemon-side (soft abort) and keeps
-// working, reopenable from History.
-export const othersOf = (id: string): ReadonlySet<string> =>
-    new Set(
-        useChat()
-            .conversations.value.filter((conversation) => conversation.conversationId !== id)
-            .map((conversation) => conversation.conversationId),
-    );
+// Every sweep reads the live list at call time and skips a pinned chat: only a pinned chat's own Close takes it.
+const sweepable = (): Conversation[] => useChat().conversations.value.filter((conversation) => !conversation.pinned.value);
+const idsOf = (list: readonly Conversation[]): ReadonlySet<string> => new Set(list.map((conversation) => conversation.conversationId));
+
+export const othersOf = (id: string): ReadonlySet<string> => idsOf(sweepable().filter((conversation) => conversation.conversationId !== id));
 
 export const toRightOf = (id: string): ReadonlySet<string> => {
     const list = useChat().conversations.value;
     const index = list.findIndex((conversation) => conversation.conversationId === id);
-    return new Set(index === -1 ? [] : list.slice(index + 1).map((conversation) => conversation.conversationId));
+    return idsOf(index === -1 ? [] : list.slice(index + 1).filter((conversation) => !conversation.pinned.value));
 };
 
-export const allTabs = (): ReadonlySet<string> => new Set(useChat().conversations.value.map((conversation) => conversation.conversationId));
+export const allTabs = (): ReadonlySet<string> => idsOf(sweepable());
 
 // Every chat in one lane, for either surface: the sweep Close Others/Close to the Right can't express. An
 // untouched draft is left out (it goes on its own the moment focus leaves); the active chat is not spared.
 export const tabsInLane = (lane: FleetLane): ReadonlySet<string> => {
     const { agentById } = useAgents();
-    return new Set(
-        useChat()
-            .conversations.value.filter(
-                (conversation) =>
-                    !untouchedDraft(conversation) && laneOfTab(conversation, agentById(conversation.conversationId)) === lane,
-            )
-            .map((conversation) => conversation.conversationId),
+    return idsOf(
+        sweepable().filter(
+            (conversation) => !untouchedDraft(conversation) && laneOfTab(conversation, agentById(conversation.conversationId)) === lane,
+        ),
+    );
+};
+
+// The persona a chat sits under in the Personas cut; a pick naming no card on file sits with Anyone, so the cut
+// always holds every open chat exactly once.
+export const personaOfTab = (conversation: Conversation, known: ReadonlySet<string>): string | undefined => {
+    const pick = conversation.selection.actsAs.value;
+    return pick !== undefined && known.has(pick) ? pick : undefined;
+};
+
+// One persona's sweepable chats, optionally one lane of them: the persona header's own Close verbs.
+export const tabsOfPersona = (persona: string | undefined, known: ReadonlySet<string>, lane?: FleetLane): ReadonlySet<string> => {
+    const { agentById } = useAgents();
+    return idsOf(
+        sweepable().filter(
+            (conversation) =>
+                !untouchedDraft(conversation) &&
+                personaOfTab(conversation, known) === persona &&
+                (lane === undefined || laneOfTab(conversation, agentById(conversation.conversationId)) === lane),
+        ),
     );
 };

@@ -245,6 +245,10 @@ const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: Wat
         live.logger.error({ watch: record.id, conversationId: record.spec.conversationId, report: prompt, invalid: receipt.invalid }, "watch: report could not be delivered");
         return;
     }
+    if ("why" in receipt) {
+        live.logger.info({ watch: record.id, conversationId: record.spec.conversationId, why: receipt.why }, "watch: its conversation took nothing");
+        return;
+    }
     live.logger.info({ watch: record.id, outcome, conversationId: record.spec.conversationId, delivered: receipt.delivered }, "watch: report delivered");
 };
 

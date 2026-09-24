@@ -1,6 +1,6 @@
 import type { MessageReceipt, TurnProfile } from "@intentic/sandbox-contract";
 import { opt } from "../../../opt.js";
-import type { SteerVoice, TurnStarter } from "../../../seams/turn-starter.js";
+import type { SteerVoice, TurnStarter, Unsaid } from "../../../seams/turn-starter.js";
 
 // The one door for words nobody at a conversation's composer typed: said into its live turn where that turn takes them,
 // a turn of their own when nothing runs, and otherwise queued behind whatever the conversation is doing, where every
@@ -23,7 +23,7 @@ export interface WakeDoors {
 }
 
 /** Hands the wake to its conversation, answered with where it went; one that waits goes once the conversation is free. */
-export const deliverWake = (doors: WakeDoors, wake: Wake): Promise<MessageReceipt | { readonly invalid: string }> =>
+export const deliverWake = (doors: WakeDoors, wake: Wake): Promise<MessageReceipt | Unsaid> =>
     doors.turns.say({
         voice: wake.voice,
         ...opt("outside", wake.outside),

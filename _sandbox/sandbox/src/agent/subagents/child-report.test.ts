@@ -26,12 +26,13 @@ const doorsOf = (
         killNote?: ChildReportDeps["killNote"];
     } = {},
 ): Doors => {
-    const entries: Record<string, { startedBy?: string; title?: string; archivedAt?: number }> = {
-        "parent-1": { title: "Refactor the parser", ...(over.parentArchived === true ? { archivedAt: 1 } : {}) },
+    const entries: Record<string, { startedBy?: string; title?: string }> = {
+        "parent-1": { title: "Refactor the parser" },
         "sub-1": { startedBy: childActor("parent-1"), title: "Port the tests" },
         ...over.entries,
     };
-    const turns = fakeTurns({ live: over.live === true });
+    // The parent filed away is the admission's to turn the report from, as it turns every word nobody sent.
+    const turns = fakeTurns({ live: over.live === true, archived: over.parentArchived === true });
     return Object.assign(turns, {
         deps: {
             doors: { turns: turns.turns, sessionIdOf: () => "parent-session" },

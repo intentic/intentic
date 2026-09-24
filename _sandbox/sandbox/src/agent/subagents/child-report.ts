@@ -16,9 +16,7 @@ export interface ChildReportDeps {
     // Where the child's roster record and its verification ledger are held.
     readonly conversations: Pick<ConversationActors, "holdings">;
     // A child's entry names its parent in `startedBy`.
-    readonly entryOf: (
-        conversationId: string,
-    ) => { readonly startedBy?: string | undefined; readonly title?: string | undefined; readonly archivedAt?: number | undefined } | undefined;
+    readonly entryOf: (conversationId: string) => { readonly startedBy?: string | undefined; readonly title?: string | undefined } | undefined;
     // What the parent runs as now, which the report's turn continues.
     readonly profileOf: (conversationId: string) => TurnProfile | undefined;
     // The ending a parent reads for a child whose runtime was killed under it; undefined for a failure of its own.
@@ -35,7 +33,7 @@ const reportText = (settled: DomainEventMap["run.settled"], killed: string | und
     return [answer, ...(ending === undefined ? [] : [ending])].filter((part) => part !== "").join("\n\n");
 };
 
-// Nobody when a person started the turn in the child's own chat, a wait already took it, or the parent is off the board.
+// Nobody when a person started the turn in the child's own chat, a wait already took it, or the parent is gone.
 const parentToTell = (
     deps: ChildReportDeps,
     settled: DomainEventMap["run.settled"],
@@ -49,11 +47,8 @@ const parentToTell = (
     ) {
         return undefined;
     }
-    const parentEntry = deps.entryOf(parent);
     const profile = deps.profileOf(parent);
-    return parentEntry === undefined || parentEntry.archivedAt !== undefined || profile === undefined
-        ? undefined
-        : { parent, profile, title: entry?.title };
+    return deps.entryOf(parent) === undefined || profile === undefined ? undefined : { parent, profile, title: entry?.title };
 };
 
 /** Never throws: it runs off a turn's ending. */
@@ -76,6 +71,10 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
                 { child: settled.conversationId, parent: target.parent, report: prompt, invalid: receipt.invalid },
                 "child report: its parent could not take it, it stays in the child's own chat",
             );
+            return;
+        }
+        if ("why" in receipt) {
+            deps.logger.info({ child: settled.conversationId, parent: target.parent, why: receipt.why }, "child report: its parent took nothing, it stays in the child's own chat");
             return;
         }
         deps.logger.info({ child: settled.conversationId, parent: target.parent, delivered: receipt.delivered }, "child report: delivered");

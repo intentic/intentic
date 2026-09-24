@@ -982,10 +982,19 @@
             "notSignedInYet": ", jeszcze niezalogowana"
         },
         "chatPersonaRail": {
-            "chat": "czat",
-            "newChat": "Nowy czat jako",
-            "open": "Otwórz {conversation}",
-            "showSChats": "Pokaż czaty: {label}"
+            "archiveFinishedOf": "Zarchiwizuj skończonych agentów: {label}",
+            "chats": "{count} czat | {count} czaty | {count} czatów",
+            "closeAllOf": "Zamknij wszystkie czaty: {label}",
+            "closeFinishedOf": "Zamknij skończone czaty: {label}",
+            "editPersona": "Edytuj personę…",
+            "more": "Więcej: {label}",
+            "moreOnBoard": "Jeszcze {count} na tablicy",
+            "needsYou": "{count} czeka na ciebie | {count} czekają na ciebie | {count} czeka na ciebie",
+            "newChatAs": "Nowy czat jako {label}",
+            "notOpen": "{count} nieotwarty | {count} nieotwarte | {count} nieotwartych",
+            "showSChats": "Pokaż czaty: {label}",
+            "startAs": "Zacznij czat jako {label}",
+            "working": "{count} pracuje | {count} pracują | {count} pracuje"
         },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "Ta rozmowa już działa {placedAt}. Uruchom nowego agenta, żeby pracować gdzie indziej.",
@@ -1112,29 +1121,43 @@
         },
         "chatTabList": {
             "anotherSandbox": "innym sandboxie",
+            "archive": "Zarchiwizuj",
+            "clearActive": "Zamknij {count} pracujący czat | Zamknij wszystkie {count} pracujące czaty | Zamknij wszystkie {count} pracujących czatów",
+            "clearAttention": "Zamknij {count} czekający czat | Zamknij wszystkie {count} czekające czaty | Zamknij wszystkie {count} czekających czatów",
+            "clearFinished": "Zamknij {count} skończony czat | Zamknij wszystkie {count} skończone czaty | Zamknij wszystkie {count} skończonych czatów",
             "closeAll": "Zamknij wszystkie ({size}): {keeps}",
             "everyConversationWindowHolds": "Każda rozmowa, którą trzyma to okno, uporządkowana według tego, co Cię potrzebuje",
             "filterChatsByMessages": "Filtruj czaty po swoich wiadomościach",
+            "keepsActive": "ich tury dalej trwają",
+            "keepsAttention": "dalej czekają na tablicy",
+            "keepsFinished": "zostają w poprzednich czatach",
             "noMatches": "Brak trafień",
             "notOpen": "Nieotwarte",
             "openBeside": "Otwórz obok",
             "openWorkflowRun": "Otwórz przebieg workflow {name}",
             "peopleSandboxPickOne": "Ludzie, którymi może być ten sandbox — wybierz jednego i z nim porozmawiaj",
+            "pin": "Przypnij",
+            "pinned": "Przypięty",
             "runsIn": "Działa w {sandbox}",
             "runsInQuoted": "Działa w „{sandbox}”",
             "share": "Udostępnij…",
-            "steps": "kroków"
+            "steps": "kroków",
+            "unpin": "Odepnij"
         },
         "chatTabs": {
+            "archiveChat": "Zarchiwizuj czat",
             "chatHistory": "Historia czatu",
+            "dockChatToRailHint": "Zadokuj czat na pasku: całe okno, za kafelkiem paska",
             "history": "Historia",
             "need": "{attentionCount} potrzebuje Cię",
+            "nextNeedsYou": "Następny czat, który na ciebie czeka",
             "openNextBeside": "Otwórz następny obok",
             "pastChats": "Wcześniejsze czaty",
             "previous": "Poprzedni",
             "running": "{runningCount} działa",
             "switch": "Przełącz…",
             "switchChatOpen": "Przełącz czat: otwartych {count}",
+            "togglePin": "Przypnij lub odepnij czat",
             "waiting": "{attentionCount} czeka na Ciebie"
         },
         "chatTodoList": {
@@ -3603,7 +3626,11 @@
         "worthBetterModelThan": "Wart lepszego modelu niż reszta zadań automatycznych: czyta polecenie jako dane, a w turze, która wchłonęła coś z zewnątrz, ten tekst może argumentować za własnym zatwierdzeniem.",
         "worthKnowing": "Warto wiedzieć",
         "writeSkill": "Napisz umiejętność",
-        "you": "Ty"
+        "you": "Ty",
+        "moveChatIntoNewWindow": "Przenieś czat do nowego okna",
+        "dockChatBack": "Zadokuj czat z powrotem",
+        "dockChatToRail": "Zadokuj czat na pasku",
+        "reopenClosedChat": "Otwórz ponownie zamknięty czat"
     },
     "shell": {
         "accountPanel": {

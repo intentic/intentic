@@ -72,7 +72,7 @@ describe("the turn's rows", () => {
         const { deps, writes } = recorded();
         await beginTurn(
             deps.conversations,
-            { conversationId: "effects-rows", isolated: false, prompt: "ship it", profile: { agent: "claude", harness: "native" } },
+            { conversationId: "effects-rows", isolated: false, prompt: "ship it", profile: { agent: "claude", harness: "native" }, byPerson: true },
             1,
         );
         // The sessions the stream has named so far; the row reads the latest.

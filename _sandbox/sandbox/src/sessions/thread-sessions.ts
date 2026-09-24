@@ -3,7 +3,7 @@ import { jsonFile } from "../store/json-file.js";
 
 // Ties a stream of inbound messages (a support chat, a tagged bot) to one conversation and provider session, so repeats
 // don't each spawn a fresh isolated worktree. The record also marks a thread past the anti-bot gate, surviving a daemon
-// restart. A thread ends by going quiet: past its TTL the record reads as absent, and the next message starts fresh.
+// restart. A thread ends by going quiet or by its conversation being archived: the record reads as absent either way.
 
 const RecordSchema = z.object({
     // The sandbox conversation this thread owns, a fleet card, a worktree, a chat tab.
@@ -44,18 +44,22 @@ export interface ThreadSessionsStore {
     readonly settle: (key: string, sessionId: string | undefined, now: number) => Promise<void>;
 }
 
-// A record still inside its TTL, or undefined; staleness is read as absence, never deleted here.
-const live = (record: ThreadSession | undefined, ttlMs: number, now: number): ThreadSession | undefined =>
-    record !== undefined && now - record.lastAt <= ttlMs ? record : undefined;
+// Whether a conversation is off the board; only a person reopens one, so no inbound message may resume it.
+export type ArchivedConversation = (conversationId: string) => boolean;
 
-export const fileThreadSessionsStore = (path: string): ThreadSessionsStore => {
+// A record still inside its TTL whose conversation is not archived, or undefined; an ended thread reads as absence and
+// is never deleted here.
+export const liveThread = (record: ThreadSession | undefined, ttlMs: number, now: number, archived: ArchivedConversation): ThreadSession | undefined =>
+    record !== undefined && now - record.lastAt <= ttlMs && !archived(record.conversationId) ? record : undefined;
+
+export const fileThreadSessionsStore = (path: string, archived: ArchivedConversation): ThreadSessionsStore => {
     const file = jsonFile<SessionsFile>(path, { parse: (raw) => FileSchema.safeParse(raw).data, fallback: () => ({}) });
 
     return {
-        get: async (key, ttlMs, now) => live((await file.read())[key], ttlMs, now),
+        get: async (key, ttlMs, now) => liveThread((await file.read())[key], ttlMs, now, archived),
         open: async (key, mintConversationId, ttlMs, now) => {
             const written = await file.update((sessions) => {
-                const existing = live(sessions[key], ttlMs, now);
+                const existing = liveThread(sessions[key], ttlMs, now, archived);
                 if (existing !== undefined) {
                     return { ...sessions, [key]: { ...existing, lastAt: now, messages: existing.messages + 1 } };
                 }

@@ -89,6 +89,7 @@ export const agentSeed = (
         | "effort"
         | "thinking"
         | "fast"
+        | "actsAs"
         | "status"
         | "branch"
         | "sandboxId"
@@ -123,6 +124,7 @@ export const agentSeed = (
     ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
     ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
     ...(agent.fast !== undefined ? { fast: agent.fast } : {}),
+    ...(agent.actsAs !== undefined ? { actsAs: agent.actsAs } : {}),
 });
 
 // Opening a card is a summons, not a store call, since the chat panel showing it may be another window's. A plain click

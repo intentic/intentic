@@ -1304,7 +1304,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
             logger,
         }),
         heldWakes: fileHeldWakesStore(statePath(workspace.root, ".intentic/records/approvals/")),
-        threadSessions: fileThreadSessionsStore(statePath(workspace.root, ".intentic/records/thread-sessions.json")),
+        threadSessions: fileThreadSessionsStore(
+            statePath(workspace.root, ".intentic/records/thread-sessions.json"),
+            (conversationId) => agents.entry(conversationId)?.archivedAt !== undefined,
+        ),
         senders: fileSendersStore(statePath(workspace.root, ".intentic/records/senders.json")),
         webchatOutbox: fileWebchatOutbox(statePath(workspace.root, ".intentic/records/webchat-outbox.json")),
         outboxStreamFor: (origin) => outboxStreamFor(services, origin),

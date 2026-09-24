@@ -16,6 +16,7 @@ import {
     setActive,
     setConversations,
     setPanes,
+    takeClosed,
 } from "../tabs/useChat-tabs";
 import { untouchedDraft } from "../tabs/tabFacts";
 import { fetchTranscript, hydrateOnce, sessions } from "../run/useChat-sessions";
@@ -227,6 +228,8 @@ export interface AgentTabSeed {
     effort?: string;
     thinking?: boolean;
     fast?: boolean;
+    // The persona the conversation acts as, so the chat lands under it in the rail's Personas cut.
+    actsAs?: string;
     // Whether the fleet actually knows this agent; false only for the board's client-only draft card.
     registered?: boolean;
     // The card's own account of where this agent stands, so the chat lands in the same lane in a window whose
@@ -252,6 +255,7 @@ export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
         effort: agent.effort,
         thinking: agent.thinking,
         fast: agent.fast,
+        actsAs: agent.actsAs,
         title: agent.title,
         // `agent.account` serves both fields but means two things: as the tab's pick, where the next turn goes; on the
         // session, what the last one actually ran under. They start equal; a switch afterward moves only the pick.
@@ -262,6 +266,16 @@ export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
         draft: ``,
         attachments: [],
     };
+};
+
+/** Brings back the chat this window closed most recently, words and pin included; false when there was none. */
+export const reopenClosed = (): boolean => {
+    const tab = takeClosed();
+    if (tab === undefined) {
+        return false;
+    }
+    reveal({ verb: `focus`, entries: [tab], focus: tab.conversationId, caret: false });
+    return true;
 };
 
 // Opens or focuses the tab bound to a fleet agent's conversationId in this window. Panel-internal surfaces call it

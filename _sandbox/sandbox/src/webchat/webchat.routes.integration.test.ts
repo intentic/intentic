@@ -22,15 +22,19 @@ import { unstubbed } from "@intentic/testing";
 import { fileWebchatOutbox, outboxStreamFor } from "./webchat-outbox.js";
 import { createWebchatRoutes } from "./webchat.routes.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { drivenBy } from "../testing.js";
+import { conversationEntry, drivenBy } from "../testing.js";
 
 const ORIGIN = "https://site.example";
 
-const fakeServices = (root: string, appends: ActivityEvent[]): Services => {
+// `archived` names the conversations the owner filed away, read by the thread store and the door's mint alike.
+const fakeServices = (root: string, appends: ActivityEvent[], archived: ReadonlySet<string>): Services => {
     const services: Services = unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
-        threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
+        threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), (conversationId) => archived.has(conversationId)),
+        agents: unstubbed<Services["agents"]>("agents", {
+            entry: (id: string) => (archived.has(id) ? conversationEntry({ id, archivedAt: 1 }) : undefined),
+        }),
         webchatOutbox: fileWebchatOutbox(join(root, "webchat-outbox.json")),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
@@ -90,9 +94,10 @@ const post = (app: Hono, id: string, body: unknown, headers: Record<string, stri
 
 const setup = async (automation: Automation) => {
     const appends: ActivityEvent[] = [];
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "webchat-")), appends);
+    const archived = new Set<string>();
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "webchat-")), appends, archived);
     await services.automations.upsert(automation);
-    return { services, appends };
+    return { services, appends, archived };
 };
 
 test("an allowed visitor message wakes the agent and streams the reply back as SSE", async () => {
@@ -259,6 +264,21 @@ test("a visitor's follow-up reuses the same conversation and resumes its session
     expect(turns[0]?.conversationId).toBe(turns[1]?.conversationId);
     expect(turns[0]?.sessionId).toBeUndefined();
     expect(turns[1]?.sessionId).toBe("sess-1");
+});
+
+// Only a person reopens an archived conversation, so a visitor writing again after the owner filed theirs away starts anew.
+test("a visitor writing again after their conversation was archived starts a fresh one, not the archived card", async () => {
+    const { services, archived } = await setup(webchat("wc-filed"));
+    const turns: AgentTurn[] = [];
+    const app = appFor(services, fakeWake(turns, [{ kind: "session", sessionId: "sess-1" }, { kind: "done" }]));
+    await (await post(app, "wc-filed", { conversationId: "visitor-a", content: "first" })).text();
+    expect(turns[0]?.conversationId).toBe("wc-wc-filed-visitor-a");
+    archived.add("wc-wc-filed-visitor-a");
+
+    await (await post(app, "wc-filed", { conversationId: "visitor-a", content: "second" })).text();
+    expect(turns).toHaveLength(2);
+    expect(turns[1]?.conversationId).toMatch(/^wc-wc-filed-visitor-a-[0-9a-z]+$/u);
+    expect(turns[1]?.sessionId).toBeUndefined();
 });
 
 test("two visitors of one Visitor chat get two conversations", async () => {

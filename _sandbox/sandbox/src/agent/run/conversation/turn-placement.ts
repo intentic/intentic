@@ -1,13 +1,13 @@
 import { type AgentEvent, profileOf, type SnapshotTurn } from "@intentic/sandbox-contract";
 import { landAgent, reportLockfileFailures } from "../../../agents/land/land.js";
 import type { ConversationActors } from "../../../agents/actor/conversation-actors.js";
-import type { BeginTurn } from "../../../agents/actor/conversation-decide.js";
+import type { BeginRefusal, BeginTurn } from "../../../agents/actor/conversation-decide.js";
 import { isIsolated } from "../../../agents/registry/agents-store.js";
 import type { ConversationWorktree } from "../../../agents/worktrees/worktrees.js";
 import type { Services } from "../../../composition.js";
 import { checkpointWorktree } from "../../checkpoints/checkpoint-worktree.js";
 import { opt } from "../../../opt.js";
-import type { TurnInput } from "../../../seams/turn-starter.js";
+import type { SentTurn } from "../../../seams/turn-starter.js";
 
 // Where a conversation's turn runs, as the one value its lifecycle is parameterized by: the runner, the main tree, or a
 // worktree. Each announces itself, hands over the turn's body, and has its own after-turn and its own books; the
@@ -57,7 +57,7 @@ export async function* placedTurn(conversations: Pick<ConversationActors, "send"
 // What a conversation's turn begins as: its profile whole, and what an opening turn decides. Placement is the
 // conversation's: a fresh one takes the request's, later turns follow the registry's own record.
 export const conversationIdentity = (
-    input: TurnInput,
+    input: SentTurn,
     conversationId: string,
     placement: { readonly isolated: boolean; readonly runner: string | undefined },
 ): BeginTurn => ({
@@ -66,6 +66,7 @@ export const conversationIdentity = (
     ...opt("runner", placement.runner),
     prompt: input.prompt,
     profile: profileOf(input),
+    byPerson: input.byPerson,
     ...opt("title", input.title),
     ...opt("origin", input.origin),
     ...opt("startedBy", input.actor),
@@ -75,6 +76,17 @@ export const conversationIdentity = (
     // A fork names its source once; `keep` is the cut's index in the source's own record.
     ...(input.forkOf !== undefined ? { forkedFrom: { conversationId: input.forkOf.conversationId, index: input.forkOf.keep, files: input.forkOf.files } } : {}),
 });
+
+const REFUSED: { readonly [R in BeginRefusal]: string } = {
+    busy: "This agent is already running a turn, wait for it to finish.",
+    archived: "This conversation is archived: only a person's message reopens it.",
+};
+
+// What a turn whose `begin` was refused says to whoever folds its frames; `agent-busy` is the one refusal with a code.
+export function* refusedBegin(refusal: BeginRefusal): Generator<AgentEvent> {
+    yield refusal === "busy" ? { kind: "error", code: "agent-busy", message: REFUSED.busy } : { kind: "error", message: REFUSED.archived };
+    yield { kind: "done" };
+}
 
 // This turn's before-state, as a branch commit: recorded for a reopened tab and framed for the live one, under the same
 // id agent-transcript.ts synthesizes for both. Best-effort; nothing pinned means no frame.

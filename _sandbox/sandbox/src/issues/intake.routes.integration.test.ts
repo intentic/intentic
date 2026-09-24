@@ -35,7 +35,9 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         doorTokens: memoryDoorTokens(),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
-        threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
+        threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), () => false),
+        // Nothing archived here: an issue's thread keeps the conversation its id names.
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async (event) => void appends.push(event as ActivityEvent), list: async () => [] },

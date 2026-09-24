@@ -72,6 +72,8 @@ export interface CiFixRequest {
     readonly evidence: CiFailureEvidence;
     // What the turn carries besides its words: the pick, who pressed, the resume verb.
     readonly turn?: Omit<TurnInput, "prompt" | "conversationId" | "title" | "isolated" | "runRole">;
+    // Somebody pressed Fix, rather than the repair gate starting it.
+    readonly byPerson: boolean;
     // Whether a model was picked for this press, which outranks re-running a turn the door kept.
     readonly picked?: boolean;
     readonly resume?: Parameters<typeof startFixAttempt>[1]["resume"];
@@ -122,11 +124,14 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
             },
             // Same detached-run boundary as POST /agent, so the run map, journal, transcript and observer stay wired;
             // no composer holds these words, so a refusal at the door leaves the sandbox keeping the turn.
-            start: (turn) => services.turns.start(turn),
+            start: async (turn) => {
+                const started = await services.turns.start({ ...turn, byPerson: request.byPerson });
+                return typeof started === "string" ? undefined : started;
+            },
             // A pick is a choice made now, so it outranks the kept turn's routing: the whole prompt goes on it.
             rerun: async (conversationId) =>
                 request.picked !== true && services.conversations.state(conversationId)?.resume.held?.reason === "door"
-                    ? services.turns.resume(conversationId)
+                    ? services.turns.resume(conversationId, request.byPerson)
                     : undefined,
         },
         {

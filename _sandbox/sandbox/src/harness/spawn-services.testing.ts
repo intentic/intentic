@@ -43,7 +43,7 @@ export const spawnServices = (
         }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { append: async () => {} }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
-        logger: unstubbed<Services["logger"]>("logger", { warn: () => {}, error: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
         config: unstubbed<Services["config"]>("config", {
             // Only the fields the scheduler's parity read touches; the rest throw by name instead of being invented.
             sandbox: unstubbed<Services["config"]["sandbox"]>("config.sandbox", {

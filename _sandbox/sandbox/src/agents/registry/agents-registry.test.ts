@@ -3,7 +3,7 @@ import type { AgentEvent, AgentSummary, LandConflictReason } from "@intentic/san
 import { noteSubagentTask, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../../agent/subagents/subagents.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import { beginTurn, conversationEntry, fleetStoreOver, isolatedAgent } from "../../testing.js";
-import type { BeginTurn } from "../actor/conversation-decide.js";
+import type { BeginOutcome, BeginTurn } from "../actor/conversation-decide.js";
 import { openConversationsDb } from "../../store/conversations-db.js";
 import { IN_MEMORY } from "../../store/sqlite.js";
 import { createFleet, type FleetStore } from "./agents-registry.js";
@@ -60,6 +60,7 @@ const turn = (overrides: Partial<BeginTurn> = {}): BeginTurn => ({
     isolated: true,
     prompt: "Fix the login bug",
     profile: { agent: "claude", harness: "native" },
+    byPerson: true,
     ...overrides,
 });
 
@@ -99,7 +100,7 @@ describe("agents registry", () => {
     it("begin creates an entry with title, branch, and running status", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        expect(await beginTurn(conversations, turn(), 1_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 1_000)).toBe("begun");
         const summary = registry.get("c1");
         expect(summary?.status).toBe("running");
         expect(summary?.branch).toBe("agent/c1");
@@ -130,7 +131,7 @@ describe("agents registry", () => {
         await registry.init();
         const unsubscribe = registry.subscribe((agents) => frames.push(agents.map((agent) => agent.status)));
 
-        expect(await beginTurn(conversations, turn(), 1_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 1_000)).toBe("begun");
 
         expect(publishedAtWrite).toEqual([[[], ["running"]]]);
         expect(store.saved().map((agent) => agent.id)).toEqual(["c1"]);
@@ -142,23 +143,23 @@ describe("agents registry", () => {
     it("a runner latches on the first turn, survives turns that name none, and cannot be moved", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        expect(await beginTurn(conversations, turn({ runner: "rog", isolated: false }), 1_000)).toBe(true);
+        expect(await beginTurn(conversations, turn({ runner: "rog", isolated: false }), 1_000)).toBe("begun");
         expect(worktreeOf(registry.entry("c1"))?.runner).toBe("rog");
         expect(worktreeOf(registry.entry("c1"))?.branch).toBe("agent/c1");
         await conversations.send("c1", { kind: "settle" }, 1_500).settled;
-        expect(await beginTurn(conversations, turn(), 2_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 2_000)).toBe("begun");
         expect(worktreeOf(registry.entry("c1"))?.runner).toBe("rog");
         await conversations.send("c1", { kind: "settle" }, 2_500).settled;
-        expect(await beginTurn(conversations, turn({ runner: "other" }), 3_000)).toBe(true);
+        expect(await beginTurn(conversations, turn({ runner: "other" }), 3_000)).toBe("begun");
         expect(worktreeOf(registry.entry("c1"))?.runner).toBe("rog");
     });
 
     it("a conversation that ran here never picks up a runner from a later request", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        expect(await beginTurn(conversations, turn(), 1_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 1_000)).toBe("begun");
         await conversations.send("c1", { kind: "settle" }, 1_500).settled;
-        expect(await beginTurn(conversations, turn({ runner: "rog" }), 2_000)).toBe(true);
+        expect(await beginTurn(conversations, turn({ runner: "rog" }), 2_000)).toBe("begun");
         expect(worktreeOf(registry.entry("c1"))?.runner).toBeUndefined();
     });
 
@@ -168,15 +169,15 @@ describe("agents registry", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
 
-        let beganDuringRewind: boolean | undefined;
+        let beganDuringRewind: BeginOutcome | undefined;
         const held = await conversations.withRewindLease("c1", async () => {
             beganDuringRewind = await beginTurn(conversations, turn(), 1_000);
             return "restored";
         });
 
         expect(held).toBe("restored");
-        expect(beganDuringRewind).toBe(false);
-        expect(await beginTurn(conversations, turn(), 2_000)).toBe(true);
+        expect(beganDuringRewind).toBe("busy");
+        expect(await beginTurn(conversations, turn(), 2_000)).toBe("begun");
     });
 
     it("refuses a rewind while a turn is running, and releases the lease even when the rewind throws", async () => {
@@ -194,7 +195,7 @@ describe("agents registry", () => {
                 throw new Error("restore blew up");
             }),
         ).rejects.toThrow("restore blew up");
-        expect(await beginTurn(conversations, turn(), 3_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 3_000)).toBe("begun");
     });
 
     it("writes the session id through to the store as the frame arrives, not at the finish that flushes it", async () => {
@@ -359,9 +360,9 @@ describe("agents registry", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
-        expect(await beginTurn(conversations, turn(), 2_000)).toBe(false);
+        expect(await beginTurn(conversations, turn(), 2_000)).toBe("busy");
         await conversations.send("c1", { kind: "settle" }, 3_000).settled;
-        expect(await beginTurn(conversations, turn(), 4_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 4_000)).toBe("begun");
     });
 
     it("keeps the first title and accumulates usage across turns", async () => {
@@ -907,7 +908,7 @@ describe("agents registry", () => {
             frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" },
         });
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
-        expect(await beginTurn(conversations, turn({ prompt: "…resumed automatically. Fix the login bug" }), 3_000)).toBe(true);
+        expect(await beginTurn(conversations, turn({ prompt: "…resumed automatically. Fix the login bug" }), 3_000)).toBe("begun");
         expect(registry.get("c1")?.status).toBe("running");
         await conversations.send("c1", { kind: "settle" }, 4_000).settled;
         expect(registry.get("c1")?.status).toBe("idle");
@@ -923,7 +924,7 @@ describe("agents registry", () => {
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("resuming");
         // The resumed turn's own `begin` ends the wait, same as the error-frame path.
-        expect(await beginTurn(conversations, turn({ prompt: "…their response follows below. Approved." }), 3_000)).toBe(true);
+        expect(await beginTurn(conversations, turn({ prompt: "…their response follows below. Approved." }), 3_000)).toBe("begun");
         expect(registry.get("c1")?.status).toBe("running");
     });
 
@@ -1331,7 +1332,7 @@ describe("agents registry", () => {
         // The refused land runs after `finish`; `begin` would otherwise refuse while a turn is still running.
         await conversations.send("c1", { kind: "settle" }, 1_800).settled;
 
-        expect(await beginTurn(conversations, turn({ prompt: "rebase onto main" }), 2_000)).toBe(true);
+        expect(await beginTurn(conversations, turn({ prompt: "rebase onto main" }), 2_000)).toBe("begun");
 
         // Checked on the persisted entry; the live summary carries only the derived standing, not `conflicts`.
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toEqual(conflicts);
@@ -1720,17 +1721,34 @@ describe("agents registry", () => {
         expect(store.saved()[0]?.archivedAt).toBeUndefined();
     });
 
-    it("a new turn un-archives the agent it runs on", async () => {
+    it("a person's turn un-archives the agent it runs on", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         await registry.setArchived(["c1"], 5_000);
 
-        expect(await beginTurn(conversations, turn(), 6_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 6_000)).toBe("begun");
         expect(registry.get("c1")?.archivedAt).toBeUndefined();
         expect(registry.list().map((agent) => agent.id)).toEqual(["c1"]);
         expect(registry.listArchived()).toEqual([]);
+    });
+
+    // A resume, a nudge, a wake: only a person un-archives, so the card stays filed away and nothing on it moves.
+    it("a turn nobody sent leaves an archived agent archived and opens nothing on it", async () => {
+        const store = memoryStore();
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        await registry.setArchived(["c1"], 5_000);
+        const filed = store.saved()[0];
+
+        expect(await beginTurn(conversations, turn({ prompt: "Picking this back up.", byPerson: false }), 6_000)).toBe("archived");
+        expect(conversations.running("c1")).toBe(false);
+        expect(registry.list()).toEqual([]);
+        expect(registry.listArchived().map((agent) => [agent.id, agent.archivedAt])).toEqual([["c1", 5_000]]);
+        expect(store.saved()[0]).toStrictEqual(filed);
     });
 
     // Each write path replaces `entries` wholesale; a write that carried the whole roster would let one overlapping change
@@ -2011,7 +2029,7 @@ describe("one write per fact", () => {
         conversations.send("c1", { kind: "journalled", entry: IN_FLIGHT });
         expect(db.rowsOf("c1")).toEqual({});
 
-        expect(await beginTurn(conversations, turn(), 1_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 1_000)).toBe("begun");
 
         expect(Object.keys(db.rowsOf("c1")).toSorted()).toEqual(["conversation", "turn_journal"]);
         expect(await sqliteTurnJournal(db).list()).toEqual([IN_FLIGHT]);

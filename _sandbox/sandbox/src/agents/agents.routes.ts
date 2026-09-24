@@ -32,7 +32,7 @@ import { agentRepoReview, agentRepoModules, checkpointOf, presentInMain } from "
 import { commitsCarrying, historySpanStart } from "./land/landed-history.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent, type RepoRecord } from "./registry/agents-store.js";
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
-import { archivable, archiveAgents, forgetConversations, purgeArchived } from "./registry/archive.js";
+import { archiveAgents, forgetConversations, purgeArchived } from "./registry/archive.js";
 import { landAgent, outstandingConflicts, reportLockfileFailures } from "./land/land.js";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
@@ -715,26 +715,14 @@ export const createAgentsRoutes = (services: Services) => {
             await forgetConversations(services, [entry]);
             return { ok: true } as const;
         }),
-        // Named ids archive what the user pointed at; no ids clears the whole Finished lane. Answers with what moved,
-        // not the roster, so overlapping requests can't undo each other.
+        // Archives exactly the ids named, the board's Clear included. Answers with what moved, not the roster, so
+        // overlapping requests can't undo each other.
         archive: i.archive.handler(async ({ input, context }) => {
-            if (input.ids !== undefined) {
-                for (const id of input.ids) {
-                    entryFor(id, context);
-                    notRunning(id);
-                }
+            for (const id of input.ids) {
+                entryFor(id, context);
+                notRunning(id);
             }
-            // Re-probes standings, since 'archivable right now' isn't visible on the persisted entry (archive.ts). Only
-            // for the bulk clear: a named archive's ids are already the user's own decision.
-            const archivableNow = async (): Promise<string[]> => {
-                await services.agents.refreshStandings();
-                return services.agents
-                    .list()
-                    .filter((agent) => archivable(agent) && visibleTo(context.identity, agent))
-                    .map((agent) => agent.id);
-            };
-            const targets = input.ids ?? (await archivableNow());
-            const { archived, failed } = await archiveAgents(services, targets, Date.now());
+            const { archived, failed } = await archiveAgents(services, input.ids, Date.now());
             // Read after the archive: summaries carry a fresh archivedAt and revision; a failed id is only reported.
             return {
                 moved: archived.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined),

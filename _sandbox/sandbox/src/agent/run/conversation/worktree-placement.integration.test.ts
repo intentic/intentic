@@ -28,7 +28,7 @@ const begun = async (id: string, change: { readonly runner?: string } = {}, extr
     const deps = services({ ...recorded.overrides, logger, agentWorktrees: made.worktrees, ...extra });
     await beginTurn(
         deps.conversations,
-        { conversationId: id, isolated: true, prompt: "ship it", profile: { agent: "claude", harness: "native" }, ...change },
+        { conversationId: id, isolated: true, prompt: "ship it", profile: { agent: "claude", harness: "native" }, byPerson: true, ...change },
         1,
     );
     const base = await gitOut(made.work, "rev-parse", "HEAD");

@@ -24,6 +24,9 @@ flowchart LR
 - One turn: `agent/run/turn/turn-admission.ts` admits it, `turn-plan.ts` picks a runtime, it runs in the
   conversation's worktree (or the main tree, or a remote runner), `agents/land/land.ts` lands the result as
   uncommitted changes, and `verify-landed.ts` runs the repository's checks on it.
+- Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
+  a nudge, an automation's thread) is refused on an archived one (`agents/actor/conversation-decide.ts`), and a
+  thread whose conversation was archived opens a fresh one instead.
 - Extension code never runs in the daemon process; it runs in a supervised backend host.
 
 More: [subsystems](docs/subsystems.md) (how the parts connect), [environment](docs/env-contract.md) (what the daemon

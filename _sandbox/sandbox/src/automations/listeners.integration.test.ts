@@ -24,7 +24,7 @@ const fakeServices = (root: string): Services =>
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
-        threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
+        threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), () => false),
         senders: fileSendersStore(join(root, "senders.json")),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),

@@ -7,7 +7,7 @@ import { codexConnectedProxy, recordingTurnStores, services, withTranslator } fr
 import type { ConversationEvent } from "../../agents/actor/conversation-decide.js";
 import { notedFleet } from "../../testing.js";
 import { recordProviderSuccess } from "../providers/provider-health.js";
-import type { TurnInput } from "../../seams/turn-starter.js";
+import type { SentTurn } from "../../seams/turn-starter.js";
 import * as verifyNudge from "../verification/verify-nudge.js";
 import type { AgentRequest } from "../providers/agent-request.js";
 import { streamAgent } from "./agent.routes.js";
@@ -96,7 +96,7 @@ const checked: AgentEvent = {
 const windows: UsageWindow[] = [{ kind: "five_hour", utilization: 42, resetsAt: 1_900_000_000, gates: "all" }];
 
 test("a clean turn streams every frame once, stamps the ones that name an account, and settles into every store", async () => {
-    const input: TurnInput = { prompt: "ship the parser", conversationId: "frames-clean", actor: "ada@example.com" };
+    const input: SentTurn = { prompt: "ship the parser", conversationId: "frames-clean", actor: "ada@example.com", byPerson: true };
     const {
         services: s,
         writes,
@@ -228,7 +228,7 @@ test("a clean turn streams every frame once, stamps the ones that name an accoun
 });
 
 test("a spent allowance naming its reset is held whole, filed as a limit, and re-measured", async () => {
-    const input: TurnInput = { prompt: "carry on", conversationId: "frames-limit", actor: "ada@example.com", model: "opus" };
+    const input: SentTurn = { prompt: "carry on", conversationId: "frames-limit", actor: "ada@example.com", model: "opus", byPerson: true };
     const {
         services: s,
         writes,
@@ -341,7 +341,7 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
 });
 
 test("an outage goes out as the breaker's retry frame, and remembers the session for the resume", async () => {
-    const input: TurnInput = { prompt: "keep going", conversationId: "frames-outage" };
+    const input: SentTurn = { prompt: "keep going", conversationId: "frames-outage", byPerson: true };
     const {
         services: s,
         writes,
@@ -397,7 +397,7 @@ test("an outage goes out as the breaker's retry frame, and remembers the session
 });
 
 test("a refused credential is promised a re-mint and held for it, unless the turn is itself the re-mint", async () => {
-    const input: TurnInput = { prompt: "go", conversationId: "frames-token" };
+    const input: SentTurn = { prompt: "go", conversationId: "frames-token", byPerson: true };
     const refusal = scripted([
         { kind: "session", sessionId: "s-token" },
         { kind: "error", code: "claude-token-refused", message: "401 invalid bearer token" },
@@ -435,7 +435,7 @@ test("a refused credential is promised a re-mint and held for it, unless the tur
 
     resumes.length = 0;
     const again = turnServices(refusal);
-    const rerun = await collect(streamAgent(again.services, { ...input, conversationId: "frames-token-again", resume: "auth" }, undefined));
+    const rerun = await collect(streamAgent(again.services, { ...input, conversationId: "frames-token-again", resume: "auth", byPerson: false }, undefined));
     expect(rerun.find((frame) => frame.kind === "error")).toStrictEqual({
         kind: "error",
         code: "claude-token-refused",
@@ -455,7 +455,7 @@ test("a turn that ends with nothing to show gets its failure synthesized ahead o
         ]),
     );
 
-    const frames = await collect(streamAgent(s, { prompt: "fix the parser", conversationId: "frames-silent" }, undefined));
+    const frames = await collect(streamAgent(s, { prompt: "fix the parser", conversationId: "frames-silent", byPerson: true }, undefined));
 
     const sentence =
         "The turn ended with nothing to show for it: 1 tool call and then a stop, no reply and no change to a file. Nothing failed: the session is intact, so carrying on continues from where it stopped.";
@@ -486,7 +486,7 @@ test("a stopped turn's error frames never reach the stream, and the ledger calls
         yield { kind: "done" };
     });
 
-    const frames = await collect(streamAgent(s, { prompt: "go", conversationId: "frames-cancel" }, controller.signal));
+    const frames = await collect(streamAgent(s, { prompt: "go", conversationId: "frames-cancel", byPerson: true }, controller.signal));
 
     expect(frames).toStrictEqual([
         { kind: "session", sessionId: "s-cancel", account: "default" },
@@ -503,7 +503,7 @@ test("a stopped turn's error frames never reach the stream, and the ledger calls
 });
 
 test("a runtime with no Stop hook gets the daemon's: routed readings re-measured, the cache clock dropped, the nudge asked", async () => {
-    const input: TurnInput = { prompt: "carry on", conversationId: "frames-codex", agent: "codex" };
+    const input: SentTurn = { prompt: "carry on", conversationId: "frames-codex", agent: "codex", byPerson: true };
     const codex = scripted([
         { kind: "session", sessionId: "thread-1" },
         { kind: "delta", text: "on it" },

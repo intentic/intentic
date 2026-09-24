@@ -207,9 +207,14 @@ const runChildTurn = (services: Services, childId: string, parent: string, turn:
                 kid.queued = false;
                 kid.oomKillsAtStart = (await services.memoryHeadroom()).oomKills;
             }
-            const run = services.turns.run(turn);
-            if (run === undefined) {
+            // The parent's agent asked for it, never a person.
+            const run = services.turns.run({ ...turn, byPerson: false });
+            if (run === "busy") {
                 failure = "A turn is already running on that conversation.";
+                return;
+            }
+            if (run === "archived") {
+                failure = "That child is archived: only a person's message reopens it.";
                 return;
             }
             for await (const event of run.frames()) {

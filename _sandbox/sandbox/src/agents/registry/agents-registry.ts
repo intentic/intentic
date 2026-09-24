@@ -333,11 +333,12 @@ const settingsOf = (existing: StoredProfile, profile: TurnProfile): StoredProfil
 
 // The entry a turn opens: every record carried whole, since each outlives the turn that wrote it, except what a turn
 // restates (identity it may still fill in, settings, title and owner). Its ending is the resting state for a turn that
-// never reports back: only a daemon killed mid-turn ever sees it. Messaging an archived agent un-archives it.
+// never reports back: only a daemon killed mid-turn ever sees it. Only a person's turn un-archives it.
 const openedEntry = (existing: PersistedAgent | undefined, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined, now: number): PersistedAgent => {
-    const { archivedAt: _unarchived, ...held } = existing ?? freshEntry(turn, now);
+    const { archivedAt, ...held } = existing ?? freshEntry(turn, now);
     return {
         ...held,
+        ...(turn.byPerson ? {} : opt("archivedAt", archivedAt)),
         identity: identityOf(held.identity, turn, entryOf),
         profile: settingsOf(held.profile, turn.profile),
         ending: { kind: "interrupted" },

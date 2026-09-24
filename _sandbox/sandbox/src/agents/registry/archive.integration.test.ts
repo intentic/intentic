@@ -75,7 +75,7 @@ const daemonOn = async () => {
 const live = async (daemon: Awaited<ReturnType<typeof daemonOn>>, id: string): Promise<void> => {
     const { historyRoot, db, conversations } = daemon;
     conversations.send(id, { kind: "journalled", entry: { kind: "turn", turn: { conversationId: id, prompt: "go" }, startedAt: 1, attempts: 0 } });
-    await beginTurn(conversations, { conversationId: id, isolated: false, prompt: "go", profile: {}, areas: ["finance"] }, 1_000);
+    await beginTurn(conversations, { conversationId: id, isolated: false, prompt: "go", profile: {}, byPerson: true, areas: ["finance"] }, 1_000);
     await sqliteTurnCheckpoints(db).record(id, 0, { kind: "tree", snapshot: "s-0" });
     await sqliteWatchJournal(db).record({
         id: `watch-${id}`,

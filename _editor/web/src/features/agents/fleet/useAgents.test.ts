@@ -58,7 +58,7 @@ import { useChat } from "../../chat/run/useChat";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { queryClient } from "../../../lib/queryPersistence";
 import { desyncAgents, useAgents } from "./useAgents";
-import { canArchive, doneWith, FINISHED_WINDOW, type FleetAgent, windowFinished } from "./useAgents-fleet";
+import { canArchive, doneWith, FINISHED_WINDOW, type FleetAgent, TIDY_AFTER_MS, tidyDue, windowFinished, withKeptWords } from "./useAgents-fleet";
 import { auditRoster, setAgents } from "./useAgents-registry";
 import { runningTurn } from "../../../testing/runningTurn";
 import { IDLE } from "../../chat/session/runPhase";
@@ -145,6 +145,40 @@ describe("windowFinished", () => {
 
         expect(shown.map((entry) => entry.conversation.conversationId)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
         expect(hidden).toBe(3);
+    });
+});
+
+// When the rail may let a finished chat go: done with, and untouched for twelve hours by the clock of its finish,
+// its last read and focus leaving it, whichever came last.
+describe("tidyDue", () => {
+    const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
+    const settled = (over: Partial<FleetAgent> = {}): FleetAgent => ({
+        id: `a1`,
+        status: `landed`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 1_000,
+        seenAt: 2_000,
+        attention: none,
+        open: true,
+        unread: false,
+        unsent: false,
+        ...over,
+    });
+
+    it("keeps a read, finished chat until twelve hours after the reader last touched it", () => {
+        expect(tidyDue(settled(), undefined, 2_000 + TIDY_AFTER_MS - 1)).toBe(false);
+        expect(tidyDue(settled(), undefined, 2_000 + TIDY_AFTER_MS)).toBe(true);
+    });
+
+    it("counts from focus leaving the chat when that came last", () => {
+        expect(tidyDue(settled(), 50_000, 2_000 + TIDY_AFTER_MS)).toBe(false);
+        expect(tidyDue(settled(), 50_000, 50_000 + TIDY_AFTER_MS)).toBe(true);
+    });
+
+    it("never lets go of one the board still has a reason to hold, however old", () => {
+        expect(tidyDue(settled({ unread: true }), undefined, Number.MAX_SAFE_INTEGER)).toBe(false);
+        expect(tidyDue(settled({ status: `ready` }), undefined, Number.MAX_SAFE_INTEGER)).toBe(false);
     });
 });
 
@@ -985,24 +1019,24 @@ describe("draft cards", () => {
         ]);
     });
 
-    // An archived session with unsent words stays on the board for as long as those words exist, still marked
-    // archived on its face; nothing is written daemon-side.
-    it("lifts an archived session back onto the board while its chat holds an unsent message", () => {
+    // Archived means off the board: words left in its composer wait with the archived card, which wears the mark,
+    // rather than lifting it back where Clear can no longer take it.
+    it("keeps an archived session in the archive while its closed chat holds an unsent message, marked on its card", () => {
         const { archived, open } = useAgents();
         const entry = { ...registered(`a1`), archivedAt: 2_000 };
         archived.value = [{ ...entry, open: false, unread: false, unsent: false }];
         open(entry);
         const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === `a1`)!;
-
         conversation.draft.value = `and one more thing —`;
 
-        expect(useAgents().lanes.value.finished.map((card) => ({ id: card.id, unsent: card.unsent, archived: card.archivedAt }))).toEqual([
-            { id: `a1`, unsent: true, archived: 2_000 },
-        ]);
+        useChat().closeTabs(new Set([`a1`]));
+
+        expect(useAgents().lanes.value.finished.map((card) => card.id)).toEqual([]);
+        expect(withKeptWords(archived.value[0]!)).toMatchObject({ id: `a1`, unsent: true, archivedAt: 2_000 });
     });
 
-    // It files back the moment the words clear; whitespace isn't a message, matching send()'s own rule.
-    it("puts it back in the archive the moment the message is cleared", () => {
+    // Whitespace isn't a message, matching send()'s own rule; either way the card stays filed.
+    it("keeps it in the archive whether the message is typed or cleared", () => {
         const { archived, open } = useAgents();
         const entry = { ...registered(`a1`), archivedAt: 2_000 };
         archived.value = [{ ...entry, open: false, unread: false, unsent: false }];
@@ -1450,15 +1484,17 @@ describe("archive", () => {
         });
     });
 
-    it("with no ids asks the daemon to clear the lane, and a sweep is the archive that reports", async () => {
+    // Clear names what it takes, unlanded work included: archiving commits and keeps the branch, so a `ready` card that
+    // Clear skipped would sit in Finished for good. A card mid-turn is not in Finished and is not named.
+    it("with no ids names every Finished card the board may archive, ready ones included, and a sweep reports", async () => {
         const { archive } = useAgents();
         const { receipt } = useNotifications();
-        setAgents([agent(`a`), agent(`b`)], 1);
+        setAgents([agent(`a`), { ...agent(`b`), status: `ready` }, { ...agent(`c`), status: `running` }], 1);
         daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 3 } as never);
 
         await archive();
 
-        expect(daemon.archive).toHaveBeenCalledWith({});
+        expect(daemon.archive).toHaveBeenCalledWith({ ids: [`a`, `b`] });
         expect(receipt.value?.title).toContain(`2 agents archived`);
         expect(receipt.value?.actions?.[0]?.run).toBeTypeOf(`function`);
     });

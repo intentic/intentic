@@ -34,7 +34,10 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
         doors: { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
         logger,
         conversations: services.conversations,
-        entryOf: (conversationId) => services.agents.entry(conversationId),
+        entryOf: (conversationId) => {
+            const entry = services.agents.entry(conversationId);
+            return entry === undefined ? undefined : { startedBy: entry.identity.startedBy, title: entry.social.title?.text };
+        },
         profileOf: (conversationId) => {
             const entry = services.agents.entry(conversationId);
             return entry === undefined ? undefined : conversationProfile(entry);

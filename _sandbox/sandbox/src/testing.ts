@@ -9,7 +9,7 @@ import { turnDoors } from "./agent/run/turn/turn-doors.js";
 import type { ConversationActors } from "./agents/actor/conversation-actors.js";
 import { turnJournalRows } from "./agent/run/turn/turn-journal.js";
 import { createFleet, type Fleet, type FleetStore } from "./agents/registry/agents-registry.js";
-import type { BeginTurn, ConversationEvent } from "./agents/actor/conversation-decide.js";
+import type { BeginOutcome, BeginTurn, ConversationEvent } from "./agents/actor/conversation-decide.js";
 import { type IsolatedAgent, type PersistedAgent, type RepoRecord, sqliteAgentsStore } from "./agents/registry/agents-store.js";
 import { type ConversationsDb, openConversationsDb } from "./store/conversations-db.js";
 import type { ConversationUnits } from "./store/conversation-units.js";
@@ -183,7 +183,7 @@ export const fleetStoreOver = (db: ConversationsDb, units: Pick<ConversationUnit
 });
 
 // Opens a turn on a conversation the way the daemon does: the `begin` event, answered once the entry's write has landed.
-export const beginTurn = (conversations: Pick<ConversationActors, "send">, turn: BeginTurn, now: number): Promise<boolean> =>
+export const beginTurn = (conversations: Pick<ConversationActors, "send">, turn: BeginTurn, now: number): Promise<BeginOutcome> =>
     conversations.send(turn.conversationId, { kind: "begin", turn }, now).settled;
 
 // A fleet over nothing: entries kept in an in-memory database (the real store, the real SQL), and land probes that
@@ -218,9 +218,9 @@ export const drivenBy = (services: Services, body: TurnStarter["stream"]): Servi
     return driven;
 };
 
-// The TurnStarter port's wake door, recording what it was handed the way admission would take it: said into the live turn
-// while `live`, queued while `busy` counts down (Infinity: every one until reset), a turn of its own otherwise; never
-// answered while `stuck`, as a daemon dying mid-delivery.
+// The TurnStarter port's wake door, recording what it was handed the way admission would take it: nowhere for words not a
+// person's while `archived`, said into the live turn while `live`, queued while `busy` counts down (Infinity: every one
+// until reset), a turn of its own otherwise; never answered while `stuck`, as a daemon dying mid-delivery.
 export interface FakeTurns {
     readonly turns: Pick<TurnStarter, "say">;
     readonly steers: Steer[];
@@ -229,9 +229,10 @@ export interface FakeTurns {
     live: boolean;
     busy: number;
     stuck: boolean;
+    archived: boolean;
 }
 
-export const fakeTurns = (over: { readonly live?: boolean; readonly busy?: number } = {}): FakeTurns => {
+export const fakeTurns = (over: { readonly live?: boolean; readonly busy?: number; readonly archived?: boolean } = {}): FakeTurns => {
     const fake: FakeTurns = {
         steers: [],
         started: [],
@@ -239,10 +240,14 @@ export const fakeTurns = (over: { readonly live?: boolean; readonly busy?: numbe
         live: over.live === true,
         busy: over.busy ?? 0,
         stuck: false,
+        archived: over.archived === true,
         turns: {
             say: async (said) => {
                 if (fake.stuck) {
                     return new Promise<never>(() => undefined);
+                }
+                if (fake.archived && said.voice !== "person") {
+                    return { why: "the conversation is archived, and only a person's message reopens it" };
                 }
                 if (fake.live) {
                     fake.steers.push({ text: said.turn.prompt, voice: said.voice, ...opt("outside", said.outside) });

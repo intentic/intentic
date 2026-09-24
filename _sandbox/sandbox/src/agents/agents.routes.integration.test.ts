@@ -470,7 +470,7 @@ test("a forced land leaves the running turn's bookkeeping to the turn", async ()
     expect(agents[0]?.status).not.toBe("running");
 });
 
-test("archiving a named agent asks nothing of the rest of the fleet; clearing the lane still does", async () => {
+test("archiving names what it takes and asks nothing of the rest of the fleet", async () => {
     const daemon = services();
     const probe = jest.spyOn(daemon.agents, "refreshStandings");
     const client = clientFor(createApp(daemon));
@@ -484,10 +484,9 @@ test("archiving a named agent asks nothing of the rest of the fleet; clearing th
     expect(probe).not.toHaveBeenCalled();
     expect((await client.agents.archived()).agents.map((agent) => agent.id)).toEqual(["conv1"]);
 
-    probe.mockClear();
-    await client.agents.archive({});
+    await client.agents.archive({ ids: ["conv2"] });
 
-    expect(probe).toHaveBeenCalledTimes(1);
+    expect(probe).not.toHaveBeenCalled();
     expect((await client.agents.archived()).agents.map((agent) => agent.id)).toEqual(["conv2", "conv1"]);
 });
 

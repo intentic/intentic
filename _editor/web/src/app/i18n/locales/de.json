@@ -971,10 +971,19 @@
             "notSignedInYet": ", noch nicht angemeldet"
         },
         "chatPersonaRail": {
-            "chat": "Chat",
-            "newChat": "Neuer Chat als",
-            "open": "{conversation} öffnen",
-            "showSChats": "Die Chats von {label} zeigen"
+            "archiveFinishedOf": "Fertige Agenten von {label} archivieren",
+            "chats": "{count} Chat | {count} Chats",
+            "closeAllOf": "Alle Chats von {label} schließen",
+            "closeFinishedOf": "Fertige Chats von {label} schließen",
+            "editPersona": "Persona bearbeiten…",
+            "more": "Mehr zu {label}",
+            "moreOnBoard": "{count} weitere auf dem Board",
+            "needsYou": "{count} braucht dich | {count} brauchen dich",
+            "newChatAs": "Neuer Chat als {label}",
+            "notOpen": "{count} nicht offen | {count} nicht offen",
+            "showSChats": "Die Chats von {label} zeigen",
+            "startAs": "Chat als {label} beginnen",
+            "working": "{count} arbeitet | {count} arbeiten"
         },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "Diese Unterhaltung läuft bereits {placedAt}. Starten Sie einen neuen Agenten, um woanders zu arbeiten.",
@@ -1099,29 +1108,43 @@
         },
         "chatTabList": {
             "anotherSandbox": "eine andere Sandbox",
+            "archive": "Archivieren",
+            "clearActive": "{count} arbeitenden Chat schließen | Alle {count} arbeitenden Chats schließen",
+            "clearAttention": "{count} wartenden Chat schließen | Alle {count} wartenden Chats schließen",
+            "clearFinished": "{count} fertigen Chat schließen | Alle {count} fertigen Chats schließen",
             "closeAll": "Alle {size} schließen: {keeps}",
             "everyConversationWindowHolds": "Jede Unterhaltung, die dieses Fenster hält, danach geordnet, was Sie braucht",
             "filterChatsByMessages": "Chats nach Ihren Nachrichten filtern",
+            "keepsActive": "ihre Durchläufe laufen weiter",
+            "keepsAttention": "sie warten weiter auf dem Board",
+            "keepsFinished": "sie bleiben in den früheren Chats",
             "noMatches": "Keine Treffer",
             "notOpen": "Nicht offen",
             "openBeside": "Daneben öffnen",
             "openWorkflowRun": "Den Workflow-Lauf {name} öffnen",
             "peopleSandboxPickOne": "Die Menschen, die diese Sandbox sein kann — wählen Sie einen und sprechen Sie mit ihm",
+            "pin": "Anheften",
+            "pinned": "Angeheftet",
             "runsIn": "Läuft in {sandbox}",
             "runsInQuoted": "Läuft in „{sandbox}“",
             "share": "Teilen…",
-            "steps": "Schritte"
+            "steps": "Schritte",
+            "unpin": "Lösen"
         },
         "chatTabs": {
+            "archiveChat": "Chat archivieren",
             "chatHistory": "Chat-Historie",
+            "dockChatToRailHint": "Chat an die Leiste andocken: ganzes Fenster, hinter einer Leistenkachel",
             "history": "Historie",
             "need": "{attentionCount} brauchen Sie",
+            "nextNeedsYou": "Nächster Chat, der dich braucht",
             "openNextBeside": "Nächsten daneben öffnen",
             "pastChats": "Frühere Chats",
             "previous": "Vorheriger",
             "running": "{runningCount} laufen",
             "switch": "Wechseln…",
             "switchChatOpen": "Chat wechseln: {count} offen",
+            "togglePin": "Chat anheften oder lösen",
             "waiting": "{attentionCount} warten auf Sie"
         },
         "chatTodoList": {
@@ -3573,7 +3596,11 @@
         "worthBetterModelThan": "Ein besseres Modell wert als der Rest der automatischen Jobs: es liest den Befehl als Daten, und in einem Zug, der etwas von außen aufgenommen hat, argumentiert dieser Text womöglich für seine eigene Freigabe.",
         "worthKnowing": "Wissenswert",
         "writeSkill": "Einen Skill schreiben",
-        "you": "Sie"
+        "you": "Sie",
+        "moveChatIntoNewWindow": "Chat in neues Fenster verschieben",
+        "dockChatBack": "Chat wieder andocken",
+        "dockChatToRail": "Chat an die Leiste andocken",
+        "reopenClosedChat": "Geschlossenen Chat wieder öffnen"
     },
     "shell": {
         "accountPanel": {

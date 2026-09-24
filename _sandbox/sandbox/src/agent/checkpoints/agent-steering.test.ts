@@ -172,10 +172,10 @@ const liveRun = (conversations: ReturnType<typeof actors>, conversationId: strin
             await held;
             yield { kind: "done" };
         },
-        { prompt: "start", conversationId },
+        { prompt: "start", conversationId, byPerson: true },
     );
-    if (run === undefined) {
-        throw new Error(`a run is already live on ${conversationId}`);
+    if (typeof run === "string") {
+        throw new Error(`no run on ${conversationId}: ${run}`);
     }
     return { run, release };
 };

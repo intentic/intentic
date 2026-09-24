@@ -20,6 +20,7 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
@@ -101,6 +102,24 @@ const toggleOpen = (persona: Persona): void => {
         draft.value = draftOf(persona);
     });
 };
+
+// A link naming a persona (`?open=<id>`, the chat rail's Edit persona) lands on it open, once the list has it.
+const route = useRoute();
+let landedOn: unknown;
+watch(
+    [() => route.query[`open`], personas],
+    ([asked]) => {
+        const persona = personas.value.find((candidate) => candidate.id === asked);
+        if (persona === undefined || landedOn === asked) {
+            return;
+        }
+        landedOn = asked;
+        if (!isOpen(persona)) {
+            toggleOpen(persona);
+        }
+    },
+    { immediate: true },
+);
 
 // A name, and nothing else: the persona is written with the schema's own defaults (stored as absent, so the file says
 // nothing about questions nobody was asked), then opens for the rest. The name lives in its own ref rather than a

@@ -25,8 +25,10 @@ import { formatAnswers } from "../../tools/question-answers.js";
 import { personaRunModel, runRoleModel } from "../../models/run-role-model.js";
 import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
 import { consumeEntry, type JournalEntry, type JournalledTurn, resumeBars, spendAttempt } from "./turn-journal.js";
-import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
+import type { SentTurn, StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
+import { refusedBegin } from "../conversation/turn-placement.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
+import type { BeginRefusal } from "../../../agents/actor/conversation-decide.js";
 import type { HeldRecord } from "../../../agents/actor/conversation-state.js";
 import { opt } from "../../../opt.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
@@ -133,23 +135,27 @@ const rerunNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNot
     }
 };
 
-// A held turn sent again where `routing` points; a door refusal's run joins those whose rows the model never saw.
-const rerunOf = (held: HeldTurn, routing?: ResumeRouting): TurnInput & { conversationId: string } => {
-    const turn = resumedTurn({ input: reroutedInput(held.input, routing), sessionId: held.sessionId }, rerunNote(held, routing));
+// A held turn sent again where `routing` points, by whoever sends it now; a door refusal's run joins those whose rows the
+// model never saw.
+const rerunOf = (held: HeldTurn, byPerson: boolean, routing?: ResumeRouting): SentTurn & { conversationId: string } => {
+    const turn = { ...resumedTurn({ input: reroutedInput(held.input, routing), sessionId: held.sessionId }, rerunNote(held, routing)), byPerson };
     return held.run === undefined ? turn : { ...turn, unseenRuns: [...(held.input.unseenRuns ?? []), held.run] };
 };
 
-// Undefined when nothing a press answers for is held (an outage or a refused credential is the pass's) or a turn runs.
+// Undefined when nothing a press answers for is held (an outage or a refused credential is the pass's), a turn runs, or
+// the conversation is archived and no person pressed.
 export const fireHeldResume = async (
     services: Pick<Services, "conversations" | "turns">,
     conversationId: string,
+    byPerson: boolean,
     routing?: ResumeRouting,
 ): Promise<StartedRun | undefined> => {
     const held = services.conversations.state(conversationId)?.resume.held;
     if (held === undefined || held.reason === "auth" || held.reason === "outage") {
         return undefined;
     }
-    return services.turns.start(rerunOf(held, routing));
+    const started = await services.turns.start(rerunOf(held, byPerson, routing));
+    return typeof started === "string" ? undefined : started;
 };
 
 // The one reader for every ending's question. Two callers must agree about the same turn — the failure frame promises
@@ -218,18 +224,18 @@ const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): 
 };
 
 // The one path every detached turn starts through, so the announcements and the journal entry live here once, not at
-// each call site; `body` is the turn itself. Undefined means a live turn already owns the conversation.
+// each call site; `body` is the turn itself. A refusal names why no run was made.
 export const startConversationTurn = async (
     services: Services,
     body: TurnStarter["stream"],
-    started: TurnInput & { readonly conversationId: string },
+    started: SentTurn & { readonly conversationId: string },
     { attempts = 0, senderKeeps = false }: StartOptions = {},
-): Promise<TurnRun | undefined> => {
+): Promise<TurnRun | BeginRefusal> => {
     const turn = await withRoleModel(services, started);
     const { conversationId, prompt } = turn;
     // The record is copied now; the pump waits for it before invoking the provider.
     const transcriptOpen = openTurnTranscript(services, turn);
-    return startTurnRun(services, body, turn, {
+    const run = startTurnRun(services, body, turn, {
         journalled: true,
         before: transcriptOpen,
         opening: (startedAt) => openingRows(turn, services.workspace.root, startedAt),
@@ -242,11 +248,15 @@ export const startConversationTurn = async (
         ...(senderKeeps
             ? {}
             : {
-                  holdTurnedAway: ({ input, run }) => {
-                      services.conversations.send(conversationId, { kind: "turn-held", held: { input, reason: "door", ran: false, run } });
+                  holdTurnedAway: ({ input, run: turnedAway }) => {
+                      services.conversations.send(conversationId, { kind: "turn-held", held: { input, reason: "door", ran: false, run: turnedAway } });
                   },
               }),
     });
+    if (run === "archived") {
+        services.logger.info({ conversationId, resume: turn.resume }, "turn not started: the conversation is archived, and only a person reopens it");
+    }
+    return run;
 };
 
 export interface TurnResumeScheduler {
@@ -294,10 +304,10 @@ interface Rung {
     readonly fire: (services: Services, held: HeldRecord, routing: ResumeRouting | undefined, now: number) => Promise<void>;
 }
 
-// A held turn's re-run, logged once it starts; undefined means a live turn already owns the conversation.
-const rerun = async (services: Services, held: HeldTurn, routing?: ResumeRouting): Promise<StartedRun | undefined> => {
-    const started = await services.turns.start(rerunOf(held, routing));
-    if (started !== undefined) {
+// A held turn's re-run, the sandbox's own, logged once it starts; a refusal names why it did not.
+const rerun = async (services: Services, held: HeldTurn, routing?: ResumeRouting): Promise<StartedRun | BeginRefusal> => {
+    const started = await services.turns.start(rerunOf(held, false, routing));
+    if (typeof started !== "string") {
         const { conversationId } = held.input;
         services.logger.info({ conversationId, reason: held.reason, ...opt("account", routing?.account) }, "held turn re-run fired");
     }
@@ -314,10 +324,10 @@ const dispatch =
     };
 
 // `retry` keeps the hold: a throw never asked the question, and a turn still unwinding cannot yet be told the answer.
-const remintAndRerun = async (services: Services, held: HeldTurn): Promise<"resumed" | "dead" | "retry"> => {
+const remintAndRerun = async (services: Services, held: HeldTurn): Promise<"done" | "retry"> => {
     const { remint } = held;
     if (remint === undefined) {
-        return "dead";
+        return "done";
     }
     let replacement: string | undefined;
     try {
@@ -329,9 +339,9 @@ const remintAndRerun = async (services: Services, held: HeldTurn): Promise<"resu
     // Nothing new to run: the credential is revoked, or re-mint handed back the very token that was just refused.
     if (replacement === undefined || replacement === remint.refusedToken) {
         const settled = await services.conversations.send(held.input.conversationId, { kind: "resume-abandoned", reason: AUTH_DEAD }).settled;
-        return settled ? "dead" : "retry";
+        return settled ? "done" : "retry";
     }
-    return (await rerun(services, held)) === undefined ? "retry" : "resumed";
+    return (await rerun(services, held)) === "busy" ? "retry" : "done";
 };
 
 // One re-mint in flight per conversation, so a slow one isn't refired by the next pass underneath itself.
@@ -525,13 +535,13 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
                 isolated: record?.placement.kind === "worktree",
                 prompt: input.prompt,
                 profile: profileOf(input),
+                byPerson: input.byPerson,
                 ...(input.title !== undefined ? { title: input.title } : {}),
                 ...(input.origin !== undefined ? { origin: input.origin } : {}),
             },
         }).settled;
-        if (!began) {
-            yield { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish." };
-            yield { kind: "done" };
+        if (began !== "begun") {
+            yield* refusedBegin(began);
             return;
         }
         // Every frame folds into the conversation's actor, lighting `awaiting` and the fleet's attention flag.
@@ -578,10 +588,10 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
             await services.conversations.send(conversationId, { kind: "settle" }).settled;
         }
     };
-    // Rehydration spends nothing; attempts pass through unchanged so the journal stays honest about what ran.
-    const run = await startConversationTurn(services, placeholder, entry.turn, { attempts: entry.attempts });
-    if (run === undefined) {
-        // A live turn already owns the conversation; it supersedes the park, as a hand retry would.
+    // Rehydration spends nothing, and is the sandbox's own; attempts pass through so the journal stays honest about what ran.
+    const run = await startConversationTurn(services, placeholder, { ...entry.turn, byPerson: false }, { attempts: entry.attempts });
+    if (typeof run === "string") {
+        // A live turn already owns the conversation, superseding the park as a hand retry would; or nobody reopened it.
         return;
     }
     services.logger.info({ conversationId, requests: requests.length }, "parked turn rehydrated, its requests are back where they were");
@@ -591,7 +601,8 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
         if (followUp === undefined) {
             return;
         }
-        if ((await services.turns.start(followUp)) !== undefined) {
+        // The answer to a restored card is a person's.
+        if (typeof (await services.turns.start({ ...followUp, byPerson: true })) !== "string") {
             services.logger.info({ conversationId }, "parked turn resumed: the user's answer continues its session");
         }
     })().catch((error: unknown) => services.logger.error({ err: error, conversationId }, "parked turn's answer failed to resume it"));
@@ -643,12 +654,14 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
         // The attempt is spent on disk before the turn restarts; this write has to survive the death it guards against.
         await spendAttempt(services, entry);
         const { conversationId } = entry.turn;
-        if ((await services.turns.start(restartTurnOf(entry), { attempts: entry.attempts + 1 })) !== undefined) {
+        if (typeof (await services.turns.start(restartTurnOf(entry), { attempts: entry.attempts + 1 })) !== "string") {
             services.logger.info({ conversationId }, "restart auto-resume fired");
         }
     }
 };
 
 // Uses resumedTurn's own rules for the prompt and session; the journal just renames the fields a failure record uses.
-const restartTurnOf = (entry: JournalledTurn): TurnInput & { conversationId: string } =>
-    resumedTurn({ input: entry.turn, sessionId: entry.sessionId }, { reason: "restart" });
+const restartTurnOf = (entry: JournalledTurn): SentTurn & { conversationId: string } => ({
+    ...resumedTurn({ input: entry.turn, sessionId: entry.sessionId }, { reason: "restart" }),
+    byPerson: false,
+});

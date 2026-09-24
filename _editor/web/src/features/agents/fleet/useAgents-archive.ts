@@ -7,7 +7,7 @@ import { useChat } from "../../chat/run/useChat";
 import { commandShortcut } from "../../../shell/commands/useCommands";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { type FleetAgent, lanes } from "./useAgents-fleet";
+import { canArchive, type FleetAgent, lanes } from "./useAgents-fleet";
 import { archived, holdPending, moveAhead } from "./useAgents-registry";
 
 // The board's exit: archiving takes an agent off the lanes and reclaims its worktree checkout, keeping the branch,
@@ -138,11 +138,18 @@ const settleArchive = (
     }
 };
 
-// Archives the named agents, or with no ids every archivable finished agent (the lane header's "Clear"). The daemon
-// answers with what actually moved, since "everything finished" can't be re-derived once the lane is empty.
+// What Clear on the Finished lane archives: every card there the board may archive.
+const clearableIds = (): string[] => lanes.value.finished.filter(canArchive).map((agent) => agent.id);
+
+// Archives the named agents, or with no ids every Finished card the board may archive (the lane header's "Clear"). The
+// daemon answers with what actually moved, since "everything finished" can't be re-derived once the lane is empty.
 export const archive = async (ids?: readonly string[]): Promise<void> => {
-    // The bulk press borrows the Finished lane's own ids, since that lane is the archivable set by construction.
-    const aimed = ids ?? lanes.value.finished.map((agent) => agent.id);
+    // Clear names its cards, `ready` included: archiving commits and keeps the branch, so unlanded work is filed, not lost.
+    const aimed = ids ?? clearableIds();
+    if (aimed.length === 0) {
+        say(`Nothing to archive, every finished agent is already off the board.`);
+        return;
+    }
     const release = claimBusy(aimed);
     // A sweep is the archive with no per-card animation to vouch for it, so it's the one that reports.
     const sweep = ids === undefined || ids.length > 1;
@@ -151,7 +158,7 @@ export const archive = async (ids?: readonly string[]): Promise<void> => {
     // An answer landing after a switch is about cards the board no longer holds; the next sandbox's strip is not its.
     const current = sandboxScopeGuard();
     try {
-        const answer = await sandboxRpc.agents.archive(ids === undefined ? {} : { ids: [...ids] });
+        const answer = await sandboxRpc.agents.archive({ ids: [...aimed] });
         if (current()) {
             settleArchive(answer, restore, sweep);
         }

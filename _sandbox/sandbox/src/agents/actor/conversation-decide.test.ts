@@ -10,8 +10,11 @@ import { type ConversationState, freshRuntime, idleConversation, NO_USAGE, type 
 // effects in the order they must run, and the answer. Pure, so each row is the whole story of one event.
 
 const NOW = 5_000;
-const OPENING: BeginTurn = { conversationId: "c1", isolated: true, prompt: "Fix the login bug", profile: { agent: "claude", harness: "native" } };
+// A person's message; the sandbox's own turns (a resume, a nudge, a wake) begin the same way with `byPerson: false`.
+const OPENING: BeginTurn = { conversationId: "c1", isolated: true, prompt: "Fix the login bug", profile: { agent: "claude", harness: "native" }, byPerson: true };
+const UNATTENDED: BeginTurn = { ...OPENING, prompt: "Picking this back up.", byPerson: false };
 const ENTRY: PersistedAgent = isolatedAgent([]);
+const ARCHIVED: PersistedAgent = { ...ENTRY, archivedAt: 2_000 };
 const SESSIONED: PersistedAgent = { ...ENTRY, sessionId: "s-0" };
 // The in-flight record a journalled run files for its turn.
 const IN_FLIGHT: JournalledTurn = { kind: "turn", turn: { conversationId: "c1", prompt: "go" }, startedAt: 900, attempts: 0 };
@@ -72,7 +75,7 @@ const rows: readonly Row[] = [
             { kind: "broadcast" },
             { kind: "persist" },
         ],
-        reply: true,
+        reply: "begun",
     },
     {
         name: "begin on a conversation that already has a session files the prompt under it at once",
@@ -91,7 +94,7 @@ const rows: readonly Row[] = [
             { kind: "broadcast" },
             { kind: "persist" },
         ],
-        reply: true,
+        reply: "begun",
     },
     {
         name: "begin writes the run's journal row with the entry that opens the turn, one write for both",
@@ -111,7 +114,7 @@ const rows: readonly Row[] = [
             { kind: "broadcast" },
             { kind: "persist" },
         ],
-        reply: true,
+        reply: "begun",
     },
     {
         name: "a run's journal row filed before its turn begins is held for that begin, and written by nothing else",
@@ -148,7 +151,7 @@ const rows: readonly Row[] = [
         entry: ENTRY,
         to: { ...running(), journal: { entry: IN_FLIGHT, written: false } },
         effects: [],
-        reply: false,
+        reply: "busy",
     },
     {
         name: "begin under a live turn is refused",
@@ -157,7 +160,7 @@ const rows: readonly Row[] = [
         entry: ENTRY,
         to: running(),
         effects: [],
-        reply: false,
+        reply: "busy",
     },
     {
         name: "begin under a rewind is refused",
@@ -166,7 +169,96 @@ const rows: readonly Row[] = [
         entry: ENTRY,
         to: rewinding(),
         effects: [],
+        reply: "busy",
+    },
+    {
+        name: "a begin nobody sent is turned away from an archived conversation, which opens nothing and stays archived",
+        from: idle(),
+        event: { kind: "begin", turn: UNATTENDED },
+        entry: ARCHIVED,
+        to: idle(),
+        effects: [],
+        reply: "archived",
+    },
+    {
+        name: "an archived conversation says so to a begin nobody sent even while a rewind holds it, since waiting cannot help",
+        from: rewinding(),
+        event: { kind: "begin", turn: UNATTENDED },
+        entry: ARCHIVED,
+        to: rewinding(),
+        effects: [],
+        reply: "archived",
+    },
+    {
+        name: "a person's begin opens an archived conversation, the entry it opens coming back onto the board",
+        from: idleConversation(),
+        event: { kind: "begin", turn: OPENING },
+        entry: ARCHIVED,
+        to: {
+            ...idleConversation(),
+            phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
+            turn: { ...freshRuntime(), lastAt: NOW, promptToFile: OPENING.prompt },
+        },
+        effects: [
+            { kind: "entry-opened", turn: OPENING },
+            { kind: "conversation-prompt", prompt: OPENING.prompt },
+            { kind: "broadcast" },
+            { kind: "persist" },
+        ],
+        reply: "begun",
+    },
+    {
+        name: "a begin nobody sent claims a conversation that is not archived",
+        from: idleConversation(),
+        event: { kind: "begin", turn: UNATTENDED },
+        entry: ENTRY,
+        to: {
+            ...idleConversation(),
+            phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
+            turn: { ...freshRuntime(), lastAt: NOW, promptToFile: UNATTENDED.prompt },
+        },
+        effects: [
+            { kind: "entry-opened", turn: UNATTENDED },
+            { kind: "conversation-prompt", prompt: UNATTENDED.prompt },
+            { kind: "broadcast" },
+            { kind: "persist" },
+        ],
+        reply: "begun",
+    },
+    {
+        name: "asked ahead of a run, an archived conversation says it would turn away a turn nobody sent",
+        from: idle(),
+        event: { kind: "open-asked", byPerson: false },
+        entry: ARCHIVED,
+        to: idle(),
+        effects: [],
         reply: false,
+    },
+    {
+        name: "asked ahead of a run, an archived conversation would open for a person",
+        from: idle(),
+        event: { kind: "open-asked", byPerson: true },
+        entry: ARCHIVED,
+        to: idle(),
+        effects: [],
+        reply: true,
+    },
+    {
+        name: "asked ahead of a run, a conversation on the board would open for anyone, whatever holds it now",
+        from: running(),
+        event: { kind: "open-asked", byPerson: false },
+        entry: ENTRY,
+        to: running(),
+        effects: [],
+        reply: true,
+    },
+    {
+        name: "asked ahead of a run, a conversation with no entry yet would open for anyone",
+        from: idleConversation(),
+        event: { kind: "open-asked", byPerson: false },
+        to: idleConversation(),
+        effects: [],
+        reply: true,
     },
     {
         name: "a card raised on a live turn parks it",
@@ -690,7 +782,7 @@ const rows: readonly Row[] = [
             { kind: "broadcast" },
             { kind: "persist" },
         ],
-        reply: true,
+        reply: "begun",
     },
     {
         name: "a rewording made against an older copy changes nothing, and says it was stale",
@@ -716,7 +808,7 @@ const rows: readonly Row[] = [
             { kind: "broadcast" },
             { kind: "persist" },
         ],
-        reply: true,
+        reply: "begun",
     },
     {
         name: "begin drops a hold that already ended, with no receipt to give",
@@ -734,7 +826,7 @@ const rows: readonly Row[] = [
             { kind: "broadcast" },
             { kind: "persist" },
         ],
-        reply: true,
+        reply: "begun",
     },
     {
         name: "arming starts a hold now, and says it was the sandbox's own when it was",

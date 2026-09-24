@@ -45,16 +45,20 @@ export const turnDoors = (services: () => Services, body: TurnStarter["stream"])
     const start: TurnStarter["start"] = (turn, options) => startConversationTurn(services(), body, turn, options);
     return {
         start,
-        resume: (conversationId, routing) => fireHeldResume(services(), conversationId, routing),
+        resume: (conversationId, byPerson, routing) => fireHeldResume(services(), conversationId, byPerson, routing),
         run: (turn) => {
             const daemon = services();
             // Opened before the provider runs, matching the send path's own order.
             const opened = openTurnTranscript(daemon, turn);
-            return startTurnRun(daemon, body, turn, {
+            const run = startTurnRun(daemon, body, turn, {
                 before: opened,
                 opening: (startedAt) => openingRows(turn, daemon.workspace.root, startedAt),
                 transcript: (rows, steerRows) => recordTurnTranscript(daemon, turn, rows, steerRows),
             });
+            if (run === "archived") {
+                daemon.logger.info({ conversationId: turn.conversationId }, "run not started: the conversation is archived, and only a person reopens it");
+            }
+            return run;
         },
         stream: body,
         steer: async (conversationId, steer) => {

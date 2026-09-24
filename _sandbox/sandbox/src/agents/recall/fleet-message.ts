@@ -44,6 +44,12 @@ export type MessageOutcome =
 
 type Refused = Extract<MessageOutcome, { ok: false }>;
 
+const archivedRefusal = (id: string): Refused => ({
+    ok: false,
+    status: 409,
+    message: `\`${id}\` is archived: it is off the board, and a message would quietly start work on it. Ask the owner to reopen it first.`,
+});
+
 // The conversation a handle names, or why a message cannot go there.
 const targetOf = (services: Services, from: string | undefined, handle: string): PersistedAgent | Refused => {
     const resolved = resolveHandle(services, handle);
@@ -62,8 +68,9 @@ const targetOf = (services: Services, from: string | undefined, handle: string):
     if (entry.id === from) {
         return { ok: false, status: 400, message: "That is this conversation. A message to yourself is a note; write it down instead." };
     }
+    // Asked before the steer and the hourly budget, so a refusal spends neither.
     if (entry.archivedAt !== undefined) {
-        return { ok: false, status: 409, message: `\`${entry.id}\` is archived: it is off the board, and a message would quietly start work on it. Ask the owner to reopen it first.` };
+        return archivedRefusal(entry.id);
     }
     return entry;
 };
@@ -103,10 +110,14 @@ export const messageConversation = async (services: Services, from: string | und
         prompt: steer.text,
         // Who asked, in the same vocabulary the registry already uses for a spawned child's starter.
         actor: peer,
+        byPerson: false,
         // What makes the sandbox treat the turn as carrying somebody else's words rather than the owner's.
         outsideWake: peer,
     });
-    if (run === undefined) {
+    if (run === "archived") {
+        return archivedRefusal(entry.id);
+    }
+    if (run === "busy") {
         // A turn is in flight after all: it either started between the steer attempt and this call, or it was already
         // running and unsteerable — parked on a card only its owner can answer, or on a runtime with no steering seam.
         return (await services.turns.steer(entry.id, steer)) === true

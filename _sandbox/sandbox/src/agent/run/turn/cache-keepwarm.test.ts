@@ -66,7 +66,7 @@ const harness = (frames: readonly AgentEvent[], opts: { usage?: AccountUsage; ke
 
 // Opens, binds and settles one turn whose last request touched the cache at `cachedAt`.
 const settled = async (deps: Services, cachedAt: number = T0): Promise<void> => {
-    await beginTurn(deps.conversations, { conversationId: ID, prompt: "go", isolated: false, profile: { agent: "claude", harness: "native", account: "acct" } }, cachedAt - MINUTE);
+    await beginTurn(deps.conversations, { conversationId: ID, prompt: "go", isolated: false, profile: { agent: "claude", harness: "native", account: "acct" }, byPerson: true }, cachedAt - MINUTE);
     deps.conversations.send(ID, { kind: "frame", frame: { kind: "session", sessionId: "s-1", account: "acct" } }, cachedAt);
     deps.conversations.send(ID, { kind: "frame", frame: { kind: "context_usage", tokens: 200_000, contextWindow: 1_000_000, cachedAt, cacheTtlMs: HOUR } }, cachedAt);
     await deps.conversations.send(ID, { kind: "settle" }, cachedAt).settled;

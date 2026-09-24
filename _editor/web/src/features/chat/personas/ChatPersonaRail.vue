@@ -1,292 +1,459 @@
-<!-- Lists personas with pinned chats; unpinned chats stay in the Agents list. -->
+<!-- The rail's Personas cut: the same open chats as the Agents cut, grouped by who they act as, plus each persona's live work that isn't open here. -->
 <script setup lang="ts">
-import { personaBounds, providerLabel } from "@intentic/sandbox-contract";
-import { ui, Icon, type IconName, PersonaFace, StatusBadge } from "@intentic/ui";
+import { personaBounds } from "@intentic/sandbox-contract";
+import { ContextMenu, FACE_SIZES, Icon, type IconName, PersonaFace, StatusBadge, ui } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
+import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import { startAgent } from "../../agents/fleet/agentActions";
 import {
     activityIcon,
     activityLine,
+    agentDisplayTitle,
     agentStatusMeta,
-    blocked,
     type FleetLane,
-    type StandingChip,
+    laneOf,
     standingChip,
     turnInFlight,
+    unregistered,
 } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
-import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import { relativeTime, statusIcon, statusLabel } from "../models/catalog";
-import { modelLabelFor } from "../accounts/providerCatalog";
-import type { Conversation } from "../session/conversation";
-import { laneOfTab, tabLabel } from "../tabs/tabs";
-import { useChat } from "../run/useChat";
+import { canArchive, type FleetAgent, finishedLaneOrder } from "../../agents/fleet/useAgents-fleet";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import RailCard from "../../../components/RailCard.vue";
-import { useT } from "@intentic/ui/i18n";
+import { relativeTime } from "../models/catalog";
+import { previewOf } from "../panel/useChat-strip";
+import { useChat } from "../run/useChat";
+import type { OpenChat } from "../tabs/cardView";
+import ChatRowList from "../tabs/ChatRowList.vue";
+import { untouchedDraft } from "../tabs/tabFacts";
+import { laneOfTab, personaOfTab, tabsOfPersona } from "../tabs/tabs";
+import { injectChatRowActions } from "../tabs/useChatRowActions";
+import { ANYONE, usePersonaExpanded } from "./personaExpanded";
 
-// The host focuses the chat; this list only emits verbs, never writes the store directly.
 const t = useT();
-
-const emit = defineEmits<{ select: [id: string] }>();
+const router = useRouter();
 
 const { personas } = usePersonas();
 const { activeId, conversations } = useChat();
-const { agentById } = useAgents();
+const { agentById, fleet, archive, open } = useAgents();
+const actions = injectChatRowActions();
+const { isExpanded, toggle, open: expand } = usePersonaExpanded();
 
-// Chats this window holds for a persona: the pick lives on the conversation (ComposerSelection.actsAs), so this can only
-// report what's in this window's own tabs, not the whole fleet.
-const chatsOf = (id: string) =>
-    conversations.value
-        .filter((conversation) => conversation.selection.actsAs.value === id)
-        .map((conversation) => ({ conversation, agent: agentById(conversation.conversationId) }))
-        .toSorted((a, b) => (b.agent?.updatedAt ?? 0) - (a.agent?.updatedAt ?? 0));
+// A group shows this many finished chats before folding the rest; smaller than a lane's, since several groups share the column.
+const GROUP_FINISHED = 3;
+// Not-open conversations a group lists before sending the reader to the board for the rest.
+const BACKGROUND_SHOWN = 5;
 
-// The chat this rail rings on arrival, seeded once at mount from the focused chat if it names a persona; a plain ref,
-// not a live mirror, so switching focus elsewhere while this list is up doesn't drag the ring with it.
-const arrivedIn = conversations.value.find(
-    (conversation) => conversation.conversationId === activeId.value && conversation.selection.actsAs.value !== undefined,
-);
-const arrivedAs = arrivedIn?.selection.actsAs.value;
-const picked = ref<string | undefined>(arrivedIn?.conversationId);
+const known = computed(() => new Set(personas.value.map((persona) => persona.id)));
+const keyOf = (persona: string | undefined): string => persona ?? ANYONE;
 
-// A chat of this persona's, as the row's two halves (conversation + agent) read it.
-type PersonaChat = { conversation: Conversation; agent: FleetAgent | undefined };
+const LANE_RANK: Record<FleetLane, number> = { attention: 0, active: 1, finished: 2 };
 
-// The status glyph and its label, from the agent's own state where tracked, else the conversation's; shared with the
-// expanded chat list below so a persona's glyph and its chats' glyphs never disagree.
-const statusOf = (entry: PersonaChat): { name: IconName; spin?: boolean; class: string; "aria-label": string } => {
-    if (entry.agent !== undefined) {
-        const meta = agentStatusMeta(entry.agent.status);
-        return { name: meta.icon, spin: meta.spin, class: `text-xs ${meta.class}`, "aria-label": meta.label };
+// Every open chat under exactly one key: pinned first, then needs-you, working, finished, newest first within each.
+const openBy = computed(() => {
+    const groups = new Map<string, OpenChat[]>();
+    for (const conversation of conversations.value) {
+        const key = keyOf(personaOfTab(conversation, known.value));
+        // A blank nobody has typed into is the panel's resting state, not a chat: it names no persona to sit under.
+        if (key === ANYONE && untouchedDraft(conversation)) {
+            continue;
+        }
+        const entry = { conversation, agent: agentById(conversation.conversationId) };
+        groups.set(key, [...(groups.get(key) ?? []), entry]);
     }
-    const status = entry.conversation.status.value;
-    const icon = statusIcon(status);
-    return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
-};
-
-// The same corner word the lanes list and the board draw (agentStatus.standingChip): a chat of this persona's parked
-// on a question says so here too, rather than leaving the reader a glyph to interpret.
-const chipOf = (entry: PersonaChat): StandingChip | undefined => (entry.agent === undefined ? undefined : standingChip(entry.agent));
-
-// Which of a persona's chats the row speaks for: a turn in flight first, else the most recent, else none — undefined
-// is a distinct state, not a gap, for a persona with no chats here yet.
-const leadOf = (mine: readonly PersonaChat[]): PersonaChat | undefined =>
-    mine.find((entry) => entry.agent !== undefined && turnInFlight(entry.agent)) ??
-    mine.find((entry) => entry.conversation.turn.streaming.value) ??
-    mine[0];
-
-// What it runs on: the agent's recorded model, else the last turn's, else what the composer would send next, else the
-// bare provider. Must agree with ChatTabList.modelOf and AgentRow.model.
-const modelOf = (entry: PersonaChat | undefined): string | undefined => {
-    if (entry === undefined) {
-        return undefined;
+    const rank = (entry: OpenChat): number => LANE_RANK[laneOfTab(entry.conversation, entry.agent)];
+    for (const [key, entries] of groups) {
+        groups.set(
+            key,
+            entries.toSorted(
+                (a, b) =>
+                    Number(b.conversation.pinned.value) - Number(a.conversation.pinned.value) ||
+                    rank(a) - rank(b) ||
+                    (a.agent !== undefined && b.agent !== undefined && rank(a) === 2 ? finishedLaneOrder(a.agent, b.agent) : 0) ||
+                    (b.agent?.updatedAt ?? 0) - (a.agent?.updatedAt ?? 0),
+            ),
+        );
     }
-    const provider = entry.agent?.provider ?? entry.conversation.selection.provider.value;
-    const model = entry.agent?.model ?? entry.conversation.activeModel.value ?? entry.conversation.selection.model.value;
-    return model !== null && model !== `` ? modelLabelFor(provider, model) : providerLabel(provider);
-};
+    return groups;
+});
 
-// What it's doing right now, read from whichever half is tracking the turn; the registry's activity is richer (tool
-// name), a streaming conversation the roster hasn't caught up with still reports running.
-const liveOf = (entry: PersonaChat | undefined): { icon: IconName; text: string; since: number | undefined } | undefined => {
-    if (entry === undefined) {
-        return undefined;
+// A persona's live conversations this window has not opened: its automations, its other windows' chats, its runs.
+const openIds = computed(() => new Set(conversations.value.map((conversation) => conversation.conversationId)));
+const backgroundBy = computed(() => {
+    const groups = new Map<string, FleetAgent[]>();
+    for (const agent of fleet.value) {
+        if (
+            agent.actsAs === undefined ||
+            !known.value.has(agent.actsAs) ||
+            openIds.value.has(agent.id) ||
+            agent.sandboxId !== undefined ||
+            unregistered(agent.status)
+        ) {
+            continue;
+        }
+        groups.set(agent.actsAs, [...(groups.get(agent.actsAs) ?? []), agent]);
     }
-    const { agent, conversation } = entry;
-    if (agent !== undefined && turnInFlight(agent)) {
-        return {
-            icon: (agent.subagents?.running ?? 0) > 0 ? `users` : activityIcon(agent.activity?.tool),
-            text: activityLine(agent) ?? t(`shared.working`),
-            since: agent.startedAt,
-        };
+    for (const [key, agents] of groups) {
+        groups.set(key, agents.toSorted((a, b) => LANE_RANK[laneOf(a)] - LANE_RANK[laneOf(b)] || b.updatedAt - a.updatedAt));
     }
-    return conversation.turn.streaming.value
-        ? { icon: activityIcon(undefined), text: t(`shared.working`), since: conversation.turn.turnStartedAt.value }
-        : undefined;
-};
+    return groups;
+});
 
-interface PersonaRow {
+type Live = { icon: IconName; text: string; since: number | undefined };
+const liveOfAgent = (agent: FleetAgent): Live => ({
+    icon: (agent.subagents?.running ?? 0) > 0 ? `users` : activityIcon(agent.activity?.tool),
+    text: activityLine(agent) ?? t(`shared.working`),
+    since: agent.startedAt,
+});
+const working = (entry: OpenChat): boolean =>
+    entry.agent !== undefined ? turnInFlight(entry.agent) : entry.conversation.turn.streaming.value;
+
+interface Group {
     readonly key: string;
-    readonly id: string;
+    // Undefined for the Anyone group.
+    readonly persona: { id: string; label: string; bounds: string | undefined } | undefined;
     readonly label: string;
-    readonly bounds: string | undefined;
-    // What the lead chat runs on, and what it's doing: the row's one line of facts.
-    readonly model: string | undefined;
-    readonly live: { icon: IconName; text: string; since: number | undefined } | undefined;
-    // The persona's standing glyph, off the same lead chat; spins while a turn is in flight.
-    readonly status: { name: IconName; spin?: boolean; class: string } | undefined;
-    readonly chats: number;
+    readonly open: readonly OpenChat[];
+    readonly background: readonly FleetAgent[];
+    readonly needsYou: number;
+    readonly working: number;
     readonly lastAt: number | undefined;
-    readonly needsYou: boolean;
-    readonly open: boolean;
+    readonly live: Live | undefined;
+    readonly status: { name: IconName; spin?: boolean; class: string } | undefined;
+    readonly holdsFocus: boolean;
 }
 
-// One row per persona, nothing else: no "Anyone" row here, since an unpinned chat already has a home in the Agents
-// cut, and grouping them here would outweigh the personas the list exists to show.
-const rows = computed<PersonaRow[]>(() =>
-    personas.value.map((persona) => {
-        const mine = chatsOf(persona.id);
-        const lead = leadOf(mine);
-        return {
-            key: persona.id,
-            id: persona.id,
-            label: persona.label ?? persona.id,
-            bounds: persona.powers === undefined ? undefined : personaBounds(persona),
-            model: modelOf(lead),
-            live: liveOf(lead),
-            status: lead === undefined ? undefined : statusOf(lead),
-            chats: mine.length,
-            lastAt: mine[0]?.agent?.updatedAt,
-            // Same attention channel a session row uses: one of this persona's chats is waiting on you.
-            needsYou: mine.some((entry) => entry.agent !== undefined && blocked(entry.agent)),
-            // Ringed only for a chat opened from here; see `picked`.
-            open: mine.some((entry) => entry.conversation.conversationId === picked.value),
-        };
-    }),
+const groupOf = (key: string, persona: Group[`persona`], label: string): Group => {
+    const mine = openBy.value.get(key) ?? [];
+    const background = persona === undefined ? [] : (backgroundBy.value.get(persona.id) ?? []);
+    const runningOpen = mine.find(working);
+    const runningBackground = background.find(turnInFlight);
+    const live =
+        runningOpen === undefined
+            ? runningBackground === undefined
+                ? undefined
+                : liveOfAgent(runningBackground)
+            : runningOpen.agent !== undefined
+              ? liveOfAgent(runningOpen.agent)
+              : { icon: activityIcon(undefined), text: t(`shared.working`), since: runningOpen.conversation.turn.turnStartedAt.value };
+    const lead = runningOpen?.agent ?? runningBackground;
+    const leadMeta = lead === undefined ? undefined : agentStatusMeta(lead.status);
+    const stamps = [...mine.map((entry) => entry.agent?.updatedAt ?? 0), ...background.map((agent) => agent.updatedAt)].filter((at) => at > 0);
+    return {
+        key,
+        persona,
+        label,
+        open: mine,
+        background,
+        needsYou:
+            mine.filter((entry) => laneOfTab(entry.conversation, entry.agent) === `attention`).length +
+            background.filter((agent) => laneOf(agent) === `attention`).length,
+        working: mine.filter(working).length + background.filter(turnInFlight).length,
+        lastAt: stamps.length === 0 ? undefined : Math.max(...stamps),
+        live,
+        status: leadMeta === undefined ? undefined : { name: leadMeta.icon, spin: leadMeta.spin, class: `text-xs ${leadMeta.class}` },
+        holdsFocus: mine.some((entry) => entry.conversation.conversationId === activeId.value),
+    };
+};
+
+// Personas with something open or live, in the order personas.json lists them; the rest wait as start tiles below.
+const personaGroups = computed(() =>
+    personas.value.map((persona) =>
+        groupOf(
+            persona.id,
+            { id: persona.id, label: persona.label ?? persona.id, bounds: persona.powers === undefined ? undefined : personaBounds(persona) },
+            persona.label ?? persona.id,
+        ),
+    ),
 );
+const busy = computed(() => personaGroups.value.filter((group) => group.open.length > 0 || group.needsYou > 0 || group.working > 0));
+const idle = computed(() => personaGroups.value.filter((group) => !busy.value.includes(group)));
+const anyone = computed(() => groupOf(ANYONE, undefined, t(`shared.anyone`)));
+const groups = computed(() => [...busy.value, ...(anyone.value.open.length > 0 ? [anyone.value] : [])]);
 
-const empty = computed(() => personas.value.length === 0);
-
-// Switching chats or starting a fresh one both land here; the ring follows whichever this rail put on screen.
-const show = (conversationId: string): void => {
-    picked.value = conversationId;
-    emit(`select`, conversationId);
-};
-const startAs = (row: PersonaRow): void => {
-    picked.value = startAgent(undefined, row.id);
-};
-
-// Pressing a persona row toggles its own chat list, rather than jumping straight to a chat: a list this scanned needs a
-// reversible default press, with switching and starting a new chat as deliberate second presses inside the opened
-// group.
-// The persona you arrived inside starts expanded, since its row is already ringed and a collapsed group over it would
-// hide the very chat being highlighted. Seeded here rather than left to the watch below, which only fires on change.
-const expanded = ref<Set<string>>(new Set(arrivedAs === undefined ? [] : [arrivedAs]));
-const isExpanded = (row: PersonaRow): boolean => expanded.value.has(row.key);
-const toggleExpanded = (row: PersonaRow): void => {
-    const next = new Set(expanded.value);
-    if (!next.delete(row.key)) {
-        next.add(row.key);
-    }
-    expanded.value = next;
-};
-
-// A persona opened from this rail (not from elsewhere) expands itself, keyed to this rail's own pick so a chat focused
-// elsewhere doesn't spring a group open; a reader who collapses it afterward stays collapsed.
+// Focus landing in a group opens it; a reader who folds it afterwards keeps it folded until focus moves elsewhere.
 watch(
-    () => rows.value.find((row) => row.open)?.key,
+    () => groups.value.find((group) => group.holdsFocus)?.key,
     (key) => {
-        if (key !== undefined && !expanded.value.has(key)) {
-            expanded.value = new Set(expanded.value).add(key);
+        if (key !== undefined) {
+            expand(key);
         }
     },
+    { immediate: true },
 );
 
-// Inside a group: needs-you, then running, then finished, newest first within each — the same order every session list
-// in this app uses.
-const LANE_RANK: Record<FleetLane, number> = { attention: 0, active: 1, finished: 2 };
-const sessionsOf = (row: PersonaRow) =>
-    chatsOf(row.id).toSorted(
-        (a, b) =>
-            LANE_RANK[laneOfTab(a.conversation, a.agent)] - LANE_RANK[laneOfTab(b.conversation, b.agent)] ||
-            (b.agent?.updatedAt ?? 0) - (a.agent?.updatedAt ?? 0),
-    );
+// Finished chats past the group's fold, unless the reader lifted it; pinned ones and the focused one always show.
+const unfolded = ref<ReadonlySet<string>>(new Set());
+const shownBy = computed(() => {
+    const shown = new Map<string, { entries: OpenChat[]; hidden: number }>();
+    const folds = (entry: OpenChat): boolean => !entry.conversation.pinned.value && laneOfTab(entry.conversation, entry.agent) === `finished`;
+    for (const group of groups.value) {
+        if (unfolded.value.has(group.key)) {
+            shown.set(group.key, { entries: [...group.open], hidden: 0 });
+            continue;
+        }
+        const tail = group.open.filter(folds);
+        const kept = tail.filter((entry, at) => at < GROUP_FINISHED || entry.conversation.conversationId === activeId.value);
+        shown.set(group.key, { entries: [...group.open.filter((entry) => !folds(entry)), ...kept], hidden: tail.length - kept.length });
+    }
+    return shown;
+});
+const shownOf = (group: Group): { entries: OpenChat[]; hidden: number } => shownBy.value.get(group.key) ?? { entries: [], hidden: 0 };
+const flipped = (set: ReadonlySet<string>, key: string): ReadonlySet<string> => {
+    const next = new Set(set);
+    if (!next.delete(key)) {
+        next.add(key);
+    }
+    return next;
+};
+const toggleUnfolded = (key: string): void => {
+    unfolded.value = flipped(unfolded.value, key);
+};
+
+// The not-open list: anything waiting on the reader stands in the group itself; the rest waits behind its own fold.
+const backgroundShown = ref<ReadonlySet<string>>(new Set());
+const toggleBackground = (key: string): void => {
+    backgroundShown.value = flipped(backgroundShown.value, key);
+};
+const waiting = (group: Group): FleetAgent[] => group.background.filter((agent) => laneOf(agent) === `attention`);
+const quiet = (group: Group): FleetAgent[] => group.background.filter((agent) => laneOf(agent) !== `attention`);
+
+const startAs = (group: Group): void => {
+    startAgent(undefined, group.persona?.id);
+};
+
+// The header's own menu: what can be done to the whole group at once. Sweeps skip pinned chats (tabsOfPersona).
+const groupMenu = ref<{ show: (event: Event) => void } | undefined>();
+const menuGroup = ref<string>();
+const NO_ITEMS: MenuItem[] = [];
+const archivableOf = (group: Group): string[] => [
+    ...group.open
+        .filter(
+            (entry) =>
+                entry.agent !== undefined &&
+                entry.conversation.box.value === undefined &&
+                laneOf(entry.agent) === `finished` &&
+                canArchive(entry.agent),
+        )
+        .map((entry) => entry.conversation.conversationId),
+    ...group.background.filter((agent) => laneOf(agent) === `finished` && canArchive(agent)).map((agent) => agent.id),
+];
+const groupMenuItems = computed<MenuItem[]>(() => {
+    const group = [...groups.value, ...idle.value].find((candidate) => candidate.key === menuGroup.value);
+    if (group === undefined) {
+        return NO_ITEMS;
+    }
+    const persona = group.persona?.id;
+    const finished = tabsOfPersona(persona, known.value, `finished`);
+    const all = tabsOfPersona(persona, known.value);
+    const archivable = archivableOf(group);
+    return [
+        {
+            label: group.persona === undefined ? t(`shared.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label }),
+            icon: `plus`,
+            command: () => startAs(group),
+        },
+        { separator: true },
+        {
+            label: t(`chat.chatPersonaRail.closeFinishedOf`, { label: group.label }),
+            disabled: finished.size === 0,
+            command: () => actions.closeSet(finished),
+        },
+        { label: t(`chat.chatPersonaRail.closeAllOf`, { label: group.label }), disabled: all.size === 0, command: () => actions.closeSet(all) },
+        ...(group.persona === undefined
+            ? []
+            : [
+                  {
+                      label: t(`chat.chatPersonaRail.archiveFinishedOf`, { label: group.label }),
+                      icon: `box`,
+                      disabled: archivable.length === 0,
+                      command: () => void archive(archivable),
+                  },
+                  { separator: true },
+                  {
+                      label: t(`chat.chatPersonaRail.editPersona`),
+                      icon: `cog`,
+                      command: () => void router.push({ path: `/sandbox/personas`, query: { open: persona } }),
+                  },
+              ]),
+    ];
+});
+const openGroupMenu = (group: Group, event: Event): void => {
+    menuGroup.value = group.key;
+    groupMenu.value?.show(event);
+};
+// The × and the ⋯ sit inside the header's click target; stopping the press keeps them from also toggling the group.
+const onHeaderAction = (event: Event, run: () => void): void => {
+    event.stopPropagation();
+    run();
+};
+
+const titleOf = (agent: FleetAgent): string => agentDisplayTitle(agent, previewOf(agent.id));
 </script>
 
 <template>
     <!-- No slab: the other half of this rail (the lanes) has none either, and the rows take their step up from `--card-rest`. -->
     <div class="flex min-h-0 min-w-0 flex-col p-2">
         <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-            <template v-if="empty">
-                <!-- A real link, since the sandbox hub has an address and this is often the first place someone finds it. -->
-                <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
-                    <Icon name="plus" class="text-2xs" />
-                    {{ t(`shared.setUpPersona`) }}
-                </RouterLink>
-            </template>
-
-            <template v-else>
-                <template v-for="row in rows" :key="row.key">
-                    <!-- Running personas expose status and live activity in the row. -->
-                    <RailCard
-                        :title="row.label"
-                        :status="row.status"
-                        :live="row.live"
-                        tight
-                        :selected="row.open"
-                        :attention="row.needsYou"
-                        :aria-expanded="isExpanded(row)"
-                        :aria-label="t(`chat.chatPersonaRail.showSChats`, { label: row.label })"
-                        @click="toggleExpanded(row)"
-                    >
-                        <!-- The persona face leads the row at its standard size. -->
-                        <template #aside>
-                            <!-- The face's default size sets the row height. -->
-                            <PersonaFace :persona="row" />
-                        </template>
-                        <!-- The clock rides the title line, so gaining one never changes the row's height. -->
-                        <template #trailing>
-                            <span v-if="row.lastAt !== undefined && row.lastAt > 0" class="shrink-0 text-2xs text-subtle">{{
-                                relativeTime(row.lastAt)
-                            }}</span>
-                        </template>
-                        <!-- Model, bounds, and activity share one non-wrapping metadata line. -->
-                        <template #meta>
-                            <span class="flex min-h-4 min-w-0 flex-1 items-center gap-2 overflow-hidden">
-                                <!-- The model leads the metadata line. -->
-                                <span v-if="row.model !== undefined" class="min-w-0 truncate text-subtle">{{ row.model }}</span>
-                                <!-- Bounds follow the model as static configuration. -->
-                                <StatusBadge v-if="row.bounds !== undefined" variant="neutral" size="xs">{{ row.bounds }}</StatusBadge>
-                                <!-- Hidden at zero (a fresh persona is simply fresh). -->
-                                <span v-if="row.chats > 0" class="flex shrink-0 items-center gap-0.5 text-muted">
-                                    {{ row.chats }} {{ t(`chat.chatPersonaRail.chat`) }}{{ row.chats === 1 ? `` : `s` }}
-                                    <Icon :name="isExpanded(row) ? `chevron-up` : `chevron-down`" class="text-2xs" />
-                                </span>
-                            </span>
-                        </template>
-                    </RailCard>
-
-                    <!-- Persona chats are grouped beneath the persona row. -->
-                    <!-- Group indentation keeps full-width chat rows inside the rail. -->
-                    <!-- Chat rows reuse the persona's live activity source. -->
-                    <div v-if="isExpanded(row)" class="ml-5 flex min-w-0 flex-col gap-2">
-                        <RailCard
-                            v-for="entry in sessionsOf(row)"
-                            :key="entry.conversation.conversationId"
-                            :title="tabLabel(entry.conversation)"
-                            :title-action="entry.agent?.titleAction"
-                            :provider="entry.agent?.provider ?? entry.conversation.selection.provider.value"
-                            :status="statusOf(entry)"
-                            :chip="chipOf(entry)"
-                            :live="liveOf(entry)"
-                            tight
-                            :selected="entry.conversation.conversationId === picked"
-                            :attention="entry.agent !== undefined && blocked(entry.agent)"
-                            :aria-label="t(`chat.chatPersonaRail.open`, { conversation: tabLabel(entry.conversation) })"
-                            @click="show(entry.conversation.conversationId)"
+            <template v-for="group in groups" :key="group.key">
+                <!-- The header summarises the group, open or folded: what needs you, what works, and the lead chat's live line. -->
+                <RailCard
+                    :title="group.label"
+                    :icon="group.persona === undefined ? `users` : undefined"
+                    :status="group.status"
+                    :live="group.live"
+                    tight
+                    :selected="group.holdsFocus && !isExpanded(group.key)"
+                    :attention="group.needsYou > 0"
+                    :aria-expanded="isExpanded(group.key)"
+                    :aria-label="t(`chat.chatPersonaRail.showSChats`, { label: group.label })"
+                    @click="toggle(group.key)"
+                    @contextmenu.prevent.stop="openGroupMenu(group, $event)"
+                >
+                    <template v-if="group.persona !== undefined" #aside>
+                        <PersonaFace :persona="group.persona" />
+                    </template>
+                    <template #trailing>
+                        <span
+                            role="button"
+                            :aria-label="group.persona === undefined ? t(`shared.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label })"
+                            v-tooltip.top="group.persona === undefined ? t(`shared.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label })"
+                            class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                            @click="onHeaderAction($event, () => startAs(group))"
                         >
-                            <template #trailing>
-                                <span v-if="entry.agent !== undefined && entry.agent.updatedAt > 0" class="shrink-0 text-2xs text-subtle">{{
-                                    relativeTime(entry.agent.updatedAt)
-                                }}</span>
-                            </template>
-                        </RailCard>
-                        <!-- Existing chat groups always retain a start-chat action. -->
-                        <button type="button" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="startAs(row)">
                             <Icon name="plus" class="text-2xs" />
-                            {{ t(`chat.chatPersonaRail.newChat`) }} {{ row.label }}
-                        </button>
-                    </div>
-                </template>
+                        </span>
+                        <span
+                            role="button"
+                            :aria-label="t(`chat.chatPersonaRail.more`, { label: group.label })"
+                            class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                            @click="onHeaderAction($event, () => openGroupMenu(group, $event))"
+                        >
+                            <Icon name="ellipsis" class="text-2xs" />
+                        </span>
+                        <span v-if="group.lastAt !== undefined" class="shrink-0 text-2xs text-subtle">{{ relativeTime(group.lastAt) }}</span>
+                    </template>
+                    <template #meta>
+                        <span class="flex min-h-4 min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                            <span v-if="group.needsYou > 0" class="shrink-0 font-semibold text-warning">{{
+                                t(`chat.chatPersonaRail.needsYou`, { count: group.needsYou }, group.needsYou)
+                            }}</span>
+                            <span v-if="group.working > 0" class="shrink-0">{{ t(`chat.chatPersonaRail.working`, { count: group.working }, group.working) }}</span>
+                            <span v-if="group.needsYou === 0 && group.working === 0 && group.open.length > 0" class="shrink-0">{{
+                                t(`chat.chatPersonaRail.chats`, { count: group.open.length }, group.open.length)
+                            }}</span>
+                            <StatusBadge v-if="group.persona?.bounds !== undefined" variant="neutral" size="xs">{{ group.persona.bounds }}</StatusBadge>
+                            <Icon :name="isExpanded(group.key) ? `chevron-up` : `chevron-down`" class="ml-auto shrink-0 text-2xs" />
+                        </span>
+                    </template>
+                </RailCard>
 
-                <!-- Link to the page that owns these rows, in the same place the composer's picker puts it. -->
-                <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
-                    <Icon name="cog" class="text-2xs" />
-                    {{ t(`shared.managePersonas`) }}
-                </RouterLink>
+                <div v-if="isExpanded(group.key)" class="ml-5 flex min-w-0 flex-col gap-2">
+                    <!-- The very rows the Agents cut draws, so every close, pin, rename and menu is here too. -->
+                    <ChatRowList v-if="shownOf(group).entries.length > 0" :entries="shownOf(group).entries" />
+                    <button
+                        v-if="shownOf(group).hidden > 0 || unfolded.has(group.key)"
+                        type="button"
+                        :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)"
+                        @click="toggleUnfolded(group.key)"
+                    >
+                        <Icon :name="unfolded.has(group.key) ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                        {{ unfolded.has(group.key) ? t(`shared.showFewer`) : t(`shared.earlier`, { hiddenFinished: shownOf(group).hidden }) }}
+                    </button>
+
+                    <!-- Waiting on the reader, though not open here: never folded, since a question can't be answered unseen. -->
+                    <RailCard
+                        v-for="agent in waiting(group)"
+                        :key="agent.id"
+                        :title="titleOf(agent)"
+                        :title-action="agent.titleAction"
+                        :provider="agent.provider"
+                        :chip="standingChip(agent)"
+                        tight
+                        quiet
+                        attention
+                        @click="open(agent, `peek`)"
+                    />
+                    <template v-if="quiet(group).length > 0">
+                        <button
+                            type="button"
+                            :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)"
+                            :aria-expanded="backgroundShown.has(group.key)"
+                            @click="toggleBackground(group.key)"
+                        >
+                            <Icon :name="backgroundShown.has(group.key) ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                            {{ t(`chat.chatPersonaRail.notOpen`, { count: quiet(group).length }, quiet(group).length) }}
+                        </button>
+                        <template v-if="backgroundShown.has(group.key)">
+                            <RailCard
+                                v-for="agent in quiet(group).slice(0, BACKGROUND_SHOWN)"
+                                :key="agent.id"
+                                :title="titleOf(agent)"
+                                :title-action="agent.titleAction"
+                                :provider="agent.provider"
+                                :chip="standingChip(agent)"
+                                :live="turnInFlight(agent) ? liveOfAgent(agent) : undefined"
+                                tight
+                                quiet
+                                @click="open(agent, `peek`)"
+                            >
+                                <template v-if="!turnInFlight(agent) && agent.updatedAt > 0" #meta>
+                                    <span class="ml-auto shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
+                                </template>
+                            </RailCard>
+                            <RouterLink
+                                v-if="quiet(group).length > BACKGROUND_SHOWN"
+                                to="/agents"
+                                :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)"
+                            >
+                                {{ t(`chat.chatPersonaRail.moreOnBoard`, { count: quiet(group).length - BACKGROUND_SHOWN }) }}
+                            </RouterLink>
+                        </template>
+                    </template>
+
+                    <!-- A group with nothing in it still offers its one next step. -->
+                    <button
+                        v-if="group.open.length === 0 && group.background.length === 0"
+                        type="button"
+                        :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)"
+                        @click="startAs(group)"
+                    >
+                        <Icon name="plus" class="text-2xs" />
+                        {{ group.persona === undefined ? t(`shared.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label }) }}
+                    </button>
+                </div>
             </template>
+
+            <!-- Personas with nothing open or live: one press starts a chat as them, so they cost a line, not a card. -->
+            <div v-if="idle.length > 0" class="flex min-w-0 flex-col gap-0.5" :class="{ 'mt-1': groups.length > 0 }">
+                <button
+                    v-for="group in idle"
+                    :key="group.key"
+                    type="button"
+                    :aria-label="t(`chat.chatPersonaRail.startAs`, { label: group.label })"
+                    v-tooltip.right="t(`chat.chatPersonaRail.newChatAs`, { label: group.label })"
+                    class="group flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left text-2xs text-muted transition hover:bg-overlay hover:text-content"
+                    @click="startAs(group)"
+                    @contextmenu.prevent.stop="openGroupMenu(group, $event)"
+                >
+                    <PersonaFace v-if="group.persona !== undefined" :persona="group.persona" :size="FACE_SIZES.pill" />
+                    <span class="min-w-0 flex-1 truncate font-medium">{{ group.label }}</span>
+                    <Icon name="plus" class="shrink-0 text-2xs opacity-0 transition group-hover:opacity-100" />
+                </button>
+            </div>
+
+            <!-- A real link, since the sandbox hub has an address and this is often the first place someone finds it. -->
+            <RouterLink v-if="personas.length === 0" to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
+                <Icon name="plus" class="text-2xs" />
+                {{ t(`shared.setUpPersona`) }}
+            </RouterLink>
+            <RouterLink v-else to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
+                <Icon name="cog" class="text-2xs" />
+                {{ t(`shared.managePersonas`) }}
+            </RouterLink>
         </div>
+        <ContextMenu ref="groupMenu" :model="groupMenuItems" :min-width="13" @hide="menuGroup = undefined" />
     </div>
 </template>

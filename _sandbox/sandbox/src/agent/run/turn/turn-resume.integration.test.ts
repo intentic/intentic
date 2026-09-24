@@ -24,7 +24,7 @@ import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { TranscriptAgent } from "../../../sessions/agent-transcript.js";
 import { testMintedSlices } from "../../../harness/route-services.testing.js";
-import { conversationEntry, drivenBy, fleetStoreOver, memoryFleet, notedFleet } from "../../../testing.js";
+import { beginTurn, conversationEntry, drivenBy, fleetStoreOver, memoryFleet, notedFleet } from "../../../testing.js";
 import { automationConfig } from "../../../harness/route-stores.testing.js";
 import { fileTranscriptRecord } from "../../../sessions/transcript-record.js";
 import { fileSandboxSettingsStore } from "../../../settings/settings-store.js";
@@ -34,7 +34,9 @@ import { PROVIDER_MODULES } from "../../../runtimes/runtime-table.js";
 import { type JournalledTurn, sqliteTurnJournal, type TurnJournal } from "./turn-journal.js";
 import { turnRunOf } from "../../../agents/actor/conversation-holdings.js";
 import { createDomainEvents } from "../../../seams/domain-events.js";
-import type { TurnStarter } from "../../../seams/turn-starter.js";
+import type { SentTurn, TurnStarter } from "../../../seams/turn-starter.js";
+import type { BeginRefusal } from "../../../agents/actor/conversation-decide.js";
+import type { TurnRun } from "./turn-runs.js";
 import { createTurnResumeScheduler, fireHeldResume, type HeldTurn, resumeInterruptedTurns, startConversationTurn } from "./turn-resume.js";
 import { parkedCards } from "../../../agents/actor/parked-cards.js";
 
@@ -109,6 +111,14 @@ const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]):
         yield* events;
     };
 
+// The run a start made, for a case whose start must not be refused.
+const made = (run: TurnRun | BeginRefusal): TurnRun => {
+    if (typeof run === "string") {
+        throw new Error(`the start was refused: ${run}`);
+    }
+    return run;
+};
+
 // Waits for a fire's detached run to finish; its wake lands after tick() returns, one I/O round-trip later.
 const settle = async (services: Pick<Services, "conversations">, conversationId: string): Promise<void> => {
     await turnRunOf(services.conversations, conversationId)?.waitUntilFinished();
@@ -117,20 +127,22 @@ const settle = async (services: Pick<Services, "conversations">, conversationId:
 test("a started turn records its settled transcript, whatever provider ran it", async () => {
     const root = mkdtempSync(join(tmpdir(), "turn-resume-"));
     const record = fileTranscriptRecord(root);
-    const started = await startConversationTurn(fakeServices(root), fakeWake([], [{ kind: "delta", text: "shipped" }, { kind: "done" }]), {
-        prompt: "ship it",
-        messageId: "m-ship",
-        conversationId: "tr-record",
-        agent: "codex",
-        harness: "native",
-    });
-    expect(started).toEqual(expect.any(Object));
+    const started = made(
+        await startConversationTurn(fakeServices(root), fakeWake([], [{ kind: "delta", text: "shipped" }, { kind: "done" }]), {
+            prompt: "ship it",
+            messageId: "m-ship",
+            conversationId: "tr-record",
+            agent: "codex",
+            harness: "native",
+            byPerson: false,
+        }),
+    );
     await waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2), SETTLES);
     // The run each row came from is part of the record: within its retention window that run is still attachable, and
     // a window redrawing from here has to recognise its rows when the head arrives.
     expect(await record.read("tr-record")).toEqual([
-        { role: "user", text: "ship it", sentAt: expect.any(Number), messageId: "m-ship", run: started!.id },
-        { role: "assistant", text: "shipped", run: started!.id },
+        { role: "user", text: "ship it", sentAt: expect.any(Number), messageId: "m-ship", run: started.id },
+        { role: "assistant", text: "shipped", run: started.id },
     ]);
 });
 
@@ -190,7 +202,7 @@ const ranWith = async (
             seen.push(input);
             yield { kind: "done" };
         },
-        turn,
+        { ...turn, byPerson: false },
     );
     await settle(services, turn.conversationId);
     return seen[0]!;
@@ -290,7 +302,7 @@ const ranAs = async (
             seen.push(input);
             yield { kind: "done" };
         },
-        turn,
+        { ...turn, byPerson: false },
     );
     await settle(services, turn.conversationId);
     return seen[0]!;
@@ -1156,7 +1168,7 @@ test("a turn refused before it ran is sent again in full, and NOT onto the sessi
         ran: false,
     });
 
-    expect(await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-1")).toEqual(expect.any(Object));
+    expect(await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-1", true)).toEqual(expect.any(Object));
     await settle(services, "lim-1");
 
     expect(turns).toHaveLength(1);
@@ -1181,7 +1193,7 @@ test("a limit reached mid-flight keeps the session holding its work, and says so
         ran: true,
     });
 
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-2");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-2", true);
     await settle(services, "lim-2");
 
     expect(turns[0]!.sessionId).toBe("s-real");
@@ -1201,7 +1213,7 @@ test("a press on a switched account runs on it, and cannot take the old account'
         ran: true,
     });
 
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-moved", { agent: "claude", harness: "native", account: "with-room" });
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-moved", true, { agent: "claude", harness: "native", account: "with-room" });
     await settle(services, "lim-moved");
 
     expect(turns[0]!.account).toBe("with-room");
@@ -1227,7 +1239,7 @@ test("a press that names the routing the turn already had resumes its session", 
         ran: true,
     });
 
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-same", { agent: "claude", harness: "native", model: "claude-sonnet-4-5" });
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-same", true, { agent: "claude", harness: "native", model: "claude-sonnet-4-5" });
     await settle(services, "lim-same");
 
     expect(turns[0]!.sessionId).toBe("s-real");
@@ -1248,7 +1260,7 @@ test("a press on a switched account still says nothing ran, when nothing ran", a
         ran: false,
     });
 
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-door", { agent: "claude", harness: "native", account: "with-room" });
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-door", true, { agent: "claude", harness: "native", account: "with-room" });
     await settle(services, "lim-door");
 
     expect(turns[0]!.account).toBe("with-room");
@@ -1276,7 +1288,7 @@ test("a press that names no routing runs the turn exactly as it was", async () =
         ran: true,
     });
 
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-bare");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-bare", true);
     await settle(services, "lim-bare");
 
     expect(turns[0]).toMatchObject({ account: "spent-one", agent: "codex", harness: "claude-code", sessionId: "s-real" });
@@ -1290,11 +1302,11 @@ test("pressing again after a re-run was refused too states the note once, not on
     const wake = heldWake(turns);
     recordHeldTurn(services, { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-3", isolated: true }, ran: false });
 
-    await fireHeldResume(drivenBy(services, wake), "lim-3");
+    await fireHeldResume(drivenBy(services, wake), "lim-3", true);
     await settle(services, "lim-3");
     // Re-held using the prompt the last fire built, simulating a second refusal.
     recordHeldTurn(services, { reason: "limit", input: { ...turns[0]!, conversationId: "lim-3" }, ran: false });
-    await fireHeldResume(drivenBy(services, wake), "lim-3");
+    await fireHeldResume(drivenBy(services, wake), "lim-3", true);
     await settle(services, "lim-3");
 
     expect(turns).toHaveLength(2);
@@ -1309,12 +1321,12 @@ test("a turn that ran before it was refused stops claiming nothing had been done
     const turns: AgentTurn[] = [];
     const wake = heldWake(turns);
     recordHeldTurn(services, { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-4", isolated: true }, ran: false });
-    await fireHeldResume(drivenBy(services, wake), "lim-4");
+    await fireHeldResume(drivenBy(services, wake), "lim-4", true);
     await settle(services, "lim-4");
 
     // This retry got partway before failing again, crossing to the ran:true arm.
     recordHeldTurn(services, { reason: "limit", input: { ...turns[0]!, conversationId: "lim-4" }, sessionId: "s-partial", ran: true });
-    await fireHeldResume(drivenBy(services, wake), "lim-4");
+    await fireHeldResume(drivenBy(services, wake), "lim-4", true);
     await settle(services, "lim-4");
 
     // Keep resume notes idempotent so replacement reasons remain current.
@@ -1327,7 +1339,7 @@ test("a turn that ran before it was refused stops claiming nothing had been done
 
 test("nothing held answers with nothing, so the press falls back to saying carry on", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
-    expect(await fireHeldResume(drivenBy(services, heldWake([])), "lim-none")).toBeUndefined();
+    expect(await fireHeldResume(drivenBy(services, heldWake([])), "lim-none", true)).toBeUndefined();
 });
 
 // A turn the sandbox started itself (a fix press, a peer's message, a re-run) has no composer holding its words. The
@@ -1338,31 +1350,34 @@ test("a turn the sandbox started is kept when the door turns it away, its messag
     const root = mkdtempSync(join(tmpdir(), "door-"));
     const record = fileTranscriptRecord(root);
     const services = fakeServices(root);
-    const started = await startConversationTurn(services, fakeWake([], TURNED_AWAY), {
-        prompt: "fix the pipeline",
-        messageId: "m-fix",
-        conversationId: "door-kept",
-        isolated: true,
-    });
+    const started = made(
+        await startConversationTurn(services, fakeWake([], TURNED_AWAY), {
+            prompt: "fix the pipeline",
+            messageId: "m-fix",
+            conversationId: "door-kept",
+            isolated: true,
+            byPerson: false,
+        }),
+    );
     await settle(services, "door-kept");
 
     expect(heldTurn(services, "door-kept")).toMatchObject({
         reason: "door",
         ran: false,
-        run: started!.id,
+        run: started.id,
         input: { prompt: "fix the pipeline", isolated: true },
     });
     await waitFor(async () => expect(await record.read("door-kept")).toHaveLength(2), SETTLES);
     expect(await record.read("door-kept")).toEqual([
-        { role: "user", text: "fix the pipeline", sentAt: expect.any(Number), messageId: "m-fix", run: started!.id },
-        expect.objectContaining({ role: "notice", noticeAction: "sendAnyway", sandboxHeld: true, run: started!.id }),
+        { role: "user", text: "fix the pipeline", sentAt: expect.any(Number), messageId: "m-fix", run: started.id },
+        expect.objectContaining({ role: "notice", noticeAction: "sendAnyway", sandboxHeld: true, run: started.id }),
     ]);
 
     // A person's words go back to the conversation's queue: a second copy kept here would be sent twice.
     await startConversationTurn(
         services,
         fakeWake([], TURNED_AWAY),
-        { prompt: "fix the pipeline", conversationId: "door-sent" },
+        { prompt: "fix the pipeline", conversationId: "door-sent", byPerson: true },
         { senderKeeps: true },
     );
     await settle(services, "door-sent");
@@ -1387,7 +1402,7 @@ test("a turn the door turned away waits for a press, which sends it whole, on th
     await createTurnResumeScheduler(drivenBy(services, heldWake(turns))).tick(Date.now() + 24 * 60 * 60_000);
     expect(turns).toEqual([]);
 
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "door-press");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "door-press", true);
     await settle(services, "door-press");
 
     expect(turns).toHaveLength(1);
@@ -1410,7 +1425,7 @@ test("a turn turned away again names every refused run before it, not only the l
         run: "run-second",
     });
 
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "door-again");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "door-again", true);
     await settle(services, "door-again");
 
     expect(turns[0]).toMatchObject({ unseenRuns: ["run-first", "run-second"] });
@@ -1430,7 +1445,7 @@ test("a turn a dead runtime cut short is sent again on its own session, with no 
         ran: true,
     });
 
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "stop-1");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "stop-1", true);
     await settle(services, "stop-1");
 
     expect(turns).toHaveLength(1);
@@ -1454,7 +1469,7 @@ test("a stopped turn whose provider never answered opens fresh, since its sessio
         ran: false,
     });
 
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "stop-2");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "stop-2", true);
     await settle(services, "stop-2");
 
     expect(turns[0]!.sessionId).toBeUndefined();
@@ -1475,7 +1490,7 @@ test("a turn whose session outgrew the model's window is sent again in a fresh s
         ran: true,
     });
 
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "over-1");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "over-1", true);
     await settle(services, "over-1");
 
     expect(turns).toHaveLength(1);
@@ -1510,13 +1525,44 @@ test("an overflow is re-run fresh on the next pass, on no policy, and only once"
     clearPendingResume(services, "over-2");
 });
 
+// Only a person reopens an archived conversation: the pass spends the hold's one dispatch and runs nothing, the card stays
+// filed away, and a press, being a person's, still sends it.
+test("the resume pass runs nothing on an archived conversation and leaves it archived, where a press still sends it", async () => {
+    const fleet = memoryFleet();
+    const services: Services = { ...fakeServices(mkdtempSync(join(tmpdir(), "held-"))), conversations: fleet.conversations, cards: parkedCards(fleet.conversations) };
+    await beginTurn(fleet.conversations, { conversationId: "over-filed", isolated: true, prompt: "ship the parser", profile: {}, byPerson: true }, 1_000);
+    await fleet.conversations.send("over-filed", { kind: "settle" }, 2_000).settled;
+    await fleet.agents.setArchived(["over-filed"], 3_000);
+    const sent: SentTurn[] = [];
+    const body: TurnStarter["stream"] = async function* (input) {
+        sent.push(input);
+        yield { kind: "done" };
+    };
+    recordHeldTurn(
+        services,
+        { reason: "overflow", input: { prompt: "ship the parser", conversationId: "over-filed", isolated: true }, sessionId: "s-full", ran: true },
+        RECORDED,
+    );
+
+    await createTurnResumeScheduler(drivenBy(services, body)).tick(RECORDED + 5_000);
+    expect(sent).toEqual([]);
+    expect(turnRunOf(fleet.conversations, "over-filed")).toBeUndefined();
+    expect(fleet.agents.entry("over-filed")?.archivedAt).toBe(3_000);
+
+    await fireHeldResume(drivenBy(services, body), "over-filed", true);
+    await settle(services, "over-filed");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ conversationId: "over-filed", byPerson: true });
+    clearPendingResume(services, "over-filed");
+});
+
 test("the next turn on the conversation supersedes the held one, whatever started it", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     recordHeldTurn(services, { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-5", isolated: true }, ran: false });
     // Simulates the user typing instead of pressing: the pending hold must not survive their new message.
     clearPendingResume(services, "lim-5");
 
-    expect(await fireHeldResume(drivenBy(services, heldWake([])), "lim-5")).toBeUndefined();
+    expect(await fireHeldResume(drivenBy(services, heldWake([])), "lim-5", true)).toBeUndefined();
 });
 
 // RECORDED is when the refusal happened; REOPENS is the window it named. Every test below pins some gate around that
@@ -1580,7 +1626,7 @@ test("an unarmed conversation is never fired for, however long the window has be
 
     await scheduler.tick(REOPENS * 1000 + 24 * 60 * 60 * 1000);
     expect(turns).toHaveLength(0);
-    expect(await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-auto-3")).toEqual(expect.any(Object));
+    expect(await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-auto-3", true)).toEqual(expect.any(Object));
     await settle(services, "lim-auto-3");
     clearPendingResume(services, "lim-auto-3");
 });
@@ -1647,7 +1693,7 @@ test("a press that carries keeps the session across the account change, and says
         ran: true,
     });
 
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-carry", { agent: "claude", harness: "native", account: "with-room", carry: true });
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-carry", true, { agent: "claude", harness: "native", account: "with-room", carry: true });
     await settle(services, "lim-carry");
 
     expect(turns[0]!.account).toBe("with-room");
@@ -1816,7 +1862,7 @@ test("a spent ladder stands down and says so, rather than leaving the card promi
     // The hold outlives the stand-down: a press re-runs the turn itself, where a dropped hold left it only a
     // "Continue" message to send.
     expect(heldTurn(services, "stop-3")?.input.prompt).toBe("ship the parser");
-    await fireHeldResume(drivenBy(services, heldWake(turns)), "stop-3");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "stop-3", true);
     await settle(services, "stop-3");
     expect(turns).toHaveLength(RETRY_LADDER_TRIES + 1);
     expect(turns.at(-1)!.prompt).toContain("ship the parser");

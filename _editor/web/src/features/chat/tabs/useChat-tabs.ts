@@ -50,6 +50,18 @@ export const keepChat = (conversationId: string): void => {
     }
 };
 
+/** Holds a chat on purpose (Conversation.pinned), or lets it go back to the ordinary rules; pinning also keeps a peek. */
+export const setPinned = (conversationId: string, pinned: boolean): void => {
+    const conversation = conversations.value.find((entry) => entry.conversationId === conversationId);
+    if (conversation === undefined) {
+        return;
+    }
+    conversation.pinned.value = pinned;
+    if (pinned) {
+        conversation.peek.value = false;
+    }
+};
+
 // The demotion, by id, with the two reasons this window still has to hold a chat the roster is done with:
 // - words waiting to be sent, which the sweep would strand
 // - a column of its own beside another, since a split is a deliberate "keep both of these up" and the sweep would
@@ -58,7 +70,12 @@ export const keepChat = (conversationId: string): void => {
 //   panel and left behind, still goes.
 const releaseChat = (conversationId: string): void => {
     const conversation = conversations.value.find((entry) => entry.conversationId === conversationId);
-    if (conversation === undefined || conversation.unsent.value || (panes.value.length > 1 && panes.value.includes(conversationId))) {
+    if (
+        conversation === undefined ||
+        conversation.pinned.value ||
+        conversation.unsent.value ||
+        (panes.value.length > 1 && panes.value.includes(conversationId))
+    ) {
         return;
     }
     conversation.peek.value = true;
@@ -77,6 +94,30 @@ const recent = sandboxValue<readonly string[]>(() => []);
 // Outlives a tab rebuild on purpose, so popping the chat out and docking it back doesn't undo the reader's pins;
 // only a different daemon's roster invalidates it, which is why it is sandbox-scoped.
 const settled = sandboxValue<ReadonlySet<string>>(() => new Set());
+
+// How many closed chats Reopen can walk back through, newest last; an untouched draft holds nothing to bring back.
+const CLOSED_KEPT = 20;
+const closedStack = sandboxShallowRef<readonly StoredTab[]>(() => []);
+const rememberClosed = (gone: readonly Conversation[]): void => {
+    const worth = gone.filter((conversation) => !untouchedDraft(conversation));
+    if (worth.length === 0) {
+        return;
+    }
+    const ids = new Set(worth.map((conversation) => conversation.conversationId));
+    closedStack.value = [...closedStack.value.filter((tab) => !ids.has(tab.conversationId)), ...worth.map(snapshotTab)].slice(-CLOSED_KEPT);
+};
+
+/** The most recently closed chat this window no longer holds, taken off the stack; undefined when there is none. */
+export const takeClosed = (): StoredTab | undefined => {
+    const open = new Set(conversations.value.map((conversation) => conversation.conversationId));
+    const stack = closedStack.value.filter((tab) => !open.has(tab.conversationId));
+    const last = stack.at(-1);
+    closedStack.value = stack.slice(0, -1);
+    return last === undefined ? undefined : { ...last, peek: false };
+};
+
+/** Whether Reopen has anything to bring back. */
+export const hasClosed = computed(() => closedStack.value.some((tab) => !conversations.value.some((open) => open.conversationId === tab.conversationId)));
 
 // Detaches a swept tab's turn (soft abort) on the way out, since a peek may be watching one; an untouched
 // draft has none. The cached transcript is kept, unlike a close's, since a look is often repeated.
@@ -107,6 +148,14 @@ export const setConversations = (next: readonly Conversation[], focus: string, r
         });
     }
     detachSwept(next, kept);
+    rememberClosed(next.filter((conversation) => !kept.includes(conversation)));
+    // The chat focus leaves starts its idle clock here; the one it lands on is not idle.
+    if (focused !== activeId.value) {
+        const leaving = kept.find((conversation) => conversation.conversationId === activeId.value);
+        if (leaving !== undefined) {
+            leaving.leftAt.value = Date.now();
+        }
+    }
     // Reassigned only when the list actually changed, so a plain focus switch doesn't refire list watchers.
     if (kept.length !== conversations.value.length || kept.some((conversation, at) => conversation !== conversations.value[at])) {
         conversations.value = kept;
@@ -197,6 +246,8 @@ export const restoreTab = (tab: StoredTab): Conversation => {
     conversation.selection.apply({ kind: `set`, picks: restoredPicks(tab, tab.isolated) });
     // A looked-at tab restores as still looking; it's always the focused tab, swept by the next click elsewhere.
     conversation.peek.value = tab.peek === true;
+    conversation.pinned.value = tab.pinned === true;
+    conversation.leftAt.value = tab.leftAt;
     // A stand-in blank restores as one too; unflagged, it would board a fresh, selected "New agent" card.
     conversation.standIn.value = tab.standIn === true;
     // The card's account of the agent, so a restored tab lanes the way its board card does before the roster lands.
@@ -410,6 +461,7 @@ export const setPanes = (ids: readonly string[]): void => {
 // Both soft-abort the turn and drop the cached transcript; only the window drawing the chat sets words aside.
 const closing = (ids: ReadonlySet<string>, unsent: `keep` | `drop`): void => {
     traceFocus(`close`, { ids: [...ids], active: activeId.value, unsent });
+    rememberClosed(conversations.value.filter((conversation) => ids.has(conversation.conversationId)));
     for (const conversation of conversations.value) {
         if (ids.has(conversation.conversationId)) {
             if (unsent === `keep` && conversation.unsent.value && drawsChat.value) {

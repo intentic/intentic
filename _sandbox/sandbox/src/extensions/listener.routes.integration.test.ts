@@ -27,7 +27,7 @@ const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
-        threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
+        threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), () => false),
         senders: fileSendersStore(join(root, "senders.json")),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),

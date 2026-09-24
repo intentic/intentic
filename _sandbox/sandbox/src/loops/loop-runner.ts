@@ -56,15 +56,18 @@ interface IterationOutcome {
     readonly failure: string | undefined;
 }
 
-// Runs through the same detached turn-run pump a composer's turn uses, so /agent/attach can watch it; the pump folds a
-// failed turn into an error frame and persists the transcript. Reduces that stream to the four values the loop needs.
-const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { conversationId: string }): Promise<IterationOutcome> => {
+// Runs through the detached turn-run pump a composer's turn uses, so /agent/attach can watch it, reduced to the four values
+// the loop needs; `archived` when the conversation was filed away between iterations, which only a person reopens.
+const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { conversationId: string }): Promise<IterationOutcome | "archived"> => {
     const report: string[] = [];
     let usage: UsageFrame | undefined;
     let sessionId: string | undefined;
     let failure: string | undefined;
-    const run = services.turns.run(turn);
-    if (run === undefined) {
+    const run = services.turns.run({ ...turn, byPerson: false });
+    if (run === "archived") {
+        return run;
+    }
+    if (run === "busy") {
         // Another turn is already live (a hand-sent message, or the previous iteration's pump not yet unwound); treated
         // as this iteration's failure rather than raced.
         services.logger.warn({ conversationId: loop.conversationId }, "loop iteration: a turn is already running");
@@ -167,6 +170,10 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
                 ...(record.autoLand !== undefined ? { autoLand: record.autoLand } : {}),
             };
             const outcome = await runIteration(services, record, turn);
+            if (outcome === "archived") {
+                ended = { state: "stopped", detail: "The conversation was archived, so the loop stopped." };
+                break;
+            }
             report = outcome.report;
             if (record.context === "continue") {
                 sessionId = outcome.sessionId ?? sessionId;

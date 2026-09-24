@@ -273,7 +273,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             clearFire: async () => {},
         },
         // In-memory: every inbound fire resolves its conversation through this; suites only need consistent answers.
-        threadSessions: memoryThreadSessionsStore(),
+        threadSessions: memoryThreadSessionsStore((conversationId) => agents.entry(conversationId)?.archivedAt !== undefined),
         activity: { append: async () => {}, list: async () => [] },
         usage: unstubbed("usage", { record: async () => {}, rollup: async () => [], turns: async () => [], ...usage }),
         // Schema's own defaults: parsing an empty object is exactly what an unwritten settings file reads as.

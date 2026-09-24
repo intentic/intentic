@@ -1020,10 +1020,19 @@
             "notSignedInYet": ", not signed in yet"
         },
         "chatPersonaRail": {
-            "chat": "chat",
-            "newChat": "New chat as",
-            "open": "Open {conversation}",
-            "showSChats": "Show {label}'s chats"
+            "archiveFinishedOf": "Archive {label}'s finished agents",
+            "chats": "{count} chat | {count} chats",
+            "closeAllOf": "Close all of {label}'s chats",
+            "closeFinishedOf": "Close {label}'s finished chats",
+            "editPersona": "Edit persona…",
+            "more": "More for {label}",
+            "moreOnBoard": "{count} more on the board",
+            "needsYou": "{count} needs you | {count} need you",
+            "newChatAs": "New chat as {label}",
+            "notOpen": "{count} not open | {count} not open",
+            "showSChats": "Show {label}'s chats",
+            "startAs": "Start a chat as {label}",
+            "working": "{count} working | {count} working"
         },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "This conversation already runs {placedAt}. Start a new agent to work somewhere else.",
@@ -1151,29 +1160,43 @@
         },
         "chatTabList": {
             "anotherSandbox": "another sandbox",
+            "archive": "Archive",
+            "clearActive": "Close {count} working chat | Close all {count} working chats",
+            "clearAttention": "Close {count} waiting chat | Close all {count} waiting chats",
+            "clearFinished": "Close {count} finished chat | Close all {count} finished chats",
             "closeAll": "Close all {size}: {keeps}",
             "everyConversationWindowHolds": "Every conversation this window holds, by what needs you",
             "filterChatsByMessages": "Filter chats by your messages",
+            "keepsActive": "their turns keep running",
+            "keepsAttention": "they keep waiting on the board",
+            "keepsFinished": "they stay in Past chats",
             "noMatches": "No matches",
             "notOpen": "Not open",
             "openBeside": "Open Beside",
             "openWorkflowRun": "Open the workflow run {name}",
             "peopleSandboxPickOne": "The people this sandbox can be, pick one and talk to them",
+            "pin": "Pin",
+            "pinned": "Pinned",
             "runsIn": "Runs in {sandbox}",
             "runsInQuoted": "Runs in “{sandbox}”",
             "share": "Share…",
-            "steps": "steps"
+            "steps": "steps",
+            "unpin": "Unpin"
         },
         "chatTabs": {
+            "archiveChat": "Archive Chat",
             "chatHistory": "Chat history",
+            "dockChatToRailHint": "Dock chat to rail: full window, behind a rail tile",
             "history": "History",
             "need": "{attentionCount} need you",
+            "nextNeedsYou": "Next Chat That Needs You",
             "openNextBeside": "Open Next Beside",
             "pastChats": "Past chats",
             "previous": "Previous",
             "running": "{runningCount} running",
             "switch": "Switch…",
             "switchChatOpen": "Switch chat: {count} open",
+            "togglePin": "Pin or Unpin Chat",
             "waiting": "{attentionCount} waiting for you"
         },
         "chatTodoList": {
@@ -3816,7 +3839,11 @@
         "worthBetterModelThan": "Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in something from outside, that text may be arguing for its own approval.",
         "worthKnowing": "Worth knowing",
         "writeSkill": "Write a skill",
-        "you": "you"
+        "you": "you",
+        "moveChatIntoNewWindow": "Move chat into new window",
+        "dockChatBack": "Dock chat back",
+        "dockChatToRail": "Dock chat to rail",
+        "reopenClosedChat": "Reopen closed chat"
     },
     "shell": {
         "accountPanel": {

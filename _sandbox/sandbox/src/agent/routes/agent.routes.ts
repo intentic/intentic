@@ -41,7 +41,7 @@ import { rewindConversation } from "../checkpoints/rewind.js";
 import { commandsOf } from "../providers/agent-commands.js";
 import { limitReopensAt } from "../models/limit-reset.js";
 import { actorOf, areasOf, ownerOf } from "../../auth/principal.js";
-import type { TurnInput } from "../../seams/turn-starter.js";
+import type { SentTurn, TurnInput } from "../../seams/turn-starter.js";
 import { type LiveRun, turnRunOf } from "../../agents/actor/conversation-holdings.js";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import { refuseUnlessReachable } from "../../personas/persona-reach.js";
@@ -64,7 +64,7 @@ import { performFailureWrites, providerAnswered, recordFrame, turnActivity } fro
 import { createTurnFrames, type TurnFrames } from "../run/frames/frame-reducers.js";
 import { performSettlement } from "../run/settle/settle-turn.js";
 import { settleTurn } from "../run/settle/turn-settlement.js";
-import { conversationIdentity, mainTreePlacement, type Placement, placedTurn, runnerPlacement } from "../run/conversation/turn-placement.js";
+import { conversationIdentity, mainTreePlacement, type Placement, placedTurn, refusedBegin, runnerPlacement } from "../run/conversation/turn-placement.js";
 import { type WorktreeRun, worktreePlacement } from "../run/conversation/worktree-placement.js";
 
 // Whether this turn enters the namespace, asked in one place so three callers can't disagree. A property of the
@@ -90,7 +90,7 @@ const recordSystemPrompt = (services: Services, input: AgentTurn, request: Agent
 
 // Runs one agent turn, streaming AgentEvents; `input.agent` picks the provider adapter. Owns the turn's control
 // surface: the AbortController /agent/stop cancels, and the SteeringQueue /agent/steer injects into.
-export async function* streamAgent(services: Services, input: TurnInput, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
+export async function* streamAgent(services: Services, input: SentTurn, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
     const controller = new AbortController();
     if (signal?.aborted === true) {
         controller.abort();
@@ -173,7 +173,7 @@ const placementOf = (
 // the conversation is placed decides what runs around the turn's own body.
 async function* runConversationTurn(
     services: Services,
-    input: TurnInput,
+    input: SentTurn,
     signal: AbortSignal | undefined,
     steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
@@ -200,14 +200,15 @@ async function* runConversationTurn(
         return;
     }
     const isolated = isolatedOf(existing, input, runner);
-    if (
-        !(await services.conversations.send(conversationId, {
-            kind: "begin",
-            turn: conversationIdentity(input, conversationId, { isolated, runner }),
-        }).settled)
-    ) {
-        yield { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish." };
-        yield { kind: "done" };
+    const began = await services.conversations.send(conversationId, {
+        kind: "begin",
+        turn: conversationIdentity(input, conversationId, { isolated, runner }),
+    }).settled;
+    if (began !== "begun") {
+        if (began === "archived") {
+            services.logger.info({ conversationId }, "turn not begun: the conversation is archived, and only a person reopens it");
+        }
+        yield* refusedBegin(began);
         return;
     }
     // Names the conversation while the turn runs, fire-and-forget; a gate skips one already better-named.
@@ -813,6 +814,9 @@ export const createAgentRoutes = (services: Services) => {
             if ("invalid" in receipt) {
                 throw new ORPCError("BAD_REQUEST", { message: receipt.invalid });
             }
+            if ("why" in receipt) {
+                throw new ORPCError("CONFLICT", { message: receipt.why });
+            }
             return receipt;
         }),
         // Re-runs a turn a spent allowance refused or a dead runtime cut short, with everything but who serves it,
@@ -820,7 +824,7 @@ export const createAgentRoutes = (services: Services) => {
         // the entry.
         resume: i.resume.handler(async ({ input, context }) => {
             own(context, input.conversationId);
-            const run = await services.turns.resume(input.conversationId, input.routing);
+            const run = await services.turns.resume(input.conversationId, true, input.routing);
             // A live turn already owns it (the resume pass's re-run, another window): the caller follows it, not re-sends.
             if (run === undefined && services.conversations.state(input.conversationId)?.phase.kind === "running") {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running in that conversation" });

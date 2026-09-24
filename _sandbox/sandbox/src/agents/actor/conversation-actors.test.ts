@@ -163,6 +163,9 @@ interface Child {
 }
 
 // The status precedence, restated from the rules rather than read from the code under test.
+// Whether it will wake itself: an armed watch, or a job not yet handed out, since no completion notice is read in a walk.
+const wakes = (model: Model): boolean => model.watches.length > 0 || model.jobs.some((job) => !job.adopted);
+
 const expectedStatus = (model: Model): AgentStatus => {
     if (model.running) {
         if (model.stopping !== undefined) {
@@ -176,7 +179,14 @@ const expectedStatus = (model: Model): AgentStatus => {
     if (model.landingShown) {
         return "landing";
     }
-    return model.entryStatus === "idle" ? (model.isolated ? model.standing : "idle") : model.entryStatus;
+    if (model.entryStatus !== "idle") {
+        return model.entryStatus;
+    }
+    if (!model.isolated) {
+        return "idle";
+    }
+    // Ready to land, but not done: a card that will wake itself reads as idle.
+    return model.standing === "ready" && wakes(model) ? "idle" : model.standing;
 };
 
 // The real store on an in-memory database; one instance outlives the fleets a walk restarts over it, as the file does.
@@ -312,15 +322,16 @@ const walk = async (seed: number, steps: number): Promise<number> => {
         return delivered.reply as unknown;
     };
 
-    const begin = async (id: Id, isolated: boolean): Promise<void> => {
+    // Only a person's turn opens an archived conversation; any other is turned away before the mutex is even asked.
+    const begin = async (id: Id, isolated: boolean, byPerson: boolean): Promise<void> => {
         const model = modelOf(id);
         const began = await send(id, {
             kind: "begin",
-            turn: { conversationId: id, isolated, prompt: "go", profile: { agent: "claude", harness: "native" } },
+            turn: { conversationId: id, isolated, prompt: "go", profile: { agent: "claude", harness: "native" }, byPerson },
         });
-        const expected = !model.running && model.rewinds === 0;
+        const expected = model.archived && !byPerson ? "archived" : model.running || model.rewinds > 0 ? "busy" : "begun";
         expect(began).toBe(expected);
-        if (!expected) {
+        if (expected !== "begun") {
             return;
         }
         if (!model.exists) {
@@ -470,7 +481,7 @@ const walk = async (seed: number, steps: number): Promise<number> => {
             const turnCards = journal.get(id);
             journal.delete(id);
             if (wasLive && turnCards !== undefined && turnCards.size > 0) {
-                await begin(id, model.isolated);
+                await begin(id, model.isolated, false);
                 for (const [requestId, kind] of turnCards) {
                     await parkOn(id, kind, requestId);
                 }
@@ -480,7 +491,7 @@ const walk = async (seed: number, steps: number): Promise<number> => {
     };
 
     const actions: readonly { readonly name: string; readonly weight: number; readonly run: (id: Id) => Promise<void> }[] = [
-        { name: "begin", weight: 6, run: (id) => begin(id, random() < 0.5) },
+        { name: "begin", weight: 6, run: (id) => begin(id, random() < 0.5, random() < 0.5) },
         { name: "park", weight: 6, run: (id) => parkOn(id, pick<ParkedKind>(["plan", "question", "permission"]), `r-${Math.floor(random() * 4)}`) },
         {
             name: "resolve",
@@ -845,10 +856,13 @@ const walk = async (seed: number, steps: number): Promise<number> => {
             weight: 2,
             run: async (id) => {
                 const model = modelOf(id);
-                const run = daemon.turns.run({ conversationId: id, prompt: "go" });
-                // One run per conversation: refused while one is live, and a finished one is replaced.
-                expect(run === undefined, `a run over a ${String(model.run)} one`).toBe(model.run === "live");
-                if (run === undefined) {
+                const byPerson = random() < 0.5;
+                const run = daemon.turns.run({ conversationId: id, prompt: "go", byPerson });
+                // One run per conversation: refused while one is live, and a finished one is replaced; none at all on an
+                // archived conversation nobody sent it to.
+                const expected = model.archived && !byPerson ? "archived" : model.run === "live" ? "busy" : "run";
+                expect(typeof run === "string" ? run : "run", `a run over a ${String(model.run)} one`).toBe(expected);
+                if (typeof run === "string") {
                     return;
                 }
                 model.run = "live";
@@ -1073,7 +1087,7 @@ describe("disposal", () => {
         const fleet = createFleet(fleetStoreOver(db), standingsOf(new Map()), PRESENCES);
         await fleet.agents.init();
         const input = { prompt: "go", conversationId: "c1" };
-        await fleet.conversations.send("c1", { kind: "begin", turn: { conversationId: "c1", isolated: true, prompt: "go", profile: {} } }, 1).settled;
+        await fleet.conversations.send("c1", { kind: "begin", turn: { conversationId: "c1", isolated: true, prompt: "go", profile: {}, byPerson: true } }, 1).settled;
         fleet.conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "s-c1" } }, 2);
         const unregister = fleet.conversations.registerTurn("c1", { abort: () => {} });
         await fleet.conversations.send("c1", { kind: "settle" }, 3).settled;

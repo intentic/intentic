@@ -1,8 +1,10 @@
 import { sleep } from "@intentic/base/async";
-import { type AgentTurn, type Rule, type RuleBuiltin, type TurnProfile, verifyNudgePrompt } from "@intentic/sandbox-contract";
+import { type Rule, type RuleBuiltin, type TurnProfile, verifyNudgePrompt } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
+import type { BeginRefusal } from "../../agents/actor/conversation-decide.js";
 import type { Services } from "../../composition.js";
+import type { SentTurn } from "../../seams/turn-starter.js";
 import { conditionHolds } from "../../rules/rules.js";
 import { workspaceRelative } from "../../rules/turn-ending.js";
 import type { VerificationLedger } from "./agent-verification.js";
@@ -20,7 +22,8 @@ export interface VerifyNudgeRuntime {
     readonly logger: Logger;
     // Where each conversation's nudge guard lives.
     readonly conversations: Pick<ConversationActors, "send">;
-    readonly start: (turn: AgentTurn & { conversationId: string }) => Promise<boolean>;
+    // The follow-up's start, or why it made no run.
+    readonly start: (turn: SentTurn & { conversationId: string }) => Promise<"started" | BeginRefusal>;
     readonly sessionIdOf: (conversationId: string) => string | undefined;
 }
 
@@ -107,11 +110,17 @@ const deliver = async (live: VerifyNudgeRuntime, nudge: VerifyNudge, message: st
             const started = await live.start({
                 prompt: message,
                 conversationId,
+                byPerson: false,
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 ...profile,
             });
-            if (started) {
+            if (started === "started") {
                 live.logger.info({ conversationId }, "verify nudge: follow-up turn started on unverified work");
+                return;
+            }
+            // Archived since the turn ended: no follow-up is coming, so the guard goes now.
+            if (started === "archived") {
+                live.conversations.send(conversationId, { kind: "nudge-disarmed" });
                 return;
             }
         } catch (error) {
@@ -138,6 +147,9 @@ export const startVerifyNudges = (services: Pick<Services, "logger" | "conversat
     startVerifyNudgeRuntime({
         logger: services.logger,
         conversations: services.conversations,
-        start: async (turn) => (await services.turns.start(turn)) !== undefined,
+        start: async (turn) => {
+            const started = await services.turns.start(turn);
+            return typeof started === "string" ? started : "started";
+        },
         sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId),
     });

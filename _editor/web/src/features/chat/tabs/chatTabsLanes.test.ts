@@ -254,7 +254,7 @@ it(`clears the Attention lane from its header, leaving the other lanes standing`
     seed();
     const el = await mountList();
     await openEveryLane(el);
-    expect(clearButton(el, `Attention`)?.getAttribute(`aria-label`)).toBe(`Close all 1 waiting chat`);
+    expect(clearButton(el, `Attention`)?.getAttribute(`aria-label`)).toBe(`Close 1 waiting chat`);
 
     clearButton(el, `Attention`)?.click();
 
@@ -267,7 +267,7 @@ it(`clears the Active lane from its header, leaving the other lanes standing`, a
     seed();
     const el = await mountList();
     await openEveryLane(el);
-    expect(clearButton(el, `Active`)?.getAttribute(`aria-label`)).toBe(`Close all 1 working chat`);
+    expect(clearButton(el, `Active`)?.getAttribute(`aria-label`)).toBe(`Close 1 working chat`);
 
     clearButton(el, `Active`)?.click();
 

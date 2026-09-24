@@ -973,9 +973,19 @@
             "notSignedInYet": ", pas encore connecté"
         },
         "chatPersonaRail": {
-            "newChat": "Nouveau chat en tant que",
-            "open": "Ouvrir {conversation}",
-            "showSChats": "Afficher les chats de {label}"
+            "archiveFinishedOf": "Archiver les agents terminés de {label}",
+            "chats": "{count} chat | {count} chats",
+            "closeAllOf": "Fermer tous les chats de {label}",
+            "closeFinishedOf": "Fermer les chats terminés de {label}",
+            "editPersona": "Modifier la persona…",
+            "more": "Plus pour {label}",
+            "moreOnBoard": "{count} de plus sur le tableau",
+            "needsYou": "{count} a besoin de vous | {count} ont besoin de vous",
+            "newChatAs": "Nouveau chat en tant que {label}",
+            "notOpen": "{count} non ouvert | {count} non ouverts",
+            "showSChats": "Afficher les chats de {label}",
+            "startAs": "Commencer un chat en tant que {label}",
+            "working": "{count} en cours | {count} en cours"
         },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "Cette conversation tourne déjà {placedAt}. Lancez un nouvel agent pour travailler ailleurs.",
@@ -1099,29 +1109,43 @@
         },
         "chatTabList": {
             "anotherSandbox": "un autre sandbox",
+            "archive": "Archiver",
+            "clearActive": "Fermer {count} chat en cours | Fermer les {count} chats en cours",
+            "clearAttention": "Fermer {count} chat en attente | Fermer les {count} chats en attente",
+            "clearFinished": "Fermer {count} chat terminé | Fermer les {count} chats terminés",
             "closeAll": "Fermer les {size} : {keeps}",
             "everyConversationWindowHolds": "Chaque conversation que cette fenêtre contient, selon ce qui a besoin de vous",
             "filterChatsByMessages": "Filtrer les chats par vos messages",
+            "keepsActive": "leurs tours continuent",
+            "keepsAttention": "ils continuent d'attendre sur le tableau",
+            "keepsFinished": "ils restent dans les chats passés",
             "noMatches": "Aucune correspondance",
             "notOpen": "Non ouvert",
             "openBeside": "Ouvrir à côté",
             "openWorkflowRun": "Ouvrir l'exécution de workflow {name}",
             "peopleSandboxPickOne": "Les personnes que ce sandbox peut être : choisissez-en une et parlez-lui",
+            "pin": "Épingler",
+            "pinned": "Épinglé",
             "runsIn": "Tourne dans {sandbox}",
             "runsInQuoted": "Tourne dans « {sandbox} »",
             "share": "Partager…",
-            "steps": "étapes"
+            "steps": "étapes",
+            "unpin": "Désépingler"
         },
         "chatTabs": {
+            "archiveChat": "Archiver le chat",
             "chatHistory": "Historique du chat",
+            "dockChatToRailHint": "Ancrer le chat au rail : fenêtre entière, derrière une tuile du rail",
             "history": "Historique",
             "need": "{attentionCount} ont besoin de vous",
+            "nextNeedsYou": "Chat suivant qui a besoin de vous",
             "openNextBeside": "Ouvrir le suivant à côté",
             "pastChats": "Chats passés",
             "previous": "Précédent",
             "running": "{runningCount} en marche",
             "switch": "Changer…",
             "switchChatOpen": "Changer de chat : {count} ouverts",
+            "togglePin": "Épingler ou désépingler le chat",
             "waiting": "{attentionCount} vous attendent"
         },
         "chatTodoList": {
@@ -3570,7 +3594,11 @@
         "worthBetterModelThan": "Mérite un meilleur modèle que le reste des tâches automatiques : il lit la commande comme des données, et dans un tour qui a absorbé quelque chose de l'extérieur, ce texte plaide peut-être pour sa propre approbation.",
         "worthKnowing": "Bon à savoir",
         "writeSkill": "Écrire un skill",
-        "you": "vous"
+        "you": "vous",
+        "moveChatIntoNewWindow": "Déplacer le chat dans une nouvelle fenêtre",
+        "dockChatBack": "Réancrer le chat",
+        "dockChatToRail": "Ancrer le chat au rail",
+        "reopenClosedChat": "Rouvrir le chat fermé"
     },
     "shell": {
         "accountPanel": {

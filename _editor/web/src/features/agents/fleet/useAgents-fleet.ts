@@ -1,6 +1,6 @@
 import { sandboxValue } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, NO_ATTENTION, turnInFlight, unregistered } from "./agentStatus";
 import { closedDrafts } from "../../chat/drafts/closedDrafts";
 import { type TabFacts, unasked } from "../../chat/tabs/tabFacts";
@@ -188,17 +188,8 @@ export const fleet = computed<FleetAgent[]>(() => {
     const drafts = strip.tabs
         .filter((tab) => !tab.registered && !carded.has(tab.id) && !unasked(tab))
         .map((tab): FleetAgent => draftCard(tab, unsent.get(tab.id)));
-    // An archived agent's own unsent words surface it back onto the board; the card still marks itself archived and
-    // drops away once the words are sent or cleared.
-    const held: FleetAgent[] = [];
+    // An archived agent stays off the board whatever its composer held; the words wait with it (withKeptWords).
     const archivedIds = new Set(archived.value.map((agent) => agent.id));
-    for (const agent of archived.value) {
-        const tab = unsent.get(agent.id);
-        if (tab !== undefined && !carded.has(agent.id)) {
-            // A copy, not the archive's own entry: unsent/draftAt describe the composer, not the filed-away agent.
-            held.push({ ...agent, open: openIds.has(agent.id), unsent: true, draftAt: tab.at });
-        }
-    }
     // Chats closed with nothing but their unsent message: no roster row, archive entry, or open tab draws them
     // otherwise. Stands as `draft` unless the closed chat had a session, in which case reopening resumes it.
     const setAside = closedDrafts.value
@@ -221,7 +212,6 @@ export const fleet = computed<FleetAgent[]>(() => {
             const shown = overlaid(startedAt === undefined ? card : asStarted(card, startedAt), agent, undefined);
             return shown === undefined ? [] : [shown];
         }),
-        ...held,
         ...drafts,
         ...setAside,
     ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);
@@ -238,6 +228,13 @@ export const fleet = computed<FleetAgent[]>(() => {
     stableFleet.value = next;
     return next;
 });
+
+// Words a closed chat left behind, by conversation, for an archived card to wear without rejoining the board.
+const keptWords = computed(() => new Map(closedDrafts.value.map((tab) => [tab.conversationId, tab.draftAt] as const)));
+
+/** An archived card as the archive view draws it: marked when a closed composer still holds its words. */
+export const withKeptWords = (agent: FleetAgent): FleetAgent =>
+    keptWords.value.has(agent.id) ? { ...agent, unsent: true, draftAt: keptWords.value.get(agent.id) } : agent;
 
 // Two headline counts, kept apart since the header renders both: blocked-on-user vs. merely unread.
 export const blocking = computed(() => fleet.value.filter(blocked).length);
@@ -262,11 +259,29 @@ watch(
     },
 );
 
-// Chats the roster is done with, handed to the tab store so its own sweep can take them without a press
-// (useChat-tabs.releaseDone). The whole verdict each frame rather than what changed in it: the store is the only
-// side that knows which of them the reader has pinned, put in a column, or is about to give a column back.
+// A finished, read chat stays in the rail until it has sat untouched this long (ms); a pinned one stays regardless.
+export const TIDY_AFTER_MS = 12 * 60 * 60 * 1000;
+
+// Minutes are the tidy's resolution: a twelve-hour rule gains nothing from a finer clock.
+const tidyClock = ref(Date.now());
+setInterval(() => {
+    tidyClock.value = Date.now();
+}, 60_000);
+
+// The reader's last contact with a chat: its finish, their last read of it, or focus leaving it.
+const touchedAt = (agent: FleetAgent, leftAt: number | undefined): number => Math.max(agent.updatedAt, agent.seenAt ?? 0, leftAt ?? 0);
+
+/** Whether the rail may let this chat go: done with (doneWith) and untouched for TIDY_AFTER_MS. */
+export const tidyDue = (agent: FleetAgent, leftAt: number | undefined, now: number): boolean =>
+    doneWith(agent) && now - touchedAt(agent, leftAt) >= TIDY_AFTER_MS;
+
+// The whole verdict each frame, never a diff: only the tab store knows which chats were kept or pinned since.
 watch(
-    () => fleet.value.filter(doneWith).map((agent) => agent.id),
+    () => {
+        const strip = chatStrip.value;
+        const leftAt = new Map(strip.tabs.map((tab) => [tab.id, tab.leftAt] as const));
+        return fleet.value.filter((agent) => agent.id !== strip.active && tidyDue(agent, leftAt.get(agent.id), tidyClock.value)).map((agent) => agent.id);
+    },
     (ids) => useChat().releaseDone(new Set(ids)),
 );
 

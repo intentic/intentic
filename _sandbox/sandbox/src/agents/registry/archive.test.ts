@@ -26,6 +26,7 @@ const turn = (overrides: Partial<BeginTurn> = {}): BeginTurn => ({
     isolated: true,
     prompt: "Fix the login bug",
     profile: { agent: "claude", harness: "native" },
+    byPerson: true,
     ...overrides,
 });
 

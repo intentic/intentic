@@ -9,12 +9,14 @@ import {
     collapsePanes,
     composerFocus,
     conversations,
+    hasClosed,
     keepChat,
     openBeside,
     panes,
     releaseDone,
     setActive,
     setPanes,
+    setPinned,
     tabReveal,
 } from "../tabs/useChat-tabs";
 import { attachStarted, loadSessions, sessions, sessionsFailure } from "./useChat-sessions";
@@ -47,7 +49,7 @@ import {
     translatorKey,
 } from "./useChat-connect";
 import { conversationView } from "../panel/useChat-view";
-import { openConversation } from "../panel/useChat-reveal";
+import { openConversation, reopenClosed } from "../panel/useChat-reveal";
 
 // Module-level singleton: the shared chat's open conversations (tabs), account connections, and turn
 // preferences. One per window; while another window draws the chat, this window's tabs are a frozen shadow, and
@@ -138,6 +140,9 @@ export function useChat() {
         tabReveal,
         setActive,
         keepChat,
+        setPinned,
+        reopenClosed,
+        hasClosed,
         closeTabs,
         closeRetired,
         releaseDone,

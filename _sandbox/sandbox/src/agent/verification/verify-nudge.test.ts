@@ -4,6 +4,7 @@ import { waitFor, SETTLES } from "@intentic/testing/bun";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { createFrameLedger, type FrameLedger } from "./agent-verification.js";
 import { createViewFrameLedger, type ViewFrameLedger } from "./agent-viewing.js";
+import type { SentTurn } from "../../seams/turn-starter.js";
 import { memoryFleet } from "../../testing.js";
 import { nudgeUnverifiedWork, startVerifyNudgeRuntime, type VerifyNudgeRuntime } from "./verify-nudge.js";
 
@@ -34,8 +35,8 @@ const RED = [`Before finishing, "Verify before you finish" ran this and it exite
 const logger = { info: () => {}, warn: () => {}, error: () => {} } as unknown as Logger;
 
 let stop: (() => void) | undefined;
-const runtimeWith = (overrides: Partial<VerifyNudgeRuntime> = {}): { started: (AgentTurn & { conversationId: string })[] } => {
-    const started: (AgentTurn & { conversationId: string })[] = [];
+const runtimeWith = (overrides: Partial<VerifyNudgeRuntime> = {}): { started: (SentTurn & { conversationId: string })[] } => {
+    const started: (SentTurn & { conversationId: string })[] = [];
     stop?.();
     stop = startVerifyNudgeRuntime({
         logger,
@@ -43,7 +44,7 @@ const runtimeWith = (overrides: Partial<VerifyNudgeRuntime> = {}): { started: (A
         conversations: memoryFleet().conversations,
         start: async (turn) => {
             started.push(turn);
-            return true;
+            return "started";
         },
         sessionIdOf: () => "session-7",
         ...overrides,
@@ -68,9 +69,27 @@ test("a turn whose check went red is sent a follow-up, as its own turn", async (
 
     expect(message).toContain(RED[0]);
     await waitFor(() => expect(started).toHaveLength(1), SETTLES);
-    // Runs where the work ran and picks the thread back up; a new provider or session asks the wrong agent.
-    expect(started[0]).toMatchObject({ conversationId: "c1", agent: "codex", model: "gpt-5.1-codex", effort: "high", sessionId: "session-7" });
+    // Runs where the work ran and picks the thread back up; a new provider or session asks the wrong agent. Nobody sent it.
+    expect(started[0]).toMatchObject({ conversationId: "c1", agent: "codex", model: "gpt-5.1-codex", effort: "high", sessionId: "session-7", byPerson: false });
     expect(started[0]?.prompt).toBe(message);
+});
+
+// A refusal that waiting cannot lift: the follow-up is not tried again, and the guard goes with it at once, where a busy
+// conversation keeps the guard through every retry.
+test("a conversation archived since its turn ended is sent no follow-up, and is left free", async () => {
+    const tried: string[] = [];
+    runtimeWith({
+        start: async (turn) => {
+            tried.push(turn.conversationId);
+            return "archived";
+        },
+    });
+    const nudge = { conversationId: "c1", profile: profileOf(seed), rules: [rule], ledger: edited(PARSER), findings: RED };
+    await nudgeUnverifiedWork(nudge);
+    await waitFor(() => expect(tried).toEqual(["c1"]), SETTLES);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(await nudgeUnverifiedWork(nudge)).toContain(RED[0]);
+    await waitFor(() => expect(tried).toEqual(["c1", "c1"]), SETTLES);
 });
 
 // The nudge goes out as an ordinary prompt, so the chat has only its opening to tell it from something the user typed.

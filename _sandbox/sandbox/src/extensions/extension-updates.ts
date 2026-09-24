@@ -451,7 +451,7 @@ const prepareAgentReview = (services: Services, target: InstalledTarget, update:
                 ? { ...record, update: { ...record.update, review: { conversationId, at: new Date().toISOString() } } }
                 : record,
         );
-        for await (const event of services.turns.stream(turn, undefined)) {
+        for await (const event of services.turns.stream({ ...turn, byPerson: false }, undefined)) {
             void event;
         }
     })().catch((error: unknown) => services.logger.warn({ err: error, extension: target.identity }, "extension update: agent review failed"));

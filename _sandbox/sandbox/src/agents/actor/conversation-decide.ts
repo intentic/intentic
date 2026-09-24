@@ -61,6 +61,8 @@ export interface BeginTurn {
     readonly title?: string;
     readonly origin?: AgentOrigin;
     readonly startIn?: string;
+    // A person sent this turn: the only turn that opens, and so un-archives, an archived conversation.
+    readonly byPerson: boolean;
     // Who asked for this turn, as the daemon verified it.
     readonly startedBy?: string;
     // The member the conversation belongs to when this turn opens it.
@@ -69,6 +71,11 @@ export interface BeginTurn {
     readonly areas?: readonly string[];
     readonly forkedFrom?: ForkedFrom;
 }
+
+// Why a turn does not claim the conversation: a turn or a rewind holds it, or it is archived and no person sent this one.
+export type BeginRefusal = "busy" | "archived";
+
+export type BeginOutcome = "begun" | BeginRefusal;
 
 // How the settling turn ended, read before the settle resets what says so. A turn that ran to its own end speaks for
 // the whole checklist; one cut short learned nothing about what it did not see; `none` is a settle with no turn.
@@ -88,8 +95,10 @@ export interface SettleFlush {
 }
 
 export type ConversationEvent =
-    // Claims the conversation for a turn unless a turn or a rewind already holds it.
+    // Claims the conversation for a turn unless it is archived and no person sent the turn, or a turn or a rewind holds it.
     | { readonly kind: "begin"; readonly turn: BeginTurn }
+    // Whether a `begin` from this sender would find the conversation archived, asked before a run is made for it.
+    | { readonly kind: "open-asked"; readonly byPerson: boolean }
     // The in-flight record of the run that holds, or is about to hold, this conversation's turn, whole as of now: held
     // for the `begin` that writes it with its entry, then written through as it changes.
     | { readonly kind: "journalled"; readonly entry: JournalledTurn }
@@ -203,7 +212,8 @@ export type ConversationEffect =
 
 // What each event answers; every other event answers nothing.
 interface Replies {
-    readonly begin: boolean;
+    readonly begin: BeginOutcome;
+    readonly "open-asked": boolean;
     readonly "resume-superseded": HeldRecord | undefined;
     readonly "held-fired": boolean;
     readonly "steer-reserved": number | undefined;
@@ -391,11 +401,17 @@ const onFrame = (state: ConversationState, frame: AgentEvent, now: number): Deci
     return handler === undefined ? unchanged({ ...state, turn }, undefined) : handler(state, turn, frame);
 };
 
+// Only a person un-archives a conversation: every other turn meets an archived one turned away.
+const refusesArchived = (entry: PersistedAgent | undefined, byPerson: boolean): boolean => entry?.archivedAt !== undefined && !byPerson;
+
 // Both holders of the mutex are read together, and the claim is this one synchronous step. The prompt is filed under
 // the session the conversation resumes at once, else held for the frame that mints one.
-const onBegin = (state: ConversationState, turn: BeginTurn, now: number, entry: PersistedAgent | undefined): Decision<boolean> => {
+const onBegin = (state: ConversationState, turn: BeginTurn, now: number, entry: PersistedAgent | undefined): Decision<BeginOutcome> => {
+    if (refusesArchived(entry, turn.byPerson)) {
+        return unchanged(state, "archived");
+    }
     if (state.phase.kind !== "idle") {
-        return unchanged(state, false);
+        return unchanged(state, "busy");
     }
     const session = entry?.sessionId;
     const staged = state.journal?.written === false ? state.journal.entry : undefined;
@@ -423,7 +439,7 @@ const onBegin = (state: ConversationState, turn: BeginTurn, now: number, entry: 
             { kind: "broadcast" },
             { kind: "persist" },
         ],
-        reply: true,
+        reply: "begun",
     };
 };
 
@@ -646,6 +662,7 @@ type Handler<K extends ConversationEvent["kind"]> = (
 
 const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     begin: (state, event, now, entry) => onBegin(state, event.turn, now, entry),
+    "open-asked": (state, event, _now, entry) => unchanged(state, !refusesArchived(entry, event.byPerson)),
     journalled: (state, event) => onJournalled(state, event.entry),
     unjournalled: onUnjournalled,
     frame: (state, event, now) => onFrame(state, event.frame, now),

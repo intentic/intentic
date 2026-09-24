@@ -8,7 +8,7 @@ import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import { type MintedStore, type StoredKeyAccount, toMintedAccount } from "../runtimes/minted/minted-credentials.js";
 import type { PersonasStore } from "../personas/personas-store.js";
 import type { AreasStore } from "../areas/areas-store.js";
-import type { ThreadSession, ThreadSessionsStore } from "../sessions/thread-sessions.js";
+import { type ArchivedConversation, liveThread, type ThreadSession, type ThreadSessionsStore } from "../sessions/thread-sessions.js";
 
 // In-memory stores, one real implementation per persistence seam the routes and the turn read, so a suite can seed
 // state and read back what a route wrote without touching the filesystem. `services` composes an empty one of each.
@@ -166,13 +166,10 @@ export const memoryAutomationsStore = (initial: AutomationRecord[] = []): Automa
 };
 
 // In-memory thread-session store, so routes turning an inbound message into a conversation are testable without the fs.
-// Honours the TTL: a quiet thread starting over is behaviour, not bookkeeping.
-export const memoryThreadSessionsStore = (): ThreadSessionsStore => {
+// Honours a thread's end, quiet or archived: starting over is behaviour, not bookkeeping.
+export const memoryThreadSessionsStore = (archived: ArchivedConversation): ThreadSessionsStore => {
     const sessions = new Map<string, ThreadSession>();
-    const live = (key: string, ttlMs: number, now: number): ThreadSession | undefined => {
-        const record = sessions.get(key);
-        return record !== undefined && now - record.lastAt <= ttlMs ? record : undefined;
-    };
+    const live = (key: string, ttlMs: number, now: number): ThreadSession | undefined => liveThread(sessions.get(key), ttlMs, now, archived);
     return {
         get: async (key, ttlMs, now) => live(key, ttlMs, now),
         open: async (key, mintConversationId, ttlMs, now) => {

@@ -602,7 +602,7 @@ test("system.metrics answers the reading, told only of conversations this daemon
     });
     await beginTurn(
         composed.conversations,
-        { conversationId: "c1", isolated: false, prompt: "work", profile: { agent: "claude", harness: "native" } },
+        { conversationId: "c1", isolated: false, prompt: "work", profile: { agent: "claude", harness: "native" }, byPerson: true },
         1_000,
     );
     expect(await clientFor(createApp(composed)).system.metrics()).toEqual({

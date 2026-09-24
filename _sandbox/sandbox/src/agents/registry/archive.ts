@@ -22,8 +22,7 @@ import type { AgentWorktrees } from "../worktrees/worktrees.js";
 export const archivable = (agent: AgentSummary): boolean =>
     agent.archivedAt === undefined && (agent.status === "landed" || agent.status === "idle") && (agent.watches ?? []).length === 0;
 
-// Aged out per the retention setting; kept separate from `archivable` so the manual Clear button can act immediately
-// while the sweep waits, same guards, different clock.
+// Aged out per the retention setting: the unattended sweep's rule, narrower than the board's Clear, which names its ids.
 export const archivableByAge = (agent: AgentSummary, now: number, retentionMs: number): boolean =>
     retentionMs > 0 && archivable(agent) && now - agent.updatedAt >= retentionMs;
 
