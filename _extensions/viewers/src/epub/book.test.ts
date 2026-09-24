@@ -1,4 +1,4 @@
-import { strToU8, zipSync } from "fflate";
+import { strToU8, zipSync, unzipSync } from "fflate";
 import { openEpub, resolveHref } from "./book";
 
 /* What a book is made of: its order, its titles, and where each file it names actually lives in the zip. */
@@ -59,12 +59,12 @@ describe(`resolveHref`, () => {
 
 describe(`openEpub`, () => {
     it(`reads the book's metadata and reading order, skipping what the spine marks non-linear`, () => {
-        const book = openEpub(
+        const book = openEpub(unzipSync(
             epub({
                 "OEBPS/content.opf": opf(`<item id="nav" href="nav.xhtml" properties="nav" media-type="application/xhtml+xml"/>`, ``),
                 "OEBPS/nav.xhtml": NAV,
             }),
-        );
+        ));
         expect(book.title).toBe(`The Book`);
         expect(book.author).toBe(`A Writer`);
         // Spine order, not manifest order; the cover is `linear="no"` and is not part of the reading order.
@@ -72,38 +72,38 @@ describe(`openEpub`, () => {
     });
 
     it(`titles chapters from an EPUB 3 navigation document`, () => {
-        const book = openEpub(
+        const book = openEpub(unzipSync(
             epub({
                 "OEBPS/content.opf": opf(`<item id="nav" href="text/nav.xhtml" properties="nav" media-type="application/xhtml+xml"/>`, ``),
                 "OEBPS/text/nav.xhtml": NAV,
             }),
-        );
+        ));
         expect(book.chapters.map((chapter) => chapter.title)).toEqual([`Chapter Two`, `Chapter One`]);
     });
 
     it(`titles chapters from an EPUB 2 NCX, each with its own label rather than its children's`, () => {
-        const book = openEpub(
+        const book = openEpub(unzipSync(
             epub({
                 "OEBPS/content.opf": opf(`<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`, `toc="ncx"`),
                 "OEBPS/toc.ncx": NCX,
             }),
-        );
+        ));
         expect(book.chapters.map((chapter) => chapter.title)).toEqual([`A section of it`, `Part One`]);
     });
 
     it(`falls back to the file's name when the book names no title for it`, () => {
-        const book = openEpub(epub({ "OEBPS/content.opf": opf(``, ``) }));
+        const book = openEpub(unzipSync(epub({ "OEBPS/content.opf": opf(``, ``) })));
         expect(book.chapters.map((chapter) => chapter.title)).toEqual([`two.xhtml`, `one.xhtml`]);
     });
 
     it(`hands out a chapter's bytes and its media type`, () => {
-        const book = openEpub(epub({ "OEBPS/content.opf": opf(``, ``) }));
+        const book = openEpub(unzipSync(epub({ "OEBPS/content.opf": opf(``, ``) })));
         expect(new TextDecoder().decode(book.entry(`OEBPS/text/one.xhtml`))).toContain(`One`);
         expect(book.mediaType(`OEBPS/images/a.png`)).toBe(`image/png`);
         expect(book.entry(`OEBPS/missing.xhtml`)).toBeUndefined();
     });
 
     it(`says so plainly when the file is a zip but not a book`, () => {
-        expect(() => openEpub(zipSync({ "hello.txt": strToU8(`hi`) }))).toThrow(/no EPUB package document/);
+        expect(() => openEpub(unzipSync(zipSync({ "hello.txt": strToU8(`hi`) })))).toThrow(/no EPUB package document/);
     });
 });

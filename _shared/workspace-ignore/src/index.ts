@@ -28,6 +28,24 @@ type GitignoreLayer = { base: string; ig: Ignore };
 export type IgnoreScope = {
     isIgnored(name: string, relPath: string, isDir: boolean): boolean;
     descend(absDir: string, relDir: string): Promise<IgnoreScope>;
+    // descend() for a walker that already holds the directory's .gitignore text; undefined when it has none.
+    layer(relDir: string, gitignore: string | undefined): IgnoreScope;
+};
+
+// Compiled matchers by .gitignore text: a walk layers the same few files on every refetch, and compiling one is most of
+// what matching costs. Bounded, since a workspace's distinct .gitignore texts are few and a stale one is only unused.
+const COMPILED_LIMIT = 512;
+const compiled = new Map<string, Ignore>();
+const compile = (gitignore: string): Ignore => {
+    let matcher = compiled.get(gitignore);
+    if (matcher === undefined) {
+        matcher = ignore().add(gitignore);
+        if (compiled.size >= COMPILED_LIMIT) {
+            compiled.delete(compiled.keys().next().value as string);
+        }
+        compiled.set(gitignore, matcher);
+    }
+    return matcher;
 };
 
 const makeScope = (layers: readonly GitignoreLayer[]): IgnoreScope => ({
@@ -57,11 +75,13 @@ const makeScope = (layers: readonly GitignoreLayer[]): IgnoreScope => ({
         return false;
     },
     async descend(absDir, relDir) {
-        const content = await readFile(join(absDir, ".gitignore"), "utf8").catch(() => undefined);
-        if (content === undefined) {
+        return this.layer(relDir, await readFile(join(absDir, ".gitignore"), "utf8").catch(() => undefined));
+    },
+    layer(relDir, gitignore) {
+        if (gitignore === undefined) {
             return this;
         }
-        return makeScope([...layers, { base: relDir.split(sep).join("/"), ig: ignore().add(content) }]);
+        return makeScope([...layers, { base: relDir.split(sep).join("/"), ig: compile(gitignore) }]);
     },
 });
 
@@ -74,6 +94,7 @@ export const createIgnoreScope = (): IgnoreScope => makeScope([]);
 export const NO_IGNORES: IgnoreScope = {
     isIgnored: () => false,
     descend: async () => NO_IGNORES,
+    layer: () => NO_IGNORES,
 };
 
 // Root-relative, forward-slash path for `abs` under `base`, the path space the tree/search/file routes speak.

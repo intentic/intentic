@@ -73,9 +73,9 @@ export interface CapabilityHandler {
     readonly status: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<CapabilityStatus>;
     readonly remove?: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<void>;
     // Config key holding this kind's secret, absent if it has none; drives the /secrets inventory (reveal, setSecret).
-    readonly secret?: (config: unknown, connectors: Map<string, ResolvedContribution>) => string | undefined;
+    readonly secret?: (config: unknown, connectors: ReadonlyMap<string, ResolvedContribution>) => string | undefined;
     // Non-secret echo of a config for the list summary (e.g. an mcp token becomes hasToken); required, not optional.
-    readonly echo: (config: unknown, connectors: Map<string, ResolvedContribution>) => Record<string, string | number | boolean>;
+    readonly echo: (config: unknown, connectors: ReadonlyMap<string, ResolvedContribution>) => Record<string, string | number | boolean>;
     // What a rename of this kind moves, or why not (CapabilityRename); required, the safe default differs per kind.
     readonly rename: CapabilityRename;
 }

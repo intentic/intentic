@@ -1,4 +1,4 @@
-import { unzipSync } from "fflate";
+import type { Unzipped } from "fflate";
 import { descendants, descendant, parseXml, textOf, type XmlElement } from "./xml-tree";
 
 /* An OpenDocument file is a zip of XML parts plus its pictures. This opens one and hands out the parts; the viewers
@@ -67,8 +67,8 @@ const mediaTypes = (manifest: XmlElement | undefined): Map<string, string> => {
     return types;
 };
 
-export const openOdf = (bytes: Uint8Array): OdfPackage => {
-    const zip = unzipSync(bytes);
+// `zip` is the package already inflated (zip/unzip.ts), so opening it is parsing only.
+export const openOdf = (zip: Unzipped): OdfPackage => {
     const part = (path: string): XmlElement | undefined => {
         const raw = zip[path];
         return raw === undefined ? undefined : parseXml(decoder.decode(raw));

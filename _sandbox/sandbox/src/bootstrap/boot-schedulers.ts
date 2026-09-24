@@ -9,6 +9,8 @@ import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
 import { createCiPoller } from "../ci/poller.js";
 import type { BootPhase } from "./boot-phase.js";
+import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
+import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
 export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPhase): void => {
@@ -70,5 +72,13 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     startRuntimeHealth(services);
     // Idle backstop: headroom is otherwise re-read only on a turn, refusal or screen.
     services.headroom.start();
-    services.history.start();
+    // Anything the watchers see, a repo appearing or going, or a write the daemon made where no watcher looks.
+    services.history.start((changed) => {
+        const stops = [subscribeWorkspaceChanges(changed), subscribeRepoChanges(changed), subscribeUnwatchedWrites(changed)];
+        return () => {
+            for (const stop of stops) {
+                stop();
+            }
+        };
+    });
 };

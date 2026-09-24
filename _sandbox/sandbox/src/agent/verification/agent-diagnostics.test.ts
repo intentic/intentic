@@ -257,13 +257,13 @@ test("a file that goes clean and breaks again is reported again", async () => {
     expect(contextOf(await fire(hooks, { file_path: "/work/src/app.ts" }))).toContain("TS2304");
 });
 
-// A tracker says which files a Bash command changed; hooks snapshot before the command and review after through the
+// A tracker says which files a Bash command changed; hooks mark the command's start and review after through the
 // same per-file reviewer an Edit uses, so once-per-turn notices and repeat suppression hold across both doors.
 const tracked = (changed: readonly ShellEdit[]): ShellEditTracker & { readonly calls: string[] } => {
     const calls: string[] = [];
     return {
         calls,
-        before: async () => {
+        before: () => {
             calls.push("before");
         },
         changed: async () => {

@@ -311,8 +311,9 @@ export const holdsRequest = (row: TranscriptRequests): boolean => REQUEST_FIELDS
 // Whether a row is holding the turn open on a card nobody has answered.
 export const isAwaitingDecision = (row: TranscriptRequests): boolean => REQUEST_FIELDS.some((field) => row[field]?.status === "pending");
 
-// One change to a run's rows, so a client keeps rows rather than frames. Prose/thinking append to a row; a `tool` card
-// replaces whole by id; everything else replaces its row; `drop` removes a row that opened and never wrote.
+// One change to a run's rows, so a client keeps rows rather than frames. Prose/thinking append to a row or a card; a
+// `tool` card replaces its own fields by id, never its nested calls or thinking, which arrive by their own patches;
+// everything else replaces its row; `drop` removes a row that opened and never wrote.
 export const TranscriptPatchSchema = z.discriminatedUnion("op", [
     z.object({ op: z.literal("append").describe("A new row at the end."), row: TranscriptRowSchema }),
     z.object({ op: z.literal("replace").describe("This row, whole, in place of the one at that index."), index: z.number().int().nonnegative(), row: TranscriptRowSchema }),
@@ -320,7 +321,17 @@ export const TranscriptPatchSchema = z.discriminatedUnion("op", [
     z.object({ op: z.literal("text").describe("More of the agent's prose, onto that row's text."), index: z.number().int().nonnegative(), text: z.string() }),
     z.object({ op: z.literal("thinking").describe("More of the agent's reasoning, onto that row's thinking."), index: z.number().int().nonnegative(), text: z.string() }),
     z.object({
-        op: z.literal("tool").describe("A tool card, whole: new, or the latest state of one already there, matched by id wherever it nests."),
+        op: z.literal("toolThinking").describe("More of a delegated subagent's reasoning, onto the thinking of the card that started it."),
+        index: z.number().int().nonnegative(),
+        id: z.string().describe("The card's id, matched wherever it nests."),
+        text: z.string(),
+    }),
+    z.object({
+        op: z
+            .literal("tool")
+            .describe(
+                "A tool card's own fields: new, or the latest state of one already there, matched by id wherever it nests. Carries no `children` or `thinking`; a card already there keeps its own.",
+            ),
         index: z.number().int().nonnegative(),
         tool: TranscriptToolSchema,
         parent: z.string().optional().describe("The card this one nests under, when it is a delegated subagent's own call."),

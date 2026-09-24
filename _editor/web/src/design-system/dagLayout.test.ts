@@ -54,6 +54,19 @@ describe(`layoutSignature`, () => {
         expect(sig([{ id: `a`, data: undefined, height: options.nodeHeight }])).toBe(sig([node(`a`)]));
     });
 
+    // DagGraph keeps its placement for as long as the signature holds, so what only draws must neither enter the
+    // signature nor move anything: a selection dims half the graph on every click.
+    it(`ignores what only draws, which places nothing differently`, () => {
+        const plain = { nodes: [node(`a`), node(`b`)], edges: [edge(`a`, `b`)] };
+        const drawn = {
+            nodes: [{ ...node(`a`), dimmed: true, tooltip: `a tip` }, node(`b`)],
+            edges: [{ ...edge(`a`, `b`), dimmed: true, dashed: true, accent: `text-warning`, kind: `dev` }],
+        };
+        expect(sig(drawn.nodes, drawn.edges)).toBe(sig(plain.nodes, plain.edges));
+        const place = (nodes: readonly DagNode<undefined>[], edges: readonly DagEdge[]) => layoutDag(nodes as readonly DagNode<never>[], edges, options);
+        expect(place(drawn.nodes, drawn.edges)).toEqual(place(plain.nodes, plain.edges));
+    });
+
     it(`still changes when the count changes, which is what it replaced`, () => {
         expect(sig([node(`a`)])).not.toBe(sig([node(`a`), node(`b`)]));
     });

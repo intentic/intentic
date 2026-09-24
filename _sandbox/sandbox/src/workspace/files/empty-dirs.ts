@@ -1,7 +1,7 @@
-import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { createIgnoreScope, type IgnoreScope, toRelPath } from "@intentic/workspace-ignore";
+import { type DirReads, freshDirReads } from "./dir-reads.js";
 
 // Every workspace directory whose subtree holds no files: debris left by a move, since git tracks no directories to
 // clean them up.
@@ -29,8 +29,9 @@ const NOTHING: Scanned = { barren: false, found: [] };
 
 // Every barren directory, root-relative, in tree order (parents before children, siblings alphabetical). Complete
 // unless the pathological maxDirs cap cuts it to a prefix.
-export const scanBarrenDirs = async (root: string, options?: { maxDirs?: number }): Promise<string[]> => {
+export const scanBarrenDirs = async (root: string, options?: { maxDirs?: number; reads?: DirReads }): Promise<string[]> => {
     const base = resolve(root);
+    const reads = options?.reads ?? freshDirReads();
     let budget = options?.maxDirs ?? MAX_SCAN_DIRS;
 
     const visit = async (abs: string, rel: string, parentScope: IgnoreScope): Promise<Scanned> => {
@@ -38,20 +39,19 @@ export const scanBarrenDirs = async (root: string, options?: { maxDirs?: number 
             return NOTHING;
         }
         budget--;
-        // Layers this directory's own .gitignore onto its parents', same as the tree walk, so the two agree.
-        const scope = await parentScope.descend(abs, rel);
-        const dirents = await readdir(abs, { withFileTypes: true }).catch(() => undefined);
-        if (dirents === undefined) {
+        const names = await reads.names(abs);
+        if (names === undefined) {
             // Unreadable is unknown, not empty; nothing to offer for deletion.
             return NOTHING;
         }
-        // isDirectory() is false for a symlink, which alone makes a link content here.
-        const children = dirents
-            .filter((dirent) => dirent.isDirectory())
-            .map((dirent) => ({ name: dirent.name, abs: join(abs, dirent.name), path: toRelPath(base, join(abs, dirent.name)) }))
+        // Layers this directory's own .gitignore onto its parents', same as the tree walk, so the two agree.
+        const scope = parentScope.layer(rel, names.gitignore);
+        // Only plain directories are named, so a symlink is content here.
+        const children = names.dirs
+            .map((name) => ({ name, abs: join(abs, name), path: toRelPath(base, join(abs, name)) }))
             .filter((child) => !scope.isIgnored(child.name, child.path, true) && !isLockedWorkspacePath(child.path));
         // Anything this walk won't descend into is content, which stops the branch here.
-        let all = children.length === dirents.length;
+        let all = names.others === 0 && children.length === names.dirs.length;
         children.sort((left, right) => left.name.localeCompare(right.name));
         const scanned = await Promise.all(children.map((child) => visit(child.abs, child.path, scope)));
 

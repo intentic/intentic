@@ -133,7 +133,8 @@ jest.mock("@intentic/ui", async () => {
 // parser.
 jest.mock("@intentic/ui/markdown", () => ({
     copyCodeFromEvent: jest.fn(),
-    renderMarkdownParts: (source: string) => [{ kind: `html`, html: `<p>${source}</p>` }],
+    parseMarkdownParts: (source: string) => source,
+    renderParsedMarkdown: (source: string) => [{ kind: `html`, html: `<p>${source}</p>` }],
 }));
 jest.mock("../drafts/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
 // formatElapsed stays real, since the loader's readout is exactly that format.

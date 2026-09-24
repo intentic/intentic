@@ -35,6 +35,9 @@ interface CardPlace {
 const defined = <T extends object>(value: T): Partial<T> =>
     Object.fromEntries(Object.entries(value).filter(([, field]) => field !== undefined)) as Partial<T>;
 
+// A card's own fields: what a `tool` patch carries, so a delegation's growing subtree never rides one.
+const ownFields = ({ children: _children, thinking: _thinking, ...own }: TranscriptTool): TranscriptTool => own;
+
 const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>): TranscriptTool => ({
     id: event.id,
     name: event.name,
@@ -522,9 +525,8 @@ export class TranscriptFold {
             return [];
         }
         if (event.kind === "thinking") {
-            return this.patchCard(parent, (tool) => {
-                tool.thinking = `${tool.thinking ?? ""}${event.text}`;
-            });
+            place.tool.thinking = `${place.tool.thinking ?? ""}${event.text}`;
+            return [{ op: "toolThinking", index: place.row, id: parent, text: event.text }];
         }
         if (event.kind === "tool_call") {
             const child = cardOf(event);
@@ -593,7 +595,7 @@ export class TranscriptFold {
             return [];
         }
         mutate(place.tool);
-        return [{ op: "tool", index: place.row, tool: structuredClone(place.tool), ...(place.parent === undefined ? {} : { parent: place.parent }) }];
+        return [{ op: "tool", index: place.row, tool: structuredClone(ownFields(place.tool)), ...(place.parent === undefined ? {} : { parent: place.parent }) }];
     }
 
     private stampOpener(mutate: (row: TranscriptRow) => void): TranscriptPatch[] {
@@ -640,15 +642,25 @@ export const applyTranscriptPatch = (rows: readonly TranscriptRow[], patch: Tran
             return rows.map((row, index) => (index === patch.index ? { ...row, text: `${row.text}${patch.text}` } : row));
         case "thinking":
             return rows.map((row, index) => (index === patch.index ? { ...row, thinking: `${row.thinking ?? ""}${patch.text}` } : row));
+        case "toolThinking":
+            return rows.map((row, index) => (index === patch.index ? { ...row, tools: [...appendToolThinking(row.tools ?? [], patch.id, patch.text)] } : row));
         case "tool":
             return rows.map((row, index) => (index === patch.index ? { ...row, tools: upsertTool(row.tools ?? [], patch.tool, patch.parent) } : row));
     }
 };
 
-// Replaces the tool with this id anywhere in the tree, or appends it under `parent`, or at top level with no parent or
-// no match.
+// Appends a delegated subagent's reasoning onto the card with this id, wherever it nests.
+export const appendToolThinking = (tools: readonly TranscriptTool[], id: string, text: string): readonly TranscriptTool[] =>
+    mapTool(tools, id, (card) => ({ ...card, thinking: `${card.thinking ?? ""}${text}` }));
+
+// Replaces the tool with this id anywhere in the tree, keeping the nested calls and thinking it already holds, or appends
+// it under `parent`, or at top level with no parent or no match.
 export const upsertTool = (tools: readonly TranscriptTool[], tool: TranscriptTool, parent: string | undefined): TranscriptTool[] => {
-    const replaced = mapTool(tools, tool.id, () => tool);
+    const replaced = mapTool(tools, tool.id, (current) => ({
+        ...tool,
+        ...(current.children === undefined ? {} : { children: current.children }),
+        ...(current.thinking === undefined ? {} : { thinking: current.thinking }),
+    }));
     if (replaced !== tools) {
         return [...replaced];
     }

@@ -1,8 +1,8 @@
 import { stat } from "node:fs/promises";
 
-// Detects a shell edit (sed -i, a heredoc) for hooks that only hear Edit|Write. Snapshots each dirty file's mtime
-// before and after a command: a changed or newly-dirty path was written by it and nothing else. `onDisk` is where this
-// process stats the file; `path` is the agent's name, which isolation makes different.
+// Detects a shell edit (sed -i, a heredoc, a mv) for hooks that only hear Edit|Write: a dirty file whose inode changed
+// since the command started was changed by it. ctime, not mtime, since a rename keeps a file's mtime. `onDisk` is where
+// this process stats the file; `path` is the agent's name, which isolation makes different.
 export interface ShellEdit {
     readonly path: string;
     readonly onDisk: string;
@@ -12,43 +12,36 @@ export interface ShellEdit {
 export type DirtyFiles = () => Promise<readonly ShellEdit[]>;
 
 export interface ShellEditTracker {
-    // Taken as the command starts; a stat per dirty file, negligible beside the command about to run.
-    readonly before: () => Promise<void>;
+    // Marks the command's start and nothing more, so the command never waits on a scan.
+    readonly before: () => void;
     // What changed since the last `before`; without one, nothing is attributed to avoid a wrong blame.
     readonly changed: () => Promise<readonly ShellEdit[]>;
 }
 
-type Snapshot = ReadonlyMap<string, { readonly edit: ShellEdit; readonly mtime: number }>;
-
-const snapshotOf = async (dirty: DirtyFiles): Promise<Snapshot> => {
-    const files = await dirty().catch((): readonly ShellEdit[] => []);
-    const seen = new Map<string, { edit: ShellEdit; mtime: number }>();
-    await Promise.all(
-        files.map(async (edit) => {
-            try {
-                seen.set(edit.path, { edit, mtime: (await stat(edit.onDisk)).mtimeMs });
-            } catch {
-                // Deleted or unreadable: there is no file left to check, so there is nothing to attribute.
-            }
-        }),
-    );
-    return seen;
-};
-
-export const createShellEditTracker = (dirty: DirtyFiles): ShellEditTracker => {
-    let baseline: Snapshot | undefined;
+export const createShellEditTracker = (dirty: DirtyFiles, now: () => number = Date.now): ShellEditTracker => {
+    let startedAt: number | undefined;
     return {
-        before: async () => {
-            baseline = await snapshotOf(dirty);
+        before: () => {
+            startedAt = now();
         },
         changed: async () => {
-            if (baseline === undefined) {
+            const since = startedAt;
+            startedAt = undefined;
+            if (since === undefined) {
                 return [];
             }
-            const now = await snapshotOf(dirty);
-            const was = baseline;
-            baseline = undefined;
-            return [...now.values()].filter(({ edit, mtime }) => was.get(edit.path)?.mtime !== mtime).map(({ edit }) => edit);
+            const files = await dirty().catch((): readonly ShellEdit[] => []);
+            const touched = await Promise.all(
+                files.map(async (edit) => {
+                    try {
+                        return (await stat(edit.onDisk)).ctimeMs >= since ? edit : undefined;
+                    } catch {
+                        // Deleted or unreadable: there is no file left to check, so there is nothing to attribute.
+                        return undefined;
+                    }
+                }),
+            );
+            return touched.filter((edit) => edit !== undefined);
         },
     };
 };

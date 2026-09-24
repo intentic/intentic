@@ -174,16 +174,17 @@ export const turnPathsAcross = async (root: string, repos: readonly string[], gi
 
 // Every path the working trees under `root` have changed, root-relative, across the root repo and each nested one.
 // A nested repo shows as one untracked entry in the root's own status; dropped here since it answers for itself.
+// One status per repo and nothing else: paths only, so no line counts and no untracked file is read.
 export const dirtyPathsAcross = async (root: string, repos: readonly string[], git: GitRunner = defaultGit): Promise<string[]> => {
     const nested = new Set(repos.flatMap((repo) => [repo, `${repo}/`]));
     const paths = new Set<string>();
     const collect = async (dir: string, prefix: string): Promise<void> => {
-        const { conflicted, staged, unstaged } = await changedFiles(dir, git).catch(() => ({ conflicted: [], staged: [], unstaged: [] }));
-        for (const change of [...conflicted, ...staged, ...unstaged]) {
-            for (const path of [change.path, change.from]) {
-                if (path !== undefined && !(prefix === "" && nested.has(path))) {
-                    paths.add(prefix === "" ? path : `${prefix}/${path}`);
-                }
+        const { stdout } = await git(dir, ["--no-optional-locks", "status", "--porcelain=v2", "-z", "-uall", "--find-renames"]).catch(() => ({ stdout: "" }));
+        const { conflicted, staged, unstaged, untracked } = parseStatusV2(stdout);
+        const named = [...conflicted, ...staged, ...unstaged].flatMap((change) => [change.path, change.from]);
+        for (const path of [...named, ...untracked]) {
+            if (path !== undefined && !(prefix === "" && nested.has(path))) {
+                paths.add(prefix === "" ? path : `${prefix}/${path}`);
             }
         }
     };

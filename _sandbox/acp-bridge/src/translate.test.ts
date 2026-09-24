@@ -73,28 +73,16 @@ test("image content becomes a resource_link at the mirror copy of the file", () 
     ]);
 });
 
-test("a helper's nested calls are announced with their parent, once each", () => {
+test("a helper's nested calls are announced from their own patches, once each; its thinking is not", () => {
     const translate = createTranslator(CWD);
-    const parent: TranscriptTool = {
-        id: "p",
-        name: "Agent",
-        category: "other",
-        status: "in_progress",
-        children: [{ id: "c", name: "Read", category: "read", status: "completed" }],
-    };
-    expect(
-        translate(patch({ op: "tool", index: 1, tool: parent })).map((update) => [
-            update.sessionUpdate,
-            "toolCallId" in update ? update.toolCallId : undefined,
-        ]),
-    ).toEqual([
-        ["tool_call", "p"],
-        ["tool_call", "c"],
-    ]);
-    expect(translate(patch({ op: "tool", index: 1, tool: parent })).map((update) => update.sessionUpdate)).toEqual([
-        "tool_call_update",
-        "tool_call_update",
-    ]);
+    const parent: TranscriptTool = { id: "p", name: "Agent", category: "other", status: "in_progress" };
+    const child: TranscriptTool = { id: "c", name: "Read", category: "read", status: "completed" };
+    const ids = (frame: Parameters<typeof translate>[0]) =>
+        translate(frame).map((update) => [update.sessionUpdate, "toolCallId" in update ? update.toolCallId : undefined]);
+    expect(ids(patch({ op: "tool", index: 1, tool: parent }))).toEqual([["tool_call", "p"]]);
+    expect(ids(patch({ op: "tool", index: 1, tool: child, parent: "p" }))).toEqual([["tool_call", "c"]]);
+    expect(ids(patch({ op: "toolThinking", index: 1, id: "p", text: "hm" }))).toEqual([]);
+    expect(ids(patch({ op: "tool", index: 1, tool: { ...parent, status: "completed" } }))).toEqual([["tool_call_update", "p"]]);
 });
 
 test("prose and thinking become message/thought chunks; a checklist on a replaced row becomes the ACP plan", () => {

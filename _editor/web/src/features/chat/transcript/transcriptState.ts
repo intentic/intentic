@@ -1,5 +1,5 @@
 import type { AttachFrame, TranscriptPatch } from "@intentic/sandbox-contract";
-import { upsertTool } from "@intentic/sandbox-contract/transcript-fold";
+import { appendToolThinking, upsertTool } from "@intentic/sandbox-contract/transcript-fold";
 import type { ChatMessage } from "./transcript";
 
 // The transcript as a value, with every transition as a pure function. Sources are the daemon's already-folded rows
@@ -118,6 +118,12 @@ export const applyPatch = (state: TranscriptState, patch: TranscriptPatch, typew
             return target === undefined
                 ? state
                 : mapMessage(state, target.id, (message) => ({ ...message, thinking: `${message.thinking ?? ``}${patch.text}` }));
+        }
+        case `toolThinking`: {
+            const target = at(patch.index);
+            return target === undefined
+                ? state
+                : mapMessage(state, target.id, (message) => ({ ...message, tools: [...appendToolThinking(message.tools ?? [], patch.id, patch.text)] }));
         }
         case `tool`: {
             const target = at(patch.index);

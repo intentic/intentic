@@ -26,7 +26,7 @@ export const hostOf = (ctx: CapabilityCtx): ExtensionHost => ({
     config: { extensionsDir: ctx.extensionsDir, historyRoot: ctx.historyRoot },
 });
 
-export const contributionRegistry = async (host: ExtensionHost): Promise<Map<string, ResolvedContribution>> => {
+const buildRegistry = async (host: ExtensionHost): Promise<ReadonlyMap<string, ResolvedContribution>> => {
     const registry = new Map<string, ResolvedContribution>();
     for (const extension of await enabledExtensions(host)) {
         for (const spec of extension.manifest.contributes?.capabilities ?? []) {
@@ -39,10 +39,26 @@ export const contributionRegistry = async (host: ExtensionHost): Promise<Map<str
     return registry;
 };
 
+// Builds in flight, by workspace: every caller asking while one runs shares it, which is how one capabilities list stops
+// reading every extension manifest once per connection. Nothing is kept once a build settles, so an install is never
+// answered from before it.
+const building = new Map<string, Promise<ReadonlyMap<string, ResolvedContribution>>>();
+
+export const contributionRegistry = (host: ExtensionHost): Promise<ReadonlyMap<string, ResolvedContribution>> => {
+    const key = `${host.workspace.root}\u0000${host.config.extensionsDir}`;
+    const running = building.get(key);
+    if (running !== undefined) {
+        return running;
+    }
+    const build = buildRegistry(host).finally(() => building.delete(key));
+    building.set(key, build);
+    return build;
+};
+
 // Looks up the entry by the kind's discriminator field (a cli `provider`, a browser `platform`); undefined if the kind
 // has none, or the declaring extension is missing or disabled.
 export const contributionFor = (
-    registry: Map<string, ResolvedContribution>,
+    registry: ReadonlyMap<string, ResolvedContribution>,
     kind: CapabilityKind,
     config: Record<string, unknown>,
 ): ResolvedContribution | undefined => {

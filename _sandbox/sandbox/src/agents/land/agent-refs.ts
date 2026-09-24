@@ -93,6 +93,10 @@ export const dropAgentRef = async (main: string, branch: string, git: GitRunner)
 // Whether `ancestor` is reachable from `descendant`, via `git merge-base --is-ancestor`'s exit code; shared by both
 // land-side readers so they cannot disagree about what "reachable" means.
 export const isAncestor = async (dir: string, ancestor: string, descendant: string, git: GitRunner): Promise<boolean> => {
+    // Every commit is its own ancestor; asking git costs a process to hear it.
+    if (ancestor === descendant) {
+        return true;
+    }
     try {
         await git(dir, ["merge-base", "--is-ancestor", ancestor, descendant]);
         return true;

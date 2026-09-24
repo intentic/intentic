@@ -7,7 +7,8 @@ import { sandboxBlob } from "../../sandbox/client/sandboxClient";
 import { useLayout } from "../../../shell/window/useLayout";
 import { type RegisteredViewer, renderViewerForExtension, useViewerComponent } from "../../../core-views/viewerRegistry";
 import ImageCompareView from "./ImageCompareView.vue";
-import { compareSides, type ImageSize, imageSize, type SidesComparison } from "./imageSides";
+import { type ImageSize, imageSize, type SidesComparison } from "./image/imageSides";
+import { compareImageSides } from "./image/imageSidesClient";
 import { useT } from "@intentic/ui/i18n";
 
 // Before/after viewer for binary diffs: DiffView's framing, bytes instead of text. Bytes come from sandboxBlob as
@@ -47,7 +48,7 @@ interface Side {
     readonly loading: boolean;
 }
 const loaded = ref<Record<"before" | "after", Side>>({ before: { loading: false }, after: { loading: false } });
-// What the two sides turn out to be, once both are in hand; see imageSides.ts.
+// What the two sides turn out to be, once both are in hand; see image/imageSides.ts.
 const comparison = ref<SidesComparison>();
 // Magnification and corner both panes show; zooming one zooms the other.
 const view = ref<ImageViewState>({ fit: true });
@@ -133,7 +134,7 @@ watch(
         if (beforeBlob === undefined || afterBlob === undefined) {
             return;
         }
-        void compareSides(beforeBlob, afterBlob).then((verdict) => {
+        void compareImageSides({ before: beforeBlob, after: afterBlob }).then((verdict) => {
             if (isLatest()) {
                 comparison.value = verdict;
             }

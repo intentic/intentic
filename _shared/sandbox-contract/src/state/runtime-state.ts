@@ -27,6 +27,10 @@ const RUNTIME_DOMAINS = [
     // The agent's Chromiums and open pages, daemon-held, minted from its own browser tool-call hooks.
     { domain: "browsers", invalidates: [["browsers"]] },
 
+    // A connection's status as its last probe found it: pushed when a probe behind a served answer finds another one, and
+    // when a browser sign-in is saved or cleared, which is what moves an account's card off "log in".
+    { domain: "capabilities", invalidates: [["capabilities"]] },
+
     // Daemon-held; changes continuously (tokens, tool uses), so it's rate-limited rather than pushed per mutation.
     { domain: "subagents", invalidates: [["subagents"]] },
 

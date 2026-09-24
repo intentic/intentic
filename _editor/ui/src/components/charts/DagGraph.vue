@@ -76,8 +76,15 @@ const layoutOptions = computed(() => ({
     ...(nodeSep !== undefined ? { nodeSep } : {}),
 }));
 
-// One layout run per render; nodes read positions from it, edges read lanes.
-const placement = computed(() => layoutDag(nodes as readonly DagNode<never>[], edges, layoutOptions.value));
+// Everything that places a node; a change to anything else, like a selection dimming half the graph, keeps the layout.
+const signature = computed(() => layoutSignature(nodes as readonly DagNode<never>[], edges, layoutOptions.value));
+
+// One layout run per placing change, since a run costs hundreds of milliseconds on a hundred-node graph; nodes read
+// positions from it, edges read lanes.
+const placement = shallowRef(layoutDag(nodes as readonly DagNode<never>[], edges, layoutOptions.value));
+watch(signature, () => {
+    placement.value = layoutDag(nodes as readonly DagNode<never>[], edges, layoutOptions.value);
+});
 
 const flowNodes = computed<Node<DagNode<T>>[]>(() =>
     nodes.map((node) => ({
@@ -213,7 +220,7 @@ const refit = (): void => {
 };
 
 watch(
-    () => layoutSignature(nodes as readonly DagNode<never>[], edges, layoutOptions.value),
+    signature,
     async () => {
         // A new graph replaces whatever the reader had panned to, so the pan hold is released and the graph refit.
         held = false;

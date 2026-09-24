@@ -60,9 +60,10 @@ export function useCapabilitySecret() {
     });
 }
 
-// Polls only while a capability is pending, since that means waiting on something outside the browser (a phone
-// linking, a login finishing) this app isn't told about. Three seconds because the thing shown is often a code the
-// reader is copying, and a stale one looks live.
+// Polls only while a pending capability is settling: something under way outside the browser (a phone linking, a
+// download) that moves on its own. A pending one waiting on a person, or on a device coming back, is left to the pushes
+// that announce it. Three seconds because the thing shown is often a code the reader is copying, and a stale one looks
+// live.
 const PENDING_POLL_MS = 3_000;
 
 export function useCapabilities() {
@@ -72,7 +73,9 @@ export function useCapabilities() {
         queryKey: capabilitiesKey,
         queryFn: fetchCapabilities,
         refetchInterval: ({ state }) =>
-            (state.data?.capabilities ?? []).some((capability) => capability.status.state === `pending`) ? PENDING_POLL_MS : false,
+            (state.data?.capabilities ?? []).some((capability) => capability.status.state === `pending` && capability.status.settling === true)
+                ? PENDING_POLL_MS
+                : false,
     });
     // Adding/removing a capability can recompose the environment overlay, so refresh the Environment tile too; a
     // platform capability also scaffolds rail panels, so refresh those as well.

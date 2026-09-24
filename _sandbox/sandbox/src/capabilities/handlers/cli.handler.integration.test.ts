@@ -85,12 +85,14 @@ test("whatsapp pends until a phone links: silence, waiting, the live code, a ref
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
         state: "pending",
         detail: "starting the WhatsApp connection…",
+        settling: true,
     });
     // Socket is up but no code has arrived yet, or the code died with the socket that minted it.
     setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: { state: "waiting" } } }, Date.now());
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
         state: "pending",
         detail: "waiting for WhatsApp to issue a pairing code…",
+        settling: true,
     });
     // The code has its own field so the entry can show it big and copyable, not buried in a sentence.
     setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: { state: "code", code: "ABCDEFGH" } } }, Date.now());
@@ -98,6 +100,7 @@ test("whatsapp pends until a phone links: silence, waiting, the live code, a ref
         state: "pending",
         detail: "Type this code on the phone: WhatsApp → Linked devices → Link a device → Link with phone number instead.",
         code: "ABCDEFGH",
+        settling: true,
     });
     // WhatsApp's own refusal reaches the owner verbatim; the retry behind it stays silent.
     setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: { state: "failed", detail: "Not a WhatsApp account" } } }, Date.now());
@@ -117,6 +120,7 @@ test("whatsapp pends while a paired session is reconnecting: a dropped socket is
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
         state: "pending",
         detail: "reconnecting to WhatsApp…",
+        settling: true,
     });
 });
 

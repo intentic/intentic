@@ -8,7 +8,7 @@ import { ignoreFileMode } from "../git/remote/repo-git-dirs.js";
 import { stateRelPath } from "../state-paths.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { startRepoWatch, subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
-import { startWorkspaceWatch, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+import { startWorkspaceWatch, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // Three feeds, none of which sees what the others see: files (ignores .git), repos (clones and deletions), refs. Nothing polls.
@@ -22,6 +22,8 @@ const extensionSource = (path: string): boolean =>
 export const startChangeReactions = ({ logger, services, shutdown, traits }: BootPhase): void => {
     startWorkspaceWatch(services.workspace.root, logger);
     subscribeWorkspaceChanges(() => services.iq.markDirty());
+    subscribeWorkspaceChanges(services.workspaceTreeChanged);
+    shutdown.push(subscribeUnwatchedWrites(() => services.workspaceTreeChanged([])));
     // Loaded code can't be unloaded, so a debounced restart is the reload; one that declares new powers waits for approval
     // again, and keeps none of its processes meanwhile.
     subscribeWorkspaceChanges((paths) => {
@@ -38,6 +40,18 @@ export const startChangeReactions = ({ logger, services, shutdown, traits }: Boo
     startRefWatch(services.workspace.root, subscribeRepoChanges, logger);
     // A ref can move without a workspace byte changing, so only the ref feed can invalidate health.
     shutdown.push(subscribeRefChanges(() => services.iq.invalidateHealth()));
+    // Everything a land standing is measured against outside the registry: refs (main's HEAD, agent tips) and the main
+    // checkouts' files (a landed path discarded, a blocking edit cleared).
+    shutdown.push(
+        services.agents.watchStandings((changed) => {
+            const stops = [subscribeRefChanges(changed), subscribeWorkspaceChanges(changed), subscribeUnwatchedWrites(changed)];
+            return () => {
+                for (const stop of stops) {
+                    stop();
+                }
+            };
+        }),
+    );
     shutdown.push(startVanishedRepoSweep(services, subscribeRepoChanges));
     // A repo cloned mid-session gets the file-mode rule boot gave the rest, not a boot later.
     if (traits.relocateGitDirs) {

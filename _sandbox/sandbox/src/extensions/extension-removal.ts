@@ -64,8 +64,9 @@ const contributedCapabilities = async (services: Services, extension: InstalledE
 // The card registry `echo` consults, forced to carry THIS extension's own cards even while it is switched off: a
 // disabled extension is absent from contributionRegistry, and without its card `echo` cannot tell a credential from a
 // hostname, so every field of every connection would be reported to the owner as a stored secret.
-const registryIncluding = async (services: Services, extension: InstalledExtension): Promise<Map<string, ResolvedContribution>> => {
-    const cards = await contributionRegistry(services);
+const registryIncluding = async (services: Services, extension: InstalledExtension): Promise<ReadonlyMap<string, ResolvedContribution>> => {
+    // A copy: the registry is shared with every caller that asked while it was built.
+    const cards = new Map(await contributionRegistry(services));
     for (const spec of extension.manifest.contributes?.capabilities ?? []) {
         const key = contributionKey(spec.kind, spec.id);
         if (!cards.has(key)) {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { unzipParts } from "./zip/unzip";
 import { Icon, useLatest } from "@intentic/extension-ui";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { openOdf, type OdfPackage } from "./odf/pkg";
@@ -99,12 +100,12 @@ const render = async (source: Blob): Promise<void> => {
     error.value = undefined;
     host.replaceChildren();
     try {
-        const bytes = new Uint8Array(await source.arrayBuffer());
+        const parts = await unzipParts(new Uint8Array(await source.arrayBuffer()));
         if (!isLatest()) {
             return;
         }
         release();
-        open = openOdf(bytes);
+        open = openOdf(parts);
         const deck = readPresentation(open);
         count.value = deck.slides.length;
         const doc = host.ownerDocument;

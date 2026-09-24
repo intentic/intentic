@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { unzipParts } from "./zip/unzip";
 import { useLatest } from "@intentic/extension-ui";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DocumentPaper from "./DocumentPaper.vue";
@@ -34,12 +35,12 @@ const render = async (source: Blob): Promise<void> => {
     empty.value = false;
     host.replaceChildren();
     try {
-        const bytes = new Uint8Array(await source.arrayBuffer());
+        const parts = await unzipParts(new Uint8Array(await source.arrayBuffer()));
         if (!isLatest()) {
             return;
         }
         release();
-        open = openOdf(bytes);
+        open = openOdf(parts);
         const doc = readTextDocument(open);
         empty.value = doc.empty;
         for (const blocks of doc.pages) {

@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { copyCodeFromEvent } from "../../markdown/code.js";
-import { type MarkdownDecorator, renderMarkdownParts } from "../../markdown/render.js";
+import { type MarkdownDecorator, parseMarkdownParts, renderParsedMarkdown } from "../../markdown/render.js";
 import MarkdownFigure from "../charts/MarkdownFigure.vue";
 
 defineOptions({ inheritAttrs: false });
@@ -15,8 +15,10 @@ const { source, decorate } = defineProps<{
 }>();
 
 // Prose runs and figures, in reading order (see renderMarkdownParts). Every run goes through the same engine
-// with the same decorator, so file links and code blocks behave identically either side of a figure.
-const parts = computed(() => renderMarkdownParts(source, decorate));
+// with the same decorator, so file links and code blocks behave identically either side of a figure. Parsed apart from
+// the render so a highlight landing anywhere re-runs only the code-block swap, never marked and DOMPurify.
+const parsed = computed(() => parseMarkdownParts(source, decorate));
+const parts = computed(() => renderParsedMarkdown(parsed.value));
 
 // The whole document as one string when it holds no figures: the shape every existing surface renders in.
 const plain = computed(() => {

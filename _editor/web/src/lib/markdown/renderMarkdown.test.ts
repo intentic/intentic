@@ -4,7 +4,9 @@ import "@intentic/testing/dom";
 import { watchEffect } from "vue";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { copyCodeFromEvent, escapeHtml } from "@intentic/ui/markdown";
+import { waitFor } from "@intentic/testing/bun";
 import { createStreamingMarkdown, markdownParseCount, renderMarkdown, type RenderedMarkdown, settledEnd } from "./renderMarkdown";
+import { useMarkdown } from "./useMarkdown";
 
 // A rendered document is a list of parts: prose runs as HTML, figures as data. These read it as a reader would see
 // it: which run is which. `prose` is not the whole document; a figure has no html.
@@ -310,6 +312,28 @@ describe(`code block highlighting is bounded`, () => {
         // One initial render, plus at most a couple as colour batches settle.
         expect(renders).toBeLessThanOrEqual(5);
         expect(renders).toBeGreaterThan(0);
+    });
+});
+
+// A finished message holds its parse: colour landing re-runs only the code-block swap, never marked and DOMPurify, since
+// every mounted message with a code block re-renders on each bump.
+describe(`a finished message's parse`, () => {
+    it(`survives its highlights landing: the render re-runs, the parse does not`, async () => {
+        const body = useMarkdown(`Prose.\n\n\`\`\`ts\nexport const kept = 1;\n\`\`\`\n`, false);
+        let renders = 0;
+        const before = markdownParseCount();
+        const stop = watchEffect(
+            () => {
+                void body.value;
+                renders += 1;
+            },
+            { flush: `sync` },
+        );
+        // Shiki's own line markup, absent from the plain fallback.
+        await waitFor(() => expect(prose(body.value)).toContain(`class="line"`));
+        stop();
+        expect(renders).toBeGreaterThan(1);
+        expect(markdownParseCount() - before).toBe(1);
     });
 });
 

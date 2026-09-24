@@ -1,3 +1,4 @@
+import { unzipSync } from "fflate";
 import { stubGlobal } from "@intentic/testing/bun";
 import { textOfBlock } from "./document-model";
 import { openOdf } from "./pkg";
@@ -18,14 +19,14 @@ const SLIDE_STYLES = stylesXml(
 
 const deckOf = (pages: string, automatic = GRAPHICS, files?: Parameters<typeof odfBytes>[0][`files`]) =>
     readPresentation(
-        openOdf(
+        openOdf(unzipSync(
             odfBytes({
                 mimetype: SLIDES_MIME,
                 content: contentXml(`<office:presentation>${pages}</office:presentation>`, automatic),
                 styles: SLIDE_STYLES,
                 files,
             }),
-        ),
+        )),
     );
 
 describe(`readPresentation`, () => {
@@ -105,6 +106,6 @@ describe(`readPresentation`, () => {
             content: contentXml(`<office:drawing><draw:page draw:name="Page 1"><draw:rect svg:x="1cm" svg:y="1cm"/></draw:page></office:drawing>`),
             styles: SLIDE_STYLES,
         });
-        expect(readPresentation(openOdf(drawing)).slides[0]?.shapes).toHaveLength(1);
+        expect(readPresentation(openOdf(unzipSync(drawing))).slides[0]?.shapes).toHaveLength(1);
     });
 });

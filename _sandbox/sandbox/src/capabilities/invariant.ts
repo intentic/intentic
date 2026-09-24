@@ -11,7 +11,7 @@ import { partitionSecretValues } from "./credentials/secret-fields.js";
 export interface ManifestSecretDeps {
     // Raw, undecorated store: a vault-decorated read would hide the difference this check needs to see.
     readonly manifest: CapabilitiesStore;
-    readonly connectors: () => Promise<Map<string, ResolvedContribution>>;
+    readonly connectors: () => Promise<ReadonlyMap<string, ResolvedContribution>>;
 }
 
 export const owner = "capabilities";

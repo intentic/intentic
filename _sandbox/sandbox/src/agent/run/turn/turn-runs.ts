@@ -6,6 +6,7 @@ import type { AwaitingKind, DomainEvents } from "../../../seams/domain-events.js
 import type { TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import type { JournalledTurn } from "./turn-journal.js";
 import { recordCommands } from "../../providers/agent-commands.js";
+import { type FrameBacklog, frameBacklog } from "../../../seams/frame-backlog.js";
 
 // Turn execution decoupled from any client connection: POST /agent starts a run, folds the transcript frame by frame,
 // and any number of clients attach to it live. Holds rows, not frames; each run is held by its conversation's actor
@@ -21,18 +22,27 @@ export interface TurnObserver {
 }
 
 // One subscriber's queue; a follower holds only what it has not yet read, so a stalled reader's backlog never reaches
-// the others.
+// the others. A bounded one is cut past frame-backlog's bound instead of growing: its reader re-attaches for a fresh head.
 class Mailbox<T> {
-    private readonly items: T[];
+    private readonly queue: FrameBacklog<T>;
     private wake: (() => void) | undefined;
     private closed = false;
 
-    constructor(replay: readonly T[] = []) {
-        this.items = [...replay];
+    constructor(replay: readonly T[], bounded: { readonly onCut: () => void } | undefined) {
+        this.queue = frameBacklog<T>(
+            () => {
+                this.close();
+                bounded?.onCut();
+            },
+            bounded === undefined ? { frames: Infinity, waitMs: Infinity } : {},
+        );
+        for (const item of replay) {
+            this.queue.push(item);
+        }
     }
 
     push(item: T): void {
-        this.items.push(item);
+        this.queue.push(item);
         this.wake?.();
     }
 
@@ -46,8 +56,8 @@ class Mailbox<T> {
     async *drain(released: () => void): AsyncGenerator<T> {
         try {
             for (;;) {
-                while (this.items.length > 0) {
-                    yield this.items.shift()!;
+                for (let next = this.queue.shift(); next !== undefined; next = this.queue.shift()) {
+                    yield next.frame;
                 }
                 if (this.closed) {
                     return;
@@ -167,9 +177,14 @@ export class TurnRun implements LiveRun {
     }
 
     // Attach: rows and facts so far on the head, then everything that lands from this instant on. Head and subscription
-    // are taken in one synchronous step, so nothing lands between the snapshot and the first live entry.
-    attach(): { readonly head: AttachHead; readonly entries: AsyncGenerator<AttachEntry> } {
-        const mailbox = new Mailbox<AttachEntry>(this.facts);
+    // are taken in one synchronous step, so nothing lands between the snapshot and the first live entry. A follower whose
+    // connection aborts, or who stops reading, is let go at once rather than holding every later entry until the turn ends.
+    attach(signal?: AbortSignal): { readonly head: AttachHead; readonly entries: AsyncGenerator<AttachEntry> } {
+        const mailbox: Mailbox<AttachEntry> = new Mailbox<AttachEntry>(this.facts, { onCut: () => this.followers.delete(mailbox) });
+        const abandon = (): void => {
+            this.followers.delete(mailbox);
+            mailbox.close();
+        };
         const head: AttachHead = {
             kind: "attached",
             run: this.id,
@@ -177,18 +192,25 @@ export class TurnRun implements LiveRun {
             seq: this.seq,
             rows: this.rows.map((row) => structuredClone(row)),
         };
-        if (this.done) {
+        if (this.done || signal?.aborted === true) {
             mailbox.close();
         } else {
             this.followers.add(mailbox);
+            signal?.addEventListener("abort", abandon, { once: true });
         }
-        return { head, entries: mailbox.drain(() => this.followers.delete(mailbox)) };
+        return {
+            head,
+            entries: mailbox.drain(() => {
+                this.followers.delete(mailbox);
+                signal?.removeEventListener("abort", abandon);
+            }),
+        };
     }
 
     // Raw frames from this instant on, for the daemon's own readers of a turn (a child's supervisor, a loop); nothing
     // before now.
     frames(): AsyncGenerator<AgentEvent> {
-        const mailbox = new Mailbox<AgentEvent>();
+        const mailbox = new Mailbox<AgentEvent>([], undefined);
         if (this.done) {
             mailbox.close();
         } else {

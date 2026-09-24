@@ -195,7 +195,8 @@ export interface LiveRun {
     readonly note: (row: TranscriptRow) => void;
     // Resolves once the run has fully unwound.
     readonly waitUntilFinished: () => Promise<void>;
-    readonly attach: () => { readonly head: AttachHead; readonly entries: AsyncGenerator<AttachEntry> };
+    // `signal` is the follower's connection: its abort lets the follower go.
+    readonly attach: (signal?: AbortSignal) => { readonly head: AttachHead; readonly entries: AsyncGenerator<AttachEntry> };
     // Raw frames from this instant on.
     readonly frames: () => AsyncGenerator<AgentEvent>;
 }

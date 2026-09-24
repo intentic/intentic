@@ -40,3 +40,38 @@ test(`the overlay's Code block and the diff above it resolve to the same grammar
     expect(codeLangForPath(`environment.custom.Dockerfile`)).toBe(`docker`);
     expect<(string | undefined)[]>(Object.keys(LANGS)).toContain(codeLangForPath(`environment.custom.Dockerfile`));
 });
+
+// highlightSliced tokenizes a slice per task. Within its budget it must colour exactly as highlight() does, which only
+// holds if grammar state carries across every slice boundary.
+
+const { highlight, highlightSliced } = useHighlighter();
+const fresh = { stale: () => false };
+
+// A few KB of TypeScript whose block comments and template strings run across lines, so slice cuts land inside them.
+const source = Array.from(
+    { length: 60 },
+    (_, index) => `/* note ${index}\n   still the comment ${index}\n*/\nexport const value${index} = \`line one\n${"x".repeat(40)} ${index}\`;`,
+).join(`\n`);
+
+describe(`highlightSliced`, () => {
+    it(`colours input within its budget exactly as one whole pass does, across slice boundaries`, async () => {
+        expect(source.length).toBeGreaterThan(2 * 2_048);
+        expect(await highlightSliced(source, `typescript`, { ...fresh, from: `start` })).toBe(await highlight(source, `typescript`));
+    });
+
+    it(`colours only the budgeted end and keeps every other line as plain text`, async () => {
+        const lines = Array.from({ length: 50 }, (_, index) => `const n${index} = ${index};`);
+        const code = lines.join(`\n`);
+        const budget = lines.slice(-5).join(`\n`).length + 1;
+        const html = (await highlightSliced(code, `typescript`, { ...fresh, from: `end`, budget }))!;
+        expect(html.match(/<span class="line">/g)).toHaveLength(50);
+        expect(html).toContain(`<span class="line">const n44 = 44;</span>`);
+        expect(html).not.toContain(`<span class="line">const n45 = 45;</span>`);
+        expect(html.match(/style=/g)?.length).toBeGreaterThan(5);
+    });
+
+    it(`stops once the caller has moved on, and answers nothing for a language it does not ship`, async () => {
+        expect(await highlightSliced(source, `typescript`, { from: `start`, stale: () => true })).toBeUndefined();
+        expect(await highlightSliced(`x`, `no-such-language`, { ...fresh, from: `start` })).toBeUndefined();
+    });
+});

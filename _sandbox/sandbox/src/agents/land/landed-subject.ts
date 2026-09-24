@@ -75,7 +75,7 @@ const breakingNote = (removed: readonly string[], written: string, wantsNote: bo
 // assertion ratchet reads it in the landed commit.
 export const conversationTestNote = async (services: Services, entry: PersistedAgent): Promise<string | undefined> => {
     try {
-        const said = (await services.transcripts.read(entry)).findLast((row) => row.role === "assistant")?.text;
+        const said = await services.transcripts.lastSaid(entry);
         return said === undefined ? undefined : declaredTestNote(said);
     } catch {
         return undefined;

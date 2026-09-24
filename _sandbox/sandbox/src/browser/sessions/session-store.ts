@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { BrowserConfig, Capability } from "@intentic/sandbox-contract";
+import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { statePath } from "../../state-paths.js";
 
 // A logged-in session for one profile owner is a persistent Chromium profile at sessionDir, written by
@@ -34,6 +35,7 @@ export const markConnected = async (root: string, id: string): Promise<void> => 
     const path = markerPath(root, id);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, "");
+    publishRuntimeChange("capabilities");
 };
 
 // Tears down a profile owner's whole session: profile, passkeys, and its own marker.
@@ -42,6 +44,7 @@ export const clearSession = async (root: string, id: string): Promise<void> => {
     await rm(sessionDir(root, id), { recursive: true, force: true });
     await rm(markerPath(root, id), { force: true });
     await rm(passkeyPath(root, id), { force: true });
+    publishRuntimeChange("capabilities");
 };
 
 // Renames a profile owner's whole session (dir, marker, passkeys) rather than removing it, carrying every cookie to the
@@ -51,6 +54,7 @@ export const moveSession = async (root: string, from: string, to: string): Promi
     for (const path of [sessionDir, markerPath, passkeyPath]) {
         await rename(path(root, from), path(root, to)).catch(() => undefined);
     }
+    publishRuntimeChange("capabilities");
 };
 
 // Disconnects one entry without touching the profile it lives in; an identity-born account's shared browser and
@@ -58,12 +62,14 @@ export const moveSession = async (root: string, from: string, to: string): Promi
 // Site-side logout, if wanted, is done by hand in that browser.
 export const clearMarker = async (root: string, id: string): Promise<void> => {
     await rm(markerPath(root, id), { force: true });
+    publishRuntimeChange("capabilities");
 };
 
 // Renames one entry's marker only; it stays connected, and the profile it borrows doesn't change.
 // Counterpart to clearMarker, as moveSession is to clearSession.
 export const moveMarker = async (root: string, from: string, to: string): Promise<void> => {
     await rename(markerPath(root, from), markerPath(root, to)).catch(() => undefined);
+    publishRuntimeChange("capabilities");
 };
 
 // Persistent profile can't open twice; locked by owner, one lock covers every account in an identity's browser.

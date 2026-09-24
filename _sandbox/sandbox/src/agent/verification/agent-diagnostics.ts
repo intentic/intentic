@@ -249,7 +249,7 @@ export const editDiagnosticsHooks = (
                           hooks: [
                               async (input) => {
                                   if (input.hook_event_name === "PreToolUse") {
-                                      await shell.before();
+                                      shell.before();
                                   }
                                   return {};
                               },

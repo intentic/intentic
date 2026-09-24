@@ -24,8 +24,8 @@ export const checkpointOf = async (
     git: GitRunner = defaultGit,
 ): Promise<string> => {
     const head = await headSha(main, git);
-    let merged = "";
-    if (head !== undefined) {
+    let merged = head === tip ? tip : "";
+    if (head !== undefined && head !== tip) {
         try {
             merged = (await git(dir, ["merge-base", head, tip])).stdout.trim();
         } catch {

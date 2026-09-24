@@ -46,7 +46,7 @@ import { manifestProblems } from "../store/manifest-problems.js";
 import { repairManifest } from "../store/manifest-repair.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 import { framedEvent, framedMetrics } from "../auth/fleet-scope.js";
-import { frameBacklog } from "./frame-backlog.js";
+import { frameBacklog } from "../seams/frame-backlog.js";
 import { callerFence } from "../areas/area-scope.js";
 
 const execFileAsync = promisify(execFile);

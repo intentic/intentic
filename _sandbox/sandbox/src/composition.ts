@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type {
     AcpAgentConfig,
     AgentEvent,
@@ -303,6 +303,7 @@ import {
 } from "./workspace/files/workspace-files.js";
 import { coalescingWorkspaceTree } from "./workspace/files/workspace-tree-coalesce.js";
 import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/files/workspace-tree.js";
+import { heldDirReads } from "./workspace/files/dir-reads.js";
 
 import type { WorkspaceScopeDeps } from "./workspace/layout/workspace-scope.js";
 import { statePath } from "./state-paths.js";
@@ -711,6 +712,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly status: () => SidecarStatus;
     };
     readonly workspaceTree: (root: string) => Promise<WorkspaceTree>;
+    // What the watcher saw change under the workspace root, root-relative; empty is an unnamed change. The tree walk holds
+    // folder reads between refetches and drops exactly these.
+    readonly workspaceTreeChanged: (relPaths: readonly string[]) => void;
     readonly workspaceChildren: (root: string, relPath: string, options?: { depth?: number }) => Promise<WorkspaceChildren>;
     // Resident workspace search: one iq engine, its sweep cached in memory; indexing runs on its own thread.
     readonly iq: ResidentEngine;
@@ -731,6 +735,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly page: (agent: TranscriptAgent, window?: TranscriptWindow) => Promise<TranscriptPage>;
         // The calls under one tool card, which a page counts rather than carries; read on the press that opens it.
         readonly toolChildren: (agent: TranscriptAgent, toolId: string) => Promise<TranscriptTool[]>;
+        // The newest assistant row's prose, read back from the tail rather than the whole record; what a land reads.
+        readonly lastSaid: (agent: TranscriptAgent) => Promise<string | undefined>;
         // Opens a branch's record as a copy of the source's first `keep` rows; a no-op once the record exists.
         readonly fork: (agent: TranscriptAgent, source: string, keep: number) => Promise<void>;
         readonly append: (agent: TranscriptAgent, messages: readonly TranscriptRow[]) => Promise<void>;
@@ -805,6 +811,7 @@ const createPasskeySlice = (
 // subprocess/fs functions.
 export const createServices = (config: Config, logger: Logger): Services => {
     const workspace = workspacePaths(config.workspaceRoot);
+    const treeReads = heldDirReads(workspace.root);
     // AI-provider credential root; AGENT_AUTH_DIR shares it across dev sandboxes so subscription OAuth survives.
     const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/secrets/auth/");
     // Hoisted: the turn stream and the translator client both read and record into this same file.
@@ -1466,7 +1473,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
             deriveBytes,
             status: sidecarStatus,
         },
-        workspaceTree: coalescingWorkspaceTree(walkWorkspaceTree),
+        workspaceTree: coalescingWorkspaceTree((root) => walkWorkspaceTree(root, resolve(root) === resolve(workspace.root) ? { reads: treeReads } : {})),
+        workspaceTreeChanged: treeReads.changed,
         workspaceChildren: listWorkspaceChildren,
         iq,
         sessions: {
@@ -1482,6 +1490,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             read: (agent) => agentTranscript(transcriptDeps, agent),
             page: (agent, window) => agentTranscriptPage(transcriptDeps, agent, window),
             toolChildren: (agent, toolId) => agentToolChildren(transcriptDeps, agent, toolId),
+            lastSaid: async (agent) => (await transcriptDeps.record.findBack(agent.id, (row) => row.role === "assistant"))?.text,
             // A branch's opening history is the source conversation's record, copied once.
             fork: (agent, source, keep) => transcriptDeps.record.fork(agent.id, source, keep),
             // Written right after the record, best-effort: a failed index write is fixed by the next backfill.

@@ -148,9 +148,19 @@ const renderDocument = (document: readonly ParsedPart[], colour: boolean): Markd
         return html === `` ? [] : [{ kind: `html`, html }];
     });
 
+// A whole message parsed and sanitized, its code blocks still placeholders; what a surface holds between renders.
+export type ParsedMarkdown = readonly ParsedPart[];
+
+// The expensive half of a whole-message render (marked, DOMPurify, the decorator), which reads nothing reactive about
+// highlighting; a surface caches it on its source so a highlight landing or a copy press re-runs only the render below.
+export const parseMarkdownParts = (source: string, decorate?: MarkdownDecorator): ParsedMarkdown => parseDocument(asText(source), decorate, true);
+
+// The cheap half: code blocks swapped in, coloured once their highlight has landed, and figures passed through.
+export const renderParsedMarkdown = (parsed: ParsedMarkdown): RenderedMarkdown => renderDocument(parsed, true);
+
 // Whole-message render: every code block gets coloured and every closed figure fence gets drawn.
 export const renderMarkdownParts = (source: string, decorate?: MarkdownDecorator): RenderedMarkdown =>
-    renderDocument(parseDocument(asText(source), decorate, true), true);
+    renderParsedMarkdown(parseMarkdownParts(source, decorate));
 
 // Streaming re-render splits the message at the last point provably finished: that prefix parses once and returns
 // byte-identical HTML, so Vue skips patching it (preserving selection), and only the short tail is re-parsed.

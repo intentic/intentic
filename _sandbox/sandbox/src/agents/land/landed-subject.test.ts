@@ -40,7 +40,7 @@ const servicesWith = (said?: string): Services =>
                 void steps.push(`wrote ${draft.subject}${draft.testNote === undefined ? `` : ` | ${draft.testNote}`}`),
         }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {
-            read: async () => (said === undefined ? [] : [{ role: "assistant", text: said }]) as never,
+            lastSaid: async () => said,
         }),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { mainDir: () => "/work" }),
         agentOrigins: unstubbed<Services["agentOrigins"]>("agentOrigins", { forRepo: async () => ({ "a.ts": ["c1"] }) }),

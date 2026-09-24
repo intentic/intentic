@@ -1,4 +1,4 @@
-import { unzipSync } from "fflate";
+import type { Unzipped } from "fflate";
 import { attr, child, childElements, descendants, parseXml, textOf, type XmlElement } from "../odf/xml-tree";
 
 /* An EPUB's structure: what it is, what is in it, and in what order. Reading a chapter's markup is page.ts's job. */
@@ -124,9 +124,8 @@ const metadataOf = (opf: XmlElement, tag: string): string | undefined => {
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 
-/** Opens an .epub. Throws when the container is not an EPUB at all, which the viewer reports as such. */
-export const openEpub = (bytes: Uint8Array): EpubBook => {
-    const zip = unzipSync(bytes);
+/** Opens an .epub, already inflated (zip/unzip.ts). Throws when the container is not an EPUB at all, which the viewer reports as such. */
+export const openEpub = (zip: Unzipped): EpubBook => {
     const part = (path: string): XmlElement | undefined => {
         const raw = zip[path];
         return raw === undefined ? undefined : parseXml(decoder.decode(raw));

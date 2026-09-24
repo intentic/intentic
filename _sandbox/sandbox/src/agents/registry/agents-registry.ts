@@ -36,6 +36,7 @@ import {
     type Ending,
     endingStatus,
     type Identity,
+    type IsolatedAgent,
     isIsolated,
     type PersistedAgent,
     type Postures,
@@ -490,8 +491,11 @@ export interface AgentsRegistry {
     // landedTip) pair guards it. No broadcast: nothing visible changes.
     readonly markLandingAbsorbed: (id: string, repo: string, landedHead: string, landedTip: string, size: number) => Promise<void>;
     // Re-derives every live agent's land standing and publishes if any moved; called wherever the answer could have
-    // changed outside the daemon. Cheap when nothing moved: one rev-parse per repo, no broadcast.
+    // changed outside the daemon. Once a feed is watched, free when nothing moved: no git runs at all.
     readonly refreshStandings: () => Promise<void>;
+    // What can move a standing from outside the registry: a ref, or a file in a main checkout. Once given, a refresh
+    // re-reads git only after the feed reported something or an agent's own landing record changed; until then, always.
+    readonly watchStandings: (changes: (changed: () => void) => () => void) => () => void;
     // Stamps/clears the archive marker; the caller must have already retired or restored the checkout
     // (agents/archive.ts owns that order).
     readonly setArchived: (ids: readonly string[], now: number) => Promise<void>;
@@ -593,11 +597,23 @@ export const createFleet = (store: FleetStore, standings: LandStandings, presenc
         return true;
     };
 
+    // Whether a refresh must re-read git: set by the watched feed, by a probe that failed, and at start; `watched` says a
+    // feed exists at all, without which nothing could clear it honestly.
+    let watched = false;
+    let stale = true;
+    // The live agents' own landing inputs as the last probe saw them; a change here moves a standing with no ref moving.
+    let probedInputs = ``;
+    const landingInputs = (live: readonly IsolatedAgent[]): string =>
+        JSON.stringify(live.map((entry) => [entry.id, entry.placement.branch, entry.placement.repos, entry.landing.conflicts ?? []]));
+
     // Two independent, best-effort readings (standing, landed presence) run together rather than chained, and must
     // never throw: a settle waits on this. `allSettled`, so a failing half costs only its own reading.
     const reprobe = async (): Promise<boolean> => {
         const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
+        stale = false;
+        probedInputs = landingInputs(live);
         const probes = await Promise.allSettled([standings.refresh(live), presences.refresh(live)]);
+        stale ||= probes.some((probe) => probe.status === "rejected");
         return probes.some((probe) => probe.status === "fulfilled" && probe.value);
     };
 
@@ -803,9 +819,24 @@ export const createFleet = (store: FleetStore, standings: LandStandings, presenc
             broadcast();
         },
         refreshStandings: async () => {
+            const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
+            if (watched && !stale && landingInputs(live) === probedInputs) {
+                return;
+            }
             if (await reprobe()) {
                 broadcast();
             }
+        },
+        watchStandings: (changes) => {
+            watched = true;
+            stale = true;
+            const stop = changes(() => {
+                stale = true;
+            });
+            return () => {
+                watched = false;
+                stop();
+            };
         },
         ids: () => entries.map((entry) => entry.id),
         list,

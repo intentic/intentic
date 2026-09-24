@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { unzipParts } from "./zip/unzip";
 import { Icon, useLatest } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { Deck, ImageBox, Paragraph, TextBox } from "./pptx/deck-model";
@@ -61,12 +62,12 @@ const render = async (source: Blob): Promise<void> => {
     try {
         // Lazy: fflate and the whole OOXML reader stay out of the bundle until someone opens a deck.
         const { readDeck } = await import("./pptx/deck");
-        const bytes = new Uint8Array(await source.arrayBuffer());
+        const parts = await unzipParts(new Uint8Array(await source.arrayBuffer()));
         if (!isLatest()) {
             return;
         }
         revokePictures();
-        deck.value = readDeck(bytes);
+        deck.value = readDeck(parts);
         fit();
     } catch (caught) {
         if (!isLatest()) {

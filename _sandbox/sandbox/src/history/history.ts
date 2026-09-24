@@ -1,10 +1,9 @@
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { pathExists } from "../path-exists.js";
 import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
+import { defaultGit } from "@intentic/scaffold";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { MAX_FILE_DIFF_BYTES, partialDiff } from "../git/changes/diff-partial.js";
@@ -18,8 +17,6 @@ import type { WorkspacePaths } from "../workspace/workspace.js";
 // only turn/user/pre-restore/restore snapshots; a checkpoint diffs against the previous visible one, not its raw
 // parent.
 
-const exec = promisify(execFile);
-
 const SNAPSHOT_INTERVAL_MS = 60_000;
 // Trailing debounce for user-write pings; coalesces a multi-file drop into one snapshot.
 const USER_WRITE_DEBOUNCE_MS = 2_000;
@@ -32,11 +29,16 @@ export type HistoryGitRunner = (
     args: readonly string[],
     options: { readonly cwd: string; readonly env: Readonly<Record<string, string>> },
 ) => Promise<{ readonly stdout: string; readonly stderr: string }>;
-const defaultRunner: HistoryGitRunner = (args, options) =>
-    exec("git", [...args], { cwd: options.cwd, env: { ...process.env, ...options.env }, maxBuffer: 8 * 1024 * 1024 });
+// Through the daemon's git helper rather than a fork of the daemon itself. `core.fileMode=true` overrides the helper's
+// global false: a snapshot must keep an executable bit, or a restore strips it from every script added since.
+const defaultRunner: HistoryGitRunner = (args, options) => defaultGit(options.cwd, ["-c", "core.fileMode=true", ...args], options.env);
+
+// Tells its listener something in the workspace may have changed; returns how to stop listening.
+export type ChangeFeed = (changed: () => void) => () => void;
 
 export interface WorkspaceHistory {
-    readonly start: () => void;
+    // With a feed, the interval sweep runs only after the feed reported a change since the last one; without, every tick.
+    readonly start: (changes?: ChangeFeed) => void;
     readonly stop: () => void;
     // Returns the snapshot id, or undefined if nothing changed; a label becomes the checkpoint's timeline title.
     readonly snapshot: (trigger: SnapshotTrigger, label?: string) => Promise<string | undefined>;
@@ -480,20 +482,36 @@ export const createWorkspaceHistory = (
 
     let timer: NodeJS.Timeout | undefined;
     let userWriteTimer: NodeJS.Timeout | undefined;
+    let unsubscribe: (() => void) | undefined;
     const snapshot = (trigger: SnapshotTrigger, label?: string): Promise<string | undefined> => serialize(() => snapshotAll(trigger, label));
 
     return {
-        start: () => {
+        start: (changes) => {
             if (timer !== undefined) {
                 return;
             }
-            const tick = (): void =>
-                void snapshot("interval").catch((error: unknown) => logger.warn({ err: error }, "history: interval snapshot failed"));
+            // An idle sweep is twenty-odd git processes that find nothing; the first always runs, since boot knows nothing.
+            let dirty = true;
+            unsubscribe = changes?.(() => {
+                dirty = true;
+            });
+            const tick = (): void => {
+                if (changes !== undefined && !dirty) {
+                    return;
+                }
+                dirty = false;
+                void snapshot("interval").catch((error: unknown) => {
+                    dirty = true;
+                    logger.warn({ err: error }, "history: interval snapshot failed");
+                });
+            };
             tick();
             timer = setInterval(tick, SNAPSHOT_INTERVAL_MS);
             timer.unref();
         },
         stop: () => {
+            unsubscribe?.();
+            unsubscribe = undefined;
             if (timer !== undefined) {
                 clearInterval(timer);
                 timer = undefined;

@@ -19,6 +19,7 @@ const {
     clampLines,
     scrollLines,
     scrollBottom = false,
+    tail = false,
 } = defineProps<{
     code: string;
     // Shiki language id (e.g. `bash`); omit to render plain text. Typed to the grammars we ship, so a typo fails to
@@ -34,12 +35,14 @@ const {
     scrollLines?: number;
     // Starts scrolled to the bottom (and stays there across updates), for log tails.
     scrollBottom?: boolean;
+    // The text is a tail whose newest lines are last, so they are the ones coloured when it is too long to colour whole.
+    tail?: boolean;
 }>();
 
 // Passed through from the built-in copy button, for a caller whose flow depends on the copy happening.
 const emit = defineEmits<{ copied: [] }>();
 
-const { highlight } = useHighlighter();
+const { highlightSliced } = useHighlighter();
 const html = ref<string | undefined>(undefined);
 
 // Whether there's more to show is measured (ResizeObserver), since wrapping depends on render width.
@@ -108,7 +111,8 @@ watch(
             html.value = undefined;
             return;
         }
-        void highlight(nextCode, nextLang).then((out) => {
+        // Sliced, so a log tail of any size never holds the page; a tail spends its colour on its newest lines.
+        void highlightSliced(nextCode, nextLang, { from: tail || scrollBottom ? `end` : `start`, stale: () => !isLatest() }).then((out) => {
             if (isLatest()) {
                 html.value = out;
             }

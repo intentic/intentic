@@ -305,7 +305,11 @@ export const localModelHandler: CapabilityHandler = {
         // Progress first, by path: the download is the long pole, and the reason this entry polls at all.
         const inFlight = weightsProgress(path);
         if (inFlight !== undefined) {
-            return { state: "pending", detail: inFlight.total > 0 ? `downloading ${gb(inFlight.received)} / ${gb(inFlight.total)}` : "downloading" };
+            return {
+                state: "pending",
+                detail: inFlight.total > 0 ? `downloading ${gb(inFlight.received)} / ${gb(inFlight.total)}` : "downloading",
+                settling: true,
+            };
         }
         // What the background job would have thrown, if the add were still listening.
         const failure = failures.get(id);
@@ -328,7 +332,7 @@ export const localModelHandler: CapabilityHandler = {
         const held = await weightsReady(path);
         // No progress yet means the connection hasn't opened; `held` says whether this is loading or still fetching.
         if (jobs.has(id) || ctx.panels.running(localModelPanelKey(id))) {
-            return { state: "pending", detail: held ? "loading the model" : "fetching the model, gigabytes, leave it running" };
+            return { state: "pending", detail: held ? "loading the model" : "fetching the model, gigabytes, leave it running", settling: true };
         }
         if (selectedModelId !== undefined && selectedModelId !== id) {
             return { state: "pending", detail: "standby; press Update to make this the active local model" };

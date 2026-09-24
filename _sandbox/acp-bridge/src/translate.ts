@@ -74,9 +74,6 @@ const toolCallUpdate = (tool: TranscriptTool, cwd: string): SessionUpdate => {
     };
 };
 
-// A helper's nested calls ride the same patch as their parent, whole, so every card in the tree gets announced.
-const cardsOf = (tool: TranscriptTool): TranscriptTool[] => [tool, ...(tool.children ?? []).flatMap(cardsOf)];
-
 /** One session's translator: attach frames in, ACP updates out, tracking which tool calls it has announced. */
 export const createTranslator = (cwd: string): ((frame: AttachFrame) => SessionUpdate[]) => {
     const announced = new Set<string>();
@@ -93,14 +90,16 @@ export const createTranslator = (cwd: string): ((frame: AttachFrame) => SessionU
                 return [{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: patch.text } }];
             case "thinking":
                 return [{ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: patch.text } }];
+            // One card per patch: a helper's nested calls arrive as patches of their own, never inside their parent's.
             case "tool":
-                return cardsOf(patch.tool).map((tool) => {
-                    if (announced.has(tool.id)) {
-                        return toolCallUpdate(tool, cwd);
-                    }
-                    announced.add(tool.id);
-                    return toolCall(tool, cwd);
-                });
+                if (announced.has(patch.tool.id)) {
+                    return [toolCallUpdate(patch.tool, cwd)];
+                }
+                announced.add(patch.tool.id);
+                return [toolCall(patch.tool, cwd)];
+            // A helper's reasoning has no place in ACP's updates, which carry only the session's own thought.
+            case "toolThinking":
+                return [];
             case "append":
                 // A notice becomes one line; prose and cards arrive through their own patches instead.
                 return patch.row.role === "notice" ? [{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: patch.row.text } }] : [];

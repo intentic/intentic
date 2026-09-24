@@ -27,26 +27,26 @@ const PHONE_STEPS = "on the phone: WhatsApp → Linked devices → Link a device
 
 // Whether a phone ever linked, read from the gateway's snapshot; the default is pending, not active. A silent gateway
 // covers both a fresh add and one that has stopped: neither is a paired phone.
-const whatsappStatus = (id: string): { state: "active" | "pending"; detail?: string; code?: string } => {
+const whatsappStatus = (id: string): { state: "active" | "pending"; detail?: string; code?: string; settling?: true } => {
     const status = listenerStatus("whatsapp", Date.now());
     if (status === undefined) {
-        return { state: "pending", detail: "starting the WhatsApp connection…" };
+        return { state: "pending", detail: "starting the WhatsApp connection…", settling: true };
     }
     const pairing = status.pairing?.[id];
     if (pairing === undefined) {
         // No ceremony entry means either already paired or never started; the ready connections tell them apart.
         return status.connections.some((connection) => connection.capabilityId === id && connection.gateway === "ready")
             ? { state: "active" }
-            : { state: "pending", detail: "reconnecting to WhatsApp…" };
+            : { state: "pending", detail: "reconnecting to WhatsApp…", settling: true };
     }
     if (pairing.state === "failed") {
         // WhatsApp's refusal message reaches the owner verbatim; the retry behind it stays silent.
         return { state: "pending", detail: `WhatsApp refused that number: ${pairing.detail ?? "unknown error"}` };
     }
     if (pairing.state === "code" && pairing.code !== undefined) {
-        return { state: "pending", detail: `Type this code ${PHONE_STEPS}.`, code: pairing.code };
+        return { state: "pending", detail: `Type this code ${PHONE_STEPS}.`, code: pairing.code, settling: true };
     }
-    return { state: "pending", detail: "waiting for WhatsApp to issue a pairing code…" };
+    return { state: "pending", detail: "waiting for WhatsApp to issue a pairing code…", settling: true };
 };
 
 export const cliHandler: CapabilityHandler = {

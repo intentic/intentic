@@ -19,7 +19,7 @@ import { fakeFiles, fakeProcesses } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { HOST_PEER } from "../hosts/host-peer.js";
 import { filePeerStore } from "../peers/peer-store.js";
-import { MAX_BACKLOG_FRAMES } from "./frame-backlog.js";
+import { MAX_BACKLOG_FRAMES } from "../seams/frame-backlog.js";
 import { connectedCount } from "./presence.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 

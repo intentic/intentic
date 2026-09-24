@@ -8,7 +8,7 @@ import { computed, ref, watch } from "vue";
 
 const { code, lang, firstLine } = defineProps<{ code: string; lang?: string; firstLine: number }>();
 
-const { highlight } = useHighlighter();
+const { highlightSliced } = useHighlighter();
 // Shiki's dual-theme HTML for the code, or undefined until it lands or for an unsupported language.
 const html = ref<string | undefined>(undefined);
 
@@ -30,7 +30,8 @@ watch(
             html.value = undefined;
             return;
         }
-        void highlight(nextCode, nextLang).then((out) => {
+        // Sliced and budgeted: a Read of thousands of lines colours its head without holding the transcript.
+        void highlightSliced(nextCode, nextLang, { from: `start`, stale: () => id !== seq }).then((out) => {
             if (id === seq) {
                 html.value = out;
             }

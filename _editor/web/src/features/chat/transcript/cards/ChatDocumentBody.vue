@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { type RequestDocument, planParts } from "@intentic/sandbox-contract";
 import { browserOwnsClick, MarkdownFigure } from "@intentic/ui";
-import { copyCodeFromEvent, renderMarkdownParts } from "@intentic/ui/markdown";
+import { copyCodeFromEvent, parseMarkdownParts, renderParsedMarkdown } from "@intentic/ui/markdown";
 import { computed, ref } from "vue";
 import { useChatSurface } from "../../tools/chatToolSurface";
 import { useT } from "@intentic/ui/i18n";
@@ -37,11 +37,13 @@ const toggle = (): void => {
     shown.value = !shown.value;
 };
 
-// Strips the opening heading when it duplicates the card's own title (planParts), so it isn't shown twice.
-const parts = computed(() => {
+// Strips the opening heading when it duplicates the card's own title (planParts), so it isn't shown twice. Parsed apart
+// from the render so a highlight landing re-runs only the code-block swap.
+const parsed = computed(() => {
     const split = planParts(props.document.markdown);
-    return renderMarkdownParts(split.title === undefined ? props.document.markdown : split.body, surface.decorate);
+    return parseMarkdownParts(split.title === undefined ? props.document.markdown : split.body, surface.decorate);
 });
+const parts = computed(() => renderParsedMarkdown(parsed.value));
 
 // Bare file name for the header chip; the full path isn't useful at a glance.
 const fileName = computed(() => props.document.path.split(`/`).pop() ?? props.document.path);

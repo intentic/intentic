@@ -8,6 +8,7 @@ import { openConversationsDb } from "../../../store/conversations-db.js";
 import { IN_MEMORY } from "../../../store/sqlite.js";
 import { fleetStoreOver, memoryFleet } from "../../../testing.js";
 import { commandsOf, resetCommands } from "../../providers/agent-commands.js";
+import { MAX_BACKLOG_FRAMES } from "../../../seams/frame-backlog.js";
 import { startTurnRun } from "./turn-runs.js";
 
 // Where every run here is filed and announced: one fleet's actors, one bus.
@@ -136,6 +137,41 @@ describe(`turn runs`, () => {
         const late = await second;
         expect(late.head.rows[1]?.text).toBe(`a`);
         expect(late.entries.map((entry) => entry.seq)).toEqual([3]);
+    });
+
+    it(`lets a follower go when its connection aborts, while the run goes on`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        startTurnRun(deps, turnFn, turn(`c-abort`), { opening });
+        const connection = new AbortController();
+        const { entries } = turnRunOf(deps.conversations, `c-abort`)!.attach(connection.signal);
+        push({ kind: `delta`, text: `a` });
+        await waitFor(() => expect(turnRunOf(deps.conversations, `c-abort`)!.rows).toHaveLength(2));
+        connection.abort();
+        const drained: AttachEntry[] = [];
+        for await (const entry of entries) {
+            drained.push(entry);
+        }
+        expect(drained.map((entry) => entry.seq)).toEqual([1, 2]);
+        expect(turnRunOf(deps.conversations, `c-abort`)!.done).toBe(false);
+        close();
+    });
+
+    it(`cuts a follower that stops reading instead of holding every later change for it`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        startTurnRun(deps, turnFn, turn(`c-stalled`), { opening });
+        const { entries } = turnRunOf(deps.conversations, `c-stalled`)!.attach();
+        const changes = MAX_BACKLOG_FRAMES + 1;
+        for (let index = 0; index < changes; index += 1) {
+            push({ kind: `delta`, text: `x` });
+        }
+        await waitFor(() => expect(turnRunOf(deps.conversations, `c-stalled`)!.rows[1]?.text).toHaveLength(changes));
+        const drained: AttachEntry[] = [];
+        for await (const entry of entries) {
+            drained.push(entry);
+        }
+        expect(drained).toEqual([]);
+        expect(turnRunOf(deps.conversations, `c-stalled`)!.done).toBe(false);
+        close();
     });
 
     it(`hands its raw frames to a listener from the moment it subscribes`, async () => {

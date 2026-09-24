@@ -23,7 +23,7 @@ const hydrate = (capability: Capability, values: Record<string, string>): Capabi
 export const withSecretVault = (
     inner: CapabilitiesStore,
     vault: SecretVault,
-    connectors: () => Promise<Map<string, ResolvedContribution>>,
+    connectors: () => Promise<ReadonlyMap<string, ResolvedContribution>>,
     onUnvaultable?: (id: string, fields: readonly string[]) => void,
 ): CapabilitiesStore => {
     return {
@@ -65,7 +65,7 @@ export const withSecretVault = (
 export const vaultManifestSecrets = async (
     inner: CapabilitiesStore,
     vault: SecretVault,
-    connectors: () => Promise<Map<string, ResolvedContribution>>,
+    connectors: () => Promise<ReadonlyMap<string, ResolvedContribution>>,
     onUnvaultable?: (id: string, fields: readonly string[]) => void,
 ): Promise<readonly string[]> => {
     const resolved = await connectors();

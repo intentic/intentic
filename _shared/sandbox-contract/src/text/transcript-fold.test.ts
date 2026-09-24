@@ -439,7 +439,7 @@ describe("patches", () => {
             "append",
             "tool",
             "tool",
-            "tool",
+            "toolThinking",
             "tool",
             "replace",
             "append",
@@ -449,6 +449,25 @@ describe("patches", () => {
             "replace",
             "replace",
         ]);
+    });
+
+    it("send a delegation's card without its subtree or thinking, and a client keeps the ones it has", () => {
+        const events: AgentEvent[] = [
+            { kind: "tool_call", id: "task-1", name: "Agent", category: "other", status: "in_progress" },
+            { kind: "tool_call", id: "t2", name: "Read", category: "read", status: "in_progress", parentToolUseId: "task-1" },
+            { kind: "thinking", text: "in", parentToolUseId: "task-1" },
+            { kind: "thinking", text: "ner", parentToolUseId: "task-1" },
+            { kind: "tool_call_update", id: "task-1", status: "completed" },
+        ];
+        const { folded, applied, patches } = replay(openingOf("go"), events);
+        expect(applied).toEqual(folded);
+        expect(patches.filter((patch) => patch.op === "toolThinking")).toEqual([
+            { op: "toolThinking", index: 1, id: "task-1", text: "in" },
+            { op: "toolThinking", index: 1, id: "task-1", text: "ner" },
+        ]);
+        const update = patches.at(-1);
+        expect(update?.op === "tool" ? update.tool : undefined).toEqual({ id: "task-1", name: "Agent", category: "other", status: "completed" });
+        expect(applied[1]?.tools?.[0]).toMatchObject({ status: "completed", thinking: "inner", children: [{ id: "t2" }] });
     });
 
     // The other half of the wake's delivery: a live turn takes it as a steer. It is the daemon's own words either way,

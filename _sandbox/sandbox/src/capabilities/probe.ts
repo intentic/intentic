@@ -212,7 +212,7 @@ const coreProbe = (capability: Capability): CapabilityProbe | HttpProbe => {
 
 // `registry` is the contribution registry the caller already built, kept as a parameter so this stays a pure function
 // of its inputs.
-export const probeCapability = async (registry: Map<string, ResolvedContribution>, capability: Capability): Promise<CapabilityProbe> => {
+export const probeCapability = async (registry: ReadonlyMap<string, ResolvedContribution>, capability: Capability): Promise<CapabilityProbe> => {
     const config = capability.config as Record<string, unknown>;
     const plan = capability.kind === "cli" ? contributionProbe(contributionFor(registry, capability.kind, config), config) : coreProbe(capability);
     return "checked" in plan ? plan : runHttpProbe(plan);

@@ -491,6 +491,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // The real readers: a shadow is read off disk, so a fake here would only test the fake.
         derived: { read: readDerivedText, derive: deriveText, deriveBytes, status: sidecarStatus },
         workspaceTree: async () => ({ root: WORKSPACE_ROOT, tree: [], hidden: 0, barren: [] }),
+        workspaceTreeChanged: () => undefined,
         // Inert resident search, no index, no rg; the search route test overrides `run` with a canned outcome.
         iq: unstubbed<Services["iq"]>("iq", {
             metrics: () => ({
@@ -573,6 +574,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             page: async (agent, window = {}) => transcriptPageOf(await merged.transcripts.read(agent), window),
             // Same door, same source: a route test asking for a delegation's calls gets what the record-backed route would.
             toolChildren: async (agent, toolId) => toolChildrenOf(await merged.transcripts.read(agent), toolId),
+            lastSaid: async (agent) => (await merged.transcripts.read(agent)).findLast((row) => row.role === "assistant")?.text,
             // Inert but present: a fork's first turn opens through this door, so a fake without it fails every forkOf
             // turn with a bare 500 that no type check catches.
             fork: async () => {},

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -150,6 +150,50 @@ test("notifyUserWrite debounces a burst of pings into ONE user-triggered snapsho
     const commits = calls.filter((call) => call.includes("commit-tree"));
     expect(commits).toHaveLength(1);
     expect(commits[0]?.join(" ")).toMatch(/snapshot \S+ user/);
+});
+
+test("with a change feed, the interval sweep runs once at start and then only after a reported change", async () => {
+    const { history, calls } = await fakeHistory();
+    let report: (() => void) | undefined;
+    let listening = true;
+    // Each direct snapshot queues behind any sweep in flight, so awaiting one counts every sweep before it, plus itself.
+    const sweepsBefore = async (): Promise<number> => {
+        await history.snapshot("interval");
+        return calls.filter((call) => subcommand(call) === "write-tree").length - 1;
+    };
+    jest.useFakeTimers();
+    try {
+        history.start((changed) => {
+            report = changed;
+            return () => {
+                listening = false;
+            };
+        });
+        expect(await sweepsBefore()).toBe(1);
+        await advanceTimersByTimeAsync(3 * 60_000);
+        expect(await sweepsBefore()).toBe(2);
+        report?.();
+        await advanceTimersByTimeAsync(60_000);
+        expect(await sweepsBefore()).toBe(4);
+    } finally {
+        history.stop();
+        jest.useRealTimers();
+    }
+    expect(listening).toBe(false);
+});
+
+test("integration: a restore puts back an executable bit a snapshot saw", async () => {
+    const base = await tempBase();
+    const work = join(base, "work");
+    const historyRoot = join(base, "history");
+    await mkdir(work, { recursive: true });
+    await writeFile(join(work, "run.sh"), "#!/bin/sh\necho hi\n", { mode: 0o755 });
+    const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger });
+    const saved = await history.snapshot("turn");
+    await writeFile(join(work, "run.sh"), "changed\n");
+    await chmod(join(work, "run.sh"), 0o644);
+    expect(await history.restore(saved ?? "")).toBe(true);
+    expect((await stat(join(work, "run.sh"))).mode & 0o111).not.toBe(0);
 });
 
 test("restore runs read-tree → clean → checkout-index in order, with a safety snapshot first", async () => {

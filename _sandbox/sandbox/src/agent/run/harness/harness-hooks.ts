@@ -213,6 +213,24 @@ const safetyHooksOf = (deps: HarnessHooksDeps, settings: SandboxSettings, safety
     rememberSafety: (line) => deps.safetyPolicy.append(line),
 });
 
+// Milliseconds a turn reuses its checkout's repo list: discovery walks up to 10k dirs, and every shell command asks.
+const REPOS_REUSED_MS = 60_000;
+
+// The turn's dirty files for shell-edit attribution, with the repo list walked at most once per REPOS_REUSED_MS.
+const dirtyFilesOf = (context: TurnContext): (() => Promise<readonly { readonly onDisk: string; readonly path: string }[]>) => {
+    let repos: { readonly at: number; readonly list: Promise<string[]> } | undefined;
+    return async () => {
+        const now = Date.now();
+        if (repos === undefined || now - repos.at > REPOS_REUSED_MS) {
+            repos = { at: now, list: discoverRepos(context.localCwd) };
+        }
+        return (await dirtyPathsAcross(context.localCwd, await repos.list)).map((path) => {
+            const onDisk = join(context.localCwd, path);
+            return { onDisk, path: fromWorktree(onDisk, context.base.spec.isolation?.plan) };
+        });
+    };
+};
+
 // Every hook a harness turn is planned with, on top of the ones the route and the planner already bound.
 export const harnessHooks = (
     deps: HarnessHooksDeps,
@@ -231,11 +249,7 @@ export const harnessHooks = (
     },
     // Which files the tree says are dirty, both names, for a shell command's edit diagnostics. Read on every turn: the
     // main checkout's standing dirty set is everyone's landed work and a baseline, not a finding, there.
-    dirtyFiles: async () =>
-        (await dirtyPathsAcross(context.localCwd, await discoverRepos(context.localCwd))).map((path) => {
-            const onDisk = join(context.localCwd, path);
-            return { onDisk, path: fromWorktree(onDisk, context.base.spec.isolation?.plan) };
-        }),
+    dirtyFiles: dirtyFilesOf(context),
     ...editReviewersOf(deps, context, fileEdited),
     ...safetyHooksOf(deps, safety.settings, safety.policy),
     // The rebase the cards take back while the user is answering them; isolated turns only.

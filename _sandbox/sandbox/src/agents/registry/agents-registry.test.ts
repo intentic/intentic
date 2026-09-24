@@ -63,6 +63,38 @@ const turn = (overrides: Partial<BeginTurn> = {}): BeginTurn => ({
 });
 
 describe("agents registry", () => {
+    it("once a change feed is watched, a roster read re-derives standings only after a reported change", async () => {
+        let probes = 0;
+        const counted = {
+            ...standings(),
+            refresh: async () => {
+                probes += 1;
+                return false;
+            },
+        };
+        const { agents: registry } = createFleet(memoryStore([isolatedAgent([{ repo: "intentic", base: "b0" }])]), counted, presences());
+        await registry.init();
+        await registry.refreshStandings();
+        const unwatched = probes;
+        await registry.refreshStandings();
+        // Without a feed nothing can say an answer still holds, so every read probes.
+        expect(probes).toBe(unwatched + 1);
+
+        let report: (() => void) | undefined;
+        registry.watchStandings((changed) => {
+            report = changed;
+            return () => undefined;
+        });
+        await registry.refreshStandings();
+        const watched = probes;
+        await registry.refreshStandings();
+        await registry.refreshStandings();
+        expect(probes).toBe(watched);
+        report?.();
+        await registry.refreshStandings();
+        expect(probes).toBe(watched + 1);
+    });
+
     it("begin creates an entry with title, branch, and running status", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();

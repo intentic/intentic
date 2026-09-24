@@ -354,6 +354,12 @@ export const CapabilityStatusSchema = z.object({
     state: CapabilityStateSchema.describe("Whether it is live, still coming up, broken, or switched off."),
     detail: z.string().optional().describe("What is wrong, in words a person can act on."),
     code: z.string().optional().describe("A short marker for that reason, for anything deciding what to do about it."),
+    settling: z
+        .boolean()
+        .optional()
+        .describe(
+            "True while something under way will move this on its own: a start, a download, a pairing code waiting to be typed. Absent when only a person can move it, or a pushed change will say when it moved.",
+        ),
 });
 export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
 // The list row: manifest entry plus live status, secrets never returned. `secrets` names which config keys hold a

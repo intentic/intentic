@@ -1,3 +1,4 @@
+import { unzipSync } from "fflate";
 import { stubGlobal } from "@intentic/testing/bun";
 import { readTextDocument } from "./document";
 import { textOfBlock } from "./document-model";
@@ -17,7 +18,7 @@ const AUTOMATIC = [
 
 const documentOf = (body: string, automatic = AUTOMATIC, styles?: string) =>
     readTextDocument(
-        openOdf(odfBytes({ mimetype: TEXT_MIME, content: contentXml(`<office:text>${body}</office:text>`, automatic), styles, title: `Report` })),
+        openOdf(unzipSync(odfBytes({ mimetype: TEXT_MIME, content: contentXml(`<office:text>${body}</office:text>`, automatic), styles, title: `Report` }))),
     );
 
 describe(`readTextDocument`, () => {
@@ -113,7 +114,7 @@ describe(`readTextDocument`, () => {
         const body =
             `<text:p><draw:frame svg:width="3cm" svg:height="2cm"><draw:image xlink:href="Pictures/one.png"/><svg:title>A chart</svg:title></draw:frame></text:p>` +
             `<text:p><draw:frame><draw:image xlink:href="https://example.com/tracker.png"/></draw:frame></text:p>`;
-        const doc = readTextDocument(openOdf(odfBytes({ mimetype: TEXT_MIME, content: contentXml(`<office:text>${body}</office:text>`), files })));
+        const doc = readTextDocument(openOdf(unzipSync(odfBytes({ mimetype: TEXT_MIME, content: contentXml(`<office:text>${body}</office:text>`), files }))));
         const [first, second] = doc.pages[0] ?? [];
         const image = first?.kind === `paragraph` ? first.inlines[0] : undefined;
         expect(image).toMatchObject({ kind: `image`, alt: `A chart`, css: { width: `3cm`, height: `2cm` } });

@@ -23,6 +23,8 @@ import { readRemoteRefs, RemoteRefsError } from "./remote-refs.js";
 import { probeCapability } from "./probe.js";
 import { capabilityRecommendations } from "./recommend.js";
 import { registry } from "./registry.js";
+import { createStatusCache } from "./status/status-cache.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 
 // Follows a capability id everywhere else it's stored by name: an account's identity, an identity's mailbox, a
 // persona's capabilities list. Kept out of the handlers, since none of these is a fact about the kind being renamed.
@@ -110,6 +112,10 @@ export const createCapabilitiesRoutes = (services: Services) => {
     const ctx = capabilityCtx(services);
     // One add per id at once, or a concurrent same-id add interleaves handler runs and races the manifest upsert.
     const adding = new Set<string>();
+    const statuses = createStatusCache(
+        () => publishRuntimeChange("capabilities"),
+        (error) => services.logger.warn({ err: error }, "capability status probe failed; its last answer stands"),
+    );
     return {
         list: i.list.handler(async () => {
             const [capabilities, connectors, dismissed] = await Promise.all([
@@ -122,7 +128,9 @@ export const createCapabilitiesRoutes = (services: Services) => {
                     capabilities.map(async (capability) => ({
                         id: capability.id,
                         kind: capability.kind,
-                        status: await registry[capability.kind].status(ctx, capability.id, capability.config),
+                        status: await statuses.status(capability.id, capability.config, () =>
+                            registry[capability.kind].status(ctx, capability.id, capability.config),
+                        ),
                         config: echoConfig(capability, connectors),
                         // Names of the credentials this entry holds, so an edit form can show dots without showing a
                         // value.
@@ -131,6 +139,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 ),
                 capabilityRecommendations(services.workspace.root, capabilities, dismissed),
             ]);
+            statuses.keepOnly(new Set(capabilities.map((capability) => capability.id)));
             return { capabilities: rows, recommendations };
         }),
         add: i.add.handler(async function* ({ input, context }) {

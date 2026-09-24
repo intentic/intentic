@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { unzipParts } from "./zip/unzip";
 import { Button, Icon, useLatest } from "@intentic/extension-ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { openEpub, type EpubBook } from "./epub/book";
@@ -39,11 +40,11 @@ const load = async (file: Blob): Promise<void> => {
     source.value = ``;
     book.value = undefined;
     try {
-        const bytes = new Uint8Array(await file.arrayBuffer());
+        const parts = await unzipParts(new Uint8Array(await file.arrayBuffer()));
         if (!isLatest()) {
             return;
         }
-        book.value = openEpub(bytes);
+        book.value = openEpub(parts);
         index.value = 0;
         show(0);
     } catch (caught) {

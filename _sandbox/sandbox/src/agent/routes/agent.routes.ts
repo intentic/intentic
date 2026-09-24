@@ -808,13 +808,13 @@ export const createAgentRoutes = (services: Services) => {
             return { run: run.id };
         }),
         // Renders the run: its head, then every change as it lands, `end` when it settles.
-        attach: i.attach.handler(async function* ({ input, context }) {
+        attach: i.attach.handler(async function* ({ input, context, signal }) {
             own(context, input.conversationId);
             const run = turnRunOf(services.conversations, input.conversationId);
             if (run === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no live or recent turn for that conversation" });
             }
-            const { head, entries } = run.attach();
+            const { head, entries } = run.attach(signal);
             yield head;
             for await (const entry of entries) {
                 yield entry;

@@ -1,3 +1,4 @@
+import type { Unzipped } from "fflate";
 import {
     type Box,
     type Cell,
@@ -344,9 +345,9 @@ const slidePathsOf = (pack: Package, presentation: Element | undefined): string[
         .toSorted((left, right) => Number(/\d+/.exec(left)?.[0] ?? 0) - Number(/\d+/.exec(right)?.[0] ?? 0));
 };
 
-/** A presentation's bytes as slides ready to draw. Throws only when the file is not a readable zip. */
-export const readDeck = (source: Uint8Array): Deck => {
-    const pack = openPackage(source);
+/** A presentation's inflated parts (zip/unzip.ts) as slides ready to draw. */
+export const readDeck = (files: Unzipped): Deck => {
+    const pack = openPackage(files);
     const presentation = pack.xml("ppt/presentation.xml");
     const size = kid(presentation, "sldSz");
     const width = emuToPx(num(size, "cx") ?? DEFAULT_SIZE.cx);

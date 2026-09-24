@@ -2,7 +2,7 @@
 // layout, its master or the theme, and every one of those walks is asserted here against real OOXML rather than a
 // convenient shape of it. Fixtures are built part by part, because "what a .pptx actually contains" is the thing
 // under test.
-import { strToU8, zipSync } from "fflate";
+import { strToU8, zipSync, unzipSync } from "fflate";
 import { readDeck } from "./deck";
 import type { ImageBox, TableBox, TextBox, UnsupportedBox } from "./deck-model";
 
@@ -124,7 +124,7 @@ const words = (box: TextBox): string => box.paragraphs.flatMap((paragraph) => pa
 
 describe("reading a deck", () => {
     it("takes the slide canvas from the deck, in pixels", () => {
-        const deck = readDeck(deckBytes({ slides: [slide(shape({ ph: "title", body: `<a:p><a:r><a:t>Hello</a:t></a:r></a:p>` }))] }));
+        const deck = readDeck(unzipSync(deckBytes({ slides: [slide(shape({ ph: "title", body: `<a:p><a:r><a:t>Hello</a:t></a:r></a:p>` }))] })));
         // 12192000 EMU is 13.333in, which is 1280 CSS pixels: the 16:9 canvas every modern deck uses.
         expect(deck.width).toBe(1280);
         expect(deck.height).toBe(720);
@@ -133,7 +133,7 @@ describe("reading a deck", () => {
 
     // A reordered deck keeps its part names: slide3.xml can be the first slide, and only the index says so.
     it("follows the deck's own slide order, not the part names", () => {
-        const deck = readDeck(
+        const deck = readDeck(unzipSync(
             deckBytes({
                 slides: [
                     slide(shape({ ph: "title", body: `<a:p><a:r><a:t>First part</a:t></a:r></a:p>` })),
@@ -141,14 +141,14 @@ describe("reading a deck", () => {
                 ],
                 order: [2, 1],
             }),
-        );
+        ));
         expect(deck.slides.map((one) => words(textBoxes(one.boxes)[0] as TextBox))).toEqual(["Second part", "First part"]);
     });
 
     // The whole point of the layout walk: a slide's title states no position and no size, and must not land at 0,0 in
     // 18pt, which is what a reader sees without it.
     it("inherits a placeholder's geometry from the layout and its size from the master", () => {
-        const deck = readDeck(deckBytes({ slides: [slide(shape({ ph: "title", body: `<a:p><a:r><a:t>Quarterly plan</a:t></a:r></a:p>` }))] }));
+        const deck = readDeck(unzipSync(deckBytes({ slides: [slide(shape({ ph: "title", body: `<a:p><a:r><a:t>Quarterly plan</a:t></a:r></a:p>` }))] })));
         const title = textBoxes(deck.slides[0]?.boxes ?? [])[0];
         // The layout's own EMU, converted: 914400 to the inch, 96 pixels to the inch.
         expect(title).toMatchObject({ x: 838_200 / 9525, y: 365_125 / 9525, width: 10_515_600 / 9525, height: 1_325_563 / 9525 });
@@ -160,12 +160,12 @@ describe("reading a deck", () => {
     // "Click to add title" is the layout's prompt to its author, not content; drawing the empty placeholder would put
     // an invisible box over the slide and, worse, make an empty slide look full.
     it("draws nothing for a placeholder nobody filled in", () => {
-        const deck = readDeck(deckBytes({ slides: [slide(shape({ ph: "title", body: `<a:p/>` }))] }));
+        const deck = readDeck(unzipSync(deckBytes({ slides: [slide(shape({ ph: "title", body: `<a:p/>` }))] })));
         expect(deck.slides[0]?.boxes).toEqual([]);
     });
 
     it("resolves theme colours through the master's colour map, modifiers and all", () => {
-        const deck = readDeck(deckBytes({ slides: [slide(shape({ ph: "body", idx: "1", body: `<a:p><a:r><a:t>One point</a:t></a:r></a:p>` }))] }));
+        const deck = readDeck(unzipSync(deckBytes({ slides: [slide(shape({ ph: "body", idx: "1", body: `<a:p><a:r><a:t>One point</a:t></a:r></a:p>` }))] })));
         const body = textBoxes(deck.slides[0]?.boxes ?? [])[0];
         // tx1 maps to dk1, which the theme states as a system colour whose last rendered value was 1F1F1F; the master
         // then takes 65% of its lightness and adds 35%, which lands a near-black grey at #6d6d6d. A renderer that
@@ -176,7 +176,7 @@ describe("reading a deck", () => {
     });
 
     it("carries the bullet and indent of each outline level", () => {
-        const deck = readDeck(
+        const deck = readDeck(unzipSync(
             deckBytes({
                 slides: [
                     slide(
@@ -188,7 +188,7 @@ describe("reading a deck", () => {
                     ),
                 ],
             }),
-        );
+        ));
         const paragraphs = textBoxes(deck.slides[0]?.boxes ?? [])[0]?.paragraphs ?? [];
         expect(paragraphs.map((paragraph) => paragraph.bullet)).toEqual(["•", "–"]);
         // 342900 and 742950 EMU: the master's own indents, not a guess from the level number.
@@ -197,7 +197,7 @@ describe("reading a deck", () => {
     });
 
     it("hands a picture over as bytes a browser can draw", () => {
-        const deck = readDeck(
+        const deck = readDeck(unzipSync(
             deckBytes({
                 slides: [
                     slide(`<p:pic>
@@ -207,7 +207,7 @@ describe("reading a deck", () => {
                     </p:pic>`),
                 ],
             }),
-        );
+        ));
         const picture = deck.slides[0]?.boxes[0] as ImageBox;
         expect(picture).toMatchObject({ kind: "image", mime: "image/png", description: "The logo" });
         expect([...picture.bytes]).toEqual([...PNG]);
@@ -216,7 +216,7 @@ describe("reading a deck", () => {
     // Grouping shapes rewrites their coordinates into the group's own space; without the mapping, every grouped shape
     // renders where it sat before it was grouped.
     it("places a grouped shape through its group's coordinate space", () => {
-        const deck = readDeck(
+        const deck = readDeck(unzipSync(
             deckBytes({
                 slides: [
                     slide(`<p:grpSp>
@@ -226,7 +226,7 @@ describe("reading a deck", () => {
                     </p:grpSp>`),
                 ],
             }),
-        );
+        ));
         const box = textBoxes(deck.slides[0]?.boxes ?? [])[0];
         // Half scale: a child at 2,000,000 EMU inside a 4,000,000-wide space lands at the group's midpoint, and its
         // 1,000,000 EMU width halves with it.
@@ -234,7 +234,7 @@ describe("reading a deck", () => {
     });
 
     it("reads a table's grid, its spans and its cell text", () => {
-        const deck = readDeck(
+        const deck = readDeck(unzipSync(
             deckBytes({
                 slides: [
                     slide(`<p:graphicFrame>
@@ -254,7 +254,7 @@ describe("reading a deck", () => {
                     </p:graphicFrame>`),
                 ],
             }),
-        );
+        ));
         const table = deck.slides[0]?.boxes[0] as TableBox;
         // 2,000,000 EMU is 209.97 pixels; a table's own grid is the only thing that states its column widths.
         expect(table.columns.map((width) => Math.round(width))).toEqual([210, 210]);
@@ -266,7 +266,7 @@ describe("reading a deck", () => {
 
     // A chart is real content this viewer cannot draw. Saying so where it sits is honest; leaving a hole is not.
     it("names a chart rather than leaving a hole where it sits", () => {
-        const deck = readDeck(
+        const deck = readDeck(unzipSync(
             deckBytes({
                 slides: [
                     slide(`<p:graphicFrame>
@@ -276,17 +276,17 @@ describe("reading a deck", () => {
                     </p:graphicFrame>`),
                 ],
             }),
-        );
+        ));
         expect(deck.slides[0]?.boxes[0]).toMatchObject({ kind: "unsupported", label: "Chart" } satisfies Partial<UnsupportedBox>);
     });
 
     it("carries the speaker notes, without the slide-number field they sit beside", () => {
-        const deck = readDeck(
+        const deck = readDeck(unzipSync(
             deckBytes({
                 slides: [slide(shape({ ph: "title", body: `<a:p><a:r><a:t>Hello</a:t></a:r></a:p>` }))],
                 notes: { "1": "Remember to mention the deadline" },
             }),
-        );
+        ));
         expect(deck.slides[0]?.notes).toEqual(["Remember to mention the deadline"]);
     });
 
@@ -297,7 +297,7 @@ describe("reading a deck", () => {
             "ppt/slides/slide2.xml": strToU8(slide(shape({ body: `<a:p><a:r><a:t>Second</a:t></a:r></a:p>`, xfrm: xfrm(0, 0, 100_000, 100_000) }))),
             "ppt/slides/slide10.xml": strToU8(slide(shape({ body: `<a:p><a:r><a:t>Tenth</a:t></a:r></a:p>`, xfrm: xfrm(0, 0, 100_000, 100_000) }))),
         });
-        const deck = readDeck(source);
+        const deck = readDeck(unzipSync(source));
         // Numeric order, not the string order that would put slide10 before slide2.
         expect(deck.slides.map((one) => words(textBoxes(one.boxes)[0] as TextBox))).toEqual(["Second", "Tenth"]);
         expect(deck.width).toBe(1280);

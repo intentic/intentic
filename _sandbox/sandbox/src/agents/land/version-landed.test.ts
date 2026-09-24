@@ -32,7 +32,7 @@ const servicesWith = (rules: readonly Rule[], landedSubject?: string, landed: { 
                 }),
         }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {
-            read: async () => (landed.said === undefined ? [] : [{ role: "assistant", text: landed.said }]) as never,
+            lastSaid: async () => landed.said,
         }),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
             mainDir: () => WORKSPACE_ROOT,

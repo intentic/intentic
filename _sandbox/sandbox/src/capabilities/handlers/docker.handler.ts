@@ -257,7 +257,7 @@ export const dockerHandler: CapabilityHandler = {
             return { state: "pending", detail: "rebuild required" };
         }
         if (ctx.panels.running(DOCKER_PANEL_KEY)) {
-            return { state: "pending", detail: "starting" };
+            return { state: "pending", detail: "starting", settling: true };
         }
         return { state: "error", detail: "dockerd not running" };
     },

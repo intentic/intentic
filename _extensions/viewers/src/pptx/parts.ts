@@ -1,4 +1,4 @@
-import { unzipSync } from "fflate";
+import type { Unzipped } from "fflate";
 import { attr, parseXml } from "./xml-dom";
 
 /* A .pptx as what it is: a zip of XML parts that point at each other through per-part relationship files. Every
@@ -43,8 +43,8 @@ const relsPathOf = (path: string): string => {
     return `${path.slice(0, cut + 1)}_rels/${path.slice(cut + 1)}.rels`;
 };
 
-export const openPackage = (source: Uint8Array): Package => {
-    const files = unzipSync(source);
+// `files` is the package already inflated (zip/unzip.ts), so opening it is parsing only.
+export const openPackage = (files: Unzipped): Package => {
     const decoder = new TextDecoder();
     const parsed = new Map<string, Element | undefined>();
     const related = new Map<string, ReadonlyMap<string, Relationship>>();

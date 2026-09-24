@@ -8,9 +8,9 @@ import { registry } from "./registry.js";
 
 // The config key holding this capability's secret, or undefined for no credential, an unset token, or one kept outside
 // the manifest.
-export const secretField = (capability: Capability, connectors: Map<string, ResolvedContribution>): string | undefined =>
+export const secretField = (capability: Capability, connectors: ReadonlyMap<string, ResolvedContribution>): string | undefined =>
     registry[capability.kind].secret?.(capability.config, connectors);
 
 // The non-secret echo of a capability's config for the list summary (an mcp token becomes hasToken).
-export const echoConfig = (capability: Capability, connectors: Map<string, ResolvedContribution>): Record<string, string | number | boolean> =>
+export const echoConfig = (capability: Capability, connectors: ReadonlyMap<string, ResolvedContribution>): Record<string, string | number | boolean> =>
     registry[capability.kind].echo(capability.config, connectors);

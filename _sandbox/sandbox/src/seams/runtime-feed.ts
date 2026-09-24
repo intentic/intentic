@@ -19,6 +19,8 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     // burst, and a flapping connection's own reconnect backoff into one frame.
     hosts: 250,
     webext: 250,
+    // A list's worth of background probes settles within moments of each other; one frame says all of it.
+    capabilities: 250,
     runners: 250,
     // One push lands several runs: a commit sets off every workflow a repo has, and they end together.
     ci: 250,
