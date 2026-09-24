@@ -3,14 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
-import * as osOriginal from "node:os";
 import * as residentOriginal from "../resident.js";
 
 // Dropping the links a machine can no longer reach: the one delete on this device driven from a sandbox, so what it is
 // allowed to act on is the whole subject. It deletes ONLY on live evidence — the resident agent's own stamp — because
 // the alternative reading of "this config lists a sandbox I cannot reach" is "my agent isn't running", and that one
-// costs the user every link they have. homedir is stubbed the way config.integration.test.ts stubs it; residency is
-// stubbed because ensuring it spawns a real agent.
+// costs the user every link they have. HOME is redirected the way config.integration.test.ts redirects it; residency
+// is stubbed because ensuring it spawns a real agent.
 let home: string;
 let commands: typeof import("./commands.js");
 let config: typeof import("./config.js");
@@ -25,7 +24,8 @@ const gone = (since: number) => ({ state: "connecting", outage: { failures: LONG
 
 beforeAll(async () => {
     home = await mkdtemp(join(tmpdir(), "intentic-machine-forget-"));
-    jest.mock("node:os", () => ({ ...osOriginal, homedir: () => home }));
+    process.env["HOME"] = home;
+    process.env["USERPROFILE"] = home;
     jest.mock("../resident.js", () => ({ ...residentOriginal, ensureResident: ensured }));
     config = await import("./config.js");
     commands = await import("./commands.js");

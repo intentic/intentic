@@ -3,7 +3,9 @@
 // two kinds cannot share it: unit suites get a hang detector, `*.integration.test.*` and `*.e2e.test.*` get the
 // machine's time. Both read the package's own bunfig.toml (preload, ignore patterns) from the working directory.
 import { spawnSync } from "node:child_process";
-import { globSync, readFileSync } from "node:fs";
+import { existsSync, globSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 import { INTEGRATION_MARKERS, INTEGRATION_NAME, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
 import { junitFile, SOURCE_CONDITION } from "../../scripts/verify/failure-units.mjs";
 import { standaloneWorkers } from "../../scripts/verify/test-workers.mjs";
@@ -51,12 +53,29 @@ const report = (kind) =>
         ? []
         : ["--reporter=junit", `--reporter-outfile=${junitFile(junitDir, JSON.parse(readFileSync("package.json", "utf8")).name, kind)}`];
 
+// A throwaway home per run: Bun fixes os.homedir() at startup, so a suite's own `process.env.HOME = …` cannot redirect it,
+// and a test writing under ~ would otherwise write the real one (~/.ssh, ~/.git-credentials). Only ~/.cache is shared.
+const throwawayHome = () => {
+    const home = mkdtempSync(join(tmpdir(), "suites-home-"));
+    const cache = join(homedir(), ".cache");
+    if (existsSync(cache)) {
+        symlinkSync(cache, join(home, ".cache"));
+    }
+    return home;
+};
+
 // `--isolate`: a fresh module registry per file, so a `jest.mock` one suite installs never reaches the next.
 const run = (extra, selection) => {
-    const result = spawnSync("bun", ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...flags, ...extra, ...selection], {
-        stdio: "inherit",
-    });
-    return result.status ?? 1;
+    const home = throwawayHome();
+    try {
+        const result = spawnSync("bun", ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...flags, ...extra, ...selection], {
+            stdio: "inherit",
+            env: { ...process.env, HOME: home, USERPROFILE: home },
+        });
+        return result.status ?? 1;
+    } finally {
+        rmSync(home, { recursive: true, force: true });
+    }
 };
 
 if (watch) {

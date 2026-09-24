@@ -3,11 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
-import * as osOriginal from "node:os";
 
 // Decides which sandboxes may drive this device; upsertLink must merge, not overwrite (setup once dropped an existing
-// link when connecting a second sandbox). homedir is stubbed, not the path parameterised, since the real path is
-// computed at module load from agentHome; hence the dynamic import below.
+// link when connecting a second sandbox). agentHome reads HOME when config.ts loads, hence the dynamic import below.
 let home: string;
 let config: typeof import("./config.js");
 
@@ -29,7 +27,8 @@ const link = (url: string, id: string, shell: DeviceScopes["shell"] = "off") => 
 
 beforeAll(async () => {
     home = await mkdtemp(join(tmpdir(), "intentic-machine-config-"));
-    jest.mock("node:os", () => ({ ...osOriginal, homedir: () => home }));
+    process.env["HOME"] = home;
+    process.env["USERPROFILE"] = home;
     config = await import("./config.js");
 });
 

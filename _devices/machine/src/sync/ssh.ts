@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { homedir, hostname } from "node:os";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
-import type { Log } from "@intentic/local-agent";
+import { homeDir, type Log } from "@intentic/local-agent";
 import { STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { baseDir } from "../config.js";
 import { knownHostsPath, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
@@ -220,7 +220,7 @@ export const assertSshConfigVisible = (ssh: string, alias: string, expectedPort:
         [
             `"${ssh}": the SSH client Mutagen uses, resolves ${alias} to "${resolved.hostname ?? "nothing"}:${resolved.port ?? "?"}" instead of ${expected},`,
             `so it is not reading ${sshConfigPath}, which ${userSshConfigPath} includes. Most often that client resolves`,
-            `~ to a home directory other than ${homedir()}.`,
+            `~ to a home directory other than ${homeDir()}.`,
             ...(result.stderr.trim() === "" ? [] : [result.stderr.trim()]),
             ...(process.platform === "win32"
                 ? [`Point Mutagen at the Windows OpenSSH client and re-run: setx MUTAGEN_SSH_PATH "C:\\Windows\\System32\\OpenSSH"`]

@@ -16,8 +16,11 @@ export interface AgentHome {
     readonly configPath: string;
 }
 
+// Bun fixes os.homedir() at startup; only the environment follows a HOME set later, which is how a test redirects it.
+export const homeDir = (): string => (process.platform === "win32" ? process.env["USERPROFILE"] : process.env["HOME"]) || homedir();
+
 export const agentHome = (name: string): AgentHome => {
-    const dir = join(homedir(), ".intentic", name);
+    const dir = join(homeDir(), ".intentic", name);
     return { dir, configPath: join(dir, "config.json") };
 };
 

@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
-import { writeSecretFile } from "@intentic/local-agent";
+import { homeDir, writeSecretFile } from "@intentic/local-agent";
 import type { PortSkipReason, PortSummary } from "@intentic/sandbox-contract";
 import { baseDir } from "../config.js";
 
@@ -15,7 +14,7 @@ export const knownHostsPath = join(baseDir, "known_hosts");
 // The one thing that does NOT live under baseDir: the ssh-config fragment Mutagen's ssh reads. It sits in
 // ~/.ssh so the user's own config can pull it in by a relative name, the only include spelling every OpenSSH
 // build resolves identically.
-export const sshDir = join(homedir(), ".ssh");
+export const sshDir = join(homeDir(), ".ssh");
 export const sshConfigName = "intentic-machine.conf";
 export const sshConfigPath = join(sshDir, sshConfigName);
 export const userSshConfigPath = join(sshDir, "config");

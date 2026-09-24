@@ -137,7 +137,7 @@ for (const path of tracked) {
         if (SPELLED_ROOT.test(line) && !ROUTE_CONTEXT.test(line)) {
             findings.push({ at, why: `spells a root, import WORKSPACE_ROOT / HISTORY_ROOT / HOST_STATE_ROOT from @intentic/constants` });
         }
-        if (SPELLED_STATE.test(line) && !line.includes(`homedir`) && !TYPED_STATE_PATH.test(line) && !STATE_TABLE_FILES.has(path)) {
+        if (SPELLED_STATE.test(line) && !/homedir/i.test(line) && !TYPED_STATE_PATH.test(line) && !STATE_TABLE_FILES.has(path)) {
             findings.push({ at, why: `spells the state dir, import STATE_DIR from @intentic/constants (or use the daemon's statePath())` });
         }
     }
