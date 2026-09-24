@@ -110,6 +110,7 @@ export * from "./events/resume.js";
 export * from "./events/system-events.js";
 export * from "./events/transcript.js";
 export * from "./events/land-breakage.js";
+export * from "./events/land-conflict.js";
 export * from "./events/verify-nudge.js";
 export * from "./events/watch-wake.js";
 export * from "./policy/request-status.js";

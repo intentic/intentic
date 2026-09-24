@@ -12,6 +12,7 @@ import {
 } from "../events/transcript.js";
 import { contextTrimLine } from "../schemas/context-trim.js";
 import { keptWarmLine } from "../schemas/keep-warm.js";
+import { isLandConflict } from "../events/land-conflict.js";
 import { turnedAwayCode } from "../policy/turned-away.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
@@ -344,7 +345,7 @@ export class TranscriptFold {
                 // and the fold beside the message only ever lists notes that actually rode.
                 return this.pushRow({ role: "notice", text: contextTrimLine(event) });
             case "worktree":
-                return event.sync === undefined ? [] : this.pushRow({ role: "notice", text: syncLine(event.sync) });
+                return event.sync === undefined ? [] : this.synced(event.sync);
             case "landed":
                 return this.pushRow(landedRow(event));
             case "compact":
@@ -611,6 +612,14 @@ export class TranscriptFold {
         }
         mutate(place.tool);
         return [{ op: "tool", index: place.row, tool: structuredClone(ownFields(place.tool)), ...(place.parent === undefined ? {} : { parent: place.parent }) }];
+    }
+
+    // The rebase notice, less what a resolve turn was sent to fix: that turn opens because the branch couldn't rebase, so
+    // saying so again one row under its own errand only repeats it. What did move is still told.
+    private synced(sync: { commits: number; blocked: readonly string[] }): TranscriptPatch[] {
+        const opener = this.opener === undefined ? undefined : this.rows[this.opener];
+        const text = syncLine(opener !== undefined && isLandConflict(opener.text) ? { ...sync, blocked: [] } : sync);
+        return text === "" ? [] : this.pushRow({ role: "notice", text });
     }
 
     private stampOpener(mutate: (row: TranscriptRow) => void): TranscriptPatch[] {

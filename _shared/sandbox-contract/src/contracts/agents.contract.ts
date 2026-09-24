@@ -24,7 +24,7 @@ import {
     LandResultSchema,
 } from "../schemas/agents.js";
 import { AgentsListSchema } from "../schemas/automations.js";
-import { AgentChangesSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
+import { AgentChangesSchema, AgentConflictsSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
 import { AgentKeepWarmSchema } from "../schemas/keep-warm.js";
@@ -215,6 +215,18 @@ export const agentsContract = {
         })
         .input(AgentIdSchema)
         .output(AgentChangesSchema),
+    // For a press that needs only the verdict (asking the agent to resolve), without waiting on the review's per-file
+    // line counts, which on a branch of hundreds of files take tens of seconds.
+    conflicts: procedure
+        .route({
+            method: "GET",
+            path: "/agents/{id}/conflicts",
+            summary: "Why a conversation's last merge refused",
+            description:
+                "What still blocks the conversation's last refused merge, checked again against your workspace as it stands now. Returns the same `conflicts` the full change list carries, without the change list itself. Empty when nothing refused, or when what refused before has since stopped being in the way.",
+        })
+        .input(AgentIdSchema)
+        .output(AgentConflictsSchema),
     // Costs a `git log` per repo: ask only once `diff` reports something absorbed. Reading a file here reuses
     // `fileDiff`.
     history: procedure

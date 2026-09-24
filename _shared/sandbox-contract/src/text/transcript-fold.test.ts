@@ -2,6 +2,8 @@ import { STATE_DIR } from "@intentic/constants";
 import type { AgentEvent } from "../events/agent-events.js";
 import type { TranscriptPatch, TranscriptRow } from "../events/transcript.js";
 import { watchWakePrompt } from "../events/watch-wake.js";
+import { LAND_CONFLICT_OPENING } from "../events/land-conflict.js";
+import { RESUME_NOTES } from "../events/resume.js";
 import { childReportPrompt, peerMessagePrompt } from "../events/agent-words.js";
 import { applyTranscriptPatch, foldTurn, TranscriptFold, userRow } from "./transcript-fold.js";
 
@@ -247,6 +249,25 @@ describe("foldTurn", () => {
         expect(foldOf("go", [{ kind: "landed", landed: true, held: true }]).at(-1)?.text).toBe(
             "Finished: the work is on this agent's branch, ready to land from its review.",
         );
+    });
+
+    // A resolve turn exists because the branch couldn't rebase; its own opening rebase failing the same way is that
+    // errand said twice, one row under itself. Any other turn still hears it, and a resolve turn still hears what moved.
+    it("leaves the blocked rebase out of a land-conflict turn's notice, and only that", () => {
+        const blocked: AgentEvent = { kind: "worktree", branch: "agent/x", base: "abc1234", sync: { commits: 0, blocked: ["intentic"] } };
+        const resolve = `${LAND_CONFLICT_OPENING}\n\n1. \`git add -A && git commit\``;
+        expect(foldOf(resolve, [blocked])).toEqual(openingOf(resolve));
+        expect(foldOf(`${RESUME_NOTES.restart}\n\n${resolve}`, [blocked]).slice(1)).toEqual([]);
+        expect(foldOf("go", [blocked]).slice(1)).toEqual([
+            {
+                role: "notice",
+                text: "Couldn't rebase onto your workspace in intentic: the turn is running from the older base, so its land may need a resolve.",
+            },
+        ]);
+        const mixed: AgentEvent = { kind: "worktree", branch: "agent/x", base: "abc1234", sync: { commits: 3, blocked: ["intentic"] } };
+        expect(foldOf(resolve, [mixed]).slice(1)).toEqual([
+            { role: "notice", text: "Your workspace moved on while this agent waited, its branch was rebased onto your latest 3 commits." },
+        ]);
     });
 
     it("stamps the checkpoint and the preamble's notes on the turn's user row", () => {

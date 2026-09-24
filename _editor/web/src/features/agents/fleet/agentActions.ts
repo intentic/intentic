@@ -158,7 +158,9 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
     }
     const press = claim(id, undefined, `turn`);
     const read = new AbortController();
-    const report = sandboxRpc.agents.diff({ id }, { signal: read.signal });
+    // The verdict alone, not the whole review: the review's per-file line counts cost tens of seconds on a large
+    // branch, and the turn waited on them before anything reached the daemon or any other window watching this chat.
+    const report = sandboxRpc.agents.conflicts({ id }, { signal: read.signal });
     // Awaited only inside `compose`, which a superseded press never reaches; its rejection is still thrown there.
     report.catch(() => undefined);
     // Settled by `compose` itself whenever it answers without a prompt; a turn that never went says nothing.

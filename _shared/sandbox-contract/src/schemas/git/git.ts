@@ -450,6 +450,11 @@ export const AgentChangesSchema = z.object({
 });
 export type AgentChanges = z.infer<typeof AgentChangesSchema>;
 
+// The review's `conflicts` alone, re-derived the same way. The whole review also takes a code-only line count per
+// file, and on a branch of hundreds of files that count, not the conflict check, is what takes seconds.
+export const AgentConflictsSchema = AgentChangesSchema.pick({ conflicts: true });
+export type AgentConflicts = z.infer<typeof AgentConflictsSchema>;
+
 // Names scratch exactly as `AgentChanges.scratch` lists it; anything else is refused, so a stale list cannot reach a
 // file that was never scratch.
 export const AgentScratchSchema = z.object({

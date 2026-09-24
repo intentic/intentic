@@ -56,7 +56,10 @@ test("an isolated turn runs in the conversation worktree, leads with the worktre
     expect(agents).toHaveLength(1);
     expect(agents[0]).toMatchObject({ id: "conv1", status: "idle", branch: "agent/conv1", costUsd: 0.5, sessionId: "sess-iso" });
     // `absorbed` is always present, even at 0, so a client can tell no changes from no data (AgentChangesSchema).
-    expect(await client.agents.diff({ id: "conv1" })).toMatchObject({ absorbed: 0 });
+    const review = await client.agents.diff({ id: "conv1" });
+    expect(review).toMatchObject({ absorbed: 0 });
+    // The verdict alone is the review's own, field for field: the resolve press reads this instead of the whole review.
+    expect(await client.agents.conflicts({ id: "conv1" })).toEqual(review.conflicts === undefined ? {} : { conflicts: review.conflicts });
 });
 
 test("a workspace turn follows the same registry lifecycle without inventing a branch", async () => {
@@ -92,6 +95,7 @@ test("a workspace turn follows the same registry lifecycle without inventing a b
     await waitFor(() => expect(spend).toMatchObject([{ conversationId: "workspace-conv" }]), SETTLES);
     // Branch-only actions (diff, autoLand, land, discard) reject a workspace conversation explicitly, not silently.
     expect(await errorCode(client.agents.diff({ id: "workspace-conv" }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.agents.conflicts({ id: "workspace-conv" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.agents.autoLand({ id: "workspace-conv", autoLand: false }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.agents.land({ id: "workspace-conv" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.agents.discard({ id: "workspace-conv" }))).toBe("BAD_REQUEST");

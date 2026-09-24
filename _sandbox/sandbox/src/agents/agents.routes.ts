@@ -10,6 +10,7 @@ import {
     type AgentRepoChanges,
     type AgentRepoHistory,
     type AgentSummary,
+    type LandConflict,
     type ScratchPath,
     capabilitiesOf,
     RETRY_LADDER_TRIES,
@@ -70,6 +71,14 @@ export const createAgentsRoutes = (services: Services) => {
         }
         return entry;
     };
+    // Re-derived, not replayed: the stored refusal is from land time, rows may since be committed. Served as stored
+    // while a land holds one of its repos, since re-deriving would queue this read behind that land.
+    const liveConflicts = async (entry: IsolatedAgent): Promise<LandConflict[]> =>
+        entry.landing.conflicts === undefined
+            ? []
+            : entry.placement.repos.some(({ repo }) => services.agentWorktrees.repoBusy(repo))
+              ? entry.landing.conflicts
+              : await outstandingConflicts(services.agentWorktrees, entry);
     const notRunning = (id: string): void => {
         if (services.conversations.running(id)) {
             throw new ORPCError("CONFLICT", { message: "the agent's turn is running, wait for it to finish" });
@@ -526,14 +535,7 @@ export const createAgentsRoutes = (services: Services) => {
                     services.logger.warn({ err: error, repo: composed.repo, id: entry.id }, "agents diff: repo skipped");
                 }
             }
-            // Re-derived, not replayed: the stored refusal is from land time, rows may since be committed. Served as stored
-            // while a land holds one of its repos, since re-deriving would queue this read behind that land.
-            const conflicts =
-                entry.landing.conflicts === undefined
-                    ? []
-                    : entry.placement.repos.some(({ repo }) => services.agentWorktrees.repoBusy(repo))
-                      ? entry.landing.conflicts
-                      : await outstandingConflicts(services.agentWorktrees, entry);
+            const conflicts = await liveConflicts(entry);
             // Asked of the whole composition, not of the repos that produced rows: a conversation that did all its work
             // on a branch of its own leaves `agent/<id>` empty, which is the case with no row to hang this on.
             const elsewhere = await services.agentWorktrees.elsewhere(entry.id, entry.placement.repos);
@@ -545,6 +547,11 @@ export const createAgentsRoutes = (services: Services) => {
                 ...(conflicts.length > 0 ? { conflicts } : {}),
                 ...(elsewhere.length > 0 ? { elsewhere: elsewhere.map(({ repo, branch }) => ({ repo, ...(branch === undefined ? {} : { branch }) })) } : {}),
             };
+        }),
+        // The verdict `diff` carries, by the same function, so the two cannot disagree; none of the review's line counts.
+        conflicts: i.conflicts.handler(async ({ input }) => {
+            const conflicts = await liveConflicts(isolatedEntryOf(input.id));
+            return conflicts.length > 0 ? { conflicts } : {};
         }),
         // Reads the same rows `diff` filtered out to absorbed, from the same pass over the tree, so the two routes
         // can't disagree. Span starts at the recorded `landedHead` when it still resolves, else the merge-base anchor.

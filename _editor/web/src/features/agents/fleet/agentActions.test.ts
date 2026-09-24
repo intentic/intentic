@@ -153,8 +153,8 @@ const stubDaemon = (routes: Readonly<Record<string, unknown>>): void => {
 const LANDED = { landed: true, changed: true };
 const stubLand = (): void => stubDaemon({ [`POST /agents/a1/land`]: LANDED });
 
-// GET /agents/{id}/diff as the daemon would answer it for a refused land: nothing listed, nothing absorbed.
-const stubConflicts = (conflicts: readonly LandConflict[]): void => stubDaemon({ [`GET /agents/a1/diff`]: { repos: [], absorbed: 0, conflicts } });
+// GET /agents/{id}/conflicts as the daemon would answer it for a refused land.
+const stubConflicts = (conflicts: readonly LandConflict[]): void => stubDaemon({ [`GET /agents/a1/conflicts`]: { conflicts } });
 
 afterEach(() => {
     sent.length = 0;
@@ -227,7 +227,7 @@ it("refuses the ask when the report names no blocked path at all, and names the 
 it("re-judges instead of scolding when the refusal it was pressed about has evaporated", async () => {
     chat.conversations.value = [tab(`a1`)];
     // A report with nothing in it, and the judgement a measure land hands back: nothing applied, work held.
-    stubDaemon({ [`GET /agents/a1/diff`]: { repos: [], absorbed: 0 }, [`POST /agents/a1/land`]: { landed: false, changed: false, held: true } });
+    stubDaemon({ [`GET /agents/a1/conflicts`]: {}, [`POST /agents/a1/land`]: { landed: false, changed: false, held: true } });
     const ask = await askAgentToResolve(`a1`);
     // Reported as an outcome, not a refusal: the board floats this rather than raising its failure strip.
     expect(ask).toEqual({ kind: `settled`, why: expect.stringContaining(`ready to land`) });
@@ -418,12 +418,12 @@ it("never opens the errand when a later press replaced it while the chat was sti
     const asking = askAgentToResolve(`a1`);
     claim(`a1`, undefined, `stop`);
     // The report's read is already out while the chat paints; the replacing press is what lets it go.
-    await waitFor(() => expect(sent.filter((request) => request.url.endsWith(`/agents/a1/diff`)).map((request) => request.method)).toEqual([`GET`]));
+    await waitFor(() => expect(sent.filter((request) => request.url.endsWith(`/agents/a1/conflicts`)).map((request) => request.method)).toEqual([`GET`]));
     painted();
 
     expect(await asking).toEqual({ kind: `dropped` });
     expect(chat.opened).toEqual([]);
     expect(chat.enqueued).toEqual([]);
     // The report read the press started is let go rather than left to finish for nobody.
-    expect(sent.filter((request) => request.url.endsWith(`/agents/a1/diff`)).map((request) => request.signal.aborted)).toEqual([true]);
+    expect(sent.filter((request) => request.url.endsWith(`/agents/a1/conflicts`)).map((request) => request.signal.aborted)).toEqual([true]);
 });

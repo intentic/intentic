@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic/ui";
-import { LAND_BREAKAGE_OPENING, VERIFY_NUDGE_OPENING, withoutResumeNote } from "@intentic/sandbox-contract";
+import { LAND_BREAKAGE_OPENING, LAND_CONFLICT_OPENING, VERIFY_NUDGE_OPENING, withoutResumeNote } from "@intentic/sandbox-contract";
 import type { ChatMessage } from "../transcript/transcript";
 import { t } from "@intentic/ui/i18n";
 
@@ -25,10 +25,11 @@ export const errands = () =>
             icon: `sync`,
             label: t(`chat.errands.resolvingLandConflict`),
             detail: t(`chat.errands.sentByAppLanding`),
-            opening: `Landing your work hit a merge conflict, none of it reached the user's workspace; it is all still on your branch. Rebase onto the main line and resolve the conflicts yourself. In each repo below (\`root\` is your working directory, any other name that subdirectory of it):`,
+            // The contract's, not a literal here: the fold recognises this turn too (land-conflict.ts).
+            opening: LAND_CONFLICT_OPENING,
         },
-        // Composed by the DAEMON, unlike the one above, so its opening is the contract's rather than a literal here: the
-        // two ends would drift the first time either was reworded on its own.
+        // Composed by the DAEMON, unlike the one above, so its opening is the contract's: the two ends would drift the
+        // first time either was reworded on its own.
         verifyNudge: {
             icon: `check-circle`,
             label: t(`chat.errands.checkingWorkJustDid`),

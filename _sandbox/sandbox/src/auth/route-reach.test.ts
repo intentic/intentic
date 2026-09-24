@@ -41,6 +41,7 @@ const RECORDED: Readonly<Record<string, string>> = {
     "POST /agents/{id}/assign": "bearer waits timed collaborator panel drive land",
     "POST /agents/{id}/auto-land": "bearer waits timed maintainer panel",
     "POST /agents/{id}/break-policy": "bearer waits timed collaborator panel drive land",
+    "GET /agents/{id}/conflicts": "bearer waits timed viewer panel read drive land",
     "GET /agents/{id}/diff": "bearer waits timed viewer panel read drive land",
     "POST /agents/{id}/discard": "bearer waits timed maintainer panel land",
     "GET /agents/{id}/history": "bearer waits timed viewer panel read drive land",
