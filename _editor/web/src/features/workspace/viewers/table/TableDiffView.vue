@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref, watch } from "vue";
-import { type CellDiff, foldUnchangedRows, MAX_ROWS, type RowDiff, type Sheet, type SheetDiff, tableDiff } from "./tableDiff";
+import { computed, ref, shallowRef, watch } from "vue";
+import { type CellDiff, foldUnchangedRows, MAX_ROWS, type RowDiff, type Sheet, type SheetDiff } from "./tableDiff";
+import { requestTableDiff } from "./tableDiffClient";
 
 // Two versions of tabular data drawn as one grid per sheet: a changed cell shows what it was and what it became, a
 // row or a sheet added or dropped wears its mark whole, long unchanged stretches fold to a line. What a spreadsheet's
@@ -14,9 +15,32 @@ const emit = defineEmits<{ changed: [number] }>();
 
 const t = useT();
 
-const sheets = computed(() => tableDiff(before, after));
-const changed = computed(() => sheets.value.reduce((sum, sheet) => sum + sheet.changedRows, 0));
-watch(changed, (count) => emit(`changed`, count), { immediate: true });
+// Undefined until the diff of the current pair arrives; a superseded pair's answer is dropped, never drawn.
+const sheets = shallowRef<readonly SheetDiff[] | undefined>();
+watch(
+    () => [before, after] as const,
+    ([from, to], _previous, onCleanup) => {
+        let current = true;
+        onCleanup(() => (current = false));
+        sheets.value = undefined;
+        void requestTableDiff({ before: from, after: to }).then((diff) => {
+            if (current) {
+                sheets.value = diff;
+            }
+        });
+    },
+    { immediate: true },
+);
+const changed = computed(() => sheets.value?.reduce((sum, sheet) => sum + sheet.changedRows, 0));
+watch(
+    changed,
+    (count) => {
+        if (count !== undefined) {
+            emit(`changed`, count);
+        }
+    },
+    { immediate: true },
+);
 
 // Folds the reader has opened, keyed by sheet and the index of the first row they hide; a new diff starts folded.
 const opened = ref<ReadonlySet<string>>(new Set());
@@ -52,8 +76,17 @@ const plain = (cell: CellDiff): string => cell.after ?? cell.before ?? ``;
         <p v-if="cut" class="mb-3 text-2xs text-warning">
             {{ t(`workspace.tableDiffView.longTableOnlyFirstRows`, { rows: MAX_ROWS.toLocaleString() }) }}
         </p>
-        <p v-if="sheets.length === 0" class="text-2xs text-subtle">{{ t(`workspace.tableDiffView.neitherVersionHoldsTable`) }}</p>
-        <section v-for="sheet of sheets" :key="sheet.name" class="mb-6 last:mb-0">
+        <!-- Held back a moment so a diff that lands at once never flashes it. -->
+        <div v-if="sheets === undefined" role="status" aria-busy="true" class="animate-[ui-fade-in_0.2s_ease-out_0.3s_both]">
+            <span class="sr-only">{{ t(`workspace.tableDiffView.comparing`) }}</span>
+            <div class="flex flex-col gap-2.5 rounded-md border border-line p-3" aria-hidden="true">
+                <span v-for="row in 8" :key="row" class="flex gap-4">
+                    <span v-for="cell in 4" :key="cell" class="skeleton block h-2 flex-1" />
+                </span>
+            </div>
+        </div>
+        <p v-else-if="sheets.length === 0" class="text-2xs text-subtle">{{ t(`workspace.tableDiffView.neitherVersionHoldsTable`) }}</p>
+        <section v-for="sheet of sheets ?? []" :key="sheet.name" class="mb-6 last:mb-0">
             <header class="mb-1.5 flex items-baseline gap-2">
                 <h3 class="text-sm font-semibold text-content" :class="sheet.kind === `removed` ? `line-through text-muted` : ``">
                     {{ sheet.name }}

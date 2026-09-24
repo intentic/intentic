@@ -4309,6 +4309,7 @@
             "materialToConsultNever": "Material zum Nachschlagen, nie Workspace-Code: ausgeschlossen von Suche, Abhängigkeitsinstallation und Synchronisierung."
         },
         "tableDiffView": {
+            "comparing": "Die beiden Versionen werden verglichen…",
             "emptySheet": "(leeres Blatt)",
             "longTableOnlyFirstRows": "Lange Tabelle: nur die ersten {rows} Zeilen jeder Seite werden verglichen.",
             "neitherVersionHoldsTable": "Keine der Versionen enthält eine Tabelle.",

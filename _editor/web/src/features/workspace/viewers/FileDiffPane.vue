@@ -14,8 +14,8 @@ import DerivedDiffView from "./DerivedDiffView.vue";
 import { patchedSides } from "./diffPatch";
 import DiffView from "./DiffView.vue";
 import ProseDiffView from "./ProseDiffView.vue";
-import { sheetOfDelimited } from "./tableDiff";
-import TableDiffView from "./TableDiffView.vue";
+import { sheetOfDelimited } from "./table/tableDiff";
+import TableDiffView from "./table/TableDiffView.vue";
 
 // One file's diff, whichever of seven shapes it arrives in; every review surface (Changes tab, phone, agent
 // review) renders this same fork. Loading state stays with the host; content does not. The seven shapes, decided

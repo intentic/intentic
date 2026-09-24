@@ -4345,6 +4345,7 @@
             "materialToConsultNever": "Materiał do wglądu, nigdy kod przestrzeni roboczej: wyłączony z wyszukiwania, instalacji zależności i synchronizacji."
         },
         "tableDiffView": {
+            "comparing": "Porównywanie obu wersji…",
             "emptySheet": "(pusty arkusz)",
             "longTableOnlyFirstRows": "Długa tabela: porównywanych jest tylko pierwszych {rows} wierszy każdej strony.",
             "neitherVersionHoldsTable": "Żadna z wersji nie zawiera tabeli.",

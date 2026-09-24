@@ -9,8 +9,8 @@ import { formatOf } from "@intentic/ui/file-format";
 import ConversionNotes, { type ConversionNote } from "./ConversionNotes.vue";
 import { readDerivedDiff } from "./derivedDiff";
 import ProseDiffView from "./ProseDiffView.vue";
-import { sheetsOfMarkdown } from "./tableDiff";
-import TableDiffView from "./TableDiffView.vue";
+import { sheetsOfMarkdown } from "./table/tableDiff";
+import TableDiffView from "./table/TableDiffView.vue";
 
 // A document's change read as tracked changes over the text the sandbox renders from each version: the same
 // rendering an agent reads instead of the bytes, so what is compared here is what the agent worked from. Formatting,

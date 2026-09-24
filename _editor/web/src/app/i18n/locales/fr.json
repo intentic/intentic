@@ -4298,6 +4298,7 @@
             "materialToConsultNever": "Matière à consulter, jamais du code de l'espace de travail : exclue de la recherche, de l'installation des dépendances et de la synchronisation."
         },
         "tableDiffView": {
+            "comparing": "Comparaison des deux versions…",
             "emptySheet": "(feuille vide)",
             "longTableOnlyFirstRows": "Tableau long : seules les {rows} premières lignes de chaque côté sont comparées.",
             "neitherVersionHoldsTable": "Aucune version ne contient de tableau.",

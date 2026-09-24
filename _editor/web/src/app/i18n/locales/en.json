@@ -4576,6 +4576,7 @@
             "materialToConsultNever": "Material to consult, never workspace code: excluded from search, dependency setup and sync."
         },
         "tableDiffView": {
+            "comparing": "Comparing the two versions…",
             "emptySheet": "(empty sheet)",
             "longTableOnlyFirstRows": "Long table: only the first {rows} rows of each side are compared.",
             "neitherVersionHoldsTable": "Neither version holds a table.",
