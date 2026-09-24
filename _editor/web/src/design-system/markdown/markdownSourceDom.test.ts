@@ -155,6 +155,24 @@ describe(`what it draws`, () => {
         expect(blockBody(element)).toBe(`    const x = 1;`);
     });
 
+    test(`a raw HTML block is drawn as code, every line of it, with nothing hidden as markup`, () => {
+        const source = `<div align="center">\n<p>Hi</p>\n</div>`;
+        const element = buildBlockElement(source);
+        expect(element.classList.contains(`md-code-block`)).toBe(true);
+        expect(element.querySelector(`.md-marker`)).toBeNull();
+        expect([...element.querySelectorAll(`.md-code-line`)].map((node) => node.textContent)).toEqual([`<div align="center">`, `<p>Hi</p>`, `</div>`]);
+        expect(blockBody(element)).toBe(source);
+    });
+
+    test(`a raw HTML block wears the html grammar's colours once they land`, async () => {
+        const source = `<details>\n<summary>More</summary>\n</details>`;
+        await useHighlighter().ensureLang(`html`);
+        await waitFor(() => expect(buildBlockElement(source).dataset[`mdColoured`]).toBe(``), { timeout: 10_000, interval: 10 });
+        const element = buildBlockElement(source);
+        expect(element.querySelectorAll(`.md-code-line span[style]`).length).toBeGreaterThan(0);
+        expect(blockBody(element)).toBe(source);
+    }, 30_000);
+
     test(`a table is drawn as a table, its pipes markers like any other markup`, () => {
         const source = "| Command | Does |\n| --- | --- |\n| `iq` | searches |";
         const element = buildBlockElement(source);

@@ -206,8 +206,8 @@ const listElement = (source: string, ordered: boolean): HTMLElement => linePrefi
 
 const quoteElement = (source: string): HTMLElement => linePrefixed(source, `blockquote`, `div`, QUOTE_LINE, `md-src-quote`);
 
-// Anything not modeled as prose (an indented code block, a table, raw HTML, a rule): shown verbatim, since there
-// is no way to edit a rendered table except as its markdown.
+// Anything not modeled as prose (an indented code block, a table that doesn't parse as one): shown verbatim, since
+// there is no way to edit a rendered table except as its markdown.
 const verbatimElement = (source: string): HTMLElement => {
     const element = document.createElement(`pre`);
     element.className = `md-src-verbatim`;
@@ -321,6 +321,23 @@ const codeElement = (source: string): HTMLElement | undefined => {
         if (lang === MERMAID_LANG) {
             element.appendChild(figureHolder(fenced.body.join(`\n`)));
         }
+    }
+    return element;
+};
+
+// A raw HTML block drawn as the HTML it is, in the colours a ```html fence would wear; unlike a fence, every line
+// is code, so there is no markup to hide.
+const htmlElement = (source: string): HTMLElement => {
+    const lines = bodyLines(source);
+    const coloured = colouredLines(lines, `html`);
+    const element = document.createElement(`pre`);
+    element.className = `md-code-block`;
+    element.dataset[ROWS] = ``;
+    if (coloured !== undefined) {
+        element.dataset[`mdColoured`] = ``;
+    }
+    for (const [at, line] of lines.entries()) {
+        element.appendChild(codeRow(line, coloured?.[at]));
     }
     return element;
 };
@@ -463,6 +480,7 @@ const BUILDERS: Record<string, (token: MarkdownToken, source: string) => HTMLEle
     code: (_token, source) => codeElement(source),
     table: (_token, source) => tableElement(source),
     hr: (_token, source) => ruleElement(source),
+    html: (_token, source) => htmlElement(source),
 };
 
 const buildProse = (token: MarkdownToken, source: string): HTMLElement | undefined => BUILDERS[token.type]?.(token, source);

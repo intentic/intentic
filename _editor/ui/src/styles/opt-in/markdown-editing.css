@@ -82,7 +82,7 @@
     content: none;
 }
 
-/* An indented code block, a table, raw HTML: constructs whose markup IS their content, shown verbatim. */
+/* An indented code block, a table that does not parse as one: constructs whose markup IS their content, shown verbatim. */
 .md-editing .md-src-verbatim {
     white-space: pre-wrap;
     font-family: var(--font-mono);
@@ -90,7 +90,7 @@
     tab-size: 4;
 }
 
-/* A FENCED BLOCK IS THE CODE IT HOLDS, not the source of a code block: its delimiters are markup like a heading's hashes, and its body wears the colours the rendered document gives it (sourceDom.ts). */
+/* A FENCED BLOCK IS THE CODE IT HOLDS, not the source of a code block: its delimiters are markup like a heading's hashes, and its body wears the colours the rendered document gives it (sourceDom.ts). A raw HTML block is drawn the same way, every line of it code. */
 .md-editing .md-code-block {
     position: relative;
     font-family: var(--font-mono);
