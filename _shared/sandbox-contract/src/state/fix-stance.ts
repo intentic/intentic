@@ -130,6 +130,8 @@ const RULES: readonly ((agent: AgentSummary) => FixStance | undefined)[] = [
             ? needsYou("Needs you", "The fix agent has stopped and is waiting on you.")
             : undefined,
     (agent) => (IN_FLIGHT.has(agent.status) ? WORKING : undefined),
+    // An armed watch wakes it again by itself, so neither what it holds nor holding nothing is its last word yet.
+    (agent) => ((agent.watches?.length ?? 0) > 0 ? WORKING : undefined),
     (agent) => (holdingWork(agent) ? READY : undefined),
     (agent) => (agent.status === "landed" ? LANDED : undefined),
 ];

@@ -45,6 +45,20 @@ test("held work reads as a fix to review, whether the fleet called it ready or l
     expect(fixStance(agent({ status: `idle`, diff: { files: 4, insertions: 120, deletions: 8 } })).kind).toBe(`ready`);
 });
 
+test.each([
+    ["holding work", { files: 4, insertions: 120, deletions: 8 }],
+    ["holding nothing yet", undefined],
+] as const)("a turn that ended waiting on its own watch, %s, is still working", (_case, diff) => {
+    const watches = [{ id: `watch-a1b2`, note: `CI on the pushed branch`, intervalSeconds: 60, deadlineAt: 9_000 }];
+    expect(fixStance(agent({ status: `idle`, watches, ...(diff === undefined ? {} : { diff }) }))).toStrictEqual({
+        kind: `working`,
+        ongoing: true,
+        retry: false,
+        label: `Agent working`,
+        hint: `An agent is already working on this failure. Open the conversation to watch it.`,
+    });
+});
+
 // Diff present doesn't change a failed status to ready; it only earns a mention in the hint.
 test("an agent that failed after writing files still reads as failed", () => {
     const stance = fixStance(agent({ status: `error`, diff: { files: 2, insertions: 34, deletions: 6 } }));

@@ -20,6 +20,7 @@ import type { JournalledTurn, TurnJournalRows } from "../../agent/run/turn/turn-
 import { opt } from "../../opt.js";
 import { parentOfActor } from "../../auth/principal.js";
 import { subagentCountsOf } from "../../agent/subagents/subagents.js";
+import { wakesItself } from "../../agent/tools/background-jobs.js";
 import { liveRunOf } from "../actor/conversation-holdings.js";
 import { queueView } from "../actor/conversation-queue.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
@@ -721,7 +722,12 @@ export const createFleet = (store: FleetStore, standings: LandStandings, presenc
         const state = conversations.state(entry.id);
         // A turn holding any unanswered card reads as `awaiting`, whatever else is in flight beside it.
         const parked = parkedKinds(state);
-        const status = conversationStatus(state, endingStatus(entry.ending), entry.placement.kind === "main" ? "idle" : standings.of(entry.id));
+        const status = conversationStatus(
+            state,
+            endingStatus(entry.ending),
+            entry.placement.kind === "main" ? "idle" : standings.of(entry.id),
+            wakesItself(conversations, entry.id),
+        );
         return {
             id: entry.id,
             status,

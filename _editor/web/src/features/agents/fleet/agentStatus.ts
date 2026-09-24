@@ -66,7 +66,7 @@ export const conflictIsYours = (agent: AgentStanding): boolean =>
     agent.conflictCauses !== undefined && agent.conflictCauses.length > 0 && agent.conflictCauses.every((cause) => cause === `workspace`);
 
 // This conversation runs again by itself, with nobody pressing anything: a watched agent's last turn ended (status
-// is `idle`/`landed`/`ready`, correctly), but the conversation is not over.
+// is `idle`/`landed`, never `ready`, since the daemon holds the land for the wake), but the conversation is not over.
 export const watching = (agent: AgentStanding): boolean => (agent.watches?.length ?? 0) > 0;
 
 // No registry entry behind this card: archiving, reviewing, landing, discarding and dropping all address an agent

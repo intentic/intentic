@@ -389,6 +389,17 @@ export const settledBackgroundJobs = (actors: Actors, conversationId: string): S
     return { running, unseen };
 };
 
+/**
+ * Whether something already armed runs the conversation again by itself: a watch, or a job `settledBackgroundJobs`
+ * would still hand to one. A job whose watch was stopped keeps running but wakes nothing.
+ */
+export const wakesItself = (actors: Pick<ConversationActors, "holdings" | "state">, conversationId: string): boolean =>
+    (actors.state(conversationId)?.watches.length ?? 0) > 0 ||
+    actors
+        .holdings(JOBS)
+        .of(conversationId)
+        .some((record) => !record.adopted && (!jobFinished(record.job) || record.notice !== "read"));
+
 /** tmux sessions holding a still-running job, for the reaper to spare; prunes finished and expired records. */
 export const backgroundJobSessions = (actors: Actors, now: number = Date.now()): ReadonlySet<string> => {
     const live = new Set<string>();

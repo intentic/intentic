@@ -11,12 +11,13 @@ const liveStatus = (stopping: "stopped" | "dismissed" | undefined, parked: reado
     return parked.length > 0 ? "awaiting" : "running";
 };
 
-// Status precedence: the live turn, then an armed resume, then a shown land lease, then how the last turn ended, then the
-// land standing; only `idle` yields to the standing. A running turn's own end-of-turn land stays `running`.
+// Precedence: live turn, armed resume, shown land lease (a turn's own land stays `running`), ending, land standing. Only
+// `idle` yields to the standing, and its `ready` (finished work awaiting a land) is `idle` while the conversation wakes.
 export const conversationStatus = (
     state: ConversationState | undefined,
     entryStatus: EndingStatus,
     standing: LandStanding,
+    wakes: boolean,
 ): AgentStatus => {
     if (state?.phase.kind === "running") {
         return liveStatus(state.phase.stopping, state.phase.parked);
@@ -27,7 +28,10 @@ export const conversationStatus = (
     if (state?.turn.landing === true) {
         return "landing";
     }
-    return entryStatus === "idle" ? standing : entryStatus;
+    if (entryStatus !== "idle") {
+        return entryStatus;
+    }
+    return standing === "ready" && wakes ? "idle" : standing;
 };
 
 // What the card's attention lanes read: the kinds of every card parked right now, none outside a live turn.

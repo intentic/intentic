@@ -2,6 +2,7 @@ import type { AgentEvent, Rule, WorkspaceEvent } from "@intentic/sandbox-contrac
 import { landAgent, type LandOutcome } from "../../../agents/land/land.js";
 import { landingPaths } from "../../../agents/land/landing-paths.js";
 import { type LandVerifier, verifyLandedTree } from "../../../agents/land/verify-landed.js";
+import { wakesItself } from "../../tools/background-jobs.js";
 import { type IsolatedAgent, isIsolated } from "../../../agents/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
 import { landingVerdict, type RuleFacts, standing } from "../../../rules/rules.js";
@@ -173,13 +174,14 @@ async function* recordLand(
     });
 }
 
-// Lands a clean turn, or runs the same pass in `measure` where it is held; nothing at all for a failed or stopped one.
+// Lands a clean turn, or runs the same pass in `measure` where it is held; nothing at all for a failed or stopped one,
+// nor for one that ended to wait on something it armed, whose wake is the turn that finishes the work.
 export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: LandingTurn, books: LandBooks): AsyncGenerator<AgentEvent> {
     const id = turn.conversationId;
     // Taken whatever the turn did, so a verdict never outlives the turn that ran its check.
     const check = deps.conversations.send(id, { kind: "verdict-taken" }).reply;
     const finished = deps.agents.entry(id);
-    if (turn.failed || turn.aborted || finished === undefined || !isIsolated(finished)) {
+    if (turn.failed || turn.aborted || wakesItself(deps.conversations, id) || finished === undefined || !isIsolated(finished)) {
         return;
     }
     const { rules } = await deps.sandboxSettings.get();

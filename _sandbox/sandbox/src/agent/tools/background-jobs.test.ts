@@ -23,6 +23,7 @@ import {
     restoreBackgroundJobs,
     settledBackgroundJobs,
     sweepJobEnds,
+    wakesItself,
 } from "./background-jobs.js";
 import { fakeTurns, memoryFleet } from "../../testing.js";
 
@@ -271,6 +272,39 @@ describe("background job registry", () => {
         expect(jobCommandLine("  pnpm\n  build  ")).toBe("pnpm build");
         expect(jobCommandLine("x".repeat(200))).toHaveLength(120);
         expect(jobCommandLine("x".repeat(200)).endsWith("…")).toBe(true);
+    });
+});
+
+// What holds a conversation's land and keeps it from reading `ready`: the jobs its settle hands to a watch, and the
+// watches themselves; nothing else.
+describe("a conversation waking itself", () => {
+    it("is true while a job runs that no settle has handed to a watch yet, and false once one has", () => {
+        opened("conv-wakes-running");
+        expect(wakesItself(actors, "conv-wakes-running")).toBe(true);
+        settledBackgroundJobs(actors, "conv-wakes-running");
+        // The watch it was handed to answers from here: stopped, the job runs on and wakes nothing.
+        expect(wakesItself(actors, "conv-wakes-running")).toBe(false);
+    });
+
+    it("is true for a finished job whose completion the model never read, and false for one it did", () => {
+        finish(opened("conv-wakes-unseen"));
+        expect(wakesItself(actors, "conv-wakes-unseen")).toBe(true);
+        const read = opened("conv-wakes-read", "pnpm build", "tu-wakes-read");
+        noteJobShell(actors, "tu-wakes-read", "bsh-wakes-read");
+        finish(read);
+        noteJobNotice(actors, "bsh-wakes-read");
+        noteModelRequest(actors, "conv-wakes-read");
+        expect(wakesItself(actors, "conv-wakes-read")).toBe(false);
+    });
+
+    it("is true while a watch is armed, whatever its jobs", () => {
+        actors.send("conv-wakes-watch", {
+            kind: "watches-shown",
+            watches: [{ id: "watch-a1b2", note: "CI on the pushed branch", intervalSeconds: 60, deadlineAt: 9_000 }],
+        });
+        expect(wakesItself(actors, "conv-wakes-watch")).toBe(true);
+        actors.send("conv-wakes-watch", { kind: "watches-shown", watches: [] });
+        expect(wakesItself(actors, "conv-wakes-watch")).toBe(false);
     });
 });
 
