@@ -124,6 +124,29 @@
     pointer-events: none;
 }
 
+/* A DRAWN DIAGRAM is what a closed ```mermaid block looks like at rest, as in the rendered document; the caret in it brings back the code, and the picture steps aside. */
+.md-editing .md-code-figure {
+    display: none;
+    overflow-x: auto;
+    text-align: center;
+    font-family: var(--font-sans);
+    user-select: none;
+}
+/* No code box round a picture: the rendered document draws a diagram on the page, not in a pre. */
+.md-editing .md-code-block[data-md-drawn]:not(.md-block-active) {
+    font-size: inherit;
+    border-color: transparent;
+    background: transparent;
+    padding-inline: 0;
+}
+.md-editing .md-code-block[data-md-drawn]:not(.md-block-active) > .md-code-figure {
+    display: block;
+}
+.md-editing .md-code-block[data-md-drawn]:not(.md-block-active) > [data-md-row],
+.md-editing .md-code-block[data-md-drawn]:not(.md-block-active)::before {
+    display: none;
+}
+
 /* Shiki emits both themes at once, the dark one as a custom property inline styles cannot be overridden without (see code.css). */
 [data-mode="dark"] .md-editing .md-code-line span {
     color: var(--shiki-dark) !important;

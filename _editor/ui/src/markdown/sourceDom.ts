@@ -1,4 +1,5 @@
 import { highlightedCode } from "./code.js";
+import { MERMAID_LANG } from "./figures.js";
 import { lexBlocks, lexInline, type MarkdownToken } from "./render.js";
 
 // This block's DOM text is its markdown source, byte for byte (`blockBody(element) === source`), so
@@ -278,6 +279,18 @@ const fencedCode = (source: string): FencedCode | undefined => {
     return { open: first, info: open.rest, body: lines.slice(1, closed ? -1 : undefined), close: closed ? last : undefined };
 };
 
+// Where a closed ```mermaid block's diagram is drawn (by the surface, figureDrawing.ts): not a row, so it is no part of
+// the block's text, and not editable, so the caret cannot land inside the picture.
+export const FIGURE_HOLDER = `md-code-figure`;
+
+const figureHolder = (code: string): HTMLElement => {
+    const holder = document.createElement(`div`);
+    holder.className = FIGURE_HOLDER;
+    holder.setAttribute(`contenteditable`, `false`);
+    holder.dataset[`mdFigureCode`] = code;
+    return holder;
+};
+
 // A fenced block drawn as the code it holds: the fences are markup, like a heading's hashes, and the body wears
 // the colours the rendered document gives it. Undefined for an indented code block, which has no fences to draw
 // and whose indentation is part of its source.
@@ -305,6 +318,9 @@ const codeElement = (source: string): HTMLElement | undefined => {
     }
     if (fenced.close !== undefined) {
         element.appendChild(fenceRow(fenced.close));
+        if (lang === MERMAID_LANG) {
+            element.appendChild(figureHolder(fenced.body.join(`\n`)));
+        }
     }
     return element;
 };

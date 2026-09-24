@@ -5,8 +5,10 @@ import { highlightVersion } from "../../markdown/code.js";
 import { continueList, indentLines, insertLink, onListLine, outdentLines, type TextEdit, toggleWrap } from "../../markdown/edits.js";
 import { createMarkdownHistory, type EditKind } from "../../markdown/history.js";
 import { splitMarkdownBlocks } from "../../markdown/index.js";
-import { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "../../markdown/sourceDom.js";
+import { blockBody, buildBlockElement, caretAtOffset, FIGURE_HOLDER, offsetOfCaret } from "../../markdown/sourceDom.js";
 import { useT } from "../../i18n/index.js";
+import { useTheme } from "../../composables/useTheme.js";
+import { drawFigures } from "./figureDrawing.js";
 
 const t = useT();
 
@@ -124,10 +126,36 @@ const putSelection = (start: number, end: number): void => {
 
 const putCaret = (offset: number): void => putSelection(offset, offset);
 
+// A closed ```mermaid block draws its diagram at rest, as the reader does; every rebuild ends in markActive, so drawing
+// there reaches each new holder. Accent is part of the look: it moves the tokens the palette is painted from.
+const { scheme, accent } = useTheme();
+const drawDiagrams = (): void => {
+    if (host.value !== undefined) {
+        drawFigures(host.value, scheme.value, `${scheme.value}:${accent.value}`);
+    }
+};
+watch([scheme, accent], drawDiagrams);
+
+// The picture is not editable, so a press on it would land the caret wherever the browser guesses; it opens the
+// diagram's source instead, at the first line after its opening fence.
+const onFigurePress = (event: MouseEvent): void => {
+    const block = event.target instanceof Element ? event.target.closest(`.${FIGURE_HOLDER}`)?.parentElement : undefined;
+    const index = block === undefined || block === null ? -1 : blockElements().indexOf(block);
+    const start = blockStarts()[index];
+    if (block === undefined || block === null || start === undefined) {
+        return;
+    }
+    event.preventDefault();
+    host.value?.focus({ preventScroll: true });
+    putCaret(start + (block.querySelector(`[data-md-row]`)?.textContent?.length ?? 0) + 1);
+    markActive();
+};
+
 // Marks whichever block holds the caret, regardless of how it got there (click, arrow key, find, rewrite).
 const markActive = (): void => {
     const index = activeIndex();
     blockElements().forEach((element, at) => element.classList.toggle(`md-block-active`, at === index));
+    drawDiagrams();
 };
 
 // A block's span, split into the part that is drawn and the blank lines that follow it (which are not).
@@ -607,6 +635,7 @@ defineExpose({ text, focus: (): void => host.value?.focus() });
         @input="onInput"
         @beforeinput="onBeforeInput"
         @keydown="onKeydown"
+        @mousedown="onFigurePress"
         @paste="onPaste"
         @drop="onDrop"
         @compositionstart="onCompositionStart"

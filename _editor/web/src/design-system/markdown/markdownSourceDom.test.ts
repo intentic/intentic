@@ -39,6 +39,7 @@ const BLOCKS = {
     // The inner delimiters are code: only a run of four closes this one.
     fenceHoldingAFence: "````md\n```ts\nx\n```\n````",
     fenceHoldingNothing: "```json\n```",
+    mermaid: "```mermaid\nflowchart LR\n    a --> b\n```",
     indentedCode: `    const x = 1;`,
     table: `| a | b |\n| - | - |\n| 1 | 2 |`,
     tableAligned: `| a | b | c |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |`,
@@ -127,6 +128,20 @@ describe(`what it draws`, () => {
         const element = buildBlockElement("````md\n```ts\nx\n```\n````");
         expect([...element.querySelectorAll(`.md-code-fence .md-marker`)].map((node) => node.textContent)).toEqual(["````md", "````"]);
         expect([...element.querySelectorAll(`.md-code-line`)].map((node) => node.textContent)).toEqual(["```ts", `x`, "```"]);
+    });
+
+    test(`a closed mermaid fence carries a picture holder that is no part of its text`, () => {
+        const source = "```mermaid\nflowchart LR\n    a --> b\n```";
+        const element = buildBlockElement(source);
+        const holder = element.querySelector<HTMLElement>(`.md-code-figure`);
+        expect(holder?.dataset[`mdFigureCode`]).toBe(`flowchart LR\n    a --> b`);
+        expect(holder?.getAttribute(`contenteditable`)).toBe(`false`);
+        holder?.append(`label text a drawn diagram would hold`);
+        expect(blockBody(element)).toBe(source);
+    });
+
+    test(`a mermaid fence still being typed has nothing to draw yet`, () => {
+        expect(buildBlockElement("```mermaid\nflowchart LR").querySelector(`.md-code-figure`)).toBeNull();
     });
 
     test(`a fence with no info string names no language`, () => {
