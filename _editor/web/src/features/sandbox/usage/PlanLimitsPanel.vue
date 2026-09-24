@@ -11,6 +11,7 @@ import {
     formatAge,
     formatReset,
     formatUtilization,
+    NO_SEAT,
     PLAN_LIMIT_BAND_LABEL,
     type PlanLimitBand,
     PLAN_LIMIT_BANDS,
@@ -112,6 +113,9 @@ const barTooltip = (row: PlanLimitRow): string =>
 const ATTENTION_SHOWN = 12;
 const attentionExpanded = ref(false);
 const attentionTotal = computed(() => summary.value.attention.reduce((count, group) => count + group.rows.length, 0));
+// Split by door: a lost seat is handed back by the organisation, every other condition by signing in again.
+const seatTotal = computed(() => summary.value.attention.find((group) => group.reason === NO_SEAT)?.rows.length ?? 0);
+const reconnectTotal = computed(() => attentionTotal.value - seatTotal.value);
 const attentionShown = computed(() =>
     summary.value.attention.map((group) => ({
         reason: group.reason,
@@ -311,8 +315,11 @@ const roster = computed(() => {
             <div class="flex flex-col gap-2">
                 <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     <span class="text-2xs font-medium text-danger">{{ t(`sandbox.planLimitsPanel.cantServeTurn`, { attentionTotal }) }}</span>
-                    <span class="text-2xs text-subtle">
-                        {{ t(`sandbox.planLimitsPanel.reconnectOnAgentTab`, { count: attentionTotal }, attentionTotal) }}
+                    <span v-if="reconnectTotal > 0" class="text-2xs text-subtle">
+                        {{ t(`sandbox.planLimitsPanel.reconnectOnAgentTab`, { count: reconnectTotal }, reconnectTotal) }}
+                    </span>
+                    <span v-if="seatTotal > 0" class="text-2xs text-subtle">
+                        {{ t(`sandbox.planLimitsPanel.seatFromAdmin`, { count: seatTotal }, seatTotal) }}
                     </span>
                 </div>
                 <div v-for="group in attentionShown" :key="group.reason" class="flex flex-col gap-1">

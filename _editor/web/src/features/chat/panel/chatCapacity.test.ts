@@ -245,8 +245,31 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `expired`, usage: usage(3), needsReauth: true })] };
         const capacity = chatCapacity([], NOW);
         expect(capacity.providers).toEqual([]);
-        expect(capacity.blocked).toEqual([{ reason: `sign-in expired`, count: 1 }]);
+        expect(capacity.blocked).toEqual([{ reason: `sign-in expired`, count: 1, reconnect: true, labels: [`expired`] }]);
         expect(capacity.out[0]?.reason).toBe(`sign-in expired`);
+    });
+
+    // An organisation can take a seat away while the account still signs in and its pools still read: the bars it
+    // last drew are true of a plan no turn can reach, so drawing them offered room that did not exist.
+    it(`holds back an account that lost its seat, whatever its pools say, and says no sign-in fixes it`, () => {
+        providerAccounts.value = {
+            claude: [
+                claude({ id: `a`, label: `team@example.com`, usage: usage(20), seatRefusal: `Your organization has disabled Claude Code` }),
+                claude({ id: `b`, label: `own@example.com`, usage: usage(60) }),
+            ],
+        };
+
+        const capacity = chatCapacity([], NOW);
+        const [entry] = capacity.providers;
+        expect(entry?.rows.map((row) => row.label)).toEqual([`own@example.com`]);
+        expect([entry?.ready, entry?.total, entry?.blocked]).toEqual([1, 1, 1]);
+        expect(capacity.blocked).toEqual([{ reason: `no seat`, count: 1, reconnect: false, labels: [`team@example.com`] }]);
+    });
+
+    // A revoked credential is the one a person can fix from here, so it names the account first.
+    it(`names an expired sign-in before a lost seat on the same account`, () => {
+        providerAccounts.value = { claude: [claude({ id: `a`, label: `both`, needsReauth: true, seatRefusal: `disabled` })] };
+        expect(chatCapacity([], NOW).blocked).toEqual([{ reason: `sign-in expired`, count: 1, reconnect: true, labels: [`both`] }]);
     });
 
     // What a 33-account Google fleet did to a reader: two accounts with untouched allowances were connected, no
@@ -261,7 +284,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         const capacity = chatCapacity([], NOW);
         const [entry] = capacity.providers;
         expect([entry?.ready, entry?.total, entry?.blocked]).toEqual([1, 2, 1]);
-        expect(capacity.blocked).toEqual([{ reason: NO_PROJECT, count: 1 }]);
+        expect(capacity.blocked).toEqual([{ reason: NO_PROJECT, count: 1, reconnect: true, labels: [`new@gmail.com`] }]);
     });
 
     // "Cooling down" promises a wait that fixes it; nothing about a missing project is waiting for anything.
@@ -291,7 +314,7 @@ describe(`how old the rail says its readings are`, () => {
 
         expect(chatCapacity([], NOW).measuredAt).toBe(NOW - 120_000);
         // And the expired sign-in is still accounted for, in the words of what it is missing.
-        expect(chatCapacity([], NOW).blocked).toEqual([{ reason: `sign-in expired`, count: 1 }]);
+        expect(chatCapacity([], NOW).blocked).toEqual([{ reason: `sign-in expired`, count: 1, reconnect: true, labels: [`expired@example.com`] }]);
     });
 
     it(`keeps the oldest reading of an account it is still drawing, however stale`, () => {

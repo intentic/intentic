@@ -788,6 +788,7 @@
             "nothingRoomRightNow": "W tej chwili nigdzie nie ma miejsca.",
             "planHeadroom": "Zapas planu",
             "reconnectOnAgentTab": "połącz ponownie w zakładce Agent",
+            "seatFromAdmin": "poproś admina organizacji o stanowisko",
             "unavailable": "Niedostępne"
         },
         "chatChooseModelButton": {
@@ -2382,6 +2383,7 @@
             "read2": "Odczytano",
             "reconnectOnAgentTab": "podłącz je ponownie w zakładce Agent | podłącz je ponownie w zakładce Agent | podłącz je ponownie w zakładce Agent",
             "reopens": "Otwiera się ponownie",
+            "seatFromAdmin": "poproś admina organizacji o przypisanie mu stanowiska | poproś admina organizacji o przypisanie im stanowisk | poproś admina organizacji o przypisanie im stanowisk",
             "showingMostConstrained": "pokazujemy {max_bars} najbardziej ograniczonych z {count}",
             "used": "Zużyto",
             "viewAccounts": "Zobacz konta"

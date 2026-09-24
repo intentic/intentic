@@ -4,6 +4,7 @@ import { providerDisplayLabel } from "../accounts/providerCatalog";
 import {
     attentionGroups,
     blockedReason,
+    NO_SEAT,
     type PlanLimitGroup,
     planLimitGroups,
     type PlanLimitPool,
@@ -81,6 +82,16 @@ export interface CapacityOut {
     readonly detail: string | undefined;
 }
 
+/** Credentials held back by one missing thing, and whether signing in again is the fix. */
+export interface CapacityBlocked {
+    readonly reason: string;
+    readonly count: number;
+    // False only for a lost seat, which an organisation's admin hands back, never a new sign-in.
+    readonly reconnect: boolean;
+    // Account labels, for the hover the counted line is too narrow to print.
+    readonly labels: readonly string[];
+}
+
 export interface ChatCapacity {
     // Roomiest provider first.
     readonly providers: readonly CapacityProvider[];
@@ -89,7 +100,7 @@ export interface ChatCapacity {
     // Credentials needing a person, grouped by what is missing; counted, not listed, since the fix lives on the
     // Agent tab. Without this a connected-but-unusable account is invisible: absent from every offer, and silently
     // part of no count.
-    readonly blocked: readonly { readonly reason: string; readonly count: number }[];
+    readonly blocked: readonly CapacityBlocked[];
     // Oldest reading on screen, not the freshest, since it qualifies every bar shown under it.
     readonly measuredAt: number | undefined;
 }
@@ -128,10 +139,10 @@ const refusedAccounts = (group: PlanLimitGroup): Refused => {
     return refusal.account === undefined ? { all: true, one: undefined } : { all: false, one: group.refusedRow?.id };
 };
 
-// Four ways to be unusable: spent (waits), a rejected credential, a standing refusal, or benched by the translator. No
-// reading at all is still usable; unknown is not exhausted.
+// Four ways to be unusable: spent (waits), blocked until a person acts, a standing refusal, or benched by the
+// translator. No reading at all is still usable; unknown is not exhausted.
 const canServe = (row: PlanLimitRow, refused: Refused): boolean => {
-    if (row.needsReauth || row.cooling !== undefined || refused.all || refused.one === row.id) {
+    if (blockedReason(row) !== undefined || row.cooling !== undefined || refused.all || refused.one === row.id) {
         return false;
     }
     return !spentOutright(row);
@@ -285,7 +296,12 @@ export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number =
                       },
                   ],
         ),
-        blocked: attentionGroups(rows).map((entry) => ({ reason: entry.reason, count: entry.rows.length })),
+        blocked: attentionGroups(rows).map((entry) => ({
+            reason: entry.reason,
+            count: entry.rows.length,
+            reconnect: entry.reason !== NO_SEAT,
+            labels: entry.rows.map((row) => row.label),
+        })),
         measuredAt: measured.length === 0 ? undefined : Math.min(...measured),
     };
 };
@@ -301,20 +317,23 @@ export interface CapacityHeld {
 
 // The daemon's answer to a press, as the rail states it. An account it cannot name (a connection this window hasn't
 // read yet) still counts: the count is what says a number could not move, and the label only says which. A park whose
-// instant has passed is dropped rather than restated: the next trigger reads that account, so the claim is over.
+// instant has passed is dropped rather than restated: the next trigger reads that account, so the claim is over. A
+// blocked credential is dropped too: the rail names it by what it is missing and draws no figure a re-read could move.
 export const heldReadings = (held: readonly PlanLimitsHeld[], now: number = Date.now()): CapacityHeld | undefined => {
-    const standing = held.filter((entry) => entry.resumesAt * 1000 > now);
+    const rows = planLimitRows(providerAccounts.value, translatorAccounts.value);
+    const rowOf = (entry: PlanLimitsHeld): PlanLimitRow | undefined =>
+        rows.find((candidate) => candidate.provider === entry.provider && candidate.account === entry.account);
+    const standing = held.flatMap((entry) => {
+        const row = rowOf(entry);
+        return entry.resumesAt * 1000 > now && (row === undefined || blockedReason(row) === undefined) ? [{ entry, row }] : [];
+    });
     if (standing.length === 0) {
         return undefined;
     }
-    const rows = planLimitRows(providerAccounts.value, translatorAccounts.value);
     return {
         count: standing.length,
-        resumesAt: Math.min(...standing.map((entry) => entry.resumesAt)),
-        labels: standing.flatMap((entry) => {
-            const row = rows.find((candidate) => candidate.provider === entry.provider && candidate.account === entry.account);
-            return row === undefined ? [] : [row.label];
-        }),
+        resumesAt: Math.min(...standing.map(({ entry }) => entry.resumesAt)),
+        labels: standing.flatMap(({ row }) => (row === undefined ? [] : [row.label])),
     };
 };
 

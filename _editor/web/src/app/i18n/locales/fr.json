@@ -779,6 +779,7 @@
             "nothingRoomRightNow": "Rien n'a de place en ce moment.",
             "planHeadroom": "Marge de l'offre",
             "reconnectOnAgentTab": "reconnectez-vous dans l'onglet Agent",
+            "seatFromAdmin": "demandez un siège à un admin de l'organisation",
             "unavailable": "Indisponible"
         },
         "chatChooseModelButton": {
@@ -2369,6 +2370,7 @@
             "read2": "Relevé",
             "reconnectOnAgentTab": "reconnectez-le dans l'onglet Agent | reconnectez-les dans l'onglet Agent",
             "reopens": "Rouvre",
+            "seatFromAdmin": "demandez à un admin de l'organisation de lui attribuer un siège | demandez à un admin de l'organisation de leur attribuer des sièges",
             "showingMostConstrained": "affichage des {max_bars} plus contraintes sur {count}",
             "used": "Utilisé",
             "viewAccounts": "Voir les comptes"

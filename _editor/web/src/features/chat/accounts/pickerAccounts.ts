@@ -46,12 +46,23 @@ export interface CapacityCount {
 export const capacityCounts = (
     provider: AgentProvider,
     // Credential state rides along with the ring: an account nothing can run on is not a degree of fullness.
-    rows: readonly { readonly headroom: PlanHeadroom | undefined; readonly needsReauth?: boolean; readonly cooling?: PlanLimitRow[`cooling`] }[],
+    rows: readonly {
+        readonly headroom: PlanHeadroom | undefined;
+        readonly needsReauth?: boolean;
+        readonly seatRefusal?: string | undefined;
+        readonly cooling?: PlanLimitRow[`cooling`];
+    }[],
 ): readonly CapacityCount[] => {
     const readable = reportsPlanLimits(provider);
     const counts = new Map<PlanLimitBand, number>();
     for (const row of rows) {
-        const band = planLimitBand({ percent: row.headroom?.percent, readable, needsReauth: row.needsReauth === true, cooling: row.cooling });
+        const band = planLimitBand({
+            percent: row.headroom?.percent,
+            readable,
+            needsReauth: row.needsReauth === true,
+            seatRefusal: row.seatRefusal,
+            cooling: row.cooling,
+        });
         counts.set(band, (counts.get(band) ?? 0) + 1);
     }
     // Worst first; `none` is dropped, since unpublished limits aren't a fullness reading.
@@ -144,8 +155,8 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
                           : undefined,
                 // liveUsage, not the streamed map alone: the row's own reading is usually the newer of the two.
                 headroom: planHeadroom(liveUsage(provider.value, entry.id, entry.usage, modelRef.value), modelRef.value),
-                // Only while the refusal stands, and only on the account it names.
-                refused: note?.current === true && refusal?.account === entry.id ? note.line : undefined,
+                // A lost seat outlives the turn it refused; any other refusal shows only while it stands, on the account it names.
+                refused: entry.seatRefusal ?? (note?.current === true && refusal?.account === entry.id ? note.line : undefined),
             });
         });
     });

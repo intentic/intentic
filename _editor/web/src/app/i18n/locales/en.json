@@ -812,6 +812,7 @@
             "nothingRoomRightNow": "Nothing has room right now.",
             "planHeadroom": "Plan headroom",
             "reconnectOnAgentTab": "reconnect on the Agent tab",
+            "seatFromAdmin": "ask an org admin for a seat",
             "unavailable": "Unavailable"
         },
         "chatChooseModelButton": {
@@ -2553,6 +2554,7 @@
             "read2": "Read",
             "reconnectOnAgentTab": "reconnect it on the Agent tab | reconnect them on the Agent tab",
             "reopens": "Reopens",
+            "seatFromAdmin": "ask an org admin to assign it a seat | ask an org admin to assign them seats",
             "showingMostConstrained": "showing the {max_bars} most constrained of {count}",
             "used": "Used",
             "viewAccounts": "View accounts"

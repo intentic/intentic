@@ -777,6 +777,7 @@
             "nothingRoomRightNow": "Gerade hat nichts Platz.",
             "planHeadroom": "Tarif-Spielraum",
             "reconnectOnAgentTab": "auf dem Agenten-Tab neu verbinden",
+            "seatFromAdmin": "einen Org-Admin um einen Sitz bitten",
             "unavailable": "Nicht verfügbar"
         },
         "chatChooseModelButton": {
@@ -2370,6 +2371,7 @@
             "read2": "Gemessen",
             "reconnectOnAgentTab": "verbinden Sie es im Tab „Agent“ neu | verbinden Sie sie im Tab „Agent“ neu",
             "reopens": "Öffnet wieder",
+            "seatFromAdmin": "bitten Sie einen Org-Admin, ihm einen Sitz zuzuweisen | bitten Sie einen Org-Admin, ihnen Sitze zuzuweisen",
             "showingMostConstrained": "es werden die {max_bars} engsten von {count} gezeigt",
             "used": "Verbraucht",
             "viewAccounts": "Konten ansehen"

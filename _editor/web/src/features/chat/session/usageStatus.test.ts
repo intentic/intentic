@@ -584,6 +584,7 @@ describe(`plan-limit aggregates`, () => {
         stale: false,
         readable: true,
         needsReauth: false,
+        seatRefusal: undefined,
         routed: false,
         cooling: undefined,
         ...over,
@@ -734,6 +735,17 @@ describe(`plan-limit aggregates`, () => {
         // blocked rather than as one more account waiting on a reading.
         expect(summary.counts).toEqual({ blocked: 1, spent: 1, tight: 0, room: 1, unread: 1, none: 0 });
         expect(summary.accounts).toBe(4);
+    });
+
+    // Its pools still read after an organisation takes the seat away, so only the refusal can say it serves nothing.
+    it(`raises an account that lost its seat, and names a dead sign-in on it first`, () => {
+        const seatless = at(20, { id: `seatless`, seatRefusal: `Your organization has disabled Claude Code` });
+        const both = at(20, { id: `both`, needsReauth: true, seatRefusal: `Your organization has disabled Claude Code` });
+        expect(planLimitBand(seatless)).toBe(`blocked`);
+        expect(planLimitSummary([seatless, both]).attention).toEqual([
+            { reason: `no seat`, rows: [expect.objectContaining({ id: `seatless` })] },
+            { reason: `sign-in expired`, rows: [expect.objectContaining({ id: `both` })] },
+        ]);
     });
 
     // Even a spent account whose credential is dead belongs here: on the reauth, not on the spend.

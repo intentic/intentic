@@ -223,12 +223,17 @@ const heldNote = computed((): { readonly subject: string; readonly retry: string
                     </div>
                     <!-- Counted, not listed, one line per condition: a credential that stays broken until a person acts is the one thing a fleet's percentages cannot say. -->
                     <!-- The condition is the alarm; the instruction stays quiet beside it (as in the Usage tab's attention block), so the sentence doesn't shout twice. -->
-                    <p v-for="entry in capacity.blocked" :key="entry.reason" class="text-2xs">
+                    <p v-for="entry in capacity.blocked" :key="entry.reason" v-tooltip.left="entry.labels.join(`, `)" class="text-2xs">
                         <span class="text-warning">{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }}</span>
                         <span class="text-subtle"> · {{ entry.reason }}</span>
                     </p>
-                    <!-- Said once for every condition above it: the fix is the same door whatever the credential is missing. -->
-                    <p v-if="capacity.blocked.length > 0" class="text-2xs text-subtle">{{ t(`chat.chatCapacityRail.reconnectOnAgentTab`) }}</p>
+                    <!-- One line per door, not per condition: every other condition is fixed by signing in again, a lost seat only by the organisation. -->
+                    <p v-if="capacity.blocked.some((entry) => entry.reconnect)" class="text-2xs text-subtle">
+                        {{ t(`chat.chatCapacityRail.reconnectOnAgentTab`) }}
+                    </p>
+                    <p v-if="capacity.blocked.some((entry) => !entry.reconnect)" class="text-2xs text-subtle">
+                        {{ t(`chat.chatCapacityRail.seatFromAdmin`) }}
+                    </p>
                 </div>
             </div>
         </template>

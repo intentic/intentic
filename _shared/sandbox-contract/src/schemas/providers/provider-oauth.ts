@@ -22,6 +22,12 @@ export const OauthAccountSchema = z.object({
         .optional()
         .describe("Its stored credential can no longer be renewed and somebody has to sign in again. Absent means healthy, or not checked yet."),
     detail: z.string().optional().describe("Why, in words a person can act on."),
+    seatRefusal: z
+        .string()
+        .optional()
+        .describe(
+            "Its organisation has switched it off for this harness (no seat): it still signs in and its plan limits may still read, but no turn can run on it until an admin gives access back. The provider's own sentence; cleared by the next turn that runs on it. Absent means no refusal is on file.",
+        ),
     usage: AccountUsageSchema.optional().describe(
         "How full its plan limits were when last measured, so a picker can show what is left before committing work to it. Absent until a reading exists, which reads as unknown rather than as nothing left.",
     ),

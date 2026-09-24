@@ -11,10 +11,9 @@ import type { SeatRefusal } from "./claude-seats.js";
 // Merges in the usage window when measured; account objects from the store are not mutated in place.
 const withUsage = (account: OauthAccount, usage: AccountUsage | undefined): OauthAccount => (usage === undefined ? account : { ...account, usage });
 
-// Row for an account an org has switched off: shows the provider's own sentence without needsReauth, since reconnecting
-// can't fix it. A revoked credential still outranks this, since that one is reconnectable.
+// A revoked credential outranks a seat refusal: reconnecting fixes that one, and nothing here fixes a seat.
 const withSeat = (account: OauthAccount, seat: SeatRefusal | undefined): OauthAccount =>
-    seat === undefined || account.needsReauth === true ? account : { ...account, detail: seat.reason };
+    seat === undefined || account.needsReauth === true ? account : { ...account, seatRefusal: seat.reason };
 
 export type ClaudeAccountDeps = Pick<Services, "accountUsage" | "claudeSeats" | "claudeStore" | "headroom">;
 

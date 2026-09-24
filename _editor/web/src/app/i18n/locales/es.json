@@ -785,6 +785,7 @@
             "nothingRoomRightNow": "Ahora mismo no hay sitio en ninguno.",
             "planHeadroom": "Margen del plan",
             "reconnectOnAgentTab": "vuelve a conectar en la pestaña Agente",
+            "seatFromAdmin": "pide un puesto a un admin de la organización",
             "unavailable": "No disponible"
         },
         "chatChooseModelButton": {
@@ -2381,6 +2382,7 @@
             "read2": "Leído",
             "reconnectOnAgentTab": "vuelve a conectarla en la pestaña Agente | vuelve a conectarlas en la pestaña Agente",
             "reopens": "Se reabre",
+            "seatFromAdmin": "pide a un admin de la organización que le asigne un puesto | pide a un admin de la organización que les asigne puestos",
             "showingMostConstrained": "mostrando las {max_bars} más ajustadas de {count}",
             "used": "Usado",
             "viewAccounts": "Ver cuentas"

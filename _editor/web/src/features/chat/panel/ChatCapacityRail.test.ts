@@ -275,6 +275,32 @@ it(`says which reading the last press could not take, and when it can`, () => {
     expect(el.textContent).toContain(`retry ${formatReset(HELD_UNTIL)}`);
 });
 
+// A lost seat is not a reading waiting to be retaken: the rail names it by what is missing, so a stay-away on its reads
+// explains no number on screen, and the fix is the organisation's, not the Agent tab's sign-in.
+it(`names a lost seat by who can fix it, and says nothing about re-reading it`, () => {
+    heldAccounts.value = [{ provider: `claude`, account: `a`, resumesAt: HELD_UNTIL }];
+    const el = mount([
+        {
+            id: `a`,
+            label: `team@example.com`,
+            seatRefusal: `Your organization has disabled Claude subscription access for Claude Code`,
+            usage: { measuredAt: Date.now() - 10 * 3_600_000, windows: [{ kind: `seven_day`, utilization: 72, gates: `all` }] },
+        },
+        {
+            id: `b`,
+            label: `own@example.com`,
+            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 24, gates: `all` }] },
+        },
+    ]);
+
+    expect(el.textContent).toContain(`1 can't serve`);
+    expect(el.textContent).toContain(`no seat`);
+    expect(el.textContent).toContain(`ask an org admin for a seat`);
+    expect(el.textContent).not.toContain(`reconnect on the Agent tab`);
+    expect(el.textContent).not.toContain(`Can't re-read`);
+    expect(barWidths(el)).toEqual([`24%`]);
+});
+
 // A held account this window has no row for (a provider it hasn't listed) still explains a number that didn't move,
 // so it is counted rather than dropped for want of a name.
 it(`counts a held reading it cannot name`, () => {

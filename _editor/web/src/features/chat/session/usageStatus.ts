@@ -301,19 +301,28 @@ export interface PlanLimitRow {
     readonly readable: boolean;
     // Credential can no longer be refreshed; unrelated to headroom, decides whether it can serve a turn.
     readonly needsReauth: boolean;
+    // Provider's own sentence when the account's organisation took its seat away; its pools may still read, but no
+    // turn can run on it.
+    readonly seatRefusal: string | undefined;
     // Pickable by name (native) or balanced automatically (routed); provider alone can't tell — Grok is both.
     readonly routed: boolean;
     // Translator routes around this credential now, regardless of its last reading; undefined means in rotation.
     readonly cooling: { readonly until?: number | undefined; readonly reason?: string | undefined } | undefined;
 }
 
+// The one blocked condition signing in again cannot fix: only the organisation's admin can hand a seat back.
+export const NO_SEAT = `no seat`;
+
 // What stops this credential serving any turn at all, in the words of what is missing; undefined when only its meters
 // stand in the way. Never a full pool (it reopens on its own) and never a timed bench (the translator lifts it):
 // only the states a person has to act on, which is why a fleet can read 100% while an account with an untouched
 // allowance sits in it unusable.
-export const blockedReason = (row: Pick<PlanLimitRow, `needsReauth` | `cooling`>): string | undefined => {
+export const blockedReason = (row: Pick<PlanLimitRow, `needsReauth` | `seatRefusal` | `cooling`>): string | undefined => {
     if (row.needsReauth) {
         return `sign-in expired`;
+    }
+    if (row.seatRefusal !== undefined) {
+        return NO_SEAT;
     }
     return row.cooling !== undefined && row.cooling.until === undefined ? (row.cooling.reason ?? `benched by the translator`) : undefined;
 };
@@ -326,6 +335,7 @@ interface PlanLimitSource {
     readonly identity: string | undefined;
     readonly attached: AccountUsage | undefined;
     readonly needsReauth: boolean;
+    readonly seatRefusal: string | undefined;
     readonly routed: boolean;
     readonly cooling: PlanLimitRow["cooling"];
 }
@@ -347,6 +357,7 @@ const planLimitRow = (provider: AgentProvider, source: PlanLimitSource): PlanLim
         stale: usage !== undefined && isStale(usage),
         readable: reportsPlanLimits(provider),
         needsReauth: source.needsReauth,
+        seatRefusal: source.seatRefusal,
         routed: source.routed,
         cooling: source.cooling,
     };
@@ -365,6 +376,7 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
                     identity: account.email === account.label ? undefined : account.email,
                     attached: account.usage,
                     needsReauth: account.needsReauth === true,
+                    seatRefusal: account.seatRefusal,
                     routed: false,
                     cooling: undefined,
                 }),
@@ -379,6 +391,7 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
                     identity: undefined,
                     attached: account.usage,
                     needsReauth: false,
+                    seatRefusal: undefined,
                     routed: true,
                     cooling: account.cooling,
                 }),
@@ -399,7 +412,7 @@ export type PlanLimitBand = (typeof PLAN_LIMIT_BANDS)[number];
 
 // `blocked` and `none` aren't fullness levels — one can serve nothing whatever its meters say, the other publishes
 // no meters at all — so both are counted beside the capacity bar rather than inside it.
-export const planLimitBand = (row: Pick<PlanLimitRow, `percent` | `readable` | `needsReauth` | `cooling`>): PlanLimitBand => {
+export const planLimitBand = (row: Pick<PlanLimitRow, `percent` | `readable` | `needsReauth` | `seatRefusal` | `cooling`>): PlanLimitBand => {
     if (blockedReason(row) !== undefined) {
         return `blocked`;
     }

@@ -194,7 +194,7 @@ const translatorRows = computed(() =>
               ...row,
               // The translator's own verdict on the credential, which no reading of its pools can contradict: this is
               // the tab a reader is sent to when one can serve nothing, so it has to say which row that was.
-              blocked: blockedReason({ needsReauth: false, cooling: row.account.cooling }),
+              blocked: blockedReason({ needsReauth: false, seatRefusal: undefined, cooling: row.account.cooling }),
           })),
 );
 
@@ -326,10 +326,10 @@ watch(() => route.query[`connect`], focusConnect);
                     v-for="{ account, headroom, exhausted } in visibleNativeAccounts"
                     :key="account.id"
                     :title="account.label"
-                    :state="account.needsReauth ? `reauth` : `connected`"
-                    :tone="account.needsReauth ? `warning` : `default`"
+                    :state="account.needsReauth || account.seatRefusal !== undefined ? `reauth` : `connected`"
+                    :tone="account.needsReauth || account.seatRefusal !== undefined ? `warning` : `default`"
                     :note="identityNote(account)"
-                    :description="account.needsReauth ? (account.detail ?? t(`sandbox.aiAccountSection.signedOutReconnectTo`)) : undefined"
+                    :description="account.needsReauth ? (account.detail ?? t(`sandbox.aiAccountSection.signedOutReconnectTo`)) : account.seatRefusal"
                     :activity="account.needsReauth || !usageLoaded ? undefined : usageLine(account.id)"
                     :rename="renameOf(account)"
                     :headroom="headroom"

@@ -113,11 +113,11 @@ test("Claude: an account its organization turned away says so without asking for
         seats,
     );
     expect(await claude.list(false)).toEqual([
-        { id: "a", label: "Work", connectedAt: 1, detail: refusal },
+        { id: "a", label: "Work", connectedAt: 1, seatRefusal: refusal },
         { id: "b", label: "Old", connectedAt: 2, needsReauth: true, detail: "Signed out" },
     ]);
-    // Rename replaces the whole row; the refusal detail must survive it too.
-    expect(await claude.rename("a", "Job")).toEqual({ id: "a", label: "Job", connectedAt: 1, detail: refusal });
+    // Rename replaces the whole row; the seat refusal must survive it too.
+    expect(await claude.rename("a", "Job")).toEqual({ id: "a", label: "Job", connectedAt: 1, seatRefusal: refusal });
     // Disconnect clears the seat entry; a reconnect mints a new account id, so a leftover entry is orphaned.
     await claude.disconnect("a");
     expect(seats.has("a")).toBe(false);
