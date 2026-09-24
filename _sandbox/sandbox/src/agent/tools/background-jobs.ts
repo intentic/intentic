@@ -8,6 +8,8 @@ import { z } from "zod";
 import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 import type { Holding } from "../../agents/actor/conversation-holdings.js";
 import { whenFileAppears } from "../../file-appears.js";
+import { publishRuntimeChange } from "../../seams/runtime-feed.js";
+import { endSession, jobRunnerPids } from "./job-processes.js";
 
 // Every `run_in_background` Bash call, which outlives the per-turn CLI in its own pane, held by its conversation's
 // actor, whose card lists it (`jobs-shown`).
@@ -77,6 +79,11 @@ const JobFileSchema = z.object({
     shellId: z.string().optional(),
     // Whether its completion was handed to a watch; a restored unadopted job is adopted at boot.
     adopted: z.boolean().optional(),
+    // Left running for the person instead (job-fates.ts); never adopted, restart or not.
+    handed: z.boolean().optional(),
+    ports: z.array(z.number().int()).optional(),
+    // The watch it was handed to, which a stop disarms before it ends the job.
+    watch: z.string().optional(),
 });
 
 export interface BackgroundJob {
@@ -96,14 +103,29 @@ export interface BackgroundJob {
 // The CLI queues a completion notice when the command exits; only a later model request reads it.
 type Notice = "none" | "queued" | "read";
 
+// What became of a job its turn left running, decided when a turn ends (job-fates.ts) and never undone: `awaited` is
+// handed to a watch whose wake reports its exit; `handed` was left running for the person; `stopped` is being ended.
+// Undefined while the turn that started it is still going.
+type JobFate = "awaited" | "handed" | "stopped";
+
+// Who ended a job that did not exit by itself.
+export type JobStopper = NonNullable<AgentJob["stoppedBy"]>;
+
 interface JobRecord {
     readonly job: BackgroundJob;
-    adopted: boolean;
+    fate: JobFate | undefined;
     shellId: string | undefined;
     toolUseId: string | undefined;
     notice: Notice;
     // Stops watching for the status file; the card moves the moment it lands.
     unwatch: (() => void) | undefined;
+    // The watch an `awaited` job was handed to.
+    watch: string | undefined;
+    // Where a `handed` job listens.
+    ports: readonly number[] | undefined;
+    stoppedBy: JobStopper | undefined;
+    // The last run whose ending judged it, so the two looks one ending takes (before the land, at the settle) judge once.
+    judged: string | undefined;
 }
 
 // A conversation's jobs, by job id, until nothing depends on one any more.
@@ -128,40 +150,72 @@ export const jobFinished = (job: BackgroundJob): boolean => existsSync(jobStatus
 // Either file is tmux-run's first act, the pane path writing `cmd` and the no-tmux fallback `out`.
 const jobStarted = (job: BackgroundJob): boolean => existsSync(join(job.dir, COMMAND_FILE)) || existsSync(jobOutputPath(job));
 
-// Ends a job whose command never ran the way tmux-run ends one that did, so the card, the watch and `wait` all see it end.
-const endNeverRan = (job: BackgroundJob): void => {
+// Longest a stopped job's runner gets to publish its own status, once its command has been signalled.
+const END_WAIT_MS = 2_000;
+
+// The status a SIGTERMed command leaves (128 + 15), for a stopped job whose runner could not write its own.
+const STOPPED_STATUS = "143";
+
+// Ends a job no runner will end, the way tmux-run ends one: `output` replaces what it printed, then the status lands by
+// the same atomic rename, so the card, the watch and `wait` all see it end.
+const endInPlace = (job: BackgroundJob, status: string, output?: string): void => {
     try {
-        writeFileSync(jobOutputPath(job), "--- intentic: this command never reached a terminal, so it never ran\n");
-        writeFileSync(`${jobStatusPath(job)}.part`, `${NEVER_RAN}\n`);
+        if (output !== undefined) {
+            writeFileSync(jobOutputPath(job), output);
+        }
+        writeFileSync(`${jobStatusPath(job)}.part`, `${status}\n`);
         renameSync(`${jobStatusPath(job)}.part`, jobStatusPath(job));
     } catch {
         // A dir that cannot be written is one the tmp sweep already took.
     }
 };
 
-const cardOf = (job: BackgroundJob): AgentJob => ({ id: job.id, label: job.label, session: job.session, startedAt: job.startedAt });
+// A job whose command never ran.
+const endNeverRan = (job: BackgroundJob): void => endInPlace(job, NEVER_RAN, "--- intentic: this command never reached a terminal, so it never ran\n");
+
+const cardOf = (record: JobRecord): AgentJob => {
+    const { job } = record;
+    return {
+        id: job.id,
+        label: job.label,
+        session: job.session,
+        startedAt: job.startedAt,
+        ...(record.fate === "awaited" && record.watch !== undefined ? { watch: record.watch } : {}),
+        ...(record.fate === "handed" ? { handed: true } : {}),
+        ...(record.ports === undefined ? {} : { ports: [...record.ports] }),
+        ...(record.stoppedBy === undefined ? {} : { stoppedBy: record.stoppedBy }),
+    };
+};
 
 // The status file's own mtime is the exit, however late it is noticed; its body is the exit code.
-const endOf = (job: BackgroundJob): AgentJob => {
+const endOf = (record: JobRecord): AgentJob => {
+    const { job } = record;
+    // What it was waiting on, or left running for, is over once it ends; who stopped it is what stays worth saying.
+    const { watch: _watch, handed: _handed, ...card } = cardOf(record);
     try {
         const code = Number(readFileSync(jobStatusPath(job), "utf8").trim());
         // Clamped to the start: a filesystem clock coarser than Date.now() can date a quick exit before it began.
         const endedAt = Math.max(job.startedAt, Math.round(statSync(jobStatusPath(job)).mtimeMs));
-        return { ...cardOf(job), endedAt, ...(Number.isInteger(code) ? { exitCode: code } : {}) };
+        return { ...card, endedAt, ...(Number.isInteger(code) ? { exitCode: code } : {}) };
     } catch {
-        return { ...cardOf(job), endedAt: Date.now() };
+        return { ...card, endedAt: Date.now() };
     }
 };
 
 const ended = (actors: Actors, job: BackgroundJob): boolean => actors.holdings(ENDINGS).has(job.id);
 
 // Once per job; answers whether this call was the one that wrote it down.
-const noteEnded = (actors: Actors, job: BackgroundJob): boolean => {
+const noteEnded = (actors: Actors, record: JobRecord): boolean => {
+    const { job } = record;
     if (ended(actors, job)) {
         return false;
     }
     const endings = actors.holdings(ENDINGS);
-    endings.hold(job.conversationId, job.id, endOf(job));
+    endings.hold(job.conversationId, job.id, endOf(record));
+    // A server left for the person is on the ports list by its job's name (ports.routes.ts), which this takes off.
+    if (record.fate === "handed" || record.ports !== undefined) {
+        publishRuntimeChange("ports");
+    }
     for (const stale of endings.of(job.conversationId).slice(0, -ENDINGS_KEPT)) {
         endings.drop(stale.id);
     }
@@ -173,7 +227,7 @@ const publish = (actors: Actors, conversationId: string): void => {
         .holdings(JOBS)
         .of(conversationId)
         .filter((record) => !ended(actors, record.job))
-        .map((record) => cardOf(record.job));
+        .map(cardOf);
     actors.send(conversationId, { kind: "jobs-shown", jobs: [...running, ...actors.holdings(ENDINGS).of(conversationId)] });
 };
 
@@ -181,7 +235,7 @@ const sweepEnds = (actors: Actors): void => {
     const jobs = actors.holdings(JOBS).entries();
     const moved = new Set<string>();
     for (const [, record] of jobs) {
-        if (!ended(actors, record.job) && jobFinished(record.job) && noteEnded(actors, record.job)) {
+        if (!ended(actors, record.job) && jobFinished(record.job) && noteEnded(actors, record)) {
             record.unwatch?.();
             record.unwatch = undefined;
             moved.add(record.job.conversationId);
@@ -223,7 +277,7 @@ const forgetJob = (actors: Actors, record: JobRecord): void => {
     record.unwatch?.();
     record.unwatch = undefined;
     if (jobFinished(record.job)) {
-        noteEnded(actors, record.job);
+        noteEnded(actors, record);
     }
     publish(actors, record.job.conversationId);
 };
@@ -239,7 +293,10 @@ const persist = (record: JobRecord): void => {
                 ...job,
                 turn: profile,
                 ...(record.shellId === undefined ? {} : { shellId: record.shellId }),
-                ...(record.adopted ? { adopted: true } : {}),
+                ...(record.fate === "awaited" ? { adopted: true } : {}),
+                ...(record.fate === "handed" ? { handed: true } : {}),
+                ...(record.ports === undefined ? {} : { ports: [...record.ports] }),
+                ...(record.watch === undefined ? {} : { watch: record.watch }),
             }),
             { mode: 0o600 },
         );
@@ -272,7 +329,7 @@ export const openBackgroundJob = (
         startedAt: Date.now(),
         profile: seed.profile,
     };
-    const record: JobRecord = { job, adopted: false, shellId: undefined, toolUseId: spec.toolUseId, notice: "none", unwatch: undefined };
+    const record: JobRecord = { ...UNJUDGED, job, shellId: undefined, toolUseId: spec.toolUseId };
     const actors = seed.conversations;
     actors.holdings(JOBS).hold(job.conversationId, id, record);
     persist(record);
@@ -281,6 +338,17 @@ export const openBackgroundJob = (
     return job;
 };
 
+// A record as its job starts: nothing decided about it, nothing it waits on, nobody told of its end.
+const UNJUDGED = {
+    fate: undefined,
+    notice: "none",
+    unwatch: undefined,
+    watch: undefined,
+    ports: undefined,
+    stoppedBy: undefined,
+    judged: undefined,
+} as const satisfies Omit<JobRecord, "job" | "shellId" | "toolUseId">;
+
 // Undefined for anything that is not a job file; never throws, so a bad entry cannot fail a boot.
 const recordOf = (dir: string): JobRecord | undefined => {
     try {
@@ -288,14 +356,15 @@ const recordOf = (dir: string): JobRecord | undefined => {
         if (!parsed.success) {
             return undefined;
         }
-        const { shellId, adopted, turn, ...rest } = parsed.data;
+        const { shellId, adopted, handed, ports, watch, turn, ...rest } = parsed.data;
         return {
+            ...UNJUDGED,
             job: { ...rest, dir, profile: profileOf(turn) },
-            adopted: adopted === true,
+            fate: handed === true ? "handed" : adopted === true ? "awaited" : undefined,
             shellId,
             toolUseId: undefined,
-            notice: "none",
-            unwatch: undefined,
+            watch,
+            ports,
         };
     } catch {
         return undefined;
@@ -363,7 +432,10 @@ export interface SettledJobs {
     readonly unseen: readonly BackgroundJob[];
 }
 
-/** A settled turn's jobs, each handed out once; a job whose completion the model read retires here. */
+/**
+ * A settled turn's jobs, each handed out once; a job whose completion the model read retires here. Only a job its
+ * turn's ending left undecided is handed out: one left running for the person, or being stopped, wakes nothing.
+ */
 export const settledBackgroundJobs = (actors: Actors, conversationId: string): SettledJobs => {
     const running: BackgroundJob[] = [];
     const unseen: BackgroundJob[] = [];
@@ -374,15 +446,15 @@ export const settledBackgroundJobs = (actors: Actors, conversationId: string): S
         }
         if (jobFinished(record.job)) {
             forgetJob(actors, record);
-            if (record.notice !== "read" && !record.adopted) {
+            if (record.notice !== "read" && record.fate === undefined) {
                 unseen.push(record.job);
             }
             continue;
         }
-        if (record.adopted) {
+        if (record.fate !== undefined) {
             continue;
         }
-        record.adopted = true;
+        record.fate = "awaited";
         persist(record);
         running.push(record.job);
     }
@@ -391,14 +463,15 @@ export const settledBackgroundJobs = (actors: Actors, conversationId: string): S
 
 /**
  * Whether something already armed runs the conversation again by itself: a watch, or a job `settledBackgroundJobs`
- * would still hand to one. A job whose watch was stopped keeps running but wakes nothing.
+ * would still hand to one. A job whose watch was stopped keeps running but wakes nothing, and so does one left running
+ * for the person or being stopped.
  */
 export const wakesItself = (actors: Pick<ConversationActors, "holdings" | "state">, conversationId: string): boolean =>
     (actors.state(conversationId)?.watches.length ?? 0) > 0 ||
     actors
         .holdings(JOBS)
         .of(conversationId)
-        .some((record) => !record.adopted && (!jobFinished(record.job) || record.notice !== "read"));
+        .some((record) => record.fate === undefined && (!jobFinished(record.job) || record.notice !== "read"));
 
 /** tmux sessions holding a still-running job, for the reaper to spare; prunes finished and expired records. */
 export const backgroundJobSessions = (actors: Actors, now: number = Date.now()): ReadonlySet<string> => {
@@ -411,6 +484,131 @@ export const backgroundJobSessions = (actors: Actors, now: number = Date.now()):
         live.add(record.job.session);
     }
     return live;
+};
+
+/**
+ * Records the watch an awaited job was handed to, so a stop can disarm it before the exit it waits on fires it. False
+ * when the job is no longer awaited (stopped, or gone) by the time its watch armed, which the caller then disarms.
+ */
+export const noteJobWatch = (actors: Actors, job: BackgroundJob, watchId: string): boolean => {
+    const record = actors.holdings(JOBS).get(job.id);
+    if (record?.fate !== "awaited") {
+        return false;
+    }
+    record.watch = watchId;
+    persist(record);
+    publish(actors, job.conversationId);
+    return true;
+};
+
+/** A job the ending of one turn still has to decide about: running, and neither handed over nor being stopped. */
+export interface JudgedJob {
+    readonly job: BackgroundJob;
+    // The call that started it, so its own command line is never read as the agent using what it started.
+    readonly toolUseId: string | undefined;
+}
+
+/** The conversation's jobs one run's ending has not judged yet; claims them for that run, so each is judged once. */
+export const jobsToJudge = (actors: Holders, conversationId: string, runId: string): readonly JudgedJob[] => {
+    const judged: JudgedJob[] = [];
+    for (const record of actors.holdings(JOBS).of(conversationId)) {
+        if (record.judged === runId || jobFinished(record.job) || (record.fate !== undefined && record.fate !== "awaited")) {
+            continue;
+        }
+        record.judged = runId;
+        judged.push({ job: record.job, toolUseId: record.toolUseId });
+    }
+    return judged;
+};
+
+/** Where a running job's pane leads a session, for the dirs that have one; the pid is the session's id. */
+export const jobPanes = (jobs: readonly BackgroundJob[]): Promise<Map<string, number>> => jobRunnerPids(jobs.map((job) => job.dir));
+
+/**
+ * Leaves a running job to the person: it outlives the turn, wakes nothing and holds no land. Answers the watch it was
+ * handed to, if an earlier ending handed it to one, for the caller to disarm.
+ */
+export const handJobOver = (actors: Actors, job: BackgroundJob, ports: readonly number[]): string | undefined => {
+    const record = actors.holdings(JOBS).get(job.id);
+    if (record === undefined || jobFinished(job)) {
+        return undefined;
+    }
+    const watch = record.watch;
+    record.fate = "handed";
+    record.ports = ports;
+    record.watch = undefined;
+    // Nobody is owed a report of its exit now: the person holds it, and stopping it is theirs.
+    record.notice = "read";
+    persist(record);
+    publish(actors, job.conversationId);
+    // Preview offers it by its job's name from here on.
+    publishRuntimeChange("ports");
+    return watch;
+};
+
+/** Every port the conversation's running jobs were left listening on for the person. */
+export const handedPorts = (actors: Holders, conversationId: string): ReadonlySet<number> =>
+    new Set(
+        actors
+            .holdings(JOBS)
+            .of(conversationId)
+            .filter((record) => record.fate === "handed" && !jobFinished(record.job))
+            .flatMap((record) => record.ports ?? []),
+    );
+
+/** The running job left for the person on this port, whichever conversation left it, as the port's row names it. */
+export const portJobOf = (actors: Holders, port: number): { readonly conversationId: string; readonly jobId: string; readonly label: string } | undefined => {
+    const job = actors
+        .holdings(JOBS)
+        .entries()
+        .map(([, record]) => record)
+        .find((record) => record.fate === "handed" && record.ports?.includes(port) === true && !jobFinished(record.job))?.job;
+    return job === undefined ? undefined : { conversationId: job.conversationId, jobId: job.id, label: job.label };
+};
+
+// The runner publishes the status once its command is gone; this gives it the moment that takes.
+const untilFinished = async (job: BackgroundJob, ms: number): Promise<void> => {
+    const deadline = Date.now() + ms;
+    while (!jobFinished(job) && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50).unref());
+    }
+};
+
+/**
+ * Ends a job, whoever asks: its watch is disarmed first through `disarm` (the watch engine is not importable from
+ * here, and it must not reject), so its exit wakes nothing, and the card says who stopped it the moment the stop is asked. Resolves once the
+ * job has ended, or once nothing is left that could end it; answers false for a job that had already ended.
+ */
+export const stopBackgroundJob = async (
+    actors: Actors,
+    job: BackgroundJob,
+    by: JobStopper,
+    disarm?: (conversationId: string, watchId: string) => Promise<unknown>,
+): Promise<boolean> => {
+    const record = actors.holdings(JOBS).get(job.id);
+    if (record === undefined || jobFinished(job)) {
+        return false;
+    }
+    const watch = record.watch;
+    record.fate = "stopped";
+    record.stoppedBy = by;
+    record.watch = undefined;
+    record.notice = "read";
+    publish(actors, job.conversationId);
+    if (watch !== undefined && disarm !== undefined) {
+        await disarm(job.conversationId, watch);
+    }
+    const leader = (await jobRunnerPids([job.dir])).get(job.dir);
+    if (leader !== undefined && (await endSession(leader))) {
+        await untilFinished(job, END_WAIT_MS);
+    }
+    // No pane left to run it (a tmux-less run, a pane already closed): its end is written down on its runner's behalf,
+    // with the code a SIGTERM leaves.
+    if (!jobFinished(job)) {
+        endInPlace(job, STOPPED_STATUS);
+    }
+    sweepEnds(actors);
+    return true;
 };
 
 /** The conversation's jobs still running, for `wait` on "any". */

@@ -14,6 +14,15 @@ describe(`jobPhase`, () => {
         expect(jobPhase(job({ endedAt: 5_000 }))).toEqual({ kind: `ended`, took: [1_000, 5_000] });
     });
 
+    it(`carries what the turn's ending decided about a running job, and a stop under way`, () => {
+        expect(jobPhase(job({ handed: true, ports: [5173] }))).toEqual({ kind: `running`, startedAt: 1_000, session: `agent-1`, handed: true, ports: [5173] });
+        expect(jobPhase(job({ stoppedBy: `person` }))).toEqual({ kind: `running`, startedAt: 1_000, session: `agent-1`, stopping: `person` });
+    });
+
+    it(`reads a stopped job as stopped by whoever did it, never as a failure of its own`, () => {
+        expect(jobPhase(job({ endedAt: 5_000, exitCode: 143, stoppedBy: `turn` }))).toEqual({ kind: `stopped`, by: `turn`, took: [1_000, 5_000] });
+    });
+
     it(`claims nothing about a job the card does not carry`, () => {
         expect(jobPhase(undefined)).toEqual({ kind: `untracked` });
     });

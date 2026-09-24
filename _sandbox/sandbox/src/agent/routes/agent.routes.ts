@@ -66,6 +66,7 @@ import { performSettlement } from "../run/settle/settle-turn.js";
 import { settleTurn } from "../run/settle/turn-settlement.js";
 import { conversationIdentity, mainTreePlacement, type Placement, placedTurn, refusedBegin, runnerPlacement } from "../run/conversation/turn-placement.js";
 import { type WorktreeRun, worktreePlacement } from "../run/conversation/worktree-placement.js";
+import { resolveTurnJobs } from "../tools/job-fates.js";
 
 // Whether this turn enters the namespace, asked in one place so three callers can't disagree. A property of the
 // runtime: only the Claude Code loop enters it.
@@ -222,6 +223,8 @@ async function* runConversationTurn(
         services.conversations,
         conversationId,
         placementOf(services, input, signal, steering, { id: conversationId, snapshot, runner, isolated }),
+        // Never throws: a job it cannot judge stays awaited.
+        () => resolveTurnJobs({ conversations: services.conversations, scanPorts: services.scanPorts, logger: services.logger }, conversationId),
     );
 }
 

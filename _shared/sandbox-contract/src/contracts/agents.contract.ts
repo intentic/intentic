@@ -13,6 +13,7 @@ import {
     AgentPlaceSchema,
     AgentReactSchema,
     AgentRenameSchema,
+    AgentStopJobSchema,
     AgentStopWatchingSchema,
     AgentsArchivedSchema,
     AgentSearchQuerySchema,
@@ -184,6 +185,16 @@ export const agentsContract = {
                 "Disarms this conversation's outside-condition watches, so they will not wake it. Named without a watch id it disarms all of them, because that is what the press means when it is made about a card; a press made about one watch's own row names that watch and leaves the rest armed. Nothing else about the conversation changes.",
         })
         .input(AgentStopWatchingSchema)
+        .output(AgentSummarySchema),
+    stopJob: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/stop-job",
+            summary: "Stop one of a conversation's background jobs",
+            description:
+                "Ends a command this conversation left running: the server it handed over, or the build it is waiting on. The watch that would have woken the conversation on its exit is disarmed first, so stopping it wakes nothing. Stopping a job that already ended is not an error.",
+        })
+        .input(AgentStopJobSchema)
         .output(AgentSummarySchema),
     seenAll: procedure
         .route({

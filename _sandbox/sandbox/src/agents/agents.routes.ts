@@ -20,6 +20,8 @@ import { withBaseText } from "../agent/prompt/prompt-disclosure.js";
 import type { HeldTurn } from "../agent/run/turn/turn-resume.js";
 import { opt } from "../opt.js";
 import { cancelWatcher, cancelWatchersFor } from "../agent/verification/watchers.js";
+import { backgroundJobOf } from "../agent/tools/background-jobs.js";
+import { stopJob } from "../agent/tools/job-fates.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { deliverToListenerChannel } from "../extensions/listener-deliver.js";
@@ -464,6 +466,21 @@ export const createAgentsRoutes = (services: Services) => {
             // is disarmed alone; an unknown name is already-gone, not an error, since it may have fired mid-press.
             await (input.watchId === undefined ? cancelWatchersFor(entry.id) : cancelWatcher(entry.id, input.watchId));
             // Reads back through `get`, not the live roster: an archived conversation can still hold armed watches.
+            const summary = services.agents.get(entry.id);
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+            }
+            return summary;
+        }),
+        // A person's way to end what a conversation left running: the server it handed over, the build it waits on.
+        // Legal in every state, mid-turn included; the job's watch is disarmed before it ends, so nothing wakes.
+        stopJob: i.stopJob.handler(async ({ input }) => {
+            const entry = entryOf(input.id);
+            const job = backgroundJobOf(services.conversations, entry.id, input.jobId);
+            // An unknown id is a job already gone (it exited, or a restart forgot it), not an error: the press is satisfied.
+            if (job !== undefined) {
+                await stopJob({ conversations: services.conversations, logger: services.logger }, job, "person");
+            }
             const summary = services.agents.get(entry.id);
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });

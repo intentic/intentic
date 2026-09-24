@@ -7,6 +7,7 @@ test("a full stat line yields the comm, both CPU counters, the start time and th
         comm: "node (vite)",
         ppid: 4200,
         pgrp: 4242,
+        session: 4242,
         cpuTicks: 1555,
         childCpuTicks: 49,
         startTimeTicks: 885_210,

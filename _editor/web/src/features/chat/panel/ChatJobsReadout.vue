@@ -5,7 +5,7 @@ import { computed, ref } from "vue";
 import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { openWorkTerminal } from "../../terminal/useWorkTerminals";
-import { runningJobs } from "../transcript/jobPhase";
+import { portsLine, runningJobs } from "../transcript/jobPhase";
 import { usePaneView } from "./useChat-view";
 import { useT } from "@intentic/ui/i18n";
 
@@ -51,6 +51,7 @@ const watchJob = (session: string): void => {
             <div v-for="job in jobs" :key="job.id" class="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-overlay">
                 <Icon name="spinner" spin class="shrink-0 text-2xs text-link" />
                 <span class="min-w-0 flex-1 truncate text-xs text-content">{{ job.label }}</span>
+                <span v-if="job.handed === true && job.ports !== undefined" class="shrink-0 font-mono text-2xs text-subtle">{{ portsLine(job.ports) }}</span>
                 <span class="shrink-0 text-2xs tabular-nums text-subtle">{{ formatElapsed(job.startedAt, now) }}</span>
                 <button
                     type="button"

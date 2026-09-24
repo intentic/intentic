@@ -45,6 +45,16 @@ export const PortSummarySchema = z.object({
         .describe(
             'The terminal it came from, to watch it in or stop it from. Absent when nothing in its ancestry is one, which is the honest "you cannot reach this from here".',
         ),
+    // A job an agent's turn left running for the person (AgentSummary.jobs[].handed); ports listed anywhere else stay
+    // unclaimed by any conversation.
+    job: z
+        .object({
+            conversationId: z.string().describe("The conversation whose turn left it running."),
+            jobId: z.string().describe("The job, as that conversation's card names it; stopping it stops this port."),
+            label: z.string().describe("What the job is, in the agent's own words when it gave any."),
+        })
+        .optional()
+        .describe("The background job an agent left running for you on this port, when that is what answers here."),
     forwarded: z.boolean().describe("Whether it is currently reachable from outside."),
     // `https://port-<slot>-<sandboxId>.<zone>`.
     previewUrl: z.string().optional().describe("Where to open it. Present only while forwarded, and only on a sandbox that has an outside address."),

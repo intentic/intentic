@@ -2,6 +2,7 @@ import { createActivityRoutes } from "./activity/activity.routes.js";
 import { createAgentRoutes } from "./agent/routes/agent.routes.js";
 import { createProvidersRoutes } from "./agent/routes/providers.routes.js";
 import { createAgentsRoutes } from "./agents/agents.routes.js";
+import { portJobOf } from "./agent/tools/background-jobs.js";
 import { createTranslatorRoutes } from "./agent/routes/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
 import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
@@ -76,7 +77,8 @@ export const createRouter = (services: Services) => ({
     loops: createLoopsRoutes(services),
     workflows: createWorkflowsRoutes(services),
     panels: createPanelsRoutes(services),
-    ports: createPortsRoutes(services),
+    // A server an agent left running for the person is named on its port's row by its job.
+    ports: createPortsRoutes({ ...services, jobOn: (port) => portJobOf(services.conversations, port) }),
     public: createPublicRoutes(services),
     providers: createProvidersRoutes(services),
     push: createPushRoutes(services),

@@ -10,7 +10,12 @@ import { useSandboxQuery } from "../client/useSandboxQuery";
 
 const QUERY_KEY = PORTS.of();
 
-export function usePorts(): { forwarded: ComputedRef<PortSummary[]> } {
+// `offered` adds the servers an agent's turn left running for the person (PortSummary.job) to the forwarded ones: the
+// ports Preview has something to say about.
+export function usePorts(): { forwarded: ComputedRef<PortSummary[]>; offered: ComputedRef<PortSummary[]> } {
     const { query } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: () => sandboxRpc.ports.list() });
-    return { forwarded: computed(() => (query.data.value?.ports ?? []).filter((port) => port.forwarded)) };
+    return {
+        forwarded: computed(() => (query.data.value?.ports ?? []).filter((port) => port.forwarded)),
+        offered: computed(() => (query.data.value?.ports ?? []).filter((port) => port.forwarded || port.job !== undefined)),
+    };
 }

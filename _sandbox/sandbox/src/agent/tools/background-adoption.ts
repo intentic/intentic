@@ -1,8 +1,8 @@
 import { classifyCommand } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { Logger } from "pino";
-import { armWatcher, type WatcherSpec } from "../verification/watchers.js";
-import { type BackgroundJob, JOB_MAX_MS, jobOutputPath, jobStatusPath, OUTPUT_TAIL_BYTES, settledBackgroundJobs } from "./background-jobs.js";
+import { armWatcher, cancelWatcher, type WatcherSpec } from "../verification/watchers.js";
+import { type BackgroundJob, JOB_MAX_MS, jobOutputPath, jobStatusPath, noteJobWatch, OUTPUT_TAIL_BYTES, settledBackgroundJobs } from "./background-jobs.js";
 import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 
 // Kept apart from background-jobs.ts, whose importing the watch engine would close a cycle through agent.ts.
@@ -54,6 +54,11 @@ export const adoptBackgroundJobs = async (
             const outcome = await armWatcher(specOf(job), { reportIfMet: true });
             if (outcome.kind === "armed" || outcome.kind === "reported") {
                 handed += 1;
+                // Kept on the job, so stopping it disarms this first and its exit wakes nobody; a job stopped while this
+                // armed has nobody left to wake.
+                if (outcome.kind === "armed" && !noteJobWatch(conversations, job, outcome.id)) {
+                    await cancelWatcher(conversationId, outcome.id);
+                }
                 logger.info({ conversationId, job: job.id, watch: outcome.id, session: job.session, outcome: outcome.kind }, "background job: handed to a watch, its completion will wake the conversation");
                 continue;
             }

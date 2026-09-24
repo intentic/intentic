@@ -1,6 +1,6 @@
 import { readdir, readFile, readlink } from "node:fs/promises";
 import { join } from "node:path";
-import { parentPid } from "../platform/resources/proc-stat.js";
+import { parentPid, parseProcStat } from "../platform/resources/proc-stat.js";
 
 // Discovers every listening TCP socket via procfs, no lsof/ss dependency. The only way to see ports bound outside the
 // managed-process registry: a terminal's dev servers, an agent's ad-hoc process, a docker-proxy.
@@ -19,6 +19,8 @@ export interface ListeningPort {
     readonly cwd?: string;
     // The tmux session it runs in, watchable/killable by the user; absent when nothing in its ancestry is a pane.
     readonly session?: string;
+    // The pid leading the pane it runs under, which is how a background job (whose pane it leads) claims it.
+    readonly pane?: number;
 }
 
 // Walks a socket's owner up its parents to the first tmux pane root, since the launched process (pnpm dev -> turbo ->
@@ -26,7 +28,8 @@ export interface ListeningPort {
 const ANCESTRY_LIMIT = 64;
 
 // Annotates each listener with the tmux session it descends from; `panes` maps a pane's root pid to its session. An
-// empty map annotates nothing.
+// empty map annotates nothing. A listener whose launcher exited has been handed to init, which ends the walk; the
+// kernel session it inherited from the pane's root still names that pane, so it is asked next.
 export const withOwningSessions = async (
     listeners: readonly ListeningPort[],
     panes: ReadonlyMap<number, string>,
@@ -36,26 +39,33 @@ export const withOwningSessions = async (
         return [...listeners];
     }
     // One read per pid for the whole scan; sibling dev servers under one pnpm dev share ancestors.
-    const parents = new Map<number, number | undefined>();
-    const parentOf = async (pid: number): Promise<number | undefined> => {
-        if (!parents.has(pid)) {
-            parents.set(pid, parentPid(await readFile(join(procRoot, String(pid), "stat"), "utf8").catch(() => "")));
+    const stats = new Map<number, string>();
+    const statOf = async (pid: number): Promise<string> => {
+        const known = stats.get(pid);
+        if (known !== undefined) {
+            return known;
         }
-        return parents.get(pid);
+        const stat = await readFile(join(procRoot, String(pid), "stat"), "utf8").catch(() => "");
+        stats.set(pid, stat);
+        return stat;
+    };
+    const owned = (listener: ListeningPort, pane: number): ListeningPort => {
+        const session = panes.get(pane);
+        return session === undefined ? listener : { ...listener, session, pane };
     };
     return Promise.all(
         listeners.map(async (listener) => {
             const visited = new Set<number>();
             let pid = listener.pid;
             for (let hop = 0; pid !== undefined && hop < ANCESTRY_LIMIT && !visited.has(pid); hop++) {
-                const session = panes.get(pid);
-                if (session !== undefined) {
-                    return { ...listener, session };
+                if (panes.has(pid)) {
+                    return owned(listener, pid);
                 }
                 visited.add(pid);
-                pid = await parentOf(pid);
+                pid = parentPid(await statOf(pid));
             }
-            return listener;
+            const leader = listener.pid === undefined ? undefined : parseProcStat(await statOf(listener.pid))?.session;
+            return leader === undefined ? listener : owned(listener, leader);
         }),
     );
 };

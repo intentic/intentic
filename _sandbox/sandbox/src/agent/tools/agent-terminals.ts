@@ -12,7 +12,7 @@ import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../../terminal/ter
 import { type HeavyCommands, matchHeavyCommand } from "../../platform/resources/heavy-commands.js";
 import { choomPrefix, OOM_SCORE } from "../../platform/resources/oom-priority.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { type BackgroundJob, type BackgroundJobSeed, jobCommandLine, openBackgroundJob } from "./background-jobs.js";
+import { type BackgroundJob, backgroundJobOf, type BackgroundJobSeed, jobCommandLine, openBackgroundJob, stopBackgroundJob } from "./background-jobs.js";
 import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
 import { guardSelfMatch, selfKillRefusal } from "./self-kill-guard.js";
 
@@ -129,6 +129,33 @@ const startJob = (
     return job;
 };
 
+// The CLI's own ways to stop a background task by the id its Bash call returned, across its renames.
+const TASK_STOP_TOOLS = "TaskStop|KillShell|KillBash";
+
+// The stop the CLI performs cannot reach a job: it signals tmux-run, which under `-b` must survive that very signal (it
+// is also how the turn's CLI exits), so the pane ran on while the agent was told "Successfully stopped task". After a
+// stop that names one of this conversation's jobs, the job is ended for real.
+const taskStopHooks = (jobs: BackgroundJobSeed): HookCallbackMatcher[] => [
+    {
+        matcher: TASK_STOP_TOOLS,
+        hooks: [
+            async (input) => {
+                if (input.hook_event_name !== "PostToolUse") {
+                    return {};
+                }
+                const tool = input.tool_input as { task_id?: unknown; shell_id?: unknown };
+                const id = typeof tool.task_id === "string" ? tool.task_id : typeof tool.shell_id === "string" ? tool.shell_id : undefined;
+                const job = id === undefined ? undefined : backgroundJobOf(jobs.conversations, jobs.conversationId, id);
+                if (job !== undefined) {
+                    // A job this turn's CLI can name was started in this turn, so no watch holds it yet to disarm.
+                    await stopBackgroundJob(jobs.conversations, job, "agent");
+                }
+                return {};
+            },
+        ],
+    },
+];
+
 export const bashTmuxHooks = (
     envKeys: readonly string[] = [],
     // An isolated turn's Bash must land in the same tree as its Edit/Write:
@@ -147,6 +174,7 @@ export const bashTmuxHooks = (
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const envFlags = envKeyFlags(envKeys);
     return {
+        ...(jobs === undefined ? {} : { PostToolUse: taskStopHooks(jobs) }),
         PreToolUse: [
             {
                 matcher: "Bash",

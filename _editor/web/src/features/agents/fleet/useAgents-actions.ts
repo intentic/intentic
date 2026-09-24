@@ -75,6 +75,20 @@ export const stopWatching = (id: string, watchId?: string): Promise<void> => {
     return optimistic(id, { watches: kept.length > 0 ? kept : undefined }, () => sandboxRpc.agents.stopWatching({ id, watchId }));
 };
 
+// Ends a command this conversation left running (a server handed over, a build it waits on). Drawn from the press as
+// stopping, with the watch its exit would have woken the chat through gone, since the daemon disarms that first.
+export const stopJob = (id: string, jobId: string): Promise<void> => {
+    const agent = agentById(id);
+    const job = agent?.jobs?.find((entry) => entry.id === jobId);
+    const jobs = agent?.jobs?.map((entry) => (entry.id === jobId ? { ...entry, stoppedBy: `person` as const, watch: undefined, handed: undefined } : entry));
+    const watches = agent?.watches?.filter((watch) => watch.id !== job?.watch);
+    return optimistic(
+        id,
+        { ...(jobs === undefined ? {} : { jobs }), ...(agent?.watches === undefined ? {} : { watches: watches !== undefined && watches.length > 0 ? watches : undefined }) },
+        () => sandboxRpc.agents.stopJob({ id, jobId }),
+    );
+};
+
 // Opens or focuses an agent's tab and marks it seen; takes just the identity fields so registry cards and client-only
 // draft cards both route through it.
 export const agentSeed = (

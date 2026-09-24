@@ -3,6 +3,7 @@ import { computed, type Ref } from "vue";
 import { usePanels } from "../extensions/usePanels";
 import { APPS, PORTS } from "../../lib/queryKeys";
 import { sandboxRpc } from "../sandbox/client/sandboxRpc";
+import { stopJob } from "../agents/fleet/useAgents-actions";
 import { usePorts } from "../sandbox/environment/usePorts";
 import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
 import { usePublicOutbox } from "../workspace/push/usePublicOutbox";
@@ -16,8 +17,9 @@ export function usePreviewTargets(active: Ref<boolean>) {
     const queryClient = useQueryClient();
     const { panels, settled: panelsSettled, start: startRepo, stop: stopRepo, invalidate: invalidatePanels } = usePanels();
     const { files: publicFiles, settled: publicSettled } = usePublicOutbox();
-    // The forwarded ports the shell already reads for its exposure indicator, this adds no request.
-    const { forwarded } = usePorts();
+    // The ports the shell already reads for its exposure indicator (forwarded, and servers agents left for the person);
+    // this adds no request.
+    const { offered } = usePorts();
 
     const monorepos = computed(() => panels.value.filter((panel) => panel.monorepo).map((panel) => panel.repo));
     const { query: appsQuery } = useSandboxQuery({
@@ -39,14 +41,20 @@ export function usePreviewTargets(active: Ref<boolean>) {
         mergeTargets(
             repoTargets(panels.value),
             (appsQuery.data.value ?? []).flatMap(({ repo, apps }) => appTargets(repo, apps)),
-            portTargets(forwarded.value),
+            portTargets(offered.value),
             publicTarget(publicFiles.value),
             addressTarget(previewAddress.value),
         ),
     );
 
-    // One verb for both process kinds; the public page has no process and falls through to nothing.
+    // One verb for every process kind; the public page has no process and falls through to nothing. A server an agent
+    // left running for the person is stopped through its conversation, the one place that knows it as a job.
     const act = async (target: PreviewTarget, verb: `start` | `stop`): Promise<void> => {
+        if (target.job !== undefined && verb === `stop`) {
+            await stopJob(target.job.conversationId, target.job.jobId);
+            await queryClient.invalidateQueries({ queryKey: PORTS.every });
+            return;
+        }
         if (target.kind === `repo` && target.repo !== undefined) {
             await (verb === `start` ? startRepo(target.repo) : stopRepo(target.repo));
             return;

@@ -31,7 +31,14 @@ const isAbort = (error: unknown): boolean => typeof error === "object" && error 
 
 // The conversation's lifecycle around one placed turn the caller has begun: every body frame sent to its actor, an
 // error frame or a thrown error marking it failed, a thrown one sent and rethrown, and the settle always sent.
-export async function* placedTurn(conversations: Pick<ConversationActors, "send">, conversationId: string, placement: Placement): AsyncGenerator<AgentEvent> {
+// `ended` runs between a body that ran to its end and the land, whatever the placement: what the turn's ending decides
+// about what it left running must be decided before the land asks whether anything still wakes the conversation.
+export async function* placedTurn(
+    conversations: Pick<ConversationActors, "send">,
+    conversationId: string,
+    placement: Placement,
+    ended?: () => Promise<void>,
+): AsyncGenerator<AgentEvent> {
     let failed = false;
     try {
         const body = yield* placement.open();
@@ -40,6 +47,7 @@ export async function* placedTurn(conversations: Pick<ConversationActors, "send"
             failed ||= event.kind === "error";
             yield event;
         }
+        await ended?.();
         yield* placement.land(failed);
     } catch (error) {
         if (!isAbort(error)) {

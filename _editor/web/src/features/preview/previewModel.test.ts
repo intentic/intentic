@@ -128,6 +128,13 @@ describe(`portTargets`, () => {
     it(`says what is answering there, by the name the daemon resolved for it`, () => {
         expect(portTargets([port({ title: `Vite dev server` })])[0]?.detail).toBe(`Vite dev server`);
     });
+
+    it(`lists a server an agent left running for the person before it is forwarded, by the job's own name`, () => {
+        const job = { conversationId: `cnv_1`, jobId: `job_web`, label: `Start the web dev server` };
+        const [target] = portTargets([port({ port: 5173, forwarded: false, previewUrl: undefined, title: `Vite dev server`, job })]);
+        // No address until the person forwards it, which publishes it; the panel offers that, and Stop ends the job.
+        expect(target).toMatchObject({ id: `port:5173`, url: undefined, detail: `Start the web dev server`, job: { conversationId: `cnv_1`, jobId: `job_web`, port: 5173 } });
+    });
 });
 
 describe(`addressTarget`, () => {

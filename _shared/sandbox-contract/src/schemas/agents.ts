@@ -484,6 +484,27 @@ export const AgentSummarySchema = z.object({
                 startedAt: z.number().describe("When it started, in milliseconds."),
                 endedAt: z.number().optional().describe("When the command exited, in milliseconds. Absent while it runs."),
                 exitCode: z.number().int().optional().describe("The code it exited with. Absent while it runs, or when its exit left none."),
+                // What the turn that left it running decided about it (agent/tools/job-fates.ts): one of these, or none
+                // while its turn is still going.
+                watch: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "The watch its exit wakes this conversation through. Present once the turn that left it running has ended and the conversation is waiting on it.",
+                    ),
+                handed: z
+                    .boolean()
+                    .optional()
+                    .describe(
+                        "Left running for the person: the turn's reply gave its address, so it outlives the turn, wakes nothing and is theirs to stop.",
+                    ),
+                ports: z.array(z.number().int()).optional().describe("The ports it was listening on when its turn ended."),
+                stoppedBy: z
+                    .enum(["turn", "person", "agent"])
+                    .optional()
+                    .describe(
+                        "Who stopped it: the sandbox, when the turn that used it ended without handing it over; a person; or the agent itself. Present from the moment the stop is asked. Absent for a job that exited by itself.",
+                    ),
             }),
         )
         .optional()
@@ -512,6 +533,10 @@ export const AgentIdSchema = z.object({ id: z.string().min(1).describe("Which co
 // watch's own transcript row names it, and leaves the conversation's other watches armed.
 export const AgentStopWatchingSchema = AgentIdSchema.extend({
     watchId: z.string().optional().describe("Which watch to disarm. Absent disarms every watch this conversation is parked on."),
+});
+
+export const AgentStopJobSchema = AgentIdSchema.extend({
+    jobId: z.string().min(1).describe("Which of its background jobs, by the id its card and transcript row carry."),
 });
 
 // Pages a transcript: a read returns its most recent turns and where they start (`from`); handing that back as `before`

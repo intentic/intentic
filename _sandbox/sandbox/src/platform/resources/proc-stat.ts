@@ -7,6 +7,8 @@ export interface ParsedProcStat {
     readonly comm: string;
     readonly ppid: number;
     readonly pgrp: number;
+    // The session it belongs to: a tmux pane's root process leads one, and whatever it starts keeps it, reparented or not.
+    readonly session?: number;
     // User plus system time, in clock ticks.
     readonly cpuTicks?: number;
     // The same for children already waited for: what a reaped command leaves in the parent that collected it.
@@ -29,6 +31,7 @@ export const parseProcStat = (stat: string): ParsedProcStat | undefined => {
         .split(/\s+/u);
     const ppid = Number(fields[1]);
     const pgrp = Number(fields[2]);
+    const session = Number(fields[3]);
     const cpuTicks = sumOf(Number(fields[11]), Number(fields[12]));
     const childCpuTicks = sumOf(Number(fields[13]), Number(fields[14]));
     const startTimeTicks = Number(fields[19]);
@@ -40,6 +43,7 @@ export const parseProcStat = (stat: string): ParsedProcStat | undefined => {
         comm: stat.slice(stat.indexOf("(") + 1, close),
         ppid,
         pgrp,
+        ...(nonnegativeInteger(session) ? { session } : {}),
         ...(cpuTicks === undefined ? {} : { cpuTicks }),
         ...(childCpuTicks === undefined ? {} : { childCpuTicks }),
         ...(nonnegativeInteger(startTimeTicks) ? { startTimeTicks } : {}),

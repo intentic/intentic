@@ -426,7 +426,7 @@ onUnmounted(stopStartingPoll);
                     <template #icon><Icon name="play" /></template>
                 </Button>
                 <Button
-                    v-else-if="target.startable"
+                    v-else-if="target.startable || target.job !== undefined"
                     :label="t(`ui.action.stop`)"
                     size="small"
                     severity="secondary"
@@ -595,6 +595,22 @@ onUnmounted(stopStartingPoll);
                 <p class="max-w-sm text-2xs text-subtle">
                     {{ t(`preview.previewPanel.previewingOneForwardsPort`) }}
                 </p>
+            </div>
+
+            <!-- A server an agent left running for the person, not forwarded yet: forwarding publishes it, so it waits for their press. -->
+            <div v-else-if="target.job !== undefined && !target.url" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                <Icon name="server" class="text-2xl text-subtle" />
+                <p class="text-sm text-muted">{{ t(`preview.previewPanel.leftRunningForYou`, { label: target.detail ?? target.label }) }}</p>
+                <div class="flex items-center gap-2">
+                    <Button
+                        :label="forwarding !== undefined ? t(`preview.previewPanel.opening`) : t(`shared.preview`)"
+                        size="small"
+                        :disabled="forwarding !== undefined"
+                        @click="previewServer(target.job.port)"
+                    />
+                    <Button :label="t(`ui.action.stop`)" size="small" severity="secondary" :disabled="busy" @click="act(stop)" />
+                </div>
+                <p class="max-w-sm text-2xs text-subtle">{{ t(`preview.previewPanel.previewingItForwardsPort`) }}</p>
             </div>
 
             <!-- STARTED, NOT YET SERVING: installing, compiling, or failing in its terminal, which is the one place that says which. -->

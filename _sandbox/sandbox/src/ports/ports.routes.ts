@@ -12,8 +12,17 @@ import type { OrpcContext } from "../app-env.js";
 
 // ExtensionHost is only for naming a supervised service by its extension (port 40085 becomes "the discord extension's
 // gateway", not `node dist/gateway.js`); narrowed rather than pulling in more of Services.
+// The job an agent's turn left serving a port for the person, as the port's row names it.
+export interface PortJob {
+    readonly conversationId: string;
+    readonly jobId: string;
+    readonly label: string;
+}
+
+// `jobOn` answers from the background-job registry (agent/tools/background-jobs.ts), handed in by the router rather than
+// imported, which would tie this subsystem to the agent's in a cycle.
 export type PortsRoutesDeps = Pick<Services, "config" | "portForwards" | "scanPorts" | "serviceProcesses" | "workspace"> &
-    ExtensionHost;
+    ExtensionHost & { readonly jobOn: (port: number) => PortJob | undefined };
 
 export const createPortsRoutes = (services: PortsRoutesDeps) => {
     const i = implement(portsContract).$context<OrpcContext>();
@@ -37,7 +46,10 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
                     .map((listener) => {
                         const slot = services.portForwards.slotOf(listener.port);
                         const url = slot !== undefined ? portUrl(slot, zone, sandboxId) : undefined;
-                        const summary = Object.assign({ forwarded: slot !== undefined }, listener, identifyPort(listener, attribution));
+                        // A server an agent's turn left running for the person, which Preview offers by its job's name.
+                        const handed = services.jobOn(listener.port);
+                        const job = handed === undefined ? {} : { job: handed };
+                        const summary = Object.assign({ forwarded: slot !== undefined }, listener, identifyPort(listener, attribution), job);
                         return url === undefined ? summary : Object.assign(summary, { previewUrl: url });
                     }),
             };

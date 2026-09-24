@@ -31,6 +31,7 @@ import { useComposerPopovers } from "./pane/composerPopovers";
 import { useComposerKeys, useRecallRing } from "./pane/composerKeys";
 import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
+import ChatLeftRunning from "./ChatLeftRunning.vue";
 import ChatQueue from "../composer/ChatQueue.vue";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatMentionPopover from "../composer/ChatMentionPopover.vue";
@@ -328,6 +329,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <ChatPaneNotices />
                         <!-- The turn stopped before finishing, and the way on (ChatContinueStrip). -->
                         <ChatContinueStrip :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
+                        <!-- The turn is over, but the chat is not: what it left running, and the watches it armed (ChatLeftRunning). -->
+                        <ChatLeftRunning />
                         <!-- What waits for the next turn: the conversation's queue, the same in every window. -->
                         <ChatQueue />
                         <!-- An armed edit, and the two ways out of it. -->

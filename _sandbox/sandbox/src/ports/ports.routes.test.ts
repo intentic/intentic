@@ -1,10 +1,12 @@
+import { rmSync } from "node:fs";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { portsContract, portUrl } from "@intentic/sandbox-contract";
 import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { workspacePaths } from "../workspace/workspace.js";
-import { testConfig } from "../testing.js";
+import { memoryFleet, testConfig } from "../testing.js";
 import { errorCode, routesClient } from "../harness/route-client.testing.js";
 import { fakeServiceProcesses } from "../harness/route-fakes.testing.js";
+import { handJobOver, openBackgroundJob, portJobOf } from "../agent/tools/background-jobs.js";
 import { createPortForwards } from "./port-forwards.js";
 import { createPortsRoutes, type PortsRoutesDeps } from "./ports.routes.js";
 
@@ -25,6 +27,8 @@ const portsDeps = (overrides: Partial<PortsRoutesDeps> = {}): PortsRoutesDeps =>
     files: { read: async () => undefined },
     capabilities: { list: async () => [] },
     serviceProcesses: fakeServiceProcesses(),
+    // No conversation has left a job running here, so no port is claimed by one.
+    jobOn: () => undefined,
     ...overrides,
 });
 
@@ -110,4 +114,36 @@ test("ports.forward on a loopback sandbox (no zone/token) still maps the slot bu
         createPortsRoutes(portsDeps({ config: testConfig, scanPorts: async () => [{ port: 3000, host: "127.0.0.1", forwardable: true }] })),
     );
     expect(await client.forward({ port: 3000 })).toEqual({});
+});
+
+// Preview offers a server an agent left running for the person by its job's own name, and stops it through the job.
+test("ports.list names the conversation's job on a port an agent's turn left running for the person", async () => {
+    const conversations = memoryFleet().conversations;
+    const job = openBackgroundJob(
+        { conversationId: "conv-served", profile: {}, conversations },
+        { command: "pnpm dev --port 4173", session: "agent-conv-served", description: "Start the app's dev server" },
+    );
+    if (job === undefined) {
+        throw new Error("the job dir could not be minted");
+    }
+    try {
+        handJobOver(conversations, job, [4173]);
+        const client = routesClient(
+            portsContract,
+            createPortsRoutes(
+                portsDeps({
+                    jobOn: (port) => portJobOf(conversations, port),
+                    scanPorts: async () => [
+                        { port: 4173, host: "127.0.0.1", forwardable: true },
+                        { port: 3000, host: "127.0.0.1", forwardable: true },
+                    ],
+                }),
+            ),
+        );
+        const listed = (await client.list()).ports;
+        expect(listed.find((port) => port.port === 4173)?.job).toEqual({ conversationId: "conv-served", jobId: job.id, label: "Start the app's dev server" });
+        expect(listed.find((port) => port.port === 3000)?.job).toBeUndefined();
+    } finally {
+        rmSync(job.dir, { recursive: true, force: true });
+    }
 });

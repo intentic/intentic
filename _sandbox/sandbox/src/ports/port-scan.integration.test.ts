@@ -89,7 +89,8 @@ test("falls back to /proc/<pid>/comm when a listening process has an empty cmdli
 
 // Traced to the terminal, not the process: the listening pid may be generations below what a person launched, so the
 // pane is found by walking parents. comm is parenthesized and may itself contain spaces and parens.
-const statFile = (pid: number, comm: string, ppid: number): string => `${pid} (${comm}) S ${ppid} ${pid} ${pid} 0 -1 4194304 0 0`;
+// `session` is the kernel session it keeps from whatever led it; its own pid when it leads one.
+const statFile = (pid: number, comm: string, ppid: number, session = pid): string => `${pid} (${comm}) S ${ppid} ${pid} ${session} 0 -1 4194304 0 0`;
 
 test("traces a listener up its ancestry to the tmux pane it is running in", async () => {
     const root = mkdtempSync(join(tmpdir(), "port-scan-"));
@@ -111,7 +112,7 @@ test("traces a listener up its ancestry to the tmux pane it is running in", asyn
         { port: 5440, host: "127.0.0.1" as const, forwardable: true },
     ];
     await expect(withOwningSessions(listeners, new Map([[397, "web-3f2a"]]), root)).resolves.toEqual([
-        { port: 4321, host: "127.0.0.1", forwardable: true, pid: 400, session: "web-3f2a" },
+        { port: 4321, host: "127.0.0.1", forwardable: true, pid: 400, session: "web-3f2a", pane: 397 },
         { port: 8787, host: "127.0.0.1", forwardable: true, pid: 397_000 },
         { port: 5440, host: "127.0.0.1", forwardable: true },
     ]);
@@ -123,8 +124,22 @@ test("a process that IS the pane's own root process owns its port (a panel runni
     writeFileSync(join(root, "247", "stat"), statFile(247, "dockerd", 1));
     const listeners = [{ port: 5440, host: "127.0.0.1" as const, forwardable: true, pid: 247 }];
     await expect(withOwningSessions(listeners, new Map([[247, "panel-docker"]]), root)).resolves.toEqual([
-        { port: 5440, host: "127.0.0.1", forwardable: true, pid: 247, session: "panel-docker" },
+        { port: 5440, host: "127.0.0.1", forwardable: true, pid: 247, session: "panel-docker", pane: 247 },
     ]);
+});
+
+// What left fair-marsh-rft7's demo server unattributed: its `pnpm` launcher exited, init took the vite process, and the
+// walk up from it ends at pid 1. The pane's session is what it kept.
+test("a listener its launcher left to init is still claimed by the pane whose session it kept", async () => {
+    const root = mkdtempSync(join(tmpdir(), "port-scan-"));
+    mkdirSync(join(root, "600"), { recursive: true });
+    writeFileSync(join(root, "600", "stat"), statFile(600, "node", 1, 397));
+    const listeners = [{ port: 47_148, host: "127.0.0.1" as const, forwardable: true, pid: 600 }];
+    await expect(withOwningSessions(listeners, new Map([[397, "agent-1b60e8bf"]]), root)).resolves.toEqual([
+        { port: 47_148, host: "127.0.0.1", forwardable: true, pid: 600, session: "agent-1b60e8bf", pane: 397 },
+    ]);
+    // A session no pane leads (a daemon runtime of its own) claims nothing.
+    await expect(withOwningSessions(listeners, new Map([[398, "agent-other"]]), root)).resolves.toEqual(listeners);
 });
 
 test("no tmux server annotates nothing, and a stat file that lies about its parent can't loop the walk", async () => {

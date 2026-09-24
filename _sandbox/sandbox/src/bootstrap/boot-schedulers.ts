@@ -1,5 +1,6 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
 import { adoptBackgroundJobs } from "../agent/tools/background-adoption.js";
+import { resolveTurnJobs } from "../agent/tools/job-fates.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
 import { childKillNote } from "../agent/subagents/children.js";
 import { conversationProfile } from "../agents/registry/agents-store.js";
@@ -24,10 +25,16 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // Stop clears timers only; the watch journal survives for the next boot to restore.
     shutdown.push(startWatchers(services));
 
-    // A turn ending is the moment its background jobs become nobody's: each still running is handed to a watch of its
-    // own, so the conversation is woken when it exits. Beside the watchers because it arms one, and after them because
-    // it needs their runtime bound.
-    shutdown.push(services.events.subscribe("run.settled", (settled) => adoptBackgroundJobs(services.conversations, settled.conversationId, logger)));
+    // A turn ending is the moment its background jobs become nobody's. A server it used and never handed over is
+    // stopped, one whose address it gave is left to the person (job-fates.ts; judged already before the land when the
+    // turn reached it), and each other one still running is handed to a watch of its own, so the conversation is woken
+    // when it exits. Beside the watchers because it arms one, and after them because it needs their runtime bound.
+    shutdown.push(
+        services.events.subscribe("run.settled", async (settled) => {
+            await resolveTurnJobs({ conversations: services.conversations, scanPorts: services.scanPorts, logger }, settled.conversationId);
+            await adoptBackgroundJobs(services.conversations, settled.conversationId, logger);
+        }),
+    );
 
     // A spawned child's settled turn is its parent's news, delivered like a wake unless a parked `wait` took it.
     const childReports: ChildReportDeps = {

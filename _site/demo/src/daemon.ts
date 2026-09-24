@@ -483,6 +483,21 @@ export const procedures = {
         autoLand: ({ id }) => agentAnswer(patchAgent(id, {})),
         breakPolicy: setBreakPolicy,
         keepWarm: keepWarmAgent,
+        // Ends a job the way the daemon's answer reads once it has: stopped by the person, its wait and hand-over over.
+        stopJob: ({ id, jobId }) =>
+            agentAnswer(
+                patchAgent(id, {
+                    jobs: roster.agents
+                        .find((agent) => agent.id === id)
+                        ?.jobs?.map((job) => {
+                            if (job.id !== jobId || job.endedAt !== undefined) {
+                                return job;
+                            }
+                            const { watch: _watch, handed: _handed, ...ended } = job;
+                            return { ...ended, endedAt: Date.now(), exitCode: 143, stoppedBy: `person` as const };
+                        }),
+                }),
+            ),
         land: ({ id }) => land(id),
         discard: () => refuse(`This is the demo workspace: there is no worktree to discard.`),
         archive: archiveAgents,

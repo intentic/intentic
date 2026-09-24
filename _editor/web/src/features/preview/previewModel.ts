@@ -37,6 +37,8 @@ export interface PreviewTarget {
     // What Start costs (installed) and a running target's progress (launch); undefined/true where nothing starts.
     readonly installed: boolean;
     readonly launch: PanelLaunch | undefined;
+    // The background job an agent's turn left serving this port for the person; Stop ends it through its conversation.
+    readonly job?: { readonly conversationId: string; readonly jobId: string; readonly port: number };
 }
 
 export const repoTargetId = (repo: string): string => `repo:${repo}`;
@@ -97,16 +99,18 @@ export const appTargets = (repo: string, apps: readonly RepoApp[]): PreviewTarge
 export const portTargetId = (port: number): string => `port:${port}`;
 
 // Forwarded ports: the answer for a dev server this app never started. Only forwarded ones qualify; an unforwarded
-// port's loopback address means nothing to this browser.
+// port's loopback address means nothing to this browser. The one exception is a server an agent left running for the
+// person (`job`): it is listed before it is forwarded, with no address, and the panel offers forwarding it, since
+// forwarding publishes it and that is the person's call.
 export const portTargets = (ports: readonly PortSummary[]): PreviewTarget[] =>
     ports
-        .filter((port) => port.forwarded && port.previewUrl !== undefined)
+        .filter((port) => (port.forwarded && port.previewUrl !== undefined) || port.job !== undefined)
         .map((port) => ({
             id: portTargetId(port.port),
             kind: `port`,
             label: t(`preview.previewModel.port`, { port: port.port }),
-            // What's answering there, in the daemon's own words (ports/port-identity.ts).
-            detail: port.title,
+            // What's answering there: the agent's own words for the job that serves it, else the daemon's (ports/port-identity.ts).
+            detail: port.job?.label ?? port.title,
             repo: undefined,
             app: undefined,
             url: port.previewUrl,
@@ -118,6 +122,7 @@ export const portTargets = (ports: readonly PortSummary[]): PreviewTarget[] =>
             startable: false,
             installed: true,
             launch: undefined,
+            ...(port.job === undefined ? {} : { job: { conversationId: port.job.conversationId, jobId: port.job.jobId, port: port.port } }),
         }));
 
 // Outbox's served page, read off the listing so a blocked file never previews as live. `index.html` wins (what the

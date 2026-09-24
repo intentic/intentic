@@ -24,12 +24,13 @@ test("the stamp says whose work it is and nothing else: no daemon identity to mi
 });
 
 test("ppid and pgrp are read from after the last paren, so an executable named with spaces and parens cannot shift them", () => {
-    expect(parseProcStat("42 (node) S 7 9 42 0 -1 4194304")).toEqual({ comm: "node", ppid: 7, pgrp: 9 });
-    expect(parseProcStat("42 (weird ) name) S 9 11 42 0 -1 4194304")).toEqual({ comm: "weird ) name", ppid: 9, pgrp: 11 });
+    expect(parseProcStat("42 (node) S 7 9 42 0 -1 4194304")).toEqual({ comm: "node", ppid: 7, pgrp: 9, session: 42 });
+    expect(parseProcStat("42 (weird ) name) S 9 11 42 0 -1 4194304")).toEqual({ comm: "weird ) name", ppid: 9, pgrp: 11, session: 42 });
     expect(parseProcStat("42 (weird ) name) S 9 11 42 0 -1 4194304 0 0 0 0 13 17 0 0 20 0 1 0 12345")).toEqual({
         comm: "weird ) name",
         ppid: 9,
         pgrp: 11,
+        session: 42,
         cpuTicks: 30,
         childCpuTicks: 0,
         startTimeTicks: 12345,
@@ -59,6 +60,15 @@ test("an out-of-group survivor whose owner this registry knows is reclaimed once
     expect(leftoverProcesses(survivor, policy({ ownerKnown: (owner) => owner === "conv-1" })).map((entry) => entry.pid)).toEqual([600]);
     expect(leftoverProcesses(survivor, policy({ ownerKnown: () => true, ownerLive: () => true }))).toEqual([]);
     expect(leftoverProcesses(survivor, policy())).toEqual([]);
+});
+
+// A server a turn left running for the person: its launcher exited, so init parents it and no walk reaches the pane,
+// but the pane still leads the session it kept, and the pane is what retires it.
+test("a survivor still in a live pane's session is the pane's, however it lost its parent", () => {
+    const handed: SweptProcess[] = [{ pid: 600, ppid: 1, pgrp: 601, owner: "conv-1", session: 601 }];
+    expect(leftoverProcesses(handed, policy({ ownerKnown: () => true, panePids: new Set([601]) }))).toEqual([]);
+    // Once that pane is gone the session names nothing, and it is reclaimed like any other survivor.
+    expect(leftoverProcesses(handed, policy({ ownerKnown: () => true })).map((entry) => entry.pid)).toEqual([600]);
 });
 
 test("the reserved owners never pass the registry licence: the pools stay group-ruled", () => {

@@ -8,7 +8,7 @@ import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { usePaneView } from "../panel/useChat-view";
 import { useChatSurface } from "../tools/chatToolSurface";
-import { jobPhase } from "./jobPhase";
+import { jobPhase, type JobStopper, portsLine } from "./jobPhase";
 import { useT } from "@intentic/ui/i18n";
 
 // The row a background job's start left, drawn with the job's live state off the conversation's card (AgentSummary.jobs).
@@ -36,16 +36,37 @@ const glyph = computed<{ readonly name: IconName; readonly spin: boolean; readon
             return { name: `check`, spin: false, tone: `text-success` };
         case `failed`:
             return { name: `times`, spin: false, tone: `text-danger` };
+        case `stopped`:
+            return { name: `stop`, spin: false, tone: `text-subtle` };
         default:
             return { name: `terminal`, spin: false, tone: `text-subtle` };
     }
 });
 
+// Who ended it, said as the reader would: the turn's own ending is the sandbox's doing, not a failure.
+const stoppedLine = (by: JobStopper, elapsed: string): string => {
+    switch (by) {
+        case `turn`:
+            return t(`chat.chatJobRow.stoppedByTurn`, { elapsed });
+        case `person`:
+            return t(`chat.chatJobRow.stoppedByYou`, { elapsed });
+        default:
+            return t(`chat.chatJobRow.stoppedByAgent`, { elapsed });
+    }
+};
+
 const status = computed(() => {
     const current = phase.value;
     switch (current.kind) {
         case `running`:
-            return t(`chat.chatJobRow.running`, { elapsed: formatElapsed(current.startedAt, now.value) });
+            if (current.stopping !== undefined) {
+                return t(`chat.chatJobRow.stopping`);
+            }
+            return current.handed === true
+                ? t(`chat.chatJobRow.leftForYou`, { ports: portsLine(current.ports ?? []), elapsed: formatElapsed(current.startedAt, now.value) })
+                : t(`chat.chatJobRow.running`, { elapsed: formatElapsed(current.startedAt, now.value) });
+        case `stopped`:
+            return stoppedLine(current.by, formatElapsed(...current.took));
         case `finished`:
             return t(`chat.chatJobRow.finished`, { elapsed: formatElapsed(...current.took) });
         case `failed`:

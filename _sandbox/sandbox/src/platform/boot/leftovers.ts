@@ -6,8 +6,8 @@ import { parseProcStat } from "../resources/proc-stat.js";
 // unspoofable) decides which processes are this daemon's; an env stamp then says whose conversation they belong to.
 // Anything under a live tmux pane is exempt: its session retires it, not this sweep.
 
-// `pgrp` decides ownership; `ppid` only walks upward looking for a pane.
-export type SweptProcess = Pick<ScannedProcess, "pid" | "ppid" | "pgrp" | "owner">;
+// `pgrp` decides ownership; `ppid` only walks upward looking for a pane, and `session` finds one the walk cannot.
+export type SweptProcess = Pick<ScannedProcess, "pid" | "ppid" | "pgrp" | "owner" | "session">;
 
 export interface Leftover {
     readonly pid: number;
@@ -48,8 +48,11 @@ const underPane = (pid: number, parents: ReadonlyMap<number, number>, panePids: 
 export const leftoverProcesses = (scanned: readonly SweptProcess[], { group, ownerLive, ownerKnown, panePids }: LeftoverPolicy): Leftover[] => {
     const parents = new Map(scanned.map((entry) => [entry.pid, entry.ppid]));
     const leftovers: Leftover[] = [];
-    for (const { pid, pgrp, owner } of scanned) {
-        if (owner === undefined || (pgrp !== group && !ownerKnown(owner)) || underPane(pid, parents, panePids)) {
+    for (const { pid, pgrp, owner, session } of scanned) {
+        // A pane leads the session everything it starts keeps, so a server whose launcher exited (parented by init now,
+        // out of the walk's reach) is still under its pane: a background job left running for the person, say.
+        const inPaneSession = session !== undefined && panePids.has(session);
+        if (owner === undefined || (pgrp !== group && !ownerKnown(owner)) || inPaneSession || underPane(pid, parents, panePids)) {
             continue;
         }
         if (!ownerLive(owner)) {
