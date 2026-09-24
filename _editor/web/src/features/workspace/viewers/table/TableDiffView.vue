@@ -3,7 +3,7 @@ import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, shallowRef, watch } from "vue";
 import { type CellDiff, foldUnchangedRows, MAX_ROWS, type RowDiff, type Sheet, type SheetDiff } from "./tableDiff";
-import { requestTableDiff } from "./tableDiffClient";
+import { diffTables } from "./tableDiffClient";
 
 // Two versions of tabular data drawn as one grid per sheet: a changed cell shows what it was and what it became, a
 // row or a sheet added or dropped wears its mark whole, long unchanged stretches fold to a line. What a spreadsheet's
@@ -15,15 +15,20 @@ const emit = defineEmits<{ changed: [number] }>();
 
 const t = useT();
 
-// Undefined until the diff of the current pair arrives; a superseded pair's answer is dropped, never drawn.
+// Undefined while a large pair's diff is in the worker; a superseded pair's answer is dropped, never drawn.
 const sheets = shallowRef<readonly SheetDiff[] | undefined>();
 watch(
     () => [before, after] as const,
     ([from, to], _previous, onCleanup) => {
+        const answer = diffTables({ before: from, after: to });
+        if (Array.isArray(answer)) {
+            sheets.value = answer;
+            return;
+        }
         let current = true;
         onCleanup(() => (current = false));
         sheets.value = undefined;
-        void requestTableDiff({ before: from, after: to }).then((diff) => {
+        void answer.then((diff) => {
             if (current) {
                 sheets.value = diff;
             }

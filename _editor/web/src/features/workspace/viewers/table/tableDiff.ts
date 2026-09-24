@@ -184,17 +184,24 @@ const whole = (kind: "same" | "added" | "removed", row: readonly string[], befor
     ...(afterLine === undefined ? {} : { afterLine }),
 });
 
-// How alike two rows are: the share of positions holding the same cell. Pairing needs a third to agree, so a row
-// with one edited cell out of three still finds itself, while two unrelated rows stay a removal and an addition.
-const similarity = (left: readonly string[], right: readonly string[]): number => {
+// How alike two rows are: the share of positions holding the same cell, or -1 once it can no longer reach `floor`.
+// Pairing needs a third to agree, so a row with one edited cell out of three still finds itself.
+const similarity = (left: Int32Array, right: Int32Array, floor: number): number => {
     const width = Math.max(left.length, right.length);
     if (width === 0) {
         return 1;
     }
+    const shared = Math.min(left.length, right.length);
+    let reachable = shared;
+    if (reachable / width < floor) {
+        return -1;
+    }
     let same = 0;
-    for (let index = 0; index < width; index++) {
+    for (let index = 0; index < shared; index++) {
         if (left[index] === right[index]) {
             same++;
+        } else if (--reachable / width < floor) {
+            return -1;
         }
     }
     return same / width;
@@ -204,28 +211,46 @@ const PAIR_THRESHOLD = 1 / 3;
 interface Numbered {
     readonly row: readonly string[];
     readonly line: number;
+    // Equal exactly when the rows' joined cells are, so the row table compares numbers, never strings.
+    readonly key: number;
+    // One id per cell, equal exactly when the cells' text is.
+    readonly cells: Int32Array;
 }
 
 // A run of removed then added rows between two kept ones: each removed row is paired with the added row it most
 // resembles, in order, and compared cell by cell; what pairs with nothing stands as removed or added whole.
 const pairRun = (removed: readonly Numbered[], added: readonly Numbered[]): RowDiff[] => {
-    const taken = new Set<number>();
+    const end = added.length;
+    const taken = new Uint8Array(end);
     const pairs = new Map<number, number>();
+    // The untaken added rows as a list in their order, so a row once paired is never scored again.
+    const next = Int32Array.from({ length: end }, (_, index) => index + 1);
+    const previous = Int32Array.from({ length: end }, (_, index) => index - 1);
+    let first = 0;
+    const take = (to: number): void => {
+        taken[to] = 1;
+        if (previous[to] === -1) {
+            first = next[to]!;
+        } else {
+            next[previous[to]!] = next[to]!;
+        }
+        if (next[to]! < end) {
+            previous[next[to]!] = previous[to]!;
+        }
+    };
     for (const [from, left] of removed.entries()) {
         let best = -1;
         let bestScore = PAIR_THRESHOLD;
-        for (const [to, right] of added.entries()) {
-            if (taken.has(to)) {
-                continue;
-            }
-            const score = similarity(left.row, right.row);
+        for (let to = first; to < end; to = next[to]!) {
+            // A tie goes to the later row, so only a row that cannot even tie is cut short.
+            const score = similarity(left.cells, added[to]!.cells, bestScore);
             if (score >= bestScore && score > 0) {
                 best = to;
                 bestScore = score;
             }
         }
         if (best !== -1) {
-            taken.add(best);
+            take(best);
             pairs.set(from, best);
         }
     }
@@ -234,7 +259,7 @@ const pairRun = (removed: readonly Numbered[], added: readonly Numbered[]): RowD
     let nextAdded = 0;
     const emitAddedBefore = (limit: number): void => {
         while (nextAdded < limit) {
-            if (!taken.has(nextAdded)) {
+            if (taken[nextAdded] === 0) {
                 const entry = added[nextAdded]!;
                 rows.push(whole(`added`, entry.row, undefined, entry.line));
             }
@@ -259,11 +284,11 @@ const pairRun = (removed: readonly Numbered[], added: readonly Numbered[]): RowD
 // Rows shared at both ends are matched without a table, so a sheet with rows appended costs nothing to diff.
 const trimmed = (before: readonly Numbered[], after: readonly Numbered[]): { head: number; tail: number } => {
     let head = 0;
-    while (head < before.length && head < after.length && rowKey(before[head]!.row) === rowKey(after[head]!.row)) {
+    while (head < before.length && head < after.length && before[head]!.key === after[head]!.key) {
         head++;
     }
     let tail = 0;
-    while (tail < before.length - head && tail < after.length - head && rowKey(before[before.length - 1 - tail]!.row) === rowKey(after[after.length - 1 - tail]!.row)) {
+    while (tail < before.length - head && tail < after.length - head && before[before.length - 1 - tail]!.key === after[after.length - 1 - tail]!.key) {
         tail++;
     }
     return { head, tail };
@@ -271,15 +296,35 @@ const trimmed = (before: readonly Numbered[], after: readonly Numbered[]): { hea
 
 const sameRows = (rows: readonly Numbered[], offset: number): RowDiff[] => rows.map((entry, index) => whole(`same`, entry.row, entry.line, offset + index + 1));
 
-const numbered = (rows: readonly (readonly string[])[]): Numbered[] => rows.slice(0, MAX_ROWS).map((row, index) => ({ row, line: index + 1 }));
+// Both sides of one sheet share the id tables, so an id means the same text on either side.
+const numberer = (): ((rows: readonly (readonly string[])[]) => Numbered[]) => {
+    const rowIds = new Map<string, number>();
+    const cellIds = new Map<string, number>();
+    const idOf = (ids: Map<string, number>, text: string): number => {
+        let id = ids.get(text);
+        if (id === undefined) {
+            id = ids.size;
+            ids.set(text, id);
+        }
+        return id;
+    };
+    return (rows) =>
+        rows.slice(0, MAX_ROWS).map((row, index) => ({
+            row,
+            line: index + 1,
+            key: idOf(rowIds, rowKey(row)),
+            cells: Int32Array.from(row, (cell) => idOf(cellIds, cell)),
+        }));
+};
 
 const diffRows = (beforeRows: readonly (readonly string[])[], afterRows: readonly (readonly string[])[]): RowDiff[] => {
+    const numbered = numberer();
     const before = numbered(beforeRows);
     const after = numbered(afterRows);
     const { head, tail } = trimmed(before, after);
     const midBefore = before.slice(head, before.length - tail);
     const midAfter = after.slice(head, after.length - tail);
-    const ops: Op<Numbered>[] | undefined = diffSequence(midBefore, midAfter, (left, right) => rowKey(left.row) === rowKey(right.row));
+    const ops: Op<Numbered>[] | undefined = diffSequence(midBefore, midAfter, (left, right) => left.key === right.key);
     const middle: RowDiff[] = [];
     // A middle too large for the table reads as replaced whole, which is honest rather than slow.
     const script: Op<Numbered>[] = ops ?? [...midBefore.map((item): Op<Numbered> => ({ kind: `removed`, item })), ...midAfter.map((item): Op<Numbered> => ({ kind: `added`, item }))];
@@ -316,7 +361,7 @@ export const tableDiff = (before: readonly Sheet[], after: readonly Sheet[]): Sh
     for (const sheet of before) {
         const counterpart = afterByName.get(sheet.name);
         if (counterpart === undefined) {
-            diffs.push({ name: sheet.name, kind: `removed`, rows: numbered(sheet.rows).map((entry) => whole(`removed`, entry.row, entry.line, undefined)), columns: width(sheet), changedRows: sheet.rows.length });
+            diffs.push({ name: sheet.name, kind: `removed`, rows: sheet.rows.slice(0, MAX_ROWS).map((row, index) => whole(`removed`, row, index + 1, undefined)), columns: width(sheet), changedRows: sheet.rows.length });
             continue;
         }
         const rows = diffRows(sheet.rows, counterpart.rows);
@@ -325,7 +370,7 @@ export const tableDiff = (before: readonly Sheet[], after: readonly Sheet[]): Sh
     }
     for (const sheet of after) {
         if (!beforeNames.has(sheet.name)) {
-            diffs.push({ name: sheet.name, kind: `added`, rows: numbered(sheet.rows).map((entry) => whole(`added`, entry.row, undefined, entry.line)), columns: width(sheet), changedRows: sheet.rows.length });
+            diffs.push({ name: sheet.name, kind: `added`, rows: sheet.rows.slice(0, MAX_ROWS).map((row, index) => whole(`added`, row, undefined, index + 1)), columns: width(sheet), changedRows: sheet.rows.length });
         }
     }
     return diffs;

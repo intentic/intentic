@@ -113,7 +113,7 @@ in a list to count paragraphs would cost a render per row. The count lives in th
 - Daemon: `git/changes/diff-locate.ts`, `diff-raw.ts`, `diff-derived.ts`; `derived/derived-blob.ts`,
   `derived/fileq.ts` (the shared slot); `router.ts`, `composition.ts`.
 - fileq: `read --plain`, `git-attributes`, the `deriver` stamp in `read --json`.
-- Web: `viewers/DerivedDiffView.vue`, `viewers/table/` (`TableDiffView.vue` + `tableDiff.ts`, run in `tableDiffWorker.ts`), `ImageCompareView.vue`,
+- Web: `viewers/DerivedDiffView.vue`, `viewers/table/` (`TableDiffView.vue` + `tableDiff.ts`, a large pair run in `tableDiffWorker.ts`), `ImageCompareView.vue`,
   `BinaryDiffView.vue` (viewer per side, overlays), `FileDiffPane.vue` (the fork), `DiffToolbar.vue` (the reading
   control), `derivedDiff.ts`, `changes/diffRaw.ts` (`derivedDiffSource`), `explorer/fileType.ts`
   (`isDocumentPath`, `isSpreadsheetPath`, `isDelimitedPath`), `core-views/viewerRegistry.ts`
