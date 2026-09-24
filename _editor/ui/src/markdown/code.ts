@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { clipboardOf } from "../lib/clipboard.js";
+import { lateImport } from "../lib/lateImport.js";
 import type { ShikiLang } from "@intentic/code-read/langs";
 import { JSON_FIGURE_LANGS } from "./figures.js";
 
@@ -84,7 +85,7 @@ const settleBatch = (): void => {
 // unit tests.
 let highlighter: Promise<(code: string, lang: string) => Promise<string | undefined>> | undefined;
 const loadHighlighter = (): Promise<(code: string, lang: string) => Promise<string | undefined>> =>
-    (highlighter ??= import(`../composables/useHighlighter.js`).then((module) => module.useHighlighter().highlight));
+    (highlighter ??= lateImport(() => import(`../composables/useHighlighter.js`)).then((module) => module.useHighlighter().highlight));
 
 // The fence's info string reduced to a grammar id: `ts`, but also ```` ```ts title=x ```` and ```` ```TS ````.
 const langId = (fence: string): string | undefined => {

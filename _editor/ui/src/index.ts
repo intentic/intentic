@@ -217,6 +217,7 @@ export { default as Verdict } from "./components/charts/Verdict.vue";
 export { VERDICT_RANKS, VERDICT_TONES, type VerdictSize, type VerdictTone } from "./components/charts/verdict.js";
 export { Theme } from "./styles/theme.js";
 export { installUi } from "./plugin.js";
+export { lateImport, setLateImportFailure } from "./lib/lateImport.js";
 // Markdown engine ships separately as `@intentic/ui/markdown`, so plain-TypeScript callers and tests avoid this
 // barrel's component graph.
 export { vTw } from "./lib/tw.js";
