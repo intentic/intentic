@@ -2,7 +2,7 @@
     "_editor/web/src/extension-host": 34,
     "_editor/web/src/features/workspace/explorer": 33,
     "_editor/web/src/features/workspace/files": 31,
-    "_editor/web/src/features/workspace/viewers": 43,
+    "_editor/web/src/features/workspace/viewers": 39,
     "_extensions/viewers/src": 31,
     "_sandbox/sandbox/src/capabilities": 35
 }
