@@ -25,6 +25,7 @@ interface Probe {
 
 const cache = new Map<string, Probe>();
 const moduleCache = new Map<string, Probe>();
+const packageCache = new Map<string, Probe>();
 
 export interface ModuleProbeTarget {
     readonly name: string;
@@ -35,6 +36,7 @@ export interface ModuleProbeTarget {
 export const clearVersionCache = (): void => {
     cache.clear();
     moduleCache.clear();
+    packageCache.clear();
 };
 
 // First dotted number in the tool's output (`rustc 1.90.0`, `ffmpeg version 6.1.1-3`, a bare `1.2.4` from bun); build
@@ -115,6 +117,52 @@ const probeModule = async (target: ModuleProbeTarget): Promise<Probe> => {
     const probe = await probeModuleOnce(target.manifest);
     moduleCache.set(target.manifest, probe);
     return probe;
+};
+
+// `ii` is dpkg's installed-and-configured; anything else (removed, config-only, half-installed) is not on disk.
+const DPKG_FORMAT = "${Package}|${db:Status-Abbrev}|${Version}\\n";
+
+// dpkg exits 1 when any name is unknown yet still prints the rest, so the output is read either way; no dpkg at all
+// (a non-Debian host) reads as nothing installed.
+const queryDpkg = async (packages: readonly string[]): Promise<string> => {
+    try {
+        return (await execFileAsync("dpkg-query", ["-W", `-f=${DPKG_FORMAT}`, ...packages], { timeout: PROBE_TIMEOUT_MS, maxBuffer: MAX_BUFFER })).stdout;
+    } catch (error) {
+        return (error as { stdout?: string }).stdout ?? "";
+    }
+};
+
+// An apt package by name, for the ones whose name is no command (imagemagick ships `magick`, sysstat `iostat`); the
+// version is the package's own with its epoch dropped, so `8:7.1.1.43+dfsg1` reads 7.1.1.
+export const probePackages = async (packages: Iterable<string>): Promise<Map<string, Probe>> => {
+    const now = Date.now();
+    const result = new Map<string, Probe>();
+    const stale: string[] = [];
+    for (const name of new Set(packages)) {
+        const cached = packageCache.get(name);
+        if (cached !== undefined && now - cached.at < CACHE_TTL_MS) {
+            result.set(name, cached);
+        } else {
+            stale.push(name);
+        }
+    }
+    if (stale.length === 0) {
+        return result;
+    }
+    const installed = new Map<string, string>();
+    for (const line of (await queryDpkg(stale)).split("\n")) {
+        const [name, status, version] = line.split("|");
+        if (name !== undefined && status?.startsWith("ii") === true) {
+            installed.set(name, version ?? "");
+        }
+    }
+    for (const name of stale) {
+        const version = installed.get(name);
+        const probe: Probe = { version: version === undefined ? undefined : parseVersion(version.replace(/^\d+:/, "")), found: version !== undefined, at: now };
+        packageCache.set(name, probe);
+        result.set(name, probe);
+    }
+    return result;
 };
 
 // Prefix-installed npm modules have no binary on PATH; their manifest is the probe target.

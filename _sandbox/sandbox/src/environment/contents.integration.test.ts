@@ -152,3 +152,21 @@ test("a staple the recipe already explains is not listed twice", async () => {
     const { items } = await readEnvironmentContents(services);
     expect(items.filter((item) => item.tools.some((tool) => tool.name === "node")).map((item) => item.origin)).toEqual(["custom"]);
 });
+
+test("an apt package named for no command it ships is active when dpkg has it installed", async () => {
+    clearVersionCache();
+    const services = stubServices();
+    // ca-certificates is in every sandbox image and puts no command of that name on PATH, like imagemagick or sysstat.
+    await writeWorkspaceFile(
+        customPath(services),
+        `# ---- certs ----
+# Trusted roots.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
+`,
+    );
+
+    const { items } = await readEnvironmentContents(services);
+    const certs = items.find((item) => item.id === "custom:certs");
+    expect(certs?.state).toBe("active");
+    expect(certs?.tools.map((tool) => tool.name)).toEqual(["ca-certificates"]);
+});
