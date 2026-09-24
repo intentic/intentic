@@ -162,18 +162,21 @@ const shown = (text: string, title: string): string => {
                             {{ formatTokens(row.text.length) }}
                         </span>
                     </button>
-                    <div v-if="opened === row.key && row.text !== undefined" class="pb-3">
-                        <p class="mb-2 text-2xs text-subtle">{{ row.whence }}</p>
-                        <!-- Capped and scrolled rather than clamped: one of these rows is the whole base prompt. -->
-                        <div class="ui-softscroll max-h-[45dvh] overflow-auto" style="--prose-measure: 76ch">
-                            <MarkdownDocument :model-value="shown(row.text, row.title)" :label="row.title" />
+                    <!-- Shut until found rather than absent, so find-in-page reaches a section and opens it. -->
+                    <div :hidden.attr="opened === row.key ? undefined : `until-found`" @beforematch="opened = row.key">
+                        <div v-if="row.text !== undefined" class="pb-3">
+                            <p class="mb-2 text-2xs text-subtle">{{ row.whence }}</p>
+                            <!-- Capped and scrolled rather than clamped: one of these rows is the whole base prompt. -->
+                            <div class="ui-softscroll max-h-[45dvh] overflow-auto" style="--prose-measure: 76ch">
+                                <MarkdownDocument :model-value="shown(row.text, row.title)" :label="row.title" />
+                            </div>
+                            <div class="mt-2 flex justify-end">
+                                <!-- Copies the section as it was sent, heading and all, whatever the reading above dropped. -->
+                                <CopyButton :text="row.text" :label="t(`ui.action.copy`)" />
+                            </div>
                         </div>
-                        <div class="mt-2 flex justify-end">
-                            <!-- Copies the section as it was sent, heading and all, whatever the reading above dropped. -->
-                            <CopyButton :text="row.text" :label="t(`ui.action.copy`)" />
-                        </div>
+                        <p v-else class="pb-3 text-2xs text-subtle">{{ row.whence }}</p>
                     </div>
-                    <p v-else-if="opened === row.key" class="pb-3 text-2xs text-subtle">{{ row.whence }}</p>
                 </div>
             </div>
             <div class="mt-3 flex items-center justify-end gap-2">

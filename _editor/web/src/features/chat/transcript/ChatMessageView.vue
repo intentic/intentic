@@ -5,7 +5,7 @@ import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { basename } from "@intentic/ui/path";
 import { REQUEST_FIELDS, type RequestField } from "@intentic/sandbox-contract";
-import { type Component, computed, ref, useTemplateRef, watch } from "vue";
+import { type Component, computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
 import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
@@ -216,7 +216,7 @@ const defers = computed(() => foldsIntoTurn(props.message));
 // An errand is a prompt the app sent on the user's behalf (errands.ts): named in one quiet line, since a turn nobody
 // typed still has to appear as a turn, with the words it actually sent out on the mark beside it.
 const errand = computed(() => errandOf(props.message));
-const errandMarks = computed(() => (errand.value === undefined ? [] : [{ key: `errand`, icon: errand.value.icon, label: errand.value.label }]));
+const errandMarks = computed(() => (errand.value === undefined ? [] : [{ key: `errand`, icon: errand.value.icon, label: errand.value.label, findable: true }]));
 
 // Trailer naming the latest thing keeping this turn going, and how many said the same; shown in-flow so it can't shift
 // the pinned row's height.
@@ -334,17 +334,51 @@ watch(
     { immediate: true, flush: `post` },
 );
 
-// A clamped box has no scrollbar, so any scroll event means find-in-page or a screen reader jumped inside it: expand
-// and reset scroll. Either axis, since a stuck prompt is clamped sideways. An open box is left alone.
+// The character at the middle of a box, as a live one-character range: find-in-page centres its match there.
+const middleOf = (element: HTMLElement): Range | undefined => {
+    const box = element.getBoundingClientRect();
+    const [x, y] = [box.left + box.width / 2, box.top + box.height / 2];
+    const page = element.ownerDocument;
+    const range = page.createRange();
+    // WebKit has only the older caretRangeFromPoint.
+    if (typeof page.caretPositionFromPoint === `function`) {
+        const position = page.caretPositionFromPoint(x, y);
+        if (position === null) {
+            return undefined;
+        }
+        range.setStart(position.offsetNode, position.offset);
+    } else {
+        const caret = page.caretRangeFromPoint(x, y);
+        if (caret === null) {
+            return undefined;
+        }
+        range.setStart(caret.startContainer, caret.startOffset);
+    }
+    // nodeType, not instanceof Text: a popped-out window's nodes belong to its own realm.
+    const node = range.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE || !element.contains(node)) {
+        return undefined;
+    }
+    range.setEnd(node, Math.min(range.startOffset + 1, node.textContent?.length ?? 0));
+    return range;
+};
+
+// A clamped box has no scrollbar, so any scroll event means find-in-page or a screen reader jumped inside it: open it
+// and scroll the spot it jumped to back into the middle, since opening re-wraps a stuck prompt's one line.
 const onBubbleScroll = (): void => {
-    if (expanded.value) {
+    const element = bubble.value;
+    if (expanded.value || element === null || (element.scrollTop === 0 && element.scrollLeft === 0)) {
         return;
     }
-    if (bubble.value !== null && (bubble.value.scrollTop > 0 || bubble.value.scrollLeft > 0)) {
-        expanded.value = true;
-        bubble.value.scrollTop = 0;
-        bubble.value.scrollLeft = 0;
-    }
+    const spot = middleOf(element);
+    expanded.value = true;
+    void nextTick(() => {
+        const rect = spot?.getBoundingClientRect();
+        if (rect === undefined || rect.height === 0) {
+            return;
+        }
+        element.scrollTop += rect.top + rect.height / 2 - element.getBoundingClientRect().top - element.clientHeight / 2;
+    });
 };
 
 // Clicking a clamped bubble expands it, one direction only; guarded on an active selection so dragging text doesn't

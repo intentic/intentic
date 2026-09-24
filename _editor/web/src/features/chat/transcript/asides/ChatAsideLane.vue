@@ -17,9 +17,18 @@ const props = defineProps<{
 // Unset until pressed, so a live mark keeps opening itself; null is the reader having shut everything.
 const override = ref<string | null>();
 const opened = computed(() => (override.value === undefined ? props.openByDefault : (override.value ?? undefined)));
+// The mark find-in-page opened: shown at once, since the browser scrolls to the match before a fold would finish.
+const found = ref<string>();
 const toggle = (key: string): void => {
+    found.value = undefined;
     override.value = opened.value === key ? null : key;
 };
+const onFound = (key: string): void => {
+    found.value = key;
+    override.value = key;
+};
+
+const findable = computed(() => props.marks.filter((mark) => mark.findable === true));
 
 // A caller with something to say in the column says it on this bar, so its words and its mark share a line. Such a bar
 // keeps its height when opened; an empty one folds to nothing and lets the material take the row.
@@ -53,13 +62,26 @@ const said = computed(() => slots[`default`] !== undefined);
                 </button>
             </div>
         </div>
-        <!-- Opened material uses an in-flow transition and remains absent when closed. -->
+        <!-- Other material uses an in-flow transition and is absent when closed. -->
         <Transition name="chat-mark-reveal">
-            <div v-if="opened !== undefined" class="grid">
+            <div v-if="opened !== undefined && !findable.some((mark) => mark.key === opened)" class="grid">
                 <div class="min-h-0 overflow-hidden">
                     <slot :name="opened" />
                 </div>
             </div>
         </Transition>
+        <!-- One node open or shut: beforematch reveals the element it fired on, and a swapped-in copy would lose the match. -->
+        <div
+            v-for="mark in findable"
+            :key="mark.key"
+            class="chat-mark-material"
+            :class="found === mark.key && `chat-mark-found`"
+            :hidden.attr="opened === mark.key ? undefined : `until-found`"
+            @beforematch="onFound(mark.key)"
+        >
+            <div class="min-h-0 overflow-hidden">
+                <slot :name="mark.key" />
+            </div>
+        </div>
     </div>
 </template>

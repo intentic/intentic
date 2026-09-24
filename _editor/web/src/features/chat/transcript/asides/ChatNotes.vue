@@ -15,7 +15,7 @@ const t = useT();
 const props = defineProps<{ notes: readonly TurnNote[] }>();
 
 const marks = computed((): readonly ChatAsideMark[] => [
-    { key: `notes`, icon: `paperclip`, label: t(`chat.chatNotes.sentMessage`), count: props.notes.length },
+    { key: `notes`, icon: `paperclip`, label: t(`chat.chatNotes.sentMessage`), count: props.notes.length, findable: true },
 ]);
 
 // One note open at a time: the list is what the mark is for, and two open notes bury it.
@@ -43,8 +43,11 @@ const body = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim
                         <Icon :name="opened === note.title ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs" />
                         <span class="min-w-0 truncate font-medium">{{ note.title }}</span>
                     </button>
-                    <!-- Capped and scrolled, not clamped: one note here is the whole project map. -->
-                    <p v-if="opened === note.title" class="max-h-48 overflow-auto px-2.5 pb-1.5 pl-7 whitespace-pre-wrap">{{ body(note.text) }}</p>
+                    <!-- Shut until found rather than absent, so find-in-page reaches a note and opens it. -->
+                    <div :hidden.attr="opened === note.title ? undefined : `until-found`" @beforematch="opened = note.title">
+                        <!-- Capped and scrolled, not clamped: one note here is the whole project map. -->
+                        <p class="max-h-48 overflow-auto px-2.5 pb-1.5 pl-7 whitespace-pre-wrap">{{ body(note.text) }}</p>
+                    </div>
                 </div>
             </div>
         </template>

@@ -15,6 +15,7 @@ import {
 import { errandOf, errands, errandPrompt } from "../run/errands";
 import { changedNothing, type ChatMessage } from "./transcript";
 import { IconStub } from "@intentic/ui/testing";
+import { shownText } from "../../../testing/shownText";
 import { CLOCK_FROM_MS, formatElapsed } from "../../agents/fleet/agentStatus";
 
 const clock = { turnStartedAt: undefined as number | undefined };
@@ -657,7 +658,7 @@ describe(`ChatMessageView errand row`, () => {
         const element = mount({ id: 2, role: `user`, text: prompt });
         expect(element.textContent).toContain(errand.label);
         expect(element.textContent).toContain(errand.detail);
-        expect(element.textContent).not.toContain(`src/auth/session.ts`);
+        expect(shownText(element)).not.toContain(`src/auth/session.ts`);
         expect(element.querySelector(`.chat-prompt`)).toBeNull();
 
         const mark = element.querySelector<HTMLButtonElement>(`button[aria-expanded]`)!;
@@ -667,7 +668,7 @@ describe(`ChatMessageView errand row`, () => {
 
         mark.click();
         await nextTick();
-        expect(element.textContent).toContain(`src/auth/session.ts`);
+        expect(shownText(element)).toContain(`src/auth/session.ts`);
     });
 
     // The one errand the DAEMON composes rather than this app (verify-nudge.ts). Built here the way the daemon builds
@@ -681,7 +682,7 @@ describe(`ChatMessageView errand row`, () => {
         expect(element.querySelector(`.chat-prompt`)).toBeNull();
         expect(element.querySelector(`button[aria-label="Edit this message"]`)).toBeNull();
         // The asks stay behind the mark: the row says what happened, not the whole of what was asked for.
-        expect(element.textContent).not.toContain(`src/parser.ts`);
+        expect(shownText(element)).not.toContain(`src/parser.ts`);
     });
 });
 
@@ -701,14 +702,14 @@ describe(`ChatMessageView added-notes mark`, () => {
         expect(mark.textContent?.trim()).toBe(String(notes.length));
         expect(mark.getAttribute(`aria-label`)).toBe(`Sent with your message`);
         expect(mark.querySelector(`[data-icon="paperclip"]`)).not.toBeNull();
-        expect(element.textContent).not.toContain(notes[0]!.title);
+        expect(shownText(element)).not.toContain(notes[0]!.title);
 
         mark.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
         await nextTick();
-        expect(element.textContent).toContain(notes[0]!.title);
-        expect(element.textContent).toContain(notes[1]!.title);
+        expect(shownText(element)).toContain(notes[0]!.title);
+        expect(shownText(element)).toContain(notes[1]!.title);
         // A list of what was added costs the list, not the text of everything on it.
-        expect(element.textContent).not.toContain(notes[1]!.text);
+        expect(shownText(element)).not.toContain(notes[1]!.text);
     });
 
     it(`opens one note at a time, without repeating the heading its own row already states`, async () => {
@@ -721,15 +722,30 @@ describe(`ChatMessageView added-notes mark`, () => {
 
         rows[0]!.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
         await nextTick();
-        expect(element.textContent).toContain(`It opens with a slash but names no command.`);
-        expect(element.textContent).not.toContain(`##`);
+        expect(shownText(element)).toContain(`It opens with a slash but names no command.`);
+        expect(shownText(element)).not.toContain(`##`);
         expect(element.textContent).not.toContain(`Reading the message below`);
-        expect(element.textContent).not.toContain(notes[1]!.text);
+        expect(shownText(element)).not.toContain(notes[1]!.text);
 
         rows[1]!.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
         await nextTick();
-        expect(element.textContent).toContain(notes[1]!.text);
-        expect(element.textContent).not.toContain(`It opens with a slash but names no command.`);
+        expect(shownText(element)).toContain(notes[1]!.text);
+        expect(shownText(element)).not.toContain(`It opens with a slash but names no command.`);
+    });
+
+    it(`lets find-in-page reach a shut note, opening the mark and that note together`, async () => {
+        const element = mount({ id: 7, role: `user`, text: `fix the bug`, notes });
+        expect(shownText(element)).not.toContain(notes[1]!.text);
+
+        // Fired, as the browser fires it, on every shut ancestor of the match, innermost first.
+        const shut = [...element.querySelectorAll(`[hidden="until-found"]`)].filter((node) => node.textContent?.includes(notes[1]!.text)).toReversed();
+        expect(shut).toHaveLength(2);
+        for (const node of shut) {
+            node.dispatchEvent(new Event(`beforematch`));
+        }
+        await nextTick();
+        expect(shownText(element)).toContain(notes[1]!.text);
+        expect(shownText(element)).not.toContain(`It opens with a slash but names no command.`);
     });
 
     it(`sits outside the prompt, so it never rides in the pinned band`, () => {
@@ -745,6 +761,22 @@ describe(`ChatMessageView added-notes mark`, () => {
         const element = mount({ id: 5, role: `user`, text: `fix the bug` });
         expect(element.querySelector(`[aria-label="Sent with your message"]`)).toBeNull();
         expect(element.querySelector(`.chat-mark-bar`)).toBeNull();
+    });
+});
+
+// A clamped prompt has no scrollbar, so a scroll inside it is find-in-page (or a screen reader) showing a match there.
+describe(`ChatMessageView clamped prompt under find-in-page`, () => {
+    it(`opens where the match was shown instead of scrolling back to the top`, async () => {
+        // jsdom has no caret hit-testing; null is what a real engine answers for a point on no text.
+        document.caretRangeFromPoint = () => null;
+        const element = mount({ id: 8, role: `user`, text: `fix the bug` });
+        const bubble = element.querySelector<HTMLElement>(`.chat-prompt-text`)!;
+
+        bubble.scrollTop = 40;
+        bubble.dispatchEvent(new Event(`scroll`));
+        await nextTick();
+        expect(element.querySelector(`.chat-prompt-open`)).not.toBeNull();
+        expect(bubble.scrollTop).toBe(40);
     });
 });
 

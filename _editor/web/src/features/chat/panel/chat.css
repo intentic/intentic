@@ -64,6 +64,8 @@
    short enough to need no chevron pins as a lopsided bubble. */
 .chat-prompt-pinned:not(.chat-prompt-open) .chat-prompt-clamped .chat-prompt-text {
     padding-right: 1.75rem;
+    /* The chevron's padding plus the ellipsis: text there is hidden, and find-in-page must scroll to show it. */
+    scroll-padding: 0 2.5rem 0 0;
 }
 .chat-prompt-pinned:not(.chat-prompt-open) .chat-prompt-toggle {
     top: 50%;
@@ -101,6 +103,11 @@
     border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
     background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-overlay) 55%, var(--color-card)));
     pointer-events: none;
+}
+/* The fade's height: find-in-page counts text under it as on screen and would not scroll, and that scroll is what opens
+   the prompt (ChatMessageView onBubbleScroll). */
+.chat-prompt-clamped .chat-prompt-text {
+    scroll-padding-bottom: 1.75rem;
 }
 /* Opening a prompt is a deliberate "I want to read this again" — asked, more often than not, while the answer to it is streaming underneath. */
 .chat-prompt-open .chat-prompt-text {
@@ -293,11 +300,30 @@
     grid-template-rows: 1fr;
     opacity: 1;
 }
+/* Material kept in the page while shut (hidden="until-found", ChatAsideLane) folds here, not in that Transition, which
+   would unmount it. `allow-discrete` keeps it painted until the fold ends. */
+.chat-mark-material {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition:
+        grid-template-rows 160ms ease-out,
+        opacity 160ms ease-out,
+        content-visibility 160ms ease-out allow-discrete;
+}
+.chat-mark-material[hidden] {
+    grid-template-rows: 0fr;
+    opacity: 0;
+}
 @media (prefers-reduced-motion: reduce) {
     .chat-mark-reveal-enter-active,
-    .chat-mark-reveal-leave-active {
-        transition-property: opacity;
+    .chat-mark-reveal-leave-active,
+    .chat-mark-material {
+        transition-property: opacity, content-visibility;
     }
+}
+/* Opened by find-in-page, which scrolls to the match at once and would miss it mid-fold. */
+.chat-mark-material.chat-mark-found {
+    transition: none;
 }
 /* THE ONE SURFACE ANYTHING OPENED IN THE TRANSCRIPT IS DRAWN ON — a tool's output, a diff, a written document, a
    thought, the sandbox's preamble. `bg-canvas` sits BELOW the panel, so a box drawn on it reads as a hole cut through

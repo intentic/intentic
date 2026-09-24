@@ -30,7 +30,7 @@ const run = computed(() => (showToolCalls.value ? undefined : summarizeRun(props
 const marks = computed<readonly ChatAsideMark[]>(() => [
     ...(props.thinking === undefined || props.thinking === ``
         ? []
-        : [{ key: `thinking`, icon: `sparkles` as const, label: t(`chat.chatTurnAsides.thinking`), busy: props.live }]),
+        : [{ key: `thinking`, icon: `sparkles` as const, label: t(`chat.chatTurnAsides.thinking`), busy: props.live, findable: true }]),
     ...(run.value === undefined
         ? []
         : [

@@ -6,6 +6,7 @@ import { type App, createApp, h, nextTick } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { useToolCalls } from "../../tools/useToolCalls";
+import { shownText } from "../../../../testing/shownText";
 
 // Same runtime globals as ChatToolCard's suite (window.matchMedia, window.env), absent in jsdom.
 
@@ -121,22 +122,22 @@ describe(`ChatTurnAsides thinking mark`, () => {
         const [thought, run] = marks(element);
         expect(thought?.getAttribute(`aria-label`)).toBe(`Thinking`);
         expect(run?.getAttribute(`aria-label`)).toBe(`Show 1 step`);
-        expect(element.textContent).not.toContain(thinking);
+        expect(shownText(element)).not.toContain(thinking);
 
         thought!.click();
         await nextTick();
-        expect(element.textContent).toContain(thinking);
+        expect(shownText(element)).toContain(thinking);
 
         // One body under one bar: opening the run puts the thought away.
         run!.click();
         await nextTick();
-        expect(element.textContent).not.toContain(thinking);
+        expect(shownText(element)).not.toContain(thinking);
         expect(element.textContent).toContain(`a.ts`);
     });
 
     it(`reads as it is written and puts itself away once the turn lands`, async () => {
         const live = mount({ thinking, live: true });
-        expect(live.textContent).toContain(thinking);
+        expect(shownText(live)).toContain(thinking);
         expect(live.querySelector(`[data-spin]`)).not.toBeNull();
 
         app?.unmount();
@@ -144,14 +145,28 @@ describe(`ChatTurnAsides thinking mark`, () => {
         document.body.innerHTML = ``;
 
         const settled = mount({ thinking, live: false });
-        expect(settled.textContent).not.toContain(thinking);
+        expect(shownText(settled)).not.toContain(thinking);
         expect(marks(settled)[0]?.querySelector(`[data-icon="sparkles"]`)).not.toBeNull();
+    });
+
+    it(`keeps a shut thought in the page for find-in-page, and opens it when a match lands inside`, async () => {
+        const element = mount({ thinking, tools: [read(`a.ts`)] });
+        const shut = element.querySelector(`[hidden="until-found"]`)!;
+        expect(shut.textContent).toBe(thinking);
+        // The run is not text worth the page's weight: it stays absent until pressed.
+        expect(element.textContent).not.toContain(`a.ts`);
+
+        shut.dispatchEvent(new Event(`beforematch`));
+        await nextTick();
+        expect(shut.hasAttribute(`hidden`)).toBe(false);
+        expect(shut.classList.contains(`chat-mark-found`)).toBe(true);
+        expect(marks(element)[0]?.getAttribute(`aria-expanded`)).toBe(`true`);
     });
 
     it(`keeps a reader's own answer over the turn's: a shut thought stays shut as the turn settles`, async () => {
         const element = mount({ thinking, live: true });
         marks(element)[0]!.click();
         await settle();
-        expect(element.textContent).not.toContain(thinking);
+        expect(shownText(element)).not.toContain(thinking);
     });
 });
