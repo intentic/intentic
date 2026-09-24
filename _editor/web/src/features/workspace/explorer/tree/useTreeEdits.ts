@@ -1,7 +1,9 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { parentDir } from "@intentic/ui/path";
 import { computed, type Ref, ref, shallowRef, type VNode } from "vue";
 import { newNameError } from "../entryNames";
+import type { LandedEntry } from "../fileNesting";
 import { noteUserCreatedDir } from "../useEmptyDirs";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
 import { advanceEdit, IDLE, type InlineEdit, type InlineEditEvent, type InlineWrite } from "./inlineEdit";
@@ -44,7 +46,8 @@ export interface TreeEditsHost {
     readonly byPath: Readonly<Ref<ReadonlyMap<string, WorkspaceTreeEntry>>>;
     readonly rules: Pick<ReturnType<typeof useTreeRules>, "pending" | "refuseIn">;
     readonly targetDir: (path: string | null) => string;
-    readonly openFolder: (dir: string) => void;
+    // Opens the folder a name lands in, and the nest that would fold it (useTreeRows' openLanding).
+    readonly openLanding: (dir: string, landed?: readonly LandedEntry[]) => void;
     readonly selectSingle: (path: string) => void;
     readonly focusLead: () => Promise<void>;
     readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "run" | "moveEntry" | "createDir" | "createFile">;
@@ -66,18 +69,23 @@ export const useTreeEdits = (host: TreeEditsHost) => {
         if (rules.refuseIn(dir)) {
             return;
         }
-        host.openFolder(dir);
+        host.openLanding(dir, []);
         inline.apply({ kind: `create`, dir, type });
     };
 
     // `moveEntry` swaps the rows before its first await, so the new name is on screen in this same frame; the selection
-    // follows it, or the highlight would sit on a row that has just gone. A refusal puts both back.
+    // follows it, or the highlight would sit on a row that has just gone. A refusal puts both back. Renaming a file to
+    // package.json starts a fold, which opens so its siblings don't vanish under it.
     const renameTo = (from: string, to: string): void => {
+        const type = host.byPath.value.get(from)?.type ?? `file`;
         void store.run(() => store.moveEntry(from, to), `Couldn't rename that.`);
+        host.openLanding(parentDir(to), [{ path: to, type }]);
         host.selectSingle(to);
     };
-    // Selection and focus land on the new row, up before the write's first await. A file's tab waits for the bytes: the
-    // viewer reads the path it is given, and a read of a file the daemon hasn't written yet closes the tab that opened it.
+    // Selection and focus land on the new row, up before the write's first await, with the package.json nest it folds
+    // under opened in the same frame, so the row never vanishes into the fold between Enter and its tab. That tab waits
+    // for the bytes: the viewer reads the path it is given, and a read of a file the daemon hasn't written yet closes the
+    // tab that opened it.
     const createAt = async (path: string, type: "file" | "dir"): Promise<void> => {
         if (type === `dir`) {
             // A freshly created folder is exempt from barren marking until it gains content.
@@ -87,6 +95,7 @@ export const useTreeEdits = (host: TreeEditsHost) => {
             type === `dir`
                 ? store.run(() => store.createDir(path), `Couldn't create that folder.`)
                 : store.run(() => store.createFile(path), `Couldn't create that file.`);
+        host.openLanding(parentDir(path), [{ path, type }]);
         host.selectSingle(path);
         await host.focusLead();
         await write;

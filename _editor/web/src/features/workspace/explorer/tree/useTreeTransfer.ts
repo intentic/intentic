@@ -5,6 +5,7 @@ import { onScopeDispose, type Ref, ref } from "vue";
 import type { useNotifications } from "../../../../shell/notifications/notifications";
 import type { useUploadQueue } from "../../files/upload/useUploadQueue";
 import { joinPath } from "../entryNames";
+import type { LandedEntry } from "../fileNesting";
 import { filesOffered } from "../transfer/dragSource";
 import { filesToEntries } from "../transfer/dropEntries";
 import { movableInto, pastePairs } from "../transfer/explorerPaste";
@@ -24,7 +25,10 @@ export interface TreeTransferHost {
     readonly byPath: Readonly<Ref<ReadonlyMap<string, WorkspaceTreeEntry>>>;
     readonly childrenOf: (entry: WorkspaceTreeEntry) => readonly WorkspaceTreeEntry[];
     readonly targetDir: (path: string | null) => string;
-    readonly openFolder: (dir: string) => void;
+    // Opens the folder something lands in, and the nest that would fold it (useTreeRows' openLanding).
+    readonly openLanding: (dir: string, landed?: readonly LandedEntry[]) => void;
+    // The nest alone, for a drag onto a folder row, which leaves that folder as it was.
+    readonly openNest: (dir: string, landed?: readonly LandedEntry[]) => void;
     readonly rules: Pick<ReturnType<typeof useTreeRules>, "unlockedOnly" | "archived" | "noDrops" | "refuseIn">;
     readonly selecting: Pick<ReturnType<typeof useTreeSelection>, "selection" | "lead" | "selectLanded">;
     readonly inline: Pick<ReturnType<typeof useInlineEdit>, "edit" | "editing">;
@@ -66,10 +70,12 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         const siblings = target === undefined ? host.tree() : host.childrenOf(target);
         return new Set(siblings.map((child) => child.name));
     };
-    // Opens the target dir and selects what landed, so a paste into a collapsed folder isn't invisible.
-    const revealLanded = (dir: string, paths: readonly string[]): void => {
-        host.openFolder(dir);
-        selecting.selectLanded(paths);
+    // What moving or copying `from` to `to` lands: the source's kind, read before the write takes the source away.
+    const landedAs = (from: string, to: string): LandedEntry => ({ path: to, type: host.byPath.value.get(from)?.type ?? `file` });
+    // Opens the target dir (and the nest folding it) and selects what landed, so a paste into a collapsed folder isn't invisible.
+    const revealLanded = (dir: string, landed: readonly LandedEntry[]): void => {
+        host.openLanding(dir, landed);
+        selecting.selectLanded(landed.map((entry) => entry.path));
     };
     // A copy never overwrites, landing under a free name ("<name> copy"). Revealed before the write is awaited: its rows
     // are already on screen, and selecting them after the round trip would make the paste look like nothing happened.
@@ -78,11 +84,9 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         if (pairs.length === 0) {
             return;
         }
+        const landed = pairs.map((pair) => landedAs(pair.from, pair.to));
         const write = store.run(() => store.copyEntries(pairs), whenRefused);
-        revealLanded(
-            dir,
-            pairs.map((pair) => pair.to),
-        );
+        revealLanded(dir, landed);
         await write;
     };
     // A cut moves and consumes the clipboard; a copy leaves it for the next paste.
@@ -100,11 +104,9 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         if (sources.length === 0) {
             return;
         }
+        const landed = sources.map((source) => landedAs(source, joinPath(dir, basename(source))));
         const write = store.run(() => store.moveIntoMany(sources, dir), `Couldn't move those items.`);
-        revealLanded(
-            dir,
-            sources.map((source) => joinPath(dir, basename(source))),
-        );
+        revealLanded(dir, landed);
         await write;
     };
 
@@ -131,7 +133,7 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         if (files !== undefined && files.length > 0) {
             event.preventDefault();
             if (!rules.refuseIn(dir)) {
-                host.openFolder(dir);
+                host.openLanding(dir);
                 void host.uploads.enqueue(dir, filesToEntries(files));
             }
             return;
@@ -150,7 +152,12 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
             await copyInto(paths, dir, `Couldn't copy those items out.`);
             return;
         }
-        await store.run(() => store.moveIntoMany(paths, dir), `Couldn't move those items.`);
+        const landed = paths.map((path) => landedAs(path, joinPath(dir, basename(path))));
+        const write = store.run(() => store.moveIntoMany(paths, dir), `Couldn't move those items.`);
+        // The folder dropped on stays as it was, but the nest opens: a file dropped into an open package folder would
+        // otherwise vanish under its package.json.
+        host.openNest(dir, landed);
+        await write;
     };
     // Every press reaches beginEntryDrag, carrying nothing when it cannot travel: that is what ends a drag's claim on a click.
     const onPointerDown = (event: PointerEvent, path: string): void => {
@@ -205,8 +212,8 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         if (rules.noDrops(dir) || rules.refuseIn(dir)) {
             return;
         }
-        // Opened before the files are read, so the placeholder rows appear inside the folder that took the drop.
-        host.openFolder(dir);
+        // Opened before the files are read, so the placeholder rows appear inside the folder (and nest) that took the drop.
+        host.openLanding(dir);
         // Synchronous, since webkitGetAsEntry must fire while the drag items are still alive.
         host.uploads.enqueueFromDataTransfer(dir, event.dataTransfer);
     };
@@ -229,7 +236,8 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         }
         await store.run(async () => {
             const landed = await store.extractEntry(path);
-            revealLanded(parentDir(landed), [landed]);
+            // An extract lands a folder unless the listing already says otherwise.
+            revealLanded(parentDir(landed), [{ path: landed, type: host.byPath.value.get(landed)?.type ?? `dir` }]);
             host.say(`Extracted to ${basename(landed)}`);
         }, `Couldn't extract that.`);
     };

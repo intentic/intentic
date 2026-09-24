@@ -144,12 +144,14 @@ export interface SurfaceOptions extends StoreOptions {
     readonly barren?: readonly string[];
     readonly rowActions?: (dir: string) => readonly RowAction[];
     readonly frame?: TreeMenuHost[`frame`];
+    // Whether package.json folds its sibling files (the explorer's file-nesting preference).
+    readonly nesting?: boolean;
 }
 
 // The tree's composables over one listing, the way WorkspaceTree.vue builds them; the surface's element is in the DOM.
 export const treeSurface = (
     listing: readonly WorkspaceTreeEntry[],
-    { rootDir = ``, barren = [], rowActions = () => [], frame = () => ({}), ...options }: SurfaceOptions = {},
+    { rootDir = ``, barren = [], rowActions = () => [], frame = () => ({}), nesting = false, ...options }: SurfaceOptions = {},
 ) => {
     const { store, calls, release } = fakeTreeStore(listing, options);
     const { settled, emptyDirs } = emptyDirsOver(barren);
@@ -167,11 +169,11 @@ export const treeSurface = (
             rootHidden: () => 0,
             filter: () => ``,
             filters: ref({ showIgnored: true, hideTests: false, hideTechnical: false }),
-            nesting: ref(false),
+            nesting: ref(nesting),
             store,
             emptyDirs,
         });
-        const { byPath, targetDir, openFolder } = rows;
+        const { byPath, targetDir, openLanding, openNest } = rows;
         const rules = useTreeRules({ byPath, store });
         const selecting = useTreeSelection({ selectedPath: () => undefined, order: rows.orderedPaths });
         const inline = useInlineEdit((path) => byPath.value.has(path));
@@ -180,7 +182,7 @@ export const treeSurface = (
             byPath,
             rules,
             targetDir,
-            openFolder,
+            openLanding,
             selectSingle: selecting.selectSingle,
             focusLead: async () => {
                 calls.push(`focus`);
@@ -195,7 +197,8 @@ export const treeSurface = (
             byPath,
             childrenOf: rows.childrenOf,
             targetDir,
-            openFolder,
+            openLanding,
+            openNest,
             rules,
             selecting,
             inline,

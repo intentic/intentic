@@ -5,6 +5,7 @@ import { computed, type Ref } from "vue";
 import { opensAsFolder } from "../../files/archiveEntries";
 import { withProvisionalEntries } from "../../files/provisionalEntries";
 import { type ExplorerFilters, technicalHidden } from "../explorerFilter";
+import { type LandedEntry, landingNest } from "../fileNesting";
 import type { useEmptyDirs } from "../useEmptyDirs";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
 import { deadLink, flattenRows, indexEntries, type Row } from "./treeRows";
@@ -93,6 +94,37 @@ export const useTreeRows = (host: TreeRowsHost) => {
             expanded.value = new Set([...expanded.value, ...dirs]);
         }
     };
+    // Opens the package.json that would fold what the user just put in `dir` out of sight, with nesting on. Only a
+    // gesture's landing: a file an agent writes leaves the tree as the reader arranged it.
+    const openNest = (dir: string, landed?: readonly LandedEntry[]): void => {
+        if (!host.nesting.value) {
+            return;
+        }
+        const entry = byPath.value.get(dir);
+        const listed = dir === host.rootDir() ? host.tree() : entry === undefined ? [] : childrenOf(entry);
+        const nest = landingNest(dir, withProvisionalEntries(dir, listed), landed);
+        if (nest !== undefined) {
+            openAll([nest]);
+        }
+    };
+    // Opens where something the user put is landing: its folder, and the nest inside it.
+    const openLanding = (dir: string, landed?: readonly LandedEntry[]): void => {
+        openFolder(dir);
+        openNest(dir, landed);
+    };
 
-    return { byPath, childrenOf, visibleRows, orderedPaths, technicalCount, targetDir, expandable, toggleExpand, openFolder, openAll };
+    return {
+        byPath,
+        childrenOf,
+        visibleRows,
+        orderedPaths,
+        technicalCount,
+        targetDir,
+        expandable,
+        toggleExpand,
+        openFolder,
+        openAll,
+        openNest,
+        openLanding,
+    };
 };

@@ -92,6 +92,32 @@ describe(`ending the field`, () => {
         expect(calls.slice(2)).toEqual([`write src/notes.md`, `opened src/notes.md`]);
     });
 
+    it(`opens the package.json a new file folds under in the same frame, so its row never vanishes into the fold`, async () => {
+        const { inline, edits, store, selecting, release } = treeSurface([dir(`app`, [file(`app/package.json`), file(`app/README.md`)])], {
+            park: true,
+            nesting: true,
+        });
+        edits.beginCreate(`app`, `file`);
+        expect([...store.expanded.value]).toEqual([`app`]);
+        inline.draft.value = `notes.md`;
+
+        const ending = edits.endEdit(`commit`);
+        expect([[...store.expanded.value], [...selecting.selection.value]]).toEqual([[`app`, `app/package.json`], [`app/notes.md`]]);
+        release();
+        await ending;
+    });
+
+    it(`opens a package.json a rename starts, so the files it now folds stay in view`, async () => {
+        const { inline, edits, store, release } = treeSurface([dir(`app`, [file(`app/pkg.json`), file(`app/README.md`)])], { nesting: true });
+        store.expanded.value = new Set([`app`]);
+        edits.beginRename(`app/pkg.json`);
+        inline.draft.value = `package.json`;
+
+        await edits.endEdit(`commit`);
+        expect([...store.expanded.value]).toEqual([`app`, `app/package.json`]);
+        release();
+    });
+
     it(`opens nothing for a file the daemon refused, and nothing for a folder`, async () => {
         const refusedFile = editsOver({ park: false, refused: new Set([`src/notes.md`]) });
         refusedFile.edits.beginCreate(`src`, `file`);

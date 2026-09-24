@@ -120,6 +120,18 @@ describe(`paste`, () => {
         expect(store.clipboard.value).toBeUndefined();
     });
 
+    it(`opens the package.json a pasted file folds under, and not for a pasted folder`, async () => {
+        const PACKAGE = [dir(`app`, [file(`app/package.json`)]), dir(`lib`, []), file(`README.md`)];
+        const pasted = treeSurface(PACKAGE, { nesting: true });
+        pasted.store.clipboard.value = { mode: `copy`, paths: [`README.md`] };
+        await pasted.transfer.paste(`app`);
+        const folder = treeSurface(PACKAGE, { nesting: true });
+        folder.store.clipboard.value = { mode: `cut`, paths: [`lib`] };
+        await folder.transfer.paste(`app`);
+
+        expect([[...pasted.store.expanded.value], [...folder.store.expanded.value]]).toEqual([[`app`, `app/package.json`], [`app`]]);
+    });
+
     it(`writes nothing with nothing staged, into an archive, or for a read-only member`, async () => {
         const writer = treeSurface(TREE);
         await writer.transfer.paste(`src`);
@@ -225,6 +237,16 @@ describe(`an entry dragged by pointer`, () => {
             [`docs/logo.png`],
         ]);
         expect(calls.filter((call) => call.startsWith(`run: `))).toEqual([`run: Couldn't move those items.`, `run: Couldn't copy those items out.`]);
+    });
+
+    it(`opens the package.json an entry dragged into a package folder folds under, leaving the folder as it was`, async () => {
+        const { transfer, store } = treeSurface([dir(`app`, [file(`app/package.json`)]), file(`README.md`)], { nesting: true });
+
+        dragTo(transfer, `README.md`, `app`);
+        window.dispatchEvent(new PointerEvent(`pointerup`));
+        await drain();
+
+        expect([store.moveIntoMany.mock.calls, [...store.expanded.value]]).toEqual([[[[`README.md`], `app`]], [`app/package.json`]]);
     });
 });
 

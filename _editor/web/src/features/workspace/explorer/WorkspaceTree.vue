@@ -86,16 +86,17 @@ const { fileNesting } = useFileNesting();
 // Settled folders holding only empty folders; tracked by path since `tree`'s listing may not reach every branch here.
 const emptyDirs = useEmptyDirs(() => barren);
 
-const { byPath, childrenOf, visibleRows, orderedPaths, technicalCount, targetDir, expandable, toggleExpand, openFolder, openAll } = useTreeRows({
-    tree: () => tree,
-    rootDir: () => rootDir,
-    rootHidden: () => rootHidden,
-    filter: () => filter,
-    filters: layout.explorerFilters,
-    nesting: fileNesting,
-    store,
-    emptyDirs,
-});
+const { byPath, childrenOf, visibleRows, orderedPaths, technicalCount, targetDir, expandable, toggleExpand, openAll, openNest, openLanding } =
+    useTreeRows({
+        tree: () => tree,
+        rootDir: () => rootDir,
+        rootHidden: () => rootHidden,
+        filter: () => filter,
+        filters: layout.explorerFilters,
+        nesting: fileNesting,
+        store,
+        emptyDirs,
+    });
 const rules = useTreeRules({ byPath, store });
 const { pendingRow, pending, dropTargetOf } = rules;
 // An arriving row holding nothing a press can reach: a pending file, not a pending folder, which still expands.
@@ -121,7 +122,7 @@ const { beginRename, beginCreate, endEdit } = useTreeEdits({
     byPath,
     rules,
     targetDir,
-    openFolder,
+    openLanding,
     selectSingle: selecting.selectSingle,
     focusLead,
     store,
@@ -155,7 +156,8 @@ const { stage, paste, extract, onCopyEvent, onPasteEvent, onPointerDown, carried
     byPath,
     childrenOf,
     targetDir,
-    openFolder,
+    openLanding,
+    openNest,
     rules,
     selecting,
     inline,
