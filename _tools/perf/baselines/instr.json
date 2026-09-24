@@ -8,13 +8,16 @@
     },
     "scenarios": {
         "code-lines": {
-            "instructions": 2977381734
+            "instructions": 1599635195
         },
         "fuzzy-rank": {
             "instructions": 1475606338
         },
+        "ignore-rewalk": {
+            "instructions": 264699190
+        },
         "ignore-walk": {
-            "instructions": 1108899328
+            "instructions": 1108649714
         },
         "transcript-fold": {
             "instructions": 163401256

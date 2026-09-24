@@ -8,8 +8,8 @@ export const scenario: Scenario = {
     setup: async () => {
         const before = typescriptModule(1, 40);
         const after = edited(before);
-        // The grammar loads once per process; loading it here keeps the one-off load out of the count.
-        await analyze("const warm = 1;\n", "typescript");
+        // The counting worker is long-lived, so the count is of a warm tokenizer: a same-sized file of other text goes first.
+        await analyze(typescriptModule(2, 40), "typescript");
         return async () => {
             const stat = await codeLineStat(before, after, "src/rows.ts", analyze);
             if (stat === undefined || stat.additions === 0) {
