@@ -207,14 +207,14 @@ const diffTab = (payload: DiffPayload): WorkspaceTab => ({
     pending: payload.pending,
 });
 
-// A diff from a document tab (e.g. a commit's file list) opens in the other pane so the list stays visible;
-// anything else opens where the reader is, keyed on the active tab, not the caller.
+// A diff from a document or a repository's panel (e.g. its Git graph's file list) opens in the other pane so the list
+// stays visible; anything else opens where the reader is, keyed on the active tab, not the caller.
 const diffPane = (): EditorPane => {
     if (!splitAllowed.value) {
         return focused.value;
     }
     const active = tabs.value.find((tab) => tab.id === activeId.value);
-    return active?.kind === `document` ? otherPane(focused.value) : focused.value;
+    return active?.kind === `document` || active?.kind === `directory` ? otherPane(focused.value) : focused.value;
 };
 
 const openDiff = (payload: DiffPayload, mode: OpenMode): void => {

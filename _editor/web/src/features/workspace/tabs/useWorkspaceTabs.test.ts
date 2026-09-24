@@ -253,7 +253,26 @@ it(`opens a document's diff beside it, leaving the document on screen`, () => {
     expect(splitOpen.value).toBe(true);
 });
 
+it(`opens a repository panel's diff beside it, leaving the panel on screen`, () => {
+    startFresh();
+    openDirectory(`shop`, `git-history-repo`);
+
+    // A double-click: its first click peeks, the dblclick keeps; then a single click peeks the next file.
+    openDiff(diffPayload(`src/a.ts`), `preview`);
+    openDiff(diffPayload(`src/a.ts`), `keep`);
+    openDiff(diffPayload(`src/b.ts`), `preview`);
+
+    expect(strip.value.main.tabs.map((tab) => tab.id)).toEqual([`dir:shop`]);
+    expect(strip.value.main.active).toBe(`dir:shop`);
+    expect(strip.value.side.tabs.map((tab) => (tab.kind === `diff` ? tab.path : tab.id))).toEqual([`src/a.ts`, `src/b.ts`]);
+    expect(strip.value.side.preview).toBe(strip.value.side.active);
+});
+
 it(`replaces the companion diff as the reader moves down the list`, () => {
+    startFresh();
+    openDocument(`git-history`, `log`, ``, `History`, `sitemap`);
+    openDiff(diffPayload(`src/a.ts`), `preview`);
+
     openDiff(diffPayload(`src/b.ts`), `preview`);
 
     const companion = strip.value.side.tabs[0];

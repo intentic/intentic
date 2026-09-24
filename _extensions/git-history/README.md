@@ -32,8 +32,8 @@ makes between its SCM list and its Git Graph tab; the uncommitted half of the st
 stays in the app's sidebar where it already lives.
 
 **The diff opens BESIDE the graph, not over it.** Clicking a file in a commit hands the host a diff, and because
-this tab is a document with a file list in it, the host puts that diff in the editor's companion pane (its
-`EditorStrip`) and leaves the graph where it is. Reading a commit is a list and a diff, and in one pane they take
+the active tab is a repository panel or the root's document, both surfaces with a file list in them, the host puts
+that diff in the editor's companion pane (its `EditorStrip`) and leaves the graph where it is. Reading a commit is a list and a diff, and in one pane they take
 turns: every file clicked used to replace the very list that named it. A click is a PEEK (one companion tab,
 replaced by the next file) and a double-click keeps the tab, the grammar the Changes panel already uses; the row
 whose diff is showing stays marked, so the two halves read as one view. The tab opens on the click with the
