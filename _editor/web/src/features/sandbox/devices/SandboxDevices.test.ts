@@ -38,7 +38,7 @@ const startedTurns: string[] = [];
 jest.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => startedTurns.push(prompt ?? ``) }));
 // Container verbs, recorded the same way: which op left for which machine, and for `reshape`, what the form
 // asked for.
-const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown }[] = [];
+const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown; later?: true }[] = [];
 // Both of the above in one list, in the order they left: which half of a removal goes first is a rule of its own,
 // and two arrays cannot say.
 const flow: string[] = [];
@@ -54,8 +54,14 @@ jest.mock(`./useDevices`, () => {
     return {
         ...useDevicesOriginal,
         useDevices: () => ({ devices, readAt, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
-        manageDeviceSandbox: (hostId: string, slug: string, op: string, payload?: { resources?: unknown }) => {
-            verbCalls.push({ hostId, slug, op, ...(payload?.resources === undefined ? {} : { resources: payload.resources }) });
+        manageDeviceSandbox: (hostId: string, slug: string, op: string, payload?: { resources?: unknown; later?: boolean }) => {
+            verbCalls.push({
+                hostId,
+                slug,
+                op,
+                ...(payload?.resources === undefined ? {} : { resources: payload.resources }),
+                ...(payload?.later === true ? { later: true as const } : {}),
+            });
             flow.push(`${op}:${slug}`);
             return Promise.resolve(`Reshaped sandbox "${slug}".`);
         },
@@ -494,16 +500,54 @@ it(`opens the Resources form on the row's own share and sends only what changed,
     // The environment's privilege isn't the owner's to withdraw, and the switch says why.
     expect(document.body.querySelector(`input[aria-label="Run privileged"]`)).toHaveProperty(`disabled`, true);
     expect(everything()).toContain(`approved environment requires this`);
-    expect(dialogButton(`Apply`)).toHaveProperty(`disabled`, true);
+    expect(dialogButton(`Apply now`)).toHaveProperty(`disabled`, true);
 
     // Past the derived share, into what the engine keeps for itself: the owner's to give.
     memory!.value = `18`;
     memory!.dispatchEvent(new Event(`input`));
     await nextTick();
-    expect(dialogButton(`Apply`)).toHaveProperty(`disabled`, false);
-    dialogButton(`Apply`)?.click();
+    expect(dialogButton(`Apply now`)).toHaveProperty(`disabled`, false);
+    dialogButton(`Apply now`)?.click();
     await nextTick();
     expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape`, resources: { memoryGib: 18 } }]);
+});
+
+// The form's other way out: Save keeps the ask for the sandbox's next restart and leaves it running.
+it(`saves the Resources form for the next restart instead of applying it`, async () => {
+    granted();
+    const el = mount([shared()]);
+    el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
+    await nextTick();
+    menuRow(`Resources…`)?.click();
+    await nextTick();
+    expect(dialogButton(`Save for next restart`)).toHaveProperty(`disabled`, true);
+    const memory = document.body.querySelector<HTMLInputElement>(`input[aria-label="Memory cap in GiB"]`);
+    memory!.value = `18`;
+    memory!.dispatchEvent(new Event(`input`));
+    await nextTick();
+    dialogButton(`Save for next restart`)?.click();
+    await nextTick();
+    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape`, resources: { memoryGib: 18 }, later: true }]);
+});
+
+// A share already saved: the form opens on it, says so, and Apply now with nothing typed applies it as it is.
+it(`opens on a share saved for the next restart and applies it as it is`, async () => {
+    granted();
+    const device = shared();
+    const box = device.sandboxes![0]!;
+    const el = mount([{ ...device, sandboxes: [{ ...box, resources: { ...box.resources!, saved: { memoryGib: 16 } } }] }]);
+    el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
+    await nextTick();
+    menuRow(`Resources…`)?.click();
+    await nextTick();
+    expect(document.body.querySelector<HTMLInputElement>(`input[aria-label="Memory cap in GiB"]`)).toHaveProperty(`value`, `16`);
+    expect(everything()).toContain(`Saved for the next restart: 16 GiB memory.`);
+    // Saving the very share that is saved changes nothing; applying it is the one thing left to do.
+    expect(dialogButton(`Save for next restart`)).toHaveProperty(`disabled`, true);
+    expect(dialogButton(`Apply now`)).toHaveProperty(`disabled`, false);
+    dialogButton(`Apply now`)?.click();
+    await nextTick();
+    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape` }]);
 });
 
 it(`says nothing about connecting a device that is already managing its sandboxes`, () => {

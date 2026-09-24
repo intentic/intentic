@@ -9,6 +9,14 @@ import { DEV_VERSION } from "../state/versions.js";
 // One sandbox's resource share as docker currently enforces it, read off the container by the machine agent.
 // `overlayRuntime` is the environment's locked demand; `hostRuntime` is the owner's addition; `privileged`/`gpu` are
 // docker's enforced truth.
+// Reshape request, turned into `ic sandbox reshape` flags: absent means leave it, `null` on the two caps means back to
+// the default; at least one key must be set.
+export const SandboxResourcesAskFieldsSchema = z.object({
+    memoryGib: z.int().positive().nullable().optional(),
+    cpus: z.int().positive().nullable().optional(),
+    privileged: z.boolean().optional(),
+    gpu: z.boolean().optional(),
+});
 export const SandboxResourcesSchema = z.object({
     // The cgroup memory ceiling in bytes; absent when docker imposes none (the hosted shape).
     memoryBytes: z.number().optional(),
@@ -18,17 +26,12 @@ export const SandboxResourcesSchema = z.object({
     gpu: z.boolean(),
     hostRuntime: z.array(z.string()),
     overlayRuntime: z.array(z.string()),
+    // A reshape saved for the sandbox's next restart (`ic sandbox reshape --later`) and not yet in force: the next
+    // update, rollback, rebuild, reshape or Restart applies it. Absent when nothing is saved.
+    saved: SandboxResourcesAskFieldsSchema.optional(),
 });
 export type SandboxResources = z.infer<typeof SandboxResourcesSchema>;
 
-// Reshape request, turned into `ic sandbox reshape` flags: absent means leave it, `null` on the two caps means back to
-// the default; at least one key must be set.
-export const SandboxResourcesAskFieldsSchema = z.object({
-    memoryGib: z.int().positive().nullable().optional(),
-    cpus: z.int().positive().nullable().optional(),
-    privileged: z.boolean().optional(),
-    gpu: z.boolean().optional(),
-});
 // Fields also exported separately for callers that compose them and enforce the at-least-one rule themselves.
 export const SandboxResourcesAskSchema = SandboxResourcesAskFieldsSchema.refine((ask) => Object.values(ask).some((value) => value !== undefined), {
     message: "a reshape must change at least one thing",
@@ -81,8 +84,12 @@ export const DeviceSandboxFlowSchema = z.object({
     slug: z.string().min(1),
     // Approved overlay's sha256, required only by `rebuild`; only content matching it is ever built.
     hash: z.string().optional(),
-    // What `reshape` should change, required by it and meaningless to the rest.
+    // What `reshape` should change, meaningless to the rest. Absent on a reshape applies what is saved for the next
+    // restart now; absent with `later` forgets what is saved.
     resources: SandboxResourcesAskSchema.optional(),
+    // `reshape` only: save `resources` for the sandbox's next restart instead of restarting it now, replacing
+    // whatever was saved before (`ic sandbox reshape --later`).
+    later: z.boolean().optional(),
     // `runner-up` only, daemon-filled, never by the caller: the browser never holds the pairing credential.
     parentUrl: z.string().optional(),
     pair: z.string().optional().meta({ secret: true }),

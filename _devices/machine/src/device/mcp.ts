@@ -340,7 +340,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "manage_sandbox",
         description:
-            "Start, stop or restart one Intentic sandbox on this device, by its slug from list_sandboxes. Stopping one interrupts whoever is working in it, and stopping the sandbox you are calling from severs your own connection. Requires the 'Manage sandboxes on this device' permission, which is OFF unless the user turned it on.",
+            "Start, stop or restart one Intentic sandbox on this device, by its slug from list_sandboxes. Stopping one interrupts whoever is working in it, and stopping the sandbox you are calling from severs your own connection. When a share is saved for the sandbox's next restart (reshape_sandbox with `later`), start and restart recreate it with that share, which takes about a minute. Requires the 'Manage sandboxes on this device' permission, which is OFF unless the user turned it on.",
         effect: "write",
         input: z.object({ op: SandboxOpSchema, slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
         run: async ({ op, slug }, scopes) => textResult(await manageSandbox(op, slug, scopes)),
@@ -363,10 +363,13 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "reshape_sandbox",
         description:
-            "Change how much of this device one Intentic sandbox may use, or its privileges: a memory cap in whole GiB, a CPU cap in whole cores, whether the container runs privileged, and whether this device's NVIDIA GPUs are passed through. Give only what should change; `null` for a cap means back to the default (the memory share derived from this machine; every core). The sandbox RESTARTS onto the same image — about a minute, whoever is working in it is interrupted, and reshaping the sandbox you are calling from severs your own connection until it is back — and the new values live on the container, surviving every later update. A privilege the sandbox's approved environment demands (the Docker capability's --privileged) cannot be withdrawn here, only the owner's own ask. Requires the 'Manage sandboxes on this device' permission.",
+            "Change how much of this device one Intentic sandbox may use, or its privileges: a memory cap in whole GiB, a CPU cap in whole cores, whether the container runs privileged, and whether this device's NVIDIA GPUs are passed through. Give only what should change; `null` for a cap means back to the default (the memory share derived from this machine; every core). The sandbox RESTARTS onto the same image — about a minute, whoever is working in it is interrupted, and reshaping the sandbox you are calling from severs your own connection until it is back — and the new values live on the container, surviving every later update. Pass `later: true` to SAVE the change for the sandbox's next restart instead (its next update, rollback, rebuild, or a start/restart through manage_sandbox applies it) without restarting it now; `later: true` with nothing else forgets what is saved, and a call with nothing at all applies what is saved now. list_sandboxes shows what is saved under `resources.saved`. A privilege the sandbox's approved environment demands (the Docker capability's --privileged) cannot be withdrawn here, only the owner's own ask. Requires the 'Manage sandboxes on this device' permission.",
         effect: "write",
-        input: SandboxResourcesAskFieldsSchema.extend({ slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
-        run: async ({ slug, ...ask }, scopes) => textResult(await reshapeSandbox(slug, ask, scopes, () => {})),
+        input: SandboxResourcesAskFieldsSchema.extend({
+            slug: required.describe("The sandbox's slug, from list_sandboxes."),
+            later: z.boolean().optional().describe("Save the change for the sandbox's next restart instead of restarting it now."),
+        }),
+        run: async ({ slug, later, ...ask }, scopes) => textResult(await reshapeSandbox(slug, ask, scopes, () => {}, { later })),
     }),
     tool({
         name: "remove_sandbox",

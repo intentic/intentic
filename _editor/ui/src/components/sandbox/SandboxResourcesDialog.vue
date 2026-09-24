@@ -1,4 +1,5 @@
-<!-- Confirmation dialog for one sandbox's memory, CPU, privileged and GPU share; shared by the web and desktop apps. -->
+<!-- Confirmation dialog for one sandbox's memory, CPU, privileged and GPU share; shared by the web and desktop apps.
+     Apply restarts the sandbox now; Save (where the caller can carry it) keeps the share for its next restart. -->
 <script setup lang="ts">
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, useId, watch } from "vue";
@@ -9,7 +10,8 @@ import type { DeviceSandboxResources } from "./deviceDetail.js";
 import Modal from "../overlays/Modal.vue";
 import Row from "../rows/Row.vue";
 import {
-    askFrom,
+    applyAskFrom,
+    askSummary,
     capFromField,
     cpuBounds,
     defaultMemoryGib,
@@ -22,6 +24,9 @@ import {
     MEMORY_BOUNDS,
     type ResourcesAsk,
     type ResourcesForm,
+    sameAsk,
+    saveAskFrom,
+    withAsk,
 } from "./sandboxResources.js";
 import { ui } from "../../lib/ui.js";
 
@@ -34,6 +39,7 @@ const {
     engine,
     selfWarning = false,
     suggestMemoryGib,
+    canSave = false,
 } = defineProps<{
     open: boolean;
     /** What to call the sandbox in the header: the row's own title. */
@@ -52,12 +58,20 @@ const {
      * difference and the reader sees what they are about to change from.
      */
     suggestMemoryGib?: number | undefined;
+    /**
+     * Whether the caller can save a share for the sandbox's next restart (the machine agent's `later`), which adds
+     * the Save button. Off for a caller whose door has no such thing.
+     */
+    canSave?: boolean;
 }>();
 
-const emit = defineEmits<{ cancel: []; apply: [ask: ResourcesAsk] }>();
+// `apply` carries undefined when the only change is to apply what is already saved; `save` carries undefined to
+// forget what is saved, which is what saving a form that matches the running share means.
+const emit = defineEmits<{ cancel: []; apply: [ask: ResourcesAsk | undefined]; save: [ask: ResourcesAsk | undefined] }>();
 
 // The form starts from the container every time it opens, not from where the last visit left it, so a
-// share changed by an Apply in between is what the next open shows.
+// share changed by an Apply in between is what the next open shows. `initial` is what RUNS; the fields open on
+// what the next restart would leave, so a saved share is what the reader sees and edits.
 const EMPTY: ResourcesForm = { memoryGib: null, cpus: null, privileged: false, gpu: false };
 const initial = ref<ResourcesForm>(EMPTY);
 const form = ref<ResourcesForm>(EMPTY);
@@ -66,7 +80,7 @@ watch(
     ([showing, share, suggested]) => {
         if (showing && share !== undefined) {
             initial.value = formFrom(share);
-            form.value = { ...initial.value, ...(suggested === undefined ? {} : { memoryGib: suggested }) };
+            form.value = { ...withAsk(initial.value, share.saved), ...(suggested === undefined ? {} : { memoryGib: suggested }) };
         }
     },
     { immediate: true },
@@ -78,8 +92,15 @@ const memoryDefault = computed(() => defaultMemoryGib(engine));
 const engineGib = computed(() => engineMemoryGib(engine));
 const cpus = computed(() => cpuBounds(engine));
 const problems = computed(() => formProblems(form.value, engine));
-const ask = computed(() => askFrom(initial.value, form.value));
-const ready = computed(() => ask.value !== undefined && problems.value.memory === undefined && problems.value.cpus === undefined);
+const saved = computed(() => current?.saved);
+const savedSummary = computed(() => (saved.value === undefined ? undefined : askSummary(saved.value)));
+const valid = computed(() => problems.value.memory === undefined && problems.value.cpus === undefined);
+// Apply is worth pressing when the form differs from what runs, or when a saved share is waiting to be applied.
+const applyAsk = computed(() => applyAskFrom(initial.value, saved.value, form.value));
+const applyReady = computed(() => valid.value && (applyAsk.value !== undefined || saved.value !== undefined));
+// Save is worth pressing when it would change what is saved: a new share, or forgetting the one there is.
+const saveAsk = computed(() => saveAskFrom(initial.value, form.value));
+const saveReady = computed(() => valid.value && !sameAsk(saveAsk.value, saved.value));
 
 // A cap field's text, read back on every keystroke: the problem and the Apply button both follow the
 // typing. Not-a-number mid-edit leaves the form as it was, rather than flipping the cap to the default.
@@ -230,9 +251,17 @@ const uid = useId();
                 </Row>
             </div>
 
+            <!-- A share already saved and not yet in force: named, so the fields showing it are not mistaken for what runs. -->
+            <p v-if="savedSummary !== undefined" class="text-xs text-info">
+                {{ t(`ui.sandboxResourcesDialog.savedForNextRestart`, { share: savedSummary }) }}
+            </p>
+
             <!-- What applying costs, beside the button that commits it; every sentence keeps the sandbox, not the computer, as its subject. -->
             <p class="text-xs text-muted">
                 {{ t(`ui.sandboxResourcesDialog.applyingRestartsSandboxOnto`) }}
+            </p>
+            <p v-if="canSave" class="text-xs text-muted">
+                {{ t(`ui.sandboxResourcesDialog.savingKeepsItRunning`) }}
             </p>
             <p v-if="selfWarning" class="text-xs text-warning">
                 {{ t(`ui.sandboxResourcesDialog.sandboxUsingRightNow`) }}
@@ -242,7 +271,14 @@ const uid = useId();
         <template #footer>
             <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="emit(`cancel`)" />
             <!-- Disabled rather than refused: nothing changed, or a cap outside the rails, leaves nothing for the machine to accept. -->
-            <Button :label="t(`ui.action.apply`)" :disabled="!ready" @click="ask !== undefined && emit(`apply`, ask)">
+            <Button
+                v-if="canSave"
+                :label="t(`ui.sandboxResourcesDialog.saveForNextRestart`)"
+                severity="secondary"
+                :disabled="!saveReady"
+                @click="emit(`save`, saveAsk)"
+            />
+            <Button :label="canSave ? t(`ui.sandboxResourcesDialog.applyNow`) : t(`ui.action.apply`)" :disabled="!applyReady" @click="emit(`apply`, applyAsk)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
         </template>

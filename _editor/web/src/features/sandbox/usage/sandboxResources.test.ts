@@ -1,7 +1,9 @@
 import { localSandboxMemory } from "@intentic/sandbox-run";
 import { type DeviceSandboxResources, resourcesSummary } from "@intentic/ui/device";
 import {
+    applyAskFrom,
     askFrom,
+    askSummary,
     capFromField,
     cpuBounds,
     defaultMemoryGib,
@@ -11,6 +13,9 @@ import {
     gpuDropped,
     locksOf,
     MEMORY_BOUNDS,
+    sameAsk,
+    saveAskFrom,
+    withAsk,
 } from "@intentic/ui/sandbox-resources";
 
 // Pins the resources form's arithmetic here (the kit that owns it has no test runner): what it starts from,
@@ -136,4 +141,42 @@ test(`says a sandbox's share as one line, and only the parts somebody set`, () =
     expect(resourcesSummary({ ...row, resources: share({ memoryBytes: undefined, cpus: undefined, privileged: false }) })).toBeUndefined();
     // No share reported: no line, rather than a line claiming defaults nobody read off the container.
     expect(resourcesSummary(row)).toBeUndefined();
+    // A share saved for the next restart is a change still waiting, said on the row as well as in the form.
+    expect(resourcesSummary({ ...row, resources: share({ saved: { memoryGib: 20 } }) })).toBe(`12 GiB · 4 CPUs · privileged · changes on restart`);
+});
+
+// A share saved for the next restart: what runs, what the next restart leaves, and what the reader typed are three
+// different forms, and each button sends the difference against a different one of them.
+test(`lays a saved share over what runs, field by field, with null kept apart from absent`, () => {
+    const running = formFrom(share());
+    expect(withAsk(running, undefined)).toEqual(running);
+    expect(withAsk(running, { memoryGib: 20, gpu: true })).toEqual({ memoryGib: 20, cpus: 4, privileged: true, gpu: true });
+    expect(withAsk(running, { cpus: null })).toEqual({ memoryGib: 12, cpus: null, privileged: true, gpu: false });
+});
+
+test(`saves the typed form against what runs, and forgets the saved share when they match`, () => {
+    const running = formFrom(share());
+    expect(saveAskFrom(running, { ...running, memoryGib: 20 })).toEqual({ memoryGib: 20 });
+    expect(saveAskFrom(running, { ...running })).toBeUndefined();
+});
+
+test(`applies against what the saved share would leave, so a field put back is sent rather than let through`, () => {
+    const running = formFrom(share());
+    const saved = { memoryGib: 20 };
+    // Unchanged from what is saved: nothing to add, ic applies the saved share on its own.
+    expect(applyAskFrom(running, saved, withAsk(running, saved))).toBeUndefined();
+    // The reader put memory back to what runs: without an explicit 12 the saved 20 would come through the gap.
+    expect(applyAskFrom(running, saved, { ...running })).toEqual({ memoryGib: 12 });
+    expect(applyAskFrom(running, saved, { ...withAsk(running, saved), cpus: 8 })).toEqual({ cpus: 8 });
+    // Nothing saved: the same ask Apply always sent.
+    expect(applyAskFrom(running, undefined, { ...running, memoryGib: 16 })).toEqual({ memoryGib: 16 });
+});
+
+test(`compares asks key for key and says a saved one in words`, () => {
+    expect(sameAsk(undefined, {})).toBe(true);
+    expect(sameAsk({ memoryGib: 20 }, { memoryGib: 20 })).toBe(true);
+    expect(sameAsk({ memoryGib: 20 }, { memoryGib: null })).toBe(false);
+    expect(sameAsk({ memoryGib: 20 }, undefined)).toBe(false);
+    expect(askSummary({ memoryGib: 20, cpus: 1, privileged: false, gpu: true })).toBe(`20 GiB memory · 1 CPU · not privileged · GPU`);
+    expect(askSummary({ memoryGib: null, cpus: null })).toBe(`default memory · every CPU`);
 });

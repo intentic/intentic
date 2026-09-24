@@ -52,12 +52,20 @@ const selfResources = useSelfResources();
 const shareLine = computed(() => (selfResources.row.value === undefined ? undefined : resourcesSummary(selfResources.row.value)));
 const resizing = ref(false);
 const resizeFailed = ref<string | undefined>();
-const applyResize = async (ask: ResourcesAsk): Promise<void> => {
+const applyResize = async (ask: ResourcesAsk | undefined): Promise<void> => {
     resizing.value = false;
     resizeFailed.value = undefined;
     // The sandbox recreates under this page, so success is the reconnect, not a sentence here. Only a refusal the
     // machine actually sent has anything to say.
     await selfResources.apply(ask).catch((error: unknown) => {
+        resizeFailed.value = errorMessage(error, `That didn't work on this device.`);
+    });
+};
+// Saving leaves the sandbox running, so unlike Apply this one answers: the share line picks up "changes on restart".
+const saveResize = async (ask: ResourcesAsk | undefined): Promise<void> => {
+    resizing.value = false;
+    resizeFailed.value = undefined;
+    await selfResources.save(ask).catch((error: unknown) => {
         resizeFailed.value = errorMessage(error, `That didn't work on this device.`);
     });
 };
@@ -332,8 +340,10 @@ const removeLogo = async (): Promise<void> => {
             :current="selfResources.current.value"
             :engine="selfResources.engine.value"
             :self-warning="true"
+            :can-save="true"
             @cancel="resizing = false"
             @apply="applyResize"
+            @save="saveResize"
         />
 
         <!-- What fills the disk and what may be freed; maintainer-only like the routes behind it, self-hides otherwise. -->

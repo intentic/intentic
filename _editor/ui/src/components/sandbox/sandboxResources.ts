@@ -131,6 +131,44 @@ export const askFrom = (initial: ResourcesForm, form: ResourcesForm): ResourcesA
     return Object.keys(ask).length === 0 ? undefined : ask;
 };
 
+// ---- a share saved for the next restart ----
+// A saved ask is a delta against what RUNS (the container's share), the same shape Apply sends. ic lays whatever
+// ask arrives over it on the next recreate, field by field, so the form has three states to keep apart: what runs,
+// what the next restart would leave (runs + saved), and what the reader typed.
+
+// The form with an ask laid over it: what the container would run with once that ask is applied.
+export const withAsk = (form: ResourcesForm, ask: ResourcesAsk | undefined): ResourcesForm => ({
+    memoryGib: ask?.memoryGib === undefined ? form.memoryGib : ask.memoryGib,
+    cpus: ask?.cpus === undefined ? form.cpus : ask.cpus,
+    privileged: ask?.privileged ?? form.privileged,
+    gpu: ask?.gpu ?? form.gpu,
+});
+
+// Whether two asks say the same thing, key for key; undefined and {} are both "nothing".
+export const sameAsk = (a: ResourcesAsk | undefined, b: ResourcesAsk | undefined): boolean => {
+    const keys = [`memoryGib`, `cpus`, `privileged`, `gpu`] as const;
+    return keys.every((key) => a?.[key] === b?.[key]);
+};
+
+// What Save sends: the typed form against what RUNS, since it replaces whatever was saved before. Undefined is
+// "nothing differs from what runs", which forgets a saved share rather than saving an empty one.
+export const saveAskFrom = (running: ResourcesForm, form: ResourcesForm): ResourcesAsk | undefined => askFrom(running, form);
+
+// What Apply sends while something is saved: the typed form against runs + saved, because ic applies the saved share
+// under whatever arrives. A field the reader put back to what runs is therefore sent explicitly, or the saved value
+// would come through the gap.
+export const applyAskFrom = (running: ResourcesForm, saved: ResourcesAsk | undefined, form: ResourcesForm): ResourcesAsk | undefined =>
+    askFrom(withAsk(running, saved), form);
+
+// A saved ask in a few words, e.g. "20 GiB memory · 4 CPUs"; the words `resourcesSummary` uses for a running share.
+export const askSummary = (ask: ResourcesAsk): string =>
+    [
+        ...(ask.memoryGib === undefined ? [] : [ask.memoryGib === null ? `default memory` : `${ask.memoryGib} GiB memory`]),
+        ...(ask.cpus === undefined ? [] : [ask.cpus === null ? `every CPU` : `${ask.cpus} ${ask.cpus === 1 ? `CPU` : `CPUs`}`]),
+        ...(ask.privileged === undefined ? [] : [ask.privileged ? `privileged` : `not privileged`]),
+        ...(ask.gpu === undefined ? [] : [ask.gpu ? `GPU` : `no GPU`]),
+    ].join(` · `);
+
 // A number field's text, read back live. Not-a-number stays out entirely, so a field mid-edit ("1e")
 // can't flip a cap to the default underneath the typing.
 export const capFromField = (text: string): number | null | undefined => {

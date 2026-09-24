@@ -64,29 +64,29 @@ const swapFlowFor =
         swapSandbox(swap, slug, hash, scopes, onLine);
 
 // Which function each op is, total over the op enum so a new op cannot be added without one: start/stop/restart are a
-// docker call, `logs` is a read, and the rest run `ic` and narrate themselves for minutes.
+// docker call (unless a share is saved for the next restart, which start and restart apply through `ic`), `logs` is a read, and the rest run `ic` and narrate themselves for minutes.
 const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
     start:
         ({ slug }, scopes) =>
-        async () =>
-            await manageSandbox("start", slug, scopes),
+        async (onLine) =>
+            await manageSandbox("start", slug, scopes, onLine),
     stop:
         ({ slug }, scopes) =>
         async () =>
             await manageSandbox("stop", slug, scopes),
     restart:
         ({ slug }, scopes) =>
-        async () =>
-            await manageSandbox("restart", slug, scopes),
+        async (onLine) =>
+            await manageSandbox("restart", slug, scopes, onLine),
     prepare: swapFlowFor("prepare"),
     update: swapFlowFor("update"),
     rebuild: swapFlowFor("rebuild"),
     rollback: swapFlowFor("rollback"),
     // The same image with a different share of this machine: the one op with a payload of its own.
     reshape:
-        ({ slug, resources }, scopes) =>
+        ({ slug, resources, later }, scopes) =>
         (onLine) =>
-            reshapeSandbox(slug, resources, scopes, onLine),
+            reshapeSandbox(slug, resources, scopes, onLine, { later }),
     remove:
         ({ slug }, scopes) =>
         (onLine) =>

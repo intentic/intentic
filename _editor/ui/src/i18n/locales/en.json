@@ -157,6 +157,7 @@
     "sandboxResourcesDialog": {
         "all": "all",
         "allMax": "all {max}",
+        "applyNow": "Apply now",
         "applyingRestartsSandboxOnto": "Applying restarts the sandbox onto the same image, about a minute, and interrupts whoever is working in it. Its files (in /work) are kept, and the new share survives every later update, rollback and rebuild.",
         "askedComputerNoNvidia": "Asked for, but this computer has no NVIDIA container runtime, so the sandbox runs without it.",
         "cores": "cores",
@@ -178,7 +179,10 @@
         "range": "{min} to {max}",
         "resources": "Resources for {name}",
         "runPrivileged": "Run privileged",
-        "sandboxUsingRightNow": "This is the sandbox you are using right now: this page will lose it until it is back."
+        "sandboxUsingRightNow": "This is the sandbox you are using right now: this page will lose it until it is back.",
+        "saveForNextRestart": "Save for next restart",
+        "savedForNextRestart": "Saved for the next restart: {share}. The fields show it; Apply now restarts onto it straight away.",
+        "savingKeepsItRunning": "Saving keeps the sandbox running as it is. Its next restart, update, rollback or rebuild applies the new share."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "This deletes the sandbox and everything in it — its files and its history — from that device. This cannot be undone.",

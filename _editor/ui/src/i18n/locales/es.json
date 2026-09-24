@@ -155,6 +155,7 @@
     "sandboxResourcesDialog": {
         "all": "todos",
         "allMax": "los {max}",
+        "applyNow": "Aplicar ahora",
         "applyingRestartsSandboxOnto": "Aplicarlo reinicia el sandbox sobre la misma imagen, tarda alrededor de un minuto e interrumpe a quien esté trabajando dentro. Sus archivos (en /work) se conservan, y el nuevo reparto sobrevive a cada actualización, reversión y reconstrucción posterior.",
         "askedComputerNoNvidia": "Se pidió, pero este ordenador no tiene el runtime de contenedores de NVIDIA, así que el sandbox se ejecuta sin ella.",
         "cores": "núcleos",
@@ -174,7 +175,10 @@
         "range": "{min} a {max}",
         "resources": "Recursos de {name}",
         "runPrivileged": "Ejecutar en modo privilegiado",
-        "sandboxUsingRightNow": "Este es el sandbox que estás usando ahora mismo: esta página lo perderá hasta que vuelva."
+        "sandboxUsingRightNow": "Este es el sandbox que estás usando ahora mismo: esta página lo perderá hasta que vuelva.",
+        "saveForNextRestart": "Guardar para el próximo reinicio",
+        "savedForNextRestart": "Guardado para el próximo reinicio: {share}. Los campos lo muestran; «Aplicar ahora» reinicia con ello de inmediato.",
+        "savingKeepsItRunning": "Guardar deja el sandbox funcionando tal como está. Su próximo reinicio, actualización, reversión o reconstrucción aplica la nueva asignación."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "Esto elimina el sandbox y todo lo que contiene — sus archivos y su historial — de ese dispositivo. No se puede deshacer.",

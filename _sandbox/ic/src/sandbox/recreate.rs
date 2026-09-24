@@ -6,7 +6,7 @@ use crate::docker;
 use crate::health;
 use crate::logfile::Log;
 use crate::record;
-use crate::sandbox::{resolve_slug, staged, CONTAINER_PREFIX};
+use crate::sandbox::{resolve_slug, saved_shape, staged, CONTAINER_PREFIX};
 use crate::util::{bail, sha256_hex, Fail, Result};
 
 /* Swap THIS machine's sandbox container onto a different image, preserving /work, /history, the tunnel, and every setting the container carries. */
@@ -36,12 +36,22 @@ pub enum Mode {
 /// maps the verb's `default` onto it. The two switches edit the owner's directive tokens (SANDBOX_RUNTIME):
 /// they add or withdraw the OWNER's ask only, never what the approved overlay demands, which rides beside them
 /// untouched and is unioned back in by the image.
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct Reshape {
     pub memory: Option<String>,
     pub cpus: Option<String>,
     pub privileged: Option<bool>,
     pub gpus: Option<bool>,
+}
+
+impl Reshape {
+    /// Nothing asked: every field "leave it".
+    pub fn is_empty(&self) -> bool {
+        self.memory.is_none()
+            && self.cpus.is_none()
+            && self.privileged.is_none()
+            && self.gpus.is_none()
+    }
 }
 
 // The directive tokens the two switches stand for, in the contract's single-token spelling
@@ -493,9 +503,22 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     /* THE OWNER'S OWN DIRECTIVES, the second source beside the overlay's: what the container carries now (SANDBOX_RUNTIME, replayed by every other mode). */
     let carried_runtime =
         docker::container_env_value(&container, HOST_RUNTIME_ENV).unwrap_or_default();
-    let (host_runtime, seeds) = match &mode {
-        Mode::Reshape(ask) => reshape_seeds(ask, &carried_runtime),
-        _ => (carried_runtime, Vec::new()),
+    /* THE SHARE SAVED FOR THE NEXT RESTART (`reshape --later`) rides on whichever recreate comes first: an update, a rollback, a rebuild, or a reshape, whose own ask wins field by field. */
+    let saved_share = saved_shape::read(&slug)?;
+    let shape = match &mode {
+        Mode::Reshape(ask) => saved_shape::merged(saved_share.as_ref(), ask),
+        _ => saved_share.clone().unwrap_or_default(),
+    };
+    if let Some(saved_share) = &saved_share {
+        println!(
+            "intentic: applying the share saved for this restart — {}.",
+            saved_shape::describe(saved_share)
+        );
+    }
+    let (host_runtime, seeds) = if shape.is_empty() {
+        (carried_runtime, Vec::new())
+    } else {
+        reshape_seeds(&shape, &carried_runtime)
     };
     // Which asks this host cannot honour — probed via the image (the list lives in the run contract), so
     // the sandbox starts without an optional extra instead of `docker run` refusing the whole launch.
@@ -640,6 +663,11 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     health::wait_ready(&container);
     docker::quiet(&["rm", "-f", &parked]);
 
+    /* The saved share is in force now, so it is no longer waiting. Best-effort: the swap already happened, and a file left behind only re-applies the same values next time. */
+    if saved_share.is_some() {
+        let _ = saved_shape::clear(&slug);
+    }
+
     /* Take the "an update is ready for you" offer back, now that the swap is real. */
     if !reshaping {
         staged::withdraw(&container);
@@ -683,12 +711,41 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
 
 /// `ic sandbox reshape` — the same image, a different share of this machine. Always a named slug: the verb
 /// changes a container's privileges, and "the one sandbox here" is not a thing to guess at for that.
+///
+/// An empty ask is allowed only when a share is saved for the next restart: it is how that share is applied
+/// NOW (the Restart button, when something is saved, is exactly this).
 pub fn reshape(slug: String, ask: Reshape) -> Result<()> {
-    if ask.memory.is_none() && ask.cpus.is_none() && ask.privileged.is_none() && ask.gpus.is_none()
-    {
+    if ask.is_empty() && saved_shape::read(&slug)?.is_none() {
         bail!("nothing to change — give at least one of --memory, --cpus, --privileged, --gpus.");
     }
     recreate(Mode::Reshape(ask), Some(slug), Reach::Applied, false)
+}
+
+/// `ic sandbox reshape --later` — save the ask for the sandbox's next restart instead of restarting it now. It
+/// REPLACES whatever was saved before, and the container is not touched: the next update, rollback, rebuild
+/// or reshape applies it, as does a Restart from the Devices view.
+pub fn reshape_later(slug: String, ask: Reshape) -> Result<()> {
+    if ask.is_empty() {
+        bail!("nothing to save — give at least one of --memory, --cpus, --privileged, --gpus (or --forget to drop what is saved).");
+    }
+    let container = format!("{CONTAINER_PREFIX}{slug}");
+    if !docker::container_exists(&container) {
+        bail!("sandbox container {container} does not exist on this machine — nothing was saved.");
+    }
+    saved_shape::write(&slug, &ask)?;
+    println!(
+        "intentic: saved for the next restart of {slug} — {}. The sandbox keeps running as it is.",
+        saved_shape::describe(&ask)
+    );
+    println!("          Apply it now with: ic sandbox reshape {slug}");
+    Ok(())
+}
+
+/// `ic sandbox reshape --forget` — drop the share saved for the next restart. Idempotent.
+pub fn forget_saved(slug: String) -> Result<()> {
+    saved_shape::clear(&slug)?;
+    println!("intentic: nothing is saved for the next restart of {slug} any more.");
+    Ok(())
 }
 
 /* THE RESHAPE'S PAYLOAD, as pure arithmetic on strings so it can be asserted without a container. */

@@ -56,6 +56,8 @@ const frameText = (line: Record<string, unknown>, key: string): string | undefin
 export interface DeviceSandboxPayload {
     hash?: string | undefined;
     resources?: SandboxResourcesAsk | undefined;
+    // `reshape` only: save `resources` for the sandbox's next restart instead of restarting it now.
+    later?: boolean | undefined;
     // The short-lived setup code reconnect redeems on the host machine for a drifted container's missing values.
     setupCode?: string | undefined;
     onLine?: ((line: string) => void) | undefined;
@@ -69,13 +71,14 @@ const flowInput = (
     hostId: string,
     slug: string,
     op: DeviceSandboxOp,
-    { hash, resources, setupCode }: DeviceSandboxPayload,
+    { hash, resources, later, setupCode }: DeviceSandboxPayload,
 ): DeviceSandboxFlowInput => ({
     id: hostId,
     slug,
     op,
     ...(hash === undefined ? {} : { hash }),
     ...(resources === undefined ? {} : { resources }),
+    ...(later === true ? { later } : {}),
     ...(setupCode === undefined ? {} : { setupCode }),
 });
 

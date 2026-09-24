@@ -3,6 +3,7 @@ pub mod doctor;
 pub mod recreate;
 pub mod remove;
 pub mod restore;
+pub mod saved_shape;
 pub mod staged;
 pub mod trash;
 

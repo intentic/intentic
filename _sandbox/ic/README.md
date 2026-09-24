@@ -19,6 +19,9 @@ flowchart LR
 - `ic sandbox connect <code>` redeems the setup code from the platform and brings a sandbox up. `update`, `prepare`,
   `rollback`, `rebuild` and `reshape` swap or restart the container while keeping `/work` and `/history`; `remove`
   moves the data to a trash that `restore` brings back and `purge` empties early.
+- `ic sandbox reshape <slug> … --later` saves a memory, CPU, privileged or GPU change instead of restarting for it
+  (`sandbox-<slug>.shape` beside the channel record). The next recreate applies it and clears it: an update,
+  rollback, rebuild, a plain `reshape`, or a Restart from the Devices view. `--forget` drops it.
 - `ic sandbox doctor` walks the reachability chain (machine, container, daemon, platform, edge) and names the broken
   link with its fix.
 - The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of

@@ -42,8 +42,11 @@ const reshapeFlags = (ask: ResourcesAsk | undefined): string | undefined => {
     return given.length === 0 ? undefined : given.join(` `);
 };
 
-/** The command that does this verb to this sandbox by hand, or undefined for a verb with no single-line equivalent. */
-export const sandboxFallback = (verb: SandboxVerb, slug: string, resources?: ResourcesAsk): string | undefined => {
+/**
+ * The command that does this verb to this sandbox by hand, or undefined for a verb with no single-line equivalent.
+ * `later` is the resources form's Save: the same flags with `--later`, or `--forget` when it saved nothing.
+ */
+export const sandboxFallback = (verb: SandboxVerb, slug: string, resources?: ResourcesAsk, later = false): string | undefined => {
     const ic = IC_VERB[verb];
     if (ic !== undefined) {
         return `ic sandbox ${ic} ${slug}`;
@@ -56,6 +59,9 @@ export const sandboxFallback = (verb: SandboxVerb, slug: string, resources?: Res
         return `docker logs --tail ${LOG_LINES} ${CONTAINER}${slug}`;
     }
     const flags = reshapeFlags(resources);
+    if (later) {
+        return `ic sandbox reshape ${slug} ${flags === undefined ? `--forget` : `${flags} --later`}`;
+    }
     return flags === undefined ? undefined : `ic sandbox reshape ${slug} ${flags}`;
 };
 

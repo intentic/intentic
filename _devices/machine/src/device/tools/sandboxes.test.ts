@@ -19,6 +19,8 @@ import {
     runnerFlow,
     rowsFrom,
     sandboxesFrom,
+    savedShapeFrom,
+    savedShapePath,
     sandboxLogs,
     swapSandbox,
     tailSandboxLogs,
@@ -188,6 +190,33 @@ test("a reshape builds ic's flags from the ask, with null as default and switche
 test("a reshape with nothing to change is refused before anything is spawned", () => {
     expect(() => icReshapeArgs("work", undefined)).toThrow(/change something/i);
     expect(() => icReshapeArgs("work", {})).toThrow(/change something/i);
+});
+
+// `later` saves instead of restarting; an empty `later` forgets what is saved; an empty immediate reshape is
+// meaningful only when something is saved, and then it is a bare `reshape` that applies it.
+test("a reshape saved for later carries --later, an empty one forgets, and a bare one applies what is saved", () => {
+    expect(icReshapeArgs("work", { memoryGib: 20 }, { later: true })).toEqual(["sandbox", "reshape", "work", "--memory", "20g", "--later"]);
+    expect(icReshapeArgs("work", undefined, { later: true })).toEqual(["sandbox", "reshape", "work", "--forget"]);
+    expect(icReshapeArgs("work", {}, { later: true })).toEqual(["sandbox", "reshape", "work", "--forget"]);
+    expect(icReshapeArgs("work", undefined, { saved: true })).toEqual(["sandbox", "reshape", "work"]);
+    expect(() => icReshapeArgs("work", undefined, { saved: false })).toThrow(/change something/i);
+    // An ask applied now rides as it always did, whether or not something is saved: ic lays it over the saved share.
+    expect(icReshapeArgs("work", { cpus: 4 }, { saved: true })).toEqual(["sandbox", "reshape", "work", "--cpus", "4"]);
+});
+
+// The file ic's `saved_shape.rs` writes, read back as the form's ask: `memory=` is null (the default), a switch is
+// on/off, and a value the form cannot hold as a whole number is left out rather than rounded.
+test("the saved share reads back from ic's own file, keeping default, off and absent apart", () => {
+    expect(savedShapeFrom("memory=20g\ncpus=\nprivileged=off\ngpus=on\n")).toEqual({ memoryGib: 20, cpus: null, privileged: false, gpu: true });
+    expect(savedShapeFrom("cpus=4\r\n")).toEqual({ cpus: 4 });
+    expect(savedShapeFrom("memory=20480m\nfuture=1\nprivileged=maybe\n")).toBeUndefined();
+    expect(savedShapeFrom("")).toBeUndefined();
+});
+
+test("the saved share lives in ic's home, which INTENTIC_HOME moves exactly as it moves ic's", () => {
+    expect(savedShapePath("work", {}, "/home/u")).toBe("/home/u/.intentic/sandbox-work.shape");
+    expect(savedShapePath("work", { INTENTIC_HOME: "/srv/ic" }, "/home/u")).toBe("/srv/ic/sandbox-work.shape");
+    expect(savedShapePath("work", { INTENTIC_HOME: "" }, "/home/u")).toBe("/home/u/.intentic/sandbox-work.shape");
 });
 
 test("reshaping is refused by the sandboxes switch, like the swaps it shares a door with", async () => {

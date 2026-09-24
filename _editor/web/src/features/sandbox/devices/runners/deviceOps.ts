@@ -206,7 +206,8 @@ export interface DeviceOps {
     readonly actPrompt: ComputedRef<ActPrompt | undefined>;
     readonly confirmAct: () => void;
     readonly reshaping: Ref<{ group: DeviceSandboxGroup } | undefined>;
-    readonly applyReshape: (ask: ResourcesAsk) => void;
+    readonly applyReshape: (ask: ResourcesAsk | undefined) => void;
+    readonly saveReshape: (ask: ResourcesAsk | undefined) => void;
     readonly selfGroup: (group: DeviceSandboxGroup) => boolean;
 
     // Letting this machine go of one sandbox or of several: per row the container verb, the unpair command, or both,
@@ -331,7 +332,9 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     const door = (): string | undefined => managerOf(machine())?.device.hostId;
 
     // `resources` is the one verb with something to say beyond its name: the form's answer, forwarded unread.
-    const runAct = async (group: DeviceSandboxGroup, verb: SandboxVerb, resources?: ResourcesAsk): Promise<void> => {
+    // `later` is the resources form's Save: the ask is kept for the sandbox's next restart and the container is not
+    // touched, so nothing is severed even on the sandbox serving this page.
+    const runAct = async (group: DeviceSandboxGroup, verb: SandboxVerb, resources?: ResourcesAsk, later = false): Promise<void> => {
         const hostId = door();
         const slug = group.sandbox?.slug;
         if (hostId === undefined || slug === undefined || working.value) {
@@ -348,14 +351,15 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         try {
             const message = await manageDeviceSandbox(hostId, slug, OP[verb], {
                 resources,
+                later,
                 onLine: (line) => (runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] }),
                 // The same severing the dialog warned about: losing the stream is the answer, not a failure to report.
-                severing: severs(group, verb),
+                severing: !later && severs(group, verb),
             });
             // A log tail's result line would only restate the pane above it, so it's left to be the answer.
             outcome.value = verb === `logs` ? undefined : { key, message };
         } catch (error) {
-            failure.value = { key, notice: noticeFrom(error, `That didn't work on this device.`), command: sandboxFallback(verb, slug, resources) };
+            failure.value = { key, notice: noticeFrom(error, `That didn't work on this device.`), command: sandboxFallback(verb, slug, resources, later) };
             if (verb === `logs`) {
                 openLog.value = undefined;
             }
@@ -424,13 +428,15 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
     };
 
-    const applyReshape = (ask: ResourcesAsk): void => {
+    const reshapeWith = (ask: ResourcesAsk | undefined, later: boolean): void => {
         const pending = reshaping.value;
         reshaping.value = undefined;
         if (pending !== undefined) {
-            void runAct(pending.group, `resources`, ask);
+            void runAct(pending.group, `resources`, ask, later);
         }
     };
+    const applyReshape = (ask: ResourcesAsk | undefined): void => reshapeWith(ask, false);
+    const saveReshape = (ask: ResourcesAsk | undefined): void => reshapeWith(ask, true);
 
     const removalPrompt = computed<RemovalPrompt | undefined>(() => {
         const pending = confirmingRemoval.value;
@@ -740,6 +746,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         confirmAct,
         reshaping,
         applyReshape,
+        saveReshape,
         selfGroup,
         confirmingRemoval,
         removalPrompt,

@@ -1,9 +1,10 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { DeviceScopes, DeviceSandbox, SandboxResources, SandboxResourcesAsk } from "@intentic/sandbox-contract";
+import type { DeviceScopes, DeviceSandbox, SandboxResources, SandboxResourcesAsk,SandboxResourcesAskFieldsSchema } from "@intentic/sandbox-contract";
+import { STATE_DIR } from "@intentic/constants";
 import { HOST_RUNTIME_ENV, OVERLAY_RUNTIME_ENV } from "@intentic/sandbox-run";
 import { z } from "zod";
 import { assertScope } from "../policy.js";
@@ -147,6 +148,68 @@ export const resourcesFrom = (inspected: unknown): SandboxResources | undefined 
     };
 };
 
+// ---- the share saved for the next restart ----
+
+type SavedShape = z.infer<typeof SandboxResourcesAskFieldsSchema>;
+
+// Where `ic sandbox reshape --later` keeps what it saved: `sandbox-<slug>.shape` in ic's home, which honours
+// INTENTIC_HOME exactly as ic's own `intentic_home()` does. ic owns the file (its `saved_shape.rs`); this side
+// only reads it, to show what is saved and to decide that a Restart has something to apply.
+export const savedShapePath = (slug: string, env: NodeJS.ProcessEnv = process.env, home: string = homedir()): string =>
+    join(env["INTENTIC_HOME"] !== undefined && env["INTENTIC_HOME"] !== "" ? env["INTENTIC_HOME"] : join(home, STATE_DIR), `sandbox-${slug}.shape`);
+
+// A cap in ic's spelling, as the form's whole number: `20g` is 20 GiB, `4` is four cores, empty is "back to the
+// default" (null). Anything else (a `20480m` typed at the CLI) is not a whole number the form can show, so it is
+// left out rather than rounded into a value nobody saved.
+const savedCap = (value: string, unit: RegExp): number | null | undefined => {
+    if (value === "") {
+        return null;
+    }
+    const match = unit.exec(value);
+    const whole = match === null ? Number.NaN : Number(match[1]);
+    return Number.isInteger(whole) && whole > 0 ? whole : undefined;
+};
+
+// The saved file's `key=value` lines as the form's ask, or undefined when nothing readable is saved. Same rules as
+// ic's reader: an unknown key is ignored, an absent key is "leave it".
+export const savedShapeFrom = (text: string): SavedShape | undefined => {
+    const shape: SavedShape = {};
+    for (const line of text.split(/\r?\n/)) {
+        const at = line.indexOf("=");
+        if (at < 0) {
+            continue;
+        }
+        const key = line.slice(0, at).trim();
+        const value = line.slice(at + 1).trim();
+        if (key === "memory") {
+            const gib = savedCap(value, /^(\d+)g$/i);
+            if (gib !== undefined) {
+                shape.memoryGib = gib;
+            }
+        } else if (key === "cpus") {
+            const cores = savedCap(value, /^(\d+)$/);
+            if (cores !== undefined) {
+                shape.cpus = cores;
+            }
+        } else if ((key === "privileged" || key === "gpus") && (value === "on" || value === "off")) {
+            shape[key === "gpus" ? "gpu" : "privileged"] = value === "on";
+        }
+    }
+    return Object.keys(shape).length === 0 ? undefined : shape;
+};
+
+// What is saved for one slug; an absent or unreadable file is nothing saved, since this is only ever shown or used
+// to pick the door, and ic re-reads the file itself (refusing an unreadable one) when it applies it.
+const savedShape = async (slug: string): Promise<SavedShape | undefined> =>
+    await readFile(savedShapePath(slug), "utf8").then(savedShapeFrom, () => undefined);
+
+// Whether anything at all is saved: a file whose values the form cannot show (a `20480m` cap) still gets applied.
+const hasSavedShape = async (slug: string): Promise<boolean> =>
+    await readFile(savedShapePath(slug), "utf8").then(
+        (text) => /^(memory|cpus|privileged|gpus)=/m.test(text),
+        () => false,
+    );
+
 // The fleet WITH each container's share of the machine: one `docker inspect` on top of the `docker ps` above.
 // `fleet()` answers "which slug is this" for every op, none of which need a HostConfig; this is for the listing
 // a person or model reads, where the caps and privileges are the point. A container that vanished between the
@@ -176,10 +239,16 @@ export const fleetDetailed = async (): Promise<DeviceSandbox[]> => {
             // A line that is not one inspect object is a warning riding along; the rows it did print still count.
         }
     }
-    return boxes.map((box) => {
-        const resources = byContainer.get(box.container);
-        return resources === undefined ? box : { ...box, resources };
-    });
+    return await Promise.all(
+        boxes.map(async (box) => {
+            const resources = byContainer.get(box.container);
+            if (resources === undefined) {
+                return box;
+            }
+            const saved = await savedShape(box.slug);
+            return { ...box, resources: saved === undefined ? resources : { ...resources, saved } };
+        }),
+    );
 };
 
 // Which slugs an `ic` flow is touching right now, in this process. The background auto-prepare tick reads it so
@@ -213,12 +282,29 @@ const find = async (slug: string): Promise<DeviceSandbox> => {
     throw new Error(`No sandbox "${slug}" on this device. ${known === "" ? "It runs none." : `It has: ${known}.`}`);
 };
 
-export const manageSandbox = async (op: SandboxOp, slug: string, scopes: DeviceScopes): Promise<string> => {
+export const manageSandbox = async (
+    op: SandboxOp,
+    slug: string,
+    scopes: DeviceScopes,
+    onLine: (line: string) => void = () => {},
+): Promise<string> => {
     assertScope(scopes, "sandboxes");
     const target = await find(slug);
     // The tunnel sidecar goes wherever its sandbox goes, a "started" sandbox nobody can reach is not started.
     // Stopping fells the tunnel first so nothing routes into a container on its way down; starting raises it last.
     const sidecar = target.tunnelRunning === undefined ? [] : [`${TUNNEL_PREFIX}${slug}`];
+    // A share saved for the next restart turns this start or restart into the recreate that applies it: a bare
+    // `ic sandbox reshape`, which leaves the container running. Only the sidecar still needs raising after it.
+    if (op !== "stop" && (await hasSavedShape(slug))) {
+        const run = await icFlow(slug, ["sandbox", "reshape", slug], onLine);
+        if (run.code !== 0) {
+            throw new Error(`That ${op} failed on this device while applying the share saved for it.\n\n${run.output}`);
+        }
+        if (op === "start" && sidecar.length > 0) {
+            await docker(["start", ...sidecar]);
+        }
+        return `${op === "start" ? "Started" : "Restarted"} sandbox "${slug}" with the share saved for its next restart. Its files and its history were kept.`;
+    }
     await docker([op, ...(op === "stop" ? [...sidecar, target.container] : [target.container, ...sidecar])]);
     const verb = { start: "Started", stop: "Stopped", restart: "Restarted" }[op];
     return `${verb} sandbox "${slug}"${sidecar.length === 0 ? "" : " and its tunnel"}.`;
@@ -296,7 +382,15 @@ const capFlag = (value: number | null | undefined, spell: (value: number) => str
 // A switch's flag value: absent means no flag, otherwise the explicit word ic requires (a bare flag could only add).
 const switchFlag = (value: boolean | undefined): string | undefined => (value === undefined ? undefined : value ? "on" : "off");
 
-export const icReshapeArgs = (slug: string, ask: SandboxResourcesAsk | undefined): string[] => {
+// `later` saves the ask for the next restart instead (`--later`), and a `later` with nothing in it forgets what is
+// saved (`--forget`). `saved` says a share is already saved, which is the one case an empty immediate reshape
+// means something: apply that share now.
+export interface ReshapeTiming {
+    readonly later?: boolean | undefined;
+    readonly saved?: boolean | undefined;
+}
+
+export const icReshapeArgs = (slug: string, ask: SandboxResourcesAsk | undefined, { later = false, saved = false }: ReshapeTiming = {}): string[] => {
     const flags: readonly (readonly [string, string | undefined])[] = [
         ["--memory", capFlag(ask?.memoryGib, (gib) => `${gib}g`)],
         ["--cpus", capFlag(ask?.cpus, String)],
@@ -304,7 +398,10 @@ export const icReshapeArgs = (slug: string, ask: SandboxResourcesAsk | undefined
         ["--gpus", switchFlag(ask?.gpu)],
     ];
     const given = flags.flatMap(([flag, value]) => (value === undefined ? [] : [flag, value]));
-    if (given.length === 0) {
+    if (later) {
+        return ["sandbox", "reshape", slug, ...(given.length === 0 ? ["--forget"] : [...given, "--later"])];
+    }
+    if (given.length === 0 && !saved) {
         throw new Error(`A reshape has to change something: give a memory or CPU cap, or a privileged/GPU switch.`);
     }
     return ["sandbox", "reshape", slug, ...given];
@@ -512,19 +609,29 @@ export const swapSandbox = async (
 // Change a sandbox's share of this machine, or its privileges, over the same `ic` door as the swaps. Rides
 // `sandboxes`, not the removal switch, since every value it changes is undone by the next reshape. The ask is a
 // closed form (two caps, two switches) rather than flags, so nothing reaches docker as text.
+// With `later` the container is not touched: the ask is saved for its next restart (or, empty, what was saved is
+// forgotten), and the answer says which.
 export const reshapeSandbox = async (
     slug: string,
     ask: SandboxResourcesAsk | undefined,
     scopes: DeviceScopes,
     onLine: (line: string) => void,
+    { later = false }: { readonly later?: boolean | undefined } = {},
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    // Built before the fleet is read, for icSwapArgs' reason: an empty ask was already wrong when it arrived.
-    const args = icReshapeArgs(slug, ask);
+    const empty = ask === undefined || Object.values(ask).every((value) => value === undefined);
+    // Built before the fleet is read, for icSwapArgs' reason: an empty immediate ask with nothing saved was already
+    // wrong when it arrived. The saved file is read only for that one case.
+    const args = icReshapeArgs(slug, ask, { later, saved: !later && empty && (await hasSavedShape(slug)) });
     await find(slug);
     const run = await icFlow(slug, args, onLine);
     if (run.code !== 0) {
         throw new Error(`That reshape failed on this device.\n\n${run.output}`);
+    }
+    if (later) {
+        return empty
+            ? `Nothing is saved for the next restart of "${slug}" any more. It keeps running as it is.`
+            : `Saved for the next restart of "${slug}". It keeps running as it is until then.`;
     }
     return `Reshaped sandbox "${slug}". Its files and its history were kept, and the new share survives every later update.`;
 };

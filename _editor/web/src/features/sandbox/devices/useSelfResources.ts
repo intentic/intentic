@@ -31,7 +31,12 @@ export interface SelfResources {
      * connection down with it — the caller warns about that beforehand, and `manageDeviceSandbox` reads the
      * dropped stream as the expected ending rather than a failure.
      */
-    readonly apply: (ask: ResourcesAsk) => Promise<string>;
+    readonly apply: (ask: ResourcesAsk | undefined) => Promise<string>;
+    /**
+     * Saves the ask for this sandbox's next restart (undefined forgets what is saved). The container is not touched,
+     * so the machine's own sentence does arrive.
+     */
+    readonly save: (ask: ResourcesAsk | undefined) => Promise<string>;
     readonly refetch: () => void;
 }
 
@@ -58,7 +63,7 @@ export function useSelfResources(): SelfResources {
     // A share the machine never reported leaves the form nothing to open on, so there is nothing to offer either.
     const reshapable = computed(() => hostId.value !== undefined && slug.value !== undefined && current.value !== undefined);
 
-    const apply = async (ask: ResourcesAsk): Promise<string> => {
+    const send = async (ask: ResourcesAsk | undefined, later: boolean): Promise<string> => {
         const sendTo = hostId.value;
         const name = slug.value;
         if (sendTo === undefined || name === undefined) {
@@ -67,13 +72,16 @@ export function useSelfResources(): SelfResources {
         applying.value = true;
         try {
             // `severing`: a reshape recreates the container, and the daemon relaying this call lives in it, so no
-            // result frame can arrive. Without this the drop reads as a failure on a reshape that worked.
-            return await manageDeviceSandbox(sendTo, name, `reshape`, { resources: ask, severing: true });
+            // result frame can arrive. Without this the drop reads as a failure on a reshape that worked. A save
+            // touches nothing, so its answer does arrive.
+            return await manageDeviceSandbox(sendTo, name, `reshape`, { resources: ask, later, severing: !later });
         } finally {
             applying.value = false;
             refetch();
         }
     };
+    const apply = async (ask: ResourcesAsk | undefined): Promise<string> => await send(ask, false);
+    const save = async (ask: ResourcesAsk | undefined): Promise<string> => await send(ask, true);
 
-    return { hostId, slug, row, current, engine, reshapable, applying, apply, refetch };
+    return { hostId, slug, row, current, engine, reshapable, applying, apply, save, refetch };
 }

@@ -149,6 +149,7 @@
     "sandboxResourcesDialog": {
         "all": "alle",
         "allMax": "alle {max}",
+        "applyNow": "Jetzt übernehmen",
         "applyingRestartsSandboxOnto": "Das Übernehmen startet die Sandbox auf demselben Image neu, dauert etwa eine Minute und unterbricht alle, die darin arbeiten. Ihre Dateien (in /work) bleiben erhalten, und der neue Anteil übersteht jedes spätere Update, jeden Rollback und jeden Neubau.",
         "askedComputerNoNvidia": "Angefordert, aber dieser Computer hat keine NVIDIA-Container-Laufzeit — die Sandbox läuft ohne sie.",
         "cores": "Kerne",
@@ -167,7 +168,10 @@
         "range": "{min} bis {max}",
         "resources": "Ressourcen für {name}",
         "runPrivileged": "Privilegiert ausführen",
-        "sandboxUsingRightNow": "Das ist die Sandbox, die Sie gerade benutzen: diese Seite verliert sie, bis sie zurück ist."
+        "sandboxUsingRightNow": "Das ist die Sandbox, die Sie gerade benutzen: diese Seite verliert sie, bis sie zurück ist.",
+        "saveForNextRestart": "Für nächsten Neustart speichern",
+        "savedForNextRestart": "Für den nächsten Neustart gespeichert: {share}. Die Felder zeigen es; „Jetzt übernehmen“ startet sofort damit neu.",
+        "savingKeepsItRunning": "Speichern lässt die Sandbox so weiterlaufen, wie sie ist. Ihr nächster Neustart, ihr nächstes Update, ihr nächster Rollback oder Neubau übernimmt den neuen Anteil."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "Das löscht die Sandbox und alles darin — ihre Dateien und ihre Historie — von diesem Gerät. Das lässt sich nicht rückgängig machen.",

@@ -153,6 +153,7 @@
     "sandboxResourcesDialog": {
         "all": "wszystkie",
         "allMax": "wszystkie {max}",
+        "applyNow": "Zastosuj teraz",
         "applyingRestartsSandboxOnto": "Zastosowanie restartuje sandbox na tym samym obrazie, trwa około minuty i przerywa pracę każdemu, kto w nim siedzi. Jego pliki (w /work) zostają, a nowy przydział przetrwa każdą późniejszą aktualizację, cofnięcie i przebudowę.",
         "askedComputerNoNvidia": "Zażądano, ale ten komputer nie ma środowiska kontenerowego NVIDIA, więc sandbox działa bez niego.",
         "cores": "rdzeni",
@@ -172,7 +173,10 @@
         "range": "{min} do {max}",
         "resources": "Zasoby dla {name}",
         "runPrivileged": "Uruchom w trybie uprzywilejowanym",
-        "sandboxUsingRightNow": "To jest sandbox, w którym właśnie pracujesz: ta strona straci go, dopóki nie wróci."
+        "sandboxUsingRightNow": "To jest sandbox, w którym właśnie pracujesz: ta strona straci go, dopóki nie wróci.",
+        "saveForNextRestart": "Zapisz na następny restart",
+        "savedForNextRestart": "Zapisane na następny restart: {share}. Pola to pokazują; „Zastosuj teraz” od razu restartuje z tym przydziałem.",
+        "savingKeepsItRunning": "Zapisanie zostawia sandbox działający tak, jak jest. Jego następny restart, aktualizacja, cofnięcie lub przebudowa zastosuje nowy przydział."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "To usuwa sandbox i wszystko, co w nim jest — jego pliki i jego historię — z tego urządzenia. Tego nie można cofnąć.",

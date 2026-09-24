@@ -35,6 +35,8 @@ export const createDeviceSystemRoutes = (services: Services) => {
                 ...(input.hash === undefined ? {} : { hash: input.hash }),
                 // The reshape's payload: a closed form the machine spells into `ic` flags, never a command line.
                 ...(input.resources === undefined ? {} : { resources: input.resources }),
+                // Save the reshape for the sandbox's next restart instead of restarting it now.
+                ...(input.later === true ? { later: true } : {}),
             });
         }),
         // One named CLI action on a connected device (e.g. the Devices tab's Stop-mirroring button).

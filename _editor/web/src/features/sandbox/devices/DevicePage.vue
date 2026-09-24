@@ -177,7 +177,8 @@ const openIds = computed(() => {
     return mine === undefined ? [] : [mine.sandboxId];
 });
 
-const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
+const applyReshape = (ask: ResourcesAsk | undefined): void => ops.applyReshape(ask);
+const saveReshape = (ask: ResourcesAsk | undefined): void => ops.saveReshape(ask);
 
 // SELECTING IS OPT-IN. This list is read far more often than it is pruned, so the tick boxes appear only once
 // somebody asks for them; the resting state stays one column of names with one cluster of verbs per row.
@@ -697,8 +698,10 @@ const confirmRemoval = (): void => {
             :current="ops.reshaping.value?.group.sandbox?.resources"
             :engine="manager?.device.facts?.engine"
             :self-warning="ops.reshaping.value !== undefined && ops.selfGroup(ops.reshaping.value.group)"
+            :can-save="true"
             @cancel="ops.reshaping.value = undefined"
             @apply="applyReshape"
+            @save="saveReshape"
         />
 
         <!-- Names the rows before the consequences, and the consequences one per effect: a batch that deletes two

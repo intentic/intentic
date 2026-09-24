@@ -140,6 +140,7 @@
     "sandboxResourcesDialog": {
         "all": "tous",
         "allMax": "les {max}",
+        "applyNow": "Appliquer maintenant",
         "applyingRestartsSandboxOnto": "Appliquer redémarre le sandbox sur la même image, cela prend environ une minute et interrompt qui y travaille. Ses fichiers (dans /work) sont conservés, et la nouvelle part survit à chaque mise à jour, retour en arrière et reconstruction ultérieurs.",
         "askedComputerNoNvidia": "Demandé, mais cet ordinateur n'a pas de runtime de conteneurs NVIDIA : le sandbox tourne donc sans.",
         "cores": "cœurs",
@@ -160,7 +161,10 @@
         "range": "{min} à {max}",
         "resources": "Ressources de {name}",
         "runPrivileged": "Exécuter en mode privilégié",
-        "sandboxUsingRightNow": "C'est le sandbox que vous utilisez en ce moment : cette page le perdra jusqu'à son retour."
+        "sandboxUsingRightNow": "C'est le sandbox que vous utilisez en ce moment : cette page le perdra jusqu'à son retour.",
+        "saveForNextRestart": "Enregistrer pour le prochain redémarrage",
+        "savedForNextRestart": "Enregistré pour le prochain redémarrage : {share}. Les champs l'affichent ; « Appliquer maintenant » redémarre dessus tout de suite.",
+        "savingKeepsItRunning": "Enregistrer laisse le sandbox tourner tel quel. Son prochain redémarrage, sa prochaine mise à jour, son prochain retour arrière ou sa prochaine reconstruction applique la nouvelle part."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "Cela supprime le sandbox et tout ce qu'il contient — ses fichiers et son historique — de cet appareil. C'est irréversible.",

@@ -830,10 +830,11 @@ const openResources = (group: DeviceSandboxGroup, slug: string): void => {
     }
     reshaping.value = group;
 };
-const applyReshape = async (ask: ResourcesAsk): Promise<void> => {
+const applyReshape = async (ask: ResourcesAsk | undefined): Promise<void> => {
     const slug = reshaping.value === undefined ? undefined : slugOf(reshaping.value);
     reshaping.value = undefined;
-    if (slug === undefined || busy.value !== undefined || running.value) {
+    // An empty ask means "apply what is saved", which this app never shows (its listing reads no saved share).
+    if (slug === undefined || ask === undefined || busy.value !== undefined || running.value) {
         return;
     }
     // A log pane for a row that's about to change is now stale.

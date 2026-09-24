@@ -126,7 +126,9 @@ enum SandboxCommand {
     },
     /// Change a sandbox's share of this machine, or its privileges — a restart of about a minute onto the
     /// same image. The values live on the container and survive every later update, rollback and rebuild.
-    #[command(group = ArgGroup::new("ask").required(true).multiple(true))]
+    /// With --later the ask is saved instead, and the sandbox's next restart applies it; with no ask at all,
+    /// what is saved is applied now.
+    #[command(group = ArgGroup::new("ask").multiple(true))]
     Reshape {
         /// The sandbox to reshape (always named: this changes a container's privileges)
         slug: String,
@@ -143,6 +145,13 @@ enum SandboxCommand {
         /// Pass this machine's NVIDIA GPUs through (on/off); dropped, with a note, on a host without the runtime
         #[arg(long, value_enum, group = "ask")]
         gpus: Option<Switch>,
+        /// Save the ask for the sandbox's next restart (update, rollback, rebuild, or a Restart from the
+        /// Devices view) instead of restarting it now. Replaces whatever was saved before
+        #[arg(long, requires = "ask", conflicts_with = "forget")]
+        later: bool,
+        /// Drop the share saved with --later, leaving the sandbox as it runs
+        #[arg(long, conflicts_with = "ask")]
+        forget: bool,
     },
     /// Check every link of a sandbox's reachability chain and name what is broken, with its fix (read-only)
     Doctor {
@@ -299,15 +308,23 @@ fn main() {
                 cpus,
                 privileged,
                 gpus,
-            } => sandbox::recreate::reshape(
-                slug,
-                sandbox::recreate::Reshape {
+                later,
+                forget,
+            } => {
+                let ask = sandbox::recreate::Reshape {
                     memory: seed_value(memory),
                     cpus: seed_value(cpus),
                     privileged: privileged.map(|switch| switch == Switch::On),
                     gpus: gpus.map(|switch| switch == Switch::On),
-                },
-            ),
+                };
+                if forget {
+                    sandbox::recreate::forget_saved(slug)
+                } else if later {
+                    sandbox::recreate::reshape_later(slug, ask)
+                } else {
+                    sandbox::recreate::reshape(slug, ask)
+                }
+            }
             SandboxCommand::Doctor { slug } => sandbox::doctor::run(slug),
             SandboxCommand::List => sandbox::list(),
             SandboxCommand::Remove {
@@ -678,12 +695,25 @@ mod tests {
 
     /* `reshape` changes a container's PRIVILEGES, so its surface is held tighter than the swaps': the slug is never inferred. */
     #[test]
-    fn reshape_names_its_sandbox_and_requires_at_least_one_ask() {
+    fn reshape_names_its_sandbox_and_parses_each_ask() {
         assert!(parse(&["sandbox", "reshape"]).is_err());
-        assert!(
-            parse(&["sandbox", "reshape", "abc123"]).is_err(),
-            "a reshape with nothing to change must be refused"
-        );
+        // A bare reshape PARSES: it applies the share saved for the next restart, and `recreate::reshape`
+        // refuses it at run time when nothing is saved (that check needs the host, not the argv).
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Reshape {
+                    memory: None,
+                    cpus: None,
+                    privileged: None,
+                    gpus: None,
+                    later: false,
+                    forget: false,
+                    ..
+                }),
+        }) = parse(&["sandbox", "reshape", "abc123"])
+        else {
+            panic!("a bare reshape did not parse as an empty ask")
+        };
         let Ok(Cli {
             command:
                 Command::Sandbox(SandboxCommand::Reshape {
@@ -692,6 +722,8 @@ mod tests {
                     cpus,
                     privileged,
                     gpus,
+                    later: false,
+                    forget: false,
                 }),
         }) = parse(&[
             "sandbox",
@@ -728,6 +760,38 @@ mod tests {
         // A switch needs its word: a bare `--privileged` must not be read as "on".
         assert!(parse(&["sandbox", "reshape", "abc123", "--privileged"]).is_err());
         assert!(parse(&["sandbox", "reshape", "abc123", "--privileged", "yes"]).is_err());
+    }
+
+    /* `--later` saves an ask for the next restart, so it needs one; `--forget` drops what is saved, so it takes none. */
+    #[test]
+    fn reshape_later_needs_an_ask_and_forget_refuses_one() {
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Reshape {
+                    memory,
+                    later: true,
+                    forget: false,
+                    ..
+                }),
+        }) = parse(&["sandbox", "reshape", "abc123", "--memory", "20g", "--later"])
+        else {
+            panic!("a saved reshape did not parse")
+        };
+        assert_eq!(memory.as_deref(), Some("20g"));
+        assert!(parse(&["sandbox", "reshape", "abc123", "--later"]).is_err());
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Reshape {
+                    forget: true,
+                    later: false,
+                    ..
+                }),
+        }) = parse(&["sandbox", "reshape", "abc123", "--forget"])
+        else {
+            panic!("--forget did not parse")
+        };
+        assert!(parse(&["sandbox", "reshape", "abc123", "--forget", "--cpus", "4"]).is_err());
+        assert!(parse(&["sandbox", "reshape", "abc123", "--forget", "--later"]).is_err());
     }
 
     #[test]

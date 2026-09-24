@@ -48,6 +48,12 @@ describe(`a reshape`, () => {
         expect(sandboxFallback(`resources`, `work`)).toBeUndefined();
         expect(sandboxFallback(`resources`, `work`, {})).toBeUndefined();
     });
+
+    // The form's Save: the same flags, kept for the next restart; a Save that saved nothing forgets what was saved.
+    test(`saved for the next restart carries --later, and an empty save is --forget`, () => {
+        expect(sandboxFallback(`resources`, `work`, { memoryGib: 20 }, true)).toBe(`ic sandbox reshape work --memory 20g --later`);
+        expect(sandboxFallback(`resources`, `work`, undefined, true)).toBe(`ic sandbox reshape work --forget`);
+    });
 });
 
 // A verb with no line is a row that silently offers no way out, so the absence is asserted rather than assumed:

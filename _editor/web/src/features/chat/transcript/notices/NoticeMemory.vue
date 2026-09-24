@@ -28,7 +28,7 @@ const offered = computed(() => selfResources.reshapable.value && suggestedGib.va
 const resizing = ref(false);
 const failed = ref<string | undefined>();
 // The sandbox recreates under this page, so the reconnect is the answer; only a refusal the machine sent is a sentence.
-const apply = async (ask: ResourcesAsk): Promise<void> => {
+const apply = async (ask: ResourcesAsk | undefined): Promise<void> => {
     resizing.value = false;
     failed.value = undefined;
     await selfResources.apply(ask).catch((error: unknown) => {

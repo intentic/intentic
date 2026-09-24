@@ -55,6 +55,18 @@ export interface DeviceSandboxResources {
     gpu: boolean;
     hostRuntime: readonly string[];
     overlayRuntime: readonly string[];
+    /**
+     * A reshape saved for the next restart and not yet in force (the contract's `saved`); absent when none is. The
+     * same shape as `ResourcesAsk`, spelled here rather than imported so the two modules don't import each other.
+     */
+    saved?:
+        | {
+              memoryGib?: number | null | undefined;
+              cpus?: number | null | undefined;
+              privileged?: boolean | undefined;
+              gpu?: boolean | undefined;
+          }
+        | undefined;
 }
 
 // One sandbox container on the machine, the docker half of the sandbox the two lists above describe.
@@ -87,6 +99,8 @@ export const resourcesSummary = (row: DeviceSandboxRow): string | undefined => {
         ...(share.cpus === undefined ? [] : [`${share.cpus} ${share.cpus === 1 ? `CPU` : `CPUs`}`]),
         ...(share.privileged ? [`privileged`] : []),
         ...(share.gpu ? [`GPU`] : []),
+        // Said on the row too, not only in the form: a saved share is a change still waiting for a restart.
+        ...(share.saved === undefined ? [] : [`changes on restart`]),
     ];
     return parts.length === 0 ? undefined : parts.join(` · `);
 };
