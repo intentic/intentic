@@ -8,22 +8,28 @@
     },
     "scenarios": {
         "code-lines": {
-            "instructions": 1599635195
+            "instructions": 1599288419
+        },
+        "code-recount": {
+            "instructions": 883054348
         },
         "fuzzy-rank": {
-            "instructions": 1475606338
+            "instructions": 1475596578
+        },
+        "fuzzy-typing": {
+            "instructions": 640363315
         },
         "ignore-rewalk": {
-            "instructions": 264699190
+            "instructions": 54624901
         },
         "ignore-walk": {
-            "instructions": 1108649714
+            "instructions": 760830487
         },
         "transcript-fold": {
-            "instructions": 163401256
+            "instructions": 163677958
         },
         "transcript-rows": {
-            "instructions": 246458844
+            "instructions": 246493129
         }
     }
 }

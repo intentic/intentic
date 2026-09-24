@@ -19,7 +19,8 @@ const subsequenceScore = (needle: string, haystack: string, path: string): numbe
         if (found === -1) {
             return undefined;
         }
-        const boundary = found === 0 || BOUNDARY.has(haystack[found - 1]!) || (path[found] !== undefined && path[found]! >= "A" && path[found]! <= "Z");
+        const boundary =
+            found === 0 || BOUNDARY.has(haystack[found - 1]!) || (path[found] !== undefined && path[found]! >= "A" && path[found]! <= "Z");
         score += 1 + (found === previousHit + 1 ? 0.8 : 0) + (boundary ? 0.6 : 0);
         previousHit = found;
         hi = found + 1;
@@ -46,11 +47,14 @@ export const fuzzyScore = (needle: string, path: string): number | undefined => 
     return raw === undefined ? undefined : (raw / (n.length * 2.4)) * 0.7 * Math.min(1, 20 / Math.max(20, h.length - n.length));
 };
 
+/** Matching paths, best first, each with its score. */
+export type Ranked = { readonly path: string; readonly score: number }[];
+
 /**
  * Every matching path, best first. Ties break on the path itself, so the order does not depend on the order the
  * paths arrived in — which is what lets two callers over the same set agree, and a test assert on the answer at all.
  */
-export const rankByFuzzy = (needle: string, paths: Iterable<string>): { readonly path: string; readonly score: number }[] => {
+export const rankByFuzzy = (needle: string, paths: Iterable<string>): Ranked => {
     const scored: { path: string; score: number }[] = [];
     for (const path of paths) {
         const score = fuzzyScore(needle, path);
@@ -59,4 +63,21 @@ export const rankByFuzzy = (needle: string, paths: Iterable<string>): { readonly
         }
     }
     return scored.toSorted((a, b) => b.score - a.score || (a.path < b.path ? -1 : 1));
+};
+
+/**
+ * `rankByFuzzy` for a query typed a key at a time: while the paths are the same collection and the query only grew at
+ * its end, only the last answer's paths are scored, since a path that misses a query misses every extension of it.
+ */
+export const fuzzyRanker = (): ((needle: string, paths: readonly string[]) => Ranked) => {
+    let last: { readonly paths: readonly string[]; readonly needle: string; readonly ranked: Ranked } | undefined;
+    return (needle, paths) => {
+        const narrowed =
+            last !== undefined && last.paths === paths && last.needle !== "" && needle.toLowerCase().startsWith(last.needle.toLowerCase())
+                ? last.ranked.map((entry) => entry.path)
+                : paths;
+        const ranked = rankByFuzzy(needle, narrowed);
+        last = { paths, needle, ranked };
+        return ranked;
+    };
 };

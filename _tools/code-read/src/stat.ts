@@ -65,6 +65,36 @@ export const lineStat = (before: string, after: string): LineStat | undefined =>
 /** Reads one side with comments stripped; the app runs this in a worker, the daemon in-process. */
 export type Analyze = (text: string, lang: string | undefined) => Promise<CodeAnalysis | undefined>;
 
+/**
+ * `analyze` with its answers kept by text, oldest dropped once the kept texts pass `budget` characters. A file saved
+ * again is counted against a side that has not moved, so a recount tokenizes only the side that did.
+ */
+export const rememberAnalyses = (analyze: Analyze, budget: number): Analyze => {
+    const kept = new Map<string, { readonly lang: string | undefined; readonly analysis: Promise<CodeAnalysis | undefined> }>();
+    let held = 0;
+    const forget = (text: string): void => {
+        if (kept.delete(text)) {
+            held -= text.length;
+        }
+    };
+    return (text, lang) => {
+        const hit = kept.get(text);
+        forget(text);
+        const analysis = hit !== undefined && hit.lang === lang ? hit.analysis : analyze(text, lang);
+        kept.set(text, { lang, analysis });
+        held += text.length;
+        for (const oldest of kept.keys()) {
+            if (held <= budget || oldest === text) {
+                break;
+            }
+            forget(oldest);
+        }
+        // A failed reading is not an answer: the next ask tries again.
+        void analysis.catch(() => forget(text));
+        return analysis;
+    };
+};
+
 /** Same counts with every comment stripped from both sides, or undefined when the file can't be stripped. */
 export const codeLineStat = async (before: string, after: string, path: string, analyze: Analyze): Promise<LineStat | undefined> => {
     // Resolved exactly as the diff pane resolves it; none above the highlight cap, where it shows the file whole.

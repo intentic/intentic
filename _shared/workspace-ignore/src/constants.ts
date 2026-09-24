@@ -32,7 +32,18 @@ export { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/constants";
 
 // Root-relative paths only: both predicates match the first segment, so a repo's own refs/ or public/ subdir stays
 // ordinary content. Callers with an absolute path must relativize first (toRelPath).
-const firstSegment = (relPath: string): string | undefined => relPath.split(/[\\/]/).find((segment) => segment.length > 0);
+const isSeparator = (char: string | undefined): boolean => char === "/" || char === "\\";
+const firstSegment = (relPath: string): string => {
+    let start = 0;
+    while (isSeparator(relPath[start])) {
+        start++;
+    }
+    let end = start;
+    while (end < relPath.length && !isSeparator(relPath[end])) {
+        end++;
+    }
+    return relPath.slice(start, end);
+};
 export const isReferencePath = (relPath: string): boolean => firstSegment(relPath) === REFERENCE_DIR;
 export const isPublicPath = (relPath: string): boolean => firstSegment(relPath) === PUBLIC_DIR;
 
@@ -41,6 +52,9 @@ export const isPublicPath = (relPath: string): boolean => firstSegment(relPath) 
 const BROWSER_PROFILE_GROUP = "local";
 
 export const isBrowserProfilePath = (path: string): boolean => {
+    if (!path.includes(STATE_DIR)) {
+        return false;
+    }
     const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
     const i = segments.indexOf(STATE_DIR);
     return i !== -1 && segments[i + 1] === BROWSER_PROFILE_GROUP && segments[i + 2] === "browser";
@@ -50,6 +64,9 @@ export const isBrowserProfilePath = (path: string): boolean => {
 const AGENT_WORKTREE_SEGMENTS = [".claude", "worktrees"] as const;
 
 export const isAgentWorktreePath = (path: string): boolean => {
+    if (!path.includes(AGENT_WORKTREE_SEGMENTS[1])) {
+        return false;
+    }
     const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
     return segments.some((segment, i) => segment === AGENT_WORKTREE_SEGMENTS[0] && segments[i + 1] === AGENT_WORKTREE_SEGMENTS[1]);
 };

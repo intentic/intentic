@@ -2,7 +2,7 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import type { Ref } from "vue";
 import { computed, ref } from "vue";
-import { rankPaths } from "./fuzzyPaths";
+import { pathRanker } from "./fuzzyPaths";
 import { type SearchScope, useWorkspaceSearch } from "./useWorkspaceSearch";
 import { useSearchOptions } from "./useSearchOptions";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
@@ -62,6 +62,7 @@ export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
     const server = useWorkspaceSearch(query, scope, serverActive, SERVER_DEBOUNCE_MS);
 
     const trimmed = computed(() => query.value.trim());
+    const rank = pathRanker(LIMIT);
     // The shortest query that can produce matches: the daemon's contract floors at 2 chars, client ranking at 1.
     const floor = computed(() => (serverMode.value ? 2 : 1));
 
@@ -69,7 +70,7 @@ export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
         if (!active.value || trimmed.value.length < floor.value) {
             return [];
         }
-        return serverMode.value ? server.groups.value.map((group) => group.path) : rankPaths(trimmed.value, clientTree.value.paths, LIMIT);
+        return serverMode.value ? server.groups.value.map((group) => group.path) : rank(trimmed.value, clientTree.value.paths);
     });
 
     return {

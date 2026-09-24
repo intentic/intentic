@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { join, posix, relative, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import ignore, { type Ignore } from "ignore";
 import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath } from "./constants.js";
 
@@ -60,8 +60,12 @@ const makeScope = (layers: readonly GitignoreLayer[]): IgnoreScope => ({
         // Nearest (deepest) matcher wins; approximates git's precedence for cross-file negation.
         for (let i = layers.length - 1; i >= 0; i--) {
             const layer = layers[i]!;
-            const rel = layer.base === "" ? relPath : posix.relative(layer.base, relPath);
-            if (rel === "" || rel.startsWith("..")) {
+            // Layers are the walk's ancestors and paths arrive normalized, so "under base" is a prefix test.
+            if (layer.base !== "" && !relPath.startsWith(`${layer.base}/`)) {
+                continue;
+            }
+            const rel = layer.base === "" ? relPath : relPath.slice(layer.base.length + 1);
+            if (rel === "") {
                 continue;
             }
             const result = layer.ig.test(isDir ? `${rel}/` : rel);

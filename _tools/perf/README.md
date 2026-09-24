@@ -50,14 +50,16 @@ Measured spread over three runs of each scenario: **0.8 to 9 ppm**. The toleranc
 times the worst of that. A real change to a hot path moves its count by far more than that. Injecting
 `localeCompare` into `rankByFuzzy`'s tie-break moved `fuzzy-rank` by **+12.60%**.
 
-| scenario          | production path                                                                           | work                                                          |
-| ----------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `code-lines`      | the review row's comment-free line counts: `codeLineStat` (`@intentic/code-read`)         | a warm Shiki tokenizes both sides of a 40-function `.ts` file |
-| `ignore-walk`     | the workspace walk's ignore check: `IgnoreScope.isIgnored` (`@intentic/workspace-ignore`) | 8,000 paths under two `.gitignore` layers, first walk         |
-| `ignore-rewalk`   | the same check on a repeat walk, matchers and their answers already cached                | the same 8,000 paths again                                    |
-| `fuzzy-rank`      | quick-open ranking: `rankByFuzzy` (`@intentic/base/fuzzy`)                                | 20 keystrokes, each re-ranking 20,000 paths                   |
-| `transcript-fold` | the daemon's per-frame fold: `TranscriptFold.apply` (`@intentic/sandbox-contract`)        | a 900-call turn of 14,400 frames                              |
-| `transcript-rows` | reading a stored transcript back: `JSON.parse` + `TranscriptRowSchema.safeParse`          | 20 settled 150-call turns                                     |
+| scenario          | production path                                                                                 | work                                                                |
+| ----------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `code-lines`      | the review row's comment-free line counts: `codeLineStat` (`@intentic/code-read`)               | a warm Shiki tokenizes both sides of a 40-function `.ts` file       |
+| `code-recount`    | the counting worker's recount of a file saved again: `rememberAnalyses` (`@intentic/code-read`) | only the side that moved is tokenized                               |
+| `ignore-walk`     | the workspace walk's ignore check: `IgnoreScope.isIgnored` (`@intentic/workspace-ignore`)       | 8,000 paths under two `.gitignore` layers, first walk               |
+| `ignore-rewalk`   | the same check on a repeat walk, matchers and their answers already cached                      | the same 8,000 paths again                                          |
+| `fuzzy-rank`      | quick-open ranking: `rankByFuzzy` (`@intentic/base/fuzzy`)                                      | 20 keystrokes, each re-ranking 20,000 paths                         |
+| `fuzzy-typing`    | quick-open as typed: `fuzzyRanker` (`@intentic/base/fuzzy`)                                     | the same 20 keystrokes, each scoring only what the last one matched |
+| `transcript-fold` | the daemon's per-frame fold: `TranscriptFold.apply` (`@intentic/sandbox-contract`)              | a 900-call turn of 14,400 frames                                    |
+| `transcript-rows` | reading a stored transcript back: `JSON.parse` + `TranscriptRowSchema.safeParse`                | 20 settled 150-call turns                                           |
 
 `code-lines` and `ignore-walk` were named in
 [the sandbox performance analysis](../../docs/audits/sandbox-performance-analysis.md) as two of the synchronous

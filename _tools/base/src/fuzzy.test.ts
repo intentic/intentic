@@ -1,4 +1,4 @@
-import { fuzzyScore } from "./fuzzy.js";
+import { fuzzyRanker, fuzzyScore, rankByFuzzy } from "./fuzzy.js";
 
 test("a substring beats a subsequence over the same path", () => {
     expect(fuzzyScore("widget", "alpha/src/widget.ts")!).toBeGreaterThan(fuzzyScore("wdgt", "alpha/src/widget.ts")!);
@@ -30,4 +30,42 @@ test("a subsequence score stays within 0..1, while a substring score may pass 1 
     expect(fuzzyScore("wdgt", "alpha/src/widget.ts")!).toBeLessThanOrEqual(1);
     expect(fuzzyScore("wdgt", "alpha/src/widget.ts")!).toBeGreaterThan(0);
     expect(fuzzyScore("notes", "notes.md")!).toBeGreaterThan(1);
+});
+
+const CORPUS = [
+    "_sandbox/sandbox/src/sessions/store.ts",
+    "_sandbox/sandbox/src/sessions/search.ts",
+    "_editor/web/src/App.vue",
+    "sand/box.md",
+    "README.md",
+];
+
+test("a ranker answers every keystroke exactly as a fresh ranking would, through backspace, case and a new collection", () => {
+    const rank = fuzzyRanker();
+    const typed = ["s", "sa", "san", "sand", "sa", "SAND", "sandb", "sandbox/se", "x", "xs"];
+    for (const needle of typed) {
+        expect(rank(needle, CORPUS)).toEqual(rankByFuzzy(needle, CORPUS));
+    }
+    const grown = [...CORPUS, "sandy/beach.ts"];
+    expect(rank("sandb", grown)).toEqual(rankByFuzzy("sandb", grown));
+});
+
+test("a ranker scores only the last answer's paths while the query grows over the same collection", () => {
+    let walked = 0;
+    const paths = Object.assign([...CORPUS], {
+        *[Symbol.iterator](this: string[]) {
+            for (const path of Array.prototype.values.call(this)) {
+                walked += 1;
+                yield path;
+            }
+        },
+    });
+    const rank = fuzzyRanker();
+    rank("s", paths);
+    expect(walked).toBe(CORPUS.length);
+    rank("sa", paths);
+    rank("san", paths);
+    expect(walked).toBe(CORPUS.length);
+    rank("s", paths);
+    expect(walked).toBe(CORPUS.length * 2);
 });

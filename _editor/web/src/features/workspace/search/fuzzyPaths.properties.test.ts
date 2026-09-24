@@ -1,8 +1,12 @@
-// Property tests over quick-open ranking's laws (cap, dedupe, tie-break, order-independence) for every input.
+// Property tests over quick-open ranking's laws (cap, dedupe, tie-break, order-independence, and a kept ranker answering
+// every keystroke as a fresh one would) for every input.
 // The scorer's own laws are @intentic/base/fuzzy's, tested there; here it is only the oracle ranking is judged by.
 import { array, assert, constantFrom, integer, nat, oneof, option, property, stringMatching, tuple, uniqueArray } from "fast-check";
 import { fuzzyScore } from "@intentic/base/fuzzy";
-import { rankPaths } from "./fuzzyPaths";
+import { pathRanker } from "./fuzzyPaths";
+
+// A fresh ranking: the oracle a kept ranker is held to.
+const rankPaths = (query: string, paths: readonly string[], limit: number): string[] => pathRanker(limit)(query, paths);
 
 const segmentArb = stringMatching(/^[a-z0-9_-]{1,10}$/);
 
@@ -13,7 +17,7 @@ const pathArb = tuple(array(segmentArb, { minLength: 1, maxLength: 5 }), option(
 
 const needleArb = stringMatching(/^[a-z0-9._/-]{0,12}$/);
 
-describe(`rankPaths`, () => {
+describe(`pathRanker`, () => {
     const queryArb = oneof(needleArb, segmentArb);
 
     // Same basename under sibling dirs from a disjoint alphabet: scores tie, isolating the tie-break.
@@ -75,6 +79,19 @@ describe(`rankPaths`, () => {
                 const offset = paths.length === 0 ? 0 : rotation % paths.length;
                 const rotated = [...paths.slice(offset), ...paths.slice(0, offset)].toReversed();
                 expect(rankPaths(query, rotated, limit)).toEqual(rankPaths(query, paths, limit));
+            }),
+        );
+    });
+
+    test(`kept across keystrokes, answers each one as a fresh ranking would: typing on, deleting back, and retyping`, () => {
+        assert(
+            property(queryArb, queryArb, uniqueArray(pathArb, { maxLength: 25 }), integer({ min: 1, max: 30 }), (first, second, paths, limit) => {
+                const rank = pathRanker(limit);
+                const typed = [...first].map((_, index) => first.slice(0, index + 1));
+                const retyped = [...second].map((_, index) => second.slice(0, index + 1));
+                for (const query of [...typed, ...typed.toReversed(), ...retyped]) {
+                    expect(rank(query, paths)).toEqual(rankPaths(query, paths, limit));
+                }
             }),
         );
     });

@@ -28,6 +28,8 @@ and a package that offers them as one thing invites being treated as a junk draw
 - **`fuzzy`**: the fzf-style path scorer and the ranking order built on it. Both ends of quick-open answer with
   it — the sandbox's iq `files` engine and the app's own search box — and they used to answer with two copies of
   it, kept identical by hand, where the same keystrokes could have put a different file first on either side.
+  `fuzzyRanker` is the same ranking for a query typed a key at a time: a keystroke that extends the query scores
+  only the paths the last one matched, with an identical answer.
 - **`errors`**: how a catch says which failure it expected. `isMissing` is ENOENT or ENOTDIR and nothing else,
   and `undefinedIfMissing` is the `.catch` handler built on it: "not there" answers undefined, and EACCES, EIO or
   a bug's TypeError still arrive. Without it every call site wrote `.catch(() => undefined)`, which reads an

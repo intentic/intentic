@@ -30,6 +30,8 @@ test("the reference shelf is the ROOT-level refs/ only, a repo's own refs dir st
     expect(isReferencePath("myrepo/refs/notes.md")).toBe(false);
     expect(isReferencePath("refactor/src/main.ts")).toBe(false);
     expect(isReferencePath("")).toBe(false);
+    expect(isReferencePath("/refs/notes.md")).toBe(true);
+    expect(isReferencePath("refs\\react\\index.js")).toBe(true);
 });
 
 test("IgnoreScope.isIgnored grays junk dirs (incl. .git) + browser profiles; leaves tracked source & lone secrets alone", () => {
@@ -88,4 +90,13 @@ test("a .git pointer file is left to each caller: this layer only knows the dire
     const scope = createIgnoreScope();
     expect(scope.isIgnored(".git", "repo/.git", true)).toBe(true);
     expect(scope.isIgnored(".git", "repo/.git", false)).toBe(false);
+});
+
+test("a directory's rules reach its own subtree and not a sibling whose name starts the same", () => {
+    const scope = createIgnoreScope().layer("", "*.log\n").layer("app", "*.tmp\n!keep.log\n");
+    expect(scope.isIgnored("x.tmp", "app/src/x.tmp", false)).toBe(true);
+    expect(scope.isIgnored("x.tmp", "apps/src/x.tmp", false)).toBe(false);
+    expect(scope.isIgnored("keep.log", "app/keep.log", false)).toBe(false);
+    expect(scope.isIgnored("keep.log", "apps/keep.log", false)).toBe(true);
+    expect(scope.isIgnored("app", "app", true)).toBe(false);
 });

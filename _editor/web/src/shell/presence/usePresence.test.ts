@@ -46,6 +46,21 @@ describe(`presence roster`, () => {
         expect(presenceOthers.value).toEqual([]);
     });
 
+    it(`hands back the same viewers until the roster changes, each member once however many of their tabs are there`, () => {
+        setPresenceUsers([
+            tab({ clientId: `c1`, email: `a@x.com`, sessionId: `s1` }),
+            tab({ clientId: `c2`, email: `a@x.com`, sessionId: `s1` }),
+            tab({ clientId: `c3`, email: `b@x.com`, sessionId: `s1`, path: `src/app.ts` }),
+        ]);
+        const first = viewersOfSession(`s1`);
+        expect(first.map((member) => member.email)).toEqual([`a@x.com`, `b@x.com`]);
+        expect(viewersOfSession(`s1`)).toBe(first);
+        expect(viewersOfSession(`s2`)).toBe(viewersOfPath(`nowhere.ts`));
+        setPresenceUsers([tab({ clientId: `c3`, email: `b@x.com`, sessionId: `s1` })]);
+        expect(viewersOfSession(`s1`).map((member) => member.email)).toEqual([`b@x.com`]);
+        expect(viewersOfPath(`src/app.ts`)).toEqual([]);
+    });
+
     // The roster is the outgoing daemon's; the incoming sandbox's stream repaints its own on connect.
     it(`starts empty in the next sandbox`, () => {
         setPresenceUsers([tab({ clientId: `c1`, email: `a@x.com` })]);

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, ProgressRing, ResponsiveOverlay, SegmentRing, ui, useDevice } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
-import { errorMessage, useNow } from "@intentic/ui/async";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, useTemplateRef } from "vue";
 import { RouterLink } from "vue-router";
 import { requestLandAgent } from "../../fleet/agentActions";
@@ -10,6 +10,7 @@ import { useRole } from "../../../sandbox/secrets/useRole";
 import { useAudience } from "../../../../app/useAudience";
 import { useVocabulary } from "../../../../core-views/vocabulary";
 import OriginMark from "../../../../components/OriginMark.vue";
+import AgentCardClock from "./AgentCardClock.vue";
 import AgentReactions from "./AgentReactions.vue";
 import OwnerMark from "../session/OwnerMark.vue";
 import { sessionMark } from "../ownership";
@@ -19,30 +20,22 @@ import UnsentMark from "../../../../components/UnsentMark.vue";
 import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
 import {
-    activityIcon,
     activityLine,
     agentDisplayTitle,
     agentStatusMeta,
     conflictIsYours,
     formatCost,
-    formatElapsed,
     landedAway,
     laneOf,
-    limitClosed,
-    limitCountdown,
     limited,
     loopMeta,
     reviewAction,
     standingChip,
     tileRim,
-    turnInFlight,
     turnWorking,
     unreadHint,
     unregistered,
-    watching,
-    watchLine,
 } from "../../fleet/agentStatus";
-import { cacheCooling, cacheWarm, warmMark } from "../../fleet/promptCache";
 import KeepWarmPanel from "../../fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
 // user to exactly this place for exactly this refusal.
@@ -66,8 +59,8 @@ import { useT } from "@intentic/ui/i18n";
 
 // One fleet agent: identity tile + title + status chip, a model/session line, and a closing summary line (stats,
 // drill-in, and either the running elapsed or the settled date).
-// Each card reads the shared useNow clock itself so its own elapsed advances without rerendering the board; root is a
-// div-button (not <button>) so the nested rename input stays valid HTML.
+// The clock corner (AgentCardClock) reads the shared useNow clock itself, so a tick redraws that corner and not the card
+// or the board; root is a div-button (not <button>) so the nested rename input stays valid HTML.
 // `dense` is the same card as a row, for stacked lanes: identical DOM and facts, just wrapped onto one line instead of
 // stacked, so a lane fits more cards.
 
@@ -89,8 +82,6 @@ const props = defineProps<{
     // Filter's case-sensitivity switch, so marks are struck under the rule search actually used.
     matchCase?: boolean;
 }>();
-// Ticks only while needed (turn, watch, limit countdown); settled cards share the clock without re-ticking.
-const now = useNow(() => turnInFlight(props.agent) || watching(props.agent) || limitClosed(props.agent) || cacheWarm(props.agent));
 const emit = defineEmits<{
     // The click that opened it, if any; a modified click asks for a pane instead of focus.
     open: [event?: MouseEvent];
@@ -294,19 +285,6 @@ const reactionsStrip = useTemplateRef<{ open: (from: HTMLElement) => void }>(`re
 // One wrapping line (stats left, standing/time right) rather than two rows, so a lane fits more cards.
 const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value || working.value || reactable.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
-// Recomputed against the ticking `now`, like the elapsed beside it, so the countdown moves without its own timer.
-// Suppressed while a turn is in flight: the running corner already answers "doing what, for how long", and reclaims it
-// the moment the turn ends.
-const watch = computed(() => (working.value ? undefined : watchLine(props.agent, now.value)));
-// Shares the card's "when" corner with the running elapsed and the watch countdown; the chip already says what
-// happened, this says when.
-// Undefined once the window is open or the provider gave no instant; the corner then falls back to the ordinary date.
-const limitBackAt = computed(() => limitCountdown(props.agent, now.value));
-// Shares that same corner, and yields it: a reset clock and a watch are each a firmer promise about the card than a
-// cache that only makes answering cheaper, so this speaks when the corner is otherwise free.
-const cooling = computed(() => (watch.value !== undefined || limitBackAt.value !== undefined ? undefined : cacheCooling(props.agent, now.value)));
-// A hold outranks the cooling clock in that corner: it is the answer to the question the cooling chip asks.
-const warm = computed(() => (watch.value !== undefined || limitBackAt.value !== undefined || working.value ? undefined : warmMark(props.agent)));
 // Either mark opens the same question the chat's status bar asks, answered for this card.
 const warmOpen = ref(false);
 const warmAnchor = ref<HTMLElement>();
@@ -822,78 +800,15 @@ const grab = (event: PointerEvent): void => {
                     <span v-else-if="review === undefined && completed" class="inline-flex shrink-0 items-center gap-1">
                         <Icon name="check" class="text-2xs" />{{ t(`agents.agentCard.completed`) }}
                     </span>
-                    <!-- Archived card dates itself by when it left the board, the same "when" slot a running card's elapsed uses. -->
-                    <span v-if="agent.archivedAt !== undefined" class="shrink-0"
-                        >{{ t(`agents.agentCard.archived`, { archivedAt: relativeTime(agent.archivedAt) }) }}
-                    </span>
-                    <!-- Takes the date's slot: "back at X" tells the reader something to plan around, unlike "last active". -->
-                    <span
-                        v-else-if="limitBackAt !== undefined"
-                        class="inline-flex shrink-0 items-center gap-1"
-                        v-tooltip.top="agent.failure ?? t(`agents.agentCard.providerRefusedTurnUsage`)"
-                    >
-                        <Icon name="clock" class="shrink-0 text-2xs" />
-                        <span class="tabular-nums">{{ t(`agents.agentCard.back`, { limitBackAt }) }}</span>
-                    </span>
-                    <!-- A hold on the cache, running or stopped early: the corner says until when, or since when it went cold. -->
-                    <button
-                        v-else-if="warm !== undefined"
-                        type="button"
-                        class="inline-flex shrink-0 items-center gap-1 hover:underline"
-                        :class="warm.cold ? 'text-warning' : 'text-link'"
-                        v-tooltip.top="warm.hint"
-                        @click.stop="openWarm"
-                    >
-                        <Icon :name="warm.icon" class="shrink-0 text-2xs" />
-                        <span class="tabular-nums">{{ warm.text }}</span>
-                    </button>
-                    <!-- Borrows the date's slot for the last fifth of the cache's life: for that minute or twelve, "answering now is cheap" is worth more than "4m ago", and it hands the slot straight back. -->
-                    <button
-                        v-else-if="cooling !== undefined"
-                        type="button"
-                        class="inline-flex shrink-0 items-center gap-1 hover:underline"
-                        :class="cooling.near ? 'font-medium text-link' : 'text-muted'"
-                        v-tooltip.top="t(`agents.promptCache.coolingHint`, { hint: cooling.hint })"
-                        @click.stop="openWarm"
-                    >
-                        <Icon name="bolt" class="shrink-0 text-2xs" />
-                        {{ cooling.text }}<span class="tabular-nums">{{ cooling.countdown }}</span>
-                    </button>
-                    <span v-else-if="watch === undefined && !working && agent.updatedAt > 0" class="shrink-0">{{
-                        relativeTime(agent.updatedAt)
-                    }}</span>
-
-                    <!-- Same slot and grammar as the running tool and the settled date: a card is only ever one of those three things at a time. -->
-                    <span v-if="watch !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
-                        <!-- Readout and its hint wrap together, separately from the press beside them. -->
-                        <span class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link" v-tooltip.top="watch.hint">
-                            <Icon name="eye" class="shrink-0 text-2xs" />
-                            <span class="min-w-0 truncate">{{ watch.text }}</span>
-                            <span class="shrink-0 tabular-nums">{{ watch.countdown }}</span>
-                        </span>
-                        <!-- The one visible way to disarm a watch; previously only a right-click menu or a drag, neither discoverable from the readout that announces it. -->
-                        <Button
-                            size="small"
-                            severity="secondary"
-                            :text="true"
-                            class="shrink-0"
-                            :aria-label="t(`shared.stopWatching`)"
-                            v-tooltip.top="t(`agents.agentCard.stopWatchingConversationStays`)"
-                            :disabled="busy"
-                            :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
-                            @click.stop="emit(`unwatch`)"
-                        >
-                            {{ t(`ui.action.stop`) }}
-                        </Button>
-                    </span>
-
-                    <!-- Same corner as the settled card's date, so the eye finds one readout per card instead of two at different heights. -->
-                    <span v-if="working" class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link">
-                        <!-- Glyph follows whichever fact leads: running children if any, else the tool the agent itself is using. -->
-                        <Icon :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)" class="shrink-0 text-2xs" />
-                        <span class="min-w-0 truncate">{{ activityText ?? t(`shared.working`) }}</span>
-                        <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(agent.startedAt, now) }}</span>
-                    </span>
+                    <!-- The one part of the card that moves with the clock, so a tick redraws it and not the card around it. -->
+                    <AgentCardClock
+                        :agent="agent"
+                        :working="working"
+                        :activity-text="activityText"
+                        :busy="busy"
+                        @unwatch="emit(`unwatch`)"
+                        @warm="openWarm"
+                    />
                 </span>
             </div>
         </div>

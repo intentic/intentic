@@ -1,5 +1,5 @@
 import { type AgentCommand, type ContextUsage, type ConversationQueue, newConversationId, type TurnFact } from "@intentic/sandbox-contract";
-import { computed, ref, shallowRef } from "vue";
+import { computed, effectScope, ref, shallowRef, watch } from "vue";
 import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import type { PickUp } from "../run/pickUp";
@@ -106,9 +106,9 @@ export class Conversation {
     readonly failures: TurnFailures;
     readonly requests: CardReplies;
 
-    // Whether this window holds words nowhere else does (a draft, an attachment); guards a tab from closing. What waits in
-    // the queue is the daemon's, kept whatever this window does.
-    readonly unsent = computed<boolean>(() => this.draft.value.trim() !== `` || this.attachments.value.length > 0);
+    // Words this window holds and nothing else does (a draft, an attachment; never the daemon's queue); guards a tab from
+    // closing. A watcher keeps it, not a computed, so a keystroke wakes none of the strip, fleet and cards that read it.
+    readonly unsent = shallowRef(false);
 
     // What this conversation is doing, for the tab's status icon.
     readonly status = computed<ConversationStatus>(() => {
@@ -129,5 +129,15 @@ export class Conversation {
         this.selection = new ComposerSelection(this);
         this.failures = new TurnFailures(this);
         this.requests = new CardReplies(this);
+        // Detached: the conversation outlives whichever component made it, and the watcher is reachable only through it.
+        effectScope(true).run(() =>
+            watch(
+                () => this.draft.value.trim() !== `` || this.attachments.value.length > 0,
+                (now) => {
+                    this.unsent.value = now;
+                },
+                { flush: `sync`, immediate: true },
+            ),
+        );
     }
 }

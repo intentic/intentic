@@ -22,8 +22,9 @@ how big a change is once those are out of it.
 - [src/tokens.ts](src/tokens.ts): the walk. Takes its grammars from the caller (`Grammars`), which is the seam
   between the two sides below.
 - [src/analysis.ts](src/analysis.ts): one walk, two answers, the comment-free source and the import lines.
-- [src/stat.ts](src/stat.ts): `lineStat` (a minimal diff's two counts, from one longest-common-subsequence pass)
-  and `codeLineStat` (the same, with both sides stripped first).
+- [src/stat.ts](src/stat.ts): `lineStat` (a minimal diff's two counts, from one longest-common-subsequence pass),
+  `codeLineStat` (the same, with both sides stripped first), and `rememberAnalyses`, which keeps each side's
+  reading by its text so a file saved again re-tokenizes only the side that moved.
 - [src/grammars.ts](src/grammars.ts): a Shiki core for a process with no screen. The daemon's; the app does not
   use it.
 

@@ -57,11 +57,35 @@ export const presenceOthers = computed<readonly PresenceMember[]>(() => {
     return members.toSorted((a, b) => Number(a.idle) - Number(b.idle) || a.email.localeCompare(b.email));
 });
 
-export const viewersOfPath = (path: string): readonly PresenceMember[] =>
-    presenceOthers.value.filter((member) => member.tabs.some((tab) => tab.path === path));
+const NOBODY: readonly PresenceMember[] = [];
 
-export const viewersOfSession = (sessionId: string): readonly PresenceMember[] =>
-    presenceOthers.value.filter((member) => member.tabs.some((tab) => tab.sessionId === sessionId));
+// Members per file and per chat, in roster order, built once per roster: a lookup returns the same array until someone
+// moves, so a row that redraws for its own reasons hands its avatars an unchanged prop and they stay as they are.
+const byPlace = computed(() => {
+    const paths = new Map<string, PresenceMember[]>();
+    const sessions = new Map<string, PresenceMember[]>();
+    const place = (at: Map<string, PresenceMember[]>, key: string | undefined, member: PresenceMember): void => {
+        if (key === undefined) {
+            return;
+        }
+        const members = at.get(key) ?? at.set(key, []).get(key)!;
+        // A member's tabs are walked together, so two of theirs in one place are adjacent here.
+        if (members.at(-1) !== member) {
+            members.push(member);
+        }
+    };
+    for (const member of presenceOthers.value) {
+        for (const tab of member.tabs) {
+            place(paths, tab.path, member);
+            place(sessions, tab.sessionId, member);
+        }
+    }
+    return { paths, sessions };
+});
+
+export const viewersOfPath = (path: string): readonly PresenceMember[] => byPlace.value.paths.get(path) ?? NOBODY;
+
+export const viewersOfSession = (sessionId: string): readonly PresenceMember[] => byPlace.value.sessions.get(sessionId) ?? NOBODY;
 
 // What a member is doing, for tooltips, from their most specific tab, visible tabs first.
 export const presenceActivity = (member: PresenceMember): string => {
