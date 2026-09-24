@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, watch } from "vue";
+import { computed, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useChatFloating } from "../../features/chat/panel/chatFloating";
 import { globalTerminalSource, useTerminalPanel } from "../../features/terminal/useTerminalPanel";
@@ -39,14 +39,14 @@ const terminalTarget = computed(() => terminalDock.value ?? park);
 // No side-column slot: fills its area or window, or waits parked, where the live iframe keeps its own state.
 const previewTarget = computed(() => previewDock.value ?? park);
 
-// Redirects to the panel's route home on close, so it lands visible; only panels whose home is a route.
-watch(chat.floats, (floats) => {
-    if (!floats && chatOnRail.value && router.currentRoute.value.name !== `chat`) {
+// Only a dock lands a panel visible on its route home; one whose window merely went away returns without moving the reader.
+chat.onDocked(() => {
+    if (chatOnRail.value && router.currentRoute.value.name !== `chat`) {
         void router.push(`/chat`);
     }
 });
-watch(preview.floats, (floats) => {
-    if (!floats && previewOpened.value && router.currentRoute.value.name !== `preview`) {
+preview.onDocked(() => {
+    if (previewOpened.value && router.currentRoute.value.name !== `preview`) {
         void router.push(`/preview`);
     }
 });

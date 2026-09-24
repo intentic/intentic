@@ -3,8 +3,10 @@ import { expect, type BrowserContext, type Page, test } from "@playwright/test";
 declare global {
     interface Window {
         dropChatStrips: boolean;
+        drewChat: boolean;
         chatWindow: {
             draws(): boolean;
+            dock(): void;
             owner(): string | undefined;
             state(): { active?: string; panes: string[]; run?: { runId: string; mode: string } };
             select(sandbox: string): void;
@@ -21,6 +23,15 @@ const open = async (context: BrowserContext, holder = false): Promise<Page> => {
     return page;
 };
 const selected = (page: Page): Promise<string | undefined> => page.evaluate(() => window.chatWindow.state().active);
+const draws = (page: Page): Promise<boolean> => page.evaluate(() => window.chatWindow.draws());
+// Sampled every few milliseconds from here on, since a hand-back inside a reload lasts only as long as the page load.
+const watchDraws = (page: Page): Promise<void> =>
+    page.evaluate(() => {
+        window.drewChat = false;
+        setInterval(() => {
+            window.drewChat ||= window.chatWindow.draws();
+        }, 5);
+    });
 
 test.beforeEach(async ({ context }) => {
     await context.addInitScript(() => {
@@ -116,4 +127,35 @@ test(`a sandbox switch never republishes the previous sandbox's cached strip`, a
     expect(await selected(board)).toBeUndefined();
     await holder.evaluate(() => window.chatWindow.publish(`sb2-only`));
     await expect.poll(() => selected(board)).toBe(`sb2-only`);
+});
+
+test(`a holder that reloads never hands the panel back to the board`, async ({ context }) => {
+    const holder = await open(context, true);
+    const board = await open(context);
+    await expect.poll(() => draws(board)).toBe(false);
+    const oldOwner = await board.evaluate(() => window.chatWindow.owner());
+    await watchDraws(board);
+
+    await holder.reload();
+    await holder.waitForFunction(() => window.chatWindow !== undefined);
+    await expect.poll(() => board.evaluate(() => window.chatWindow.owner())).not.toBe(oldOwner);
+    // The retired claim's deadline has to fall inside the observation.
+    await board.waitForTimeout(3_500);
+
+    expect(await board.evaluate(() => window.drewChat)).toBe(false);
+});
+
+test(`a holder that docks hands the panel back at once, and one that closes at its deadline`, async ({ context }) => {
+    const holder = await open(context, true);
+    const board = await open(context);
+    await expect.poll(() => draws(board)).toBe(false);
+
+    await holder.evaluate(() => window.chatWindow.dock());
+    // Well inside the 2.5s deadline: this is the hand-back itself, not the claim expiring.
+    await expect.poll(() => draws(board), { timeout: 1_000 }).toBe(true);
+
+    const second = await open(context, true);
+    await expect.poll(() => draws(board)).toBe(false);
+    await second.close();
+    await expect.poll(() => draws(board)).toBe(true);
 });

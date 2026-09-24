@@ -10,6 +10,7 @@ import {
     workDesktopWindow,
 } from "../../app/environments/desktop";
 import { BAR, type BarEdges, barsChanged, type Corner, cornerBar } from "./controlsReserve";
+import { handBackOwnPanel } from "./floating";
 import { domLayout, pressOf, windowGesture } from "./windowGesture";
 import { useT } from "@intentic/ui/i18n";
 
@@ -24,6 +25,13 @@ const controls = ref<HTMLElement>();
 /* The app's own screens follow this page's light; it cannot see this window's storage, so the scheme is announced. */
 const { scheme } = useTheme();
 const route = useRoute();
+
+/* A floating panel's × is its dock (windows.rs), said as one, so the workspace takes the panel back without waiting. */
+const close = (): void => {
+    if (!handBackOwnPanel()) {
+        workDesktopWindow(`close`);
+    }
+};
 
 /* --- The corner ---------------------------------------------------------------------------------------------- */
 
@@ -260,7 +268,7 @@ onUnmounted(() => {
         >
             <Icon :name="maximized ? `restore` : `square`" class="text-sm" />
         </button>
-        <button type="button" class="window-control window-control-close" :aria-label="t(`ui.action.close`)" @click="workDesktopWindow(`close`)">
+        <button type="button" class="window-control window-control-close" :aria-label="t(`ui.action.close`)" @click="close">
             <Icon name="times" class="text-sm" />
         </button>
     </div>

@@ -36,21 +36,20 @@ if (panel === `preview`) {
     markPreviewOpened();
 }
 
-// The window going away, asked for from anywhere (this window, another window's Dock press, F9). A browser ignores
-// `window.close()` for a window the script didn't open (the desktop app closes its own by link instead), so the
-// fallback is to stop being floating and become an ordinary window; either way the claim releases.
-const dock = (): void => {
+// The window going away once its claim has let go. A browser ignores `window.close()` for a window the script didn't
+// open (the desktop app closes its own by link instead), so the fallback is to become an ordinary window.
+const close = (): void => {
     closeOwnWindow();
     void router.replace(`/`);
 };
 
-claimFloating(panel, dock);
+const handBack = claimFloating(panel, close);
 
-// Closing the panel from inside its own window closes the window — its x can't mean "leave an empty window".
+// Closing the panel from inside its own window docks it — its x can't mean "leave an empty window".
 if (panel === `terminal`) {
     watch(layout.terminalOpen, (open) => {
         if (!open) {
-            dock();
+            handBack();
         }
     });
 }

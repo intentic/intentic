@@ -1,29 +1,35 @@
 import { computed, type ComputedRef, getCurrentScope, onScopeDispose, shallowRef } from "vue";
-import { closeOwnWindow, raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
+import { raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { uuid } from "../../lib/uuid";
 
-// A floating panel (chat, terminal, preview) is a real window at /floating/<panel>, rendering full-bleed
-// (FloatingSection.vue). `floats`/`here`/`shows` derive from BroadcastChannel heartbeats, not ownership; a stale claim
-// (heartbeat and lock both gone past STALE_MS) is swept, and duplicates resolve oldest-claim-wins.
+// A floating panel (chat, terminal, preview) is a real window at /floating/<panel> (FloatingSection.vue); every window
+// derives `floats`/`here`/`shows` from its heartbeats. Only a hand-back (`gone`) ends a claim at once; any other end,
+// a reload's included, waits out the claim's deadline and its lock. Duplicates resolve oldest-claim-wins.
 
 export type FloatingPanel = `chat` | `terminal` | `preview`;
 
 // Resolved against BASE_URL, not root-absolute: this build can be served under a path prefix.
 const floatingPath = (panel: FloatingPanel): string => `${import.meta.env.BASE_URL}floating/${panel}`;
 
-// STALE_MS must outlast a reload's heartbeat gap, or a reloading window gets written off as gone.
+// STALE_MS is silence after which a running window is gone; a reloading one says so first and holds its place longer.
 const HEARTBEAT_MS = 750;
 const STALE_MS = 2500;
 const SWEEP_MS = 500;
 
+// Caps an unloading window's promised return: a first boot that sat on a sign-in is no measure of a reload.
+const MAX_RETURN_MS = 10_000;
+
 // Frames smaller than this are treated as a bad reading (closing/minimized window), not a real size.
 const MIN_FRAME = 240;
 
-// Notes exchanged between floating windows over BroadcastChannel; only `here` carries state, the rest are requests.
-// `roll` lets a newly loaded window learn current state without waiting for a heartbeat.
+// Notes exchanged between floating windows over BroadcastChannel; `here`, `unloading` and `gone` carry state, the rest
+// are requests. `roll` lets a newly loaded window learn current state without waiting for a heartbeat.
 export type FloatingNote =
     | { readonly kind: `here`; readonly panel: FloatingPanel; readonly id: string; readonly since: number }
+    // A reload unloads exactly like a close, so this holds the panel's place for `within` ms rather than handing it back.
+    | { readonly kind: `unloading`; readonly panel: FloatingPanel; readonly id: string; readonly within: number }
+    // Handed back on purpose (a Dock press, the window's ×, a lost race), while that window was still running.
     | { readonly kind: `gone`; readonly panel: FloatingPanel; readonly id: string }
     | { readonly kind: `dock`; readonly panel: FloatingPanel }
     | { readonly kind: `raise`; readonly panel: FloatingPanel }
@@ -37,13 +43,16 @@ const post = (note: FloatingNote): void => {
 };
 
 // Other windows' claims only; a BroadcastChannel never delivers to its own poster, so this window's own claim is
-// `mine`. Kept in a plain Map rather than reactive state, since presence changes rarely.
+// `own`. Kept in a plain Map rather than reactive state, since presence changes rarely.
 interface Sighting {
     readonly panel: FloatingPanel;
     readonly id: string;
     // When that window's claim began; used to break ties between competing claims for the same panel.
     readonly since: number;
-    readonly seenAt: number;
+    // When the claim may be retired, if its lock agrees: STALE_MS past its last beat, or its promised return.
+    readonly until: number;
+    // Its window said it was unloading: the claim only holds the panel's place until a live claim or the deadline.
+    readonly unloading: boolean;
 }
 
 const sightings = new Map<string, Sighting>();
@@ -51,7 +60,10 @@ const elsewhere = shallowRef<ReadonlyMap<FloatingPanel, string>>(new Map());
 
 const publish = (): void => {
     const next = new Map<FloatingPanel, string>();
-    const ordered = [...sightings.values()].sort((a, b) => a.since - b.since || (a.id < b.id ? -1 : a.id === b.id ? 0 : 1));
+    // A live claim outranks an unloading one whatever their ages, so a reload's successor holds the panel once it claims.
+    const ordered = [...sightings.values()].sort(
+        (a, b) => Number(a.unloading) - Number(b.unloading) || a.since - b.since || (a.id < b.id ? -1 : a.id === b.id ? 0 : 1),
+    );
     for (const sighting of ordered) {
         if (!next.has(sighting.panel)) {
             next.set(sighting.panel, sighting.id);
@@ -104,7 +116,7 @@ let sweep: ReturnType<typeof setInterval> | undefined;
 // Expiry must use a fresh lock query; a cached result can predate a browser suspension or a new claim.
 const retireSightings = (heldLocks: ReadonlySet<string>): void => {
     for (const [id, sighting] of sightings) {
-        if (Date.now() - sighting.seenAt > STALE_MS && !heldLocks.has(lockName(sighting.panel, id))) {
+        if (Date.now() > sighting.until && !heldLocks.has(lockName(sighting.panel, id))) {
             sightings.delete(id);
         }
     }
@@ -147,22 +159,38 @@ const startSweeping = (): void => {
     sweep = setInterval(sweepSightings, SWEEP_MS);
 };
 
-// This window's own claim, if any; set when a floating route mounts and cleared when its scope disposes.
-const mine = shallowRef<FloatingPanel | undefined>(undefined);
-const myId = shallowRef<string>();
+// This window's own claim, if any; set when a floating route mounts and cleared when it lets go.
+interface OwnClaim {
+    readonly panel: FloatingPanel;
+    readonly id: string;
+    // Lets go on purpose, then closes the window.
+    readonly handBack: () => void;
+}
+
+const own = shallowRef<OwnClaim | undefined>(undefined);
 
 // A replacement realm has a different owner even when the panel never stops floating.
 export const floatingOwner = (panel: FloatingPanel): ComputedRef<string | undefined> =>
-    computed(() => (mine.value === panel ? myId.value : elsewhere.value.get(panel)));
+    computed(() => (own.value?.panel === panel ? own.value.id : elsewhere.value.get(panel)));
 
 // Readers of incoming notes held by this window's claim; a set so a hot update can't leave a stale reader behind.
 const claimants = new Set<(note: FloatingNote) => void>();
+
+// Reactions to a panel docked on purpose (FloatingSurface.onDocked); a claim merely expiring never reaches them.
+const dockedReactions = new Set<(panel: FloatingPanel) => void>();
 
 /**
  * Which panel this window floats, if any; read by the app shell so a floating window keeps its panel mounted under the
  * mobile breakpoint.
  */
-export const floatingWindowPanel: ComputedRef<FloatingPanel | undefined> = computed(() => mine.value);
+export const floatingWindowPanel: ComputedRef<FloatingPanel | undefined> = computed(() => own.value?.panel);
+
+/** Hands this window's panel back and closes the window, as its Dock press does; false in a window that floats nothing. */
+export const handBackOwnPanel = (): boolean => {
+    const claim = own.value;
+    claim?.handBack();
+    return claim !== undefined;
+};
 
 /**
  * True when some panel floats in another window; this window may need to hand work back to it
@@ -251,14 +279,14 @@ const centred = (size: { width: number; height: number }): Frame => ({
 // The floating window's half: hold the claim for as long as this window is that window.
 
 /**
- * Claims a panel for this window, announcing it until the scope disposes (call once from the floating route's setup);
- * `onDock` handles a dock request, since only this realm can decide whether to close.
+ * Claims a panel for this window until the scope disposes (call once from the floating route's setup); `close` takes
+ * the window away, which only this realm can do. Returns the hand-back: let go on purpose, then close.
  */
-export const claimFloating = (panel: FloatingPanel, onDock: () => void): void => {
+export const claimFloating = (panel: FloatingPanel, close: () => void): (() => void) => {
     const id = uuid();
     const since = Date.now();
-    myId.value = id;
-    mine.value = panel;
+    // A reload is a boot, so this realm's own boot (navigation to claim) says how soon a reload of it is back.
+    const within = Math.round(Math.min(Math.max(STALE_MS, 2 * performance.now()), MAX_RETURN_MS));
 
     // Acquired before the first heartbeat, so the window is never announced without its liveness token.
     const dropLiveness = holdLiveness(lockName(panel, id));
@@ -273,8 +301,36 @@ export const claimFloating = (panel: FloatingPanel, onDock: () => void): void =>
             rememberOwnFrame(panel);
         }
     };
-    beat();
     const timer = setInterval(beat, HEARTBEAT_MS);
+
+    // pagehide is alike for a reload, a close and bfcache (whose pageshow resumes this claim): hold the place, keep the lock.
+    const unloading = (): void => {
+        rememberOwnFrame(panel);
+        post({ kind: `unloading`, panel, id, within });
+    };
+
+    let released = false;
+    // Idempotent: a hand-back releases before it closes, and the route unmounting behind it releases again.
+    const release = (): void => {
+        if (released) {
+            return;
+        }
+        released = true;
+        clearInterval(timer);
+        claimants.delete(heard);
+        window.removeEventListener(`pagehide`, unloading);
+        window.removeEventListener(`pageshow`, beat);
+        if (own.value?.id === id) {
+            own.value = undefined;
+        }
+        dropLiveness();
+        rememberOwnFrame(panel);
+        post({ kind: `gone`, panel, id });
+    };
+    const handBack = (): void => {
+        release();
+        close();
+    };
 
     const heard = (note: FloatingNote): void => {
         if (note.kind === `roll`) {
@@ -285,7 +341,7 @@ export const claimFloating = (panel: FloatingPanel, onDock: () => void): void =>
             return;
         }
         if (note.kind === `dock`) {
-            onDock();
+            handBack();
             return;
         }
         if (note.kind === `raise`) {
@@ -294,38 +350,43 @@ export const claimFloating = (panel: FloatingPanel, onDock: () => void): void =>
         }
         // Older claim wins, ties broken by id: exactly one of two racing claims for the same panel closes itself.
         if (note.kind === `here` && note.id !== id && (note.since < since || (note.since === since && note.id < id))) {
-            onDock();
+            handBack();
         }
     };
+
+    own.value = { panel, id, handBack };
     claimants.add(heard);
-
-    // Runs eagerly on pagehide as the fast path; a window that dies without it is written off once its lock releases.
-    // The lock stays held here since pagehide also fires for bfcache, which resumes this same claim.
-    const leaving = (): void => {
-        rememberOwnFrame(panel);
-        post({ kind: `gone`, panel, id });
-    };
-    window.addEventListener(`pagehide`, leaving);
+    window.addEventListener(`pagehide`, unloading);
     window.addEventListener(`pageshow`, beat);
-
-    const release = (): void => {
-        clearInterval(timer);
-        claimants.delete(heard);
-        window.removeEventListener(`pagehide`, leaving);
-        window.removeEventListener(`pageshow`, beat);
-        if (mine.value === panel) {
-            mine.value = undefined;
-            myId.value = undefined;
-        }
-        dropLiveness();
-        leaving();
-    };
+    beat();
     if (getCurrentScope() !== undefined) {
         onScopeDispose(release);
     }
+    return handBack;
 };
 
 // Every window's half: hear the claims and act on them.
+
+/**
+ * Ends a panel's float on purpose: the claim `id` names, matched by id so a race loser cannot retire the winner, and
+ * every unloading claim on the panel, which nobody is left to answer for. A no-op when neither is sighted.
+ */
+const endFloat = (panel: FloatingPanel, id: string | undefined): void => {
+    let ended = false;
+    for (const [other, sighting] of sightings) {
+        if (sighting.panel === panel && (other === id || sighting.unloading)) {
+            sightings.delete(other);
+            ended = true;
+        }
+    }
+    if (!ended) {
+        return;
+    }
+    publish();
+    for (const react of dockedReactions) {
+        react(panel);
+    }
+};
 
 /**
  * The single entry point for an incoming note, shared by the BroadcastChannel listener and tests. Updates presence for
@@ -333,13 +394,19 @@ export const claimFloating = (panel: FloatingPanel, onDock: () => void): void =>
  */
 export const receiveFloatingNote = (note: FloatingNote): void => {
     if (note.kind === `here`) {
-        sightings.set(note.id, { panel: note.panel, id: note.id, since: note.since, seenAt: Date.now() });
+        sightings.set(note.id, { panel: note.panel, id: note.id, since: note.since, until: Date.now() + STALE_MS, unloading: false });
         publish();
         startSweeping();
-    } else if (note.kind === `gone` && sightings.get(note.id)?.panel === note.panel) {
-        // Matched by id: a losing window's `gone` must not retire the winner's claim it raced against.
-        sightings.delete(note.id);
-        publish();
+    } else if (note.kind === `unloading`) {
+        const sighting = sightings.get(note.id);
+        if (sighting?.panel === note.panel) {
+            sightings.set(note.id, { ...sighting, until: Date.now() + note.within, unloading: true });
+            publish();
+        }
+    } else if (note.kind === `gone`) {
+        endFloat(note.panel, note.id);
+    } else if (note.kind === `dock`) {
+        endFloat(note.panel, undefined);
     }
     for (const claimant of claimants) {
         claimant(note);
@@ -369,16 +436,18 @@ export interface FloatingSurface {
     readonly toggle: () => void;
     // Grows the floating window to at least this width; a no-op anywhere else.
     readonly fit: (width: number) => void;
+    // Runs `react` while the calling scope lives, whenever a dock brings the panel back; never when its window just went.
+    readonly onDocked: (react: () => void) => void;
 }
 
 /**
  * Whether this window draws the given panel, without the rest of a full surface (see chat/useChat.ts); depends on
  * nothing but vue.
  */
-export const showsPanel = (panel: FloatingPanel): ComputedRef<boolean> => computed(() => mine.value === panel || !elsewhere.value.has(panel));
+export const showsPanel = (panel: FloatingPanel): ComputedRef<boolean> => computed(() => own.value?.panel === panel || !elsewhere.value.has(panel));
 
 export const createFloatingSurface = (panel: FloatingPanel, size: () => { width: number; height: number }): FloatingSurface => {
-    const here = computed(() => mine.value === panel);
+    const here = computed(() => own.value?.panel === panel);
     const floats = computed(() => here.value || elsewhere.value.has(panel));
     const shows = showsPanel(panel);
 
@@ -400,10 +469,12 @@ export const createFloatingSurface = (panel: FloatingPanel, size: () => { width:
 
     const dock = (): void => {
         if (here.value) {
-            closeOwnWindow();
+            own.value?.handBack();
             return;
         }
         post({ kind: `dock`, panel });
+        // What every other window does on hearing the request; the channel never echoes it back to this one.
+        endFloat(panel, undefined);
     };
 
     const fit = (width: number): void => {
@@ -415,7 +486,20 @@ export const createFloatingSurface = (panel: FloatingPanel, size: () => { width:
         widenOwnWindow(Math.min(width, room));
     };
 
-    return { panel, floats, here, shows, open, dock, toggle: () => (floats.value ? dock() : open()), fit };
+    const onDocked = (react: () => void): void => {
+        // A hand-back of this panel that another claim survives (a race loser's, an older window's) brings nothing back.
+        const reaction = (docked: FloatingPanel): void => {
+            if (docked === panel && !floats.value) {
+                react();
+            }
+        };
+        dockedReactions.add(reaction);
+        if (getCurrentScope() !== undefined) {
+            onScopeDispose(() => dockedReactions.delete(reaction));
+        }
+    };
+
+    return { panel, floats, here, shows, open, dock, toggle: () => (floats.value ? dock() : open()), fit, onDocked };
 };
 
 // One claim, sighting set and channel per window: a hot update must not leave stale state behind.

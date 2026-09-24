@@ -6,13 +6,15 @@ import { EMPTY_STRIP } from "../../../_editor/web/src/features/chat/tabs/tabFact
 activeSandboxId.value = `sb1`;
 const owner = floatingOwner(`chat`);
 const holder = new URL(location.href).searchParams.has(`holder`);
+let handBack;
 if (holder) {
     publishStrip(JSON.parse(sessionStorage.getItem(`fixture-strip`) ?? JSON.stringify(EMPTY_STRIP)), `sb1`);
-    claimFloating(`chat`, () => location.assign(`about:blank`));
+    handBack = claimFloating(`chat`, () => location.assign(`about:blank`));
 }
 
 window.chatWindow = {
     draws: () => drawsChat.value,
+    dock: () => handBack?.(),
     owner: () => owner.value,
     state: () => elsewhereStrip.value,
     select: (sandbox) => {

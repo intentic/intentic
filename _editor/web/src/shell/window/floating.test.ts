@@ -1,15 +1,16 @@
 import "@intentic/testing/dom";
 import { effectScope } from "vue";
 import { stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { closeOwnWindow, raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
-import { claimFloating, createFloatingSurface, floatingWindowPanel, receiveFloatingNote } from "./floating";
+import { raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
+import type { FloatingNote } from "./floating";
 import * as desktopOriginal from "../../app/environments/desktop";
 
 // Pins the note protocol windows exchange to arbitrate a floating panel, not any one window's bookkeeping:
 //
 // 1. `here`: a window claims the panel; every other window collapses its place for it.
-// 2. Silence past the deadline: that window is gone, however it went.
-// 3. Two `here` claims for the same panel: the older one wins.
+// 2. `gone`: that window handed the panel back on purpose; it lands here at once, and visibly.
+// 3. `unloading`, or silence past the deadline: that window may be reloading, so its place is held until it is not.
+// 4. Two `here` claims for the same panel: the older one wins.
 
 // What the floating window does to ITSELF goes through one seam (browser: the DOM; desktop app: a link, desktop.test.ts);
 // here only that it is asked, and when.
@@ -20,10 +21,40 @@ jest.mock(`../../app/environments/desktop`, () => ({
     widenOwnWindow: jest.fn(),
 }));
 
+// What this window says to the others; the channel never delivers a window's own notes back to it.
+const posted: FloatingNote[] = [];
+
+class FakeChannel {
+    constructor(private readonly name: string) {}
+    postMessage(note: FloatingNote): void {
+        if (this.name === `intentic.floating`) {
+            posted.push(note);
+        }
+    }
+    addEventListener(): void {
+        // Notes arrive through receiveFloatingNote instead, not this listener.
+    }
+}
+
+stubGlobal(`BroadcastChannel`, FakeChannel);
+
+const { claimFloating, createFloatingSurface, floatingOwner, floatingWindowPanel, handBackOwnPanel, receiveFloatingNote } = await import(`./floating`);
+
 const size = () => ({ width: 800, height: 600 });
 
 // The note a floating window beats out; `since` (claim start) is what settles a race between two of them.
 const here = (panel: `chat` | `terminal` | `preview`, id: string, since = 1_000) => ({ kind: `here` as const, panel, id, since });
+
+// What a floating window's pagehide says, for a reload and a close alike; `within` is the return it promises.
+const unloading = (panel: `chat` | `terminal` | `preview`, id: string, within = 2_500) => ({ kind: `unloading` as const, panel, id, within });
+
+// A surface's dock reactions, held in a scope the way PoppablePanels holds them.
+const watchDocks = (surface: ReturnType<typeof createFloatingSurface>) => {
+    const docked = jest.fn();
+    const scope = effectScope();
+    scope.run(() => surface.onDocked(docked));
+    return { docked, stop: () => scope.stop() };
+};
 
 // Web Lock stub: jsdom has no Web Locks, so a test that skips this runs the beat-only path instead.
 let lockedNames: Set<string> | undefined;
@@ -42,6 +73,7 @@ beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(1_000_000);
     localStorage.clear();
+    posted.length = 0;
 });
 
 afterEach(async () => {
@@ -85,25 +117,126 @@ describe(`a panel floating in another window`, () => {
         expect(surface.here.value).toBe(false);
         expect(surface.shows.value).toBe(false);
 
-        // Silence: what a dock, a close, a crash or a kill all look like from here.
+        // Silence: what a close, a crash or a kill all look like from here.
         jest.advanceTimersByTime(4_000);
 
         expect(surface.floats.value).toBe(false);
         expect(surface.shows.value).toBe(true);
     });
 
-    it(`rides out a reload out there without flashing the panel back`, () => {
+    // A reload out there says `unloading`, spends a page load booting, then claims again as a new realm.
+    it(`rides out a reload out there without handing the panel back`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        const owner = floatingOwner(`chat`);
+        const { docked, stop } = watchDocks(surface);
+        receiveFloatingNote(here(`chat`, `w-1`));
+        jest.advanceTimersByTime(700);
+        receiveFloatingNote(unloading(`chat`, `w-1`));
+
+        jest.advanceTimersByTime(2_000);
+        expect(surface.shows.value).toBe(false);
+
+        // Younger than the claim it replaces, but live: it holds the panel from its first beat.
+        receiveFloatingNote(here(`chat`, `w-2`, 5_000));
+        expect(owner.value).toBe(`w-2`);
+
+        for (let beat = 0; beat < 5; beat++) {
+            jest.advanceTimersByTime(750);
+            receiveFloatingNote(here(`chat`, `w-2`, 5_000));
+        }
+
+        expect(surface.shows.value).toBe(false);
+        expect(owner.value).toBe(`w-2`);
+        expect(docked).not.toHaveBeenCalled();
+        stop();
+    });
+
+    it(`takes the panel back quietly, once its promised return has passed, when that window never comes back`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        const { docked, stop } = watchDocks(surface);
+        receiveFloatingNote(here(`chat`, `w-1`));
+        jest.advanceTimersByTime(740);
+        receiveFloatingNote(unloading(`chat`, `w-1`));
+
+        // Past the deadline w-1's last beat would have set; its promise, made at the unload, still runs.
+        jest.advanceTimersByTime(2_460);
+        expect(surface.shows.value).toBe(false);
+
+        jest.advanceTimersByTime(400);
+
+        expect(surface.shows.value).toBe(true);
+        // A close is not a dock: the panel is back, and nothing moves the reader to it.
+        expect(docked).not.toHaveBeenCalled();
+        stop();
+    });
+
+    it(`holds the place of a window that boots slowly for as long as it promised`, () => {
         const surface = createFloatingSurface(`chat`, size);
         receiveFloatingNote(here(`chat`, `w-1`));
+        receiveFloatingNote(unloading(`chat`, `w-1`, 6_000));
 
-        // A page load out there is a gap in the beat; the deadline is deliberately several beats long.
-        jest.advanceTimersByTime(1_000);
+        jest.advanceTimersByTime(5_900);
         expect(surface.shows.value).toBe(false);
 
+        jest.advanceTimersByTime(600);
+        expect(surface.shows.value).toBe(true);
+    });
+
+    it(`reports a hand-back as a dock, and only one that brings the panel back here`, () => {
+        const chat = createFloatingSurface(`chat`, size);
+        const { docked, stop } = watchDocks(chat);
+        receiveFloatingNote(here(`chat`, `winner`, 1_000));
+        receiveFloatingNote(here(`chat`, `loser`, 2_000));
+        receiveFloatingNote(here(`terminal`, `t-1`));
+
+        // A race loser standing down, and another panel docking, bring the chat nowhere.
+        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `loser` });
+        receiveFloatingNote({ kind: `gone`, panel: `terminal`, id: `t-1` });
+        expect(docked).not.toHaveBeenCalled();
+
+        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `winner` });
+
+        expect(chat.shows.value).toBe(true);
+        expect(docked).toHaveBeenCalledTimes(1);
+        stop();
+    });
+
+    it(`asks a live window to dock and lands the panel when that window hands it back`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        const { docked, stop } = watchDocks(surface);
         receiveFloatingNote(here(`chat`, `w-1`));
-        jest.advanceTimersByTime(1_000);
 
+        surface.dock();
+
+        expect(posted).toEqual([{ kind: `dock`, panel: `chat` }]);
         expect(surface.shows.value).toBe(false);
+
+        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w-1` });
+
+        expect(surface.shows.value).toBe(true);
+        expect(docked).toHaveBeenCalledTimes(1);
+        stop();
+    });
+
+    // An unloading window hears nothing, so every window answers a dock request for it rather than wait out its deadline.
+    it(`answers a dock for an unloading window itself, whichever window asked`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        const { docked, stop } = watchDocks(surface);
+        receiveFloatingNote(here(`chat`, `w-1`));
+        receiveFloatingNote(unloading(`chat`, `w-1`));
+
+        surface.dock();
+
+        expect(surface.shows.value).toBe(true);
+        expect(docked).toHaveBeenCalledTimes(1);
+
+        receiveFloatingNote(here(`chat`, `w-2`));
+        receiveFloatingNote(unloading(`chat`, `w-2`));
+        receiveFloatingNote({ kind: `dock`, panel: `chat` });
+
+        expect(surface.shows.value).toBe(true);
+        expect(docked).toHaveBeenCalledTimes(2);
+        stop();
     });
 
     // A minimized window is not a closed one: the browser throttles a hidden page's timers, so its beat can go as
@@ -228,28 +361,69 @@ describe(`the floating window itself`, () => {
         expect(letGo).toBe(true);
     });
 
-    it(`closes itself when any window asks it to dock`, () => {
-        const onDock = jest.fn();
-        const release = claim(`chat`, onDock);
+    // The window's close would unload it, which says nothing final; the hand-back has to be heard before that.
+    const closeAfterHandBack = () =>
+        jest.fn(() => {
+            expect(posted.filter((note) => note.kind === `gone`)).toHaveLength(1);
+            expect(floatingWindowPanel.value).toBeUndefined();
+        });
+
+    it(`hands the panel back, then closes, when any window asks it to dock`, () => {
+        const close = closeAfterHandBack();
+        const release = claim(`chat`, close);
 
         receiveFloatingNote({ kind: `dock`, panel: `chat` });
 
-        expect(onDock).toHaveBeenCalledTimes(1);
+        expect(close).toHaveBeenCalledTimes(1);
+        release();
+        expect(posted.filter((note) => note.kind === `gone`)).toHaveLength(1);
+    });
+
+    // Its Dock press, F9 and the desktop app's × are the same hand-back as a dock request from elsewhere.
+    it(`hands the panel back, then closes, on its own Dock press and its own ×`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        const close = closeAfterHandBack();
+        const release = claim(`chat`, close);
+
+        surface.dock();
+
+        expect(close).toHaveBeenCalledTimes(1);
+        expect(surface.here.value).toBe(false);
+        release();
+
+        posted.length = 0;
+        const again = claim(`chat`, closeAfterHandBack());
+        expect(handBackOwnPanel()).toBe(true);
+        again();
+        // A window floating nothing has no panel to hand back; its × is the window's own.
+        expect(handBackOwnPanel()).toBe(false);
+    });
+
+    // A reload, a close and a trip into bfcache all fire pagehide, and only the last comes back as this same realm.
+    it(`holds its claim through pagehide, saying only that it is unloading and when it would be back`, () => {
+        // Claimed 1.8s after its navigation began; a reload is that same boot again, so twice that is promised.
+        jest.spyOn(performance, `now`).mockReturnValue(1_800);
+        const release = claim(`chat`, jest.fn());
+        const [announced] = posted;
+        if (announced?.kind !== `here`) {
+            throw new Error(`a claim announces itself before anything else`);
+        }
+
+        window.dispatchEvent(new Event(`pagehide`));
+
+        expect(posted.filter((note) => note.kind !== `here`)).toEqual([{ kind: `unloading`, panel: `chat`, id: announced.id, within: 3_600 }]);
+        expect(floatingWindowPanel.value).toBe(`chat`);
         release();
     });
 
-    // Its own presses act on its own window, through the seam that knows whether a script may (desktop.ts).
-    it(`docks its own Dock press by closing its own window, and raises itself when asked`, () => {
+    it(`raises itself when asked, from its own press or another window`, () => {
         const surface = createFloatingSurface(`chat`, size);
         const release = claim(`chat`, jest.fn());
 
-        surface.dock();
-        expect(closeOwnWindow).toHaveBeenCalledTimes(1);
-
         surface.open();
         receiveFloatingNote({ kind: `raise`, panel: `chat` });
-        expect(raiseOwnWindow).toHaveBeenCalledTimes(2);
 
+        expect(raiseOwnWindow).toHaveBeenCalledTimes(2);
         release();
     });
 
