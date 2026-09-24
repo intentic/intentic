@@ -57,7 +57,9 @@
         "prepare": "node _tools/scripts/ci/githooks.mjs",
         "clear": "node _tools/scripts/build/clean-outputs.mjs --sweep node_modules .cache dist .turbo pnpm-lock.yaml",
         "cache:clear": "node _tools/scripts/build/clean-outputs.mjs --sweep .cache dist .turbo",
-        "diff:stat": "git diff HEAD --shortstat"
+        "diff:stat": "git diff HEAD --shortstat",
+        "perf:instr": "turbo run build --filter=@intentic/perf... --output-logs=errors-only && pnpm --filter @intentic/perf perf:instr",
+        "perf:browser": "turbo run build --filter=@intentic/perf... --output-logs=errors-only && pnpm --filter @intentic/perf perf:browser"
     },
     "devDependencies": {
         "@commitlint/cli": "catalog:",

@@ -167,6 +167,7 @@
                 "_tools/fake-upstream",
                 "_tools/localhost-https",
                 "_tools/onboarding",
+                "_tools/perf",
                 "_tools/registry-scan",
                 "_tools/testing",
                 "_tools/tsconfig"

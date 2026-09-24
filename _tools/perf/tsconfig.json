@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "references": [
+        { "path": "../base" },
+        { "path": "../code-read" },
+        { "path": "../../_shared/sandbox-contract" },
+        { "path": "../../_shared/workspace-ignore" }
+    ],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

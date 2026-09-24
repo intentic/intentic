@@ -1,0 +1,26 @@
+{
+    "host": {
+        "node": "v24.21.0",
+        "flags": "--predictable --predictable-gc-schedule --random-seed=1 --max-old-space-size=2048 --max-semi-space-size=16 --expose-gc",
+        "valgrind": "valgrind-3.24.0",
+        "arch": "x64",
+        "cpu": "Intel(R) Core(TM) Ultra 9 275HX"
+    },
+    "scenarios": {
+        "code-lines": {
+            "instructions": 2977381734
+        },
+        "fuzzy-rank": {
+            "instructions": 1475606338
+        },
+        "ignore-walk": {
+            "instructions": 1108899328
+        },
+        "transcript-fold": {
+            "instructions": 163401256
+        },
+        "transcript-rows": {
+            "instructions": 246458844
+        }
+    }
+}

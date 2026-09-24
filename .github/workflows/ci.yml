@@ -130,6 +130,8 @@ jobs:
       front: ${{ steps.filter.outputs.front }}
       images: ${{ steps.filter.outputs.images }}
       platform: ${{ steps.filter.outputs.platform }}
+      perf-instr: ${{ steps.filter.outputs.perf-instr }}
+      perf-browser: ${{ steps.filter.outputs.perf-browser }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -671,6 +673,63 @@ jobs:
       # TEST_WORKERS for the reason verify.yml spells out: turbo is invoked directly, so nothing else sizes the fan-out
       # to a box this job shares with five others.
       - run: TEST_WORKERS=$(node _tools/scripts/verify/test-workers.mjs) pnpm turbo run test --filter=@intentic/sandbox --filter=@intentic/sandbox-contract --filter=@intentic/ext-automations --filter=@intentic/web --continue=dependencies-successful
+
+  # Counts, not timings: each is judged from one run against the baseline checked into _tools/perf (its README).
+  # Instructions executed by the daemon's pure-JS hot paths, under Valgrind with node --predictable.
+  perf-instr:
+    needs: [changes, preflight]
+    if: ${{ !cancelled() && needs.changes.outputs.perf-instr == 'true' && needs.preflight.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      # This job is Valgrind's only user, so it installs it rather than ci-base carrying it for every job.
+      - run: apt-get update && apt-get install -y --no-install-recommends valgrind
+      # Four at a time: the host runs six runner processes, and the counts do not depend on the parallelism.
+      - run: pnpm perf:instr --jobs 4
+
+  # Vue renders, V8 calls, layouts, style recalcs and DOM mutations per interaction, in the real editor (_site/demo).
+  perf-browser:
+    needs: [changes, preflight]
+    if: ${{ !cancelled() && needs.changes.outputs.perf-browser == 'true' && needs.preflight.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+      # Not $HOME, which a job container maps to a throwaway /github/home.
+      PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - run: pnpm --filter @intentic/perf exec playwright install --with-deps chromium
+      - run: pnpm perf:browser
 
   # The marketing site and the content/integration libs behind it. It gates no deploy — the site publishes from
   # Cloudflare's own git integration, outside this pipeline, so nothing here can stop a bad one — which makes

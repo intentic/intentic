@@ -10,6 +10,10 @@ checkout and nothing else, listed once in its manifest and run everywhere that l
 and standing machines up — grouped by who it serves, one family per directory, with the shared decisions in
 `scripts/lib`. Each has a README naming every file in it.
 
+[perf/](perf) measures what the code costs the CPU and the screen as counts, not timings: Valgrind instruction
+counts for the daemon's pure-JS hot paths, and render, layout, call and mutation counts for the editor, each
+checked against a baseline in the repository.
+
 [nav/](nav) measures what this repository costs an *agent* to read — tokens spent locating and opening a
 symbol — and gates a decomposition against removing a public export or moving a frozen contract file.
 [`nav/structure-stats.mjs`](nav/structure-stats.mjs) is its sibling one level up: what FINDING a file costs,
@@ -26,7 +30,7 @@ at all: it is scripts this repository runs on itself.
 | ------------ | ------------------------------------------------------------------------------------------------------------------------ |
 | **shipped**  | [base](base), [code-read](code-read), [constants](constants), [registry-scan](registry-scan), [testing](testing), [tsconfig](tsconfig) |
 | **double**   | [fake-model](fake-model), [fake-upstream](fake-upstream)                                                                  |
-| **harness**  | [e2e](e2e), [onboarding](onboarding), [desktop-smoke](desktop-smoke), [desktop-smoke-windows](desktop-smoke-windows), [localhost-https](localhost-https), [examples](examples), [extension-example](extension-example), [dind-host](dind-host) |
+| **harness**  | [e2e](e2e), [onboarding](onboarding), [desktop-smoke](desktop-smoke), [desktop-smoke-windows](desktop-smoke-windows), [localhost-https](localhost-https), [examples](examples), [extension-example](extension-example), [dind-host](dind-host), [perf](perf) |
 | **plumbing** | [checks](checks), [scripts](scripts), [nav](nav), [oxlint](oxlint), [ci-base](ci-base), [ci-desktop](ci-desktop), [selfhost](selfhost) |
 
 `extension-example` and `registry-scan/seed` are **seeds**: directories copied OUT of this repository into

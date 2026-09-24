@@ -91,6 +91,8 @@ const LOOSE = {
     front: /^(_sandbox\/front\/|_shared\/sandbox-contract\/src\/(front\/|ids\/hostnames\.fixture\.json)|\.github\/workflows\/ci\.yml)/,
     images: /^(_sandbox\/sandbox\/(Dockerfile|packs\/)|_sandbox\/front\/|_tools\/scripts\/image\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     platform: /^(_tools\/scripts\/platform\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
+    "perf-instr": /^\.github\/workflows\/ci\.yml/,
+    "perf-browser": /^\.github\/workflows\/ci\.yml/,
     "ci-base-changed": /^_tools\/ci-base\//,
     // ci-desktop's FROM is ci-base's mutable `latest`; a ci-base change forces a rebuild here too.
     "ci-desktop-changed": /^_tools\/ci-(desktop|base)\//,
@@ -111,6 +113,9 @@ const ROOTS = {
     images: [...imagePayload],
     // Grouped under one trigger because one pipeline builds and ships them together, not by naming convention.
     platform: ["@intentic/api", "@intentic/web", "@intentic/ingress"],
+    // The counts are of the code the harness imports, and of the editor the demo serves.
+    "perf-instr": ["@intentic/perf"],
+    "perf-browser": ["@intentic/perf", "@intentic/demo"],
 };
 for (const [trigger, names] of Object.entries(ROOTS)) {
     for (const name of names) {

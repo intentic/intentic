@@ -1,0 +1,30 @@
+{
+    "name": "@intentic/perf",
+    "version": "0.0.0",
+    "description": "Deterministic performance counts checked against a baseline in the repo: Valgrind instruction counts for pure-JS hot paths, and render, layout, call and mutation counts for the editor in a real browser",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "suites",
+        "perf:instr": "node dist/instr/perf-instr.js",
+        "perf:browser": "node dist/browser/perf-browser.js"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/code-read": "workspace:*",
+        "@intentic/constants": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/workspace-ignore": "workspace:*",
+        "playwright": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:"
+    }
+}

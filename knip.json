@@ -159,6 +159,17 @@
         "_tools/examples": {
             "entry": ["*.config.ts"]
         },
+        // The probe is spawned under Valgrind by path and each scenario is imported by its file name, so neither is
+        // reachable through an import.
+        "_tools/perf": {
+            "entry": [
+                "src/instr/perf-instr.ts",
+                "src/browser/perf-browser.ts",
+                "src/instr/counted-process.ts",
+                "src/instr/scenarios/*.ts",
+                "src/**/*.test.ts"
+            ]
+        },
         "_search/iq-bench": {
             "entry": ["src/**/*.ts"]
         },

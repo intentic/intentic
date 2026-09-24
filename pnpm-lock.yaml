@@ -3716,6 +3716,43 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  _tools/perf:
+    dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../base
+      '@intentic/code-read':
+        specifier: workspace:*
+        version: link:../code-read
+      '@intentic/constants':
+        specifier: workspace:*
+        version: link:../constants
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+      '@intentic/workspace-ignore':
+        specifier: workspace:*
+        version: link:../../_shared/workspace-ignore
+      playwright:
+        specifier: 'catalog:'
+        version: 1.62.1
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
+
   _tools/registry-scan:
     dependencies:
       '@intentic/extension-manifest':
