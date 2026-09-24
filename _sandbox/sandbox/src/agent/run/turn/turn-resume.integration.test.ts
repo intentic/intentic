@@ -804,9 +804,9 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
         ...base,
         sessions: unstubbed<Services["sessions"]>("sessions", {
             ...base.sessions,
-            readTail: async (_dir: string, id: string) => [
+            readTail: async (_dir: string, id: string, since: number) => [
                 { role: "user", text: "finish the report" },
-                { role: "assistant", text: `two chapters in, on ${id}` },
+                { role: "assistant", text: `two chapters in, on ${id} since ${since}` },
             ],
         }),
     });
@@ -817,8 +817,8 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
     expect(await fileTranscriptRecord(root).read("rs-work")).toEqual([
         // sentAt is the turn's own start time, not the provider's, and the id is its sender's, as on every other user row.
         { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report" },
-        // Reads the session the journal recorded; the registry entry may predate it if the daemon died early.
-        { role: "assistant", text: "two chapters in, on s-partial" },
+        // Reads the session the journal recorded, from the turn's own start; the registry entry may predate it.
+        { role: "assistant", text: "two chapters in, on s-partial since 10000" },
         {
             role: "notice",
             text: "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.",

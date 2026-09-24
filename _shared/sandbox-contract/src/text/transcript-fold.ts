@@ -21,6 +21,9 @@ import { unspokenPromptRow } from "../events/agent-words.js";
 
 export type TurnEnding = "settled" | "stopped";
 
+// A compaction's row, live and restored from the provider's store alike.
+export const COMPACTED_NOTICE = "Context compacted to free up space.";
+
 // Where a tool card lives: its row, and the parent card it nests under when it's a helper's own call.
 interface CardPlace {
     readonly tool: TranscriptTool;
@@ -327,7 +330,7 @@ export class TranscriptFold {
             case "landed":
                 return this.pushRow(landedRow(event));
             case "compact":
-                return this.pushRow({ role: "notice", text: `Context compacted to free up space.` });
+                return this.pushRow({ role: "notice", text: COMPACTED_NOTICE });
             case "error":
                 // Keeps a refusal (no prose from the provider) from reading as a session that ended mid-question.
                 // A refusal that ran nothing takes its message back out ahead of the notice standing in for it.

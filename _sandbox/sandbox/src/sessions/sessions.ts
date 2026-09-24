@@ -13,6 +13,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
+import { COMPACTED_NOTICE } from "@intentic/sandbox-contract/transcript-fold";
 import { ASK_TOOL_NAMES, parseAnswers } from "../agent/tools/question-answers.js";
 import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { TaskChecklist } from "../agent/run/task-checklist.js";
@@ -152,28 +153,20 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Tra
     return restoredSessionMessages(scoped.length > 0 ? scoped : await sdk().getSessionMessages(id), dir);
 };
 
-// Index where the last turn begins: a user message carrying words opens a turn; a tool_result-only user message is
-// plumbing, not a boundary. Returns 0 (restoring everything) when nothing carries words.
-const lastTurnStart = (messages: readonly { readonly type?: string; readonly message?: unknown }[]): number => {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-        const message = messages[index];
-        if (message?.type !== "user") {
-            continue;
-        }
-        const spoken = blocksOf(message).some((block) => block.type === "text" && typeof block.text === "string" && block.text.length > 0);
-        if (spoken) {
-            return index;
-        }
-    }
-    return 0;
+// Epoch ms the store stamped a message with, NaN when it carries none; the SDK's declared message type omits the field.
+const storedAt = (message: object): number => {
+    const { timestamp } = message as { readonly timestamp?: unknown };
+    return typeof timestamp === "string" ? Date.parse(timestamp) : Number.NaN;
 };
 
-// The last stored turn alone, restored by the same reducer, for a turn the daemon died under and never reached the
-// durable record. Its boundary is read off the stored messages, not the restored ones.
-export const readWorkspaceSessionTail = async (dir: string, id: string): Promise<TranscriptRow[]> => {
+// The turn that began at `since` (epoch ms) alone, restored by the same reducer, for a turn the daemon died under and
+// never reached the durable record. Empty when the store holds nothing from it, never an earlier turn in its place.
+export const readWorkspaceSessionTail = async (dir: string, id: string, since: number): Promise<TranscriptRow[]> => {
     const scoped = await sdk().getSessionMessages(id, { dir });
     const messages = scoped.length > 0 ? scoped : await sdk().getSessionMessages(id);
-    return restoredSessionMessages(messages.slice(lastTurnStart(messages)), dir);
+    // A user message mid-turn (a steer, a task notification) is no boundary: the turn opens where the daemon started it.
+    const start = messages.findIndex((message) => storedAt(message) >= since);
+    return start < 0 ? [] : restoredSessionMessages(messages.slice(start), dir);
 };
 
 // A prompt nobody typed is its own row, never the user's bubble; `dir` is the root attachment chips resolve against.
@@ -204,6 +197,11 @@ const storedPromptRows = (text: string, dir: string): TranscriptRow[] => {
     }
     return stripped.text.length > 0 || attachments.length > 0 ? [{ role: "user", text: stripped.text, ...chips, ...added }] : [];
 };
+
+// A background task's report, stored as a user message; the live stream shows it on the task's own card, never as words.
+const TaskNotification = z.object({ origin: z.object({ kind: z.literal("task-notification") }) });
+// The CLI's summary opening a compacted chain, stored as a user message; the live stream draws a compaction notice.
+const CompactSummary = z.object({ isCompactSummary: z.literal(true) });
 
 // The stored-message reducer, shared with a subagent's transcript so both assemble by identical rules. The bubble
 // boundary is the prose block (`text_end`), exactly as the live stream draws it.
@@ -279,6 +277,11 @@ export const restoredSessionMessages = (
         }
         const blocks = blocksOf(message);
 
+        if (message.type === "user" && CompactSummary.safeParse(message).success) {
+            flush();
+            out.push({ role: "notice", text: COMPACTED_NOTICE });
+            continue;
+        }
         if (message.type === "user") {
             let text = "";
             for (const block of blocks) {
@@ -314,7 +317,7 @@ export const restoredSessionMessages = (
                 }
             }
             // Tool-results-only and injected notes aren't user words; chips resolve against `dir`, always the root.
-            if (text.length === 0) {
+            if (text.length === 0 || TaskNotification.safeParse(message).success) {
                 continue;
             }
             // Real words close whatever bubble was still open above them; a tool_results-only message never reaches

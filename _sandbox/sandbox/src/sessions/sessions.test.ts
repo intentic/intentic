@@ -361,53 +361,115 @@ test("a re-run in the provider's store reads as the interruption, not as the mes
     expect(messages[2]?.text).toMatch(/Claude/i);
 });
 
-// Exists for the boot pass recovering a turn the daemon died under; returning more than the last turn would duplicate
+// The store's own stamp on a message, as the SDK hands it back: ISO text, epoch ms here.
+const at = (ms: number): string => new Date(ms).toISOString();
+
+// Exists for the boot pass recovering a turn the daemon died under; returning more than that turn would duplicate
 // turns the record already holds.
-test("the tail is the last turn alone, not the session it sits at the end of", async () => {
+test("the tail is the turn begun at `since`, not the session it sits at the end of", async () => {
     getSessionMessages.mockResolvedValue([
-        { type: "user", message: { content: "ship the parser" } },
-        { type: "assistant", message: { content: [{ type: "text", text: "shipped" }] } },
-        { type: "user", message: { content: "now the printer" } },
-        { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "pnpm test" } }] } },
+        { type: "user", timestamp: at(1_000), message: { content: "ship the parser" } },
+        { type: "assistant", timestamp: at(2_000), message: { content: [{ type: "text", text: "shipped" }] } },
+        { type: "user", timestamp: at(5_000), message: { content: "now the printer" } },
+        { type: "assistant", timestamp: at(6_000), message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "pnpm test" } }] } },
     ]);
-    const messages = await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0");
+    const messages = await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 4_000);
     expect(messages.map((message) => message.text)).toEqual(["now the printer", ""]);
     expect(messages[1]?.tools?.[0]).toMatchObject({ name: "Bash", status: "in_progress" });
 });
 
-test("a tool result does not open a turn, so the tail keeps the calls that preceded it", async () => {
+// A long turn waiting on background agents takes each one's report as a stored user message; cutting at the last of
+// them recovered only the final report and the reply to it, and lost the prompt and the hour of work before it.
+test("a task notification mid-turn does not open the tail: the turn is recovered from its own prompt", async () => {
     getSessionMessages.mockResolvedValue([
-        { type: "user", message: { content: "audit the rail" } },
-        { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Read", input: { file_path: `${WORKSPACE_ROOT}/a.ts` } }] } },
-        { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "export const a = 1;" }] } },
-        { type: "assistant", message: { content: [{ type: "text", text: "read it" }] } },
+        { type: "user", timestamp: at(1_000), message: { content: "sweep the catch sites" } },
+        { type: "assistant", timestamp: at(2_000), message: { content: [{ type: "text", text: "Fanning out ten agents." }] } },
+        {
+            type: "user",
+            timestamp: at(3_000),
+            origin: { kind: "task-notification" },
+            message: { content: "<task-notification>\n<status>completed</status>\n</task-notification>" },
+        },
+        { type: "assistant", timestamp: at(4_000), message: { content: [{ type: "text", text: "The first agent has finished." }] } },
     ]);
-    const messages = await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0");
+    expect(await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 1_000)).toEqual([
+        { role: "user", text: "sweep the catch sites" },
+        { role: "assistant", text: "Fanning out ten agents." },
+        { role: "assistant", text: "The first agent has finished." },
+    ]);
+});
+
+// A turn that died before the store wrote its prompt: the last turn on file is an earlier, already-recorded one.
+test("a turn the store never reached recovers nothing, not the turn before it", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", timestamp: at(1_000), message: { content: "ship the parser" } },
+        { type: "assistant", timestamp: at(2_000), message: { content: [{ type: "text", text: "shipped" }] } },
+    ]);
+    expect(await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 3_000)).toEqual([]);
+});
+
+test("a tool result inside the turn keeps the calls that preceded it", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", timestamp: at(1_000), message: { content: "audit the rail" } },
+        {
+            type: "assistant",
+            timestamp: at(2_000),
+            message: { content: [{ type: "tool_use", id: "t1", name: "Read", input: { file_path: `${WORKSPACE_ROOT}/a.ts` } }] },
+        },
+        { type: "user", timestamp: at(3_000), message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "export const a = 1;" }] } },
+        { type: "assistant", timestamp: at(4_000), message: { content: [{ type: "text", text: "read it" }] } },
+    ]);
+    const messages = await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 1_000);
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
     expect(messages[0]?.text).toBe("audit the rail");
     expect(messages[1]?.tools?.[0]).toMatchObject({ name: "Read", status: "completed" });
 });
 
-// A resume note becomes a muted line with no user row; that line is still a turn boundary, so the split must be read
-// off the stored messages, not the restored ones, where it looks like any other notice.
+// A re-run starts a turn of its own, opened by its resume note, which restores as a muted line with no user row; the
+// attempt it replaced predates it and is not recovered twice.
 test("a re-run's resume note opens the tail, so the turn it replaced is not recovered twice", async () => {
     getSessionMessages.mockResolvedValue([
-        { type: "user", message: { content: "ship the parser" } },
-        { type: "assistant", message: { content: [{ type: "text", text: "on it" }] } },
-        { type: "user", message: { content: withResumeNote("ship the parser", RESUME_NOTES.outage) } },
-        { type: "assistant", message: { content: [{ type: "text", text: "picking back up" }] } },
+        { type: "user", timestamp: at(1_000), message: { content: "ship the parser" } },
+        { type: "assistant", timestamp: at(2_000), message: { content: [{ type: "text", text: "on it" }] } },
+        { type: "user", timestamp: at(5_000), message: { content: withResumeNote("ship the parser", RESUME_NOTES.outage) } },
+        { type: "assistant", timestamp: at(6_000), message: { content: [{ type: "text", text: "picking back up" }] } },
     ]);
-    const messages = await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0");
+    const messages = await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 4_000);
     expect(messages.map((message) => message.role)).toEqual(["notice", "assistant"]);
     expect(messages[1]?.text).toBe("picking back up");
 });
 
 test("a session holding one unfinished turn is entirely tail", async () => {
     getSessionMessages.mockResolvedValue([
+        { type: "user", timestamp: at(1_000), message: { content: "audit the rail" } },
+        { type: "assistant", timestamp: at(2_000), message: { content: [{ type: "text", text: "reading it now" }] } },
+    ]);
+    expect(await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0", 1_000)).toEqual([
+        { role: "user", text: "audit the rail" },
+        { role: "assistant", text: "reading it now" },
+    ]);
+});
+
+test("a stored task notification is no user row: the live record never showed it as words", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "audit the rail" } },
+        { type: "user", origin: { kind: "task-notification" }, message: { content: "<task-notification>\n</task-notification>" } },
+        { type: "assistant", message: { content: [{ type: "text", text: "The audit agent is back." }] } },
+    ]);
+    expect(await readWorkspaceSession(WORKSPACE_ROOT, "s0")).toEqual([
+        { role: "user", text: "audit the rail" },
+        { role: "assistant", text: "The audit agent is back." },
+    ]);
+});
+
+test("a compacted chain's summary restores as the compaction notice the live turn showed, not as the user's words", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", isCompactSummary: true, message: { content: "This session is being continued from a previous conversation." } },
         { type: "user", message: { content: "audit the rail" } },
         { type: "assistant", message: { content: [{ type: "text", text: "reading it now" }] } },
     ]);
-    expect(await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0")).toEqual([
+    expect(await readWorkspaceSession(WORKSPACE_ROOT, "s0")).toEqual([
+        { role: "notice", text: "Context compacted to free up space." },
         { role: "user", text: "audit the rail" },
         { role: "assistant", text: "reading it now" },
     ]);

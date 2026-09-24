@@ -717,8 +717,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly sessions: {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
         readonly read: (dir: string, id: string) => Promise<TranscriptRow[]>;
-        // The last turn of a session that never settled; what the boot pass writes in its place.
-        readonly readTail: (dir: string, id: string) => Promise<TranscriptRow[]>;
+        // The turn begun at `since` (epoch ms) in a session that never settled; what the boot pass writes in its place.
+        readonly readTail: (dir: string, id: string, since: number) => Promise<TranscriptRow[]>;
         // No dir, unlike its neighbours: search reads the phrase index and the workspace listing, both built once.
         readonly search: (query: string, caseSensitive: boolean) => Promise<SessionSummary[]>;
         readonly exists: (dir: string, id: string) => Promise<boolean>;

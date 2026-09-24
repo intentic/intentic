@@ -177,7 +177,7 @@ const interruptedTurnRows = async (
     if (sessionId === undefined || capabilitiesOf(turn.agent ?? "claude", turn.harness ?? "native").runtime !== "claude-code") {
         return [];
     }
-    const rows = await services.sessions.readTail(services.workspace.root, sessionId).catch((error: unknown) => {
+    const rows = await services.sessions.readTail(services.workspace.root, sessionId, sentAt).catch((error: unknown) => {
         services.logger.warn({ err: error, conversationId: turn.conversationId, sessionId }, "interrupted turn: session tail unreadable");
         return [] as TranscriptRow[];
     });
