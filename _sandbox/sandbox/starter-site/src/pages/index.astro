@@ -82,12 +82,12 @@ const prompts = [
             <section aria-labelledby="map-title" class="rounded-3xl border border-rule bg-soot">
                 <h2 id="map-title" class="sr-only">A pretend run of agents</h2>
                 <div id="map" class="relative overflow-hidden rounded-t-3xl">
-                    <svg id="rail" class="block h-[300px] w-full" aria-hidden="true">
+                    <svg id="rail" class="block h-75 w-full" aria-hidden="true">
                         <line id="now" y1="14" class="stroke-rule" stroke-width="1"></line>
-                        <text id="now-label" y="10" text-anchor="middle" class="fill-dust font-mono text-[10px]">now</text>
+                        <text id="now-label" y="10" text-anchor="middle" class="fill-dust font-mono text-3xs">now</text>
                         <line id="trunk-past" x1="0" class="stroke-paper" stroke-width="5" stroke-linecap="round"></line>
                         <line id="trunk-future" class="stroke-paper/35" stroke-width="5" stroke-linecap="round" stroke-dasharray="0.1 12"></line>
-                        <text id="main-label" text-anchor="end" class="fill-paper font-mono text-[11px] font-semibold">main</text>
+                        <text id="main-label" text-anchor="end" class="fill-paper font-mono text-2xs font-semibold">main</text>
                         <g id="world"></g>
                     </svg>
                     <div id="chips"></div>
@@ -336,7 +336,7 @@ const prompts = [
             const station = (x: number, stroke: string, label: string): void => {
                 const group = draw("g", {}, world);
                 draw("circle", { cx: x, cy: TRUNK_Y, r: 7, class: `fill-paper ${stroke}`, "stroke-width": 3 }, group);
-                const text = draw("text", { x, y: TRUNK_Y + (stations % 2 === 0 ? 28 : 44), "text-anchor": "middle", class: "fill-dust font-mono text-[10px]" }, group);
+                const text = draw("text", { x, y: TRUNK_Y + (stations % 2 === 0 ? 28 : 44), "text-anchor": "middle", class: "fill-dust font-mono text-3xs" }, group);
                 text.textContent = label;
                 stations += 1;
             };
@@ -365,8 +365,8 @@ const prompts = [
                     waiting: draw("path", { class: colour.stroke, "stroke-width": 5, fill: "none", "stroke-dasharray": "4 7" }, group),
                     arrival: draw("path", { class: colour.stroke, "stroke-width": 5, fill: "none", "stroke-linecap": "round" }, group),
                     tip: draw("circle", { r: 6, cy: y, class: colour.fill }, group),
-                    name: draw("text", { y: y - 12, "text-anchor": "end", class: "fill-paper font-mono text-[11px]" }, group),
-                    note: draw("text", { y: y + 22, "text-anchor": "end", class: "fill-dust font-mono text-[10px]" }, group),
+                    name: draw("text", { y: y - 12, "text-anchor": "end", class: "fill-paper font-mono text-2xs" }, group),
+                    note: draw("text", { y: y + 22, "text-anchor": "end", class: "fill-dust font-mono text-3xs" }, group),
                     chip: undefined,
                 };
                 agent.name.textContent = agent.branch;
