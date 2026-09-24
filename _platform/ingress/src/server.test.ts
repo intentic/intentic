@@ -295,3 +295,50 @@ describe(`the ingress edge replaying hosted sandboxes`, () => {
         expect(JSON.parse(answer.body)).toMatchObject({ build: `turbo-testbuild` });
     });
 });
+
+// A restart must not wait on the browsers: every stream through a tunnel is long-lived by design.
+describe(`closing the edge`, () => {
+    test(`finishes while a browser still holds a response open through a tunnel`, async () => {
+        let holding: (() => void) | undefined;
+        const held = new Promise<void>((resolve) => {
+            holding = resolve;
+        });
+        const target = createServer((_request, response) => {
+            response.writeHead(200, { "content-type": `text/event-stream` });
+            response.write(`data: open\n\n`);
+            holding?.();
+        });
+        await new Promise<void>((resolve) => target.listen(0, `127.0.0.1`, resolve));
+        const ingress = createIngressServer({
+            publicKey,
+            revocation: { allows: () => Promise.resolve(true), lookup: () => Promise.resolve({ exists: true, lane: `tunnel` }) },
+            log: () => undefined,
+        });
+        await ingress.listen(0, `127.0.0.1`);
+        const socket = new WebSocket(`ws://127.0.0.1:${portOf(ingress.server)}/tunnel/v1`, {
+            headers: { [INGRESS_GRANT_HEADER]: mintReachabilityGrant(privateKey, SANDBOX_ID, Date.now()) },
+        });
+        await new Promise<void>((resolve, reject) => {
+            socket.on(`open`, () => resolve());
+            socket.on(`error`, reject);
+        });
+        const daemon = await serveIngressSession(webSocketDuplex(socket), { targetPort: portOf(target) });
+        await new Promise<void>((resolve) => setTimeout(resolve, 100));
+        const stream = h1Request({ host: `127.0.0.1`, port: portOf(ingress.server), path: `/events`, headers: { host: `sandbox-${SANDBOX_ID}.${ZONE}` } });
+        stream.on(`error`, () => undefined);
+        const cut = new Promise<void>((resolve) => stream.on(`close`, () => resolve()));
+        stream.end();
+        await held;
+        expect(stream.destroyed).toBe(false);
+
+        await ingress.close();
+        await cut;
+
+        // The browser's stream was ended by the close rather than left open for a supervisor to kill.
+        expect(stream.destroyed).toBe(true);
+        daemon.close();
+        socket.terminate();
+        await new Promise<void>((resolve) => target.close(() => resolve()));
+        target.closeAllConnections();
+    });
+});

@@ -1,5 +1,5 @@
 import { nextOneTimeWakeAt } from "../automations/scheduler.js";
-import type { ReachPosture } from "../platform/listeners/ingress-tunnel.js";
+import type { ReachPosture } from "../platform/listeners/reach-posture.js";
 import { DEFAULT_PROBES, startIdleStop } from "../system/idle-stop.js";
 import type { BootPhase } from "./boot-phase.js";
 import { listSubagentSessions, subagentRunning } from "../agent/subagents/subagents.js";

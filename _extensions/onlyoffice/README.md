@@ -48,7 +48,8 @@ Two things in the platform decide this shape, and both were verified rather than
   the preview proxy frames for the editor and pipes WebSockets through; asked for again on every open, since the
   forward table is in-memory and a busy sandbox can evict a slot. The proxy's `frame-ancestors` names the editor
   origins AND `'self'`: the document frame `api.js` creates has this extension's own page as an ancestor, and without
-  `'self'` the browser refuses it (`panels/preview-proxy.ts`, and the nested-frame test beside it). The same proxy
+  `'self'` the browser refuses it (the sandbox front's preview relay, `_sandbox/front/crates/front/src/proxy.rs`, and
+  its routes test). The same proxy
   rewrites `Host` to `localhost:<port>` but names the browser's origin in `X-Forwarded-Host`/`X-Forwarded-Proto`,
   which the listener passes through and the document server's nginx builds `$the_host` from, so every absolute URL it
   hands the editor over the socket (the converted `Editor.bin` to download, prints, images) names that origin;

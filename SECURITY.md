@@ -42,7 +42,8 @@ The parts where a bug is most likely to matter to someone other than the operato
 
 | | |
 | --- | --- |
-| `_sandbox/sandbox` | the daemon: the workspace API, terminals, the preview proxy, the public-files outbox |
+| `_sandbox/sandbox` | the daemon: the workspace API, terminals, preview routing, the public-files outbox |
+| `_sandbox/front` | the daemon's front: every port, the ingress tunnel, the preview relay, and the headers only it may set |
 | `_sandbox/sandbox/src/secrets` | credential storage and the redaction that keeps secrets out of transcripts |
 | `_sandbox/sandbox/src/guard` | the admission floor, the in-turn command and outbound gates, and the envelope that marks content the owner did not write |
 | `_devices/machine` | the one agent behind the connect-this-computer and desktop-sync install commands, and the tunnel it opens |

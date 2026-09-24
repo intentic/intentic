@@ -367,6 +367,9 @@ COPY _search/iq/plugin /opt/iq-plugin
 COPY _sandbox/webq/plugin /opt/webq-plugin
 # The sandbox daemon.
 COPY --from=trees sandbox /opt/sandbox
+# The front the entrypoint execs: every port, the ingress tunnel, and the daemon's supervision (_sandbox/front). Built
+# on this image's Debian release by build-front.sh, so it links against the glibc this layer carries.
+COPY --from=trees front /opt/sandbox/front
 # node-pty ships no linux prebuild, so it gets source-compiled by whatever host ran pnpm deploy — linked
 # against THAT host's glibc. Rebuild it against this image's glibc with the baked toolchain (python3/make/g++
 # above; the node image ships its own headers, so node-gyp compiles offline). Without this, a tree deployed on

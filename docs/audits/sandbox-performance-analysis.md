@@ -366,9 +366,9 @@ harnesses as above, under Node 24 unless noted, on the same loaded machine.
 | Code counts tokenized on a worker thread | `git/changes/code-counts.ts`, `code-counts-worker.ts` | 1–1.4 s freezes on `/git/changes` | Tokenizing holds only the worker |
 | Transcript rows indexed by byte offset | `sessions/transcript-record.ts` | `count` on the 60 MB record: 208 ms with a 96 ms block. Default page 444 ms with a 134 ms block | First `count` 26 ms (a byte scan, 2 ms block), then 0. Default page 40 ms with a 23 ms block, spent parsing the rows it returns |
 | JSON answers compressed (zstd, brotli, gzip) | `compress-responses.ts`, mounted in `app.ts` | Full tree 583 KB on the wire | 79 KB with zstd, 74 KB with brotli |
-| Nagle off on the loopback router's sockets | `platform/listeners/loopback-listener.ts` | First request on a new TLS connection 49–53 ms | 7–9 ms |
+| Nagle off on the loopback router's sockets | `platform/listeners/loopback-listener.ts`, now the front's `listen.rs` | First request on a new TLS connection 49–53 ms | 7–9 ms |
 | libuv pool of 32 threads | `docker-entrypoint.sh` | Small reads behind a tree walk: p99 268 ms at 4 threads | p99 112 ms measured at 64 |
-| Daemon cgroup with no swap and 10× cpu and io weight, its children moved to `workload` | `docker-entrypoint.sh`, `platform/resources/workload-priority.ts` | The daemon's heap swapped (400–800 MB), with multi-second freezes on fault-in | Takes effect on the next container start, not yet run live |
+| Daemon cgroup with no swap and 10× cpu and io weight, its children moved to `workload` | `docker-entrypoint.sh`, `platform/resources/workload-priority.ts`, now the front's `cgroup.rs` | The daemon's heap swapped (400–800 MB), with multi-second freezes on fault-in | Takes effect on the next container start, not yet run live |
 
 Three things the table does not show:
 
@@ -377,6 +377,24 @@ Three things the table does not show:
   new code rather than on what this audit first measured.
 - The entrypoint's cgroup and thread-pool changes need a rebuild and a container recreate to take effect, which is
   the owner's call. Its tests stage the whole cgroup root, so a test run does not move this machine's processes.
-- Nothing in the "Weeks" and "Rewrite level" lists was started. The largest remaining costs in the profile are the
-  tree re-walks (25 s of CPU per 5 minutes) and the polling spawns (13 s).
+- The "Rewrite level" list is under way as the native front, below; the "Weeks" list folds into its phases. The
+  largest remaining costs in the profile are the tree re-walks (25 s of CPU per 5 minutes) and the polling spawns
+  (13 s), phases 5 and 3.
+
+## The rewrites
+
+The plan and its reasoning are [native-front.md](../design/native-front.md): a Rust process (`_sandbox/front`) that
+owns every port and the tunnel and supervises Node, which then serves HTTP on a Unix socket. Phase 1 is done;
+these are its figures, on the same loaded machine.
+
+| What | Measured |
+| --- | --- |
+| The front's own hop, stand-in daemon, keep-alive | 149 µs p50 through the front against 84 µs straight to Node's socket (p99 336 and 364) |
+| The same on the real daemon's `/health` | 313 µs p50 through the front, 217 µs direct; the live daemon's JS preview-proxy hop costs about as much (353 against 244) |
+| Previews while the daemon stalls 100 ms of every 150 | p99 1.48 ms through the front, against 100 ms through a JS proxy on the stalled daemon, the old shape |
+| Node killed mid-flight | the request sent right after the kill was answered 1,048 ms later, by the restarted Node, not failed |
+| Tunnel daemon half, through the real Bun edge on localhost | 263–294 µs p50 through the front against 93–161 for the TS half; not like for like, since the TS half ran inside the edge's own process and the front adds two process boundaries a real tunnel already has |
+
+What phase 1 does not move: a request Node must answer still waits for Node, stalls included (p99 99 ms in the same
+stall test). The phases after it are what take terminals, events, files, the tree and git reads off Node's loop.
 

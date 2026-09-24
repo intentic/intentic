@@ -61,7 +61,7 @@ import { createIntakeRoutes } from "./issues/intake.routes.js";
 import { createSdkRoute } from "./issues/issue-sdk.js";
 import { createGateRoute } from "./workflows/gate.routes.js";
 import { createWorkspaceBytesRoutes } from "./workspace/files/workspace-bytes.routes.js";
-import { reachPosture } from "./platform/listeners/ingress-tunnel.js";
+import { reachPosture } from "./platform/listeners/reach-posture.js";
 import { profileTraits } from "./platform/boot/profile.js";
 import { rawRouteServer } from "./http/raw-route-server.js";
 import { logContext } from "./logger.js";
@@ -281,7 +281,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     const access = createAccessRoutes(services);
     serve("POST /system/ws-ticket", access.wsTicket);
 
-    // Interactive PTY over a WebSocket, paired with the `ws` server in bootstrap/daemon-listeners.ts; matched before the oRPC catch-all.
+    // Interactive PTY over a WebSocket, paired with the `ws` server in bootstrap/front-door.ts; matched before the oRPC catch-all.
     serve("GET /system/terminal", createTerminalRoute(services));
 
     // Desktop sync's transport: this container's sshd as a byte stream, authorized via the ordinary grant table.

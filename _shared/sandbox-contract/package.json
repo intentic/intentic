@@ -150,6 +150,17 @@
                 "default": "./dist/policy/owner-ticket.js"
             }
         },
+        "./front-wire": {
+            "types": "./dist/front/generated/wire.d.ts",
+            "import": {
+                "@intentic/src": "./src/front/generated/wire.ts",
+                "default": "./dist/front/generated/wire.js"
+            },
+            "require": {
+                "@intentic/src": "./src/front/generated/wire.ts",
+                "default": "./dist/front/generated/wire.js"
+            }
+        },
         "./ingress-protocol": {
             "types": "./dist/protocol/ingress-protocol.d.ts",
             "import": {

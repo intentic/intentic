@@ -39,7 +39,7 @@ app); this package is why they cannot disagree about what one is.
   hash as `SANDBOX_ENVIRONMENT_HASH` when the image was built from one), the shape of the one other machine a
   hosted sandbox runs (`flyBuildMachineConfig`: the builder the platform creates in the sandbox's app to build
   that overlay, its recipe delivered as `files`, no volume, no restart), plus the one thing a
-  docker run never declares: the machine's **front door**, the preview proxy as a Fly service with a health
+  docker run never declares: the machine's **front door**, the front's preview port as a Fly service with a health
   check under the sandbox's own hostname, because a hosted machine is reached by a replay from the platform's
   edge rather than through a tunnel it dials.
 - [src/quote.ts](src/quote.ts): shell quoting, which is the part that is easy to get subtly wrong.

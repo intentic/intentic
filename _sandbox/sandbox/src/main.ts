@@ -9,10 +9,10 @@ import { startBootResumes } from "./bootstrap/boot-resumes.js";
 import { startBootSchedulers } from "./bootstrap/boot-schedulers.js";
 import { startBootSweeps } from "./bootstrap/boot-sweeps.js";
 import { startChangeReactions } from "./bootstrap/change-reactions.js";
-import { startDaemonListeners } from "./bootstrap/daemon-listeners.js";
 import { prepareDaemonProcess, requireAuthWhenReachable } from "./bootstrap/daemon-env.js";
 import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
+import { startFrontDoor } from "./bootstrap/front-door.js";
 import { startPlatformPresence } from "./bootstrap/platform-presence.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
 import { startWorkspaceApps } from "./bootstrap/workspace-apps.js";
@@ -24,7 +24,6 @@ import { listenHost, profileTraits, requireLocalContract } from "./platform/boot
 import { checks as containerChecks, owner as containerOwner } from "./platform/invariant.js";
 import { readCgroup } from "./platform/resources/cgroup.js";
 import { startLoopWatchdog } from "./platform/resources/loop-watchdog.js";
-import { startWorkloadPriorityGovernor } from "./platform/resources/workload-priority.js";
 import { answers } from "./ports/port-probe.js";
 import { runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { appPanelKey } from "./workspace/layout/app-previews.js";
@@ -51,10 +50,6 @@ const main = async (): Promise<void> => {
     // Stall detector: logs the lag and the machine's pressure numbers when the event loop freezes.
     const loopWatchdog = startLoopWatchdog(logger);
     shutdown.push(() => loopWatchdog.stop());
-    // Keeps direct children (provider SDKs spawn CLIs outside the Bash/git wrappers) below /events heartbeats in
-    // priority.
-    const workloadPriority = startWorkloadPriorityGovernor();
-    shutdown.push(() => workloadPriority.stop());
     const services = createServices(config, logger);
     shutdown.push(() => services.perf.stop());
     shutdown.push(() => services.ciHooks.stop());
@@ -97,7 +92,7 @@ const main = async (): Promise<void> => {
     // Declares the readiness gate data routes await (app.ts): an early request waits instead of reading half-built
     // state, and a browser is told which step is running. Before the listeners, or a request could slip past it.
     declareBootSteps(services);
-    const reach = startDaemonListeners(phase, host);
+    const reach = await startFrontDoor(phase, host);
     startPlatformPresence(phase, reach);
 
     await runBootSteps(phase, runnerEnv);

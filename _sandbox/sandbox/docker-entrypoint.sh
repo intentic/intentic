@@ -180,9 +180,9 @@ fi
 # The daemon in a cgroup of its own, beside one for everything it starts. On a box short of memory the kernel swaps out
 # whatever is idle, and most of the daemon's heap is idle between requests: faulting it back in froze the event loop for
 # seconds (in minutes with heavy faulting, a quarter held a freeze over 5 s). `memory.swap.max` 0 keeps it resident, and
-# a larger cpu and io weight keeps an agent's build from starving the process every keystroke waits on. The daemon
-# moves each process it starts into `workload` (src/platform/resources/workload-priority.ts). Silent on refusal, like
-# memory.high above.
+# a larger cpu and io weight keeps an agent's build from starving the process every keystroke waits on. The front keeps
+# the leaf to itself and the daemon, moving everything else into `workload` (_sandbox/front, cgroup.rs). Silent on
+# refusal, like memory.high above.
 cgroup_root=/sys/fs/cgroup
 if [ -w "$cgroup_root/cgroup.subtree_control" ] && grep -qw memory "$cgroup_root/cgroup.controllers" 2>/dev/null; then
     mkdir -p "$cgroup_root/daemon" "$cgroup_root/workload" 2>/dev/null || true
@@ -206,4 +206,6 @@ fi
 # went from 268 ms at 4 threads to 112 ms at 64). Children inherit it, which costs them idle threads and nothing else.
 export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-32}"
 
-exec node --max-old-space-size="$heap_mb" --report-on-fatalerror --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js
+# The front owns every port and the tunnel, and supervises the daemon behind it: a daemon crash is restarted while the
+# browser's sockets stay open, and the daemon's own exit 0 (a stop, an idle machine) or 78 still ends the container.
+exec /opt/sandbox/front/intentic-front -- node --max-old-space-size="$heap_mb" --report-on-fatalerror --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js

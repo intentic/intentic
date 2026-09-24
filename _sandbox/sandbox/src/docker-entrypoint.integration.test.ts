@@ -11,7 +11,7 @@ describe(`entrypoint memory sizing`, () => {
     const GIB = 1024 ** 3;
     // The WSL guest's MemTotal behind a 20 GB .wslconfig, in KiB.
     const GUEST_KIB = 20_479_632;
-    const sizing = entrypoint.slice(entrypoint.indexOf("heap_mb=1536"), entrypoint.indexOf("exec node"));
+    const sizing = entrypoint.slice(entrypoint.indexOf("heap_mb=1536"), entrypoint.indexOf("exec /opt/sandbox/front/intentic-front"));
     // The sizing lines run against a staged memory.max, memory.high and meminfo; answers the heap and the brake written.
     const size = (memoryMax: string, engineKib: number): { heapMb: number; high: string } => {
         const dir = mkdtempSync(join(tmpdir(), "entrypoint-"));

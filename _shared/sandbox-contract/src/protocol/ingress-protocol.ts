@@ -10,9 +10,9 @@ import {
 import { type AddressInfo, createServer as createNetServer, connect as netConnect, type Socket } from "node:net";
 import { Duplex } from "node:stream";
 
-// Both ends of the ingress tunnel's h2 session, over any node Duplex, in one file: a wire format with two owners
-// drifts. h2 gives multiplexing and backpressure for free; routing is per h2 stream, since one edge connection can
-// interleave several sandboxes' hosts.
+// Both halves of the ingress tunnel's h2 session over any node Duplex, in one file so the wire has one owner: the edge's,
+// and a daemon half its suites dial (a sandbox runs the Rust one, _sandbox/front tunnel.rs, held to this by its test).
+// Routing is per h2 stream, since one edge connection can interleave several sandboxes' hosts.
 
 // Header hygiene
 
@@ -308,7 +308,7 @@ export const openIngressSession = async (duplex: Duplex): Promise<IngressSession
     };
 };
 
-// The daemon half: an h2 server over the tunnel, onto the loopback listener
+// The daemon half the edge's suites dial: an h2 server over the tunnel, onto a local listener
 
 export interface ServeIngressSessionOptions {
     // The daemon's own listener; every stream lands there as a plain HTTP/1.1 request or upgrade.

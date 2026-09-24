@@ -99,6 +99,10 @@ rm -rf "$out"/sandbox/node_modules/.pnpm/@cursor+sdk@*
 rm -rf "$out"/sandbox/node_modules/.pnpm/@cursor+sdk-*
 find "$out/sandbox/node_modules" -xtype l -delete
 
+# The front the entrypoint execs (_sandbox/front), compiled in the image's own Debian release: the one piece of the
+# payload no JS build produces, and whose glibc must be the image's rather than this machine's.
+bash _tools/scripts/image/build-front.sh "$out/front"
+
 # The baked embedding + reranker models (~57MB from HF). The marker sits OUTSIDE the model dir so the tree
 # COPY'd into the image stays exactly the layout fetch-model.mjs validated.
 if [ ! -f "$out/.iq-models-complete" ]; then

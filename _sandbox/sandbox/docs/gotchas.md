@@ -363,7 +363,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   the phrase index's SQLite (`src/sessions/search-index-worker.ts`), whose cold query took 2.2 s, and the tokenizer
   behind code counts (`src/git/changes/code-counts-worker.ts`), over a second on a large file. The daemon's own
   processes stay off the host's swap too: the entrypoint gives it a cgroup with `memory.swap.max` 0 and moves what it
-  starts into a `workload` sibling (`src/platform/resources/workload-priority.ts`), since faulting a swapped heap back
+  starts into a `workload` sibling (the front's `cgroup.rs`, `_sandbox/front`), since faulting a swapped heap back
   in froze the loop for seconds.
 - Built on Hono, zod, and provider-native runtimes. Claude uses the Agent SDK; Codex uses app-server, whose
   runner seam is injectable so co-located tests run without a provider process or network.
@@ -377,8 +377,8 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   and dockerd's data-root onto it: layout in `@intentic/sandbox-run/fly`). Three stated deviations from the
   container flavor: the whole box is the platform's machine rather than the user's; it is **reached directly**
   rather than through a tunnel it dials (the platform's edge replays requests for its hostname to the Fly app
-  it is, and Fly's proxy lands them on the preview proxy, the same front door a tunnel would; so its env
-  carries no grant, `startIngressTunnelWhenConfigured` logs the posture and dials nothing, no loopback
+  it is, and Fly's proxy lands them on the front's preview port, the same front door a tunnel would; so its env
+  carries no grant, the front is handed no tunnel to dial (`bootstrap/front-door.ts` logs the posture), no loopback
   certificate is ordered since no browser can ever be on the same machine, and `/health` says `reachedBy:
   "direct"`); and the daemon **stops itself when idle** (`IDLE_STOP_MINUTES` →
   `src/system/idle-stop.ts`: nobody connected, no turn, no live delegate, no armed condition watch, no terminal

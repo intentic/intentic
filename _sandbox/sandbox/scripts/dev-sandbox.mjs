@@ -17,7 +17,7 @@ const SLUG_ARGS = process.argv.slice(2);
 const WATCH_PATHS = [join(REPO_ROOT, "_sandbox"), join(REPO_ROOT, "_deploy"), join(REPO_ROOT, "_search"), join(REPO_ROOT, "_tools/constants")];
 
 // chokidar v4 dropped glob support; build artifacts and vcs dirs are filtered by path segment instead.
-const IGNORED_SEGMENTS = new Set(["node_modules", "dist", ".turbo", ".cache", "generated", ".astro", ".git"]);
+const IGNORED_SEGMENTS = new Set(["node_modules", "dist", ".turbo", ".cache", "generated", ".astro", ".git", "target"]);
 const ignored = (path) => path.split(sep).some((segment) => IGNORED_SEGMENTS.has(segment));
 
 const run = (command, args) =>

@@ -15,6 +15,9 @@ const push = (hostPath, containerPath) => {
 };
 
 push(join(REPO_ROOT, "_sandbox/sandbox/dist"), `${SANDBOX_ROOT}/dist`);
+// The front as build-front.sh last built it on the image's own Debian release. Its directory, not the file: a rebuild
+// replaces the file, and a single-file bind mount would keep serving the replaced one.
+push(join(REPO_ROOT, ".image-out/front"), `${SANDBOX_ROOT}/front`);
 
 // Each baked package's compiled output, mounted over the pruned copy in the daemon's node_modules.
 const packages = workspacePackages();

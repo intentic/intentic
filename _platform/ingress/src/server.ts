@@ -368,12 +368,15 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         close: () =>
             new Promise<void>((resolve) => {
                 sockets.close();
-                server.close(() => resolve());
                 // A tunnel is long-lived by construction; closing gracefully would wait forever, so containers redial
                 // instead.
                 for (const id of registry.ids()) {
                     registry.lookup(id)?.close();
                 }
+                // Before `close`, never after: Bun drops the server handle inside `close`, turning a later call into a
+                // no-op, and every held browser stream then kept the process up until a supervisor killed it.
+                server.closeAllConnections();
+                server.close(() => resolve());
             }),
     };
 };

@@ -1,0 +1,20 @@
+[
+    { "host": "preview-web-abcdef012345.sbx.example.test", "sandboxId": "abcdef012345", "panel": "web" },
+    { "host": "preview-my-app-abcdef012345.sbx.example.test:443", "sandboxId": "abcdef012345", "panel": "my-app" },
+    { "host": "preview-shop--web-abcdef012345.example.com", "sandboxId": "abcdef012345", "panel": "shop--web" },
+    { "host": "preview-web-0123456789ab.sbx.example.test", "sandboxId": "abcdef012345" },
+    { "host": "preview--abcdef012345.sbx.example.test", "sandboxId": "abcdef012345" },
+    { "host": "preview-x-abcdef012345.sbx.example.test", "sandboxId": "abcdef012345", "panel": "x" },
+    { "host": "port-1a2b3c4d5e6f-abcdef012345.sbx.example.test:8443", "sandboxId": "abcdef012345", "port": "1a2b3c4d5e6f" },
+    { "host": "public-9f8e7d6c5b4a-abcdef012345.sbx.example.test", "sandboxId": "abcdef012345", "public": "9f8e7d6c5b4a" },
+    { "host": "sandbox-abcdef012345.sbx.example.test", "sandboxId": "abcdef012345" },
+    { "host": "app.example.com", "sandboxId": "abcdef012345" },
+    { "host": "preview-web.localhost:8788", "panel": "web" },
+    { "host": "port-a.localhost", "port": "a" },
+    { "host": "public-z.example.com", "public": "z" },
+    { "host": "preview-.localhost" },
+    { "host": "127.0.0.1:8788" },
+    { "host": "[::1]:8788" },
+    { "host": "" },
+    { "host": "Preview-web-abcdef012345.sbx.example.test", "sandboxId": "abcdef012345" }
+]

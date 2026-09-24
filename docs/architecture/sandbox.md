@@ -7,13 +7,17 @@ ports every other subsystem reaches the turn through) and why is
 [docs/design/structural-decomposition.md](../design/structural-decomposition.md).
 
 The daemon ([_sandbox/sandbox](../../_sandbox/sandbox)) is the whole per-user product surface, not just a chat
-endpoint. One Node process serves the oRPC contract on `:8787` and a preview proxy on `:5173`, and a loopback
-listener on `:8788` (published on the machine's own loopback) that serves the same app for a same-machine browser AND
-hands plain connections whose Host names a preview label (`port-<slot>-<id>.localhost` and its siblings) to that
-preview proxy, so previews have a loopback lane too (`platform/listeners/loopback-listener.ts`; the editor asks for
-it through `previewAddress`, and the proxy names the lane to the app as `X-Forwarded-Host`/`-Proto`);
-terminals, panel dev servers, and agent shell commands all run in a shared `tmux` server so they
-survive reconnects. Its subsystems:
+endpoint. It runs behind **its front** ([_sandbox/front](../../_sandbox/front)), a Rust process the entrypoint execs,
+which owns every port and the ingress tunnel and supervises the Node process: the oRPC contract on `:8787`, the
+preview port `:5173`, and a loopback listener on `:8788` (published on the machine's own loopback) that serves the same
+app for a same-machine browser AND relays plain connections whose Host names a preview label
+(`port-<slot>-<id>.localhost` and its siblings) to that preview, so previews have a loopback lane too (the editor asks
+for it through `previewAddress`, and the preview's app is told the lane as `X-Forwarded-Host`/`-Proto`). Node serves
+HTTP on a Unix socket only the front dials and decides everything the front carries: which ports to bind, which
+upstream a preview host names ([panels/preview-routes.ts](../../_sandbox/sandbox/src/panels/preview-routes.ts)), what a
+refusal page says. A daemon crash restarts Node while every browser socket stays open; the reasoning is
+[native-front.md](../design/native-front.md). Terminals, panel dev servers, and agent shell commands all run in a
+shared `tmux` server so they survive reconnects. Its subsystems:
 
 - **Agent backends**: Claude (agent SDK, spawned per turn), Codex, Grok/opencode, Kimi Code, Gemini, and
   Cursor. Kimi
@@ -260,7 +264,7 @@ same way, and there is only one way: the daemon dials ONE outbound WebSocket to 
 platform-signed grant naming `<id> = sha256(connectToken).slice(0, 12)`
 ([tunnel-ids.ts](../../_shared/sandbox-contract/src/ids/tunnel-ids.ts)); the edge reads the `Host` header of each
 request and sends it down that sandbox's tunnel. The hosted lane is the one box that is dialled instead of
-dialling: the same image, booted as a Fly machine (`SANDBOX_VM`), declares its preview proxy as a Fly service
+dialling: the same image, booted as a Fly machine (`SANDBOX_VM`), declares its front's preview port as a Fly service
 ([sandbox-run/fly.ts](../../_shared/sandbox-run/src/fly.ts)) and the edge replays requests for its hostnames to
 the app named after the same `<id>`.
 

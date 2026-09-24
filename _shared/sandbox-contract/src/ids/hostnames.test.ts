@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import {
     labelHostname,
     panelFromHost,
@@ -8,12 +9,31 @@ import {
     previewHostname,
     previewLabel,
     previewUrl,
+    publicSlotFromHost,
     sandboxHostname,
     sandboxIdFromUrl,
     syncFolder,
 } from "./hostnames.js";
 
 const ID = "abc123def456";
+
+// The cases the front's Rust router is held to as well (_sandbox/front, route.rs), read from the one file both run.
+interface HostCase {
+    readonly host: string;
+    readonly sandboxId?: string;
+    readonly panel?: string;
+    readonly port?: string;
+    readonly public?: string;
+}
+const HOST_CASES = JSON.parse(readFileSync(new URL("./hostnames.fixture.json", import.meta.url), "utf8")) as HostCase[];
+
+test.each(HOST_CASES)("the shared host cases parse as the front parses them: $host", (hostCase) => {
+    expect({
+        panel: panelFromHost(hostCase.host, hostCase.sandboxId),
+        port: portSlotFromHost(hostCase.host, hostCase.sandboxId),
+        public: publicSlotFromHost(hostCase.host, hostCase.sandboxId),
+    }).toEqual({ panel: hostCase.panel, port: hostCase.port, public: hostCase.public });
+});
 
 test("preview and port hostnames round-trip through their Host-header parsers", () => {
     expect(panelFromHost(`${previewHostname("shop--web", ID, "example.com")}:443`, ID)).toBe("shop--web");

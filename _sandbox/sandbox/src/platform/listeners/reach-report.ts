@@ -3,7 +3,7 @@ import { containerDrift } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../../env.config.js";
 import type { BootTracker } from "../boot/boot.js";
-import type { ReachPosture } from "./ingress-tunnel.js";
+import type { ReachPosture } from "./reach-posture.js";
 import { type CgroupReading, readCgroup } from "../resources/cgroup.js";
 import { postToPlatform } from "../platform-post.js";
 
@@ -39,7 +39,7 @@ export interface ReachState {
 }
 
 export interface ReachReporter {
-    /* WHETHER THERE IS ANYTHING TO WAIT FOR is the posture's to say (ingress-tunnel.ts), so it is asked for here rather than guessed at from config. */
+    /* WHETHER THERE IS ANYTHING TO WAIT FOR is the posture's to say (reach-posture.ts), so it is asked for here rather than guessed at from config. */
     readonly start: (posture: ReachPosture) => void;
     readonly stop: () => void;
     readonly status: () => ReachState;
