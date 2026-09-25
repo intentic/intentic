@@ -14,17 +14,20 @@ import { memoryFleet } from "../../testing.js";
 const cards = parkedCards(memoryFleet().conversations);
 
 const create = jest.fn<(options: unknown) => Promise<unknown>>();
+const resume = jest.fn<(agentId: string, options: unknown) => Promise<unknown>>();
 const cancel = jest.fn<() => Promise<void>>();
+// The SDK's catch-all for any error it cannot classify, which a test throws as the SDK would.
+class UnknownAgentError extends Error {}
 
 jest.mock("./cursor-sdk.js", () => ({
     CURSOR_SDK_MISSING: `missing sdk`,
     cursorSdk: async () => ({
-        Agent: { create },
+        Agent: { create, resume },
         RateLimitError: class RateLimitError extends Error {},
         AuthenticationError: class AuthenticationError extends Error {},
         AgentBusyError: class AgentBusyError extends Error {},
         AgentNotFoundError: class AgentNotFoundError extends Error {},
-        UnknownAgentError: class UnknownAgentError extends Error {},
+        UnknownAgentError,
         NetworkError: class NetworkError extends Error {},
     }),
 }));
@@ -211,4 +214,59 @@ test("a quiet stretch after the first delta is a tool call running long, and is 
     } finally {
         jest.useRealTimers();
     }
+});
+
+// The live failure these cover: an OOM kill took the daemon down mid-run, and the SDK's store kept that run RUNNING on
+// disk. Every later send on the agent threw "already has active run", and the frame was coded session-not-found, so the
+// editor dropped the session without a word while the daemon kept resuming the same wedged agent.
+test("a resumed agent's first send expires the run a killed daemon left open, and later phases are sent plainly", async () => {
+    const sent: SendOptions[] = [];
+    resume.mockResolvedValue({
+        agentId: `agent-resumed`,
+        send: async (_prompt: string, options: SendOptions) => {
+            sent.push(options);
+            options.onDelta?.({ update: { type: `text-delta`, text: sent.length === 1 ? `ship it` : `working on it` } as InteractionUpdate });
+            return { wait: async () => ({ status: `success` }), cancel };
+        },
+        close: () => {},
+    });
+
+    const seen: AgentEvent[] = [];
+    const resumed = { ...request(), spec: { ...request().spec, sessionId: `agent-resumed` }, policy: { permissionMode: `plan` as const } };
+    const turn = (async () => {
+        for await (const event of createCursorAgent(deps())(resumed)) {
+            seen.push(event);
+        }
+    })();
+    await waitFor(() => expect(seen.map((event) => event.kind)).toContain(`plan`));
+    const plan = seen.find((event): event is Extract<AgentEvent, { kind: `plan` }> => event.kind === `plan`);
+    expect(cards.resolve({ kind: `plan`, requestId: plan?.requestId ?? ``, approve: true })).toBe(`settled`);
+    await turn;
+
+    expect(resume.mock.calls.map(([agentId]) => agentId)).toEqual([`agent-resumed`]);
+    expect(sent.map((options) => options.local)).toEqual([{ force: true }, undefined]);
+});
+
+test("a fresh agent has no run to orphan, so its send does not force", async () => {
+    const sent: SendOptions[] = [];
+    agentThat(
+        (options) => sent.push(options),
+        async () => ({ status: `success` }),
+    );
+    await collect(createCursorAgent(deps())(request()));
+    expect(sent.map((options) => options.local)).toEqual([undefined]);
+});
+
+test("the SDK's catch-all error is reported as the failure it is, not as a lost session", async () => {
+    const wedged = `Agent agent-stalled already has active run`;
+    create.mockResolvedValue({
+        agentId: `agent-stalled`,
+        send: async () => {
+            throw new UnknownAgentError(wedged);
+        },
+        close: () => {},
+    });
+    const events = await collect(createCursorAgent(deps())(request()));
+    expect(events.filter((event) => event.kind === `error`)).toEqual([{ kind: `error`, message: wedged }]);
+    expect(events.at(-1)).toEqual({ kind: `done` });
 });

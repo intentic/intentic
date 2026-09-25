@@ -52,10 +52,13 @@ const codedError = async (error: unknown, sdk: Awaited<ReturnType<typeof cursorS
     if (error instanceof sdk.AgentBusyError) {
         return { kind: "error", message, code: "agent-busy" };
     }
-    if (error instanceof sdk.AgentNotFoundError || error instanceof sdk.UnknownAgentError) {
+    if (error instanceof sdk.AgentNotFoundError) {
         // This machine lost the named agent (store cleared, a rebuild); client drops it, next send opens fresh.
         return { kind: "error", message, code: "session-not-found" };
     }
+    // UnknownAgentError is deliberately not matched above: it is the SDK's catch-all for any error it cannot classify
+    // (its converter ends in `new UnknownAgentError(message)`), not "unknown agent". Coding it session-not-found hid
+    // real failures as a silently dropped session, the wedged "already has active run" among them.
     if (error instanceof sdk.NetworkError) {
         return { kind: "error", message, code: "provider-outage" };
     }
@@ -103,12 +106,15 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         selection: ModelSelection | undefined,
         planning: boolean,
         channel: SteeringChannel | undefined,
+        force: boolean,
     ): AsyncGenerator<AgentEvent, { errored: boolean; planText: string | undefined }> {
         const mapper = createCursorEventMapper(request.spec.cwd, planning);
         let sawDelta = false;
         const options: SendOptions = {
             mode: modeFor(planning),
             ...(selection !== undefined ? { model: selection } : {}),
+            // Only `force` rides the per-send `local`; custom tools not named here fall back to the agent's own.
+            ...(force ? { local: { force: true } } : {}),
             // Mapped where it arrives rather than where it is read: the drain below can be parked on a tool handler,
             // and what the mapper captures is read the moment the phase ends.
             onDelta: ({ update }) => {
@@ -293,14 +299,23 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         // This turn's one consumer of the steering queue; absent for a bench or benchmark run with no queue.
         const relay = request.spec.steering === undefined ? undefined : steeringRelay(request.spec.steering);
 
+        // The SDK's local store marks a run finished only from inside the process that ran it, so a daemon killed
+        // mid-run (an OOM kill, a restart) leaves that run RUNNING on disk, and every later send on the agent throws
+        // "already has active run" for good. Turns on one conversation are serialized, so any run still open when a
+        // resumed agent's first send goes out is that orphan: `force` expires it, the SDK's own recovery for exactly
+        // this. Later phases of the same turn follow a run this process settled itself, and are sent plainly.
+        let orphanPossible = request.spec.sessionId !== undefined;
+
         try {
             const live = agent;
             const send = async function* (prompt: string, planning: boolean): AsyncGenerator<AgentEvent, { errored: boolean; planText?: string }> {
                 // Each phase borrows its own channel and closes it, so a message typed during a plan's approval pause
                 // waits for the executing phase instead of being delivered to the run that already finished.
                 const channel = relay?.();
+                const force = orphanPossible;
+                orphanPossible = false;
                 try {
-                    const outcome = yield* runPhase(live, request, queue, prompt, selection, planning, channel);
+                    const outcome = yield* runPhase(live, request, queue, prompt, selection, planning, channel, force);
                     return { errored: outcome.errored, ...(outcome.planText !== undefined ? { planText: outcome.planText } : {}) };
                 } finally {
                     channel?.close();
