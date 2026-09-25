@@ -1,7 +1,6 @@
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::logfile::Log;
 use crate::util::{bail, Fail, Result};
@@ -208,12 +207,6 @@ pub struct Bounded {
     pub stderr: String,
 }
 
-/// How often a bounded run is checked on. Its commands take seconds, so a tenth of one is noise on top.
-const BOUNDED_POLL: Duration = Duration::from_millis(100);
-
-/// How long the output of a finished or killed command is waited for before it is given up on (see [`collected`]).
-const BOUNDED_DRAIN: Duration = Duration::from_secs(2);
-
 /// Capture a docker command that must not be able to hang the flow: every other capture here waits as long as
 /// its child takes. Killing the CLI at the deadline is all this can do, though. A container that a `docker run`
 /// started keeps running inside the daemon without it, so a caller that starts one names it and removes it by
@@ -222,61 +215,19 @@ pub fn capture_bounded(args: &[&str], limit: Duration) -> Result<Bounded> {
     bounded(docker(args), limit)
 }
 
-/// The deadline itself, for any command, so it can be exercised without a docker daemon. Both pipes drain on
-/// threads of their own: a child blocked writing into a full pipe never exits, which would turn every long
-/// answer into a timeout. A child is polled rather than waited on, because a blocking wait cannot be given up on.
-fn bounded(mut command: Command, limit: Duration) -> Result<Bounded> {
+/// The deadline itself, for any command: the helper the desktop app shares (`intentic-bounded`), with the child
+/// left in ic's own process group so a Ctrl-C at the terminal still reaches it. Output is trimmed at the end,
+/// which is how every reader here takes it.
+fn bounded(command: Command, limit: Duration) -> Result<Bounded> {
     let program = command.get_program().to_string_lossy().into_owned();
-    let mut child = command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+    let ran = intentic_bounded::capture(command, limit, intentic_bounded::Reach::Child)
         .map_err(|err| Fail(format!("could not run {program}: {err}")))?;
-    let stdout = drain(child.stdout.take().expect("stdout was piped"));
-    let stderr = drain(child.stderr.take().expect("stderr was piped"));
-    let deadline = Instant::now() + limit;
-    let (code, timed_out) = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break (status.code(), false),
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(BOUNDED_POLL),
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break (None, true);
-            }
-            Err(err) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                bail!("could not wait for {program}: {err}");
-            }
-        }
-    };
     Ok(Bounded {
-        code,
-        timed_out,
-        stdout: collected(&stdout),
-        stderr: collected(&stderr),
+        code: ran.code,
+        timed_out: ran.timed_out,
+        stdout: ran.stdout.trim_end().to_string(),
+        stderr: ran.stderr.trim_end().to_string(),
     })
-}
-
-/// Read a pipe to its end on a thread of its own; the bytes arrive over the channel once it closes.
-fn drain(mut from: impl Read + Send + 'static) -> mpsc::Receiver<Vec<u8>> {
-    let (sender, receiver) = mpsc::channel();
-    std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let _ = from.read_to_end(&mut bytes);
-        let _ = sender.send(bytes);
-    });
-    receiver
-}
-
-/// What a drained pipe held. Waited for, never joined: a grandchild that inherited the pipe keeps it open after
-/// the child is gone, and joining its reader would hand the flow straight back to the hang the deadline ended.
-fn collected(pipe: &mpsc::Receiver<Vec<u8>>) -> String {
-    pipe.recv_timeout(BOUNDED_DRAIN)
-        .map(|bytes| String::from_utf8_lossy(&bytes).trim_end().to_string())
-        .unwrap_or_default()
 }
 
 /// What a streamed command did: its exit, and the tail of what it printed. The log holds all of it, but the

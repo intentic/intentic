@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
@@ -9,11 +7,10 @@ use crate::state::{AppState, CloseAction, SessionEnd, Settings};
 
 type CommandResult<T> = Result<T, String>;
 
-// The prefixes @intentic/sandbox-run derives every per-sandbox object from. They are duplicated here rather
-// than imported because this process has no Node — but they are also the ONLY thing about the container shape
-// this app knows, which is the whole point of running the scripts for everything else.
+// The prefix @intentic/sandbox-run derives every per-sandbox object from, duplicated here because this process has
+// no Node. It is the ONLY thing about the container shape this app knows (to find the sandbox a setup just made, and
+// to tail a log): what runs and what should run is `ic`'s to say, and this app asks it.
 const CONTAINER_PREFIX: &str = "intentic-sandbox-";
-const TUNNEL_PREFIX: &str = "intentic-sandbox-tunnel-";
 
 /* This struct describes the app, not the machine running it. */
 #[derive(Serialize)]
@@ -447,123 +444,6 @@ fn end_session(_how: SessionEnd) -> CommandResult<()> {
     Err("nothing on this system needs a restart to finish installing.".to_string())
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SandboxStatus {
-    pub slug: String,
-    pub container: String,
-    pub name: Option<String>,
-    pub running: bool,
-    pub image: String,
-    /// None when no cloudflared sidecar exists for this sandbox at all.
-    pub tunnel_running: Option<bool>,
-    /// Its share of this machine, read off `docker inspect`. None when the inspect failed, which the screen
-    /// reports as a row with nothing to say about its share rather than as a broken list.
-    pub resources: Option<SandboxResources>,
-}
-
-/* ONE CONTAINER'S SHARE OF THIS MACHINE, as docker enforces it right now. */
-#[derive(Serialize, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct SandboxResources {
-    /// The cgroup memory ceiling in bytes; ABSENT (not null: the shared row type spells absence as a missing
-    /// key) when docker imposes none.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub memory_bytes: Option<u64>,
-    /// The CFS quota in cores; absent when the container may use every core, which is the default.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cpus: Option<f64>,
-    pub privileged: bool,
-    pub gpu: bool,
-    pub host_runtime: Vec<String>,
-    pub overlay_runtime: Vec<String>,
-}
-
-/// A docker limit field: a positive number is a cap, 0 (docker's "unbounded") and anything unreadable is none.
-fn cap_of(value: &serde_json::Value) -> Option<u64> {
-    value.as_u64().filter(|limit| *limit > 0)
-}
-
-/// The whitespace-separated tokens of one `NAME=value` in a container's env list, or none.
-fn env_tokens(env: &serde_json::Value, name: &str) -> Vec<String> {
-    let prefix = format!("{name}=");
-    env.as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(serde_json::Value::as_str)
-        .find_map(|entry| entry.strip_prefix(prefix.as_str()))
-        .map(|value| value.split_whitespace().map(str::to_string).collect())
-        .unwrap_or_default()
-}
-
-/// Whether a HostConfig's DeviceRequests carry the GPU, in either spelling docker writes for `--gpus`: the
-/// nvidia driver by name, or the `gpu` capability.
-fn gpu_requested(host: &serde_json::Value) -> bool {
-    host["DeviceRequests"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .any(|request| {
-            request["Driver"] == "nvidia"
-                || request["Capabilities"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .any(|set| {
-                        set.as_array()
-                            .into_iter()
-                            .flatten()
-                            .any(|capability| *capability == "gpu")
-                    })
-        })
-}
-
-/// Pure over one `docker inspect` object, so docker's shape is asserted without a daemon (the tests below).
-/// Anything unreadable reads as its default rather than as a guess.
-pub fn resources_from(inspected: &serde_json::Value) -> SandboxResources {
-    // Docker's own key. Under any other name every cap below reads as absent and the tests renamed with it pass.
-    let host = &inspected["HostConfig"];
-    let env = &inspected["Config"]["Env"];
-    SandboxResources {
-        memory_bytes: cap_of(&host["Memory"]),
-        cpus: cap_of(&host["NanoCpus"]).map(|nanos| nanos as f64 / 1_000_000_000.0),
-        privileged: host["Privileged"] == true,
-        gpu: gpu_requested(host),
-        host_runtime: env_tokens(env, "SANDBOX_RUNTIME"),
-        overlay_runtime: env_tokens(env, "SANDBOX_OVERLAY_RUNTIME"),
-    }
-}
-
-/// `docker inspect --format '{{json .}}'` over several containers prints one object per line; each is keyed
-/// here by the name docker writes with a leading slash no other reader in this file uses. A line that is not
-/// one object is a warning riding along and is skipped, not thrown on.
-pub fn shares_from(listing: &str) -> HashMap<String, SandboxResources> {
-    listing
-        .lines()
-        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .filter_map(|value| {
-            let name = value["Name"].as_str()?.trim_start_matches('/').to_string();
-            Some((name, resources_from(&value)))
-        })
-        .collect()
-}
-
-/// Each listed container's share, from ONE `docker inspect` over all of them. A container that vanished between
-/// the listing and this call fails the whole command, and that leaves every row without a share rather than
-/// failing the list: a row with nothing to say about its share is honest, a listing that died because one
-/// sandbox was being removed is not. The next refresh reads it again.
-fn shares_of(names: &[String]) -> HashMap<String, SandboxResources> {
-    if names.is_empty() {
-        return HashMap::new();
-    }
-    let mut args: Vec<&str> = vec!["inspect", "--format", "{{json .}}"];
-    args.extend(names.iter().map(String::as_str));
-    scripts::docker_output(&args, scripts::DOCKER_READ_LIMIT)
-        .ok()
-        .map(|listing| shares_from(&listing))
-        .unwrap_or_default()
-}
-
 /* THE DOCKER ENGINE'S SIZE: the WSL guest on Windows, the Desktop VM on macOS, the host on Linux — the ceiling a sandbox's share is bounded by. */
 #[derive(Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -597,37 +477,6 @@ pub async fn docker_engine() -> Option<DockerEngine> {
     .unwrap_or(None)
 }
 
-struct ContainerRow {
-    name: String,
-    running: bool,
-    image: String,
-}
-
-fn containers() -> Result<Vec<ContainerRow>, String> {
-    let listing = scripts::docker_output(
-        &[
-            "ps",
-            "-a",
-            "--filter",
-            &format!("name=^{CONTAINER_PREFIX}"),
-            "--format",
-            "{{.Names}}\t{{.State}}\t{{.Image}}",
-        ],
-        scripts::DOCKER_READ_LIMIT,
-    )?;
-    Ok(listing
-        .lines()
-        .filter_map(|line| {
-            let mut fields = line.split('\t');
-            Some(ContainerRow {
-                name: fields.next()?.to_string(),
-                running: fields.next()? == "running",
-                image: fields.next().unwrap_or_default().to_string(),
-            })
-        })
-        .collect())
-}
-
 /// The slug of the most recently created sandbox — how a finished setup finds the row it just made without
 /// re-deriving the script's slug rule (the hostname's leading label, or the connect token's digest) in a
 /// second place. `docker ps` lists newest first, and the sidecar it created alongside is skipped.
@@ -651,97 +500,99 @@ fn newest_slug() -> Option<String> {
         .map(str::to_string)
 }
 
+/// Every sandbox on this machine as `ic sandbox list --json` reports it (the contract's `DeviceSandbox` rows: running
+/// state, the share docker enforces, the shape each runs with, the shape saved for its next restart, the update
+/// staged for it), with the name this app remembers for each. ic owns all of it; this app reads nothing off docker.
 #[tauri::command]
-pub async fn sandbox_list(app: AppHandle) -> CommandResult<Vec<SandboxStatus>> {
-    // The listing, then one inspect over everything it named: the share is read for the sidecars too, which
-    // costs nothing and keeps this one call rather than a second filter that has to agree with the one below.
-    let (rows, mut shares) = tauri::async_runtime::spawn_blocking(|| -> Result<_, String> {
-        let rows = containers()?;
-        let names: Vec<String> = rows.iter().map(|row| row.name.clone()).collect();
-        Ok((rows, shares_of(&names)))
+pub async fn sandbox_list(app: AppHandle) -> CommandResult<Vec<serde_json::Value>> {
+    let handle = app.clone();
+    let rows = tauri::async_runtime::spawn_blocking(move || {
+        scripts::ic_listing(&handle, list_script(Host::current(), VERSION))
     })
     .await
     .map_err(|error| error.to_string())??;
-
-    // A workspace container and its tunnel sidecar share the `intentic-sandbox-` prefix, and a user's own
-    // subdomain may legitimately BE `tunnel-something` — so a name is only a sidecar when the workspace
-    // container it would belong to actually exists. Nothing here has to guess.
-    let workspace_names: Vec<&str> = rows
-        .iter()
-        .map(|row| row.name.as_str())
-        .filter(|name| {
-            name.strip_prefix(TUNNEL_PREFIX).is_none_or(|slug| {
-                !rows
-                    .iter()
-                    .any(|row| row.name == format!("{CONTAINER_PREFIX}{slug}"))
-            })
-        })
-        .collect();
-
     let state = app.state::<AppState>();
     // A listing with a sandbox in it is the proof that this machine hosts one — and the only cheap proof
     // there is, since the next launch may find Docker stopped and be unable to ask anything at all.
-    if !workspace_names.is_empty() {
+    if !rows.is_empty() {
         state.remember_hosts_sandboxes();
     }
-    Ok(workspace_names
-        .iter()
-        .filter_map(|name| {
-            let slug = name.strip_prefix(CONTAINER_PREFIX)?.to_string();
-            let row = rows.iter().find(|row| row.name == **name)?;
-            let tunnel = rows
-                .iter()
-                .find(|candidate| candidate.name == format!("{TUNNEL_PREFIX}{slug}"));
-            Some(SandboxStatus {
-                name: state.name_of(&slug),
-                container: row.name.clone(),
-                running: row.running,
-                image: row.image.clone(),
-                tunnel_running: tunnel.map(|tunnel| tunnel.running),
-                resources: shares.remove(*name),
-                slug,
-            })
+    Ok(rows
+        .into_iter()
+        .map(|mut row| {
+            let name = row["slug"].as_str().and_then(|slug| state.name_of(slug));
+            if let (Some(name), Some(fields)) = (name, row.as_object_mut()) {
+                fields.insert("name".to_string(), serde_json::Value::String(name));
+            }
+            row
         })
         .collect())
 }
 
-/// Start, stop or restart the sandbox and its sidecar together — a workspace with a stopped tunnel is reachable
-/// from this machine's loopback and from nowhere else, which is not a state anyone asks for on purpose.
-///
-/// Three verbs rather than a boolean because the manager offers three: Restart is what the web's Devices tab
-/// has always had here and this window had not, and a bool cannot say it. Anything else is refused rather than
-/// forwarded — this argument reaches `docker` as its subcommand.
-#[tauri::command]
-pub async fn sandbox_power(slug: String, action: String) -> CommandResult<()> {
-    if !matches!(action.as_str(), "start" | "stop" | "restart") {
-        return Err(format!("unknown sandbox action: {action}"));
+/// The recreate shim with `ic`'s own verb behind the shim's switch for it: `recreate.sh <slug> --restart` /
+/// `recreate.ps1 -Slug … -Restart`. The shim fetches this build's own `ic` first, as it does for every recreate, so
+/// the verb is one this app knows `ic` has. Named on PowerShell, positional on sh, for [`setup_script`]'s reason.
+fn ic_verb_script(
+    slug: &str,
+    verb: (&'static str, &'static str),
+    rest: Vec<String>,
+    host: Host,
+    version: &str,
+) -> ScriptRun {
+    let mut args = match host {
+        Host::Windows => vec!["-Slug".to_string(), slug.to_string()],
+        Host::Unix => vec![slug.to_string()],
+    };
+    args.push(host.script(verb.0, verb.1).to_string());
+    args.extend(rest);
+    ScriptRun {
+        file: host.script("recreate.sh", "recreate.ps1"),
+        args,
+        env: app_env(version),
+        elevate: false,
+        host,
     }
-    tauri::async_runtime::spawn_blocking(move || {
-        let container = format!("{CONTAINER_PREFIX}{slug}");
-        let sidecar = format!("{TUNNEL_PREFIX}{slug}");
-        // Stopping fells the tunnel first so nothing routes into a container on its way down; starting and
-        // restarting raise it last. The same order the machine agent uses for the same three verbs.
-        // The sidecar is optional (a sandbox reached over the user's own proxy has none), so its absence is
-        // not a failure of the operation the user asked for; any other refusal is, reported after the sandbox's.
-        let power =
-            |target: &str| scripts::docker_output(&[&action, target], scripts::DOCKER_POWER_LIMIT);
-        let power_sidecar = || match power(&sidecar) {
-            Err(error) if !error.contains("No such container") => {
-                Err(format!("the sandbox's tunnel did not {action}: {error}"))
-            }
-            _ => Ok(()),
-        };
-        if action == "stop" {
-            let tunnel = power_sidecar();
-            power(&container)?;
-            tunnel
-        } else {
-            power(&container)?;
-            power_sidecar()
-        }
-    })
-    .await
-    .map_err(|error| error.to_string())?
+}
+
+/// `ic sandbox list --json` through the shim, for a machine whose installed `ic` is missing or older than this app:
+/// the shim's fetch is what brings it level, so the next listing asks the installed one again.
+pub fn list_script(host: Host, version: &str) -> ScriptRun {
+    ScriptRun {
+        file: host.script("recreate.sh", "recreate.ps1"),
+        args: vec![host.script("--list", "-List").to_string()],
+        env: app_env(version),
+        elevate: false,
+        host,
+    }
+}
+
+/// Start, stop or restart through `ic`, which powers the tunnel sidecar with its sandbox (down first, up last) and
+/// turns a start or restart into the recreate that applies a shape saved for the next restart. Anything else is
+/// refused rather than forwarded: this argument reaches the shim as its switch.
+pub fn power_script(
+    slug: &str,
+    action: &str,
+    host: Host,
+    version: &str,
+) -> Result<ScriptRun, String> {
+    let switch = match action {
+        "start" => ("--start", "-Start"),
+        "stop" => ("--stop", "-Stop"),
+        "restart" => ("--restart", "-Restart"),
+        _ => return Err(format!("unknown sandbox action: {action}")),
+    };
+    Ok(ic_verb_script(slug, switch, Vec::new(), host, version))
+}
+
+/// Under the power id the screen's pane follows for these three verbs; a restart that applies a saved shape is a
+/// recreate of a minute, so it streams like one.
+#[tauri::command]
+pub async fn sandbox_power(app: AppHandle, slug: String, action: String) -> CommandResult<()> {
+    let run = power_script(&slug, &action, Host::current(), VERSION)?;
+    let id = format!("power:{slug}");
+    tauri::async_runtime::spawn_blocking(move || scripts::run(&app, &id, run))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 /// Recreate the sandbox on a different image — one script, three ways through it, exactly as the shim itself
@@ -796,100 +647,78 @@ pub async fn sandbox_recreate(
         .map_err(|error| error.to_string())?
 }
 
-/* WHAT THE RESOURCES FORM ASKED FOR: the sandbox contract's SandboxResourcesAsk, as the webview sends it. */
-#[derive(Deserialize, Default, Debug, PartialEq)]
+/* A SANDBOX'S SHAPE, as the resources form sends it: the sandbox contract's SandboxShape, whole. */
+#[derive(Deserialize, Debug, PartialEq, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
-pub struct ReshapeAsk {
-    #[serde(default, deserialize_with = "present")]
-    pub memory_gib: Option<Option<u32>>,
-    #[serde(default, deserialize_with = "present")]
-    pub cpus: Option<Option<u32>>,
-    pub privileged: Option<bool>,
-    pub gpu: Option<bool>,
+pub struct Shape {
+    /// Whole GiB, or null for the default share derived from this machine.
+    pub memory_gib: Option<u32>,
+    /// Whole cores, or null for every core.
+    pub cpus: Option<u32>,
+    pub privileged: bool,
+    pub gpu: bool,
 }
 
-/// A key that is THERE, whatever it holds: `Some(None)` for null, `Some(Some(v))` for a value. serde's own
-/// handling of an Option field folds null and absent together, which is exactly the distinction a cap's ask
-/// rides on.
-fn present<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    Option::<T>::deserialize(deserializer).map(Some)
+/// `ic sandbox shape`'s flags for a whole shape and when it takes effect (`now`, `nextRestart`), or `--forget` for
+/// none: a cap is `<n>g` / `<n>` or ic's `default`, a switch the explicit word (a bare flag could only ever add). The
+/// Rust twin of the contract's `icShapeArgs`, which the machine agent and the web run; nothing is judged here, ic
+/// checks the shape against the image's run contract.
+pub fn shape_flags(shape: Option<&Shape>, when: &str) -> Result<Vec<String>, String> {
+    let Some(shape) = shape else {
+        return Ok(vec!["--forget".to_string()]);
+    };
+    let when = match when {
+        "now" => "now",
+        "nextRestart" => "next-restart",
+        _ => return Err(format!("unknown time for a shape: {when}")),
+    };
+    let cap = |value: Option<u32>, unit: &str| {
+        value.map_or_else(|| "default".to_string(), |n| format!("{n}{unit}"))
+    };
+    let switch = |on: bool| (if on { "on" } else { "off" }).to_string();
+    Ok(vec![
+        "--memory".to_string(),
+        cap(shape.memory_gib, "g"),
+        "--cpus".to_string(),
+        cap(shape.cpus, ""),
+        "--privileged".to_string(),
+        switch(shape.privileged),
+        "--gpus".to_string(),
+        switch(shape.gpu),
+        "--when".to_string(),
+        when.to_string(),
+    ])
 }
 
-/// The reshape's flags in `ic`'s own spelling (`ic sandbox reshape --memory 12g|default --cpus 4|default
-/// --privileged on|off --gpus on|off`), which the shim forwards verbatim after its `--reshape` / `-Reshape`. A
-/// cap is `<n>g` / `<n>`, a cleared cap is ic's `default`, a switch is the explicit word (a bare flag could
-/// only ever ADD). Nothing is judged here: what a valid cap is belongs to the run contract inside the image,
-/// which refuses a bad one by name.
-pub fn reshape_flags(ask: &ReshapeAsk) -> Vec<String> {
-    fn cap(value: Option<u32>, spell: impl Fn(u32) -> String) -> String {
-        value.map_or_else(|| "default".to_string(), spell)
-    }
-    fn switch(on: bool) -> String {
-        (if on { "on" } else { "off" }).to_string()
-    }
-    let mut flags = Vec::new();
-    if let Some(memory) = ask.memory_gib {
-        flags.extend(["--memory".to_string(), cap(memory, |gib| format!("{gib}g"))]);
-    }
-    if let Some(cpus) = ask.cpus {
-        flags.extend(["--cpus".to_string(), cap(cpus, |cores| cores.to_string())]);
-    }
-    if let Some(privileged) = ask.privileged {
-        flags.extend(["--privileged".to_string(), switch(privileged)]);
-    }
-    if let Some(gpu) = ask.gpu {
-        flags.extend(["--gpus".to_string(), switch(gpu)]);
-    }
-    flags
-}
-
-/// Change a sandbox's share of this machine, or its privileges, through the same recreate shim the swaps run
-/// through: `recreate.sh <slug> --reshape <ic flags>` / `recreate.ps1 -Slug … -Reshape <ic flags>`. Named on
-/// PowerShell, positional on sh, for [`setup_script`]'s reason; `-Reshape` is a switch and everything after it
-/// binds to the shim's remaining-arguments parameter, forwarded whole so the shim never learns a flag `ic`
-/// could add later. Refused with nothing to change: `ic` would refuse it too, and a restart for nothing is
-/// what the refusal exists to prevent.
-pub fn reshape_script(
+/// `recreate.sh <slug> --shape <ic flags>` / `recreate.ps1 -Slug … -Shape <ic flags>`: everything after the switch
+/// binds to the shim's remaining arguments and is forwarded whole to `ic sandbox shape`.
+pub fn shape_script(
     slug: &str,
-    ask: &ReshapeAsk,
+    shape: Option<&Shape>,
+    when: &str,
     host: Host,
     version: &str,
 ) -> Result<ScriptRun, String> {
-    let flags = reshape_flags(ask);
-    if flags.is_empty() {
-        return Err(
-            "nothing to change: a reshape needs a memory or CPU cap, or a privileged/GPU switch."
-                .to_string(),
-        );
-    }
-    let mut args = match host {
-        Host::Windows => vec![
-            "-Slug".to_string(),
-            slug.to_string(),
-            "-Reshape".to_string(),
-        ],
-        Host::Unix => vec![slug.to_string(), "--reshape".to_string()],
-    };
-    args.extend(flags);
-    Ok(ScriptRun {
-        file: host.script("recreate.sh", "recreate.ps1"),
-        args,
-        // The same shim as the swaps, so the same pin on this build's own `ic`.
-        env: app_env(version),
-        elevate: false,
+    Ok(ic_verb_script(
+        slug,
+        ("--shape", "-Shape"),
+        shape_flags(shape, when)?,
         host,
-    })
+        version,
+    ))
 }
 
-/// Under the recreate's own run id: it IS one (the same image, a different share of this machine), and the
-/// screen's pane for a row follows that id whichever verb started it.
+/// Set a sandbox's shape now (a recreate onto the same image) or for its next restart through ic (nothing restarts),
+/// or forget the one saved (`shape` absent). Under the recreate's own run id: the screen's pane for a row follows
+/// that id whichever verb started it.
 #[tauri::command]
-pub async fn sandbox_reshape(app: AppHandle, slug: String, ask: ReshapeAsk) -> CommandResult<()> {
-    let run = reshape_script(&slug, &ask, Host::current(), VERSION)?;
+pub async fn sandbox_shape(
+    app: AppHandle,
+    slug: String,
+    shape: Option<Shape>,
+    when: String,
+) -> CommandResult<()> {
+    let run = shape_script(&slug, shape.as_ref(), &when, Host::current(), VERSION)?;
     let id = format!("recreate:{slug}");
     tauri::async_runtime::spawn_blocking(move || scripts::run(&app, &id, run))
         .await
@@ -1192,12 +1021,14 @@ mod tests {
     }
 
     /* Shims download `ic` from `releases/latest` unless `IC_URL` overrides it. */
-    /// A reshape with something in it, for the lists below: every flow that runs the recreate shim is held to
-    /// the same pin and the same silence, this one included.
-    fn reshape_ask() -> ReshapeAsk {
-        ReshapeAsk {
-            memory_gib: Some(Some(12)),
-            ..ReshapeAsk::default()
+    /// A shape, for the lists below: every flow that runs the recreate shim is held to the same pin and the same
+    /// silence, these included.
+    fn shape() -> Shape {
+        Shape {
+            memory_gib: Some(12),
+            cpus: None,
+            privileged: false,
+            gpu: true,
         }
     }
 
@@ -1210,8 +1041,12 @@ mod tests {
             setup_script(&setup_args("c"), &context(Host::Unix, false)),
             recreate_script("work", None, false, Host::Windows, RELEASE),
             recreate_script("work", None, false, Host::Unix, RELEASE),
-            reshape_script("work", &reshape_ask(), Host::Windows, RELEASE).unwrap(),
-            reshape_script("work", &reshape_ask(), Host::Unix, RELEASE).unwrap(),
+            shape_script("work", Some(&shape()), "now", Host::Windows, RELEASE).unwrap(),
+            shape_script("work", Some(&shape()), "now", Host::Unix, RELEASE).unwrap(),
+            power_script("work", "restart", Host::Windows, RELEASE).unwrap(),
+            power_script("work", "restart", Host::Unix, RELEASE).unwrap(),
+            list_script(Host::Windows, RELEASE),
+            list_script(Host::Unix, RELEASE),
         ] {
             assert_eq!(
                 env_of(&run, "IC_URL"),
@@ -1243,7 +1078,9 @@ mod tests {
             setup_script(&setup_args("c"), &context(Host::Windows, false)),
             setup_script(&setup_args("c"), &context(Host::Unix, false)),
             recreate_script("work", None, false, Host::Windows, RELEASE),
-            reshape_script("work", &reshape_ask(), Host::Windows, RELEASE).unwrap(),
+            shape_script("work", None, "now", Host::Windows, RELEASE).unwrap(),
+            power_script("work", "stop", Host::Windows, RELEASE).unwrap(),
+            list_script(Host::Windows, RELEASE),
             remove_script("work", Host::Windows, RELEASE),
             remove_script("work", Host::Unix, RELEASE),
             sync_script(
@@ -1433,124 +1270,71 @@ mod tests {
         );
     }
 
-    /* THE RESHAPE, PER HOST: the shim's own switch first, then `ic`'s flags verbatim behind it. */
+    /* THE SHAPE, PER HOST: the shim's own switch first, then `ic sandbox shape`'s flags verbatim behind it. */
     #[test]
-    fn reshape_forwards_ics_flags_behind_the_shims_own_switch_per_host() {
-        let asked = ReshapeAsk {
-            memory_gib: Some(Some(12)),
-            cpus: Some(Some(4)),
-            ..ReshapeAsk::default()
-        };
-        let unix = reshape_script("work", &asked, Host::Unix, RELEASE).unwrap();
+    fn a_shape_forwards_ics_flags_behind_the_shims_own_switch_per_host() {
+        let unix =
+            shape_script("work", Some(&shape()), "nextRestart", Host::Unix, RELEASE).unwrap();
         assert_eq!(unix.file, "recreate.sh");
         assert_eq!(
             unix.args,
-            vec!["work", "--reshape", "--memory", "12g", "--cpus", "4"]
+            vec![
+                "work",
+                "--shape",
+                "--memory",
+                "12g",
+                "--cpus",
+                "default",
+                "--privileged",
+                "off",
+                "--gpus",
+                "on",
+                "--when",
+                "next-restart"
+            ]
         );
-
-        let windows = reshape_script("work", &asked, Host::Windows, RELEASE).unwrap();
+        let windows = shape_script("work", None, "nextRestart", Host::Windows, RELEASE).unwrap();
         assert_eq!(windows.file, "recreate.ps1");
-        assert_eq!(
-            windows.args,
-            vec!["-Slug", "work", "-Reshape", "--memory", "12g", "--cpus", "4"]
-        );
+        assert_eq!(windows.args, vec!["-Slug", "work", "-Shape", "--forget"]);
+        assert!(shape_script("work", Some(&shape()), "later", Host::Unix, RELEASE).is_err());
     }
 
-    /// A cleared cap is `ic`'s own word for "back to what you derive", and a switch is spelled out both ways:
-    /// a bare `--privileged` could only ever add, and the same verb has to be able to withdraw the ask.
+    /* POWER GOES THROUGH ic, so a Restart here applies a shape saved for the next restart, as it does from every other door. */
     #[test]
-    fn a_cleared_cap_is_ics_default_and_a_switch_is_spelled_out() {
+    fn power_is_ics_verb_behind_the_shims_switch_and_nothing_else_is_forwarded() {
         assert_eq!(
-            reshape_flags(&ReshapeAsk {
-                memory_gib: Some(None),
-                ..ReshapeAsk::default()
-            }),
-            vec!["--memory", "default"]
+            power_script("work", "restart", Host::Unix, RELEASE)
+                .unwrap()
+                .args,
+            vec!["work", "--restart"]
         );
         assert_eq!(
-            reshape_flags(&ReshapeAsk {
-                cpus: Some(None),
-                privileged: Some(true),
-                gpu: Some(false),
-                ..ReshapeAsk::default()
-            }),
-            vec!["--cpus", "default", "--privileged", "on", "--gpus", "off"]
+            power_script("work", "stop", Host::Windows, RELEASE)
+                .unwrap()
+                .args,
+            vec!["-Slug", "work", "-Stop"]
         );
+        assert!(power_script("work", "rm", Host::Unix, RELEASE).is_err());
+        assert_eq!(list_script(Host::Unix, RELEASE).args, vec!["--list"]);
+        assert_eq!(list_script(Host::Windows, RELEASE).args, vec!["-List"]);
     }
 
+    /* A shape off the wire is whole: a missing field is a refusal, not a "leave it". */
     #[test]
-    fn a_reshape_with_nothing_to_change_is_refused_before_anything_spawns() {
-        assert!(reshape_script("work", &ReshapeAsk::default(), Host::Unix, RELEASE).is_err());
-        assert!(reshape_flags(&ReshapeAsk::default()).is_empty());
-    }
-
-    /* THE THREE STATES OF A CAP'S ASK, off the wire. */
-    #[test]
-    fn a_reshape_ask_keeps_null_and_absent_apart() {
-        let parsed: ReshapeAsk =
-            serde_json::from_str(r#"{"memoryGib":null,"cpus":8,"gpu":true}"#).unwrap();
+    fn a_shape_off_the_wire_is_whole() {
+        let parsed: Shape =
+            serde_json::from_str(r#"{"memoryGib":null,"cpus":8,"privileged":false,"gpu":true}"#)
+                .unwrap();
         assert_eq!(
             parsed,
-            ReshapeAsk {
-                memory_gib: Some(None),
-                cpus: Some(Some(8)),
-                privileged: None,
-                gpu: Some(true),
-            }
-        );
-        assert_eq!(
-            serde_json::from_str::<ReshapeAsk>("{}").unwrap(),
-            ReshapeAsk::default()
-        );
-    }
-
-    /* WHAT `docker inspect` SAYS ABOUT A CONTAINER'S SHARE, read the way the machine agent reads it for the web. */
-    #[test]
-    fn a_containers_share_is_read_off_docker_inspect() {
-        let inspected = serde_json::json!({
-            "Name": "/intentic-sandbox-work",
-            "HostConfig": {
-                "Memory": 12_884_901_888u64,
-                "NanoCpus": 4_000_000_000u64,
-                "Privileged": true,
-                "DeviceRequests": [{ "Driver": "nvidia", "Count": -1, "Capabilities": [["gpu"]] }]
-            },
-            "Config": {
-                "Env": ["PATH=/usr/bin", "SANDBOX_RUNTIME=--gpus=all", "SANDBOX_OVERLAY_RUNTIME=--privileged"]
-            }
-        });
-        assert_eq!(
-            resources_from(&inspected),
-            SandboxResources {
-                memory_bytes: Some(12_884_901_888),
-                cpus: Some(4.0),
-                privileged: true,
-                gpu: true,
-                host_runtime: vec!["--gpus=all".to_string()],
-                overlay_runtime: vec!["--privileged".to_string()],
-            }
-        );
-        // Unbounded, unprivileged, and a GPU spelled by capability alone, with no stamps at all.
-        let bare = serde_json::json!({
-            "HostConfig": { "Memory": 0, "NanoCpus": 0, "Privileged": false, "DeviceRequests": [{ "Capabilities": [["gpu"]] }] },
-            "Config": { "Env": [] }
-        });
-        assert_eq!(
-            resources_from(&bare),
-            SandboxResources {
-                memory_bytes: None,
-                cpus: None,
+            Shape {
+                memory_gib: None,
+                cpus: Some(8),
                 privileged: false,
-                gpu: true,
-                host_runtime: vec![],
-                overlay_runtime: vec![],
+                gpu: true
             }
         );
-        // The listing keys each object by the name docker prints with a leading slash; an object with no name
-        // (or a warning line) is dropped rather than thrown on.
-        let shares = shares_from(&format!("{inspected}\nWARNING: something\n{bare}\n"));
-        assert_eq!(shares.len(), 1);
-        assert!(shares.contains_key("intentic-sandbox-work"));
+        assert!(serde_json::from_str::<Shape>(r#"{"cpus":8}"#).is_err());
     }
 
     /// The engine's size as `docker info` prints it for the form's rails. Unreadable is None, never a guess.
@@ -1583,7 +1367,12 @@ mod tests {
     fn no_flow_but_setup_ever_elevates() {
         assert!(!recreate_script("work", None, false, Host::Unix, RELEASE).elevate);
         assert!(
-            !reshape_script("work", &reshape_ask(), Host::Unix, RELEASE)
+            !shape_script("work", Some(&shape()), "now", Host::Unix, RELEASE)
+                .unwrap()
+                .elevate
+        );
+        assert!(
+            !power_script("work", "restart", Host::Unix, RELEASE)
                 .unwrap()
                 .elevate
         );

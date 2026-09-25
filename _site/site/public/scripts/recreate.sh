@@ -9,6 +9,9 @@
 #   sh recreate.sh <SLUG> --channel <tag>                                # move onto a release channel
 #   sh recreate.sh <SLUG> --rollback                                     # back to the previous image
 #   sh recreate.sh <SLUG> --reshape --memory 12g --cpus 4 …              # same image, a different share of the machine
+#   sh recreate.sh <SLUG> --shape --memory 12g … --when next-restart      # a shape now, or for the next restart
+#   sh recreate.sh <SLUG> --start|--stop|--restart                       # power, applying a saved shape
+#   sh recreate.sh --list                                                 # every sandbox here, as JSON
 #   sh recreate.sh --dev [SLUG]                                          # dev: the locally-built dev image
 #
 # The binary is downloaded on EVERY run, so re-running a card's command upgrades an existing install; only a
@@ -118,6 +121,8 @@ case "${1:-}" in
         shift
         exec "$IC" sandbox dev "$@"
         ;;
+    # The desktop app's listing when the ic on this machine is older than the app: this fetch brings it level.
+    --list) exec "$IC" sandbox list --json ;;
     "")
         exec "$IC" sandbox update
         ;;
@@ -136,6 +141,13 @@ case "${1:-}" in
                 shift
                 exec "$IC" sandbox reshape "$slug" "$@"
                 ;;
+            # ic's own `shape` surface (the four fields and --when, or --forget), forwarded verbatim like --reshape.
+            --shape)
+                shift
+                exec "$IC" sandbox shape "$slug" "$@"
+                ;;
+            # Power through ic, so a start or restart applies the shape saved for the next restart.
+            --start | --stop | --restart) exec "$IC" sandbox "${1#--}" "$slug" ;;
             --channel)
                 shift
                 exec "$IC" sandbox update "$slug" --channel "${1:?--channel needs a tag, e.g. --channel stable}"

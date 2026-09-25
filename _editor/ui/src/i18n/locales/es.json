@@ -178,7 +178,7 @@
         "sandboxUsingRightNow": "Este es el sandbox que estás usando ahora mismo: esta página lo perderá hasta que vuelva.",
         "saveForNextRestart": "Guardar para el próximo reinicio",
         "savedForNextRestart": "Guardado para el próximo reinicio: {share}. Los campos lo muestran; «Aplicar ahora» reinicia con ello de inmediato.",
-        "savingKeepsItRunning": "Guardar deja el sandbox funcionando tal como está. Su próximo reinicio, actualización, reversión o reconstrucción aplica la nueva asignación."
+        "savingKeepsItRunning": "Guardar deja el sandbox funcionando tal como está. ic conserva la nueva asignación y la aplica en el próximo reinicio del sandbox a través de ic: Reiniciar aquí, Iniciar, una actualización, una reversión o una reconstrucción. Que Docker reinicie el contenedor por su cuenta, tras un fallo o un reinicio del equipo, no la aplica."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "Esto elimina el sandbox y todo lo que contiene — sus archivos y su historial — de ese dispositivo. No se puede deshacer.",

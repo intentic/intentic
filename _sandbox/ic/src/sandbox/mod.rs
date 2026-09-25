@@ -1,10 +1,12 @@
 pub mod connect;
+pub mod desired;
 pub mod doctor;
+pub mod listing;
+pub mod power;
 pub mod preflight;
 pub mod recreate;
 pub mod remove;
 pub mod restore;
-pub mod saved_shape;
 pub mod staged;
 pub mod trash;
 
@@ -68,7 +70,8 @@ pub fn container_status(slug: &str) -> String {
         .unwrap_or_else(|| "?".to_string())
 }
 
-/// `ic sandbox list` — what the pickers show, as a verb of its own (the desktop app's manager reads this).
+/// `ic sandbox list` — what the pickers show, as a verb of its own; `--json` is the machine-readable answer the
+/// desktop app and the machine agent read (listing.rs).
 pub fn list() -> Result<()> {
     docker::require_daemon()?;
     let slugs = list_slugs();

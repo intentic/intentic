@@ -33,9 +33,12 @@ export const createDeviceSystemRoutes = (services: Services) => {
                 op: input.op,
                 slug: input.slug,
                 ...(input.hash === undefined ? {} : { hash: input.hash }),
-                // The reshape's payload: a closed form the machine spells into `ic` flags, never a command line.
+                // `set-shape`'s payload: a whole shape and when it takes effect, a closed form the machine spells into
+                // `ic` flags, never a command line.
+                ...(input.shape === undefined ? {} : { shape: input.shape }),
+                ...(input.when === undefined ? {} : { when: input.when }),
+                // The old `reshape` op's delta and its `later`, read for one release from pages older than `set-shape`.
                 ...(input.resources === undefined ? {} : { resources: input.resources }),
-                // Save the reshape for the sandbox's next restart instead of restarting it now.
                 ...(input.later === true ? { later: true } : {}),
             });
         }),

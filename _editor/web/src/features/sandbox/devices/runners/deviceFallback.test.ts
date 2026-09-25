@@ -19,11 +19,12 @@ describe(`the lifecycle verbs ic owns`, () => {
     });
 });
 
-describe(`the power verbs docker can do alone`, () => {
-    test(`each names the container, not the slug: docker has never heard of a sandbox`, () => {
-        expect(sandboxFallback(`start`, `work`)).toBe(`docker start intentic-sandbox-work`);
-        expect(sandboxFallback(`stop`, `work`)).toBe(`docker stop intentic-sandbox-work`);
-        expect(sandboxFallback(`restart`, `work`)).toBe(`docker restart intentic-sandbox-work`);
+describe(`the power verbs, which go through ic too`, () => {
+    // A bare `docker restart` would skip the shape saved for the next restart; ic's own verb applies it.
+    test(`each is the ic verb of the same name, named by slug`, () => {
+        expect(sandboxFallback(`start`, `work`)).toBe(`ic sandbox start work`);
+        expect(sandboxFallback(`stop`, `work`)).toBe(`ic sandbox stop work`);
+        expect(sandboxFallback(`restart`, `work`)).toBe(`ic sandbox restart work`);
     });
 
     test(`a log tail asks for the same depth the pane would have shown`, () => {
@@ -31,37 +32,33 @@ describe(`the power verbs docker can do alone`, () => {
     });
 });
 
-describe(`a reshape`, () => {
-    test(`carries the values that were just asked for, spelled the way ic takes them`, () => {
-        expect(sandboxFallback(`resources`, `work`, { memoryGib: 12, cpus: 4 })).toBe(`ic sandbox reshape work --memory 12g --cpus 4`);
-        expect(sandboxFallback(`resources`, `work`, { privileged: true, gpu: false })).toBe(`ic sandbox reshape work --privileged on --gpus off`);
+describe(`a shape`, () => {
+    // Whole, with when: the line a person types does exactly what the button asked the machine agent to do.
+    test(`is set whole, spelled the way ic takes it, with a cleared cap as ic's own default`, () => {
+        expect(sandboxFallback(`resources`, `work`, { shape: { memoryGib: 12, cpus: null, privileged: true, gpu: false }, when: `now` })).toBe(
+            `ic sandbox shape work --memory 12g --cpus default --privileged on --gpus off --when now`,
+        );
     });
 
-    // null is the form's "back to what this machine derives", which ic spells `default`; dropping it would print a
-    // line that sets nothing where the user asked for a reset.
-    test(`spells a cleared cap as ic's own default`, () => {
-        expect(sandboxFallback(`resources`, `work`, { memoryGib: null, cpus: null })).toBe(`ic sandbox reshape work --memory default --cpus default`);
+    test(`saved for the next restart says so, and a save of what already runs forgets what was saved`, () => {
+        expect(sandboxFallback(`resources`, `work`, { shape: { memoryGib: 20, cpus: 4, privileged: false, gpu: false }, when: `nextRestart` })).toBe(
+            `ic sandbox shape work --memory 20g --cpus 4 --privileged off --gpus off --when next-restart`,
+        );
+        expect(sandboxFallback(`resources`, `work`, { forget: true })).toBe(`ic sandbox shape work --forget`);
     });
 
-    // ic refuses a reshape that changes nothing, so a line carrying one would only fail a second way.
-    test(`is offered no line at all when there is nothing to change`, () => {
+    // The form always answers with something; without an answer there is no line that would do what was asked.
+    test(`is offered no line at all without the form's answer`, () => {
         expect(sandboxFallback(`resources`, `work`)).toBeUndefined();
-        expect(sandboxFallback(`resources`, `work`, {})).toBeUndefined();
-    });
-
-    // The form's Save: the same flags, kept for the next restart; a Save that saved nothing forgets what was saved.
-    test(`saved for the next restart carries --later, and an empty save is --forget`, () => {
-        expect(sandboxFallback(`resources`, `work`, { memoryGib: 20 }, true)).toBe(`ic sandbox reshape work --memory 20g --later`);
-        expect(sandboxFallback(`resources`, `work`, undefined, true)).toBe(`ic sandbox reshape work --forget`);
     });
 });
 
 // A verb with no line is a row that silently offers no way out, so the absence is asserted rather than assumed:
-// every verb but the empty reshape has one.
+// every verb a row can press has one.
 test(`every verb a row can press has a line behind it`, () => {
     const verbs: readonly SandboxVerb[] = [`start`, `stop`, `restart`, `update`, `rollback`, `resources`, `logs`, `remove`];
     for (const verb of verbs) {
-        expect(sandboxFallback(verb, `work`, { cpus: 2 })).toBeTypeOf(`string`);
+        expect(sandboxFallback(verb, `work`, { forget: true })).toBeTypeOf(`string`);
     }
 });
 

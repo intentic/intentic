@@ -8,7 +8,7 @@ import {
     type DeviceSandboxGroup,
     type DeviceSandboxRow,
     Notice,
-    type ResourcesAsk,
+    type ResourcesForm,
     Row,
     RowGroup,
     RowNote,
@@ -64,7 +64,7 @@ import {
     sandboxPower,
     sandboxRecreate,
     sandboxRemove,
-    sandboxReshape,
+    sandboxShape,
     setupAlert,
     setupProgress,
     setupRun,
@@ -409,17 +409,18 @@ const wakeDockerIfNeeded = async (): Promise<void> => {
     await startDocker();
 };
 
-// Maps to the shared row shape; docker's `null` becomes an absent key, since absent and false differ (no sidecar
-// vs. a down one).
+// Maps to the shared row shape; ic's rows already leave a key absent rather than null, since absent and false differ
+// (no sidecar vs. a down one).
 const sandboxRows = computed<DeviceSandboxRow[]>(() =>
     sandboxes.value.map((sandbox) => ({
         slug: sandbox.slug,
         running: sandbox.running,
         image: sandbox.image,
-        ...(sandbox.name === null ? {} : { name: sandbox.name }),
-        ...(sandbox.tunnelRunning === null ? {} : { tunnelRunning: sandbox.tunnelRunning }),
-        // Share docker enforces, already in the kit's shape.
-        ...(sandbox.resources === null ? {} : { resources: sandbox.resources }),
+        ...(sandbox.name === undefined ? {} : { name: sandbox.name }),
+        ...(sandbox.tunnelRunning === undefined ? {} : { tunnelRunning: sandbox.tunnelRunning }),
+        // The share docker enforces, the shape it runs with and the shape saved for its next restart, as ic reports
+        // them, already in the kit's shape.
+        ...(sandbox.resources === undefined ? {} : { resources: sandbox.resources }),
     })),
 );
 
@@ -798,15 +799,17 @@ const recreate = async (slug: string, hash: string | undefined, rollback: boolea
     busy.value = undefined;
 };
 
-// Same recreate, different resource share; reports as `mode: "reshape"` so restart-counting funnels include it.
-// The ask is only what the form changed.
-const reshape = async (slug: string, ask: ResourcesAsk): Promise<void> => {
+// The form's whole shape through `ic sandbox shape`: applied now (the same recreate, a different share; reported as
+// `mode: "reshape"` so restart-counting funnels include it), or saved for the next restart through ic, or forgotten
+// (`save` with no shape), neither of which restarts anything.
+const reshape = async (slug: string, shape: ResourcesForm | undefined, when: `now` | `nextRestart`): Promise<void> => {
     busy.value = { slug, verb: `resources` };
     const startedAt = Date.now();
-    track(`desktop_recreate_started`, { mode: `reshape`, source: `manager` });
-    const failure = await start(RUN_OF.resources(slug), () => sandboxReshape(slug, ask));
+    const mode = when === `now` ? `reshape` : `save-shape`;
+    track(`desktop_recreate_started`, { mode, source: `manager` });
+    const failure = await start(RUN_OF.resources(slug), () => sandboxShape(slug, shape, when));
     track(`desktop_recreate_finished`, {
-        mode: `reshape`,
+        mode,
         source: `manager`,
         ...runOutcome(RUN_OF.resources(slug), failure === undefined, startedAt),
     });
@@ -830,18 +833,21 @@ const openResources = (group: DeviceSandboxGroup, slug: string): void => {
     }
     reshaping.value = group;
 };
-const applyReshape = async (ask: ResourcesAsk | undefined): Promise<void> => {
+// Apply restarts onto the form's shape now; Save has ic keep it for the next restart through ic (undefined: forget
+// what is saved). This app's listing is ic's, so a saved shape is what the form opens on.
+const shapeWith = async (shape: ResourcesForm | undefined, when: `now` | `nextRestart`): Promise<void> => {
     const slug = reshaping.value === undefined ? undefined : slugOf(reshaping.value);
     reshaping.value = undefined;
-    // An empty ask means "apply what is saved", which this app never shows (its listing reads no saved share).
-    if (slug === undefined || ask === undefined || busy.value !== undefined || running.value) {
+    if (slug === undefined || busy.value !== undefined || running.value) {
         return;
     }
     // A log pane for a row that's about to change is now stale.
     openLog.value = undefined;
     rowFailure.value = undefined;
-    await reshape(slug, ask);
+    await reshape(slug, shape, when);
 };
+const applyReshape = async (shape: ResourcesForm): Promise<void> => await shapeWith(shape, `now`);
+const saveReshape = async (shape: ResourcesForm | undefined): Promise<void> => await shapeWith(shape, `nextRestart`);
 
 // The SPA's copy-paste cards arriving as a click instead: Update sends a slug, Environment adds the approved
 // digest, rollback sends the flag. Taken, not read, so revisiting this screen doesn't re-run it.
@@ -1400,14 +1406,16 @@ onUnmounted(() => {
                     <span v-if="info" class="truncate font-mono text-2xs text-subtle">{{ info.appUrl }}</span>
                 </footer>
 
-                <!-- The sandbox's current share (from docker) and this engine's size for the form's rails; no self-warning. -->
+                <!-- The sandbox's shape as ic reports it (running and saved for the next restart) and this engine's size for the form's rails; no self-warning. -->
                 <SandboxResourcesDialog
                     :open="reshaping !== undefined"
                     :name="reshaping?.title ?? ``"
                     :current="reshaping?.sandbox?.resources"
                     :engine="engine"
+                    can-save
                     @cancel="reshaping = undefined"
                     @apply="applyReshape"
+                    @save="saveReshape"
                 />
             </template>
         </div>

@@ -1,0 +1,10 @@
+[package]
+name = "intentic-bounded"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Run a child with a time limit and keep what it printed: the one copy `ic` and the desktop app share."
+
+# std only, on purpose: `ic` is downloaded on every run of a bootstrap shim, so its size is user-visible, and the
+# desktop crate keeps its dependency list short for its own reasons (its Cargo.toml says which).
+[dependencies]

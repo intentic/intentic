@@ -1,9 +1,11 @@
 import type { DeviceAgentOp, DeviceSandboxOp, DeviceSyncSwitch } from "@intentic/sandbox-contract";
-import type { DeviceSandboxGroup, NoticeModel, ResourcesAsk, SandboxVerb } from "@intentic/ui";
+import type { DeviceSandboxGroup, NoticeModel, ResourcesForm, SandboxVerb } from "@intentic/ui";
+import { runningShape } from "@intentic/ui/sandbox-resources";
 import { sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
 import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
+import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, TOO_OLD_TO_SAVE } from "../shapeFlow";
 import { type DeviceRow, folderOwner, isSelfMachine, type MachineRow, managerOf, rowRemoval } from "../deviceRows";
 import { manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../useDevices";
 import { useSandbox } from "../../client/useSandbox";
@@ -206,8 +208,8 @@ export interface DeviceOps {
     readonly actPrompt: ComputedRef<ActPrompt | undefined>;
     readonly confirmAct: () => void;
     readonly reshaping: Ref<{ group: DeviceSandboxGroup } | undefined>;
-    readonly applyReshape: (ask: ResourcesAsk | undefined) => void;
-    readonly saveReshape: (ask: ResourcesAsk | undefined) => void;
+    readonly applyReshape: (shape: ResourcesForm) => void;
+    readonly saveReshape: (shape: ResourcesForm | undefined) => void;
     readonly selfGroup: (group: DeviceSandboxGroup) => boolean;
 
     // Letting this machine go of one sandbox or of several: per row the container verb, the unpair command, or both,
@@ -331,13 +333,21 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     // The door container verbs travel through; undefined when no environment holds a socket.
     const door = (): string | undefined => managerOf(machine())?.device.hostId;
 
-    // `resources` is the one verb with something to say beyond its name: the form's answer, forwarded unread.
-    // `later` is the resources form's Save: the ask is kept for the sandbox's next restart and the container is not
-    // touched, so nothing is severed even on the sandbox serving this page.
-    const runAct = async (group: DeviceSandboxGroup, verb: SandboxVerb, resources?: ResourcesAsk, later = false): Promise<void> => {
+    // `resources` is the one verb with something to say beyond its name: the form's whole shape and when it takes
+    // effect (shapeFlow says which op carries it). A save or a forget touches no container, so nothing is severed even
+    // on the sandbox serving this page.
+    const runAct = async (group: DeviceSandboxGroup, verb: SandboxVerb, intent?: ShapeIntent): Promise<void> => {
         const hostId = door();
         const slug = group.sandbox?.slug;
         if (hostId === undefined || slug === undefined || working.value) {
+            return;
+        }
+        const share = group.sandbox?.resources;
+        let flow: ReturnType<typeof shapeFlow> | undefined;
+        try {
+            flow = intent === undefined || share === undefined ? undefined : shapeFlow(intent, canSetShape(managerOf(machine())?.device.facts), runningShape(share));
+        } catch (error) {
+            failure.value = { key: rowKey(group), notice: noticeFrom(error, TOO_OLD_TO_SAVE) };
             return;
         }
         const key = rowKey(group);
@@ -349,17 +359,16 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         openLog.value = verb === `logs` ? key : undefined;
         const endMark = markVerb(hubWork, group, verb);
         try {
-            const message = await manageDeviceSandbox(hostId, slug, OP[verb], {
-                resources,
-                later,
+            const message = await manageDeviceSandbox(hostId, slug, flow?.op ?? OP[verb], {
+                ...flow?.payload,
                 onLine: (line) => (runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] }),
                 // The same severing the dialog warned about: losing the stream is the answer, not a failure to report.
-                severing: !later && severs(group, verb),
+                severing: (intent === undefined || shapeSevers(intent)) && severs(group, verb),
             });
             // A log tail's result line would only restate the pane above it, so it's left to be the answer.
             outcome.value = verb === `logs` ? undefined : { key, message };
         } catch (error) {
-            failure.value = { key, notice: noticeFrom(error, `That didn't work on this device.`), command: sandboxFallback(verb, slug, resources, later) };
+            failure.value = { key, notice: noticeFrom(error, `That didn't work on this device.`), command: sandboxFallback(verb, slug, intent) };
             if (verb === `logs`) {
                 openLog.value = undefined;
             }
@@ -428,15 +437,15 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
     };
 
-    const reshapeWith = (ask: ResourcesAsk | undefined, later: boolean): void => {
+    const reshapeWith = (intent: ShapeIntent): void => {
         const pending = reshaping.value;
         reshaping.value = undefined;
         if (pending !== undefined) {
-            void runAct(pending.group, `resources`, ask, later);
+            void runAct(pending.group, `resources`, intent);
         }
     };
-    const applyReshape = (ask: ResourcesAsk | undefined): void => reshapeWith(ask, false);
-    const saveReshape = (ask: ResourcesAsk | undefined): void => reshapeWith(ask, true);
+    const applyReshape = (shape: ResourcesForm): void => reshapeWith({ shape, when: `now` });
+    const saveReshape = (shape: ResourcesForm | undefined): void => reshapeWith(shape === undefined ? { forget: true } : { shape, when: `nextRestart` });
 
     const removalPrompt = computed<RemovalPrompt | undefined>(() => {
         const pending = confirmingRemoval.value;

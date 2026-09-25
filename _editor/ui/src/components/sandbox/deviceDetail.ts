@@ -44,6 +44,13 @@ export interface DeviceFolderRow {
     backupStatus?: string | undefined;
 }
 
+export interface DeviceSandboxShape {
+    memoryGib: number | null;
+    cpus: number | null;
+    privileged: boolean;
+    gpu: boolean;
+}
+
 // One container's share of its machine right now: caps, whether privileged, whether the GPU rides along,
 // and who asked for each privilege (`overlayRuntime`: the approved environment; `hostRuntime`: the owner).
 export interface DeviceSandboxResources {
@@ -56,17 +63,15 @@ export interface DeviceSandboxResources {
     hostRuntime: readonly string[];
     overlayRuntime: readonly string[];
     /**
-     * A reshape saved for the next restart and not yet in force (the contract's `saved`); absent when none is. The
-     * same shape as `ResourcesAsk`, spelled here rather than imported so the two modules don't import each other.
+     * The shape the container runs with, the owner's own ask it carries (`null` on a cap is the default), and the
+     * shape saved for its next restart through ic; both whole, both as ic reports them (the contract's `shape` and
+     * `desired`). Absent from an agent older than `set-shape`. The same shape as `ResourcesForm`, spelled here
+     * rather than imported so the two modules don't import each other.
      */
-    saved?:
-        | {
-              memoryGib?: number | null | undefined;
-              cpus?: number | null | undefined;
-              privileged?: boolean | undefined;
-              gpu?: boolean | undefined;
-          }
-        | undefined;
+    shape?: DeviceSandboxShape | undefined;
+    desired?: DeviceSandboxShape | undefined;
+    /** An older agent's saved share (the contract's read-only `saved`): only ever said on the row. */
+    saved?: object | undefined;
 }
 
 // One sandbox container on the machine, the docker half of the sandbox the two lists above describe.
@@ -99,8 +104,8 @@ export const resourcesSummary = (row: DeviceSandboxRow): string | undefined => {
         ...(share.cpus === undefined ? [] : [`${share.cpus} ${share.cpus === 1 ? `CPU` : `CPUs`}`]),
         ...(share.privileged ? [`privileged`] : []),
         ...(share.gpu ? [`GPU`] : []),
-        // Said on the row too, not only in the form: a saved share is a change still waiting for a restart.
-        ...(share.saved === undefined ? [] : [`changes on restart`]),
+        // Said on the row too, not only in the form: a saved shape is a change still waiting for a restart.
+        ...(share.desired === undefined && share.saved === undefined ? [] : [`changes on restart`]),
     ];
     return parts.length === 0 ? undefined : parts.join(` · `);
 };

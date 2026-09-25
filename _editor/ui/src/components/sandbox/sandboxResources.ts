@@ -131,42 +131,27 @@ export const askFrom = (initial: ResourcesForm, form: ResourcesForm): ResourcesA
     return Object.keys(ask).length === 0 ? undefined : ask;
 };
 
-// ---- a share saved for the next restart ----
-// A saved ask is a delta against what RUNS (the container's share), the same shape Apply sends. ic lays whatever
-// ask arrives over it on the next recreate, field by field, so the form has three states to keep apart: what runs,
-// what the next restart would leave (runs + saved), and what the reader typed.
+// ---- the shape the form sends: whole, never a delta ----
+// `ic` owns desired vs running: it reports the shape a container runs with (`shape`, the owner's ask it carries) and the
+// shape saved for its next restart (`desired`), both WHOLE, and it is sent whole shapes back. Nothing here lays one
+// over another; the form holds a shape and compares shapes.
 
-// The form with an ask laid over it: what the container would run with once that ask is applied.
-export const withAsk = (form: ResourcesForm, ask: ResourcesAsk | undefined): ResourcesForm => ({
-    memoryGib: ask?.memoryGib === undefined ? form.memoryGib : ask.memoryGib,
-    cpus: ask?.cpus === undefined ? form.cpus : ask.cpus,
-    privileged: ask?.privileged ?? form.privileged,
-    gpu: ask?.gpu ?? form.gpu,
-});
+// The shape the container runs with, in the form's vocabulary. From `shape` when the machine reported it (an agent that
+// has `set-shape`); from docker's enforced share otherwise, the only reading an older agent gives, used for nothing but
+// the old `reshape` op's delta.
+export const runningShape = (current: DeviceSandboxResources): ResourcesForm => current.shape ?? formFrom(current);
 
-// Whether two asks say the same thing, key for key; undefined and {} are both "nothing".
-export const sameAsk = (a: ResourcesAsk | undefined, b: ResourcesAsk | undefined): boolean => {
-    const keys = [`memoryGib`, `cpus`, `privileged`, `gpu`] as const;
-    return keys.every((key) => a?.[key] === b?.[key]);
-};
+// Whether two shapes say the same thing, field for field.
+export const sameShape = (a: ResourcesForm, b: ResourcesForm): boolean =>
+    a.memoryGib === b.memoryGib && a.cpus === b.cpus && a.privileged === b.privileged && a.gpu === b.gpu;
 
-// What Save sends: the typed form against what RUNS, since it replaces whatever was saved before. Undefined is
-// "nothing differs from what runs", which forgets a saved share rather than saving an empty one.
-export const saveAskFrom = (running: ResourcesForm, form: ResourcesForm): ResourcesAsk | undefined => askFrom(running, form);
-
-// What Apply sends while something is saved: the typed form against runs + saved, because ic applies the saved share
-// under whatever arrives. A field the reader put back to what runs is therefore sent explicitly, or the saved value
-// would come through the gap.
-export const applyAskFrom = (running: ResourcesForm, saved: ResourcesAsk | undefined, form: ResourcesForm): ResourcesAsk | undefined =>
-    askFrom(withAsk(running, saved), form);
-
-// A saved ask in a few words, e.g. "20 GiB memory · 4 CPUs"; the words `resourcesSummary` uses for a running share.
-export const askSummary = (ask: ResourcesAsk): string =>
+// A shape in a few words, e.g. "20 GiB memory · every CPU · not privileged · GPU"; the words `resourcesSummary` uses.
+export const shapeSummary = (shape: ResourcesForm): string =>
     [
-        ...(ask.memoryGib === undefined ? [] : [ask.memoryGib === null ? `default memory` : `${ask.memoryGib} GiB memory`]),
-        ...(ask.cpus === undefined ? [] : [ask.cpus === null ? `every CPU` : `${ask.cpus} ${ask.cpus === 1 ? `CPU` : `CPUs`}`]),
-        ...(ask.privileged === undefined ? [] : [ask.privileged ? `privileged` : `not privileged`]),
-        ...(ask.gpu === undefined ? [] : [ask.gpu ? `GPU` : `no GPU`]),
+        shape.memoryGib === null ? `default memory` : `${shape.memoryGib} GiB memory`,
+        shape.cpus === null ? `every CPU` : `${shape.cpus} ${shape.cpus === 1 ? `CPU` : `CPUs`}`,
+        shape.privileged ? `privileged` : `not privileged`,
+        shape.gpu ? `GPU` : `no GPU`,
     ].join(` · `);
 
 // A number field's text, read back live. Not-a-number stays out entirely, so a field mid-edit ("1e")

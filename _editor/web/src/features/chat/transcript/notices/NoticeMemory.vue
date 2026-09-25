@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { SandboxResourcesDialog } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { engineMemoryGib, type ResourcesAsk } from "@intentic/ui/sandbox-resources";
+import { engineMemoryGib, type ResourcesForm } from "@intentic/ui/sandbox-resources";
 import { computed, ref } from "vue";
 import { useSelfResources } from "../../../sandbox/devices/useSelfResources";
 import type { ChatMessage } from "../transcript";
@@ -28,10 +28,10 @@ const offered = computed(() => selfResources.reshapable.value && suggestedGib.va
 const resizing = ref(false);
 const failed = ref<string | undefined>();
 // The sandbox recreates under this page, so the reconnect is the answer; only a refusal the machine sent is a sentence.
-const apply = async (ask: ResourcesAsk | undefined): Promise<void> => {
+const apply = async (shape: ResourcesForm): Promise<void> => {
     resizing.value = false;
     failed.value = undefined;
-    await selfResources.apply(ask).catch((error: unknown) => {
+    await selfResources.apply(shape).catch((error: unknown) => {
         failed.value = error instanceof Error ? error.message : `That didn't work on this device.`;
     });
 };

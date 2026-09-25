@@ -1,6 +1,7 @@
-import { DEVICE_FEATURE_RESHAPE_LATER, deviceSupports, hostRunningSandbox } from "@intentic/sandbox-contract";
-import type { DeviceSandboxResources, DeviceSandboxRow, EngineFacts, ResourcesAsk } from "@intentic/ui";
+import { hostRunningSandbox } from "@intentic/sandbox-contract";
+import { type DeviceSandboxResources, type DeviceSandboxRow, type EngineFacts, type ResourcesForm, runningShape } from "@intentic/ui";
 import { computed, type ComputedRef, ref, type Ref } from "vue";
+import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers } from "./shapeFlow";
 import { manageDeviceSandbox, useDevices } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 
@@ -24,24 +25,21 @@ export interface SelfResources {
     readonly engine: ComputedRef<EngineFacts | undefined>;
     /** Whether a reshape could be sent at all: a reachable door, a slug, and a reported share to change. */
     readonly reshapable: ComputedRef<boolean>;
-    /**
-     * Whether the machine's agent can save a share for the next restart. An older one would drop `later` and restart
-     * the sandbox now, so Save is not offered for it at all.
-     */
+    /** Whether the machine's agent can have ic save a shape for the next restart; Save is not offered otherwise. */
     readonly canSave: ComputedRef<boolean>;
     /** True while an apply is in flight; both callers disable their control on it. */
     readonly applying: Ref<boolean>;
     /**
-     * Sends the ask and answers the machine's own sentence. Recreates the container, which takes this page's
-     * connection down with it — the caller warns about that beforehand, and `manageDeviceSandbox` reads the
-     * dropped stream as the expected ending rather than a failure.
+     * Restarts this sandbox onto the shape and answers the machine's own sentence. Recreates the container, which
+     * takes this page's connection down with it — the caller warns about that beforehand, and `manageDeviceSandbox`
+     * reads the dropped stream as the expected ending rather than a failure.
      */
-    readonly apply: (ask: ResourcesAsk | undefined) => Promise<string>;
+    readonly apply: (shape: ResourcesForm) => Promise<string>;
     /**
-     * Saves the ask for this sandbox's next restart (undefined forgets what is saved). The container is not touched,
-     * so the machine's own sentence does arrive.
+     * Has ic save the shape for this sandbox's next restart (undefined forgets what is saved). The container is not
+     * touched, so the machine's own sentence does arrive.
      */
-    readonly save: (ask: ResourcesAsk | undefined) => Promise<string>;
+    readonly save: (shape: ResourcesForm | undefined) => Promise<string>;
     readonly refetch: () => void;
 }
 
@@ -63,34 +61,33 @@ export function useSelfResources(): SelfResources {
     const row = computed(() => door.value?.sandboxes?.find((box) => box.slug === slug.value));
     const current = computed(() => row.value?.resources);
     const engine = computed(() => door.value?.facts?.engine);
-    const canSave = computed(() => deviceSupports(door.value?.facts, DEVICE_FEATURE_RESHAPE_LATER));
+    const canSave = computed(() => canSetShape(door.value?.facts));
 
     const applying = ref(false);
     // A share the machine never reported leaves the form nothing to open on, so there is nothing to offer either.
     const reshapable = computed(() => hostId.value !== undefined && slug.value !== undefined && current.value !== undefined);
 
-    const send = async (ask: ResourcesAsk | undefined, later: boolean): Promise<string> => {
+    const send = async (intent: ShapeIntent): Promise<string> => {
         const sendTo = hostId.value;
         const name = slug.value;
-        if (sendTo === undefined || name === undefined) {
+        const share = current.value;
+        if (sendTo === undefined || name === undefined || share === undefined) {
             throw new Error(`This sandbox's machine is not connected, so its share can't be changed from here.`);
         }
-        if (later && !canSave.value) {
-            throw new Error(`This machine's agent is too old to save a change for the next restart. Update its agent first.`);
-        }
+        const { op, payload } = shapeFlow(intent, canSave.value, runningShape(share));
         applying.value = true;
         try {
-            // `severing`: a reshape recreates the container, and the daemon relaying this call lives in it, so no
+            // `severing`: applying recreates the container, and the daemon relaying this call lives in it, so no
             // result frame can arrive. Without this the drop reads as a failure on a reshape that worked. A save
             // touches nothing, so its answer does arrive.
-            return await manageDeviceSandbox(sendTo, name, `reshape`, { resources: ask, later, severing: !later });
+            return await manageDeviceSandbox(sendTo, name, op, { ...payload, severing: shapeSevers(intent) });
         } finally {
             applying.value = false;
             refetch();
         }
     };
-    const apply = async (ask: ResourcesAsk | undefined): Promise<string> => await send(ask, false);
-    const save = async (ask: ResourcesAsk | undefined): Promise<string> => await send(ask, true);
+    const apply = async (shape: ResourcesForm): Promise<string> => await send({ shape, when: `now` });
+    const save = async (shape: ResourcesForm | undefined): Promise<string> => await send(shape === undefined ? { forget: true } : { shape, when: `nextRestart` });
 
     return { hostId, slug, row, current, engine, canSave, reshapable, applying, apply, save, refetch };
 }

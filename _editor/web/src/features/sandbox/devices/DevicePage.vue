@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DEVICE_FEATURE_RESHAPE_LATER, deviceSupports, hostEntryOf } from "@intentic/sandbox-contract";
+import { hostEntryOf } from "@intentic/sandbox-contract";
 import {
     Button,
     ConfirmDialog,
@@ -9,7 +9,7 @@ import {
     type DeviceSandboxGroup,
     Icon,
     mirroringOff,
-    type ResourcesAsk,
+    type ResourcesForm,
     Row,
     RowGroup,
     RowNote,
@@ -26,6 +26,7 @@ import DeviceEnvironment from "./DeviceEnvironment.vue";
 import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
 import DeviceRunners from "./runners/DeviceRunners.vue";
 import { boardRoute, cardRoute } from "./deviceLinks";
+import { canSetShape } from "./shapeFlow";
 import { deviceAgentPanel, machineAgent } from "./deviceAgent";
 import { blockAttention, deviceAttention } from "./health/deviceAttention";
 import {
@@ -177,8 +178,8 @@ const openIds = computed(() => {
     return mine === undefined ? [] : [mine.sandboxId];
 });
 
-const applyReshape = (ask: ResourcesAsk | undefined): void => ops.applyReshape(ask);
-const saveReshape = (ask: ResourcesAsk | undefined): void => ops.saveReshape(ask);
+const applyReshape = (shape: ResourcesForm): void => ops.applyReshape(shape);
+const saveReshape = (shape: ResourcesForm | undefined): void => ops.saveReshape(shape);
 
 // SELECTING IS OPT-IN. This list is read far more often than it is pruned, so the tick boxes appear only once
 // somebody asks for them; the resting state stays one column of names with one cluster of verbs per row.
@@ -698,7 +699,7 @@ const confirmRemoval = (): void => {
             :current="ops.reshaping.value?.group.sandbox?.resources"
             :engine="manager?.device.facts?.engine"
             :self-warning="ops.reshaping.value !== undefined && ops.selfGroup(ops.reshaping.value.group)"
-            :can-save="deviceSupports(manager?.device.facts, DEVICE_FEATURE_RESHAPE_LATER)"
+            :can-save="canSetShape(manager?.device.facts)"
             @cancel="ops.reshaping.value = undefined"
             @apply="applyReshape"
             @save="saveReshape"

@@ -171,7 +171,7 @@
         "sandboxUsingRightNow": "Das ist die Sandbox, die Sie gerade benutzen: diese Seite verliert sie, bis sie zurück ist.",
         "saveForNextRestart": "Für nächsten Neustart speichern",
         "savedForNextRestart": "Für den nächsten Neustart gespeichert: {share}. Die Felder zeigen es; „Jetzt übernehmen“ startet sofort damit neu.",
-        "savingKeepsItRunning": "Speichern lässt die Sandbox so weiterlaufen, wie sie ist. Ihr nächster Neustart, ihr nächstes Update, ihr nächster Rollback oder Neubau übernimmt den neuen Anteil."
+        "savingKeepsItRunning": "Speichern lässt die Sandbox so weiterlaufen, wie sie ist. ic behält den neuen Anteil und übernimmt ihn beim nächsten Neustart der Sandbox über ic: Neu starten hier, Starten, ein Update, ein Rollback oder ein Neubau. Startet Docker den Container selbst neu, nach einem Absturz oder einem Neustart des Rechners, wird er nicht übernommen."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "Das löscht die Sandbox und alles darin — ihre Dateien und ihre Historie — von diesem Gerät. Das lässt sich nicht rückgängig machen.",

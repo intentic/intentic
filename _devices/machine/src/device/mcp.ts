@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { browser } from "@intentic/browser";
 import { desktop, pngSize } from "@intentic/desktop-automation";
-import { type DeviceScopes, SandboxResourcesAskFieldsSchema } from "@intentic/sandbox-contract";
+import { type DeviceScopes, SandboxResourcesAskFieldsSchema, SandboxShapeWhenSchema } from "@intentic/sandbox-contract";
 import { createMcpServer, type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { audit } from "./audit.js";
@@ -13,14 +13,15 @@ import { clickElement, fillElement, listTabs, openPage, pressKey, readPage, sele
 import { act, describeAction, settle } from "./tools/device.js";
 import {
     DEFAULT_LOG_LINES,
+    forgetShape,
     listSandboxes,
     manageSandbox,
     MAX_LOG_LINES,
     removeSandbox,
-    reshapeSandbox,
     SandboxOpSchema,
     SandboxSwapSchema,
     sandboxLogs,
+    shapeSandbox,
     swapSandbox,
 } from "./tools/sandboxes.js";
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
@@ -332,7 +333,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "list_sandboxes",
         description:
-            "The Intentic sandboxes on this device, as JSON: each one's slug, whether it is running, whether its tunnel is up, and its share of this machine under `resources` (memory cap in bytes, CPU cap, privileged, GPU, and which of those the approved environment demands versus the owner asked for). Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this device'.",
+            "The Intentic sandboxes on this device, as JSON, as the device's `ic` reports them: each one's slug, whether it is running, whether its tunnel is up, and under `resources` its share of this machine as docker enforces it (memory cap in bytes, CPU cap, privileged, GPU, and which of those the approved environment demands versus the owner asked for), the shape it runs with (`shape`: memoryGib, cpus, privileged, gpu as the owner asked; null is the default) and, when one is saved, the shape its next restart applies (`desired`). `staged` names an update downloaded and waiting. Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this device'.",
         effect: "read",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await listSandboxes(scopes)),
@@ -340,7 +341,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "manage_sandbox",
         description:
-            "Start, stop or restart one Intentic sandbox on this device, by its slug from list_sandboxes. Stopping one interrupts whoever is working in it, and stopping the sandbox you are calling from severs your own connection. When a share is saved for the sandbox's next restart (reshape_sandbox with `later`), start and restart recreate it with that share, which takes about a minute. Requires the 'Manage sandboxes on this device' permission, which is OFF unless the user turned it on.",
+            "Start, stop or restart one Intentic sandbox on this device, by its slug from list_sandboxes. Stopping one interrupts whoever is working in it, and stopping the sandbox you are calling from severs your own connection. All three go through the device's `ic`. When a shape is saved for the sandbox's next restart (reshape_sandbox with `when: \"nextRestart\"`, shown as `resources.desired`), start and restart recreate it with that shape, which takes about a minute; stop keeps it waiting. Requires the 'Manage sandboxes on this device' permission, which is OFF unless the user turned it on.",
         effect: "write",
         input: z.object({ op: SandboxOpSchema, slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
         run: async ({ op, slug }, scopes) => textResult(await manageSandbox(op, slug, scopes)),
@@ -363,13 +364,26 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "reshape_sandbox",
         description:
-            "Change how much of this device one Intentic sandbox may use, or its privileges: a memory cap in whole GiB, a CPU cap in whole cores, whether the container runs privileged, and whether this device's NVIDIA GPUs are passed through. Give only what should change; `null` for a cap means back to the default (the memory share derived from this machine; every core). The sandbox RESTARTS onto the same image — about a minute, whoever is working in it is interrupted, and reshaping the sandbox you are calling from severs your own connection until it is back — and the new values live on the container, surviving every later update. Pass `later: true` to SAVE the change for the sandbox's next restart instead (its next update, rollback, rebuild, or a start/restart through manage_sandbox applies it) without restarting it now; `later: true` with nothing else forgets what is saved, and a call with nothing at all applies what is saved now. list_sandboxes shows what is saved under `resources.saved`. A privilege the sandbox's approved environment demands (the Docker capability's --privileged) cannot be withdrawn here, only the owner's own ask. Requires the 'Manage sandboxes on this device' permission.",
+            "Set how much of this device one Intentic sandbox may use, or its privileges: a memory cap in whole GiB, a CPU cap in whole cores, whether the container runs privileged, and whether this device's NVIDIA GPUs are passed through. Give the fields that should change and `when`; a field left out keeps the value already saved for the next restart, else the one it runs with. `null` for a cap means back to the default (the memory share derived from this machine; every core). `when: \"now\"` RESTARTS the sandbox onto the same image — about a minute, whoever is working in it is interrupted, and reshaping the sandbox you are calling from severs your own connection until it is back — and the values then survive every later update. `when: \"nextRestart\"` restarts nothing: the device's `ic` checks the shape against the sandbox's image and saves it, and the sandbox's next restart through ic applies it (manage_sandbox start or restart, or swap_sandbox update, rollback or rebuild; not Docker restarting the container by itself). `forget: true`, with no fields and no `when`, drops what is saved. A call with no fields and no `forget` is refused and changes nothing. A privilege the sandbox's approved environment demands (the Docker capability's --privileged) cannot be withdrawn here, only the owner's own ask. Requires the 'Manage sandboxes on this device' permission.",
         effect: "write",
         input: SandboxResourcesAskFieldsSchema.extend({
             slug: required.describe("The sandbox's slug, from list_sandboxes."),
-            later: z.boolean().optional().describe("Save the change for the sandbox's next restart instead of restarting it now."),
+            when: SandboxShapeWhenSchema.optional().describe("`now` restarts onto the shape; `nextRestart` saves it for the sandbox's next restart through ic. Required with any field."),
+            forget: z.boolean().optional().describe("Drop the shape saved for the next restart. Takes no fields and no `when`."),
         }),
-        run: async ({ slug, later, ...ask }, scopes) => textResult(await reshapeSandbox(slug, ask, scopes, () => {}, { later })),
+        run: async ({ slug, when, forget, ...fields }, scopes) => {
+            const named = Object.values(fields).some((value) => value !== undefined);
+            if (forget === true) {
+                if (named || when !== undefined) {
+                    throw new Error("`forget` drops what is saved and takes nothing else: call again with only the slug and `forget: true`.");
+                }
+                return textResult(await forgetShape(slug, scopes, () => {}));
+            }
+            if (!named || when === undefined) {
+                throw new Error("Nothing was changed: give at least one field (memoryGib, cpus, privileged, gpu) and `when` (\"now\" or \"nextRestart\"), or `forget: true`. To apply what is saved, use manage_sandbox restart.");
+            }
+            return textResult(await shapeSandbox(slug, fields, when, scopes, () => {}));
+        },
     }),
     tool({
         name: "remove_sandbox",

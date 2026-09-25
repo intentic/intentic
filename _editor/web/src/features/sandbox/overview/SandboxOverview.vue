@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AnchoredOverlay, Card, InlineRename, resourcesSummary, SandboxResourcesDialog, StatusBadge, vAction } from "@intentic/ui";
-import type { ResourcesAsk } from "@intentic/ui";
+import type { ResourcesForm } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
@@ -52,20 +52,20 @@ const selfResources = useSelfResources();
 const shareLine = computed(() => (selfResources.row.value === undefined ? undefined : resourcesSummary(selfResources.row.value)));
 const resizing = ref(false);
 const resizeFailed = ref<string | undefined>();
-const applyResize = async (ask: ResourcesAsk | undefined): Promise<void> => {
+const applyResize = async (shape: ResourcesForm): Promise<void> => {
     resizing.value = false;
     resizeFailed.value = undefined;
     // The sandbox recreates under this page, so success is the reconnect, not a sentence here. Only a refusal the
     // machine actually sent has anything to say.
-    await selfResources.apply(ask).catch((error: unknown) => {
+    await selfResources.apply(shape).catch((error: unknown) => {
         resizeFailed.value = errorMessage(error, `That didn't work on this device.`);
     });
 };
 // Saving leaves the sandbox running, so unlike Apply this one answers: the share line picks up "changes on restart".
-const saveResize = async (ask: ResourcesAsk | undefined): Promise<void> => {
+const saveResize = async (shape: ResourcesForm | undefined): Promise<void> => {
     resizing.value = false;
     resizeFailed.value = undefined;
-    await selfResources.save(ask).catch((error: unknown) => {
+    await selfResources.save(shape).catch((error: unknown) => {
         resizeFailed.value = errorMessage(error, `That didn't work on this device.`);
     });
 };

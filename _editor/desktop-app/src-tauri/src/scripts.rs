@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -123,28 +123,11 @@ pub fn stop(id: &str) -> Result<(), String> {
         .ok()
         .and_then(|live| live.get(id).copied())
         .ok_or_else(|| format!("nothing called {id} is running on this device"))?;
-    match kill_tree(pid, "-TERM") {
+    match intentic_bounded::kill_tree(pid, intentic_bounded::Signal::Term) {
         Ok(status) if status.success() => Ok(()),
         Ok(status) => Err(format!("could not stop it (exit {:?})", status.code())),
         Err(error) => Err(format!("could not stop it: {error}")),
     }
-}
-
-/// Signal a child and everything it started. The child leads its own process group on Unix (`own_group`), so
-/// the negative pid reaches the whole group; Windows reaches the tree through `taskkill /T`, which is always forced.
-fn kill_tree(pid: u32, unix_signal: &str) -> std::io::Result<std::process::ExitStatus> {
-    if cfg!(windows) {
-        return quiet(Command::new("taskkill.exe"))
-            .args(["/PID", &pid.to_string(), "/T", "/F"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-    }
-    Command::new("kill")
-        .args([unix_signal, "--", &format!("-{pid}")])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
 }
 
 /* A SHORT CHILD, BOUNDED — every docker read and every agent call this window waits on goes through `capture`. */
@@ -175,75 +158,27 @@ impl std::fmt::Display for Unanswered {
     }
 }
 
-/// How often a bounded child is asked whether it has exited.
-const CAPTURE_POLL: Duration = Duration::from_millis(25);
-
-/// Run `command` to its exit, or kill its whole tree at `limit`. The exit ends the wait, never the pipes: a background
-/// process it leaves behind inherits them on Windows, so the streams get [`DRAIN_GRACE`] after the exit and no more.
+/// Run `command` to its exit, or kill its whole tree at `limit`: the helper `ic` shares (`intentic-bounded`). The
+/// exit ends the wait, never the pipes: a background process it leaves behind inherits them on Windows, so the
+/// streams get the crate's drain grace after the exit and no more.
 pub fn capture(what: &str, command: Command, limit: Duration) -> Result<Captured, Unanswered> {
-    let mut child = own_group(command)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| Unanswered::NotStarted {
+    let ran = intentic_bounded::capture(command, limit, intentic_bounded::Reach::Tree).map_err(
+        |error| Unanswered::NotStarted {
             what: what.to_string(),
             reason: error.to_string(),
-        })?;
-    let (drained, drains) = channel::<()>();
-    let stdout = collect(child.stdout.take(), drained.clone());
-    let stderr = collect(child.stderr.take(), drained);
-    let deadline = Instant::now() + limit;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(CAPTURE_POLL),
-            Ok(None) | Err(_) => {
-                let _ = kill_tree(child.id(), "-KILL");
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(Unanswered::TimedOut {
-                    what: what.to_string(),
-                    limit,
-                });
-            }
-        }
-    };
-    await_drain(&drains, 2, DRAIN_GRACE);
-    let text = |bytes: &Mutex<Vec<u8>>| {
-        String::from_utf8_lossy(&bytes.lock().map(|held| held.clone()).unwrap_or_default())
-            .to_string()
-    };
+        },
+    )?;
+    if ran.timed_out {
+        return Err(Unanswered::TimedOut {
+            what: what.to_string(),
+            limit,
+        });
+    }
     Ok(Captured {
-        success: status.success(),
-        stdout: text(&stdout),
-        stderr: text(&stderr),
+        success: ran.success(),
+        stdout: ran.stdout,
+        stderr: ran.stderr,
     })
-}
-
-/// Read one stream to its end on a thread of its own, reporting on `drained` when it gets there. What arrived is
-/// readable at any moment, so a finished child's output is kept even while a leftover holder keeps the pipe open.
-fn collect(
-    handle: Option<impl std::io::Read + Send + 'static>,
-    drained: Sender<()>,
-) -> Arc<Mutex<Vec<u8>>> {
-    let bytes = Arc::new(Mutex::new(Vec::new()));
-    let sink = Arc::clone(&bytes);
-    std::thread::spawn(move || {
-        if let Some(mut handle) = handle {
-            let mut chunk = [0u8; 8192];
-            while let Ok(read) = handle.read(&mut chunk) {
-                if read == 0 {
-                    break;
-                }
-                if let Ok(mut held) = sink.lock() {
-                    held.extend_from_slice(&chunk[..read]);
-                }
-            }
-        }
-        let _ = drained.send(());
-    });
-    bytes
 }
 
 /// Which script family a run targets, and therefore which argument convention and which interpreter. Every
@@ -305,11 +240,8 @@ fn resource(app: &AppHandle, file: &str) -> Result<PathBuf, String> {
 /// Seconds a `docker info` gets: a booting Docker Desktop accepts on its pipe and then answers nothing at all.
 const DOCKER_PROBE_LIMIT: Duration = Duration::from_secs(10);
 
-/// Seconds a listing (`ps`, `inspect`, `logs`) gets before the screen says Docker is not answering.
+/// Seconds a docker read (`ps`, `info`, `logs`) gets before the screen says Docker is not answering.
 pub const DOCKER_READ_LIMIT: Duration = Duration::from_secs(20);
-
-/// Seconds a start, stop or restart gets: `docker stop` alone waits out the container's own stop timeout.
-pub const DOCKER_POWER_LIMIT: Duration = Duration::from_secs(180);
 
 /// Can this user reach a Docker daemon right now? Decides elevation on Linux, and on Windows it is what tells
 /// "Docker Desktop isn't installed" (connect.ps1 offers the winget install) from "it is, but not started".
@@ -667,41 +599,14 @@ fn command_for(app: &AppHandle, run: &ScriptRun) -> Result<Command, String> {
 }
 
 /// Give the child a process group of its own, so [`stop`] can reach everything it started with one signal
-/// rather than killing the shell and orphaning the download it was waiting on. Windows gets the same reach
-/// from `taskkill /T` and needs nothing here.
-#[cfg(unix)]
+/// rather than killing the shell and orphaning the download it was waiting on.
 fn own_group(mut command: Command) -> Command {
-    use std::os::unix::process::CommandExt;
-    command.process_group(0);
+    intentic_bounded::own_group(&mut command);
     command
 }
 
-#[cfg(not(unix))]
-fn own_group(command: Command) -> Command {
-    command
-}
-
-/* HOW LONG A FINISHED RUN WAITS ON ITS OWN PIPES — and why it may not wait forever. */
-const DRAIN_GRACE: Duration = Duration::from_millis(750);
-
-/// Wait for `pumps` pipe readers to report they reached the end of their stream, for at most `grace` in total.
-/// True when every one of them did — false when the window ran out with a reader still parked on a handle
-/// somebody else is holding open, which is the case [`DRAIN_GRACE`] exists for.
-///
-/// Split out from [`run`] because it is the whole of the fix and the only part of it that can be exercised
-/// without a window: what it must never do is block past the grace, no matter how many readers stay silent.
-fn await_drain(drains: &Receiver<()>, pumps: usize, grace: Duration) -> bool {
-    let deadline = Instant::now() + grace;
-    for _ in 0..pumps {
-        if drains
-            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-            .is_err()
-        {
-            return false;
-        }
-    }
-    true
-}
+/* HOW LONG A FINISHED RUN WAITS ON ITS OWN PIPES — and why it may not wait forever: the crate's grace, shared with `ic`. */
+use intentic_bounded::{await_drain, DRAIN_GRACE};
 
 /// Run a script to completion, streaming every line to the window as it arrives. BLOCKING — call it from
 /// `spawn_blocking`; the scripts pull multi-gigabyte images and a setup legitimately takes minutes.
@@ -834,6 +739,88 @@ pub fn docker_output(args: &[&str], limit: Duration) -> Result<String, String> {
         return Err(answer.stderr.trim().to_string());
     }
     Ok(answer.stdout)
+}
+
+/* `ic` ON THIS MACHINE — what the sandbox list, and everything about what runs, is read from. */
+
+/// Where `ic` lives, in the order the installers put it: the per-user copy the shims fetch (the one this app's own
+/// setup and recreate runs just put down, at this app's version), a root install, then PATH. A VALUE rather than a
+/// `cfg!` read, for [`Host`]'s reason. The machine agent looks in the same places (`icCandidates`).
+pub fn ic_candidates(host: Host, home: Option<&str>) -> Vec<String> {
+    let mut candidates = Vec::new();
+    match host {
+        Host::Windows => {
+            if let Some(home) = home {
+                candidates.push(format!("{home}\\.intentic\\ic\\bin\\ic.exe"));
+            }
+            candidates.push("ic.exe".to_string());
+        }
+        Host::Unix => {
+            if let Some(home) = home {
+                candidates.push(format!("{home}/.intentic/ic/bin/ic"));
+            }
+            candidates.push("/usr/local/bin/ic".to_string());
+            candidates.push("ic".to_string());
+        }
+    }
+    candidates
+}
+
+/// `ic sandbox list --json`'s one line of JSON, out of whatever else rode on stdout with it (the shim's own
+/// narration, when it fetched ic first). None when there is no such line: an ic too old to have `--json`.
+pub fn listing_from(stdout: &str) -> Option<Vec<serde_json::Value>> {
+    stdout
+        .lines()
+        .map(str::trim)
+        .rfind(|line| line.starts_with('['))
+        .and_then(|line| serde_json::from_str(line).ok())
+}
+
+/// Seconds a listing gets: ic bounds each docker read inside it at 20s.
+const IC_LIST_LIMIT: Duration = Duration::from_secs(60);
+
+/// Seconds the shim's listing gets: a download of ic first, on a slow connection.
+const IC_FETCH_LIMIT: Duration = Duration::from_secs(300);
+
+/// clap's exit code for an argument it does not know: what an `ic` from before `list --json` answers.
+const USAGE_ERROR: i32 = 2;
+
+/// Every sandbox on this machine, as the installed `ic` lists them. When there is none, or it is too old to know
+/// `--json`, the listing runs through `fallback` (the recreate shim's `--list`), whose fetch of this app's own `ic`
+/// is what brings the installed one level for every listing after it. Any other failure is ic's own sentence.
+pub fn ic_listing(app: &AppHandle, fallback: ScriptRun) -> Result<Vec<serde_json::Value>, String> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok();
+    for candidate in ic_candidates(Host::current(), home.as_deref()) {
+        let mut command = quiet(Command::new(&candidate));
+        command.args(["sandbox", "list", "--json"]);
+        match intentic_bounded::capture(command, IC_LIST_LIMIT, intentic_bounded::Reach::Tree) {
+            // Not at this path: the next one.
+            Err(_) => continue,
+            Ok(ran) if ran.timed_out => {
+                return Err(format!(
+                    "ic did not list this machine's sandboxes within {}s",
+                    IC_LIST_LIMIT.as_secs()
+                ))
+            }
+            Ok(ran) => match listing_from(&ran.stdout) {
+                Some(rows) if ran.success() => return Ok(rows),
+                _ if ran.code == Some(USAGE_ERROR) => break,
+                _ => return Err(ran.stderr.trim().to_string()),
+            },
+        }
+    }
+    let command = command_for(app, &fallback)?;
+    let ran = capture("ic sandbox list", command, IC_FETCH_LIMIT)
+        .map_err(|silence| silence.to_string())?;
+    match listing_from(&ran.stdout) {
+        Some(rows) if ran.success => Ok(rows),
+        _ => Err(format!(
+            "ic could not list this machine's sandboxes: {}",
+            ran.stderr.trim()
+        )),
+    }
 }
 
 /// Where `intentic-machine` lives on this machine, in the order worth trying. The agent's own installer puts it
@@ -975,16 +962,8 @@ pub fn logs_tail(container: &str, tail: u32) -> Result<String, String> {
 }
 
 /// Suppress the console window Windows gives every spawned process in a GUI app.
-#[cfg(windows)]
 fn quiet(mut command: Command) -> Command {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    command.creation_flags(CREATE_NO_WINDOW);
-    command
-}
-
-#[cfg(not(windows))]
-fn quiet(command: Command) -> Command {
+    intentic_bounded::no_window(&mut command);
     command
 }
 
@@ -998,39 +977,6 @@ mod tests {
         assert_eq!(
             Host::Windows.script("connect.sh", "connect.ps1"),
             "connect.ps1"
-        );
-    }
-
-    /* A setup run installs resident background agents, and on Windows a detached process inherits the pipes of whoever spawned it. */
-    #[test]
-    fn a_drain_that_completes_costs_nothing() {
-        let (drained, drains) = channel::<()>();
-        drained.send(()).expect("first pump reports");
-        drained.send(()).expect("second pump reports");
-
-        let started = Instant::now();
-        assert!(await_drain(&drains, 2, Duration::from_secs(30)));
-        assert!(
-            started.elapsed() < Duration::from_secs(1),
-            "two pumps that already reported must not wait on the grace at all"
-        );
-    }
-
-    #[test]
-    fn a_pump_that_never_finishes_costs_only_the_grace() {
-        let grace = Duration::from_millis(200);
-        let (drained, drains) = channel::<()>();
-        drained.send(()).expect("the one pump that ends reports");
-        // The other end stays alive and silent — a background agent holding the write handle open.
-        let _held_open = drained;
-
-        let started = Instant::now();
-        assert!(!await_drain(&drains, 2, grace));
-        let waited = started.elapsed();
-        assert!(waited >= grace, "the grace is a real window, not a poll");
-        assert!(
-            waited < grace * 10,
-            "waited {waited:?} — a silent pump must never hold a finished run open"
         );
     }
 
@@ -1118,6 +1064,33 @@ mod tests {
             limit: Duration::from_secs(20),
         };
         assert_eq!(silence.to_string(), "docker ps did not answer within 20s");
+    }
+
+    /* `ic` is looked for where the installers put it, and its listing is found among whatever else rode on stdout. */
+    #[test]
+    fn ic_is_looked_for_where_the_installers_put_it_before_path() {
+        assert_eq!(
+            ic_candidates(Host::Unix, Some("/home/ada")),
+            vec!["/home/ada/.intentic/ic/bin/ic", "/usr/local/bin/ic", "ic"]
+        );
+        assert_eq!(
+            ic_candidates(Host::Windows, Some("C:\\Users\\Ada")),
+            vec!["C:\\Users\\Ada\\.intentic\\ic\\bin\\ic.exe", "ic.exe"]
+        );
+        assert_eq!(
+            ic_candidates(Host::Unix, None),
+            vec!["/usr/local/bin/ic", "ic"]
+        );
+    }
+
+    #[test]
+    fn the_listing_is_the_last_json_line_and_an_old_ics_text_is_none() {
+        let rows =
+            listing_from("intentic: fetching the ic CLI...\r\n[{\"slug\":\"work\"}]\r\n").unwrap();
+        assert_eq!(rows, vec![serde_json::json!({ "slug": "work" })]);
+        assert_eq!(listing_from("[]"), Some(vec![]));
+        assert_eq!(listing_from("running   work\n"), None);
+        assert_eq!(listing_from(""), None);
     }
 
     #[test]

@@ -2,9 +2,10 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use crate::logfile::intentic_home;
+use crate::shape::Shape;
 use crate::util::{Fail, Result};
 
-/* The channel record: which tag this sandbox follows, what it was on before, and what is BUILT AND WAITING for it. */
+/* The channel record: which tag this sandbox follows, what it was on before, and what is WAITING for it — an image built for it, a shape saved for it. */
 
 #[derive(Clone, Default)]
 pub struct ChannelRecord {
@@ -30,16 +31,24 @@ pub struct ChannelRecord {
     /// would not say — an older build, a probe that failed — and every reader treats that as "ready, version
     /// unknown" rather than as nothing being ready.
     pub staged_version: Option<String>,
+    /// The shape saved for the sandbox's next restart (`ic sandbox shape … --when next-restart`), whole: what it
+    /// runs with once any flow recreates it, whatever it ran with before. Present only between the save and the
+    /// recreate that applies it — that recreate writes the record without it, in the same write that names its new
+    /// image, so a swap that fails and is rewound gets it back with the rest of the record.
+    pub desired: Option<Shape>,
 }
 
 impl ChannelRecord {
     /// The same record with nothing staged. What every flow that moves the container writes: it is taking an
     /// image now, so nothing is waiting for it any more.
+    ///
+    /// The shape saved for the next restart stays: a prepare that is dropped has not restarted anything.
     pub fn without_staged(&self) -> ChannelRecord {
         ChannelRecord {
             channel: self.channel.clone(),
             current: self.current.clone(),
             previous: self.previous.clone(),
+            desired: self.desired.clone(),
             ..ChannelRecord::default()
         }
     }
@@ -68,11 +77,17 @@ fn read_file(path: &std::path::Path) -> Result<ChannelRecord> {
         }
     };
     let mut record = ChannelRecord::default();
+    // The shape's four keys are read together at the end: all four, or no shape.
+    let mut desired: [Option<String>; 4] = Default::default();
     for line in content.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
         };
         let field = match key {
+            "desired_memory" => &mut desired[0],
+            "desired_cpus" => &mut desired[1],
+            "desired_privileged" => &mut desired[2],
+            "desired_gpus" => &mut desired[3],
             "channel" => &mut record.channel,
             "current" => &mut record.current,
             "previous" => &mut record.previous,
@@ -87,6 +102,13 @@ fn read_file(path: &std::path::Path) -> Result<ChannelRecord> {
         };
         *field = Some(value.to_string());
     }
+    let [memory, cpus, privileged, gpus] = &desired;
+    record.desired = Shape::from_record(
+        memory.as_deref(),
+        cpus.as_deref(),
+        privileged.as_deref(),
+        gpus.as_deref(),
+    );
     Ok(record)
 }
 
@@ -112,6 +134,17 @@ fn write_file(path: &std::path::Path, record: &ChannelRecord) -> Result<()> {
         ("staged_version", &record.staged_version),
     ] {
         if let Some(value) = value {
+            writeln!(tmp, "{key}={value}")?;
+        }
+    }
+    if let Some(desired) = &record.desired {
+        let keys = [
+            "desired_memory",
+            "desired_cpus",
+            "desired_privileged",
+            "desired_gpus",
+        ];
+        for (key, value) in keys.iter().zip(desired.to_record()) {
             writeln!(tmp, "{key}={value}")?;
         }
     }
@@ -213,6 +246,41 @@ mod tests {
     }
 
     #[test]
+    fn the_shape_saved_for_the_next_restart_round_trips_and_survives_a_dropped_prepare() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sandbox-abc.channel");
+        let desired = Shape {
+            memory: Some("20g".to_string()),
+            cpus: None,
+            privileged: false,
+            gpus: true,
+        };
+        let waiting = ChannelRecord {
+            staged: Some("img:next".to_string()),
+            desired: Some(desired.clone()),
+            ..swap("img:now", None)
+        };
+        write_file(&path, &waiting).expect("write");
+        let written = std::fs::read_to_string(&path).expect("read");
+        assert!(written.contains(
+            "desired_memory=20g\ndesired_cpus=default\ndesired_privileged=off\ndesired_gpus=on\n"
+        ));
+        assert_eq!(
+            read_file(&path).expect("read").desired,
+            Some(desired.clone())
+        );
+        // A prepare that no longer fits is dropped; nothing restarted, so the shape is still waiting.
+        assert_eq!(waiting.without_staged().desired, Some(desired));
+        // Half a shape (a hand edit, a crash mid-write of some other tool) is no shape rather than a guess.
+        std::fs::write(
+            &path,
+            "channel=stable\ndesired_memory=20g\ndesired_gpus=on\n",
+        )
+        .expect("write");
+        assert_eq!(read_file(&path).expect("read").desired, None);
+    }
+
+    #[test]
     fn nothing_to_roll_back_to_is_an_absent_key_not_an_empty_one() {
         // A first-ever swap records no rollback target; the daemon then offers no rollback, honestly. An
         // empty `previous=` would instead read back as a rollback target named "".
@@ -222,6 +290,7 @@ mod tests {
         let written = std::fs::read_to_string(&path).expect("read");
         assert!(!written.contains("previous="));
         assert!(!written.contains("staged"));
+        assert!(!written.contains("desired"));
         assert_eq!(read_file(&path).expect("read").previous, None);
     }
 

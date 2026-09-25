@@ -38,7 +38,7 @@ const startedTurns: string[] = [];
 jest.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => startedTurns.push(prompt ?? ``) }));
 // Container verbs, recorded the same way: which op left for which machine, and for `reshape`, what the form
 // asked for.
-const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown; later?: true }[] = [];
+const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown; shape?: unknown; when?: string }[] = [];
 // Both of the above in one list, in the order they left: which half of a removal goes first is a rule of its own,
 // and two arrays cannot say.
 const flow: string[] = [];
@@ -54,13 +54,14 @@ jest.mock(`./useDevices`, () => {
     return {
         ...useDevicesOriginal,
         useDevices: () => ({ devices, readAt, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
-        manageDeviceSandbox: (hostId: string, slug: string, op: string, payload?: { resources?: unknown; later?: boolean }) => {
+        manageDeviceSandbox: (hostId: string, slug: string, op: string, payload?: { resources?: unknown; shape?: unknown; when?: string }) => {
             verbCalls.push({
                 hostId,
                 slug,
                 op,
                 ...(payload?.resources === undefined ? {} : { resources: payload.resources }),
-                ...(payload?.later === true ? { later: true as const } : {}),
+                ...(payload?.shape === undefined ? {} : { shape: payload.shape }),
+                ...(payload?.when === undefined ? {} : { when: payload.when }),
             });
             flow.push(`${op}:${slug}`);
             return Promise.resolve(`Reshaped sandbox "${slug}".`);
@@ -456,12 +457,22 @@ const shared = (): Device => {
             home: `/home/ada`,
             roots: [`/home/ada`],
             engine: { memoryBytes: 20 * GIB, cpus: 12 },
-            features: [`reshape-later`],
+            features: [`reshape-later`, `set-shape`],
         },
         sandboxes: [
             {
                 ...row.sandboxes![0]!,
-                resources: { memoryBytes: 12 * GIB, cpus: 4, privileged: true, gpu: false, hostRuntime: [], overlayRuntime: [`--privileged`] },
+                // The shape ic reports it runs with: the owner asked for 12 GiB and 4 cores, and not for the privilege
+                // the environment demands.
+                resources: {
+                    memoryBytes: 12 * GIB,
+                    cpus: 4,
+                    privileged: true,
+                    gpu: false,
+                    hostRuntime: [],
+                    overlayRuntime: [`--privileged`],
+                    shape: { memoryGib: 12, cpus: 4, privileged: false, gpu: false },
+                },
             },
         ],
     };
@@ -484,7 +495,7 @@ const menuRow = (label: string): HTMLAnchorElement | undefined =>
 const dialogButton = (label: string): HTMLButtonElement | undefined =>
     [...document.body.querySelectorAll(`button`)].findLast((control) => (control.textContent ?? ``).trim() === label);
 
-it(`opens the Resources form on the row's own share and sends only what changed, as a reshape`, async () => {
+it(`opens the Resources form on the shape the row runs with and sends the whole shape to apply now`, async () => {
     granted();
     const el = mount([shared()]);
     el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
@@ -510,10 +521,14 @@ it(`opens the Resources form on the row's own share and sends only what changed,
     expect(dialogButton(`Apply now`)).toHaveProperty(`disabled`, false);
     dialogButton(`Apply now`)?.click();
     await nextTick();
-    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape`, resources: { memoryGib: 18 } }]);
+    // Whole, and the owner's own ask: the privilege the environment demands stays the environment's, not written into
+    // the owner's list by a form that only showed it switched on.
+    expect(verbCalls).toEqual([
+        { hostId: `host-1`, slug: `work`, op: `set-shape`, shape: { memoryGib: 18, cpus: 4, privileged: false, gpu: false }, when: `now` },
+    ]);
 });
 
-// The form's other way out: Save keeps the ask for the sandbox's next restart and leaves it running.
+// The form's other way out: Save has ic keep the shape for the sandbox's next restart and leaves it running.
 it(`saves the Resources form for the next restart instead of applying it`, async () => {
     granted();
     const el = mount([shared()]);
@@ -528,40 +543,53 @@ it(`saves the Resources form for the next restart instead of applying it`, async
     await nextTick();
     dialogButton(`Save for next restart`)?.click();
     await nextTick();
-    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape`, resources: { memoryGib: 18 }, later: true }]);
+    expect(verbCalls).toEqual([
+        { hostId: `host-1`, slug: `work`, op: `set-shape`, shape: { memoryGib: 18, cpus: 4, privileged: false, gpu: false }, when: `nextRestart` },
+    ]);
 });
 
-// An agent older than `later` drops it and reshapes at once, so a Save sent to it would restart the sandbox: not offered.
-it(`offers no Save for next restart on a device whose agent does not announce it`, async () => {
+// An agent older than `set-shape` knows only the old reshape op: it reports no shape, can save nothing, and is sent
+// what differs from docker's reading of the container, now.
+it(`offers no Save to an agent older than set-shape, and applies through its old reshape op`, async () => {
     granted();
     const device = shared();
-    const el = mount([{ ...device, facts: { ...device.facts!, features: [] } }]);
+    const box = device.sandboxes![0]!;
+    const { shape: _shape, ...olderReading } = box.resources!;
+    const el = mount([{ ...device, facts: { ...device.facts!, features: [`reshape-later`] }, sandboxes: [{ ...box, resources: olderReading }] }]);
     el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
     await nextTick();
     menuRow(`Resources…`)?.click();
     await nextTick();
     expect(everything()).toContain(`Resources for work`);
     expect(dialogButton(`Save for next restart`)).toBeUndefined();
+    const memory = document.body.querySelector<HTMLInputElement>(`input[aria-label="Memory cap in GiB"]`);
+    memory!.value = `18`;
+    memory!.dispatchEvent(new Event(`input`));
+    await nextTick();
+    dialogButton(`Apply`)?.click();
+    await nextTick();
+    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape`, resources: { memoryGib: 18 } }]);
 });
 
-// A share already saved: the form opens on it, says so, and Apply now with nothing typed applies it as it is.
-it(`opens on a share saved for the next restart and applies it as it is`, async () => {
+// A shape already saved: the form opens on it, says so, and Apply now with nothing typed applies it as it is.
+it(`opens on a shape saved for the next restart and applies it as it is`, async () => {
     granted();
     const device = shared();
     const box = device.sandboxes![0]!;
-    const el = mount([{ ...device, sandboxes: [{ ...box, resources: { ...box.resources!, saved: { memoryGib: 16 } } }] }]);
+    const desired = { memoryGib: 16, cpus: 4, privileged: false, gpu: false };
+    const el = mount([{ ...device, sandboxes: [{ ...box, resources: { ...box.resources!, desired } }] }]);
     el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
     await nextTick();
     menuRow(`Resources…`)?.click();
     await nextTick();
     expect(document.body.querySelector<HTMLInputElement>(`input[aria-label="Memory cap in GiB"]`)).toHaveProperty(`value`, `16`);
-    expect(everything()).toContain(`Saved for the next restart: 16 GiB memory.`);
+    expect(everything()).toContain(`Saved for the next restart: 16 GiB memory · 4 CPUs · not privileged · no GPU.`);
     // Saving the very share that is saved changes nothing; applying it is the one thing left to do.
     expect(dialogButton(`Save for next restart`)).toHaveProperty(`disabled`, true);
     expect(dialogButton(`Apply now`)).toHaveProperty(`disabled`, false);
     dialogButton(`Apply now`)?.click();
     await nextTick();
-    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape` }]);
+    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `set-shape`, shape: desired, when: `now` }]);
 });
 
 it(`says nothing about connecting a device that is already managing its sandboxes`, () => {

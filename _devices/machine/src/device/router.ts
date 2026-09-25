@@ -8,12 +8,14 @@ import { machineReport } from "../sync/report.js";
 import { runAgentOp } from "./tools/agent.js";
 import {
     createSandbox,
+    forgetShape,
     manageSandbox,
     reconnectSandbox,
     removeSandbox,
     reshapeSandbox,
     runnerFlow,
     type SandboxSwap,
+    shapeSandbox,
     swapSandbox,
     tailSandboxLogs,
 } from "./tools/sandboxes.js";
@@ -63,8 +65,8 @@ const swapFlowFor =
     (onLine) =>
         swapSandbox(swap, slug, hash, scopes, onLine);
 
-// Which function each op is, total over the op enum so a new op cannot be added without one: start/stop/restart are a
-// docker call (unless a share is saved for the next restart, which start and restart apply through `ic`), `logs` is a read, and the rest run `ic` and narrate themselves for minutes.
+// Which function each op is, total over the op enum so a new op cannot be added without one: `logs` is a read, and every
+// other op runs `ic` and narrates itself (start and restart for minutes, when a shape is saved for the next restart).
 const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
     start:
         ({ slug }, scopes) =>
@@ -82,7 +84,20 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
     update: swapFlowFor("update"),
     rebuild: swapFlowFor("rebuild"),
     rollback: swapFlowFor("rollback"),
-    // The same image with a different share of this machine: the one op with a payload of its own.
+    // The same image with a different shape: whole, and when it takes effect. Refused without either, before ic runs.
+    "set-shape":
+        ({ slug, shape, when }, scopes) =>
+        (onLine) => {
+            if (shape === undefined || when === undefined) {
+                throw new ORPCError("BAD_REQUEST", { message: "A shape is set whole, with when it takes effect: `shape` and `when` are both required." });
+            }
+            return shapeSandbox(slug, shape, when, scopes, onLine);
+        },
+    "forget-shape":
+        ({ slug }, scopes) =>
+        (onLine) =>
+            forgetShape(slug, scopes, onLine),
+    // The old spelling of `set-shape`, for one release: a delta, with `later` for the next restart.
     reshape:
         ({ slug, resources, later }, scopes) =>
         (onLine) =>

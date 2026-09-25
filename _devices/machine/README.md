@@ -19,6 +19,12 @@ flowchart LR
   dialled out to the sandbox and answers MCP tools on it: `run_command`, files, windows and clipboard, `browser_*`
   through [browser](../browser), `screenshot` and `device` through [desktop-automation](../desktop-automation), and
   the intentic sandboxes on this machine through the `ic` CLI.
+- The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
+  `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape` and `forget-shape` are
+  ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). Nothing here reads docker's view of a
+  container or the shape saved for its next restart; ic answers both. Before its first `ic` call the agent makes
+  sure the installed `ic` is at least as new as itself, fetching its own release's into `~/.intentic/ic/bin` when it
+  is not ([`tools/ic-binary.ts`](src/device/tools/ic-binary.ts)), since a new verb here arrives with a new verb there.
 - **sync** (`src/sync/`): `sync setup` enrolls an SSH key and runs Mutagen against the sandbox's sshd, reached
   through a loopback port tunnelled over a WebSocket. It keeps a folder two-way synced, forwards every workspace
   port to the same localhost port, and fast-forwards local git clones from the sandbox.

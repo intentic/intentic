@@ -281,15 +281,25 @@ test("an unknown tool answers plainly rather than throwing", async () => {
 // A reshape with nothing to change is refused as a readable RESULT, the same shape a wrong op or a
 // switched-off scope comes back in.
 test("reshape_sandbox refuses an empty ask as a readable result, not a transport fault", async () => {
+    // A call with nothing in it once meant "apply what is saved now", a restart nobody asked for by name. It changes
+    // nothing now, and says what to send instead.
     const empty = await call("reshape_sandbox", { slug: "work" }, scopes());
     expect(empty.isError).toBe(true);
-    expect(empty.text).toMatch(/change something/i);
+    expect(empty.text).toMatch(/Nothing was changed: give at least one field/);
+    // A field without `when` (an older model's `later`, which the schema no longer carries) is refused the same way,
+    // rather than read as "now".
+    const untimed = await call("reshape_sandbox", { slug: "work", memoryGib: 12, later: true }, scopes());
+    expect(untimed.isError).toBe(true);
+    expect(untimed.text).toMatch(/Nothing was changed/);
+    const tangled = await call("reshape_sandbox", { slug: "work", memoryGib: 12, forget: true }, scopes());
+    expect(tangled.isError).toBe(true);
+    expect(tangled.text).toMatch(/`forget` drops what is saved and takes nothing else/);
     // A malformed cap is caught by the schema before the machine is touched: whole GiB, whole cores.
     const fractional = await call("reshape_sandbox", { slug: "work", cpus: 1.5 }, scopes());
     expect(fractional.isError).toBe(true);
     expect(fractional.text).toMatch(/cpus/i);
     // Scope refusal names the switch, like every other sandbox tool.
-    const refused = await call("reshape_sandbox", { slug: "work", memoryGib: 12 }, scopes({ sandboxes: "off" }));
+    const refused = await call("reshape_sandbox", { slug: "work", memoryGib: 12, when: "nextRestart" }, scopes({ sandboxes: "off" }));
     expect(refused.isError).toBe(true);
     expect(refused.text).toMatch(/Manage sandboxes on this device/);
 });

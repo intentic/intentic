@@ -7,6 +7,8 @@ import {
     type DeviceSandboxFlowInput,
     type DeviceSandboxOp,
     type SandboxResourcesAsk,
+    type SandboxShape,
+    type SandboxShapeWhen,
     hostHoldingPath,
     hostRunningSandbox,
     SyncStatusSchema,
@@ -52,12 +54,13 @@ export function useDevices({ poll = true }: { poll?: boolean } = {}): {
 const frameText = (line: Record<string, unknown>, key: string): string | undefined => (typeof line[key] === `string` ? line[key] : undefined);
 
 // Payload shared by every device-sandbox op, all issued through one streaming call. `onLine` gets progress
-// as it prints; `hash` is rebuild's digest, `resources` is reshape's requested share.
+// as it prints; `hash` is rebuild's digest, `shape`/`when` are set-shape's whole shape and its timing, `resources`
+// the old reshape op's delta (sent only to an agent older than set-shape, see shapeFlow).
 export interface DeviceSandboxPayload {
     hash?: string | undefined;
+    shape?: SandboxShape | undefined;
+    when?: SandboxShapeWhen | undefined;
     resources?: SandboxResourcesAsk | undefined;
-    // `reshape` only: save `resources` for the sandbox's next restart instead of restarting it now.
-    later?: boolean | undefined;
     // The short-lived setup code reconnect redeems on the host machine for a drifted container's missing values.
     setupCode?: string | undefined;
     onLine?: ((line: string) => void) | undefined;
@@ -71,14 +74,15 @@ const flowInput = (
     hostId: string,
     slug: string,
     op: DeviceSandboxOp,
-    { hash, resources, later, setupCode }: DeviceSandboxPayload,
+    { hash, shape, when, resources, setupCode }: DeviceSandboxPayload,
 ): DeviceSandboxFlowInput => ({
     id: hostId,
     slug,
     op,
     ...(hash === undefined ? {} : { hash }),
+    ...(shape === undefined ? {} : { shape }),
+    ...(when === undefined ? {} : { when }),
     ...(resources === undefined ? {} : { resources }),
-    ...(later === true ? { later } : {}),
     ...(setupCode === undefined ? {} : { setupCode }),
 });
 

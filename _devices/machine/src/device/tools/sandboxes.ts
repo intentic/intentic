@@ -1,254 +1,87 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { DeviceScopes, DeviceSandbox, SandboxResources, SandboxResourcesAsk,SandboxResourcesAskFieldsSchema } from "@intentic/sandbox-contract";
-import { STATE_DIR } from "@intentic/constants";
-import { HOST_RUNTIME_ENV, OVERLAY_RUNTIME_ENV } from "@intentic/sandbox-run";
+import {
+    type DeviceSandbox,
+    DeviceSandboxSchema,
+    type DeviceScopes,
+    icForgetShapeArgs,
+    icPowerArgs,
+    icShapeArgs,
+    type SandboxResourcesAsk,
+    type SandboxShapeFields,
+    type SandboxShapeWhen,
+} from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { assertScope } from "../policy.js";
+import { ensureCurrentIc, icCandidates } from "./ic-binary.js";
 
 // The Intentic sandboxes running on this machine. A sandbox can't see its siblings itself (its docker socket
 // isn't mounted), so this is the only place "what runs here, start that one back up" can be answered. Scopes
-// split by what the action does: listing is a way of seeing (either grant), start/stop/restart take
-// `sandboxes`, removal takes its own switch. The swap/remove flows run through the `ic` CLI rather than being
-// reimplemented, one implementation for every door onto this machine.
+// split by what the action does: listing is a way of seeing (either grant), every verb that changes something
+// takes `sandboxes`. Every verb runs through the `ic` CLI rather than being reimplemented: ic owns what runs and
+// what should run after the next restart, and this file is a caller of it, one implementation for every door.
 
 const exec = promisify(execFile);
 
-// Long enough for `docker stop`'s grace period plus a slow disk; a docker CLI that takes longer than this is a
-// machine in trouble.
-const DOCKER_TIMEOUT_MS = 120_000;
+// Long enough for a listing on a busy machine (ic bounds each docker read inside it at 20s); longer is a machine in
+// trouble, and every caller is a screen or a model waiting to draw.
+const LIST_TIMEOUT_MS = 60_000;
+
+// Room for every container's share and a log tail at MAX_LOG_LINES, well past exec's 1 MB default.
+const MAX_BUFFER = 8 * 1024 * 1024;
 
 const PREFIX = "intentic-sandbox-";
-const TUNNEL_PREFIX = "intentic-sandbox-tunnel-";
-
-export interface DockerRow {
-    readonly names: string;
-    readonly state: string;
-    readonly image: string;
-}
-
-// `docker ps --format` prints one JSON object per line (see FLEET_ARGS); anything that is not one is a warning or
-// banner riding along, skipped rather than thrown on.
-export const rowsFrom = (stdout: string): DockerRow[] =>
-    stdout
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith("{"))
-        .flatMap((line) => {
-            try {
-                const parsed = JSON.parse(line) as { Names?: unknown; State?: unknown; Image?: unknown };
-                return typeof parsed.Names === "string" ? [{ names: parsed.Names, state: String(parsed.State), image: String(parsed.Image) }] : [];
-            } catch {
-                return [];
-            }
-        });
-
-// A workspace container and its tunnel sidecar share the `intentic-sandbox-` prefix, and a user's own subdomain
-// may legitimately BE `tunnel-something`, so a name is only a sidecar when the workspace container it would
-// belong to actually exists.
-export const sandboxesFrom = (rows: readonly DockerRow[]): DeviceSandbox[] => {
-    const isSidecar = (name: string): boolean => {
-        const slug = name.startsWith(TUNNEL_PREFIX) ? name.slice(TUNNEL_PREFIX.length) : undefined;
-        return slug !== undefined && rows.some((row) => row.names === `${PREFIX}${slug}`);
-    };
-    return rows
-        .filter((row) => !isSidecar(row.names))
-        .map((row) => {
-            const slug = row.names.slice(PREFIX.length);
-            const tunnel = rows.find((candidate) => candidate.names === `${TUNNEL_PREFIX}${slug}`);
-            const sandbox: DeviceSandbox = { slug, container: row.names, running: row.state === "running", image: row.image };
-            // Assigned rather than spread-in, so a sandbox with no sidecar at all has no `tunnelRunning` key: absent
-            // and
-            // false are different facts.
-            if (tunnel !== undefined) {
-                sandbox.tunnelRunning = tunnel.state === "running";
-            }
-            return sandbox;
-        });
-};
-
-// Room for every container's inspect object and a log tail at MAX_LOG_LINES, well past exec's 1 MB default.
-const DOCKER_MAX_BUFFER = 8 * 1024 * 1024;
 
 // `windowsHide` here and on every other spawn in this agent: the connection agent runs detached with no console
 // of its own, and a console child of a console-less process gets a brand-new console, window and all.
 const docker = async (args: readonly string[]): Promise<{ readonly stdout: string; readonly stderr: string }> =>
-    await exec("docker", [...args], { timeout: DOCKER_TIMEOUT_MS, maxBuffer: DOCKER_MAX_BUFFER, windowsHide: true }).catch(
-        (error: NodeJS.ErrnoException) => {
-            if (error.code === "ENOENT") {
-                throw new Error("This device has no docker command, so no Intentic sandboxes can run here.");
-            }
-            throw error;
-        },
-    );
+    await exec("docker", [...args], { timeout: 120_000, maxBuffer: MAX_BUFFER, windowsHide: true }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") {
+            throw new Error("This device has no docker command, so no Intentic sandboxes can run here.");
+        }
+        throw error;
+    });
 
-// The three fields `rowsFrom` reads, asked for by name. NEVER `{{json .}}`: the whole-object template carries `Size`,
-// so docker computes every container's disk usage by walking its writable layer — measured at 0.5-1.5s against 60ms
-// here — and on Docker Desktop's containerd snapshotter that walk FAILS ("snapshotter.Usage failed … lstat … no such
-// file or directory") whenever a temp file vanishes underneath it, which a sandbox writing to /tmp does constantly.
-// That is a fleet read, and so every button gated on it, broken by a size nothing asked for.
-export const FLEET_ARGS: readonly string[] = [
-    "ps",
-    "-a",
-    "--filter",
-    `name=^${PREFIX}`,
-    "--format",
-    `{"Names":{{json .Names}},"State":{{json .State}},"Image":{{json .Image}}}`,
-];
-
-// Exported for the auto-prepare tick (../auto-prepare.ts): one producer of "what runs on me", whoever is asking.
-export const fleet = async (): Promise<DeviceSandbox[]> => sandboxesFrom(rowsFrom((await docker(FLEET_ARGS)).stdout));
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
-
-// One `NAME=value` out of a container's env list, or undefined when it carries none by that name.
-const envOf = (env: unknown, name: string): string | undefined =>
-    Array.isArray(env)
-        ? env.find((entry): entry is string => typeof entry === "string" && entry.startsWith(`${name}=`))?.slice(name.length + 1)
-        : undefined;
-
-const tokensOf = (value: string | undefined): string[] => (value ?? "").split(/\s+/).filter((token) => token !== "");
-
-// One container's share of the machine, read off its `docker inspect` object. `Memory`/`NanoCpus` are 0 for
-// "unbounded" (absent here), a GPU is a DeviceRequest for the nvidia driver or the `gpu` capability, and which
-// directive is whose is the pair of env stamps the run contract leaves on the container (SANDBOX_RUNTIME the
-// owner's, SANDBOX_OVERLAY_RUNTIME the approved environment's).
-// `HostConfig` is DOCKER's key, not this project's vocabulary: renaming it to `DeviceConfig` reads a key that
-// never exists, and every cap comes back absent while the fixtures renamed with it keep passing.
-// A docker limit field: a positive number is a cap, 0 (docker's "unbounded") and anything else is none.
-const capOf = (value: unknown): number | undefined => (typeof value === "number" && value > 0 ? value : undefined);
-
-// Whether a HostConfig's DeviceRequests carry the GPU, in either spelling docker writes for `--gpus`.
-const gpuRequested = (host: Record<string, unknown>): boolean =>
-    (Array.isArray(host["DeviceRequests"]) ? host["DeviceRequests"] : []).some(
-        (request) =>
-            isRecord(request) &&
-            (request["Driver"] === "nvidia" ||
-                (Array.isArray(request["Capabilities"]) && request["Capabilities"].some((set) => Array.isArray(set) && set.includes("gpu")))),
-    );
-
-export const resourcesFrom = (inspected: unknown): SandboxResources | undefined => {
-    if (!isRecord(inspected)) {
-        return undefined;
+// `ic sandbox list --json` prints one line of JSON on stdout (notes, if any, go to stderr), in the contract's own
+// shape: running state, the share docker enforces, the shape the container runs with, the shape saved for its next
+// restart, and the update staged for it. Parsed, not trusted: a line that is not that shape is ic too old or broken.
+export const fleetFrom = (stdout: string): DeviceSandbox[] => {
+    const line = stdout
+        .split(/\r?\n/)
+        .map((text) => text.trim())
+        .findLast((text) => text.startsWith("["));
+    const parsed = line === undefined ? undefined : z.array(DeviceSandboxSchema).safeParse(JSON.parse(line));
+    if (parsed?.success !== true) {
+        throw new Error("The `ic` on this device did not answer `ic sandbox list --json`. Re-run the sandbox's install command on it to update ic.");
     }
-    const host = isRecord(inspected["HostConfig"]) ? inspected["HostConfig"] : {};
-    const env = isRecord(inspected["Config"]) ? inspected["Config"]["Env"] : undefined;
-    const memory = capOf(host["Memory"]);
-    const nanos = capOf(host["NanoCpus"]);
-    return {
-        ...(memory === undefined ? {} : { memoryBytes: memory }),
-        ...(nanos === undefined ? {} : { cpus: nanos / 1_000_000_000 }),
-        privileged: host["Privileged"] === true,
-        gpu: gpuRequested(host),
-        hostRuntime: tokensOf(envOf(env, HOST_RUNTIME_ENV)),
-        overlayRuntime: tokensOf(envOf(env, OVERLAY_RUNTIME_ENV)),
-    };
+    return parsed.data;
 };
 
-// ---- the share saved for the next restart ----
-
-type SavedShape = z.infer<typeof SandboxResourcesAskFieldsSchema>;
-
-// Where `ic sandbox reshape --later` keeps what it saved: `sandbox-<slug>.shape` in ic's home, which honours
-// INTENTIC_HOME exactly as ic's own `intentic_home()` does. ic owns the file (its `saved_shape.rs`); this side
-// only reads it, to show what is saved and to decide that a Restart has something to apply.
-export const savedShapePath = (slug: string, env: NodeJS.ProcessEnv = process.env, home: string = homedir()): string =>
-    join(env["INTENTIC_HOME"] !== undefined && env["INTENTIC_HOME"] !== "" ? env["INTENTIC_HOME"] : join(home, STATE_DIR), `sandbox-${slug}.shape`);
-
-// A cap in ic's spelling, as the form's whole number: `20g` is 20 GiB, `4` is four cores, empty is "back to the
-// default" (null). Anything else (a `20480m` typed at the CLI) is not a whole number the form can show, so it is
-// left out rather than rounded into a value nobody saved.
-const savedCap = (value: string, unit: RegExp): number | null | undefined => {
-    if (value === "") {
-        return null;
-    }
-    const match = unit.exec(value);
-    const whole = match === null ? Number.NaN : Number(match[1]);
-    return Number.isInteger(whole) && whole > 0 ? whole : undefined;
-};
-
-// The saved file's `key=value` lines as the form's ask, or undefined when nothing readable is saved. Same rules as
-// ic's reader: an unknown key is ignored, an absent key is "leave it".
-export const savedShapeFrom = (text: string): SavedShape | undefined => {
-    const shape: SavedShape = {};
-    for (const line of text.split(/\r?\n/)) {
-        const at = line.indexOf("=");
-        if (at < 0) {
-            continue;
-        }
-        const key = line.slice(0, at).trim();
-        const value = line.slice(at + 1).trim();
-        if (key === "memory") {
-            const gib = savedCap(value, /^(\d+)g$/i);
-            if (gib !== undefined) {
-                shape.memoryGib = gib;
-            }
-        } else if (key === "cpus") {
-            const cores = savedCap(value, /^(\d+)$/);
-            if (cores !== undefined) {
-                shape.cpus = cores;
-            }
-        } else if ((key === "privileged" || key === "gpus") && (value === "on" || value === "off")) {
-            shape[key === "gpus" ? "gpu" : "privileged"] = value === "on";
+// What runs on this machine, as ic answers it. Exported for the auto-prepare tick (../auto-prepare.ts): one producer of
+// "what runs on me", whoever is asking.
+export const fleet = async (): Promise<DeviceSandbox[]> => {
+    await ensureCurrentIc();
+    const candidates = icCandidates(process.platform, homedir());
+    for (const [index, binary] of candidates.entries()) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; ENOENT means try the next
+        const answer = await exec(binary, ["sandbox", "list", "--json"], { timeout: LIST_TIMEOUT_MS, maxBuffer: MAX_BUFFER, windowsHide: true }).catch(
+            (error: NodeJS.ErrnoException & { stderr?: string }) => {
+                if (error.code === "ENOENT" && index < candidates.length - 1) {
+                    return undefined;
+                }
+                throw error.code === "ENOENT"
+                    ? new Error("This device has no `ic` command, so its sandboxes can't be listed or managed from here. Re-run the sandbox's install command on it to get one.")
+                    : new Error(`ic could not list this device's sandboxes: ${(error.stderr ?? error.message).trim()}`);
+            },
+        );
+        if (answer !== undefined) {
+            return fleetFrom(answer.stdout);
         }
     }
-    return Object.keys(shape).length === 0 ? undefined : shape;
-};
-
-// What is saved for one slug; an absent or unreadable file is nothing saved, since this is only ever shown or used
-// to pick the door, and ic re-reads the file itself (refusing an unreadable one) when it applies it.
-const savedShape = async (slug: string): Promise<SavedShape | undefined> =>
-    await readFile(savedShapePath(slug), "utf8").then(savedShapeFrom, () => undefined);
-
-// Whether anything at all is saved: a file whose values the form cannot show (a `20480m` cap) still gets applied.
-const hasSavedShape = async (slug: string): Promise<boolean> =>
-    await readFile(savedShapePath(slug), "utf8").then(
-        (text) => /^(memory|cpus|privileged|gpus)=/m.test(text),
-        () => false,
-    );
-
-// The fleet WITH each container's share of the machine: one `docker inspect` on top of the `docker ps` above.
-// `fleet()` answers "which slug is this" for every op, none of which need a HostConfig; this is for the listing
-// a person or model reads, where the caps and privileges are the point. A container that vanished between the
-// two calls makes `docker inspect` exit non-zero with the others still on stdout, so the partial answer is kept.
-export const fleetDetailed = async (): Promise<DeviceSandbox[]> => {
-    const boxes = await fleet();
-    if (boxes.length === 0) {
-        return boxes;
-    }
-    const inspected = await docker(["inspect", "--format", "{{json .}}", ...boxes.map((box) => box.container)])
-        .then(({ stdout }) => stdout)
-        .catch((error: { stdout?: string }) => error.stdout ?? "");
-    const byContainer = new Map<string, SandboxResources>();
-    for (const line of inspected.split(/\r?\n/)) {
-        if (!line.trim().startsWith("{")) {
-            continue;
-        }
-        try {
-            const parsed: unknown = JSON.parse(line);
-            const resources = resourcesFrom(parsed);
-            // docker names the inspected container with a leading slash, which no other reader here uses.
-            const name = isRecord(parsed) && typeof parsed["Name"] === "string" ? parsed["Name"].replace(/^\//, "") : undefined;
-            if (name !== undefined && resources !== undefined) {
-                byContainer.set(name, resources);
-            }
-        } catch {
-            // A line that is not one inspect object is a warning riding along; the rows it did print still count.
-        }
-    }
-    return await Promise.all(
-        boxes.map(async (box) => {
-            const resources = byContainer.get(box.container);
-            if (resources === undefined) {
-                return box;
-            }
-            const saved = await savedShape(box.slug);
-            return { ...box, resources: saved === undefined ? resources : { ...resources, saved } };
-        }),
-    );
+    throw new Error("no ic candidate was tried");
 };
 
 // Which slugs an `ic` flow is touching right now, in this process. The background auto-prepare tick reads it so
@@ -262,7 +95,7 @@ export const listSandboxes = async (scopes: DeviceScopes): Promise<string> => {
     if (scopes.shell !== "on") {
         assertScope(scopes, "sandboxes");
     }
-    return JSON.stringify(await fleetDetailed(), undefined, 2);
+    return JSON.stringify(await fleet(), undefined, 2);
 };
 
 // The ops themselves, in the one place that spells them: the MCP tool advertises this schema to the model and
@@ -282,6 +115,8 @@ const find = async (slug: string): Promise<DeviceSandbox> => {
     throw new Error(`No sandbox "${slug}" on this device. ${known === "" ? "It runs none." : `It has: ${known}.`}`);
 };
 
+// Start, stop or restart, through ic: it powers the tunnel sidecar with its sandbox (down first, up last), and a start
+// or restart with a shape saved for the next restart is the recreate that applies it.
 export const manageSandbox = async (
     op: SandboxOp,
     slug: string,
@@ -290,24 +125,13 @@ export const manageSandbox = async (
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
     const target = await find(slug);
-    // The tunnel sidecar goes wherever its sandbox goes, a "started" sandbox nobody can reach is not started.
-    // Stopping fells the tunnel first so nothing routes into a container on its way down; starting raises it last.
-    const sidecar = target.tunnelRunning === undefined ? [] : [`${TUNNEL_PREFIX}${slug}`];
-    // A share saved for the next restart turns this start or restart into the recreate that applies it: a bare
-    // `ic sandbox reshape`, which leaves the container running. Only the sidecar still needs raising after it.
-    if (op !== "stop" && (await hasSavedShape(slug))) {
-        const run = await icFlow(slug, ["sandbox", "reshape", slug], onLine);
-        if (run.code !== 0) {
-            throw new Error(`That ${op} failed on this device while applying the share saved for it.\n\n${run.output}`);
-        }
-        if (op === "start" && sidecar.length > 0) {
-            await docker(["start", ...sidecar]);
-        }
-        return `${op === "start" ? "Started" : "Restarted"} sandbox "${slug}" with the share saved for its next restart. Its files and its history were kept.`;
+    const run = await icFlow(slug, icPowerArgs(op, slug), onLine);
+    if (run.code !== 0) {
+        throw new Error(`That ${op} failed on this device.\n\n${run.output}`);
     }
-    await docker([op, ...(op === "stop" ? [...sidecar, target.container] : [target.container, ...sidecar])]);
     const verb = { start: "Started", stop: "Stopped", restart: "Restarted" }[op];
-    return `${verb} sandbox "${slug}"${sidecar.length === 0 ? "" : " and its tunnel"}.`;
+    const applied = op !== "stop" && target.resources?.desired !== undefined;
+    return `${verb} sandbox "${slug}"${applied ? " with the shape saved for its next restart. Its files and its history were kept" : ""}.`;
 };
 
 // ---- the flows that run `ic` ----
@@ -317,18 +141,6 @@ export const manageSandbox = async (
 // container is touched, so the update that follows is a restart rather than a wait.
 export const SandboxSwapSchema = z.enum(["prepare", "update", "rebuild", "rollback"]);
 export type SandboxSwap = z.infer<typeof SandboxSwapSchema>;
-
-// Where `ic` is, in the order the installers put it: a root install writes /usr/local/bin, a user install
-// writes under the home and symlinks ~/.local/bin, Windows only ever has the profile copy. PATH is the last
-// resort, since a developer's global copy would answer here and nothing would answer on a real user's machine.
-// The separator is chosen from the target platform, not from `node:path`, so the Windows spelling can be
-// asserted from a Linux runner.
-export const icCandidates = (platform: NodeJS.Platform, home: string | undefined): string[] => {
-    if (platform === "win32") {
-        return [...(home === undefined ? [] : [`${home}\\.intentic\\ic\\bin\\ic.exe`]), "ic.exe"];
-    }
-    return [...(home === undefined ? [] : [`${home}/.intentic/ic/bin/ic`]), "/usr/local/bin/ic", "ic"];
-};
 
 // The argv for each swap: `rebuild` takes the approved overlay's digest as a required second positional (the
 // trust anchor), while update and rollback take the slug alone. An argument in the wrong position binds to a
@@ -373,24 +185,15 @@ export const icConnectEnv = (platformUrl: string | undefined): { readonly PLATFO
     return { PLATFORM_URL: `${url.origin}${url.pathname.replace(/\/+$/, "")}` };
 };
 
-// The reshape argv, spelled the way `ic sandbox reshape` takes it: a cap as `<n>g`/`<n>`, `null` as ic's
-// `default`, a switch as an explicit on/off. Nothing is interpreted here; a reshape with nothing to change is
-// refused before anything is spawned.
-// A cap's flag value: absent means no flag, null means ic's `default`, a number is spelled the way ic takes it.
+// The OLD `reshape` op's argv, kept one release for pages served by sandboxes older than `set-shape`: a delta as
+// `ic sandbox reshape` flags, `later` as `--later` (ic validates and saves it as the shape for the next restart), and
+// an empty `later` as `--forget`. An empty immediate ask is ic's own "apply what is saved", which ic refuses when
+// nothing is. New callers send `set-shape`, spelled once in the contract (`icShapeArgs`).
 const capFlag = (value: number | null | undefined, spell: (value: number) => string): string | undefined =>
     value === undefined ? undefined : value === null ? "default" : spell(value);
-// A switch's flag value: absent means no flag, otherwise the explicit word ic requires (a bare flag could only add).
 const switchFlag = (value: boolean | undefined): string | undefined => (value === undefined ? undefined : value ? "on" : "off");
 
-// `later` saves the ask for the next restart instead (`--later`), and a `later` with nothing in it forgets what is
-// saved (`--forget`). `saved` says a share is already saved, which is the one case an empty immediate reshape
-// means something: apply that share now.
-export interface ReshapeTiming {
-    readonly later?: boolean | undefined;
-    readonly saved?: boolean | undefined;
-}
-
-export const icReshapeArgs = (slug: string, ask: SandboxResourcesAsk | undefined, { later = false, saved = false }: ReshapeTiming = {}): string[] => {
+export const icReshapeArgs = (slug: string, ask: SandboxResourcesAsk | undefined, { later = false }: { readonly later?: boolean | undefined } = {}): string[] => {
     const flags: readonly (readonly [string, string | undefined])[] = [
         ["--memory", capFlag(ask?.memoryGib, (gib) => `${gib}g`)],
         ["--cpus", capFlag(ask?.cpus, String)],
@@ -400,9 +203,6 @@ export const icReshapeArgs = (slug: string, ask: SandboxResourcesAsk | undefined
     const given = flags.flatMap(([flag, value]) => (value === undefined ? [] : [flag, value]));
     if (later) {
         return ["sandbox", "reshape", slug, ...(given.length === 0 ? ["--forget"] : [...given, "--later"])];
-    }
-    if (given.length === 0 && !saved) {
-        throw new Error(`A reshape has to change something: give a memory or CPU cap, or a privileged/GPU switch.`);
     }
     return ["sandbox", "reshape", slug, ...given];
 };
@@ -550,6 +350,7 @@ export const runIc = async (
     onLine: (line: string) => void,
     env: Readonly<Record<string, string>> = {},
 ): Promise<{ code: number; output: string }> => {
+    await ensureCurrentIc();
     const candidates = icCandidates(process.platform, homedir());
     for (const [index, binary] of candidates.entries()) {
         const attempt = await runStreamed(binary, args, onLine, env);
@@ -606,11 +407,41 @@ export const swapSandbox = async (
     return `${verb} sandbox "${slug}". Its files and its history were kept.`;
 };
 
-// Change a sandbox's share of this machine, or its privileges, over the same `ic` door as the swaps. Rides
-// `sandboxes`, not the removal switch, since every value it changes is undone by the next reshape. The ask is a
-// closed form (two caps, two switches) rather than flags, so nothing reaches docker as text.
-// With `later` the container is not touched: the ask is saved for its next restart (or, empty, what was saved is
-// forgotten), and the answer says which.
+// Set a sandbox's shape, now or for its next restart, over the same `ic` door as the swaps. Rides `sandboxes`, not the
+// removal switch, since every value it changes is undone by the next one. The shape is a closed form (two caps, two
+// switches) rather than flags, so nothing reaches ic as text; a field left out keeps what ic has for it.
+export const shapeSandbox = async (
+    slug: string,
+    fields: SandboxShapeFields,
+    when: SandboxShapeWhen,
+    scopes: DeviceScopes,
+    onLine: (line: string) => void,
+): Promise<string> => {
+    assertScope(scopes, "sandboxes");
+    if (Object.values(fields).every((value) => value === undefined)) {
+        throw new Error("A shape has to set something: a memory or CPU cap, or a privileged/GPU switch. To apply what is saved, restart the sandbox.");
+    }
+    await find(slug);
+    const run = await icFlow(slug, icShapeArgs(slug, fields, when), onLine);
+    if (run.code !== 0) {
+        throw new Error(`That shape was not ${when === "now" ? "applied" : "saved"} on this device.\n\n${run.output}`);
+    }
+    return when === "now"
+        ? `Reshaped sandbox "${slug}". Its files and its history were kept, and the new shape survives every later update.`
+        : `Saved for the next restart of "${slug}" through ic (Restart, Start, an update, a rollback or a rebuild). It keeps running as it is until then.`;
+};
+
+export const forgetShape = async (slug: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
+    assertScope(scopes, "sandboxes");
+    await find(slug);
+    const run = await icFlow(slug, icForgetShapeArgs(slug), onLine);
+    if (run.code !== 0) {
+        throw new Error(`That could not be forgotten on this device.\n\n${run.output}`);
+    }
+    return `Nothing is saved for the next restart of "${slug}" any more. It keeps running as it is.`;
+};
+
+// The old `reshape` op, for one release (see icReshapeArgs).
 export const reshapeSandbox = async (
     slug: string,
     ask: SandboxResourcesAsk | undefined,
@@ -619,19 +450,17 @@ export const reshapeSandbox = async (
     { later = false }: { readonly later?: boolean | undefined } = {},
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    const empty = ask === undefined || Object.values(ask).every((value) => value === undefined);
-    // Built before the fleet is read, for icSwapArgs' reason: an empty immediate ask with nothing saved was already
-    // wrong when it arrived. The saved file is read only for that one case.
-    const args = icReshapeArgs(slug, ask, { later, saved: !later && empty && (await hasSavedShape(slug)) });
+    const args = icReshapeArgs(slug, ask, { later });
     await find(slug);
     const run = await icFlow(slug, args, onLine);
     if (run.code !== 0) {
         throw new Error(`That reshape failed on this device.\n\n${run.output}`);
     }
+    const empty = ask === undefined || Object.values(ask).every((value) => value === undefined);
     if (later) {
         return empty
             ? `Nothing is saved for the next restart of "${slug}" any more. It keeps running as it is.`
-            : `Saved for the next restart of "${slug}". It keeps running as it is until then.`;
+            : `Saved for the next restart of "${slug}" through ic. It keeps running as it is until then.`;
     }
     return `Reshaped sandbox "${slug}". Its files and its history were kept, and the new share survives every later update.`;
 };

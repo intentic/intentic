@@ -44,6 +44,9 @@ export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 // `reshape` with `later`: save the change for the next restart. An agent without it strips `later` from the request and
 // reshapes NOW, restarting the sandbox and interrupting everyone in it, which is why a later-reshape is never sent to one.
 export const DEVICE_FEATURE_RESHAPE_LATER = "reshape-later";
+// The `set-shape`/`forget-shape` ops, and `start`/`restart` applying a saved shape through ic. An agent without it
+// refuses the op by name, so this is for the daemon to say why before sending and for a page to offer only what works.
+export const DEVICE_FEATURE_SET_SHAPE = "set-shape";
 export const deviceSupports = (facts: Pick<DeviceFacts, "features"> | undefined, feature: string): boolean => facts?.features?.includes(feature) === true;
 
 // Docker Desktop's own distros: `wsl -l -q` lists them like any other, and none ever runs an agent or holds a checkout.

@@ -43,6 +43,8 @@ sha2 = "0.11"
 # runtime IS tokio, so this names what is already in the graph instead of adding to it — and the alternative,
 # `spawn_blocking` around `thread::sleep`, would park a pooled worker for six hours at a time.
 tokio = { version = "1", features = ["time"] }
+# The time-limited child every short read here goes through, shared with `ic` so a fix to it reaches both.
+intentic-bounded = { path = "../../../_sandbox/ic/bounded" }
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

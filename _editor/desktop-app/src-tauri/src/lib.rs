@@ -114,7 +114,7 @@ pub fn run() {
             commands::sandbox_list,
             commands::sandbox_power,
             commands::sandbox_recreate,
-            commands::sandbox_reshape,
+            commands::sandbox_shape,
             commands::docker_engine,
             commands::sandbox_remove,
             commands::sandbox_logs,

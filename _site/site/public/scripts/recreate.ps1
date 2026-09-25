@@ -7,7 +7,9 @@
   reviewed is ever built), -Slug + -Rollback = back to the image it ran before its last update, and
   -Slug + -Prepare = download and build the next update without applying it, and -Slug + -Reshape <ic flags> =
   the same image with a different share of this machine (--memory/--cpus/--privileged/--gpus are ic's own
-  flags, forwarded verbatim after -Reshape).
+  flags, forwarded verbatim after -Reshape). -Slug + -Shape <ic flags> sets a shape now or for the next restart
+  (`ic sandbox shape`), -Slug + -Start/-Stop/-Restart powers it through ic (a saved shape is applied), and -List
+  alone prints every sandbox here as JSON.
 
 .EXAMPLE
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123        # update
@@ -21,7 +23,9 @@
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Reshape --memory 12g --cpus 4
 #>
 param(
-    [Parameter(Mandatory = $true)][string]$Slug,
+    # Required by every mode but -List. Not Mandatory: PowerShell would PROMPT for a missing one, and the desktop app
+    # that runs this has nobody to answer; the check below refuses instead.
+    [string]$Slug,
     # Present => rebuild (the approved overlay, pinned to this digest); absent => update (the fresh base).
     [string]$Hash,
     # The third way through the same shim, matching recreate.sh's --rollback: the image before the last update.
@@ -34,8 +38,21 @@ param(
     # follows the switch is ic's own flag surface (--memory 12g, --cpus 4, --privileged on, --gpus off),
     # captured whole and forwarded verbatim so this shim never learns a flag ic could add later.
     [switch]$Reshape,
+    # The same, for ic's `shape` verb (the four fields and --when, or --forget), forwarded verbatim.
+    [switch]$Shape,
+    # Power through ic, matching recreate.sh's --start/--stop/--restart: a start or restart applies a saved shape.
+    [switch]$Start,
+    [switch]$Stop,
+    [switch]$Restart,
+    # Every sandbox on this machine as JSON (`ic sandbox list --json`): the desktop app's listing when the installed
+    # ic is older than the app, since this fetch brings it level.
+    [switch]$List,
     [Parameter(ValueFromRemainingArguments = $true)][string[]]$ReshapeArgs
 )
+if (-not $List -and -not $Slug) {
+    Write-Error 'a sandbox slug is required: -Slug <slug>.'
+    exit 1
+}
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
@@ -117,7 +134,17 @@ if (-not $Ic) {
     }
 }
 
-if ($Rollback) {
+if ($List) {
+    & $Ic sandbox list --json
+} elseif ($Start) {
+    & $Ic sandbox start $Slug
+} elseif ($Stop) {
+    & $Ic sandbox stop $Slug
+} elseif ($Restart) {
+    & $Ic sandbox restart $Slug
+} elseif ($Shape) {
+    & $Ic sandbox shape $Slug @ReshapeArgs
+} elseif ($Rollback) {
     & $Ic sandbox rollback $Slug
 } elseif ($Prepare) {
     & $Ic sandbox prepare $Slug

@@ -13,6 +13,7 @@ mod runner;
 mod sandbox;
 #[cfg(unix)]
 mod selfhost;
+mod shape;
 mod tty;
 mod ui;
 mod util;
@@ -142,8 +143,8 @@ enum SandboxCommand {
     },
     /// Change a sandbox's share of this machine, or its privileges — a restart of about a minute onto the
     /// same image. The values live on the container and survive every later update, rollback and rebuild.
-    /// With --later the ask is saved instead, and the sandbox's next restart applies it; with no ask at all,
-    /// what is saved is applied now.
+    /// With no ask at all, the shape saved for the next restart is applied now. `--later` and `--forget` are
+    /// the older spellings of `ic sandbox shape … --when next-restart` and `ic sandbox shape --forget`.
     #[command(group = ArgGroup::new("ask").multiple(true))]
     Reshape {
         /// The sandbox to reshape (always named: this changes a container's privileges)
@@ -161,11 +162,11 @@ enum SandboxCommand {
         /// Pass this machine's NVIDIA GPUs through (on/off); dropped, with a note, on a host without the runtime
         #[arg(long, value_enum, group = "ask")]
         gpus: Option<Switch>,
-        /// Save the ask for the sandbox's next restart (update, rollback, rebuild, or a Restart from the
-        /// Devices view) instead of restarting it now. Replaces whatever was saved before
+        /// Save the ask, laid over what runs, for the sandbox's next restart through ic instead of restarting it
+        /// now (the older spelling of `shape --when next-restart`, kept for machine agents that send it)
         #[arg(long, requires = "ask", conflicts_with = "forget")]
         later: bool,
-        /// Drop the share saved with --later, leaving the sandbox as it runs
+        /// Drop the shape saved for the next restart, leaving the sandbox as it runs (`shape --forget`)
         #[arg(long, conflicts_with = "ask")]
         forget: bool,
         /// Swap without first running the target image's state conversions against read-only mounts of
@@ -174,13 +175,65 @@ enum SandboxCommand {
         #[arg(long = "skip-preflight", conflicts_with_all = ["later", "forget"])]
         skip_preflight: bool,
     },
+    /// Set a sandbox's shape — its share of this machine and its privileges — now, or for its next restart.
+    /// Fields left out keep what is saved for the next restart, else what runs. A shape saved for later is
+    /// checked against the image's run contract first, and applied by the next restart through ic: `start`,
+    /// `restart`, an update, a rollback or a rebuild (not by Docker restarting the container by itself).
+    #[command(group = ArgGroup::new("fields").multiple(true))]
+    #[command(group = ArgGroup::new("timing").required(true).args(["when", "forget"]))]
+    Shape {
+        /// The sandbox to shape (always named: this changes a container's privileges)
+        slug: String,
+        /// Memory cap in whole GiB, e.g. 12g — or `default` for the share derived from this machine
+        #[arg(long, group = "fields")]
+        memory: Option<String>,
+        /// CPU cap in whole cores, e.g. 4 — or `default` for every core the engine has
+        #[arg(long, group = "fields")]
+        cpus: Option<String>,
+        /// Run the container privileged (on/off); a privilege the approved environment demands stays in force
+        #[arg(long, value_enum, group = "fields")]
+        privileged: Option<Switch>,
+        /// Pass this machine's NVIDIA GPUs through (on/off); dropped, with a note, on a host without the runtime
+        #[arg(long, value_enum, group = "fields")]
+        gpus: Option<Switch>,
+        /// `now` restarts onto the shape; `next-restart` saves it and restarts nothing
+        #[arg(long, value_enum, requires = "fields")]
+        when: Option<When>,
+        /// Drop the shape saved for the next restart
+        #[arg(long, conflicts_with = "fields")]
+        forget: bool,
+        /// Restart without the state-conversion pre-flight. Only with `--when now`
+        #[arg(long = "skip-preflight", conflicts_with = "forget")]
+        skip_preflight: bool,
+    },
+    /// Start a stopped sandbox and its tunnel, applying the shape saved for its next restart if there is one
+    Start {
+        /// The sandbox to start (omit when this machine runs exactly one)
+        slug: Option<String>,
+    },
+    /// Stop a sandbox and its tunnel; its data and anything saved for its next restart are kept
+    Stop {
+        /// The sandbox to stop (omit when this machine runs exactly one)
+        slug: Option<String>,
+    },
+    /// Restart a sandbox and its tunnel, applying the shape saved for its next restart if there is one
+    Restart {
+        /// The sandbox to restart (omit when this machine runs exactly one)
+        slug: Option<String>,
+    },
     /// Check every link of a sandbox's reachability chain and name what is broken, with its fix (read-only)
     Doctor {
         /// The sandbox to diagnose (omit when this machine runs exactly one)
         slug: Option<String>,
     },
     /// List the sandboxes on this machine
-    List,
+    List {
+        /// One line of JSON: each sandbox's state, its share as docker enforces it, the shape it runs with, the
+        /// shape saved for its next restart and the update staged for it (what the desktop app and the machine
+        /// agent read)
+        #[arg(long)]
+        json: bool,
+    },
     /// Remove sandboxes — asks which, confirms; their data stays recoverable for a week
     Remove {
         /// Which sandboxes to remove; none = pick interactively
@@ -227,6 +280,13 @@ enum Switch {
     Off,
 }
 
+/// When `ic sandbox shape` takes effect.
+#[derive(Clone, Copy, PartialEq, Debug, ValueEnum)]
+enum When {
+    Now,
+    NextRestart,
+}
+
 /// The verb's `default` is a person's word for the contract's empty value ("clear this, back to what you
 /// derive"); every other spelling is forwarded as typed, because what a valid cap is belongs to the contract.
 fn seed_value(given: Option<String>) -> Option<String> {
@@ -237,6 +297,21 @@ fn seed_value(given: Option<String>) -> Option<String> {
             value
         }
     })
+}
+
+/// The four optional fields as the ask both shape verbs take.
+fn ask_of(
+    memory: Option<String>,
+    cpus: Option<String>,
+    privileged: Option<Switch>,
+    gpus: Option<Switch>,
+) -> shape::Ask {
+    shape::Ask {
+        memory: seed_value(memory),
+        cpus: seed_value(cpus),
+        privileged: privileged.map(|switch| switch == Switch::On),
+        gpus: gpus.map(|switch| switch == Switch::On),
+    }
 }
 
 /// `--skip-preflight` as the swap flow reads it.
@@ -363,22 +438,46 @@ fn main() {
                 forget,
                 skip_preflight,
             } => {
-                let ask = sandbox::recreate::Reshape {
-                    memory: seed_value(memory),
-                    cpus: seed_value(cpus),
-                    privileged: privileged.map(|switch| switch == Switch::On),
-                    gpus: gpus.map(|switch| switch == Switch::On),
-                };
+                let ask = ask_of(memory, cpus, privileged, gpus);
                 if forget {
-                    sandbox::recreate::forget_saved(slug)
+                    sandbox::desired::forget(slug)
                 } else if later {
-                    sandbox::recreate::reshape_later(slug, ask)
+                    sandbox::desired::save_later(slug, ask)
                 } else {
                     sandbox::recreate::reshape(slug, ask, preflight(skip_preflight))
                 }
             }
+            SandboxCommand::Shape {
+                slug,
+                memory,
+                cpus,
+                privileged,
+                gpus,
+                when,
+                forget,
+                skip_preflight,
+            } => match (forget, when) {
+                (true, _) | (false, None) => sandbox::desired::forget(slug),
+                (false, Some(when)) => sandbox::desired::set(
+                    slug,
+                    ask_of(memory, cpus, privileged, gpus),
+                    match when {
+                        When::Now => sandbox::desired::When::Now,
+                        When::NextRestart => sandbox::desired::When::NextRestart,
+                    },
+                    preflight(skip_preflight),
+                ),
+            },
+            SandboxCommand::Start { slug } => {
+                sandbox::power::run(sandbox::power::Power::Start, slug)
+            }
+            SandboxCommand::Stop { slug } => sandbox::power::run(sandbox::power::Power::Stop, slug),
+            SandboxCommand::Restart { slug } => {
+                sandbox::power::run(sandbox::power::Power::Restart, slug)
+            }
             SandboxCommand::Doctor { slug } => sandbox::doctor::run(slug),
-            SandboxCommand::List => sandbox::list(),
+            SandboxCommand::List { json: false } => sandbox::list(),
+            SandboxCommand::List { json: true } => sandbox::listing::list_json(),
             SandboxCommand::Remove {
                 slugs,
                 all,
@@ -918,6 +1017,104 @@ mod tests {
         };
         assert!(parse(&["sandbox", "reshape", "abc123", "--forget", "--cpus", "4"]).is_err());
         assert!(parse(&["sandbox", "reshape", "abc123", "--forget", "--later"]).is_err());
+    }
+
+    /* `shape` is the one verb that sets a shape: it always says when, or that it forgets. */
+    #[test]
+    fn shape_says_when_or_forgets_and_never_both() {
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Shape {
+                    slug,
+                    memory,
+                    cpus,
+                    privileged,
+                    gpus,
+                    when,
+                    forget: false,
+                    skip_preflight: false,
+                }),
+        }) = parse(&[
+            "sandbox",
+            "shape",
+            "abc123",
+            "--memory",
+            "20g",
+            "--cpus",
+            "default",
+            "--privileged",
+            "off",
+            "--gpus",
+            "on",
+            "--when",
+            "next-restart",
+        ])
+        else {
+            panic!("a whole shape for the next restart did not parse")
+        };
+        assert_eq!(slug, "abc123");
+        assert_eq!(
+            (memory.as_deref(), cpus.as_deref()),
+            (Some("20g"), Some("default"))
+        );
+        assert_eq!((privileged, gpus), (Some(Switch::Off), Some(Switch::On)));
+        assert_eq!(when, Some(When::NextRestart));
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Shape { when, .. }),
+        }) = parse(&["sandbox", "shape", "abc123", "--cpus", "4", "--when", "now"])
+        else {
+            panic!("--when now did not parse")
+        };
+        assert_eq!(when, Some(When::Now));
+        // Saying nothing about when is refused: a shape that silently restarted, or silently didn't, is the bug.
+        assert!(parse(&["sandbox", "shape", "abc123", "--cpus", "4"]).is_err());
+        // A when with nothing to set is refused; `restart` is the verb that applies what is saved.
+        assert!(parse(&["sandbox", "shape", "abc123", "--when", "now"]).is_err());
+        assert!(parse(&["sandbox", "shape", "abc123", "--when", "later"]).is_err());
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Shape {
+                    forget: true,
+                    when: None,
+                    ..
+                }),
+        }) = parse(&["sandbox", "shape", "abc123", "--forget"])
+        else {
+            panic!("--forget did not parse")
+        };
+        assert!(parse(&["sandbox", "shape", "abc123", "--forget", "--cpus", "4"]).is_err());
+        assert!(parse(&["sandbox", "shape", "abc123", "--forget", "--when", "now"]).is_err());
+        assert!(parse(&["sandbox", "shape", "abc123", "--forget", "--skip-preflight"]).is_err());
+        // Always named, like reshape: this changes a container's privileges.
+        assert!(parse(&["sandbox", "shape", "--forget"]).is_err());
+    }
+
+    #[test]
+    fn power_verbs_take_an_optional_slug_and_list_takes_json() {
+        for verb in ["start", "stop", "restart"] {
+            assert!(parse(&["sandbox", verb]).is_ok(), "{verb}");
+            assert!(parse(&["sandbox", verb, "abc123"]).is_ok(), "{verb}");
+            assert!(parse(&["sandbox", verb, "a", "b"]).is_err(), "{verb}");
+        }
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Stop { slug }),
+        }) = parse(&["sandbox", "stop", "abc123"])
+        else {
+            panic!("stop did not parse")
+        };
+        assert_eq!(slug.as_deref(), Some("abc123"));
+        assert!(matches!(
+            parse(&["sandbox", "list", "--json"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::List { json: true })
+            })
+        ));
+        assert!(matches!(
+            parse(&["sandbox", "list"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::List { json: false })
+            })
+        ));
     }
 
     #[test]

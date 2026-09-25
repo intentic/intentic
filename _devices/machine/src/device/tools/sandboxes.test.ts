@@ -2,8 +2,8 @@ import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { ScopeError } from "../policy.js";
 import {
     createSandbox,
-    FLEET_ARGS,
-    icCandidates,
+    fleetFrom,
+    forgetShape,
     icConnectArgs,
     icConnectEnv,
     icRemoveArgs,
@@ -15,16 +15,13 @@ import {
     reconnectSandbox,
     removeSandbox,
     reshapeSandbox,
-    resourcesFrom,
     runnerFlow,
-    rowsFrom,
-    sandboxesFrom,
-    savedShapeFrom,
-    savedShapePath,
     sandboxLogs,
+    shapeSandbox,
     swapSandbox,
     tailSandboxLogs,
 } from "./sandboxes.js";
+import { icCandidates, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
@@ -36,47 +33,38 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     ...overrides,
 });
 
-const row = (names: string, state = "running") => ({ names, state, image: "ghcr.io/intentic/sandbox:1" });
+// What ic prints for `ic sandbox list --json`, verbatim from its listing (listing.rs's own test builds the same object):
+// the agent parses it against the contract rather than re-deriving any of it from docker.
+const listed = {
+    slug: "work",
+    container: "intentic-sandbox-work",
+    running: true,
+    image: "ghcr.io/intentic/sandbox:stable",
+    tunnelRunning: false,
+    resources: {
+        memoryBytes: 12 * 1024 ** 3,
+        cpus: 4,
+        privileged: false,
+        gpu: true,
+        hostRuntime: ["--gpus=all"],
+        overlayRuntime: ["--device=/dev/net/tun"],
+        shape: { memoryGib: 12, cpus: null, privileged: false, gpu: true },
+        desired: { memoryGib: 20, cpus: null, privileged: false, gpu: true },
+    },
+    staged: { image: "img:next", version: "1.4.2" },
+};
 
-// `{{json .}}` also carries `Size`, which docker computes by walking every container's writable layer: slow, and it
-// fails outright while a sandbox writes to /tmp. The fleet read needs three fields, so it names three fields.
-test("the fleet read names the fields it parses instead of asking for the whole container", () => {
-    const format = FLEET_ARGS[FLEET_ARGS.indexOf("--format") + 1] ?? "";
-    expect(format).not.toContain("{{json .}}");
-    // Rendered with each placeholder standing for its own value, so the template is checked against the parser that
-    // has to read it rather than against a copy of itself.
-    const rendered = format.replaceAll(/\{\{json \.(\w+)\}\}/g, `"$1-value"`);
-    expect(rowsFrom(rendered)).toEqual([{ names: "Names-value", state: "State-value", image: "Image-value" }]);
+test("the fleet is ic's own listing, read as the contract's rows with nothing added or merged", () => {
+    expect(fleetFrom(`${JSON.stringify([listed])}\n`)).toEqual([listed]);
+    // A note ic wrote to the same stream (a CRLF console, a warning) does not hide the listing.
+    expect(fleetFrom(`note: something\r\n${JSON.stringify([listed])}\r\n`)).toEqual([listed]);
+    expect(fleetFrom("[]")).toEqual([]);
 });
 
-test("docker's json-lines output is read row by row, skipping whatever else the stream carried", () => {
-    const stdout = [
-        "WARNING: something about the daemon",
-        JSON.stringify({ Names: "intentic-sandbox-work", State: "running", Image: "img" }),
-        "{ not json at all }",
-        JSON.stringify({ NotNames: "x" }),
-    ].join("\n");
-    expect(rowsFrom(stdout)).toEqual([{ names: "intentic-sandbox-work", state: "running", image: "img" }]);
-});
-
-// The sidecar rule, moved here from the daemon: a name is only a sidecar when the workspace container it would
-// belong to exists, since a user's own subdomain may legitimately BE `tunnel-something`.
-test("a tunnel sidecar folds into its sandbox instead of being a sandbox", () => {
-    const boxes = sandboxesFrom([row("intentic-sandbox-work"), row("intentic-sandbox-tunnel-work", "exited")]);
-    expect(boxes).toEqual([
-        { slug: "work", container: "intentic-sandbox-work", running: true, image: "ghcr.io/intentic/sandbox:1", tunnelRunning: false },
-    ]);
-});
-
-test("a sandbox with no sidecar at all has no tunnelRunning key: absent and false are different facts", () => {
-    const boxes = sandboxesFrom([row("intentic-sandbox-work")]);
-    expect(boxes).toHaveLength(1);
-    expect("tunnelRunning" in (boxes[0] ?? {})).toBe(false);
-});
-
-test("a workspace whose own name starts with tunnel- is a sandbox, not somebody's sidecar", () => {
-    const boxes = sandboxesFrom([row("intentic-sandbox-tunnel-lab")]);
-    expect(boxes.map((box) => box.slug)).toEqual(["tunnel-lab"]);
+// An ic from before `--json` prints a usage error or the text listing; either way it is not a fleet of nothing.
+test("an ic that does not answer the listing is named, never read as a machine with no sandboxes", () => {
+    expect(() => fleetFrom("running   work\n")).toThrow(/did not answer `ic sandbox list --json`/);
+    expect(() => fleetFrom(JSON.stringify([{ slug: "work" }]))).toThrow(/update ic/);
 });
 
 test("listing is refused only when NEITHER grant covers it, naming the manage switch", async () => {
@@ -187,102 +175,32 @@ test("a reshape builds ic's flags from the ask, with null as default and switche
     expect(icReshapeArgs("work", { gpu: true })).toEqual(["sandbox", "reshape", "work", "--gpus", "on"]);
 });
 
-test("a reshape with nothing to change is refused before anything is spawned", () => {
-    expect(() => icReshapeArgs("work", undefined)).toThrow(/change something/i);
-    expect(() => icReshapeArgs("work", {})).toThrow(/change something/i);
-});
-
-// `later` saves instead of restarting; an empty `later` forgets what is saved; an empty immediate reshape is
-// meaningful only when something is saved, and then it is a bare `reshape` that applies it.
-test("a reshape saved for later carries --later, an empty one forgets, and a bare one applies what is saved", () => {
+// The old op's `later` saves instead of restarting and an empty `later` forgets; an empty immediate reshape is ic's own
+// "apply what is saved", which ic refuses when nothing is. No saved file is read on this side any more.
+test("the old reshape op maps later onto --later, an empty later onto --forget, and an empty ask onto a bare reshape", () => {
     expect(icReshapeArgs("work", { memoryGib: 20 }, { later: true })).toEqual(["sandbox", "reshape", "work", "--memory", "20g", "--later"]);
     expect(icReshapeArgs("work", undefined, { later: true })).toEqual(["sandbox", "reshape", "work", "--forget"]);
     expect(icReshapeArgs("work", {}, { later: true })).toEqual(["sandbox", "reshape", "work", "--forget"]);
-    expect(icReshapeArgs("work", undefined, { saved: true })).toEqual(["sandbox", "reshape", "work"]);
-    expect(() => icReshapeArgs("work", undefined, { saved: false })).toThrow(/change something/i);
-    // An ask applied now rides as it always did, whether or not something is saved: ic lays it over the saved share.
-    expect(icReshapeArgs("work", { cpus: 4 }, { saved: true })).toEqual(["sandbox", "reshape", "work", "--cpus", "4"]);
+    expect(icReshapeArgs("work", undefined)).toEqual(["sandbox", "reshape", "work"]);
+    expect(icReshapeArgs("work", { cpus: 4 })).toEqual(["sandbox", "reshape", "work", "--cpus", "4"]);
 });
 
-// The file ic's `saved_shape.rs` writes, read back as the form's ask: `memory=` is null (the default), a switch is
-// on/off, and a value the form cannot hold as a whole number is left out rather than rounded.
-test("the saved share reads back from ic's own file, keeping default, off and absent apart", () => {
-    expect(savedShapeFrom("memory=20g\ncpus=\nprivileged=off\ngpus=on\n")).toEqual({ memoryGib: 20, cpus: null, privileged: false, gpu: true });
-    expect(savedShapeFrom("cpus=4\r\n")).toEqual({ cpus: 4 });
-    expect(savedShapeFrom("memory=20480m\nfuture=1\nprivileged=maybe\n")).toBeUndefined();
-    expect(savedShapeFrom("")).toBeUndefined();
+test("a shape that sets nothing is refused before ic is asked, so it can never restart anything", async () => {
+    await expect(shapeSandbox("work", {}, "now", scopes(), () => {})).rejects.toThrow(/has to set something/);
+    await expect(shapeSandbox("work", { memoryGib: undefined }, "nextRestart", scopes(), () => {})).rejects.toThrow(/has to set something/);
 });
 
-test("the saved share lives in ic's home, which INTENTIC_HOME moves exactly as it moves ic's", () => {
-    expect(savedShapePath("work", {}, "/home/u")).toBe("/home/u/.intentic/sandbox-work.shape");
-    expect(savedShapePath("work", { INTENTIC_HOME: "/srv/ic" }, "/home/u")).toBe("/srv/ic/sandbox-work.shape");
-    expect(savedShapePath("work", { INTENTIC_HOME: "" }, "/home/u")).toBe("/home/u/.intentic/sandbox-work.shape");
+test("setting and forgetting a shape are refused by the sandboxes switch, like every verb that runs ic", async () => {
+    await expect(shapeSandbox("work", { cpus: 4 }, "nextRestart", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(
+        /Manage sandboxes on this device/,
+    );
+    await expect(forgetShape("work", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
 });
 
 test("reshaping is refused by the sandboxes switch, like the swaps it shares a door with", async () => {
     await expect(reshapeSandbox("work", { memoryGib: 12 }, scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(
         /Manage sandboxes on this device/,
     );
-});
-
-// What a container runs with, off docker's own inspect object. The two zeros are the reading that matters:
-// docker writes 0 for "no limit", so 0 must read as absent, not as a cap of zero.
-test("a container's share of the machine is read off its HostConfig and its two directive stamps", () => {
-    const inspected = {
-        Name: "/intentic-sandbox-work",
-        HostConfig: {
-            Memory: 12 * 1024 ** 3,
-            NanoCpus: 4_000_000_000,
-            Privileged: true,
-            DeviceRequests: [{ Driver: "", Count: -1, Capabilities: [["gpu"]] }],
-        },
-        Config: { Env: ["PATH=/usr/bin", "SANDBOX_RUNTIME=--gpus=all", "SANDBOX_OVERLAY_RUNTIME=--privileged"] },
-    };
-    expect(resourcesFrom(inspected)).toEqual({
-        memoryBytes: 12 * 1024 ** 3,
-        cpus: 4,
-        privileged: true,
-        gpu: true,
-        hostRuntime: ["--gpus=all"],
-        overlayRuntime: ["--privileged"],
-    });
-});
-
-test("an unbounded container reads as having no caps, no privileges and no asks", () => {
-    const bare = resourcesFrom({
-        Name: "/intentic-sandbox-work",
-        HostConfig: { Memory: 0, NanoCpus: 0, Privileged: false, DeviceRequests: null },
-        Config: { Env: [] },
-    });
-    expect(bare).toEqual({ privileged: false, gpu: false, hostRuntime: [], overlayRuntime: [] });
-    expect(bare).not.toHaveProperty("memoryBytes");
-    expect(bare).not.toHaveProperty("cpus");
-    // The nvidia driver spelling counts as a GPU too, and a non-object is no reading at all.
-    expect(resourcesFrom({ HostConfig: { DeviceRequests: [{ Driver: "nvidia" }] } })?.gpu).toBe(true);
-    expect(resourcesFrom("not an object")).toBeUndefined();
-});
-
-// The key is DOCKER's, not this repo's vocabulary. A sweep once renamed it to `DeviceConfig` — this repo's own
-// type name — in the reader AND in the fixtures above, so every cap silently read as absent while the suite
-// stayed green. Pinned against a verbatim `docker inspect` object, which is the only thing that can catch that:
-// captured from `docker inspect intentic-sandbox-… --format '{{json .}}'` on a 16 GiB privileged sandbox.
-test("the share is read under docker's own key, so a renamed one cannot pass", () => {
-    const asDockerEmitsIt = {
-        Id: "9f0b1c",
-        Name: "/intentic-sandbox-work",
-        HostConfig: { Memory: 17_179_869_184, NanoCpus: 0, Privileged: true, DeviceRequests: null },
-        Config: { Env: ["SANDBOX_RUNTIME=--privileged"] },
-    };
-    expect(resourcesFrom(asDockerEmitsIt)).toEqual({
-        memoryBytes: 17_179_869_184,
-        privileged: true,
-        gpu: false,
-        hostRuntime: ["--privileged"],
-        overlayRuntime: [],
-    });
-    // Docker emits no `DeviceConfig` at all, so a reader aimed there sees an unbounded, unprivileged container.
-    const underTheRenamedKey = { ...asDockerEmitsIt, DeviceConfig: asDockerEmitsIt.HostConfig, HostConfig: undefined };
-    expect(resourcesFrom(underTheRenamedKey)).toEqual({ privileged: false, gpu: false, hostRuntime: ["--privileged"], overlayRuntime: [] });
 });
 
 test("removal confirms itself, because there is no terminal on this end to answer ic's prompt", () => {
@@ -355,6 +273,18 @@ test("shape files ride the runner-up argv, and an overlay without its hash is re
 test("ic is looked for where the installers put it before PATH is tried", () => {
     expect(icCandidates("linux", "/home/ada")).toEqual(["/home/ada/.intentic/ic/bin/ic", "/usr/local/bin/ic", "ic"]);
     expect(icCandidates("win32", "C:\\Users\\Ada")).toEqual(["C:\\Users\\Ada\\.intentic\\ic\\bin\\ic.exe", "ic.exe"]);
+});
+
+// ic grows verbs in the same release the agent starts using them, so an agent keeps the ic it runs at least as new as
+// itself. A working-tree agent has no release to fetch and leaves the developer's ic alone.
+test("an ic older than the agent, or none, is fetched; a newer one and a dev agent are left alone", () => {
+    expect(icVersionFrom("ic 1.4.2\n")).toBe("1.4.2");
+    expect(icVersionFrom("error: unexpected argument")).toBeUndefined();
+    expect(icNeedsFetch("1.4.1", "1.4.2")).toBe(true);
+    expect(icNeedsFetch(undefined, "1.4.2")).toBe(true);
+    expect(icNeedsFetch("1.4.2", "1.4.2")).toBe(false);
+    expect(icNeedsFetch("1.10.0", "1.9.0")).toBe(false);
+    expect(icNeedsFetch(undefined, "0.0.0")).toBe(false);
 });
 
 test("a machine with no home still tries the rest", () => {

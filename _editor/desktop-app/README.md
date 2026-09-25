@@ -8,7 +8,9 @@ flowchart LR
     os["OS link handler<br/>browser, second launch"] -->|"intentic://"| app
     launcher["Launcher face<br/>src/ Vue bundle"] -->|"Tauri commands"| app
     app -->|"spawns"| scripts["Staged scripts<br/>connect, sync, recreate"]
-    scripts --> docker["Docker<br/>sandbox + tunnel"]
+    app -->|"list --json"| ic(["ic"])
+    scripts --> ic
+    ic --> docker["Docker<br/>sandbox + tunnel"]
     app -->|"sign-in"| browser["Default browser"]
     app -->|"updater"| release["GitHub release<br/>latest.json"]
 ```
@@ -21,6 +23,12 @@ flowchart LR
   `recreate` and `cleanup` scripts the copy-paste one-liners run. `stage-desktop-scripts.sh` copies them from
   `_site/site/public/scripts` at the current commit, so an uncommitted script edit does not reach `tauri dev` or a
   local installer.
+- **What runs is `ic`'s to say.** The manager's list is `ic sandbox list --json` from the installed `ic` (the shim's
+  `--list` when that one is missing or older than this app, whose fetch brings it level). Start, stop and restart are
+  `recreate --start|--stop|--restart`, and the Resources form's Apply and Save are `recreate --shape`, all `ic` verbs
+  behind the shim's switch, so a Restart here applies a shape saved for the next restart exactly as a Restart from
+  the web does. The app reads nothing off `docker inspect`; the short children it waits on (Docker probes, the
+  listing, the agent's status) share `ic`'s time-limited capture crate, `_sandbox/ic/bounded`.
 - **Tray-resident.** The × hides the workspace. The tray reopens it, opens "This device", shows the machine agent
   and update state, and quits. Updates download in the background and install on quit or from the editor's banner;
   deb and rpm installs cannot replace themselves and link to the download page instead.

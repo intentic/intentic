@@ -176,7 +176,7 @@
         "sandboxUsingRightNow": "To jest sandbox, w którym właśnie pracujesz: ta strona straci go, dopóki nie wróci.",
         "saveForNextRestart": "Zapisz na następny restart",
         "savedForNextRestart": "Zapisane na następny restart: {share}. Pola to pokazują; „Zastosuj teraz” od razu restartuje z tym przydziałem.",
-        "savingKeepsItRunning": "Zapisanie zostawia sandbox działający tak, jak jest. Jego następny restart, aktualizacja, cofnięcie lub przebudowa zastosuje nowy przydział."
+        "savingKeepsItRunning": "Zapisanie zostawia sandbox działający tak, jak jest. ic zachowuje nowy przydział i stosuje go przy następnym restarcie sandboxa przez ic: Uruchom ponownie tutaj, Uruchom, aktualizacja, cofnięcie lub przebudowa. Restart kontenera wykonany przez samego Dockera, po awarii lub ponownym uruchomieniu komputera, go nie stosuje."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "To usuwa sandbox i wszystko, co w nim jest — jego pliki i jego historię — z tego urządzenia. Tego nie można cofnąć.",

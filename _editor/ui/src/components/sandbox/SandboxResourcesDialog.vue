@@ -1,5 +1,6 @@
 <!-- Confirmation dialog for one sandbox's memory, CPU, privileged and GPU share; shared by the web and desktop apps.
-     Apply restarts the sandbox now; Save (where the caller can carry it) keeps the share for its next restart. -->
+     It holds a WHOLE shape and emits one: Apply restarts the sandbox onto it now; Save (where the caller can carry it)
+     has ic keep it for the sandbox's next restart through ic. -->
 <script setup lang="ts">
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, useId, watch } from "vue";
@@ -10,23 +11,19 @@ import type { DeviceSandboxResources } from "./deviceDetail.js";
 import Modal from "../overlays/Modal.vue";
 import Row from "../rows/Row.vue";
 import {
-    applyAskFrom,
-    askSummary,
     capFromField,
     cpuBounds,
     defaultMemoryGib,
     type EngineFacts,
     engineMemoryGib,
-    formFrom,
     formProblems,
     gpuDropped,
     locksOf,
     MEMORY_BOUNDS,
-    type ResourcesAsk,
     type ResourcesForm,
-    sameAsk,
-    saveAskFrom,
-    withAsk,
+    runningShape,
+    sameShape,
+    shapeSummary,
 } from "./sandboxResources.js";
 import { ui } from "../../lib/ui.js";
 
@@ -54,33 +51,33 @@ const {
     selfWarning?: boolean;
     /**
      * A memory cap to open with already typed in, for a caller that opened this form BECAUSE of the cap (the
-     * out-of-memory notice). Only the field moves: `initial` stays the container's real share, so Apply sends the
+     * out-of-memory notice). Only the field moves: `running` stays the shape the container runs with, so Apply sends the
      * difference and the reader sees what they are about to change from.
      */
     suggestMemoryGib?: number | undefined;
     /**
-     * Whether the caller can save a share for the sandbox's next restart (the machine agent's `later`), which adds
-     * the Save button. Off for a caller whose door has no such thing.
+     * Whether the caller can have ic save a shape for the sandbox's next restart (a machine agent with `set-shape`,
+     * the desktop app), which adds the Save button. Off for a caller whose door has no such thing.
      */
     canSave?: boolean;
 }>();
 
-// `apply` carries undefined when the only change is to apply what is already saved; `save` carries undefined to
-// forget what is saved, which is what saving a form that matches the running share means.
-const emit = defineEmits<{ cancel: []; apply: [ask: ResourcesAsk | undefined]; save: [ask: ResourcesAsk | undefined] }>();
+// Both carry the whole shape the form holds. `save` carries undefined to forget what is saved, which is what saving
+// the shape that already runs means.
+const emit = defineEmits<{ cancel: []; apply: [shape: ResourcesForm]; save: [shape: ResourcesForm | undefined] }>();
 
 // The form starts from the container every time it opens, not from where the last visit left it, so a
-// share changed by an Apply in between is what the next open shows. `initial` is what RUNS; the fields open on
-// what the next restart would leave, so a saved share is what the reader sees and edits.
+// shape changed by an Apply in between is what the next open shows. `running` is what RUNS; the fields open on
+// the shape saved for the next restart when there is one, so that is what the reader sees and edits.
 const EMPTY: ResourcesForm = { memoryGib: null, cpus: null, privileged: false, gpu: false };
-const initial = ref<ResourcesForm>(EMPTY);
+const running = ref<ResourcesForm>(EMPTY);
 const form = ref<ResourcesForm>(EMPTY);
 watch(
     () => [open, current, suggestMemoryGib] as const,
     ([showing, share, suggested]) => {
         if (showing && share !== undefined) {
-            initial.value = formFrom(share);
-            form.value = { ...withAsk(initial.value, share.saved), ...(suggested === undefined ? {} : { memoryGib: suggested }) };
+            running.value = runningShape(share);
+            form.value = { ...(share.desired ?? running.value), ...(suggested === undefined ? {} : { memoryGib: suggested }) };
         }
     },
     { immediate: true },
@@ -92,15 +89,14 @@ const memoryDefault = computed(() => defaultMemoryGib(engine));
 const engineGib = computed(() => engineMemoryGib(engine));
 const cpus = computed(() => cpuBounds(engine));
 const problems = computed(() => formProblems(form.value, engine));
-const saved = computed(() => current?.saved);
-const savedSummary = computed(() => (saved.value === undefined ? undefined : askSummary(saved.value)));
+const desired = computed(() => current?.desired);
+const desiredSummary = computed(() => (desired.value === undefined ? undefined : shapeSummary(desired.value)));
 const valid = computed(() => problems.value.memory === undefined && problems.value.cpus === undefined);
-// Apply is worth pressing when the form differs from what runs, or when a saved share is waiting to be applied.
-const applyAsk = computed(() => applyAskFrom(initial.value, saved.value, form.value));
-const applyReady = computed(() => valid.value && (applyAsk.value !== undefined || saved.value !== undefined));
-// Save is worth pressing when it would change what is saved: a new share, or forgetting the one there is.
-const saveAsk = computed(() => saveAskFrom(initial.value, form.value));
-const saveReady = computed(() => valid.value && !sameAsk(saveAsk.value, saved.value));
+// Apply is worth pressing when the form differs from what runs, or when a saved shape is waiting to be applied.
+const applyReady = computed(() => valid.value && (!sameShape(form.value, running.value) || desired.value !== undefined));
+// Save is worth pressing when it would change what is saved: a new shape, or forgetting the one there is.
+const saveShape = computed(() => (sameShape(form.value, running.value) ? undefined : form.value));
+const saveReady = computed(() => valid.value && !sameShape(form.value, desired.value ?? running.value));
 
 // A cap field's text, read back on every keystroke: the problem and the Apply button both follow the
 // typing. Not-a-number mid-edit leaves the form as it was, rather than flipping the cap to the default.
@@ -220,7 +216,7 @@ const uid = useId();
                     </template>
                     <template #control>
                         <ToggleSwitch
-                            :model-value="form.privileged"
+                            :model-value="form.privileged || locks.privileged !== undefined"
                             :disabled="locks.privileged !== undefined"
                             :aria-label="t(`ui.sandboxResourcesDialog.runPrivileged`)"
                             @update:model-value="(value: boolean) => (form = { ...form, privileged: value })"
@@ -236,7 +232,7 @@ const uid = useId();
                     <template #description>{{ t(`ui.sandboxResourcesDialog.passComputersNvidiaGpus`) }}</template>
                     <template #control>
                         <ToggleSwitch
-                            :model-value="form.gpu"
+                            :model-value="form.gpu || locks.gpu !== undefined"
                             :disabled="locks.gpu !== undefined"
                             :aria-label="t(`ui.sandboxResourcesDialog.passGpuThrough`)"
                             @update:model-value="(value: boolean) => (form = { ...form, gpu: value })"
@@ -251,9 +247,9 @@ const uid = useId();
                 </Row>
             </div>
 
-            <!-- A share already saved and not yet in force: named, so the fields showing it are not mistaken for what runs. -->
-            <p v-if="savedSummary !== undefined" class="text-xs text-info">
-                {{ t(`ui.sandboxResourcesDialog.savedForNextRestart`, { share: savedSummary }) }}
+            <!-- A shape already saved and not yet in force: named, so the fields showing it are not mistaken for what runs. -->
+            <p v-if="desiredSummary !== undefined" class="text-xs text-info">
+                {{ t(`ui.sandboxResourcesDialog.savedForNextRestart`, { share: desiredSummary }) }}
             </p>
 
             <!-- What applying costs, beside the button that commits it; every sentence keeps the sandbox, not the computer, as its subject. -->
@@ -276,9 +272,9 @@ const uid = useId();
                 :label="t(`ui.sandboxResourcesDialog.saveForNextRestart`)"
                 severity="secondary"
                 :disabled="!saveReady"
-                @click="emit(`save`, saveAsk)"
+                @click="emit(`save`, saveShape)"
             />
-            <Button :label="canSave ? t(`ui.sandboxResourcesDialog.applyNow`) : t(`ui.action.apply`)" :disabled="!applyReady" @click="emit(`apply`, applyAsk)">
+            <Button :label="canSave ? t(`ui.sandboxResourcesDialog.applyNow`) : t(`ui.action.apply`)" :disabled="!applyReady" @click="emit(`apply`, form)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
         </template>

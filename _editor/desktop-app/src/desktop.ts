@@ -1,4 +1,4 @@
-import type { DeviceFolderRow, DevicePortRow, DeviceAgentState } from "@intentic/ui";
+import type { DeviceAgentState, DeviceFolderRow, DevicePortRow, DeviceSandboxResources, ResourcesForm } from "@intentic/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
@@ -33,26 +33,18 @@ export interface SyncArgs {
     mirror: boolean;
 }
 
-// One sandbox's resource share as docker enforces it (commands.rs SandboxResources): caps, privilege, GPU. Matches
-// DeviceSandboxResources exactly, so this app's list and the machine agent's report describe one container alike.
-export interface SandboxResources {
-    memoryBytes?: number;
-    cpus?: number;
-    privileged: boolean;
-    gpu: boolean;
-    hostRuntime: string[];
-    overlayRuntime: string[];
-}
-
+// One sandbox as `ic sandbox list --json` reports it (the sandbox contract's DeviceSandbox), with the name this app
+// remembers for it: the same rows the machine agent hands the web, so this app's list and the Devices view describe
+// one container alike. `resources` carries the shape it runs with and the shape saved for its next restart; absent
+// when ic could not inspect the container.
 export interface SandboxStatus {
     slug: string;
     container: string;
-    name: string | null;
+    name?: string;
     running: boolean;
     image: string;
-    tunnelRunning: boolean | null;
-    // Null when the inspect behind it failed; the row just has nothing to say about its share.
-    resources: SandboxResources | null;
+    tunnelRunning?: boolean;
+    resources?: DeviceSandboxResources;
 }
 
 // Docker engine's size (commands.rs DockerEngine): the ceiling the Resources form draws rails against. Null means
@@ -62,16 +54,8 @@ export interface DockerEngine {
     cpus: number;
 }
 
-// Only what the Resources form changed; `null` on a cap means back to the default. Mirrors the sandbox contract's
-// SandboxResourcesAsk, which the Rust side spells into ic's flags.
-export interface ReshapeAsk {
-    memoryGib?: number | null;
-    cpus?: number | null;
-    privileged?: boolean;
-    gpu?: boolean;
-}
-
-// The three docker verbs this window offers, matching the web's Devices tab so both list the same three.
+// The three power verbs this window offers, matching the web's Devices tab so both list the same three. All go
+// through `ic`, so a start or restart applies a shape saved for the next restart.
 export type PowerAction = `start` | `stop` | `restart`;
 
 // What the app is, not the machine; every field is already held in-process, so this is one cheap IPC round trip.
@@ -193,9 +177,10 @@ export const sandboxPower = (slug: string, action: PowerAction): Promise<void> =
 // One command for all three recreate modes: no hash rebuilds :stable, a hash pins the overlay to that digest,
 // rollback reverts to the pre-update image.
 export const sandboxRecreate = (slug: string, hash?: string, rollback = false): Promise<void> => invoke(`sandbox_recreate`, { slug, hash, rollback });
-// Same recreate shim with --reshape/-Reshape: same image, different resource share. Streams under
-// `recreate:<slug>`.
-export const sandboxReshape = (slug: string, ask: ReshapeAsk): Promise<void> => invoke(`sandbox_reshape`, { slug, ask });
+// Same recreate shim with --shape/-Shape: `ic sandbox shape`, a whole shape now or for the next restart through ic,
+// or (no shape) forgetting the one saved. Streams under `recreate:<slug>`.
+export const sandboxShape = (slug: string, shape: ResourcesForm | undefined, when: `now` | `nextRestart`): Promise<void> =>
+    invoke(`sandbox_shape`, { slug, shape: shape ?? null, when });
 export const dockerEngine = (): Promise<DockerEngine | null> => invoke(`docker_engine`);
 export const sandboxRemove = (slug: string): Promise<void> => invoke(`sandbox_remove`, { slug });
 export const sandboxLogs = (slug: string, tail: number): Promise<string> => invoke(`sandbox_logs`, { slug, tail });

@@ -582,6 +582,29 @@ test("saving a reshape for later reaches an agent that announces it, and an imme
     expect(old.sent).toEqual([{ op: "reshape", slug: "work", resources: { gpu: true } }]);
 });
 
+// An agent that predates `set-shape` would refuse the op by name; the daemon says why, and what to do, before sending it.
+test("setting or forgetting a shape is refused before it reaches an agent that does not say it can", async () => {
+    const shape = { memoryGib: 20, cpus: null, privileged: false, gpu: true };
+    const { services, sent } = runnerServices({ features: ["reshape-later"] });
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "set-shape", slug: "work", shape, when: "nextRestart" }))).rejects.toThrow(
+        /too old to set a sandbox's shape through ic\. Nothing was changed\./,
+    );
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "forget-shape", slug: "work" }))).rejects.toThrow(/too old/);
+    expect(sent).toEqual([]);
+});
+
+test("a shape reaches an agent that announces it only whole and with when it takes effect", async () => {
+    const shape = { memoryGib: null, cpus: 4, privileged: true, gpu: false };
+    const { services, sent } = runnerServices({ features: ["reshape-later", "set-shape"] });
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "set-shape", slug: "work", shape }))).rejects.toThrow(/`shape` and `when` are both required/);
+    await drain(manageDeviceSandbox(services, "rog", { op: "set-shape", slug: "work", shape, when: "now" }));
+    await drain(manageDeviceSandbox(services, "rog", { op: "forget-shape", slug: "work" }));
+    expect(sent).toEqual([
+        { op: "set-shape", slug: "work", shape, when: "now" },
+        { op: "forget-shape", slug: "work" },
+    ]);
+});
+
 // Pairing injection applies only to `runner-up`; every other op passes through untouched.
 test("no other op grows a pairing", async () => {
     const { services, sent, minted } = runnerServices();

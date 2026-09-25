@@ -19,14 +19,24 @@ flowchart LR
 - `ic sandbox connect <code>` redeems the setup code from the platform and brings a sandbox up. `update`, `prepare`,
   `rollback`, `rebuild` and `reshape` swap or restart the container while keeping `/work` and `/history`; `remove`
   moves the data to a trash that `restore` brings back and `purge` empties early.
+- **ic is the one host authority for what runs and what should run.** Every door onto a sandbox's container (the
+  machine agent, the desktop app, the web's pasted fallback lines) calls ic's verbs rather than docker: `start`,
+  `stop` and `restart` power the tunnel sidecar with its sandbox, and `ic sandbox list --json` answers each
+  sandbox's state, its share as docker enforces it, the shape it runs with, the shape saved for its next restart and
+  the update staged for it, in the sandbox contract's `DeviceSandbox` shape.
 - Before a swap touches the running container, it pre-flights the target image's state conversions against
   read-only mounts of `/work` and `/history` (`preflight.rs`) and refuses if one would fail; `--skip-preflight`
   overrides. `prepare` records the staged image's plan in the marker it leaves the sandbox, so the update card says
   what an update converts before anyone accepts it. A new version that never commits its state journal is rolled back
   onto the parked container.
-- `ic sandbox reshape <slug> … --later` saves a memory, CPU, privileged or GPU change instead of restarting for it
-  (`sandbox-<slug>.shape` beside the channel record). The next recreate applies it and clears it: an update,
-  rollback, rebuild, a plain `reshape`, or a Restart from the Devices view. `--forget` drops it.
+- A sandbox's **shape** is the owner's own ask for memory, CPUs, privileged and GPU, always whole
+  ([`shape.rs`](src/shape.rs)). `ic sandbox shape <slug> … --when now` restarts onto it; `--when next-restart` checks
+  it against the image's run contract (a bad value is refused here, not by the next update) and saves it as the
+  channel record's `desired_*` keys, next to what `prepare` staged. The next restart through ic applies it and drops
+  it in the same record write that names the new image: `start`, `restart`, an update, a rollback, a rebuild or a
+  `reshape`. Docker restarting the container by itself (`--restart unless-stopped`) does not. `--forget` drops it.
+  `reshape --later`/`--forget` are the older spellings, kept one release for machine agents that send them; a
+  `sandbox-<slug>.shape` delta an older ic saved is converted into the record the first time it is read, then deleted.
 - `ic sandbox doctor` walks the reachability chain (machine, container, daemon, platform, edge) and names the broken
   link with its fix.
 - The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of
@@ -40,12 +50,12 @@ flowchart LR
 - [src/sandbox/connect.rs](src/sandbox/connect.rs) — the setup one-liner's flow after Docker: claim, launch, reachability.
 - [src/sandbox/recreate.rs](src/sandbox/recreate.rs) — every image swap (update, prepare, rollback, rebuild, reshape) as one flow.
 - [src/contract.rs](src/contract.rs) — asks the image for its `docker run` command.
-- [src/sandbox/doctor.rs](src/sandbox/doctor.rs) — the reachability chain and its findings.
+- [src/sandbox/desired.rs](src/sandbox/desired.rs) — the shape saved for the next restart: set, check, forget, and the old file's conversion.
 - [src/prepare/mod.rs](src/prepare/mod.rs) — `ic docker prepare`: facts, plan, fixes.
 
 ## Commands
 
 ```sh
-cargo test --manifest-path _sandbox/ic/Cargo.toml
+cargo test --manifest-path _sandbox/ic/Cargo.toml --workspace   # ic, and the bounded-capture crate the desktop app shares
 bash _tools/scripts/build/build-ic.sh linux-x64   # release binaries into _sandbox/ic/dist-bin/
 ```

@@ -10,6 +10,7 @@ import {
     type DeviceSandboxFlow,
     DeviceSandboxSchema,
     DEVICE_FEATURE_RESHAPE_LATER,
+    DEVICE_FEATURE_SET_SHAPE,
     deviceSupports,
     differentEnvironment,
     environmentOf,
@@ -373,12 +374,22 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
             message: `"${id}" is not connected right now, the device is asleep, offline, or its agent isn't running.`,
         });
     }
-    // An agent that predates `later` drops it and reshapes at once, restarting the sandbox under everyone working in it:
-    // the exact opposite of what Save promised. Refused here, before anything reaches the machine.
-    if (input.op === "reshape" && input.later === true && !deviceSupports(services.hostHub.state(id).facts, DEVICE_FEATURE_RESHAPE_LATER)) {
+    // The ops an agent can't do, refused here before anything reaches the machine. An agent that predates `later` drops
+    // it and reshapes at once, restarting the sandbox under everyone working in it: the opposite of what Save promised.
+    // One that predates `set-shape` refuses the op by name, so this only says why, and what to do, in words.
+    const facts = services.hostHub.state(id).facts;
+    if (input.op === "reshape" && input.later === true && !deviceSupports(facts, DEVICE_FEATURE_RESHAPE_LATER)) {
         throw new ORPCError("CONFLICT", {
             message: `The agent on "${id}" is too old to save a change for the next restart: it would restart the sandbox now instead. Nothing was changed. Update that device's agent, then save again.`,
         });
+    }
+    if ((input.op === "set-shape" || input.op === "forget-shape") && !deviceSupports(facts, DEVICE_FEATURE_SET_SHAPE)) {
+        throw new ORPCError("CONFLICT", {
+            message: `The agent on "${id}" is too old to set a sandbox's shape through ic. Nothing was changed. Update that device's agent, then try again.`,
+        });
+    }
+    if (input.op === "set-shape" && (input.shape === undefined || input.when === undefined)) {
+        throw new ORPCError("BAD_REQUEST", { message: "A shape is set whole, with when it takes effect: `shape` and `when` are both required." });
     }
     // Daemon-filled over the caller: reconnect/create name the minting platform, runner-up a dial URL and a pairing.
     const flow: DeviceSandboxFlow =

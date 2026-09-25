@@ -1,5 +1,6 @@
-import type { DeviceAgentOp } from "@intentic/sandbox-contract";
-import type { ResourcesAsk, SandboxVerb } from "@intentic/ui";
+import { type DeviceAgentOp, icForgetShapeArgs, icPowerArgs, icShapeArgs } from "@intentic/sandbox-contract";
+import type { SandboxVerb } from "@intentic/ui";
+import type { ShapeIntent } from "../shapeFlow";
 import type { SyncCommand } from "./deviceOps";
 
 // The line to type on the machine itself when the app's route to it is shut: a switch the device won't grant, an
@@ -16,53 +17,31 @@ const CONTAINER = `intentic-sandbox-`;
 // What `docker logs` tails, matching the agent's own default so the pasted line answers with what the pane would have.
 const LOG_LINES = 200;
 
-// The verbs `ic` owns because they move a sandbox between images, and the ones docker alone can do because the
-// container is already built and only its power state changes.
+// The verbs `ic` owns: moving a sandbox between images, and its power, since a start or restart through ic applies
+// the shape saved for the next restart and a bare `docker restart` would not.
 const IC_VERB: Partial<Record<SandboxVerb, string>> = { update: `update`, rollback: `rollback`, remove: `remove` };
-const DOCKER_VERB: Partial<Record<SandboxVerb, string>> = { start: `start`, stop: `stop`, restart: `restart` };
-
-// A cap's flag value, spelled the way `ic sandbox reshape` takes it: a number as `<n>g`/`<n>`, and null as ic's own
-// `default` (back to the share derived from the machine).
-const capFlag = (value: number | null | undefined, spell: (value: number) => string): string | undefined =>
-    value === undefined ? undefined : value === null ? `default` : spell(value);
-
-const switchFlag = (value: boolean | undefined): string | undefined => (value === undefined ? undefined : value ? `on` : `off`);
-
-// The reshape the user just asked for, as flags. Undefined when the ask changed nothing — ic refuses that too, so a
-// line that carried it would only fail differently.
-const reshapeFlags = (ask: ResourcesAsk | undefined): string | undefined => {
-    const given = (
-        [
-            [`--memory`, capFlag(ask?.memoryGib, (gib) => `${gib}g`)],
-            [`--cpus`, capFlag(ask?.cpus, String)],
-            [`--privileged`, switchFlag(ask?.privileged)],
-            [`--gpus`, switchFlag(ask?.gpu)],
-        ] as const
-    ).flatMap(([flag, value]) => (value === undefined ? [] : [flag, value]));
-    return given.length === 0 ? undefined : given.join(` `);
-};
+const POWER = new Set<SandboxVerb>([`start`, `stop`, `restart`]);
 
 /**
  * The command that does this verb to this sandbox by hand, or undefined for a verb with no single-line equivalent.
- * `later` is the resources form's Save: the same flags with `--later`, or `--forget` when it saved nothing.
+ * `resources` is the form's answer: a whole shape with when it takes effect, or forgetting the one saved, spelled by
+ * the contract's own `ic` argv so this line and the machine agent's run cannot differ.
  */
-export const sandboxFallback = (verb: SandboxVerb, slug: string, resources?: ResourcesAsk, later = false): string | undefined => {
+export const sandboxFallback = (verb: SandboxVerb, slug: string, intent?: ShapeIntent): string | undefined => {
     const ic = IC_VERB[verb];
     if (ic !== undefined) {
         return `ic sandbox ${ic} ${slug}`;
     }
-    const docker = DOCKER_VERB[verb];
-    if (docker !== undefined) {
-        return `docker ${docker} ${CONTAINER}${slug}`;
+    if (POWER.has(verb)) {
+        return `ic ${icPowerArgs(verb as `start` | `stop` | `restart`, slug).join(` `)}`;
     }
     if (verb === `logs`) {
         return `docker logs --tail ${LOG_LINES} ${CONTAINER}${slug}`;
     }
-    const flags = reshapeFlags(resources);
-    if (later) {
-        return `ic sandbox reshape ${slug} ${flags === undefined ? `--forget` : `${flags} --later`}`;
+    if (intent === undefined) {
+        return undefined;
     }
-    return flags === undefined ? undefined : `ic sandbox reshape ${slug} ${flags}`;
+    return `ic ${(`forget` in intent ? icForgetShapeArgs(slug) : icShapeArgs(slug, intent.shape, intent.when)).join(` `)}`;
 };
 
 /**

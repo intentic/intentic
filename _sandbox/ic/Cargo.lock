@@ -359,6 +359,7 @@ version = "0.0.0"
 dependencies = [
  "clap",
  "http",
+ "intentic-bounded",
  "serde",
  "serde_json",
  "sha2",
@@ -479,6 +480,10 @@ dependencies = [
  "equivalent",
  "hashbrown",
 ]
+
+[[package]]
+name = "intentic-bounded"
+version = "0.0.0"
 
 [[package]]
 name = "is_terminal_polyfill"

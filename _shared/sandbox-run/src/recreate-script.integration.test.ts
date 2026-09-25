@@ -61,6 +61,24 @@ test("every one-liner shape the platform ever handed out maps onto its ic verb",
     expect(argv(shimArgs("--dev", "abc123"))).toEqual(["sandbox", "dev", "abc123"]);
 });
 
+// The desktop app's doors onto ic's own verbs: power and shape name the sandbox, the listing does not.
+test("power, shape and the listing reach ic's own verbs, with ic's flags forwarded verbatim", () => {
+    expect(argv(shimArgs("abc123", "--restart"))).toEqual(["sandbox", "restart", "abc123"]);
+    expect(argv(shimArgs("abc123", "--start"))).toEqual(["sandbox", "start", "abc123"]);
+    expect(argv(shimArgs("abc123", "--stop"))).toEqual(["sandbox", "stop", "abc123"]);
+    expect(argv(shimArgs("abc123", "--shape", "--memory", "12g", "--when", "next-restart"))).toEqual([
+        "sandbox",
+        "shape",
+        "abc123",
+        "--memory",
+        "12g",
+        "--when",
+        "next-restart",
+    ]);
+    expect(argv(shimArgs("abc123", "--shape", "--forget"))).toEqual(["sandbox", "shape", "abc123", "--forget"]);
+    expect(argv(shimArgs("--list"))).toEqual(["sandbox", "list", "--json"]);
+});
+
 test("--channel needs a tag and an unknown flag is refused rather than read as an overlay hash", () => {
     expect(shimArgs("slug", "--channel").err).toContain("--channel needs a tag");
     expect(shimArgs("slug", "--nonsense").err).toContain("unknown option");

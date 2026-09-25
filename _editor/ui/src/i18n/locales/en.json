@@ -182,7 +182,7 @@
         "sandboxUsingRightNow": "This is the sandbox you are using right now: this page will lose it until it is back.",
         "saveForNextRestart": "Save for next restart",
         "savedForNextRestart": "Saved for the next restart: {share}. The fields show it; Apply now restarts onto it straight away.",
-        "savingKeepsItRunning": "Saving keeps the sandbox running as it is. Its next restart, update, rollback or rebuild applies the new share."
+        "savingKeepsItRunning": "Saving keeps the sandbox running as it is. ic keeps the new share and applies it on the sandbox's next restart through ic: Restart here, Start, an update, a rollback or a rebuild. Docker restarting the container by itself, after a crash or a reboot, does not apply it."
     },
     "sandboxSandboxVerbs": {
         "deletesSandboxEverythingIn": "This deletes the sandbox and everything in it — its files and its history — from that device. This cannot be undone.",

@@ -9,14 +9,32 @@ import { DEV_VERSION } from "../state/versions.js";
 // One sandbox's resource share as docker currently enforces it, read off the container by the machine agent.
 // `overlayRuntime` is the environment's locked demand; `hostRuntime` is the owner's addition; `privileged`/`gpu` are
 // docker's enforced truth.
-// Reshape request, turned into `ic sandbox reshape` flags: absent means leave it, `null` on the two caps means back to
-// the default; at least one key must be set.
+// A delta against what runs: absent means leave it, `null` on the two caps means back to the default; at least one key
+// must be set. What the old `reshape` op carries (`ic sandbox reshape` flags); `set-shape` carries a whole shape instead.
 export const SandboxResourcesAskFieldsSchema = z.object({
     memoryGib: z.int().positive().nullable().optional(),
     cpus: z.int().positive().nullable().optional(),
     privileged: z.boolean().optional(),
     gpu: z.boolean().optional(),
 });
+// A sandbox's shape, WHOLE: the owner's own ask for its share of the machine, every field a value. `null` on a cap is
+// the contract's default (the share derived from the engine, or every core). The switches are the owner's ask, not
+// docker's answer: a directive the approved environment demands rides beside it (`overlayRuntime`), and a host
+// without the NVIDIA runtime drops the GPU. `ic` stores it, validates it against the image's run contract when it is
+// saved, and prints it in `ic sandbox list --json`; nobody else merges anything into it.
+export const SandboxShapeSchema = z.object({
+    memoryGib: z.int().positive().nullable(),
+    cpus: z.int().positive().nullable(),
+    privileged: z.boolean(),
+    gpu: z.boolean(),
+});
+export type SandboxShape = z.infer<typeof SandboxShapeSchema>;
+// When a `set-shape` takes effect: `now` restarts the sandbox onto it; `nextRestart` saves it in ic's record and
+// restarts nothing, and the next restart through ic applies it — Restart or Start from any door, an update, a rollback
+// or a rebuild. Docker restarting the container by itself (after a crash or a reboot) does not: only ic recreates one.
+export const SandboxShapeWhenSchema = z.enum(["now", "nextRestart"]);
+export type SandboxShapeWhen = z.infer<typeof SandboxShapeWhenSchema>;
+
 export const SandboxResourcesSchema = z.object({
     // The cgroup memory ceiling in bytes; absent when docker imposes none (the hosted shape).
     memoryBytes: z.number().optional(),
@@ -26,8 +44,12 @@ export const SandboxResourcesSchema = z.object({
     gpu: z.boolean(),
     hostRuntime: z.array(z.string()),
     overlayRuntime: z.array(z.string()),
-    // A reshape saved for the sandbox's next restart (`ic sandbox reshape --later`) and not yet in force: the next
-    // update, rollback, rebuild, reshape or Restart applies it. Absent when nothing is saved.
+    // The shape the container runs with (the owner's ask it carries). Absent from an agent older than `set-shape`.
+    shape: SandboxShapeSchema.optional(),
+    // The shape saved for the sandbox's next restart through ic, and not yet in force. Absent when nothing is saved.
+    desired: SandboxShapeSchema.optional(),
+    // READ-ONLY, from agents older than `set-shape`: their saved share, a delta against what runs. Nothing new writes
+    // it; kept one release so a newer page can still show what an older agent saved. Remove with `later`.
     saved: SandboxResourcesAskFieldsSchema.optional(),
 });
 export type SandboxResources = z.infer<typeof SandboxResourcesSchema>;
@@ -50,10 +72,14 @@ export const DeviceSandboxSchema = z.object({
     tunnelRunning: z.boolean().optional(),
     // Absent when the reader only ran a cheap `docker ps` listing without inspecting the container.
     resources: SandboxResourcesSchema.optional(),
+    // The update `ic sandbox prepare` built and left waiting for this sandbox; absent when nothing is staged.
+    staged: z.object({ image: z.string(), version: z.string().optional(), channel: z.string().optional() }).optional(),
 });
 export type DeviceSandbox = z.infer<typeof DeviceSandboxSchema>;
 // One operation on one sandbox, streamed as lines ending in a `result` or `error` frame. `prepare` builds the pending
-// update without touching the container; `reshape` changes only its resources and privileges, not the image.
+// update without touching the container. `set-shape` sets its resources and privileges, now or for the next restart;
+// `forget-shape` drops a shape saved for the next restart. `start`/`restart` apply a saved shape (all through `ic`).
+// `reshape` is the older spelling of `set-shape`, kept one release for pages served by older sandboxes.
 // `runner-up`/`runner-remove` act on a runner (this sandbox's own container), not a person's sandbox; gated by the
 // `sandboxes` switch, not removal, since a runner holds no separate workspace to lose.
 export const DeviceSandboxOpSchema = z.enum([
@@ -65,6 +91,8 @@ export const DeviceSandboxOpSchema = z.enum([
     "rebuild",
     "rollback",
     "reshape",
+    "set-shape",
+    "forget-shape",
     "remove",
     "logs",
     // The two ops that redeem a fresh setup code; every other one recreates a container from its own existing env.
@@ -84,11 +112,12 @@ export const DeviceSandboxFlowSchema = z.object({
     slug: z.string().min(1),
     // Approved overlay's sha256, required only by `rebuild`; only content matching it is ever built.
     hash: z.string().optional(),
-    // What `reshape` should change, meaningless to the rest. Absent on a reshape applies what is saved for the next
-    // restart now; absent with `later` forgets what is saved.
+    // `set-shape` only, both required by it: the whole shape, and when it takes effect.
+    shape: SandboxShapeSchema.optional(),
+    when: SandboxShapeWhenSchema.optional(),
+    // READ-ONLY for one release, from pages served by sandboxes older than `set-shape`: the old `reshape` op's delta,
+    // and `later` to save it for the next restart instead. Nothing new sends either.
     resources: SandboxResourcesAskSchema.optional(),
-    // `reshape` only: save `resources` for the sandbox's next restart instead of restarting it now, replacing
-    // whatever was saved before (`ic sandbox reshape --later`).
     later: z.boolean().optional(),
     // `runner-up` only, daemon-filled, never by the caller: the browser never holds the pairing credential.
     parentUrl: z.string().optional(),
@@ -104,6 +133,27 @@ export const DeviceSandboxFlowSchema = z.object({
     overlayHash: z.string().optional(),
 });
 export type DeviceSandboxFlow = z.infer<typeof DeviceSandboxFlowSchema>;
+// The `ic` argv for the shape and power ops, in the one TS place that spells ic's flags: the machine agent runs it and
+// the Devices view prints it for a person to type when the app's route to the machine is shut. A cap is `<n>g`/`<n>`
+// or ic's `default`, a switch the explicit on/off (a bare flag could only ever add). A field left out keeps what ic
+// already has for it (the shape saved for the next restart, else what runs): the Devices view always sends the whole
+// shape, a model's tool call may name one field. Nothing is judged here; ic checks the shape against the image's run
+// contract.
+export type SandboxShapeFields = { readonly [K in keyof SandboxShape]?: SandboxShape[K] | undefined };
+export const icShapeArgs = (slug: string, fields: SandboxShapeFields, when: SandboxShapeWhen): string[] => [
+    "sandbox",
+    "shape",
+    slug,
+    ...(fields.memoryGib === undefined ? [] : ["--memory", fields.memoryGib === null ? "default" : `${fields.memoryGib}g`]),
+    ...(fields.cpus === undefined ? [] : ["--cpus", fields.cpus === null ? "default" : String(fields.cpus)]),
+    ...(fields.privileged === undefined ? [] : ["--privileged", fields.privileged ? "on" : "off"]),
+    ...(fields.gpu === undefined ? [] : ["--gpus", fields.gpu ? "on" : "off"]),
+    "--when",
+    when === "now" ? "now" : "next-restart",
+];
+export const icForgetShapeArgs = (slug: string): string[] => ["sandbox", "shape", slug, "--forget"];
+// Power goes through ic too, so a Start or Restart from any door applies the shape saved for the next restart.
+export const icPowerArgs = (op: "start" | "stop" | "restart", slug: string): string[] => ["sandbox", op, slug];
 // Adds the device id to the flow input; the daemon looks up machines by id.
 export const DeviceSandboxFlowInputSchema = DeviceSandboxFlowSchema.extend({ id: z.string().min(1) });
 export type DeviceSandboxFlowInput = z.infer<typeof DeviceSandboxFlowInputSchema>;
