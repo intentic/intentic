@@ -20,13 +20,15 @@ import {
     type RequestDocument,
     DEFAULT_SAFETY_POLICY,
     documentOf,
+    isPlanDocumentPath,
     type PermissionMode,
     sendableEffort,
     sendableThinking,
     type UsageWindow,
 } from "@intentic/sandbox-contract";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
-import { join, relative, sep } from "node:path";
+import { join, normalize, relative, sep } from "node:path";
+import { claudeStatePath } from "../../sessions/session-store.js";
 import { z } from "zod";
 import { daemonMountNs, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV } from "../../agents/worktrees/isolation.js";
 import { worktreeRedirectHooks } from "../../agents/worktrees/worktree-redirect.js";
@@ -539,10 +541,23 @@ const UNGATED = new Set([...ASK_TOOL_NAMES, "EnterPlanMode"]);
 // The only tools a planning turn is stopped from using: the ones that write a file (rules/edit-tools.ts).
 const PLAN_WRITE_TOOLS = new Set<string>(EDIT_TOOL_NAMES);
 
+// The CLI's plan mode tells the model to write its plan to `~/.claude/plans/<name>.md`, the one write planning is
+// meant to make; refusing it leaves the model pasting the plan into chat instead. Normalized first, so a path that
+// opens in the plans dir and climbs out with `..` is still refused.
+const writesPlanFile = (input: Record<string, unknown>): boolean => {
+    const raw = input["file_path"];
+    if (typeof raw !== "string") {
+        return false;
+    }
+    const state = claudeStatePath(normalize(raw));
+    return state !== undefined && isPlanDocumentPath(state);
+};
+
 /* PLANNING ASKS NOBODY: the container is the boundary and the plan card is the decision, so no per-tool card is raised
- * while planning. A write is refused to the MODEL instead, since plan mode's promise is that the work waits. */
+ * while planning. A write is refused to the MODEL instead, since plan mode's promise is that the work waits; the plan
+ * file itself is the exception. */
 const planDecision = (toolName: string, input: Record<string, unknown>): PermissionResult =>
-    PLAN_WRITE_TOOLS.has(toolName)
+    PLAN_WRITE_TOOLS.has(toolName) && !writesPlanFile(input)
         ? {
               behavior: "deny",
               message: `${toolName} writes the workspace, and this turn is still planning. Finish the plan and call ExitPlanMode; the work runs once the user approves it.`,

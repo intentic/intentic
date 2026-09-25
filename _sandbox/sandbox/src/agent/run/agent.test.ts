@@ -676,6 +676,21 @@ test("a planning turn's write is refused to the model rather than raised at the 
     expect(asked(frames)).toEqual([]);
 });
 
+test("a planning turn may write its plan file, and nothing that only starts out looking like one", async () => {
+    const plans = `${homedir()}/.claude/plans`;
+    const decisions: (PermissionResult | null)[] = [];
+    const frames = await gated({ ...request, policy: { ...request.policy, permissionMode: "plan" } }, async (gate) => {
+        decisions.push(await gate("Write", { file_path: `${plans}/wiggly-spring.md`, content: "# Plan" }, { signal: request.signal } as never));
+        decisions.push(await gate("Edit", { file_path: `${plans}/wiggly-spring.md` }, { signal: request.signal } as never));
+        decisions.push(await gate("Write", { file_path: `${plans}/../projects/x.md` }, { signal: request.signal } as never));
+    });
+
+    expect(decisions[0]).toMatchObject({ behavior: "allow" });
+    expect(decisions[1]).toMatchObject({ behavior: "allow" });
+    expect(decisions[2]).toMatchObject({ behavior: "deny" });
+    expect(asked(frames)).toEqual([]);
+});
+
 test("the agent entering plan mode mid-turn puts the rest of the turn on the planning posture", async () => {
     const decisions: (PermissionResult | null)[] = [];
     // Starts in the mode that asks per tool: without the posture following the agent, the Bash call raises a card.
