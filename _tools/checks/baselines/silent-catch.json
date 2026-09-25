@@ -470,7 +470,6 @@
     "_sandbox/sandbox/src/tunnel/net-probe.ts": 3,
     "_sandbox/sandbox/src/tunnel/tunnel-state.ts": 1,
     "_sandbox/sandbox/src/usage/claude-limit-reset.ts": 3,
-    "_sandbox/sandbox/src/usage/translator-usage.ts": 2,
     "_sandbox/sandbox/src/usage/usage-store.ts": 2,
     "_sandbox/sandbox/src/version.ts": 1,
     "_sandbox/sandbox/src/vpn/ipsec.ts": 5,
