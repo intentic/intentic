@@ -242,7 +242,6 @@
     "_sandbox/sandbox/src/agent/tools/agent-shell-edits.ts": 1,
     "_sandbox/sandbox/src/agent/tools/agent-terminals.ts": 2,
     "_sandbox/sandbox/src/agent/tools/background-jobs.ts": 5,
-    "_sandbox/sandbox/src/agent/tools/self-kill-guard.ts": 1,
     "_sandbox/sandbox/src/agent/verification/agent-diagnostics.ts": 1,
     "_sandbox/sandbox/src/agent/verification/python/python-diagnostics.ts": 2,
     "_sandbox/sandbox/src/agent/verification/watch-check.ts": 1,
