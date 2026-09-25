@@ -1,6 +1,7 @@
-import { mkdir, mkdtemp, readdir, stat, truncate, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, stat, truncate, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { zstdDecompressSync } from "node:zlib";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentEvent, type AgentHarness, type AgentProvider, PROVIDERS, HARNESSES, type TranscriptRow } from "@intentic/sandbox-contract";
 import { foldTurn } from "@intentic/sandbox-contract/transcript-fold";
@@ -14,6 +15,16 @@ import { openingRows } from "./turn-transcript.js";
 const dir = (): Promise<string> => mkdtemp(join(tmpdir(), "transcript-record-"));
 
 const exec = promisify(execFile);
+const readZstd = async (path: string): Promise<string> => {
+    try {
+        return (await exec("zstdcat", [path])).stdout;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return zstdDecompressSync(await readFile(path)).toString("utf8");
+        }
+        throw error;
+    }
+};
 
 const said = (text: string): TranscriptRow => ({ role: "assistant", text });
 
@@ -130,7 +141,7 @@ describe("fileTranscriptRecord", () => {
         await record.append("c1", [said("second")]);
         expect((await record.read("c1")).map((message) => message.text)).toEqual(["one", "first", "second"]);
         expect(await readdir(dirname(legacy))).toEqual(["transcript.jsonl.zst"]);
-        expect((await exec("zstdcat", [backupFile(root, "c1")])).stdout).toBe(`${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+        expect(await readZstd(backupFile(root, "c1"))).toBe(`${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
     });
 
     it("keeps a long output whole through a fork, stored once for both conversations", async () => {

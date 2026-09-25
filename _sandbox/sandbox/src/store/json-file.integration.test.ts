@@ -258,7 +258,7 @@ describe("evolution", () => {
             "state.json could not be read by this build (the file does not match what this build expects; a newer intentic wrote it)",
         );
         expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ theme: { from: "a newer build" } });
-        expect(await readdir(join(path, ".."))).toEqual(["local", "state.json"]);
+        expect((await readdir(join(path, ".."))).toSorted()).toEqual(["local", "state.json"]);
     });
 });
 

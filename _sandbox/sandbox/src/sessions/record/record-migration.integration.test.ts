@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
-import { appendFile, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { zstdDecompressSync } from "node:zlib";
 import pino from "pino";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { fileTranscriptRecord, legacyTranscriptFile, transcriptFile } from "../transcript-record.js";
@@ -15,6 +16,16 @@ import { type MigrationDeps, migrateOnThreads, migrateRecords, preparedFile } fr
 // changed or failed midway left as it is.
 
 const exec = promisify(execFile);
+const readZstd = async (path: string): Promise<string> => {
+    try {
+        return (await exec("zstdcat", [path])).stdout;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return zstdDecompressSync(await readFile(path)).toString("utf8");
+        }
+        throw error;
+    }
+};
 const logger = pino({ level: "silent" });
 
 let historyRoot: string;
@@ -71,7 +82,7 @@ test("converts every plain record on worker threads, keeps each original and mov
     for (const id of ["pinned-one", "unpinned-two"]) {
         expect(await readdir(dirname(transcriptFile(historyRoot, id)))).toEqual(["transcript.jsonl.zst"]);
         expect(await record.read(id)).toEqual(rowsOf(id));
-        expect((await exec("zstdcat", [backupFile(historyRoot, id)])).stdout).toBe(jsonl(rowsOf(id)));
+        expect(await readZstd(backupFile(historyRoot, id))).toBe(jsonl(rowsOf(id)));
     }
     expect(await readdir(dirname(preparedFile(historyRoot, "left-three")))).toEqual([]);
     // The long outputs moved out of line, once each.

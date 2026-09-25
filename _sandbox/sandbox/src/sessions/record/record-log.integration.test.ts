@@ -3,6 +3,7 @@ import { appendFile, mkdtemp, readFile, rm, stat, truncate, writeFile } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { zstdDecompressSync } from "node:zlib";
 import { appendLog, frameBytes, frameOfRow, jsonlOf, openLog, readFrame, repairLog, writeLog } from "./record-log.js";
 import * as recordIo from "./record-io.js";
 
@@ -10,6 +11,16 @@ import * as recordIo from "./record-io.js";
 // read past by any reader and cut away by the writer, and the whole log readable by the standard zstd tools as JSONL.
 
 const exec = promisify(execFile);
+const readZstd = async (path: string): Promise<string> => {
+    try {
+        return (await exec("zstdcat", [path])).stdout;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return zstdDecompressSync(await readFile(path)).toString("utf8");
+        }
+        throw error;
+    }
+};
 
 let dir: string;
 beforeEach(async () => {
@@ -78,7 +89,7 @@ test("zstdcat reads a log as the JSONL it holds, rewritten or appended", async (
     const path = join(dir, "transcript.jsonl.zst");
     await writeLog(path, [lines(0, 2), [], lines(2, 1)]);
     await appendLog(path, await openLog(path), lines(3, 1));
-    const { stdout } = await exec("zstdcat", [path]);
+    const stdout = await readZstd(path);
     expect(stdout).toBe(`${lines(0, 4).join("\n")}\n`);
 });
 

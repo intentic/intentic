@@ -39,11 +39,12 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #                           runs against a REAL private tmux server — stub it and the test asserts the stub
 #   procps                  the self-kill guard rewrites pkill/pgrep patterns, and agent-terminals.integration
 #                           proves the rewrite with a real pgrep; the sandbox runtime installs the same package
+#   zstd                    transcripts are compressed logs, so the transcript/record suites verify with zstdcat
 #   docker-ce-cli + buildx  the images/release jobs drive the dind service and export a mode=max registry cache
 # The docker apt repo is added the same way the sandbox's docker feature pack adds it
 # (_sandbox/sandbox/image-packs/docker.Dockerfile); resolved once, here, instead of in three jobs at runtime.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux zip unzip procps \
+    && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux zip unzip procps zstd \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod a+r /etc/apt/keyrings/docker.asc \
@@ -91,4 +92,4 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.4.1 SHELL=/b
 # Fail the image build, not some pipeline three days later, if any of the baked tooling is missing.
 RUN node --version && pnpm --version && git --version && docker --version && docker buildx version \
     && bun --version && rg --version && tmux -V && python3 --version && make --version | head -1 && g++ --version | head -1 \
-    && command -v ssh-keygen && command -v zip && command -v unzip && command -v tar && command -v gzip
+    && command -v ssh-keygen && command -v zip && command -v unzip && command -v tar && command -v gzip && command -v zstdcat
