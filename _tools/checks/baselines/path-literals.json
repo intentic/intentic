@@ -52,7 +52,6 @@
     "_sandbox/sandbox/src/settings/skills.ts": 1,
     "_sandbox/sandbox/src/share/share-payload.test.ts": 2,
     "_sandbox/sandbox/src/share/share-publish.integration.test.ts": 5,
-    "_sandbox/sandbox/src/store/newest-run.integration.test.ts": 1,
     "_sandbox/sandbox/src/workflows/handover-branches.test.ts": 11,
     "_sandbox/sandbox/src/workspace/watch/state-janitor.integration.test.ts": 13,
     "_sandbox/sandbox/src/workspace/watch/workspace-watch.integration.test.ts": 6,

@@ -450,6 +450,8 @@ type ThreadSessionsDocument0 = { conversationId: string; lastAt: number; message
 type VerifyDocument0 = { projects: Record<string, { at: number; attempt: number; failures?: string[]; status: "green" | "red" }> };
 // since 2026-09-25
 type VerifyDocument1 = { projects: Record<string, { at: number; attempt: number; failures?: string[]; since?: number; status: "green" | "red" }>; runs?: ({ at: number; attempt: number; command: string; failureCount: number; failures: string[]; lands: { at: number; conversationId: string; title?: string }[]; project: string; routing?: { at: number; conversationId?: string; detail?: string; kind: "waiting" | "held" | "original" | "fix-up" | "reported" | "resolved" | "spent" }; startedAt: number; status: "green" | "red"; suspects?: string[] })[] };
+// since 2026-09-25
+type VerifyDocument2 = { lands?: Record<string, { agentId: string; at: number; branch: string; kind: "land"; repos: { dir: string; from: string; repo: string }[]; title?: string }[]>; projects: Record<string, { at: number; attempt: number; failures?: string[]; since?: number; status: "green" | "red" }>; runs?: ({ at: number; attempt: number; command: string; failureCount: number; failures: string[]; lands: { at: number; conversationId: string; title?: string }[]; project: string; routing?: { at: number; conversationId?: string; detail?: string; kind: "waiting" | "held" | "original" | "fix-up" | "reported" | "resolved" | "spent" }; startedAt: number; status: "green" | "red"; suspects?: string[] })[]; streaks?: Record<string, { carried?: { command: string; failures: string[]; fresh: string[]; heldSince?: number; lands: { agentId: string; at: number; branch: string; kind: "land"; repos: { dir: string; from: string; repo: string }[]; title?: string }[]; logTail: string; measured: boolean; on?: string[]; runs: number[]; waits: number }; since: number; told?: string[] }> };
 
 // workspace:.intentic/records/wallet-ledger.json
 // since 2026-09-24
@@ -768,6 +770,7 @@ export type StateShapeChecks = [
     Fits<never, ReusedKeys<typeof threadSessionsDocument>>,
     Fits<Accepted<typeof verifyDocument>, Converted<VerifyDocument0, typeof verifyDocument>>,
     Fits<Accepted<typeof verifyDocument>, Converted<VerifyDocument1, typeof verifyDocument>>,
+    Fits<Accepted<typeof verifyDocument>, Converted<VerifyDocument2, typeof verifyDocument>>,
     Fits<never, ReusedKeys<typeof verifyDocument>>,
     Fits<Accepted<typeof walletLedgerDocument>, Converted<WalletLedgerDocument0, typeof walletLedgerDocument>>,
     Fits<never, ReusedKeys<typeof walletLedgerDocument>>,
