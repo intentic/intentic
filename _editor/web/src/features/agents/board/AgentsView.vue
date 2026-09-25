@@ -25,7 +25,7 @@ import { summonChat } from "../../chat/run/summon";
 import { chatStrip } from "../../chat/panel/useChat-strip";
 import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
-import SandboxMetricsStrip from "../metrics/SandboxMetricsStrip.vue";
+import SandboxMetricsBar from "../metrics/SandboxMetricsBar.vue";
 import { LIVE_METRICS_KEY, useLiveMetrics } from "../metrics/liveMetrics";
 import MainlineStrip from "../mainline/MainlineStrip.vue";
 import { provideMainline } from "../mainline/useMainline";
@@ -165,8 +165,6 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
         </div>
         <!-- Always on while any land has been checked: work lands without waiting for it, so this is where its verdict is seen. -->
         <MainlineStrip :status="mainline" bar />
-        <!-- Opt-in (Settings ▸ Appearance): absent, nothing was measured, not merely hidden. -->
-        <SandboxMetricsStrip v-if="liveMetrics !== undefined" :metrics="liveMetrics" />
         <!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->
         <p v-if="notice !== undefined" class="flex shrink-0 items-center gap-2 border-b border-line bg-danger/10 px-3 py-1.5 text-2xs text-danger">
             <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
@@ -483,6 +481,8 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                 </section>
             </div>
         </div>
+        <!-- Opt-in (Settings ▸ Appearance), docked at the foot like a status bar: absent, nothing was measured, not merely hidden. -->
+        <SandboxMetricsBar v-if="liveMetrics !== undefined" :metrics="liveMetrics" />
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div
             v-if="dragging"

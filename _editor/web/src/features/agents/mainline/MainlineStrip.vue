@@ -29,7 +29,7 @@ const t = useT();
 
 const props = defineProps<{
     status: MainlineStatus | undefined;
-    // The board's full-width bar, beside its metrics strip; the rail's boxed block otherwise.
+    // The board's full-width bar under its header; the rail's boxed block otherwise.
     bar?: boolean;
 }>();
 

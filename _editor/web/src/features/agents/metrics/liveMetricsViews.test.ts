@@ -6,7 +6,8 @@ import { IconStub } from "@intentic/ui/testing";
 import { type App, type Component, computed, createApp, h } from "vue";
 
 const { default: SessionMetrics } = await import("./SessionMetrics.vue");
-const { default: SandboxMetricsStrip } = await import("./SandboxMetricsStrip.vue");
+const { default: SandboxMetricsBar } = await import("./SandboxMetricsBar.vue");
+const { default: SandboxMetricsDetails } = await import("./SandboxMetricsDetails.vue");
 const { LIVE_METRICS_KEY } = await import("./liveMetrics");
 
 const GIB = 2 ** 30;
@@ -61,9 +62,22 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-// Each figure as the reader meets it: its label and its value, in the order the line draws them.
-const figuresOf = (el: HTMLElement): string[] =>
-    [...el.querySelectorAll(`[role="group"] > span`)].map((figure) => [...figure.children].map((part) => part.textContent?.trim()).join(`: `));
+// Each figure as the reader meets it: its words, in the order the line or the panel draws them.
+const figuresOf = (el: HTMLElement, section?: string): string[] =>
+    [...el.querySelectorAll(section === undefined ? `[data-figure]` : `[data-section="${section}"] [data-figure]`)].map((figure) => wordsOf(figure));
+
+// An element's text pieces joined by a space, as they read; the compiled template keeps no whitespace between them.
+const wordsOf = (node: Node): string =>
+    [...node.childNodes]
+        .map((child) => (child.nodeType === Node.TEXT_NODE ? (child.textContent ?? ``) : wordsOf(child)).trim())
+        .filter((piece) => piece !== ``)
+        .join(` `);
+
+// The panel's plain figures, a term and its reading.
+const termsOf = (el: HTMLElement): string[] =>
+    [...el.querySelectorAll(`[data-section="figures"] dt`)].map(
+        (term) => `${term.textContent?.trim()}: ${term.nextElementSibling?.textContent?.trim()}`,
+    );
 
 describe("a card's line", () => {
     it("says what the conversation's processes use", () => {
@@ -81,32 +95,53 @@ describe("a card's line", () => {
     });
 });
 
-describe("the sandbox line", () => {
-    it("reads capacity against use, and leaves out what is quiet: no swap in use, no pressure worth naming", () => {
-        expect(figuresOf(mount(SandboxMetricsStrip, { metrics: reading() }))).toEqual([
-            `CPU: 23% of 16 cores`,
-            `Memory: 5.5 GB / 16 GB`,
-            `Disk: 400 GB / 1,000 GB`,
-            `Load: 1.50 1.25 1.00`,
-            `Processes: 104`,
-            `Daemon: 412 MB · 2.0% CPU · loop 4.5%`,
-            `Memory by kind: builds and tests 2.0 GB · browsers 1.2 GB`,
+describe("the sandbox bar", () => {
+    it("reads the three figures that run out, as short as the line allows, and nothing else while all is well", () => {
+        expect(figuresOf(mount(SandboxMetricsBar, { metrics: reading() }))).toEqual([`CPU 23%`, `Memory 5.5 / 16 GB`, `Disk 400 / 1,000 GB`]);
+    });
+
+    it("keeps both units when used and total differ, and a dash for a first reading's CPU", () => {
+        const el = mount(SandboxMetricsBar, { metrics: reading({ sandbox: { cpuPercent: undefined, memoryBytes: 900 * MIB } }) });
+        expect(figuresOf(el).slice(0, 2)).toEqual([`CPU –`, `Memory 900 MB / 16 GB`]);
+    });
+
+    it("raises a figure past its limit onto the line, tinted, so it needs no click to be seen", () => {
+        const el = mount(SandboxMetricsBar, {
+            metrics: reading({ sandbox: { memoryBytes: 15 * GIB, pressure: { cpu: 0, memory: 30, io: 0 } }, daemon: { eventLoopPercent: 95 } }),
+        });
+        expect(figuresOf(el)).toEqual([
+            `CPU 23%`,
+            `Memory 15 / 16 GB`,
+            `Disk 400 / 1,000 GB`,
+            `Pressure CPU 0.0% · memory 30% · I/O 0.0%`,
+            `Daemon 412 MB · 2.0% CPU · loop 95%`,
         ]);
+        const tinted = [...el.querySelectorAll(`[data-figure]`)].filter(
+            (figure) => figure.matches(`.text-warning`) || figure.querySelector(`.text-warning`) !== null,
+        );
+        expect(tinted.map((figure) => wordsOf(figure).split(` `)[0])).toEqual([`Memory`, `Pressure`, `Daemon`]);
+    });
+});
+
+describe("the sandbox panel", () => {
+    it("reads capacity against use, and leaves out what is quiet: no swap in use, no pressure worth naming", () => {
+        const el = mount(SandboxMetricsDetails, { metrics: reading() });
+        expect(figuresOf(el, `gauges`)).toEqual([`CPU 23% of 16 cores`, `Memory 5.5 GB / 16 GB`, `Disk 400 GB / 1,000 GB`]);
+        expect(termsOf(el)).toEqual([`Load: 1.50 1.25 1.00`, `Processes: 104`, `Daemon: 412 MB · 2.0% CPU · loop 4.5%`]);
+        expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GB`, `browsers 1.2 GB`]);
     });
 
     it("names the capacity alone on a first reading, and swap and pressure once there is some", () => {
-        const figures = figuresOf(
-            mount(SandboxMetricsStrip, {
-                metrics: reading({ sandbox: { cpuPercent: undefined, swapBytes: 3 * GIB, pressure: { cpu: 2, memory: 12.5, io: 0 } } }),
-            }),
-        );
-        expect(figures).toContain(`CPU: 16 cores`);
-        expect(figures).toContain(`Swap: 3.0 GB`);
-        expect(figures).toContain(`Pressure: CPU 2.0% · memory 13% · I/O 0.0%`);
+        const el = mount(SandboxMetricsDetails, {
+            metrics: reading({ sandbox: { cpuPercent: undefined, swapBytes: 3 * GIB, pressure: { cpu: 2, memory: 12.5, io: 0 } } }),
+        });
+        expect(figuresOf(el, `gauges`)[0]).toBe(`CPU 16 cores`);
+        expect(termsOf(el)).toContain(`Swap: 3.0 GB`);
+        expect(termsOf(el)).toContain(`Pressure: CPU 2.0% · memory 13% · I/O 0.0%`);
     });
 
     it("tints only the figures near their limit", () => {
-        const el = mount(SandboxMetricsStrip, {
+        const el = mount(SandboxMetricsDetails, {
             metrics: reading({ sandbox: { memoryBytes: 15 * GIB, pressure: { cpu: 0, memory: 30, io: 0 } }, daemon: { eventLoopPercent: 95 } }),
         });
         const warned = [...el.querySelectorAll(`.text-warning`)].map((value) => value.previousElementSibling?.textContent?.trim());

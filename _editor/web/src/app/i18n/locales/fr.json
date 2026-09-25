@@ -302,6 +302,9 @@
             "rolesLabel": "Mémoire par type",
             "sandboxLabel": "Ressources du sandbox",
             "sessionHint": "Ce qu'utilisent les processus de cette conversation : le CPU des dernières secondes, où 100 % correspond à un cœur entier, et la mémoire résidente.",
+            "hide": "Masquer",
+            "hideHint": "Désactive les métriques pour geeks. Paramètres ▸ Apparence les réactive.",
+            "measuredNote": "Mesuré toutes les quelques secondes, et seulement tant que le tableau des agents est ouvert.",
             "swapHint": "La mémoire que le noyau a déplacée sur le disque. Un peu, c'est normal ; beaucoup, et en hausse, signifie que le sandbox manque de mémoire."
         },
         "ownerMark": {

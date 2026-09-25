@@ -303,6 +303,9 @@
             "rolesLabel": "Speicher nach Art",
             "sandboxLabel": "Ressourcen der Sandbox",
             "sessionHint": "Was die Prozesse dieser Unterhaltung nutzen: CPU der letzten Sekunden, wobei 100 % ein ganzer Kern ist, und belegter Arbeitsspeicher.",
+            "hide": "Ausblenden",
+            "hideHint": "Geek-Metriken ausschalten. Unter Einstellungen ▸ Aussehen schaltest du sie wieder ein.",
+            "measuredNote": "Alle paar Sekunden gemessen, und nur solange die Agenten-Übersicht offen ist.",
             "swapHint": "Arbeitsspeicher, den der Kernel auf die Platte ausgelagert hat. Ein wenig ist normal; viel und weiter wachsend heißt, der Sandbox fehlt Speicher."
         },
         "ownerMark": {

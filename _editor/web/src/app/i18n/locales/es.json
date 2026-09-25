@@ -306,6 +306,9 @@
             "rolesLabel": "Memoria por tipo",
             "sandboxLabel": "Recursos del sandbox",
             "sessionHint": "Lo que usan los procesos de esta conversación: CPU de los últimos segundos, donde 100 % es un núcleo entero, y memoria residente.",
+            "hide": "Ocultar",
+            "hideHint": "Desactiva las métricas para geeks. Se vuelven a activar en Ajustes ▸ Aspecto.",
+            "measuredNote": "Se mide cada pocos segundos, y solo mientras el tablero de agentes está abierto.",
             "swapHint": "Memoria que el kernel ha llevado al disco. Un poco es normal; mucha y en aumento significa que al sandbox le falta memoria."
         },
         "ownerMark": {

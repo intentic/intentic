@@ -299,7 +299,10 @@
             },
             "cpu": "{percent} CPU",
             "processes": "{count} process | {count} processes",
-            "sessionHint": "What this conversation's processes are using: CPU over the last few seconds, where 100% is one full core, and resident memory."
+            "sessionHint": "What this conversation's processes are using: CPU over the last few seconds, where 100% is one full core, and resident memory.",
+            "hide": "Hide",
+            "hideHint": "Turn geek metrics off. Settings ▸ Appearance turns them back on.",
+            "measuredNote": "Measured every few seconds, and only while the Agents board is open."
         },
         "buildIdeas": {
             "pageMyBusiness": "A page for my business",
