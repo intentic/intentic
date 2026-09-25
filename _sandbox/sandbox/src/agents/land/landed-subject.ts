@@ -8,6 +8,7 @@ import {
     cleanBreakingNote,
     cleanCommitSubject,
     cleanReleaseNote,
+    commitSubjectFlaw,
     fallbackBreakingNote,
     markSubjectBreaking,
     type RepoDiff,
@@ -52,14 +53,15 @@ interface DraftedMessage {
 
 // Subject decides if the reply was worth anything; the two trailers are optional (most commits earn neither), so their
 // absence isn't a failure, but a missing subject is.
-const messageAnswer = (wantsNote: boolean): RoleAnswer<DraftedMessage> => ({
+export const messageAnswer = (wantsNote: boolean, recent: readonly string[] = []): RoleAnswer<DraftedMessage> => ({
     what: `a commit subject`,
     read: (reply) => ({
         subject: cleanCommitSubject(reply),
         note: wantsNote ? cleanReleaseNote(reply) : ``,
         breaking: cleanBreakingNote(reply),
     }),
-    unusable: ({ subject }) => sentenceReason(`a commit subject`, subject, SUBJECT_MAX_WORDS),
+    // Refused like any other unusable answer, so the ask moves to the next model rather than committing it.
+    unusable: ({ subject }) => sentenceReason(`a commit subject`, subject, SUBJECT_MAX_WORDS) ?? commitSubjectFlaw(subject, recent),
 });
 
 // Sentence rides the changelog gate only when nothing was detected; a detected shrink always keeps one (the push gate
@@ -135,7 +137,7 @@ export const describeLanding = async (services: Services, id: string): Promise<v
                 `commit-message`,
                 // Sized per rung rather than built once: the patch budget is the largest thing any helper sends, and a
                 // model on a small window gets a clipped diff instead of a prompt it has to refuse.
-                { prompt: (room) => sizedCommitMessagePrompt(room, diffs, wantsNote, removed), answer: messageAnswer(wantsNote) },
+                { prompt: (room) => sizedCommitMessagePrompt(room, diffs, wantsNote, removed), answer: messageAnswer(wantsNote, diffs.flatMap((diff) => diff.subjects)) },
                 new AbortController().signal,
                 { onProgress: (attempts) => publish({ ...draft, steps: attempts.map(step) }) },
             ),

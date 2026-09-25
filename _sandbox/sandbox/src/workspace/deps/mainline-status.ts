@@ -1,13 +1,38 @@
-import type { MainlineProject, MainlineStatus } from "@intentic/sandbox-contract";
+import type { MainlineLandRef, MainlineProject, MainlineRun, MainlineStatus } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { publicPushes } from "./push-checks-store.js";
 import type { QueuedLand } from "./verify-store.js";
-import { mainlineLandOf } from "./verify-deps.js";
+import { failureOf } from "./failure-units.js";
+import { mainlineLandOf, verifyPanelKey } from "./verify-deps.js";
+import { panelSession } from "../../processes/managed-processes.js";
 
 // The main-line check as the editor reads it (GET /workspace/mainline): what runs now, from the land check; what waits,
 // the last run and the red streak per project, and the latest runs with what became of each red one, from the verify
 // store. The only verification the sandbox runs on work, so it is shown rather than hidden in a terminal. Beside it, what
 // each push check let through and what became of it, from the push-checks store.
+
+// A run with its failures split the way a reader scans them.
+const withUnits = (run: MainlineRun): MainlineRun => (run.failures.length === 0 ? run : { ...run, units: run.failures.map(failureOf) });
+
+// A red streak as the router laid it (land-breakage.ts files the blame on each run as it settles): the cause is the
+// latest run of the streak that named anybody, a run the next check found resolved aside; the fixer is the latest
+// decision. Read, never re-derived: the editor's rail, cards and panel all show this one answer.
+const redOf = (runs: readonly MainlineRun[], project: string, since: number): NonNullable<MainlineProject["red"]> => {
+    const streak = runs.filter((run) => run.project === project && run.status === "red" && run.at >= since);
+    const laid = streak.find((run) => (run.suspects?.length ?? 0) > 0 && run.routing?.kind !== "resolved");
+    const titleOf = (conversationId: string): MainlineLandRef => {
+        const title = streak.flatMap((run) => run.lands).find((land) => land.conversationId === conversationId)?.title;
+        return { conversationId, ...(title === undefined ? {} : { title }) };
+    };
+    const fixer = streak.find((run) => run.routing !== undefined)?.routing;
+    return {
+        since,
+        cause: (laid?.suspects ?? []).map(titleOf),
+        // A run filed before blame said whether it narrowed named its suspects only when it did, or when it had one land.
+        named: laid?.named ?? laid?.suspects?.length === 1,
+        ...(fixer === undefined ? {} : { fixer }),
+    };
+};
 
 export const mainlineStatus = async (deps: Pick<Services, "verifyStore" | "pushChecks" | "landCheck">): Promise<MainlineStatus> => {
     const [{ projects, runs }, lands, { pushes }] = await Promise.all([deps.verifyStore.read(), deps.verifyStore.lands(), deps.pushChecks.store.read()]);
@@ -35,11 +60,12 @@ export const mainlineStatus = async (deps: Pick<Services, "verifyStore" | "pushC
                   }
                 : {}),
             queued: waiting(dir).map(mainlineLandOf),
-            ...(last === undefined ? {} : { last }),
-            ...(outcome?.status === "red" ? { redSince: outcome.since ?? outcome.at } : {}),
+            session: panelSession(verifyPanelKey(dir)),
+            ...(last === undefined ? {} : { last: withUnits(last) }),
+            ...(outcome?.status === "red" ? { redSince: outcome.since ?? outcome.at, red: redOf(runs, dir, outcome.since ?? outcome.at) } : {}),
         };
     };
-    return { projects: [...dirs].toSorted().map(projectOf), recent: [...runs], pushes: publicPushes(pushes) };
+    return { projects: [...dirs].toSorted().map(projectOf), recent: runs.map(withUnits), pushes: publicPushes(pushes) };
 };
 
 // The projects red right now with what they fail on, for the note a turn is told (mainline-note.ts): the failures of

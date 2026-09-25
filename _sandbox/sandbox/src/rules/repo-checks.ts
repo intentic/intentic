@@ -21,8 +21,8 @@ import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 const DEFAULT_TIMEOUT_MS = 900_000;
 
 // The occasions that are rule moments. `land` is not one, it is the daemon's own run after a land (verify-deps.ts); and
-// `turn` runs nothing any more: no check runs inside a conversation, so a declaration naming it still reads, still
-// counts toward what was adopted, and becomes no rule.
+// `turn` runs nothing any more: no check runs inside a conversation, so a declaration naming it still reads and is
+// shown, but becomes no rule and is no part of what the owner adopts.
 const MOMENT: Record<Exclude<RepoCheckMoment, "land" | "turn">, Rule["moment"]> = {
     edit: "file.edited",
 };
@@ -31,8 +31,12 @@ const MOMENT: Record<Exclude<RepoCheckMoment, "land" | "turn">, Rule["moment"]> 
 export interface RepoDeclaration {
     readonly repo: string;
     readonly checks: readonly RepoCheck[];
-    // Of the checks themselves, so re-indenting the file is not a change and rewriting a command is.
+    // Of the checks that can run, so re-indenting the file is not a change, rewriting a command is, and a retired `turn`
+    // check is neither.
     readonly fingerprint: string;
+    // What adoption was measured against before `turn` stopped counting, for a file that still names one: an owner who
+    // adopted it then keeps it adopted.
+    readonly formerFingerprint?: string;
     // Present when the file exists but could not be read; `checks` is then empty, so a broken file runs nothing rather
     // than half of something.
     readonly error?: string;
@@ -49,6 +53,20 @@ export const fingerprintOf = (checks: readonly RepoCheck[]): string =>
         .digest("hex")
         .slice(0, 16);
 
+// The checks that can run: every one but a retired `turn` check.
+const standing = (checks: readonly RepoCheck[]): RepoCheck[] => checks.filter((check) => check.when !== "turn");
+
+/** A repository's checks as a declaration, with what adoption is measured against. */
+export const declarationOf = (repo: string, checks: readonly RepoCheck[]): RepoDeclaration => {
+    const runnable = standing(checks);
+    return {
+        repo,
+        checks,
+        fingerprint: fingerprintOf(runnable),
+        ...(runnable.length === checks.length ? {} : { formerFingerprint: fingerprintOf(checks) }),
+    };
+};
+
 /** Reads one repository's declaration. Absent file ⇒ undefined: a repository that declares nothing is not a row. A
  *  file that exists but cannot be read is that repository's error row, never "declares nothing" and never every row's. */
 export const readRepoDeclaration = async (root: string, repo: string): Promise<RepoDeclaration | undefined> => {
@@ -62,8 +80,7 @@ export const readRepoDeclaration = async (root: string, repo: string): Promise<R
         return undefined;
     }
     try {
-        const { checks } = RepoChecksFileSchema.parse(JSON.parse(text));
-        return { repo, checks, fingerprint: fingerprintOf(checks) };
+        return declarationOf(repo, RepoChecksFileSchema.parse(JSON.parse(text)).checks);
     } catch (error) {
         // The repository's file to fix, and the reader's to report: a malformed declaration is stated on the row, never
         // guessed at.
@@ -79,9 +96,16 @@ export const declaredRepoChecks = async (root: string): Promise<RepoDeclaration[
     return read.filter((declaration): declaration is RepoDeclaration => declaration !== undefined);
 };
 
-/** Whether what a repository declares now is what the owner said yes to. A changed declaration is held, not run. */
+// Whether the owner's recorded answer is to this declaration as it stands.
+const answers = (adopted: Readonly<Record<string, string>>, declaration: RepoDeclaration): boolean => {
+    const recorded = adopted[declaration.repo];
+    return recorded !== undefined && (recorded === declaration.fingerprint || recorded === declaration.formerFingerprint);
+};
+
+/** Whether what a repository declares now is what the owner said yes to. A changed declaration is held, not run; one
+ *  that declares nothing that can run has nothing to adopt. */
 export const isAdopted = (adopted: Readonly<Record<string, string>>, declaration: RepoDeclaration): boolean =>
-    declaration.checks.length > 0 && adopted[declaration.repo] === declaration.fingerprint;
+    standing(declaration.checks).length > 0 && answers(adopted, declaration);
 
 // A rule id is lowercase alphanumerics and dashes, so a repo id's slashes and dots become dashes. Prefixed, so a
 // synthesized rule is recognisable in a log line and can never be mistaken for one the owner wrote.
@@ -171,7 +195,7 @@ export const summariesOf = (
             fired: declaration.checks.map((check, index) => (check.when === "land" ? null : (firings[ruleId(declaration.repo, index)] ?? null))),
             adopted: isAdopted(adopted, declaration),
             // Only a repository adopted before can have changed; a first sighting is simply not adopted yet.
-            changed: adopted[declaration.repo] !== undefined && adopted[declaration.repo] !== declaration.fingerprint,
+            changed: adopted[declaration.repo] !== undefined && !answers(adopted, declaration),
             ...(declaration.error === undefined ? {} : { error: declaration.error }),
             ...(landDefault === undefined || landCheckOf(declaration) !== undefined ? {} : { landDefault }),
         };

@@ -9,6 +9,7 @@ import {
     RepoChecksListSchema,
     RuleFiringsSchema,
     SandboxSettingsSchema,
+    SandboxSettingsWriteSchema,
     SavingsReportSchema,
     TimezoneOfferSchema,
     TimezoneStateSchema,
@@ -36,7 +37,7 @@ export const settingsContract = {
             summary: "Change the sandbox settings",
             description: "Writes the settings whole, so send the complete object rather than the fields you changed.",
         })
-        .input(SandboxSettingsSchema)
+        .input(SandboxSettingsWriteSchema)
         .output(OkSchema),
     savings: procedure
         .route({

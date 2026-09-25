@@ -78,6 +78,16 @@ describe(`landCheck`, () => {
         expect(check?.fixUp).toBeUndefined();
     });
 
+    // A daemon that says whether blame was `named` files who it laid the failures at on every red run: the card reads
+    // exactly that, the same answer the panel's cause gives, and guesses nothing from how many lands the run covered.
+    it(`broke main exactly when the daemon laid the run at it, one land or several`, () => {
+        const foundRed = red({ named: false });
+        expect(landCheck(`mine`, status([project()], [foundRed]))?.kind).toBe(`checked-red`);
+        const untold = red({ lands: [land(`mine`, NOW - 5 * MINUTE), land(`other`, NOW - 4 * MINUTE)], suspects: [`mine`, `other`], named: false });
+        expect([landCheck(`mine`, status([project()], [untold]))?.kind, landCheck(`other`, status([project()], [untold]))?.kind]).toEqual([`broke`, `broke`]);
+    });
+
+    // FALLBACK: from a daemon that never says `named`, the only land of a run that turned the project red is blamed.
     it(`blames the only land of a run that turned a green project red before anybody is named`, () => {
         expect(landCheck(`mine`, status([project()], [red()]))?.kind).toBe(`broke`);
     });

@@ -8,8 +8,8 @@ import type {
     PushFinding,
 } from "@intentic/sandbox-contract";
 import {
-    causeOf,
-    failureParts,
+    checkSession,
+    failuresOf,
     findingGist,
     fixTone,
     leftSince,
@@ -68,7 +68,8 @@ describe(`mainlineSummary`, () => {
         );
         expect(summary).toEqual({
             running: { project: `web`, ...running },
-            reds: [{ project: `api`, run: broken, since: broken.at, routing: undefined }],
+            // An older daemon's red, laid by the fallback: the one land of the run that turned it red.
+            reds: [{ project: `api`, run: broken, since: broken.at, cause: [land(`mine`, NOW - 4 * MINUTE)], named: false, fixer: undefined }],
             // One land queued in two projects is one land.
             queued: 1,
             checked: true,
@@ -107,61 +108,92 @@ describe(`resultsOf`, () => {
     });
 });
 
-describe(`causeOf`, () => {
-    const streakOf = (runs: MainlineRun[]): MainlineStatus => {
-        const [newest] = runs;
-        const since = Math.min(...runs.map((each) => each.at));
-        return status([project({ last: newest, redSince: since })], runs);
-    };
-    const causeIn = (runs: MainlineRun[]): string[] => {
-        const line = streakOf(runs);
-        const [first] = redsOf(line);
-        return first === undefined ? [] : causeOf(line, first).map((each) => each.conversationId);
-    };
-
-    it(`is the suspects the sandbox named, on whichever run of the streak named them`, () => {
-        const turned = red({ at: NOW - 30 * MINUTE, lands: [land(`a`, NOW - 31 * MINUTE), land(`b`, NOW - 31 * MINUTE)], suspects: [`b`] });
-        const later = red({ at: NOW - 5 * MINUTE, lands: [land(`c`, NOW - 6 * MINUTE)], attempt: 2 });
-        expect(causeIn([later, turned])).toEqual([`b`]);
+describe(`a red's cause`, () => {
+    // What the daemon laid it at is the answer: nothing on this side re-reads the runs.
+    it(`is the red the daemon serves, cause, narrowing and fixer as it says`, () => {
+        const turned = red({ at: NOW - 30 * MINUTE, lands: [land(`a`, NOW - 31 * MINUTE), land(`b`, NOW - 31 * MINUTE)], suspects: [`b`], named: true });
+        const fixer = { kind: `fix-up` as const, conversationId: `land-fix-web-1`, at: NOW - 20 * MINUTE };
+        const served = { since: turned.at, cause: [{ conversationId: `b`, title: `work of b` }], named: true, fixer };
+        const [first] = redsOf(status([project({ last: turned, redSince: turned.at, red: served })], [turned]));
+        expect(first).toEqual({ project: `web`, run: turned, since: turned.at, cause: served.cause, named: true, fixer });
     });
 
-    it(`is every land of the run that turned the project red, where nobody was named`, () => {
-        const turned = red({ at: NOW - 30 * MINUTE, lands: [land(`a`, NOW - 31 * MINUTE), land(`b`, NOW - 31 * MINUTE)] });
-        const later = red({ at: NOW - 5 * MINUTE, lands: [land(`c`, NOW - 6 * MINUTE)], attempt: 2 });
-        expect(causeIn([later, turned])).toEqual([`a`, `b`]);
+    it(`is nobody when the daemon laid it at nobody, whatever lands the run covered`, () => {
+        const found = red({ lands: [land(`c`, NOW - 6 * MINUTE)], named: false });
+        const [first] = redsOf(status([project({ last: found, redSince: found.at, red: { since: found.at, cause: [], named: false } })], [found]));
+        expect(first?.cause).toEqual([]);
     });
 
-    // A later run only found main red; offering its land as the cause would blame the work that walked into it.
-    it(`is nobody when the record no longer reaches the run that turned it red`, () => {
-        expect(causeIn([red({ at: NOW - 5 * MINUTE, lands: [land(`c`, NOW - 6 * MINUTE)], attempt: 3 })])).toEqual([]);
-    });
+    // FALLBACK: a daemon that serves no `red` still gets a cause, rebuilt from its runs the way it used to be.
+    describe(`from a daemon that serves none`, () => {
+        const causeIn = (runs: MainlineRun[]): string[] => {
+            const [newest] = runs;
+            const since = Math.min(...runs.map((each) => each.at));
+            const [first] = redsOf(status([project({ last: newest, redSince: since })], runs));
+            return first === undefined ? [] : first.cause.map((each) => each.conversationId);
+        };
 
-    it(`never reaches back past the streak into an earlier red of the same project`, () => {
-        const earlier = red({ at: NOW - 90 * MINUTE, lands: [land(`old`, NOW - 91 * MINUTE)], suspects: [`old`] });
-        const turned = red({ at: NOW - 30 * MINUTE, lands: [land(`a`, NOW - 31 * MINUTE)] });
-        const line = status([project({ last: turned, redSince: turned.at })], [turned, run({ at: NOW - 60 * MINUTE }), earlier]);
-        const [first] = redsOf(line);
-        expect(first === undefined ? [] : causeOf(line, first).map((each) => each.conversationId)).toEqual([`a`]);
+        it(`is the suspects the sandbox named, on whichever run of the streak named them`, () => {
+            const turned = red({ at: NOW - 30 * MINUTE, lands: [land(`a`, NOW - 31 * MINUTE), land(`b`, NOW - 31 * MINUTE)], suspects: [`b`] });
+            const later = red({ at: NOW - 5 * MINUTE, lands: [land(`c`, NOW - 6 * MINUTE)], attempt: 2 });
+            expect(causeIn([later, turned])).toEqual([`b`]);
+        });
+
+        it(`is every land of the run that turned the project red, where nobody was named`, () => {
+            const turned = red({ at: NOW - 30 * MINUTE, lands: [land(`a`, NOW - 31 * MINUTE), land(`b`, NOW - 31 * MINUTE)] });
+            const later = red({ at: NOW - 5 * MINUTE, lands: [land(`c`, NOW - 6 * MINUTE)], attempt: 2 });
+            expect(causeIn([later, turned])).toEqual([`a`, `b`]);
+        });
+
+        // A later run only found main red; offering its land as the cause would blame the work that walked into it.
+        it(`is nobody when the record no longer reaches the run that turned it red`, () => {
+            expect(causeIn([red({ at: NOW - 5 * MINUTE, lands: [land(`c`, NOW - 6 * MINUTE)], attempt: 3 })])).toEqual([]);
+        });
+
+        it(`never reaches back past the streak into an earlier red of the same project`, () => {
+            const earlier = red({ at: NOW - 90 * MINUTE, lands: [land(`old`, NOW - 91 * MINUTE)], suspects: [`old`] });
+            const turned = red({ at: NOW - 30 * MINUTE, lands: [land(`a`, NOW - 31 * MINUTE)] });
+            const [first] = redsOf(status([project({ last: turned, redSince: turned.at })], [turned, run({ at: NOW - 60 * MINUTE }), earlier]));
+            expect(first?.cause.map((each) => each.conversationId)).toEqual([`a`]);
+        });
     });
 });
 
-describe(`failureParts`, () => {
-    it(`reads a failing test by its name first and the file it is in after`, () => {
-        expect(failureParts(`@intentic/web#test _editor/web/src/features/chat/tabs/chatTabsLanes.test.ts › caps the Finished lane`)).toEqual({
-            name: `caps the Finished lane`,
-            file: `chatTabsLanes.test.ts`,
+describe(`failuresOf`, () => {
+    it(`reads a failure the daemon split by its name, with the file of its path after unless the name already says it`, () => {
+        const typeError = `web typecheck: src/pages/changelog.ts(41,7): Property 'tag' does not exist on type 'Release'`;
+        const split = red({
+            units: [
+                { name: `caps the Finished lane`, path: `_editor/web/src/features/chat/tabs/chatTabsLanes.test.ts` },
+                { name: typeError, path: `src/pages/changelog.ts(41,7)` },
+                { name: `@intentic/web#test` },
+            ],
         });
-        expect(failureParts(`web/src/pages/changelog.test.ts › lists every release › under its heading`)).toEqual({
-            name: `lists every release › under its heading`,
-            file: `changelog.test.ts`,
-        });
-        expect(failureParts(`app#test a.test.ts › x`)).toEqual({ name: `x`, file: `a.test.ts` });
+        expect(failuresOf(split)).toEqual([{ name: `caps the Finished lane`, file: `chatTabsLanes.test.ts` }, { name: typeError }, { name: `@intentic/web#test` }]);
     });
 
-    it(`keeps anything that is not a test whole`, () => {
-        const typeError = `web typecheck: src/pages/changelog.ts(41,7): Property 'tag' does not exist on type 'Release'`;
-        expect(failureParts(typeError)).toEqual({ name: typeError });
-        expect(failureParts(`w#test a › `)).toEqual({ name: `w#test a › ` });
+    // FALLBACK: a daemon that sends no `units` gets its failure lines split here, the way they used to be.
+    it(`splits a failing test's line by its name first and the file it is in after, from a daemon that sends no units`, () => {
+        const lines = red({
+            failures: [
+                `@intentic/web#test _editor/web/src/features/chat/tabs/chatTabsLanes.test.ts › caps the Finished lane`,
+                `web/src/pages/changelog.test.ts › lists every release › under its heading`,
+                `w#test a › `,
+            ],
+        });
+        expect(failuresOf(lines)).toEqual([
+            { name: `caps the Finished lane`, file: `chatTabsLanes.test.ts` },
+            { name: `lists every release › under its heading`, file: `changelog.test.ts` },
+            { name: `w#test a › ` },
+        ]);
+    });
+});
+
+describe(`checkSession`, () => {
+    it(`is the terminal the daemon names for the project, or the one an older daemon's panel runs in`, () => {
+        expect(checkSession(status([project({ session: `panel-web--verify` })]), `web`)).toBe(`panel-web--verify`);
+        expect(checkSession(status([project({ project: `a/b` })]), `a/b`)).toBe(`panel-a_b--verify`);
+        expect(checkSession(status([]), ``)).toBe(`panel-root--verify`);
     });
 });
 

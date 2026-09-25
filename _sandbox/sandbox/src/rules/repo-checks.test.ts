@@ -1,6 +1,7 @@
 import type { Rule } from "@intentic/sandbox-contract";
 import {
     adoptedRules,
+    declarationOf,
     fingerprintOf,
     isAdopted,
     landCheckOf,
@@ -14,11 +15,8 @@ import {
 // What a repository's own declaration MEANS, with no workspace on disk: it becomes ordinary rules, and it only becomes
 // them once the owner has agreed to the exact commands in front of them.
 
-const declaring = (repo: string, ...checks: { when: "edit" | "turn" | "land"; run: string; paths?: string[] }[]): RepoDeclaration => ({
-    repo,
-    checks,
-    fingerprint: fingerprintOf(checks),
-});
+const declaring = (repo: string, ...checks: { when: "edit" | "turn" | "land"; run: string; paths?: string[] }[]): RepoDeclaration =>
+    declarationOf(repo, checks);
 
 describe(`a declaration as rules`, () => {
     test(`each edit check becomes a rule at its own moment, aimed at the repository that declared it`, () => {
@@ -108,11 +106,25 @@ describe(`adoption`, () => {
         ]);
     });
 
+    // Adopted before `turn` stopped counting: the answer was recorded against every check, the turn one included.
     test(`an adopted declaration still naming the retired turn moment stays adopted, and runs nothing for it`, () => {
-        const retired = declaring(`intentic`, { when: `turn`, run: `pnpm verify:turn` }, { when: `land`, run: `pnpm verify` });
-        const adopted = { intentic: retired.fingerprint };
+        const turn = { when: `turn` as const, run: `pnpm verify:turn` };
+        const land = { when: `land` as const, run: `pnpm verify` };
+        const retired = declaring(`intentic`, turn, land);
+        const adopted = { intentic: fingerprintOf([turn, land]) };
         expect(isAdopted(adopted, retired)).toBe(true);
+        expect(summariesOf([retired], adopted)[0]).toMatchObject({ adopted: true, changed: false });
         expect(adoptedRules([retired], adopted)).toEqual([]);
+    });
+
+    test(`a retired turn check is no part of what is adopted: rewriting it holds nothing, and alone it offers nothing`, () => {
+        const land = { when: `land` as const, run: `pnpm verify` };
+        const before = declaring(`intentic`, { when: `turn`, run: `pnpm verify:turn` }, land);
+        const after = declaring(`intentic`, { when: `turn`, run: `pnpm something-else` }, land);
+        expect(after.fingerprint).toBe(before.fingerprint);
+        expect(isAdopted({ intentic: before.fingerprint }, after)).toBe(true);
+        const onlyTurn = declaring(`intentic`, { when: `turn`, run: `pnpm verify:turn` });
+        expect(isAdopted({ intentic: onlyTurn.fingerprint }, onlyTurn)).toBe(false);
     });
 
     test(`a command rewritten afterwards is held, and says so, rather than running under the old answer`, () => {

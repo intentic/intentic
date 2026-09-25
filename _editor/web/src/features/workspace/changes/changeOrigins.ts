@@ -76,10 +76,12 @@ export const originHue = (id: string): OriginHue => {
 // Either carrier of a landing's message (the agent's card, or the review's origin record); same shape, one lookup.
 type MessageCarrier = { readonly landedMessage?: LandedMessage } | undefined;
 
-// Card's message wins: it's written and pushed within seconds of the land, while the review refreshes only on demand.
-// Falls back to the review, which keeps the sentence after the agent is archived; undefined means nothing written yet.
+// A live card is the answer, message or none: it is written and pushed within seconds of the land, while the review
+// refreshes only on demand, so a card whose message a newer land cleared must not fall back to the review's copy of the
+// sentence it replaced (that is how one land's subject headed the next land's commit). Only an agent off the roster
+// (archived) is read from the review, which keeps its sentence; undefined means nothing written yet.
 export const landedMessage = (card: MessageCarrier, origin: MessageCarrier): LandedMessage | undefined =>
-    card?.landedMessage ?? origin?.landedMessage;
+    card === undefined ? origin?.landedMessage : card.landedMessage;
 
 // The commit message a landed message makes (landedCommitMessage), or undefined when nothing is written yet.
 export const commitMessageOf = (landed: LandedMessage | undefined): string | undefined => (landed === undefined ? undefined : landedCommitMessage(landed));

@@ -9,8 +9,8 @@ import { openWorkTerminal } from "../../terminal/useWorkTerminals";
 import { formatElapsed } from "../fleet/agentStatus";
 import MainlinePushSection from "./MainlinePushSection.vue";
 import {
-    causeOf,
-    failureParts,
+    checkSession,
+    failuresOf,
     fixTone,
     type MainlineEvent,
     type MainlineSummary,
@@ -22,7 +22,6 @@ import {
     shortSha,
     sinceWhen,
     timelineOf,
-    verifySession,
 } from "./mainlineView";
 import { openLandConversation, useLandTitle } from "./openLanded";
 
@@ -69,12 +68,12 @@ const results = computed(() =>
         if (result.red === undefined) {
             return { ...result, cause: [], fix: undefined };
         }
-        const meta = routingMeta(result.red.routing?.kind);
+        const meta = routingMeta(result.red.fixer?.kind);
         // The conversation the line names: the one fixing it, or the one it waits for.
-        const conversationId = meta.lead === undefined ? undefined : result.red.routing?.conversationId;
+        const conversationId = meta.lead === undefined ? undefined : result.red.fixer?.conversationId;
         // Why nobody was sent is worth its sentence only when it leaves the red to the reader.
-        const detail = meta.state === `needs-you` ? result.red.routing?.detail : undefined;
-        return { ...result, cause: causeOf(props.status, result.red), fix: { meta, conversationId, detail } };
+        const detail = meta.state === `needs-you` ? result.red.fixer?.detail : undefined;
+        return { ...result, cause: result.red.cause, fix: { meta, conversationId, detail } };
     }),
 );
 
@@ -88,7 +87,7 @@ const open = (conversationId: string, title?: string): void => {
 };
 
 const showLogs = (project: string): void => {
-    openWorkTerminal(verifySession(project));
+    openWorkTerminal(checkSession(props.status, project));
 };
 
 // What a settled run measured: its first land by title and a count of the rest, or a re-check no land asked for.
@@ -239,7 +238,7 @@ const eventKey = (event: MainlineEvent): string => (event.kind === `land` ? `lan
                             </div>
                             <ul v-if="result.run.failures.length > 0" data-failures class="flex min-w-0 flex-col gap-0.5">
                                 <li
-                                    v-for="(failure, index) in result.run.failures.slice(0, FAILURES_SHOWN).map(failureParts)"
+                                    v-for="(failure, index) in failuresOf(result.run).slice(0, FAILURES_SHOWN)"
                                     :key="index"
                                     class="line-clamp-2 text-2xs wrap-anywhere"
                                 >

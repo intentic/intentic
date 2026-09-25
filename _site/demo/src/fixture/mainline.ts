@@ -25,9 +25,15 @@ const WEB_RED = (now: number): MainlineRun => ({
         `web/src/pages/changelog.test.ts › links each release to its tag`,
         `web typecheck: src/pages/changelog.ts(41,7): Property 'tag' does not exist on type 'Release'`,
     ],
+    units: [
+        { name: `lists every release under its own heading`, path: `web/src/pages/changelog.test.ts` },
+        { name: `links each release to its tag`, path: `web/src/pages/changelog.test.ts` },
+        { name: `web typecheck: src/pages/changelog.ts(41,7): Property 'tag' does not exist on type 'Release'`, path: `src/pages/changelog.ts(41,7)` },
+    ],
     failureCount: 3,
     attempt: 1,
     suspects: [RELEASE_NOTES.conversationId],
+    named: true,
     routing: {
         kind: `fix-up`,
         conversationId: LAND_FIX_AGENT_ID,
@@ -66,8 +72,16 @@ const redLine = (now: number): MainlineStatus => {
     const api = API_GREEN(now);
     return {
         projects: [
-            { project: `api`, queued: [], last: api },
-            { project: `web`, queued: [{ ...CHECKOUT, at: now - 40_000 }], last: red, redSince: red.at },
+            { project: `api`, queued: [], session: `panel-api--verify`, last: api },
+            {
+                project: `web`,
+                queued: [{ ...CHECKOUT, at: now - 40_000 }],
+                session: `panel-web--verify`,
+                last: red,
+                redSince: red.at,
+                // As the sandbox laid it: the release notes' land, named by the paths it changed, and the fresh fix-up on it.
+                red: { since: red.at, cause: [RELEASE_NOTES], named: true, ...(red.routing === undefined ? {} : { fixer: red.routing }) },
+            },
         ],
         recent: [red, api, WEB_RECHECK(now)],
     };
@@ -88,7 +102,7 @@ const WEB_GREEN = (now: number): MainlineRun => ({
 
 const greenLine = (now: number): MainlineStatus => {
     const green = WEB_GREEN(now);
-    return { projects: [{ project: `web`, queued: [], last: green }], recent: [green, WEB_RECHECK(now)] };
+    return { projects: [{ project: `web`, queued: [], session: `panel-web--verify`, last: green }], recent: [green, WEB_RECHECK(now)] };
 };
 
 // The checkout run landed its last turn a moment before the page opened, and `web`'s check is measuring it now.
@@ -100,6 +114,7 @@ const checkingLine = (now: number): MainlineStatus => {
                 project: `web`,
                 running: { command: `pnpm verify`, startedAt: now - 25_000, lands: [{ ...CHECKOUT, at: now - 30_000 }] },
                 queued: [],
+                session: `panel-web--verify`,
                 last: green,
             },
         ],

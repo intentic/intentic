@@ -1,7 +1,7 @@
 import type { LandedMessageDraft } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import { describeLanding } from "./landed-subject.js";
+import { describeLanding, messageAnswer } from "./landed-subject.js";
 import { isolatedAgent } from "../../testing.js";
 
 const ask = jest.fn<() => Promise<{ value: { subject: string; note: string; breaking: string } }>>();
@@ -102,4 +102,34 @@ test("the failed report names its reason", async () => {
     expect(reports.at(-1)?.outcome).toBe(`failed`);
     expect(reports.at(-1)?.reason).toContain(`usage limit`);
     expect(reports.at(-1)?.finishedAt).toEqual(expect.any(Number));
+});
+
+// What a model's reply is judged by before it may head a commit: refused here, the ask moves to the next model.
+describe("a drafted subject", () => {
+    const judged = (reply: string, recent: readonly string[] = []): string | undefined => {
+        const answer = messageAnswer(false, recent);
+        return answer.unusable(answer.read(reply));
+    };
+
+    // Both were real subjects of commits in this workspace.
+    test.each([
+        "Reviewing key changes in the truncated diff to craft an accurate commit message.",
+        "Reviewing key diffs to identify the unifying change theme.",
+        "Now drafting a subject from what changed",
+        "Let me look at what changed",
+        "feat(web): summarize the diff above as a commit message",
+    ])("that narrates the drafting is refused: %s", (reply) => {
+        expect(judged(reply)).toBe("narrated its own work instead of writing a commit subject");
+    });
+
+    test("that copies a subject the prompt showed as vocabulary is refused", () => {
+        const recent = ["feat(sandbox): add job-fates resolveTurnJobs and stopJob for handed background jobs"];
+        expect(judged("feat(sandbox): add job-fates resolveTurnJobs and stopJob for handed background jobs", recent)).toBe(
+            "copied a recent commit's subject instead of describing this change",
+        );
+    });
+
+    test.each(["feat(sandbox): add landCheck on Services", "fix: stop rereading the diff cache", "Update the changelog"])("that describes a change is taken: %s", (reply) => {
+        expect(judged(reply, ["fix: something else"])).toBeUndefined();
+    });
 });

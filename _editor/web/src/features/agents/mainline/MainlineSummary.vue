@@ -21,7 +21,7 @@ const running = computed(() => props.summary.running);
 const worst = computed(() => props.summary.reds[0]);
 const redCount = computed(() => props.summary.reds.length);
 // Who has it, in one or two words, only when there is one red to say it about.
-const fix = computed(() => (redCount.value === 1 ? routingMeta(worst.value?.routing?.kind) : undefined));
+const fix = computed(() => (redCount.value === 1 ? routingMeta(worst.value?.fixer?.kind) : undefined));
 
 // A running check's elapsed moves every second; nothing else on the bar moves with the clock.
 const now = useNow(() => running.value !== undefined);

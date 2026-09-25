@@ -19,6 +19,7 @@ import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origi
 import { type LandBreakage, mainlineLandOf } from "../../workspace/deps/verify-deps.js";
 import type { QueuedLand } from "../../workspace/deps/verify-store.js";
 import { narrowCheckOf } from "./land-fix.js";
+import { failureOf, pathOfUnit } from "../../workspace/deps/failure-units.js";
 
 // What a red main-line check is owed, decided from the fleet as it stands: wait for the check behind it, hold while a
 // conversation still works on what failed, send it back to the land it came with while that conversation still has the
@@ -36,7 +37,6 @@ const {
     breakageSettled,
     failingPackages,
     packageOf,
-    pathOfUnit,
     resetBreakageRouter,
     resumeBreakageRouter,
     routeLandBreakage,
@@ -68,6 +68,16 @@ test("every unit shape names the path it failed on", () => {
     expect(pathOfUnit("rustfmt _sandbox/ic")).toBe("_sandbox/ic");
     expect(pathOfUnit("@intentic/web#test")).toBeUndefined();
     expect(packageOf("_editor/web/src/a.ts")).toBe("_editor/web");
+});
+
+test("a unit reads as a test by its own name, or as the line it is, with the path it names beside it", () => {
+    expect(failureOf("@intentic/web#test _editor/web/src/a.test.ts › outer > it")).toEqual({ name: "outer > it", path: "_editor/web/src/a.test.ts" });
+    expect(failureOf("@intentic/sandbox#typecheck _sandbox/sandbox/src/a.ts: TS2322 Type 'x'")).toEqual({
+        name: "@intentic/sandbox#typecheck _sandbox/sandbox/src/a.ts: TS2322 Type 'x'",
+        path: "_sandbox/sandbox/src/a.ts",
+    });
+    expect(failureOf("@intentic/web#test")).toEqual({ name: "@intentic/web#test" });
+    expect(failureOf("@intentic/web#test x.test.ts › ")).toEqual({ name: "@intentic/web#test x.test.ts › " });
 });
 
 test("the packages failures sit in are the ones their paths name, once each, and none for a unit that names no path", () => {
@@ -227,6 +237,7 @@ const fleet = (conversations: readonly Conversation[], options: { readonly autoR
         readonly at: number;
         readonly routing: MainlineRouting;
         readonly suspects?: readonly string[] | undefined;
+        readonly named?: boolean | undefined;
     }[] = [];
     const activity: Omit<ActivityEvent, "id" | "at">[] = [];
     const { lines, logger } = recordingLogger();
@@ -234,9 +245,11 @@ const fleet = (conversations: readonly Conversation[], options: { readonly autoR
     const store = memoryVerifyStore();
     const verifyStore: Services["verifyStore"] = {
         ...store,
-        routed: async (project, at, routing, suspects) => {
-            filed.push({ project, at, routing, suspects });
-            await store.routed(project, at, routing, suspects);
+        // Filed with who the run's failures were laid at by then, which the router files before it decides.
+        routed: async (project, at, routing) => {
+            await store.routed(project, at, routing);
+            const run = (await store.read()).runs.find((candidate) => candidate.project === project && candidate.at === at);
+            filed.push({ project, at, routing, suspects: run?.suspects, named: run?.named });
         },
     };
     // Whether a check that answers for some land is ahead of the red being decided.
@@ -333,6 +346,25 @@ describe("a red with nothing owed", () => {
         expect(world.filed).toEqual([]);
     });
 
+    // The editor reads blame off the run as filed, so a red that only found main red must say it was laid at nobody.
+    test("is laid at nobody when nothing new failed in it, and says so on the run", async () => {
+        const world = fleet([{ id: "one" }]);
+
+        await route(world, red({ fresh: [] }));
+
+        const [run] = (await world.services.verifyStore.read()).runs;
+        expect([run?.named, run?.suspects]).toEqual([false, undefined]);
+    });
+
+    test("is laid at the land it came with even while repairs are switched off", async () => {
+        const world = fleet([{ id: "one" }], { autoRepair: false });
+
+        await route(world, red());
+
+        const [run] = (await world.services.verifyStore.read()).runs;
+        expect([run?.named, run?.suspects]).toEqual([true, ["one"]]);
+    });
+
     test("is only reported while repairs after landing are switched off", async () => {
         const world = fleet([{ id: "one" }], { autoRepair: false });
 
@@ -353,7 +385,7 @@ describe("the conversation that landed it", () => {
         expect(routing).toEqual(routed("original", { conversationId: "one", detail: "Sent back to the conversation that landed it (1 of 2)." }));
         expect(world.told()).toEqual([{ to: "one", prompt: followUp([SANDBOX_TEST]) }]);
         expect(world.started).toEqual([]);
-        expect(world.filed).toEqual([{ project: "", at: 1_000, routing, suspects: ["one"] }]);
+        expect(world.filed).toEqual([{ project: "", at: 1_000, routing, suspects: ["one"], named: true }]);
         expect(world.activity).toEqual([
             {
                 direction: "system",
@@ -407,7 +439,7 @@ describe("the conversation that landed it", () => {
             },
         ]);
         expect(world.started[0]?.prompt.startsWith(LAND_FIX_OPENING)).toBe(true);
-        expect(world.filed).toEqual([{ project: "", at: 1_000, routing, suspects: ["one"] }]);
+        expect(world.filed).toEqual([{ project: "", at: 1_000, routing, suspects: ["one"], named: true }]);
         expect(world.types()).toEqual(["deps.breakage_fixup"]);
     });
 
@@ -456,7 +488,7 @@ describe("blame across several lands", () => {
         expect(world.told()).toEqual([]);
         expect(world.started.map(({ title }) => title)).toEqual(["Fix main: workspace"]);
         expect(world.started[0]?.prompt).toContain("No single land could be named for them; these are every land the red check covered:");
-        expect(world.filed.map(({ suspects }) => suspects)).toEqual([["one", "two"]]);
+        expect(world.filed.map(({ suspects, named }) => ({ suspects, named }))).toEqual([{ suspects: ["one", "two"], named: false }]);
     });
 });
 
@@ -530,8 +562,8 @@ describe("a red with more work queued behind it", () => {
         expect(world.told()).toEqual([{ to: "one", prompt: followUp([SANDBOX_TEST]) }]);
         // Filed on every run it answers, the one it waited on included.
         expect(world.filed).toEqual([
-            { project: "", at: 1_000, routing, suspects: ["one"] },
-            { project: "", at: 2_000, routing, suspects: ["one"] },
+            { project: "", at: 1_000, routing, suspects: ["one"], named: true },
+            { project: "", at: 2_000, routing, suspects: ["one"], named: true },
         ]);
     });
 
@@ -544,7 +576,7 @@ describe("a red with more work queued behind it", () => {
         ).toBeUndefined();
         expect(world.told()).toEqual([]);
         expect(world.filed).toEqual([
-            { project: "", at: 1_000, routing: routed("resolved", { detail: "Gone at the next check, before anybody was sent." }), suspects: [] },
+            { project: "", at: 1_000, routing: routed("resolved", { detail: "Gone at the next check, before anybody was sent." }), suspects: ["one"], named: true },
         ]);
     });
 
@@ -577,7 +609,9 @@ describe("a red with more work queued behind it", () => {
                     project: "",
                     at: 1_000,
                     routing: routed("resolved", { detail: "Green at the next check, before anybody was sent." }),
-                    suspects: undefined,
+                    // Laid at the one land it came with when it settled, before it waited.
+                    suspects: ["one"],
+                    named: true,
                 },
             ]),
         );
@@ -626,7 +660,7 @@ describe("a red a conversation still working touches", () => {
             }),
         );
         expect(world.told()).toEqual([{ to: "busy", prompt: heldNote }]);
-        expect(world.filed).toEqual([{ project: "", at: 1_000, routing: held, suspects: ["one"] }]);
+        expect(world.filed).toEqual([{ project: "", at: 1_000, routing: held, suspects: ["one"], named: true }]);
         expect(world.types()).toEqual(["deps.breakage_held"]);
 
         // Another red while it still works holds again, and it is not told twice.
@@ -641,8 +675,8 @@ describe("a red a conversation still working touches", () => {
         const sent = routed("original", { conversationId: "one", detail: "Sent back to the conversation that landed it (1 of 2)." });
         await waitFor(() =>
             expect(world.filed.slice(-2)).toEqual([
-                { project: "", at: 1_000, routing: sent, suspects: ["one"] },
-                { project: "", at: 2_000, routing: sent, suspects: ["one"] },
+                { project: "", at: 1_000, routing: sent, suspects: ["one"], named: true },
+                { project: "", at: 2_000, routing: sent, suspects: ["one"], named: true },
             ]),
         );
     });

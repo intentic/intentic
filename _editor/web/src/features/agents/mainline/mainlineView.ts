@@ -1,5 +1,6 @@
 import type {
     MainlineLand,
+    MainlineLandRef,
     MainlinePush,
     MainlineRouting,
     MainlineRoutingKind,
@@ -19,27 +20,31 @@ import { t } from "@intentic/ui/i18n";
 // Two questions are kept apart everywhere it is drawn, because one sentence answering both is what made it unreadable:
 // HEALTH (is main passing, and if not, who has it) and ACTIVITY (what the check is doing now, and what queues for it).
 
-// One project red right now: the run that says so, when its streak began, and the latest decision about it.
+// One project red right now: the run that says so, when its streak began, the work the sandbox laid it at, and the latest
+// decision about it. All of it is the daemon's (MainlineProject.red), read, never re-derived.
 export interface MainlineRed {
     readonly project: string;
     readonly run: MainlineRun;
     readonly since: number;
-    readonly routing: MainlineRouting | undefined;
+    // The work the red is laid at; empty when nobody could be.
+    readonly cause: readonly MainlineLandRef[];
+    // Whether the paths the lands changed narrowed `cause` to them; false when it is every land the run covered.
+    readonly named: boolean;
+    readonly fixer: MainlineRouting | undefined;
 }
-
-// The decision a red streak last got. It is filed on the runs it answered, and a later red in the same streak with nothing
-// new in it gets none of its own, so the streak's newest run is not always the one carrying it.
-const routingOf = (recent: readonly MainlineRun[], project: string, since: number): MainlineRouting | undefined =>
-    recent.find((run) => run.project === project && run.status === `red` && run.at >= since && run.routing !== undefined)?.routing;
 
 // Longest red first: the breakage that has waited longest is the one a reader is owed first.
 export const redsOf = (status: MainlineStatus): MainlineRed[] =>
     status.projects
-        .flatMap((project): MainlineRed[] =>
-            project.redSince === undefined || project.last?.status !== `red`
+        .flatMap((project): MainlineRed[] => {
+            if (project.last?.status !== `red`) {
+                return [];
+            }
+            const red = project.red ?? legacyRed(status, project);
+            return red === undefined
                 ? []
-                : [{ project: project.project, run: project.last, since: project.redSince, routing: routingOf(status.recent, project.project, project.redSince) }],
-        )
+                : [{ project: project.project, run: project.last, since: red.since, cause: red.cause, named: red.named, fixer: red.fixer }];
+        })
         .toSorted((left, right) => left.since - right.since);
 
 // Lands waiting for a check, each once: a land touching two projects waits in both queues.
@@ -214,43 +219,57 @@ export const resultsOf = (status: MainlineStatus): MainlineResult[] => {
     return [...reds.map((red) => ({ project: red.project, run: red.run, red })), ...rest];
 };
 
-// The lands a red run's failures were laid at: the suspects when the sandbox named any (a suspect may have landed in an
-// earlier run of the streak, so it keeps its id when this run holds no title for it), else every land the run covered.
-export const blamedLands = (run: MainlineRun): { readonly conversationId: string; readonly title?: string }[] =>
-    run.suspects === undefined || run.suspects.length === 0
-        ? run.lands
-        : run.suspects.map((conversationId) => run.lands.find((land) => land.conversationId === conversationId) ?? { conversationId });
+// A failure as a reader scans it: a failing test by its name, with the file it sits in after, since a whole location
+// would spend a narrow column on the path; anything else as the check printed it, which already names its path.
+export const failuresOf = (run: MainlineRun): { readonly name: string; readonly file?: string }[] =>
+    run.units === undefined
+        ? run.failures.map(legacyFailureParts)
+        : run.units.map((unit) => {
+              const file = unit.path === undefined || unit.name.includes(unit.path) ? undefined : unit.path.split(`/`).at(-1);
+              return { name: unit.name, ...(file === undefined || file === `` ? {} : { file }) };
+          });
 
-// The work a red streak is laid at: the suspects the sandbox named on any run of the streak, newest first, else the lands
-// of the run that turned the project red. A later red run with nobody named only found main red, since nothing new
-// failed in it, so its lands are never offered as the cause; nor is anything when the record no longer reaches back to
-// the streak's first run.
-export const causeOf = (status: MainlineStatus, red: MainlineRed): { readonly conversationId: string; readonly title?: string }[] => {
-    const streak = status.recent.filter((run) => run.project === red.project && run.status === `red` && run.at >= red.since);
-    const named = streak.find((run) => run.suspects !== undefined && run.suspects.length > 0);
-    if (named !== undefined) {
-        return blamedLands(named);
+// The terminal a project's check runs in, as the daemon names it.
+export const checkSession = (status: MainlineStatus, project: string): string =>
+    status.projects.find((candidate) => candidate.project === project)?.session ?? legacyVerifySession(project);
+
+/* FALLBACK FOR DAEMONS BEFORE 2026-09-25, which serve no `red`, `session`, `named` or `units` ("one editor, many daemons",
+   docs/architecture/app-plane.md). Each rebuilds from the raw runs what a newer daemon serves; nothing else reads them,
+   and they go when no supported daemon lacks the fields. */
+
+// The latest decision filed on the streak's runs.
+const legacyRouting = (recent: readonly MainlineRun[], project: string, since: number): MainlineRouting | undefined =>
+    recent.find((run) => run.project === project && run.status === `red` && run.at >= since && run.routing !== undefined)?.routing;
+
+// The suspects named on any run of the streak, else the lands of the run that turned the project red.
+const legacyRed = (
+    status: MainlineStatus,
+    project: MainlineStatus[`projects`][number],
+): { readonly since: number; readonly cause: readonly MainlineLandRef[]; readonly named: boolean; readonly fixer: MainlineRouting | undefined } | undefined => {
+    const since = project.redSince;
+    if (since === undefined) {
+        return undefined;
     }
+    const streak = status.recent.filter((run) => run.project === project.project && run.status === `red` && run.at >= since);
+    const named = streak.find((run) => run.suspects !== undefined && run.suspects.length > 0);
     const first = streak.at(-1);
-    return first === undefined || first.attempt > 1 ? [] : first.lands;
+    const cause =
+        named?.suspects?.map((conversationId) => named.lands.find((land) => land.conversationId === conversationId) ?? { conversationId }) ??
+        (first === undefined || first.attempt > 1 ? [] : first.lands);
+    return { since, cause, named: named !== undefined, fixer: legacyRouting(status.recent, project.project, since) };
 };
 
-// A failure as a reader scans it: a failing test by its name first and its file after, since a test's full location
-// ("@acme/web#test path/to/sample.test › lists every release") would spend a narrow column on the path and cut
-// the name. Anything that is not a test (a type error, a whole failed task) is kept whole.
-export const failureParts = (failure: string): { readonly name: string; readonly file?: string } => {
+const legacyFailureParts = (failure: string): { readonly name: string; readonly file?: string } => {
     const cut = failure.indexOf(` › `);
     if (cut === -1) {
         return { name: failure };
     }
-    // The location's last word past its last slash: "@acme/web#test path/to/sample.test" is "sample.test".
     const file = failure.slice(0, cut).trim().split(/[\s/]/).at(-1) ?? ``;
     const name = failure.slice(cut + ` › `.length).trim();
     return name === `` ? { name: failure } : { name, ...(file === `` ? {} : { file }) };
 };
 
-// The terminal a project's check runs in: the daemon's verify panel (verifyPanelKey), as the terminal names its session.
-export const verifySession = (project: string): string => `panel-${project === `` ? `root` : project.replaceAll(/[^a-zA-Z0-9_-]/g, `_`)}--verify`;
+const legacyVerifySession = (project: string): string => `panel-${project === `` ? `root` : project.replaceAll(/[^a-zA-Z0-9_-]/g, `_`)}--verify`;
 
 // The workspace root is a project with no folder, and "" names nothing a reader can see.
 export const projectName = (project: string): string => (project === `` ? t(`agents.mainline.root`) : project);

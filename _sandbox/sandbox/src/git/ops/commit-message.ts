@@ -472,6 +472,40 @@ export const cleanCommitSubject = (reply: string): string => {
     return first === undefined ? `` : conventionalSubject(unwrap(first));
 };
 
+// A REPLY THAT NARRATES the drafting instead of being the message: "Reviewing key changes in the truncated diff to craft
+// an accurate commit message." A model that thinks aloud puts that on its first line, it passes every length rule, and it
+// became the subject of real commits. Talk about the process (the diff, the message being written) is never a change;
+// a first word that is a gerund or the model speaking for itself is never a conventional header's imperative.
+const PROCESS_TALK = /\b(?:commit (?:message|subject)s?|(?:truncated|provided|given|full) diffs?|(?:in|from|of) the diffs?|the changes? (?:above|below))\b/iu;
+const SELF_TALK = /^(?:i|i'm|i'll|i've|let(?:'s)?|let me|now|okay|ok|so|first|next|here(?:'s)?|looking|based)\b/iu;
+
+const narrates = (subject: string): boolean => {
+    if (PROCESS_TALK.test(subject)) {
+        return true;
+    }
+    // Only where no conventional header was written: after `feat(x):` the text is the model's attempt at the subject.
+    const parts = headerParts(subject);
+    if (parts !== undefined && isConventionalType(parts.type)) {
+        return false;
+    }
+    const first = subject.trim().split(/\s+/u)[0] ?? ``;
+    return SELF_TALK.test(subject.trim()) || /^\p{L}+ing$/iu.test(first);
+};
+
+// Why a drafted subject cannot head a commit, or undefined when it can; the one judgement every drafting path makes
+// (landed-subject.ts, over each model's reply, which routes a refused one to the next model). `recent` are the subjects
+// the prompt showed as vocabulary: copying one back describes somebody else's change.
+export const commitSubjectFlaw = (subject: string, recent: readonly string[] = []): string | undefined => {
+    if (narrates(subject)) {
+        return `narrated its own work instead of writing a commit subject`;
+    }
+    const same = subject.trim().toLowerCase();
+    if (recent.some((earlier) => earlier.trim().toLowerCase() === same)) {
+        return `copied a recent commit's subject instead of describing this change`;
+    }
+    return undefined;
+};
+
 // No body reader by design: anything past the first line and the trailers just falls on the floor, so "one line only"
 // needs no separate enforcement.
 

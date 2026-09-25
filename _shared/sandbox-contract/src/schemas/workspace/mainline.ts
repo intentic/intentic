@@ -14,6 +14,20 @@ export const MainlineLandSchema = z.object({
 });
 export type MainlineLand = z.infer<typeof MainlineLandSchema>;
 
+// A land a red is laid at, as a reader names it.
+export const MainlineLandRefSchema = z.object({
+    conversationId: z.string().describe("The conversation whose work landed."),
+    title: z.string().optional().describe("Its title when it landed."),
+});
+export type MainlineLandRef = z.infer<typeof MainlineLandRefSchema>;
+
+// One failure a run named, split the way a reader scans it.
+export const MainlineFailureSchema = z.object({
+    name: z.string().describe("What failed: a test by its own name, anything else (a type error, a whole task) as the check printed it."),
+    path: z.string().optional().describe("The repository path it failed in, when it names one."),
+});
+export type MainlineFailure = z.infer<typeof MainlineFailureSchema>;
+
 // What happened to a red verdict's failures, decided once the lands behind it had their own check.
 export const MainlineRoutingKindSchema = z.enum([
     // More work landed while this ran; the check that measures it decides, so nobody is sent after a failure it may fix.
@@ -61,6 +75,16 @@ export const MainlineRunSchema = z.object({
         .array(z.string())
         .optional()
         .describe("The conversations whose lands these failures were laid at, when any could be named."),
+    named: z
+        .boolean()
+        .optional()
+        .describe(
+            "Whether the failures were laid at the suspects by the paths they changed. False when nobody could be told apart (every land the run covered is a suspect) or nothing new failed in it (none is). Absent on green, and from a daemon that did not say.",
+        ),
+    units: z
+        .array(MainlineFailureSchema)
+        .optional()
+        .describe("The same first failures, split into a name and the path they failed in. Absent from a daemon that does not split them."),
     routing: MainlineRoutingSchema.optional().describe("What became of a red run's failures. Absent on green, and until it is decided."),
 });
 export type MainlineRun = z.infer<typeof MainlineRunSchema>;
@@ -76,9 +100,24 @@ export const MainlineProjectSchema = z.object({
         })
         .optional()
         .describe("The check running on it now, if any."),
+    session: z
+        .string()
+        .optional()
+        .describe("The terminal session its check runs in, running or last, to attach to for the whole log. Absent from a daemon that does not say."),
     queued: z.array(MainlineLandSchema).describe("Lands waiting for the next check, which will measure them together."),
     last: MainlineRunSchema.optional().describe("Its most recent settled check."),
     redSince: z.number().optional().describe("When its checks went red and stayed so, in milliseconds. Absent while green."),
+    red: z
+        .object({
+            since: z.number().describe("When its checks went red and stayed so, in milliseconds."),
+            cause: z
+                .array(MainlineLandRefSchema)
+                .describe("The work this red is laid at, oldest first: the lands its failures were laid at on the latest run of the streak that could name any. Empty when none could be."),
+            named: z.boolean().describe("Whether `cause` was narrowed by the paths the lands changed; false when it is every land the run covered."),
+            fixer: MainlineRoutingSchema.optional().describe("The latest decision about who has it. Absent until one is made."),
+        })
+        .optional()
+        .describe("The red streak it is in, as the sandbox laid it. Absent while green, and from a daemon that does not lay it."),
 });
 export type MainlineProject = z.infer<typeof MainlineProjectSchema>;
 

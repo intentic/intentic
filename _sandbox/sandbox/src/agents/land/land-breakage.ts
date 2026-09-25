@@ -6,6 +6,7 @@ import { conversationProfile, isIsolated, type PersistedAgent, reposOf } from ".
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { LandBreakage } from "../../workspace/deps/verify-deps.js";
 import type { Carried } from "../../workspace/deps/verify-store.js";
+import { pathOfUnit } from "../../workspace/deps/failure-units.js";
 import { landingPaths } from "./landing-paths.js";
 import { landChange, type LandSuspect, narrowCheckOf, startLandFix } from "./land-fix.js";
 
@@ -136,13 +137,6 @@ const fixUpsOf = (services: Pick<Services, "agents">, project: string, since: nu
     return [...ids].filter((id) => fixAttemptOf(base, id) !== undefined).length;
 };
 
-// The first repository path a unit names; a task id (`@scope/name#task`) is a package name, never a path.
-export const pathOfUnit = (unit: string): string | undefined =>
-    unit
-        .split(/\s+/)
-        .map((word) => word.replace(/:$/, ""))
-        .find((word) => word.includes("/") && !word.includes("#") && !word.startsWith("@"));
-
 // The package a path sits in, `_area/package` in this layout; the whole path when it is shorter.
 export const packageOf = (path: string): string => path.split("/").slice(0, 2).join("/");
 
@@ -237,14 +231,21 @@ const workingOn = async (services: BreakageRouter, breakage: LandBreakage, packa
 };
 
 // Files the decision on every run it answers for, older ones carried in included.
-const fileRouting = async (services: BreakageRouter, project: string, runs: readonly number[], routing: MainlineRouting, suspects: readonly string[]): Promise<void> => {
+const fileRouting = async (services: BreakageRouter, project: string, runs: readonly number[], routing: MainlineRouting): Promise<void> => {
     for (const at of runs) {
-        await services.verifyStore
-            .routed(project, at, routing, suspects)
-            .catch((error: unknown) => services.logger.warn({ err: error, project }, "land breakage: routing not filed"));
+        await services.verifyStore.routed(project, at, routing).catch((error: unknown) => services.logger.warn({ err: error, project }, "land breakage: routing not filed"));
     }
 };
 
+// Files who the failures of these runs are laid at, the one place blame is decided: the editor reads it as it stands.
+const fileBlame = async (services: BreakageRouter, project: string, runs: readonly number[], laid: Laid): Promise<void> => {
+    await services.verifyStore
+        .blamed(project, runs, { suspects: laid.suspects.map(({ land }) => land.agentId), named: laid.named })
+        .catch((error: unknown) => services.logger.warn({ err: error, project }, "land breakage: blame not filed"));
+};
+
+// A red with nothing new in it, or no land to answer for it, is laid at nobody: it only found main red.
+const NOBODY: Laid = { suspects: [], named: false };
 // The landed tip a land's conversation recorded for a repository, live or parked.
 const tipOf =
     (services: BreakageRouter) =>
@@ -253,9 +254,15 @@ const tipOf =
         return entry === undefined ? undefined : reposOf(entry).find((record) => record.repo === repo)?.landedTip;
     };
 
+// Who the failures are laid at, and whether the paths they changed narrowed it to them.
+interface Laid {
+    readonly suspects: readonly LandSuspect[];
+    readonly named: boolean;
+}
+
 // Who the failures are laid at: the one land a run covered, else the lands whose changes touch a failing package. One
 // such land is named; several, or none, go to a fresh conversation together.
-const blame = async (services: BreakageRouter, breakage: LandBreakage, git: GitRunner): Promise<{ readonly suspects: LandSuspect[]; readonly named: boolean }> => {
+const blame = async (services: BreakageRouter, breakage: LandBreakage, git: GitRunner): Promise<Laid> => {
     const changes = await Promise.all(breakage.lands.map((land) => landChange(services, land, breakage.project, tipOf(services), git)));
     if (changes.length === 1) {
         return { suspects: changes, named: true };
@@ -365,9 +372,12 @@ const hold = async (services: Services, owed: Owed, on: readonly string[], packa
 };
 
 // The decision, once nothing ahead of it can change it.
-const decide = async (services: Services, owed: Owed, git: GitRunner, now: number): Promise<MainlineRouting> => {
+const decide = async (services: Services, owed: Owed, git: GitRunner, now: number, laid?: Laid): Promise<MainlineRouting> => {
     const { breakage } = owed;
-    const { suspects, named } = await blame(services, breakage, git);
+    const { suspects, named } = laid ?? (await blame(services, breakage, git));
+    if (laid === undefined) {
+        await fileBlame(services, breakage.project, owed.runs, { suspects, named });
+    }
     const ids = suspects.map(({ land }) => land.agentId);
     const packages = failingPackages(breakage.fresh);
     // Past the bound a red is routed even while somebody works: a long session must not keep main red for hours.
@@ -375,7 +385,7 @@ const decide = async (services: Services, owed: Owed, git: GitRunner, now: numbe
     const busy = holdOverdue ? [] : await workingOn(services, breakage, packages, ids);
     if (busy.length > 0) {
         const routing = await hold(services, owed, busy, [...packages]);
-        await fileRouting(services, breakage.project, owed.runs, routing, ids);
+        await fileRouting(services, breakage.project, owed.runs, routing);
         return routing;
     }
     clearHoldTimer(breakage.project);
@@ -388,7 +398,7 @@ const decide = async (services: Services, owed: Owed, git: GitRunner, now: numbe
         single !== undefined && entry !== undefined && passedOver === undefined
             ? sendBack(services, breakage, single.land, entry, sends)
             : await freshFixUp(services, breakage, suspects, named, passedOver);
-    await fileRouting(services, breakage.project, owed.runs, routing, ids);
+    await fileRouting(services, breakage.project, owed.runs, routing);
     return routing;
 };
 
@@ -442,14 +452,18 @@ export const routeLandBreakage = async (services: Services, breakage: LandBreaka
         // What an earlier red carried in is gone at this one, though the tree is red on something older: those runs
         // were resolved without anybody sent.
         if (owed.runs.length > 1 && owed.breakage.fresh.length === 0) {
-            await fileRouting(services, project, owed.runs.slice(0, -1), { kind: "resolved", at: now, detail: "Gone at the next check, before anybody was sent." }, []);
+            await fileRouting(services, project, owed.runs.slice(0, -1), { kind: "resolved", at: now, detail: "Gone at the next check, before anybody was sent." });
         }
+        await fileBlame(services, project, [breakage.runAt], NOBODY);
         return undefined;
     }
+    // Laid once, as soon as the run settles, whatever is decided about it: every run it answers for carries the answer.
+    const laid = await blame(services, owed.breakage, git);
+    await fileBlame(services, project, owed.runs, laid);
     if (!(await services.sandboxSettings.get()).autoRepair) {
         await carry(services, project, breakage.redSince, undefined);
         const routing: MainlineRouting = { kind: "reported", at: now, detail: "Repairs after landing are switched off." };
-        await fileRouting(services, project, owed.runs.slice(0, -1), routing, []);
+        await fileRouting(services, project, owed.runs.slice(0, -1), routing);
         return routing;
     }
     if (breakage.queuedBehind && owed.waits < WAITS_PER_STREAK) {
@@ -459,7 +473,7 @@ export const routeLandBreakage = async (services: Services, breakage: LandBreaka
     }
     // Filed on every run it answers for, the one just settled included, so a red held now and routed later reads its
     // final answer wherever the editor looks.
-    return decide(services, owed, git, now);
+    return decide(services, owed, git, now, laid);
 };
 
 // A conversation's run ended: a red held on it is routed once nothing else it waits on is still working.

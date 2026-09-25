@@ -59,7 +59,7 @@ describe(`originHue`, () => {
     });
 });
 
-// Card's message wins over the review's; the review answers only once the card has nothing.
+// A live card's message wins over the review's; the review answers only for an agent off the roster.
 describe(`landedMessage`, () => {
     const message = { subject: `fix: cascading markers` };
 
@@ -70,6 +70,12 @@ describe(`landedMessage`, () => {
 
     test(`falls back to the review, which is all an archived agent's chip has left`, () => {
         expect(landedMessage(undefined, { landedMessage: message })).toEqual(message);
+    });
+
+    // The review keeps the sentence of the land before until it is refreshed; a newer land cleared it on the card, and
+    // reading the review's copy then headed the new land's commit with the old land's subject.
+    test(`never reads the review's older sentence for a live card whose message a newer land cleared`, () => {
+        expect(landedMessage({}, { landedMessage: message })).toBeUndefined();
     });
 
     test(`nothing written for this landing (or nothing yet) is undefined, not a guess`, () => {

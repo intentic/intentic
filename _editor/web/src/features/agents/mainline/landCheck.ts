@@ -23,10 +23,15 @@ export interface LandCheck {
 
 const holds = (lands: readonly MainlineLand[], conversationId: string): boolean => lands.some((land) => land.conversationId === conversationId);
 
-// Laid at this conversation: named among the suspects, or, where nobody was named, the one land of a run that turned a
-// green project red. A run that only extends a red streak names nobody because nothing new failed in it, and its one land
-// is then the land that found main red, not the one that turned it.
+// Laid at this conversation: among the suspects the sandbox filed on the run as it settled (a run that says whether blame
+// was `named` says who it was laid at, and a red that only found main red names nobody), the same answer the panel's
+// cause reads.
 const blamed = (run: MainlineRun, conversationId: string): boolean =>
+    run.named === undefined ? legacyBlamed(run, conversationId) : (run.suspects ?? []).includes(conversationId);
+
+// FALLBACK FOR DAEMONS BEFORE 2026-09-25, which file suspects only with a routing decision and never say `named`: the
+// suspects when there are any, else the one land of a run that turned a green project red.
+const legacyBlamed = (run: MainlineRun, conversationId: string): boolean =>
     run.suspects !== undefined && run.suspects.length > 0 ? run.suspects.includes(conversationId) : run.lands.length === 1 && run.attempt <= 1;
 
 // The answer to the newest land: every run that measured it, since a land touching two projects is checked in each, and

@@ -98,6 +98,9 @@ export const RuleSchema = z
         path: ["action"],
     });
 export type Rule = z.infer<typeof RuleSchema>;
+// A rule at a retired moment or with a retired built-in: read, so an older file parses, but never written again.
+export const isRetiredMomentRule = (rule: Pick<Rule, "moment" | "action">): boolean =>
+    rule.moment === "turn.ending" || (rule.action.kind === "builtin" && rule.action.name === "verify-ui-edits");
 // Kept out of the settings object on purpose: a firing is not an edit, and writing config on every push would make
 // every run a settings save.
 export const RuleFiringsSchema = z.record(z.string(), z.number());
@@ -517,6 +520,12 @@ export const SandboxSettingsSchema = z.object({
         .describe("How many levels deep the delegation may go, since a subagent can start subagents of its own."),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
+// What a save takes: the settings as read, less what is only read. `turn.ending` (and its `verify-ui-edits` built-in) is
+// retired; a file written before still parses (and its conversion drops such rules), but no save may stand a new one.
+export const SandboxSettingsWriteSchema = SandboxSettingsSchema.refine((settings) => !settings.rules.some(isRetiredMomentRule), {
+    message: "turn.ending is retired: nothing runs when a turn ends any more, so a rule cannot stand there",
+    path: ["rules"],
+});
 
 // A browser telling the sandbox which clock IT is on. An offer, not an instruction: see `adoptTimezone`.
 export const TimezoneOfferSchema = z.object({

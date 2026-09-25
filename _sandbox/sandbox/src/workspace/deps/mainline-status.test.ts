@@ -62,17 +62,26 @@ describe("the main line's status", () => {
             app: { status: "red", attempt: 2, at: 9, failures: ["x"], since: 3 },
         };
 
+        const appRedServed = { ...appRed, units: [{ name: "x" }] };
         expect(await mainlineStatus(storeOf(projects, [appRed, libGreen, appEarlier], [], waiting))).toEqual({
             projects: [
-                { project: "app", queued: [{ conversationId: "b", at: 60 }], last: appRed, redSince: 3 },
-                { project: "lib", queued: [], last: libGreen },
+                {
+                    project: "app",
+                    queued: [{ conversationId: "b", at: 60 }],
+                    session: "panel-app--verify",
+                    last: appRedServed,
+                    redSince: 3,
+                    red: { since: 3, cause: [], named: false },
+                },
+                { project: "lib", queued: [], session: "panel-lib--verify", last: libGreen },
                 {
                     project: "web",
                     running: { command: "pnpm test", startedAt: 100, lands: [{ conversationId: "a", title: "Ship the page", at: 50 }] },
                     queued: [],
+                    session: "panel-web--verify",
                 },
             ],
-            recent: [appRed, libGreen, appEarlier],
+            recent: [appRedServed, libGreen, appEarlier],
             pushes: [],
         });
     });
@@ -125,7 +134,46 @@ describe("the main line's status", () => {
     test("dates a red streak the store never started from the red it holds", async () => {
         const status = await mainlineStatus(storeOf({ "": { status: "red", attempt: 1, at: 7 } }, []));
 
-        expect(status.projects).toEqual([{ project: "", queued: [], redSince: 7 }]);
+        expect(status.projects).toEqual([{ project: "", queued: [], session: "panel-root--verify", redSince: 7, red: { since: 7, cause: [], named: false } }]);
+    });
+
+    // The router files who a run's failures are laid at as the run settles; the status serves that one answer.
+    test("lays a red streak at the latest run that named anybody, with the latest decision about it", async () => {
+        const sent = { kind: "original" as const, conversationId: "c-1", at: 31, detail: "Sent back." };
+        const runs = [
+            // Found main red: nothing new failed in it, so it names nobody.
+            run({ project: "app", at: 40, lands: [{ conversationId: "c-2", at: 39 }], named: false }),
+            run({ project: "app", at: 30, lands: [{ conversationId: "c-1", title: "Fix the parser", at: 29 }], suspects: ["c-1"], named: true, routing: sent }),
+        ];
+
+        const status = await mainlineStatus(storeOf({ app: { status: "red", attempt: 2, at: 40, since: 30 } }, runs));
+
+        expect(status.projects[0]?.red).toEqual({ since: 30, cause: [{ conversationId: "c-1", title: "Fix the parser" }], named: true, fixer: sent });
+    });
+
+    test("names every land a run covered as the cause, unnarrowed, when blame could not tell them apart", async () => {
+        const runs = [
+            run({
+                project: "app",
+                at: 30,
+                lands: [
+                    { conversationId: "c-1", at: 28 },
+                    { conversationId: "c-2", at: 29 },
+                ],
+                suspects: ["c-1", "c-2"],
+                named: false,
+            }),
+        ];
+
+        const status = await mainlineStatus(storeOf({ app: { status: "red", attempt: 1, at: 30, since: 30 } }, runs));
+
+        expect(status.projects[0]?.red).toEqual({ since: 30, cause: [{ conversationId: "c-1" }, { conversationId: "c-2" }], named: false });
+    });
+
+    test("serves each failure split into the name a reader scans and the path it failed in", async () => {
+        const status = await mainlineStatus(storeOf({}, [run({ project: "app", at: 5, failures: ["@a/web#test src/x.test.ts › renders"] })]));
+
+        expect(status.recent[0]?.units).toEqual([{ name: "renders", path: "src/x.test.ts" }]);
     });
 });
 

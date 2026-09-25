@@ -5,8 +5,9 @@ import { globToRegExp } from "@intentic/iq-engine";
 // as one list. `matching` returns what matched; the caller decides what an empty result means, since each moment's
 // default (land, hold, or nothing) differs.
 
-// Rule count per moment differs by purpose: one that does things (a turn check) runs every match, in order; one that
-// decides (agent.finished) runs until a rule decides, first match wins, list order is the priority owners can reorder.
+// Rule count per moment differs by purpose: one that does things (an edit check, a land's version) runs every match, in
+// order; one that decides (agent.finished) runs until a rule decides, first match wins, list order is the priority owners
+// can reorder.
 const decidesAt = (moment: RuleMoment): boolean => moment === "agent.finished";
 
 const touches = (paths: readonly string[], globs: readonly string[]): boolean => {

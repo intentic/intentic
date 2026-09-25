@@ -23,6 +23,15 @@ const isRetiredRule = (rule: unknown): boolean => {
 
 const holdsRetiredRule = (value: unknown): value is readonly unknown[] => Array.isArray(value) && value.some(isRetiredRule);
 
+// A rule at the `turn.ending` moment reads and runs nothing since nothing checks inside a turn (its moment and the
+// `verify-ui-edits` built-in stay in the read schema so a file written before reads); dropped, so it stops showing as a
+// rule the owner has and stops travelling with the settings.
+const isInertRule = (rule: unknown): boolean =>
+    isJsonObject(rule) &&
+    (rule["moment"] === "turn.ending" || (isJsonObject(rule["action"]) && rule["action"]["kind"] === "builtin" && rule["action"]["name"] === "verify-ui-edits"));
+
+const holdsInertRule = (value: unknown): value is readonly unknown[] => Array.isArray(value) && value.some(isInertRule);
+
 export const SETTINGS_HISTORY = [
     // Every setting a release since 2026-08-10 had and this one does not (read off the contract lock's history):
     // retired, so passthrough stops carrying them, a definition naming one still applies, and no later setting may
@@ -58,4 +67,10 @@ export const SETTINGS_HISTORY = [
     ),
     // suggest, the old default, becomes the new default: routing on.
     mapValue("personaRouting", { off: false, suggest: true, auto: true }),
+    retype(
+        "rules",
+        holdsInertRule,
+        (rules) => rules.filter((rule) => !isInertRule(rule)) as z.input<typeof RuleSchema>[],
+        "drops rules at the retired turn.ending moment (and the verify-ui-edits built-in), which run nothing",
+    ),
 ] as const;

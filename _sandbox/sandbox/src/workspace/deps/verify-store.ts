@@ -105,7 +105,10 @@ export interface VerifyStore {
     // Files one settled run at the head of the history, and takes the lands it answered for off their project's wait.
     readonly noteRun: (run: MainlineRun) => Promise<void>;
     // What became of a red run's failures, on the run that ended at `at` in `project`; nothing when it has aged out.
-    readonly routed: (project: string, at: number, routing: MainlineRouting, suspects?: readonly string[]) => Promise<void>;
+    readonly routed: (project: string, at: number, routing: MainlineRouting) => Promise<void>;
+    // Who the failures of the runs that ended at `ats` in `project` are laid at, and whether the paths they changed
+    // narrowed it to them (false: every land covered, or none when nothing new failed); runs aged out are skipped.
+    readonly blamed: (project: string, ats: readonly number[], blame: Blame) => Promise<void>;
     // A land asks for a check in each of `dirs`; it waits there until a run with a verdict answers it.
     readonly owe: (dirs: readonly string[], land: QueuedLand) => Promise<void>;
     // The lands waiting per project, oldest first.
@@ -114,6 +117,13 @@ export interface VerifyStore {
     readonly streaks: () => Promise<Readonly<Record<string, Streak>>>;
     // Changes one project's streak memory; undefined forgets it.
     readonly streak: (project: string, change: (current: Streak | undefined) => Streak | undefined) => Promise<void>;
+}
+
+// Who a red run's failures are laid at: the conversations whose lands they may have come with, and whether the paths
+// those lands changed narrowed it to them.
+export interface Blame {
+    readonly suspects: readonly string[];
+    readonly named: boolean;
 }
 
 // Occurrences in `now` beyond those `before` held, so one more copy of a standing failure still counts as new.
@@ -194,16 +204,28 @@ export const verifyStoreOver = (file: Pick<JsonFile<VerifyState>, "read" | "upda
                 };
             });
         },
-        routed: async (project, at, routing, suspects) => {
+        routed: async (project, at, routing) => {
             await update((current) => {
                 const index = current.runs.findIndex((run) => run.project === project && run.at === at);
                 if (index === -1) {
                     return current;
                 }
                 const runs = [...current.runs];
-                runs[index] = { ...runs[index]!, routing, ...(suspects === undefined || suspects.length === 0 ? {} : { suspects: [...suspects] }) };
+                runs[index] = { ...runs[index]!, routing };
                 return { ...current, runs };
             });
+        },
+        blamed: async (project, ats, blame) => {
+            await update((current) => ({
+                ...current,
+                runs: current.runs.map((run) => {
+                    if (run.project !== project || !ats.includes(run.at)) {
+                        return run;
+                    }
+                    const { suspects: _before, ...rest } = run;
+                    return { ...rest, named: blame.named, ...(blame.suspects.length === 0 ? {} : { suspects: [...blame.suspects] }) };
+                }),
+            }));
         },
         owe: async (dirs, land) => {
             await update((current) => {

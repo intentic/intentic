@@ -100,7 +100,7 @@ export const fileEditedReviewer = (
 };
 
 // Default runner: one bash line in a directory, killed at the ceiling, output captured as plain text.
-// A plain child, not a tmux window like rule-command.ts's Stop command: nobody watches a linter run on one file.
+// A plain child, not a tmux window like the push run's (rule-command.ts): nobody watches a linter run on one file.
 export const spawnEditCommand =
     (cwd: string): EditCommandRunner =>
     (command, timeoutMs) =>

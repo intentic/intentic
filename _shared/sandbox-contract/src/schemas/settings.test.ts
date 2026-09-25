@@ -1,4 +1,6 @@
-import { RepoChecksFileSchema, RuleSchema, SandboxSettingsSchema } from "./settings.js";
+import { convertDocument } from "../documents/conversions.js";
+import { SETTINGS_HISTORY } from "./settings-history.js";
+import { RepoChecksFileSchema, RuleSchema, SandboxSettingsSchema, SandboxSettingsWriteSchema } from "./settings.js";
 
 // A rule that saves cleanly and silently does nothing is the failure this schema exists to refuse: an action, and a
 // built-in's name, are checked against the moment they are written at.
@@ -55,5 +57,32 @@ describe(`where a command lives`, () => {
             ]),
         ).toBe(false);
         expect(file([{ when: `land`, run: `pnpm verify`, paths: [`src/**`] }])).toBe(false);
+    });
+});
+
+// Nothing runs when a turn ends any more. A file written before still reads, its conversion drops the inert rule, and no
+// save may stand a new one there.
+describe(`the retired turn.ending moment`, () => {
+    const look = { id: `verify-ui-edits`, label: `Look at what changed`, moment: `turn.ending`, action: { kind: `builtin`, name: `verify-ui-edits` } };
+    const land = { id: `auto-land`, label: `land`, moment: `agent.finished`, action: { kind: `verdict`, verdict: `allow` } };
+
+    test(`still reads, so an older file parses`, () => {
+        expect(SandboxSettingsSchema.safeParse({ rules: [look, land] }).success).toBe(true);
+    });
+
+    test(`is refused on a save`, () => {
+        const saved = SandboxSettingsWriteSchema.safeParse(SandboxSettingsSchema.parse({ rules: [look, land] }));
+        expect(saved.error?.issues.map(({ message, path }) => ({ message, path }))).toEqual([
+            { message: `turn.ending is retired: nothing runs when a turn ends any more, so a rule cannot stand there`, path: [`rules`] },
+        ]);
+        expect(SandboxSettingsWriteSchema.safeParse(SandboxSettingsSchema.parse({ rules: [land] })).success).toBe(true);
+    });
+
+    test(`is dropped from a stored file by its conversion, which leaves every other rule and settles`, () => {
+        const converted = convertDocument(SETTINGS_HISTORY, `object`, { rules: [look, land] }, true);
+        expect(converted.value).toEqual({ rules: [land] });
+        expect(converted.changes.map(({ conversion }) => conversion)).toEqual([
+            `drops rules at the retired turn.ending moment (and the verify-ui-edits built-in), which run nothing`,
+        ]);
     });
 });
