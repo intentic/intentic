@@ -711,7 +711,7 @@ const seamWidth = computed<number>({
                 {{ t(`agents.agentReviewPanel.agentHasntChangedAny2`) }}
             </p>
             <Button v-if="remoteName !== undefined" size="small" severity="secondary" class="mt-1" @click="cross">
-                <Icon name="arrow-right" />{{ t(`shared.openIn`) }} {{ remoteName }}
+                <Icon name="arrow-right" />{{ t(`agents.words.openIn`) }} {{ remoteName }}
             </Button>
         </div>
 
@@ -899,7 +899,7 @@ const seamWidth = computed<number>({
                 :min="toScreenPx(MIN_REVIEW_LIST_WIDTH)"
                 :max="toScreenPx(MAX_REVIEW_LIST_WIDTH)"
                 :reset="toScreenPx(defaultReviewListWidth())"
-                :title="t(`shared.dragToResizeDouble`)"
+                :title="t(`ui.resizeSeam.dragToResize`)"
             />
 
             <section v-if="!mobile || selected !== undefined" class="flex min-h-0 min-w-0 flex-1 flex-col">

@@ -57,7 +57,7 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
                 v-if="location && openFile"
                 type="button"
                 class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
-                v-tooltip.top="t(`shared.openInWorkspace2`)"
+                v-tooltip.top="t(`chat.words.openInWorkspaceShort`)"
                 @click="openFile(location.path, location.line)"
             >
                 {{ group.target ?? location.path }}

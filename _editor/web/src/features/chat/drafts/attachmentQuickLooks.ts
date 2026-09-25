@@ -1,4 +1,4 @@
-import { dropPartialFirst, dropPartialLast, type FilePeek, isAudioPath, isImagePath } from "./filePeek";
+import { dropPartialFirst, dropPartialLast, type FileQuickLook, isAudioPath, isImagePath } from "./fileQuickLook";
 import { lazyByPath } from "../../sandbox/client/lazyByPath";
 import { readFileWindow } from "../../workspace/files/fileWindow";
 
@@ -7,7 +7,7 @@ import { readFileWindow } from "../../workspace/files/fileWindow";
 // parked on a refusal). Two windows rather than one read, because a log is attached for what is at its END, and a
 // head-only preview shows the banner.
 
-// Bytes per window. Small on purpose: this is a peek, and the workspace viewer is one click from the chip.
+// Bytes per window. Small on purpose: this is a look, and the workspace viewer is one click from the chip.
 const HEAD_BYTES = 8 * 1024;
 const TAIL_BYTES = 8 * 1024;
 
@@ -15,9 +15,9 @@ const TAIL_BYTES = 8 * 1024;
 // and every diff viewer read this file as binary.
 const NUL = String.fromCharCode(0);
 
-const MISSING: FilePeek = { present: false, size: 0, head: ``, headBytes: 0, tailBytes: 0, binary: false };
+const MISSING: FileQuickLook = { present: false, size: 0, head: ``, headBytes: 0, tailBytes: 0, binary: false };
 
-const peeks = lazyByPath(async (path: string): Promise<FilePeek> => {
+const looks = lazyByPath(async (path: string): Promise<FileQuickLook> => {
     const head = await readFileWindow(path, { limit: HEAD_BYTES });
     if (!head.present) {
         return MISSING;
@@ -43,5 +43,5 @@ const peeks = lazyByPath(async (path: string): Promise<FilePeek> => {
 // The head and tail of an attachment, starting the read on first ask. Undefined while the windows are in flight, and
 // never asked for at all where the bytes draw themselves (a thumbnail, a waveform): two windows of a decoded
 // container are 16KB over the wire to render "Not text: nothing to preview here."
-export const attachmentPeek = (path: string): FilePeek | undefined =>
-    isImagePath(path) || isAudioPath(path) ? undefined : peeks.get(path);
+export const attachmentQuickLook = (path: string): FileQuickLook | undefined =>
+    isImagePath(path) || isAudioPath(path) ? undefined : looks.get(path);

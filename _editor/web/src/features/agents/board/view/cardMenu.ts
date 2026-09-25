@@ -53,7 +53,7 @@ const filingRow = (agent: FleetAgent, here: boolean, act: MenuActions): MenuItem
     const filing = !here
         ? []
         : agent.archivedAt !== undefined
-          ? [{ label: t(`shared.restore`), icon: `history`, command: () => act.restore([agent.id]) }]
+          ? [{ label: t(`ui.action.restore`), icon: `history`, command: () => act.restore([agent.id]) }]
           : canArchive(agent)
             ? [{ label: t(`agents.agentsView.archive`), icon: `box`, command: () => act.archive([agent.id]) }]
             : [];
@@ -69,7 +69,7 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
         [
             { label: t(`ui.action.open`), icon: `arrow-right`, command: () => act.focusAgent(agent) },
             // The press that stops a look going; the chat rail's menu carries the identical row for the identical state.
-            ...(facts.peeked ? [{ label: t(`shared.keepOpen`), icon: `pin`, command: () => act.keepAgent(agent) }] : []),
+            ...(facts.peeked ? [{ label: t(`ui.action.keepOpen`), icon: `pin`, command: () => act.keepAgent(agent) }] : []),
             // A link too, hoverable and Ctrl/Cmd-clickable into its own tab; a plain click still points the chat dock.
             ...(review === undefined ? [] : [{ label: review, icon: `copy`, url: facts.href(), command: () => act.reviewAgent(agent) }]),
         ],

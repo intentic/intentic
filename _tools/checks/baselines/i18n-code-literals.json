@@ -1,0 +1,58 @@
+{
+    "_editor/web/src/features/agents/fleet/useAgents-archive.ts": {
+        "count": 5,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_editor/web/src/features/agents/review/useAgentChanges.ts": {
+        "count": 7,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_editor/web/src/features/capabilities/capabilityPairing.ts": {
+        "count": 2,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_editor/web/src/features/capabilities/capabilityProbe.ts": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog",
+    "_editor/web/src/features/capabilities/capabilitySubmit.ts": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog",
+    "_editor/web/src/features/capabilities/connectionActions.ts": {
+        "count": 3,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_editor/web/src/features/capabilities/setupWalk.ts": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog",
+    "_editor/web/src/features/sandbox/access/usePasskeys.ts": {
+        "count": 5,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_editor/web/src/features/sandbox/agent-settings/skills/useAgentMemory.ts": {
+        "count": 3,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_editor/web/src/features/sandbox/devices/runners/deviceOps.ts": {
+        "count": 2,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_editor/web/src/features/setup/flow/useAttachLane.ts": {
+        "count": 2,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_editor/web/src/features/setup/flow/useCommandLane.ts": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog",
+    "_editor/web/src/features/setup/flow/useHostedLane.ts": {
+        "count": 4,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_editor/web/src/features/setup/flow/useSetupRow.ts": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog",
+    "_editor/web/src/features/workspace/changes/history/useHistory.ts": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog",
+    "_editor/web/src/lib/useMintedTokens.ts": {
+        "count": 3,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_extensions/git-history/src/useBranches.ts": {
+        "count": 3,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_extensions/git-history/src/useOperation.ts": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog",
+    "_extensions/git-history/src/useStashes.ts": {
+        "count": 2,
+        "why": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+    },
+    "_extensions/git-history/src/useUndo.ts": "English a notice or failure line said from code before i18n-literals read .ts; each file sheds it as its words move to the catalog"
+}

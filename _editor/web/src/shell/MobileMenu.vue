@@ -107,7 +107,7 @@ const { canShip, isGuest } = useRole();
 const { maker } = useAudience();
 // A guest connects nothing and runs no terminal; its Sandbox row opens on the one section it has.
 const sandboxRows = computed<readonly SectionRow[]>(() => [
-    ...(isGuest.value ? [] : [{ id: `capabilities`, to: `/capabilities`, label: t(`shared.addCapability`), icon: `plus` } as const]),
+    ...(isGuest.value ? [] : [{ id: `capabilities`, to: `/capabilities`, label: t(`shell.words.addCapability`), icon: `plus` } as const]),
     ...(canShip.value && !maker.value ? [{ id: `terminal`, to: `/terminal`, label: t(`shared.terminal`), icon: `code` } as const] : []),
     { id: `sandbox`, to: sandboxHubPath(isGuest.value), label: t(`shared.sandbox2`), icon: `box` },
     { id: `settings`, to: `/settings`, label: t(`shared.settings`), icon: `cog` },
@@ -226,7 +226,7 @@ const logout = async (): Promise<void> => {
                 class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm text-content transition-colors active:bg-overlay"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="plus" class="text-base text-muted" /></span>
-                {{ t(`shared.addSandbox`) }}
+                {{ t(`sandbox.words.addSandbox`) }}
             </RouterLink>
 
             <!-- Same wording as the desktop switcher: offers the move left, not a machine that doesn't exist yet. -->
@@ -239,7 +239,7 @@ const logout = async (): Promise<void> => {
                     class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm transition-colors active:bg-overlay"
                 >
                     <span class="flex h-8 w-8 shrink-0 items-center justify-center text-subtle"><Icon name="wrench" /></span>
-                    <span class="min-w-0 flex-1 truncate text-muted">{{ t(`shared.finishSettingUp`, { name: option.name }) }}</span>
+                    <span class="min-w-0 flex-1 truncate text-muted">{{ t(`sandbox.words.finishSettingUp`, { name: option.name }) }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
                 </RouterLink>
             </template>
@@ -322,7 +322,7 @@ const logout = async (): Promise<void> => {
 
         <!-- Account: identity and the actions the desktop avatar popover holds. -->
         <section class="flex flex-col gap-1 pb-4">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.account`) }}</h2>
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.words.account`) }}</h2>
             <div class="flex h-14 items-center gap-3 px-2">
                 <Avatar :size="40" :src="user?.image" />
                 <span class="min-w-0 flex-1">
@@ -336,7 +336,7 @@ const logout = async (): Promise<void> => {
                 v-action="logout"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-base text-muted" /></span>
-                {{ t(`shared.signOut`) }}
+                {{ t(`shell.words.signOut`) }}
             </button>
         </section>
     </div>

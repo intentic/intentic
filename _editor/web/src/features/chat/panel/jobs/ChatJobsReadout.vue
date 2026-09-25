@@ -56,8 +56,8 @@ const watchJob = (session: string): void => {
                 <button
                     type="button"
                     :class="ui.iconButton(`hover:bg-content/10`)"
-                    v-tooltip.top="t(`shared.watchInTerminal`)"
-                    :aria-label="t(`shared.watchInTerminal`)"
+                    v-tooltip.top="t(`chat.words.watchInTerminal`)"
+                    :aria-label="t(`chat.words.watchInTerminal`)"
                     @click="watchJob(job.session)"
                 >
                     <Icon name="desktop" class="text-2xs" />

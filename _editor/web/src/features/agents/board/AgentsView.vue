@@ -54,7 +54,7 @@ const { archived, archiveLoading, archiveFailure, archive, restore, notice, dism
 // Read only while this board is mounted and the reader opted in (liveMetrics.ts); the cards take theirs from here.
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
-// The main tree's own check: one read for the board, drawn in its status dock and on every card from here.
+// The main tree's own check: one read for the board, drawn in its status bar and on every card from here.
 const mainline = provideMainline();
 const drag = useAgentDrag();
 const { dragged, dragging, draggedId, over, action, accepts, ghostStyle, pendingResolve, confirmResolve, cancelResolve } = drag;
@@ -141,7 +141,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                 clearable
                 :busy="searching"
                 :aria-label="t(`agents.agentsView.filterAgentsByMessages`)"
-                :placeholder="t(`shared.filterByMessages`)"
+                :placeholder="t(`agents.words.filterByMessages`)"
                 class="mx-auto max-w-full shrink-0"
                 :class="narrow ? 'order-last basis-full' : 'w-72'"
             />
@@ -160,7 +160,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                     <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />{{ t(`agents.agentsView.synthesize`) }}
                     {{ chatStrip.panes.length }}
                 </Button>
-                <Button size="small" class="ui-button-thumb shrink-0" @click="startAgent()"> <Icon name="plus" />{{ t(`shared.newAgent`) }} </Button>
+                <Button size="small" class="ui-button-thumb shrink-0" @click="startAgent()"> <Icon name="plus" />{{ t(`chat.words.newAgent`) }} </Button>
             </div>
         </div>
         <!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->
@@ -384,7 +384,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                         @click="move({ kind: 'expand' })"
                     >
                         <Icon :name="view.all ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                        {{ view.all ? t(`shared.showFewer`) : t(`shared.earlier`, { hiddenFinished }) }}
+                        {{ view.all ? t(`ui.action.showFewer`) : t(`shared.earlier`, { hiddenFinished }) }}
                     </button>
                     <!-- One-way, unlike the lane's toggle: this pile has no "fewer" worth offering, since collapsing it back would lose the reader's place mid-search. -->
                     <button
@@ -485,7 +485,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                       : 'border-line bg-card text-subtle opacity-40'
             "
         >
-            <Icon name="trash" class="text-2xs" />{{ t(`shared.discard`) }}
+            <Icon name="trash" class="text-2xs" />{{ t(`ui.action.discard`) }}
         </div>
         <!-- A drag is the easiest gesture here to trigger by accident, and dropping a conflicted card on Finished spends a turn. -->
         <Modal :open="pendingResolve !== undefined" size="sm" :header="t(`agents.agentsView.agentResolveConflict`)" @update:open="cancelResolve">

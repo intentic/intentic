@@ -132,25 +132,25 @@ describe(`ChatTurnShots`, () => {
         expect(viewAsks).toEqual(expect.arrayContaining([shots[2]!.path, shots[0]!.path]));
     });
 
-    // The strip's picture stands in until the view arrives; the peek is the tile's own shot, even on the counted one.
-    it(`peeks a tile bigger while the pointer rests on it, and drops the peek on leave or press`, async () => {
+    // The strip's picture stands in until the view arrives; the look is the tile's own shot, even on the counted one.
+    it(`shows a tile bigger while the pointer rests on it, and drops the look on leave or press`, async () => {
         const shots = shotsOf(`a`, `b`);
         for (const shot of shots) {
             tiles.set(shot.path, { url: `blob:${shot.path}` });
         }
         const [, second] = buttons(mount(shots));
         await comeNear();
-        const peeks = (): string[] => [...document.body.querySelectorAll(`.fixed img`)].map((image) => image.getAttribute(`src`) ?? ``);
+        const looks = (): string[] => [...document.body.querySelectorAll(`.fixed img`)].map((image) => image.getAttribute(`src`) ?? ``);
         second?.dispatchEvent(new Event(`pointerenter`));
         await nextTick();
-        expect(peeks()).toEqual([`blob:${shots[1]!.path}`]);
+        expect(looks()).toEqual([`blob:${shots[1]!.path}`]);
         second?.dispatchEvent(new Event(`pointerleave`));
         await nextTick();
-        expect(peeks()).toEqual([]);
+        expect(looks()).toEqual([]);
         second?.dispatchEvent(new Event(`pointerenter`));
         second?.click();
         await nextTick();
-        expect(peeks()).toEqual([]);
+        expect(looks()).toEqual([]);
         expect(view.mock.calls).toEqual([[shots[1]!]]);
     });
 });

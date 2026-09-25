@@ -6,7 +6,7 @@ import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import ChatTabs from "../features/chat/tabs/ChatTabs.vue";
 import RailColumn from "./RailColumn.vue";
-import { chatFullDock } from "../shell/window/dockSlots";
+import { chatFullSlot } from "../shell/window/panelSlots";
 import { DEFAULT_RAIL_WIDTH, railWidth, setRailWidth } from "../features/agents/board/columnWidth";
 import { queryClient } from "../lib/queryPersistence";
 import { router } from "../router";
@@ -28,12 +28,12 @@ const mount = (component: Parameters<typeof h>[0]): HTMLElement => {
 };
 
 // The chat's rail (ChatTabs) and the bare column another host mounts (RailColumn, as Subagents.vue does),
-// side by side. Setting chatFullDock puts the chat panel on a wide surface, the one way a test can force ChatTabs into
+// side by side. Setting chatFullSlot puts the chat panel on a wide surface, the one way a test can force ChatTabs into
 // its rail form.
 let chatRail: HTMLElement;
 let hostRail: HTMLElement;
 beforeAll(async () => {
-    chatFullDock.value = document.createElement(`div`);
+    chatFullSlot.value = document.createElement(`div`);
     chatRail = mount(ChatTabs);
     hostRail = mount(RailColumn);
     await nextTick();

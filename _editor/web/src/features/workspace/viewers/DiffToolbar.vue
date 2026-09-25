@@ -53,7 +53,7 @@ const prose = computed(() => format.value === `markdown` || format.value === `pl
 const proseOn = computed(() => prose.value && diffProse.value);
 const READING_OPTIONS = computed(() => [
     { label: t(`workspace.diffToolbar.prose`), value: `prose`, title: t(`workspace.diffToolbar.textWhatAddedUnderlined`) },
-    { label: t(`shared.code`), value: `code`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+    { label: t(`workspace.words.code`), value: `code`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
 ]);
 
 // A binary document (a .docx, a .pdf, a deck) reads either as tracked changes over the text rendered from it or as its
@@ -69,13 +69,13 @@ const DOCUMENT_OPTIONS = computed(() => {
     if (format.value === `table`) {
         return [
             { label: t(`workspace.diffToolbar.table`), value: `changes`, title: t(`workspace.diffToolbar.rowsAndCellsChangedMarked`) },
-            { label: t(`shared.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+            { label: t(`workspace.words.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
         ];
     }
     if (redline.value) {
         return [
             { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.documentDrawnWordsMarked`) },
-            { label: t(`shared.text`), value: `text`, title: t(`workspace.diffToolbar.textOfBothVersionsAgentReads`) },
+            { label: t(`workspace.words.text`), value: `text`, title: t(`workspace.diffToolbar.textOfBothVersionsAgentReads`) },
             { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.bothVersionsDrawnWhole`) },
         ];
     }
@@ -83,7 +83,7 @@ const DOCUMENT_OPTIONS = computed(() => {
         { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.documentTextWhatAdded`) },
         rendersAsBytes(path, undefined)
             ? { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.bothVersionsDrawnWhole`) }
-            : { label: t(`shared.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+            : { label: t(`workspace.words.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
     ];
 });
 
@@ -197,7 +197,7 @@ const LABEL = `text-2xs text-content max-md:text-sm`;
                 <SegmentedControl :model-value="diffLayout" :options="LAYOUT_OPTIONS" size="xs" @update:model-value="setDiffLayout" />
             </div>
             <div :class="ROW" v-if="commentsRow">
-                <span :class="LABEL">{{ t(`shared.comments`) }}</span>
+                <span :class="LABEL">{{ t(`workspace.words.comments`) }}</span>
                 <SegmentedControl
                     :model-value="showComments ? `shown` : `hidden`"
                     :options="COMMENT_OPTIONS"

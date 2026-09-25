@@ -63,7 +63,7 @@ const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof type
         }}</span>
         <ChatChooseModelButton />
         <RouterLink to="/connect" :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)">
-            {{ t(`shared.connectAModel`) }}
+            {{ t(`chat.words.connectAModel`) }}
         </RouterLink>
     </div>
 </template>

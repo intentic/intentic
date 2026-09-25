@@ -56,7 +56,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
     return block.id === `helper`
         ? { label: t(`sandbox.modelGroupRow.off`), hint: t(`sandbox.modelGroupRow.notSetNoneJobs`) }
         : {
-              label: t(`shared.chatDefault`),
+              label: t(`sandbox.words.chatDefault`),
               hint: t(`sandbox.modelGroupRow.nothingPinnedRunOn`),
           };
 });

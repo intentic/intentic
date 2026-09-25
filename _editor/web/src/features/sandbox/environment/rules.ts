@@ -14,14 +14,14 @@ export const NAMED_RULES = {
 // what the Agent tab's own toggles write, so the two doors never disagree on the rule.
 export const autoLandRule = (): Rule => ({
     id: NAMED_RULES.land,
-    label: t(`shared.landFinishedWorkAutomatically`),
+    label: t(`sandbox.words.landFinishedWorkAutomatically`),
     moment: `agent.finished`,
     action: { kind: `verdict`, verdict: `allow` },
     enabled: true,
 });
 export const autoVersionRule = (): Rule => ({
     id: NAMED_RULES.version,
-    label: t(`shared.saveVersionAcceptedWork`),
+    label: t(`sandbox.words.saveVersionAcceptedWork`),
     moment: `agent.landed`,
     action: { kind: `builtin`, name: `version-landed` },
     enabled: true,

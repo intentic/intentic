@@ -460,7 +460,7 @@ onUnmounted(stopStartingPoll);
                     type="button"
                     :class="ui.iconButton(`h-8 w-8`)"
                     :aria-label="t(`preview.previewPanel.reloadPreview`)"
-                    v-tooltip.bottom="t(`shared.reload`)"
+                    v-tooltip.bottom="t(`ui.action.reload`)"
                     @click="reload"
                 >
                     <Icon name="refresh" />
@@ -484,7 +484,7 @@ onUnmounted(stopStartingPoll);
                         rel="noopener"
                         :class="ui.iconButton(`h-8 w-8`)"
                         :aria-label="t(`preview.previewPanel.openInNewTab`, { label: target.label })"
-                        v-tooltip.bottom="t(`shared.openInNewTab`)"
+                        v-tooltip.bottom="t(`ui.action.openInNewTab`)"
                     >
                         <Icon name="arrow-up-right" />
                     </a>
@@ -639,7 +639,7 @@ onUnmounted(stopStartingPoll);
                     <!-- Restart appears only after the wait becomes a verdict. -->
                     <Button
                         v-if="target.startable && (waitingLong || target.launch === `exited`)"
-                        :label="t(`shared.restart`)"
+                        :label="t(`ui.action.restart`)"
                         size="small"
                         :disabled="busy"
                         @click="restart"

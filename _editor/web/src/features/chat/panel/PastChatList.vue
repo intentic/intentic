@@ -32,7 +32,7 @@ const emit = defineEmits<{ open: [id: string] }>();
             <span class="flex items-center gap-1.5">
                 <span class="min-w-0 flex-1 truncate text-content" :class="touch ? `text-sm` : `text-xs`">{{ session.title }}</span>
                 <!-- Members with this session open right now. -->
-                <PresenceAvatars :members="viewersOfSession(session.id)" :label="t(`shared.inChat`)" />
+                <PresenceAvatars :members="viewersOfSession(session.id)" :label="t(`chat.words.inChat`)" />
             </span>
             <!-- Why this row matched, when it wasn't the title: the line the query hit and which side said it. -->
             <MatchLine

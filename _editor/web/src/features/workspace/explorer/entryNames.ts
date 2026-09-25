@@ -1,7 +1,8 @@
 import { basename } from "@intentic/ui/path";
+import { t } from "@intentic/ui/i18n";
 
 // Wording and checks every file surface (the tree, the home) shares for naming, creating and deleting entries, so a
-// name refused in one place is refused in the other with the same words. Pure, no framework code.
+// name refused in one place is refused in the other with the same words (workspace.fileVerbs in the catalog).
 
 export const joinPath = (dir: string, name: string): string => (dir === `` ? name : `${dir}/${name}`);
 
@@ -12,10 +13,10 @@ export const newNameError = (draft: string, dir: string, exists: (path: string) 
         return undefined;
     }
     if (name === `.` || name === `..` || /[/\\]/.test(name)) {
-        return `Invalid name.`;
+        return t(`workspace.fileVerbs.invalidName`);
     }
     if (exists(joinPath(dir, name))) {
-        return `"${name}" already exists.`;
+        return t(`workspace.fileVerbs.alreadyExists`, { name });
     }
     return undefined;
 };
@@ -23,7 +24,7 @@ export const newNameError = (draft: string, dir: string, exists: (path: string) 
 // The receipt once a delete lands; said after, never before, since a failed delete must not report what can't be undone.
 export const deletedReceipt = (paths: readonly string[]): string => {
     const only = paths.length === 1 ? paths[0] : undefined;
-    return only === undefined ? `${paths.length} items deleted` : `${basename(only)} deleted`;
+    return only === undefined ? t(`workspace.fileVerbs.deletedMany`, { count: paths.length }) : t(`workspace.fileVerbs.deleted`, { name: basename(only) });
 };
 
 // The receipt once an undo lands. `from` is where each came from; `landed` where each came back, which differs only
@@ -35,6 +36,11 @@ export const restoredReceipt = (from: readonly string[], landed: readonly string
         return undefined;
     }
     const moved = landed.length === 1 && !from.includes(only);
-    const said = landed.length > 1 ? `${landed.length} items restored` : moved ? `Restored as ${basename(only)}` : `${basename(only)} restored`;
-    return gone === 0 ? said : `${said}; ${gone} no longer in the trash`;
+    const said =
+        landed.length > 1
+            ? t(`workspace.fileVerbs.restoredMany`, { count: landed.length })
+            : moved
+              ? t(`workspace.fileVerbs.restoredAs`, { name: basename(only) })
+              : t(`workspace.fileVerbs.restored`, { name: basename(only) });
+    return gone === 0 ? said : t(`workspace.fileVerbs.someGone`, { said, count: gone });
 };

@@ -276,7 +276,7 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
             <ChatDecisionButton
                 tone="secondary"
                 :disabled="settling"
-                v-tooltip.bottom="t(`shared.alsoStopsTurn`)"
+                v-tooltip.bottom="t(`chat.words.alsoStopsTurn`)"
                 @click="reply({ kind: `question`, cancelled: true })"
                 >{{ t(`ui.action.dismiss`) }}</ChatDecisionButton
             >

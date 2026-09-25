@@ -131,7 +131,7 @@ const changedLabel = computed(() => {
         return ``;
     }
     const count = changed.value;
-    return grid.value ? t(`shared.rowsChanged`, { count }, count) : t(`workspace.derivedDiffView.paragraphsChanged`, { count }, count);
+    return grid.value ? t(`workspace.words.rowsChanged`, { count }, count) : t(`workspace.derivedDiffView.paragraphsChanged`, { count }, count);
 });
 
 const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));

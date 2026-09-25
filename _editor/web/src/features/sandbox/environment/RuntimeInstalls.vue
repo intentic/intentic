@@ -183,7 +183,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                             @click="decide(entry, entry.declined === true ? `restore` : `dismiss`)"
                         >
                             <Icon :name="entry.declined === true ? `undo` : `eye-slash`" />{{
-                                entry.declined === true ? t(`shared.undo`) : t(`ui.action.dismiss`)
+                                entry.declined === true ? t(`ui.action.undo`) : t(`ui.action.dismiss`)
                             }}
                         </button>
                     </div>

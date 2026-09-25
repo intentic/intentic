@@ -153,19 +153,19 @@ const compare = (event: Event): Promise<void> =>
             <Row v-else icon="cloud-upload" :title="t(`sandbox.moveOutPanel.notPublished`)">
                 <template #description>
                     <template v-if="host === undefined">{{ t(`sandbox.moveOutPanel.connectGithubGitlabAccount`) }}</template>
-                    <template v-else>{{ t(`shared.publish`) }} <span class="font-mono">/work</span>.</template>
+                    <template v-else>{{ t(`ui.action.publish`) }} <span class="font-mono">/work</span>.</template>
                 </template>
                 <template #control>
                     <Button
                         v-if="!confirmingPublish"
-                        :label="t(`shared.publish`)"
+                        :label="t(`ui.action.publish`)"
                         size="small"
                         severity="secondary"
                         :disabled="host === undefined"
                         @click="confirmingPublish = true"
                     />
                     <template v-else>
-                        <Button :label="t(`shared.publish`)" size="small" :loading="publishing" @click="publish" />
+                        <Button :label="t(`ui.action.publish`)" size="small" :loading="publishing" @click="publish" />
                         <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" text @click="confirmingPublish = false" />
                     </template>
                 </template>
@@ -214,7 +214,7 @@ const compare = (event: Event): Promise<void> =>
         </RowGroup>
 
         <!-- Download and delete use the same compact icon affordance. -->
-        <RowGroup v-if="exports.length > 0" flat :label="t(`shared.exports`)" :count="exports.length">
+        <RowGroup v-if="exports.length > 0" flat :label="t(`sandbox.words.exports`)" :count="exports.length">
             <Row v-for="entry in exports" :key="entry.name">
                 <template #title
                     ><span class="block truncate font-mono text-2xs">{{ entry.name }}</span></template

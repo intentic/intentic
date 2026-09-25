@@ -97,7 +97,7 @@ const warm = computed(() => (watch.value !== undefined || limitBackAt.value !== 
             severity="secondary"
             :text="true"
             class="shrink-0"
-            :aria-label="t(`shared.stopWatching`)"
+            :aria-label="t(`agents.words.stopWatching`)"
             v-tooltip.top="t(`agents.agentCard.stopWatchingConversationStays`)"
             :disabled="busy"
             :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
@@ -111,7 +111,7 @@ const warm = computed(() => (watch.value !== undefined || limitBackAt.value !== 
     <span v-if="working" class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link">
         <!-- Glyph follows whichever fact leads: running children if any, else the tool the agent itself is using. -->
         <Icon :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)" class="shrink-0 text-2xs" />
-        <span class="min-w-0 truncate">{{ activityText ?? t(`shared.working`) }}</span>
+        <span class="min-w-0 truncate">{{ activityText ?? t(`ui.status.working`) }}</span>
         <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(agent.startedAt, now) }}</span>
     </span>
 </template>

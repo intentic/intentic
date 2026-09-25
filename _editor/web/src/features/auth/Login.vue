@@ -105,7 +105,7 @@ watch(
 
             <h1 class="headline">
                 <span class="beat"
-                    ><span class="entry-display">{{ t(`shared.signIn`) }}</span
+                    ><span class="entry-display">{{ t(`ui.action.signIn`) }}</span
                     ><span class="entry-stop">.</span></span
                 >
                 <span class="beat"
@@ -134,7 +134,7 @@ watch(
                 <!-- The site's primary button style (@intentic/entry-css), shown only when Google's embedded button could not render. -->
                 <Button
                     v-if="!googleReady"
-                    :label="desktop ? t(`shared.continueGoogleInBrowser`) : t(`shared.continueGoogle`)"
+                    :label="desktop ? t(`auth.words.continueGoogleInBrowser`) : t(`auth.words.continueGoogle`)"
                     class="w-full justify-center"
                     @click="redirectSignIn"
                 >
@@ -143,7 +143,7 @@ watch(
 
                 <!-- Embedded-button failures are handled by the direct login path. -->
                 <button v-if="googleReady && !desktop" type="button" class="escape" v-action="redirectSignIn">
-                    {{ t(`shared.troubleSigningInUse`) }}
+                    {{ t(`auth.words.troubleSigningInUse`) }}
                 </button>
 
                 <p class="fine">

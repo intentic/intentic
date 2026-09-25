@@ -83,7 +83,7 @@ export const compositionOf = (input: InputSavings): Composition => {
     if (tail.length > 0) {
         segments.push({
             key: `other`,
-            label: t(`shared.more`, { count: tail.length }),
+            label: t(`sandbox.words.more`, { count: tail.length }),
             tokens: tail.reduce((sum, stage) => sum + stage.savedTokens, 0),
             color: `var(--color-series-other)`,
             kind: `saved`,
@@ -93,7 +93,7 @@ export const compositionOf = (input: InputSavings): Composition => {
     const removed = segments.reduce((sum, segment) => sum + segment.tokens, 0);
     segments.push({
         key: `reached`,
-        label: t(`shared.reachedAssistant`),
+        label: t(`sandbox.words.reachedAssistant`),
         tokens: Math.max(0, input.rawTokens - removed),
         color: `var(--color-content-subtle)`,
         kind: `reached`,

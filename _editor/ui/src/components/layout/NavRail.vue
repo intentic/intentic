@@ -36,7 +36,7 @@ const headingClass = computed(() => (stickyHeadings ? `sticky top-0 z-10 bg-canv
         <div v-if="filterable || $slots[`pinned`]" class="flex shrink-0 flex-col gap-1.5 pb-2">
             <!-- A FILLED field, not an outlined one: a box drawn at the top of a column that has no other boxes in it is the first thing the eye lands on. -->
             <div v-if="filterable" class="flex shrink-0 items-center rounded-md bg-content/[0.045]">
-                <SearchBar v-model="query" :placeholder="placeholder ?? t(`ui.navRail.filter`)" class="min-w-0 flex-1 border-b-0" />
+                <SearchBar v-model="query" :placeholder="placeholder ?? t(`ui.action.filter`)" class="min-w-0 flex-1 border-b-0" />
                 <span v-if="count !== undefined && query.trim() !== ``" class="shrink-0 pr-2.5 text-2xs tabular-nums text-subtle">{{ count }}</span>
             </div>
             <div v-if="$slots[`pinned`]"><slot name="pinned" /></div>

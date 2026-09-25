@@ -76,8 +76,8 @@ const reachLine =
 </script>
 
 <template>
-    <RowGroup :label="t(`shared.instructions`)">
-        <Row icon="pencil" :title="t(`shared.systemPrompt`)">
+    <RowGroup :label="t(`sandbox.words.instructions`)">
+        <Row icon="pencil" :title="t(`sandbox.words.systemPrompt`)">
             <template #description>
                 <template v-if="promptMode === `custom`">{{ t(`sandbox.agentInstructions.ownPromptAgentRuns`) }}</template>
                 <template v-else-if="promptMode === `claude`">{{ t(`sandbox.agentInstructions.claudeCodesOwnPrompt`) }}</template>
@@ -175,7 +175,7 @@ const reachLine =
             :stored="stored"
             :saving="save.isPending.value"
             save="explicit"
-            :label="t(`shared.systemPrompt`)"
+            :label="t(`sandbox.words.systemPrompt`)"
             :max-chars="PROMPT_MAX"
             :placeholder="t(`sandbox.agentInstructions.writeAssistantsSystemPrompt`)"
             @save="savePrompt"

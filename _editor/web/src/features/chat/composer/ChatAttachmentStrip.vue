@@ -3,7 +3,7 @@
     lang="ts"
     generic="T extends Pick<PendingAttachment, 'name' | 'path' | 'previewUrl'> & Partial<Pick<PendingAttachment, 'status' | 'progress' | 'error'>>"
 >
-import { attachmentPeek } from "../drafts/attachmentPeeks";
+import { attachmentQuickLook } from "../drafts/attachmentQuickLooks";
 import { attachmentAudio, attachmentKind, attachmentPreview } from "../drafts/attachmentPreviews";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import ChatAudioChip from "../transcript/attachments/ChatAudioChip.vue";
@@ -49,7 +49,7 @@ const errorOf = (attachment: T): string | undefined => (attachment.status === `f
                 v-else
                 :name="attachment.name"
                 :path="attachment.path"
-                :peek="landed(attachment) ? attachmentPeek(attachment.path) : undefined"
+                :look="landed(attachment) ? attachmentQuickLook(attachment.path) : undefined"
                 :preview-url="pictureOf(attachment)"
                 :lead="staged ? 0 : LEAD_LINES"
                 :progress="progressOf(attachment)"

@@ -79,12 +79,12 @@ const liveOf = (entry: OpenChat): CardView[`live`] => {
     if (agent !== undefined && turnInFlight(agent)) {
         return {
             icon: (agent.subagents?.running ?? 0) > 0 ? `users` : activityIcon(agent.activity?.tool),
-            text: activityLine(agent) ?? t(`shared.working`),
+            text: activityLine(agent) ?? t(`ui.status.working`),
             since: agent.startedAt,
         };
     }
     if (conversation.turn.streaming.value) {
-        return { icon: activityIcon(undefined), text: t(`shared.working`), since: conversation.turn.turnStartedAt.value };
+        return { icon: activityIcon(undefined), text: t(`ui.status.working`), since: conversation.turn.turnStartedAt.value };
     }
     return undefined;
 };

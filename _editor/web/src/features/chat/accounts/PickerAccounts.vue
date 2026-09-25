@@ -185,8 +185,8 @@ const pickAccount = (id: string): void => {
             ref="accountsFilter"
             v-model="accountsQuery"
             variant="field"
-            :placeholder="t(`shared.filterAccounts`)"
-            :aria-label="t(`shared.filterAccounts2`)"
+            :placeholder="t(`chat.words.filterAccounts`)"
+            :aria-label="t(`chat.words.filterAccounts2`)"
             aria-controls="picker-account-list"
             @keydown.esc="escapeAccounts"
         />
@@ -227,7 +227,7 @@ const pickAccount = (id: string): void => {
                     name="exclamation-triangle"
                     class="shrink-0 text-2xs text-warning"
                     :class="{ 'ml-auto': !a.headroom }"
-                    v-tooltip.top="a.detail ?? t(`shared.accountNeedsToReconnected`)"
+                    v-tooltip.top="a.detail ?? t(`chat.words.accountNeedsToReconnected`)"
                 />
             </button>
             <!-- Says so inside the list, where the rows would be; otherwise it reads as a list that lost its accounts. -->
@@ -246,7 +246,7 @@ const pickAccount = (id: string): void => {
             v-action="toggleAccounts"
         >
             <Icon :name="accountsOpen ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
-            <span>{{ accountsOpen ? t(`shared.showFewer`) : t(`chat.pickerAccounts.allAccounts`, { count: accountRows.length }) }}</span>
+            <span>{{ accountsOpen ? t(`ui.action.showFewer`) : t(`chat.pickerAccounts.allAccounts`, { count: accountRows.length }) }}</span>
             <span class="ml-auto flex min-w-0 items-center gap-2 truncate">
                 <span v-for="count in accountCapacity" :key="count.band" :class="count.tone">
                     <span class="tabular-nums">{{ count.count }}</span> {{ count.label }}
@@ -263,7 +263,7 @@ const pickAccount = (id: string): void => {
             ref="routedFilter"
             v-model="routedQuery"
             variant="field"
-            :placeholder="t(`shared.filterAccounts`)"
+            :placeholder="t(`chat.words.filterAccounts`)"
             :aria-label="t(`chat.pickerAccounts.filterSubscriptionAccounts`)"
             aria-controls="picker-routed-list"
             @keydown.esc="escapeRouted"
@@ -295,7 +295,7 @@ const pickAccount = (id: string): void => {
             v-action="toggleRouted"
         >
             <Icon :name="routedOpen ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
-            <span>{{ routedOpen ? t(`shared.showFewer`) : t(`chat.pickerAccounts.allAccounts`, { count: routedRows.length }) }}</span>
+            <span>{{ routedOpen ? t(`ui.action.showFewer`) : t(`chat.pickerAccounts.allAccounts`, { count: routedRows.length }) }}</span>
             <span class="ml-auto flex min-w-0 items-center gap-2 truncate">
                 <span v-for="count in routedCapacity" :key="count.band" :class="count.tone">
                     <span class="tabular-nums">{{ count.count }}</span> {{ count.label }}

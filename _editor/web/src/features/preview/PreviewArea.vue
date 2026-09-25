@@ -5,7 +5,7 @@ import { onMounted, onUnmounted, useTemplateRef, watch } from "vue";
 import { useRoute } from "vue-router";
 import { markPreviewOpened, selectPreviewTarget } from "./previewSurface";
 import { usePreviewFloating } from "./previewFloating";
-import { previewDock } from "../../shell/window/dockSlots";
+import { previewSlot } from "../../shell/window/panelSlots";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -33,10 +33,10 @@ watch(
 
 const slot = useTemplateRef(`slot`);
 onMounted(() => {
-    previewDock.value = slot.value;
+    previewSlot.value = slot.value;
 });
 onUnmounted(() => {
-    previewDock.value = null;
+    previewSlot.value = null;
 });
 </script>
 

@@ -84,9 +84,9 @@ const clearFilters = (): void => {
 
 // Both counts are inventories; the update count is a mark instead, since it isn't the size of either list.
 const viewOptions = computed(() => [
-    { label: t(`shared.installed`), value: `installed` as View, badge: entries.value.length },
+    { label: t(`sandbox.words.installed`), value: `installed` as View, badge: entries.value.length },
     {
-        label: t(`shared.browse`),
+        label: t(`ui.action.browse`),
         value: `browse` as View,
         badge: listings.value.length,
         ...(updatable.value > 0
@@ -209,7 +209,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
             <div class="ml-auto flex shrink-0 items-center gap-2">
                 <!-- A labelled button, not an icon: it creates something, unlike the others which only narrow or refresh. -->
                 <template v-if="view === `installed`">
-                    <Button :label="t(`shared.newExtension`)" size="small" @click="creating = true">
+                    <Button :label="t(`sandbox.words.newExtension`)" size="small" @click="creating = true">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                     <button

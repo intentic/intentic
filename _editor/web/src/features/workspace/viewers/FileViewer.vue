@@ -392,7 +392,7 @@ const onEditorSave = (value: string): void =>
                 v-tooltip.bottom="hideFileComments ? t(`workspace.fileViewer.commentsHiddenClickTo`) : t(`workspace.fileViewer.hideCommentsReadCode`)"
             >
                 <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-2xs" />
-                <span class="max-md:hidden">{{ t(`shared.comments`) }}</span>
+                <span class="max-md:hidden">{{ t(`workspace.words.comments`) }}</span>
             </button>
             <!-- Second reading of the same file, one click away: what a pdf, a spreadsheet or a picture becomes as text. -->
             <button
@@ -405,7 +405,7 @@ const onEditorSave = (value: string): void =>
                 v-tooltip.bottom="textWanted ? t(`workspace.fileViewer.backToFileItself`) : t(`workspace.fileViewer.readFileTextWay`)"
             >
                 <Icon :name="textWanted ? 'file' : 'align-left'" class="text-2xs" />
-                <span class="max-md:hidden">{{ t(`shared.text`) }}</span>
+                <span class="max-md:hidden">{{ t(`workspace.words.text`) }}</span>
             </button>
             <!-- Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared workspace. -->
             <span
@@ -413,7 +413,7 @@ const onEditorSave = (value: string): void =>
                 class="inline-flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-2xs text-muted"
                 v-tooltip.bottom="t(`workspace.fileViewer.agentNoCopyFile`)"
             >
-                <Icon name="folder" class="text-[0.65rem]" /> {{ t(`shared.shared`) }}
+                <Icon name="folder" class="text-[0.65rem]" /> {{ t(`workspace.words.sharedFolder`) }}
             </span>
             <!-- Edit status while the scope keeps it read-only. -->
             <span
@@ -422,7 +422,7 @@ const onEditorSave = (value: string): void =>
                 v-tooltip.bottom="readOnlyReason"
             >
                 <Icon name="lock" class="text-xs" />
-                <span class="max-md:hidden">{{ t(`shared.readOnly`) }}</span>
+                <span class="max-md:hidden">{{ t(`workspace.words.readOnly`) }}</span>
             </span>
             <!-- Save icon with top-right dirty dot badge -->
             <button

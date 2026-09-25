@@ -212,7 +212,7 @@ const stateTone = (state: string): string => STATE_TONE[state] ?? `text-subtle`;
                         <span class="truncate">{{
                             rung.installed.status.state === `active`
                                 ? t(`connect.localModelLane.ready`)
-                                : (rung.installed.status.detail ?? t(`shared.starting`))
+                                : (rung.installed.status.detail ?? t(`ui.status.starting`))
                         }}</span>
                     </span>
                     <Button

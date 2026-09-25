@@ -69,7 +69,7 @@ const save = async (message: QueuedMessage): Promise<void> => {
                     @keydown.esc.prevent="rewording = undefined"
                 />
                 <div class="flex justify-end gap-1">
-                    <Button size="small" :text="true" @click="rewording = undefined">{{ t(`shared.cancel`) }}</Button>
+                    <Button size="small" :text="true" @click="rewording = undefined">{{ t(`ui.action.cancel`) }}</Button>
                     <Button size="small" type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
                 </div>
             </form>

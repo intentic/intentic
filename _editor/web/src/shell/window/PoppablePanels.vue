@@ -10,7 +10,7 @@ import { usePreviewFloating } from "../../features/preview/previewFloating";
 import ChatPanel from "../../features/chat/panel/ChatPanel.vue";
 import PreviewPanel from "../../features/preview/PreviewPanel.vue";
 import TerminalPanel from "../../features/terminal/TerminalPanel.vue";
-import { chatBarDock, chatDock, chatFullDock, previewDock, terminalDock } from "./dockSlots";
+import { chatBarSlot, chatSlot, chatFullSlot, previewSlot, terminalSlot } from "./panelSlots";
 
 // The three poppable panels (chat, terminal, preview), mounted once per window, above the router. Each is
 // teleported to wherever it belongs (docked slot, full area, floating window's slot, or a parking stage) — a move,
@@ -29,15 +29,15 @@ park.style.cssText = `position:fixed;left:-20000px;top:0;width:900px;height:700p
 document.body.append(park);
 onUnmounted(() => park.remove());
 
-// Full-window slot first; on the rail the column is never a fallback, only the bottom strip and then the parking stage.
-const chatTarget = computed(() => chatFullDock.value ?? (chatOnRail.value ? (chatBarDock.value ?? park) : (chatDock.value ?? park)));
+// Full-window slot first; on the rail the column is never a fallback, only the quick bar and then the parking stage.
+const chatTarget = computed(() => chatFullSlot.value ?? (chatOnRail.value ? (chatBarSlot.value ?? park) : (chatSlot.value ?? park)));
 // Both read off where it actually went, like every other presentation question here: the strip takes the composer
 // alone, and the left border is the side column's own edge — every other home already has one drawn beside it.
-const inBar = computed(() => chatTarget.value === chatBarDock.value);
-const inColumn = computed(() => chatTarget.value === chatDock.value);
-const terminalTarget = computed(() => terminalDock.value ?? park);
+const inBar = computed(() => chatTarget.value === chatBarSlot.value);
+const inColumn = computed(() => chatTarget.value === chatSlot.value);
+const terminalTarget = computed(() => terminalSlot.value ?? park);
 // No side-column slot: fills its area or window, or waits parked, where the live iframe keeps its own state.
-const previewTarget = computed(() => previewDock.value ?? park);
+const previewTarget = computed(() => previewSlot.value ?? park);
 
 // Only a dock lands a panel visible on its route home; one whose window merely went away returns without moving the reader.
 chat.onDocked(() => {

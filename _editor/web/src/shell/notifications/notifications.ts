@@ -101,7 +101,7 @@ export const useNotifications = () => {
         report({
             tone: `done`,
             title: message,
-            ...(undo === undefined ? {} : { actions: [{ label: t(`shared.undo`), run: undo, hint: undoHint }] }),
+            ...(undo === undefined ? {} : { actions: [{ label: t(`ui.action.undo`), run: undo, hint: undoHint }] }),
         });
     };
 

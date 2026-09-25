@@ -2,7 +2,7 @@
 import { AnchoredOverlay, Button, iconForEntry, type Side } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui/format";
 import { type ComponentPublicInstance, computed, onBeforeUnmount, ref, useTemplateRef } from "vue";
-import { type FilePeek, peekLead, peekLines, peekOmitted } from "../../drafts/filePeek";
+import { type FileQuickLook, quickLookLead, quickLookLines, quickLookOmitted } from "../../drafts/fileQuickLook";
 import ChatChip from "./ChatChip.vue";
 import ChatChipName from "./ChatChipName.vue";
 import ChatImageThumb from "./ChatImageThumb.vue";
@@ -15,7 +15,7 @@ const t = useT();
 const {
     name,
     path,
-    peek,
+    look,
     previewUrl,
     lead = 0,
     progress,
@@ -24,10 +24,10 @@ const {
     removable = false,
 } = defineProps<{
     name: string;
-    // Workspace-relative path: what a click opens, and what `peek` was read from.
+    // Workspace-relative path: what a click opens, and what `look` was read from.
     path: string;
     // Head and tail windows, undefined while they are in flight and on a surface that can't read them.
-    peek?: FilePeek;
+    look?: FileQuickLook;
     // A picture's thumbnail, which stands in for the glyph and carries its own hover zoom.
     previewUrl?: string;
     // How many of the file's first lines the tile draws itself. 0 in a tight row (the composer), 3 in a transcript.
@@ -46,47 +46,47 @@ const icon = computed(() => iconForEntry(name, `file`));
 // Scale, and length where length is knowable: the facts a filename withholds. Never the kind, which is the name's own
 // ending — the one part of it the middle-ellipsis above never gives up.
 const meta = computed(() => {
-    if (peek?.present !== true) {
+    if (look?.present !== true) {
         return ``;
     }
-    const bits = [formatBytes(peek.size)];
-    const lines = peekLines(peek);
+    const bits = [formatBytes(look.size)];
+    const lines = quickLookLines(look);
     if (lines !== undefined) {
         bits.push(`${lines.toLocaleString()} ${lines === 1 ? `line` : `lines`}`);
     }
     return bits.join(` · `);
 });
 
-const leadLines = computed(() => (lead === 0 || peek === undefined ? [] : peekLead(peek, lead)));
+const leadLines = computed(() => (lead === 0 || look === undefined ? [] : quickLookLead(look, lead)));
 
 // Whether the drawn lines stop short of the file, which is what the face's bottom fade claims. A file whose every line
 // fits ends on a hard edge instead, so the fade never says "there is more" of a file there is no more of.
-const truncated = computed(() => peek !== undefined && (peek.headBytes < peek.size || peekLead(peek, lead + 1).length > lead));
+const truncated = computed(() => look !== undefined && (look.headBytes < look.size || quickLookLead(look, lead + 1).length > lead));
 
 // What the card says when there is no text for it to say anything with.
 const nothingToShow = computed(() => {
-    if (peek === undefined) {
-        // Unreachable while `peeking` gates on the windows having landed; kept so the card can never draw a blank body.
+    if (look === undefined) {
+        // Unreachable while `looking` gates on the windows having landed; kept so the card can never draw a blank body.
         return `Reading the file…`;
     }
-    if (!peek.present) {
+    if (!look.present) {
         return `This file is no longer in the workspace.`;
     }
-    if (peek.binary) {
+    if (look.binary) {
         return `Not text: nothing to preview here.`;
     }
-    return peek.head === `` ? `This file is empty.` : undefined;
+    return look.head === `` ? `This file is empty.` : undefined;
 });
 
-const omitted = computed(() => (peek === undefined ? 0 : peekOmitted(peek)));
+const omitted = computed(() => (look === undefined ? 0 : quickLookOmitted(look)));
 
 const chip = useTemplateRef<ComponentPublicInstance>(`chip`);
 const root = computed<HTMLElement | undefined>(() => chip.value?.$el);
 const hovering = ref(false);
 // Opens only once there is something to draw, and opens by itself if the windows land while the pointer is still on
 // the chip. Writable, so the overlay's own dismissals (Escape, a press outside) can shut it.
-const peeking = computed({
-    get: () => hovering.value && peek !== undefined,
+const looking = computed({
+    get: () => hovering.value && look !== undefined,
     set: (value: boolean) => {
         hovering.value = value;
     },
@@ -178,7 +178,7 @@ onBeforeUnmount(() => clearTimeout(timer));
             :type="openable ? `button` : undefined"
             class="relative flex min-w-0 flex-1 flex-col gap-1 text-left"
             :class="[framed ? `px-2 py-1.5` : ``, openable ? `cursor-pointer` : ``]"
-            :aria-label="openable ? t(`shared.openInWorkspace`, { name }) : undefined"
+            :aria-label="openable ? t(`chat.words.openInWorkspace`, { name }) : undefined"
             @click="openable && opening(open)"
             @focus="onFocus"
             @blur="onBlur"
@@ -204,8 +204,8 @@ onBeforeUnmount(() => clearTimeout(timer));
             </span>
         </component>
 
-        <!-- The peek, teleported out of this chip by the overlay. -->
-        <AnchoredOverlay v-model="peeking" :anchor="root" :side="side" cross="start" :gap="GAP">
+        <!-- The look, teleported out of this chip by the overlay. -->
+        <AnchoredOverlay v-model="looking" :anchor="root" :side="side" cross="start" :gap="GAP">
             <div class="flex max-h-[min(32rem,70vh)] w-[min(34rem,80vw)] flex-col" @pointerenter="onCardEnter" @pointerleave="onLeave">
                 <div class="flex shrink-0 items-start gap-2 border-b border-line px-3 py-2">
                     <Icon :name="icon" class="mt-px shrink-0 text-xs" :class="iconColor" />
@@ -218,14 +218,14 @@ onBeforeUnmount(() => clearTimeout(timer));
                 <div class="min-h-0 flex-1 overflow-auto px-3 py-2">
                     <p v-if="nothingToShow" class="text-2xs text-subtle">{{ nothingToShow }}</p>
                     <template v-else>
-                        <pre class="font-mono text-2xs leading-relaxed whitespace-pre text-muted">{{ peek?.head }}</pre>
+                        <pre class="font-mono text-2xs leading-relaxed whitespace-pre text-muted">{{ look?.head }}</pre>
                         <!-- Never a bare gap: the reader has to know the two halves aren't continuous. -->
                         <p v-if="omitted > 0" class="my-2 flex items-center gap-2 text-2xs whitespace-nowrap text-subtle">
                             <span class="h-px flex-1 bg-line"></span>
                             {{ formatBytes(omitted) }} {{ t(`chat.chatFileChip.notShown`) }}
                             <span class="h-px flex-1 bg-line"></span>
                         </p>
-                        <pre v-if="peek?.tail" class="font-mono text-2xs leading-relaxed whitespace-pre text-muted">{{ peek.tail }}</pre>
+                        <pre v-if="look?.tail" class="font-mono text-2xs leading-relaxed whitespace-pre text-muted">{{ look.tail }}</pre>
                     </template>
                 </div>
                 <div v-if="openable" class="shrink-0 border-t border-line px-3 py-1">

@@ -303,7 +303,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     <span class="text-muted">{{ extensionIdOf(manifest) }}</span> · v{{ manifest.version }} ·
                     {{
                         entry.extension.source === `builtin`
-                            ? t(`shared.builtIntoSandboxImage`)
+                            ? t(`sandbox.words.builtIntoSandboxImage`)
                             : entry.extension.source === `workspace`
                               ? t(`sandbox.extensionRow.intenticConfigWorkspaceExtensions`)
                               : t(`sandbox.extensionRow.installed`, { slice: entry.extension.commit.slice(0, 12) })

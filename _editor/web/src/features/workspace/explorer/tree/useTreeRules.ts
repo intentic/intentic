@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { noticeOf } from "@intentic/ui/async";
 import type { Ref } from "vue";
@@ -37,7 +38,7 @@ export const useTreeRules = (host: TreeRulesHost) => {
     // `refuseWrite` for the member tier, plus the archive rule, for a verb aimed at `dir`.
     const refuseIn = (dir: string): boolean => {
         if (archiveDir(dir)) {
-            host.store.actionError.value = noticeOf(`An archive's contents are read-only. Extract it to change them.`);
+            host.store.actionError.value = noticeOf(t(`workspace.fileVerbs.archiveReadOnly`));
             return true;
         }
         return host.store.refuseWrite();

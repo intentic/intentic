@@ -4,11 +4,11 @@ import { useT } from "@intentic/ui/i18n";
 import { stopWaiting, whenNear } from "../../../workspace/home/nearViewport";
 import { type ChatShot, shotName } from "./shots";
 import { picture } from "../../../workspace/home/thumbnails";
-import PicturePeek from "../attachments/PicturePeek.vue";
-import { type PeekBox, aspectOf, peekBox } from "../attachments/picturePeek";
+import PictureQuickLook from "../attachments/PictureQuickLook.vue";
+import { type QuickLookBox, aspectOf, quickLookBox } from "../attachments/pictureQuickLook";
 
 // The pictures a finished turn's tools showed the agent, standing at the turn's end where its answer is read: the last
-// few as tiles, the rest behind a count on the first. A pointer resting on a tile peeks it bigger (picturePeek), and a
+// few as tiles, the rest behind a count on the first. A pointer resting on a tile shows it bigger (pictureQuickLook), and a
 // press opens the conversation's viewer at that picture.
 
 const t = useT();
@@ -46,21 +46,21 @@ const prefetch = (shot: ChatShot): void => {
     picture(props.agent, shot.path, `view`);
 };
 
-// The tile being peeked and where its peek is drawn. The peek shows the tile's own shot (not the one a counted tile
+// The tile being looked at and where its look is drawn. The look shows the tile's own shot (not the one a counted tile
 // opens), at the viewer's size once that arrives and the strip's until then, so it never waits on a blank.
-const peeked = ref<{ shot: ChatShot; box: PeekBox }>();
-const peek = (event: Event, shot: ChatShot, opens: ChatShot): void => {
+const shown = ref<{ shot: ChatShot; box: QuickLookBox }>();
+const look = (event: Event, shot: ChatShot, opens: ChatShot): void => {
     prefetch(opens);
     prefetch(shot);
     const tile = event.currentTarget as HTMLElement;
-    peeked.value = { shot, box: peekBox(tile, aspectOf(tile.querySelector(`img`))) };
+    shown.value = { shot, box: quickLookBox(tile, aspectOf(tile.querySelector(`img`))) };
 };
-const unpeek = (): void => {
-    peeked.value = undefined;
+const hideLook = (): void => {
+    shown.value = undefined;
 };
-onBeforeUnmount(unpeek);
-const peekSrc = computed(() => {
-    const shot = peeked.value?.shot;
+onBeforeUnmount(hideLook);
+const quickLookSrc = computed(() => {
+    const shot = shown.value?.shot;
     return shot === undefined ? undefined : (picture(props.agent, shot.path, `view`)?.url ?? picture(props.agent, shot.path, `strip`)?.url);
 });
 
@@ -85,11 +85,11 @@ const tiles = computed(() =>
             type="button"
             class="chat-inset relative aspect-[16/10] min-w-0 cursor-pointer overflow-hidden rounded-md border border-line transition-colors hover:border-line-strong"
             :aria-label="tile.counted ? t(`chat.chatTurnShots.openAll`, { count: shots.length }) : t(`chat.chatTurnShots.open`, { name: tile.name })"
-            @pointerenter="peek($event, tile.shot, tile.opens)"
-            @pointerleave="unpeek"
+            @pointerenter="look($event, tile.shot, tile.opens)"
+            @pointerleave="hideLook"
             @focus="prefetch(tile.opens)"
             @click="
-                unpeek();
+                hideLook();
                 emit(`view`, tile.opens);
             "
         >
@@ -99,7 +99,7 @@ const tiles = computed(() =>
                 v-else-if="tile.picture"
                 class="flex h-full w-full flex-col items-center justify-center gap-1 px-1 text-center text-2xs text-subtle"
             >
-                <Icon name="image" class="text-xs" />{{ t(`shared.gone`) }}
+                <Icon name="image" class="text-xs" />{{ t(`chat.words.gone`) }}
             </span>
             <span v-else class="block h-full w-full animate-pulse" />
             <span
@@ -109,6 +109,6 @@ const tiles = computed(() =>
                 {{ t(`chat.chatTurnShots.more`, { count: earlier + 1 }) }}
             </span>
         </button>
-        <PicturePeek :src="peekSrc" :alt="peeked ? shotName(peeked.shot.path) : ``" :box="peeked?.box" />
+        <PictureQuickLook :src="quickLookSrc" :alt="shown ? shotName(shown.shot.path) : ``" :box="shown?.box" />
     </section>
 </template>

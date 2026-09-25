@@ -36,7 +36,7 @@ const SECTIONS = computed(
     () =>
         [
             { label: t(`shared.models`), value: `models` },
-            { label: t(`shared.instructions`), value: `instructions` },
+            { label: t(`sandbox.words.instructions`), value: `instructions` },
             { label: t(`sandbox.sandboxAgent.tools`), value: `tools` },
             { label: t(`sandbox.sandboxAgent.safety`), value: `safety` },
             { label: t(`sandbox.sandboxAgent.finishing`), value: `finishing` },

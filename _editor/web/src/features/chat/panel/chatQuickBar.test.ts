@@ -7,11 +7,11 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { useChat } from "../run/useChat";
 import { focusComposer } from "../tabs/useChat-tabs";
-import { chatBarPeek } from "./chatPanelLayout";
+import { quickBarTranscript } from "./chatPanelLayout";
 import { draftConversation, reveal } from "./useChat-reveal";
 
 import { queryClient } from "../../../lib/queryPersistence";
-import { chatBarDock, chatFullDock } from "../../../shell/window/dockSlots";
+import { chatBarSlot, chatFullSlot } from "../../../shell/window/panelSlots";
 import { useLayout } from "../../../shell/window/useLayout";
 import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
@@ -94,7 +94,7 @@ const caretLeavesFor = (next: Element | null): void =>
     void bar()?.dispatchEvent(new FocusEvent(`focusout`, { bubbles: true, relatedTarget: next }));
 // A press on the transcript's own glass: where a selection starts.
 const card = (): HTMLElement | null => document.querySelector(`.chat-quick-card`);
-const peekThroughHandle = async (): Promise<void> => {
+const openTranscriptByHover = async (): Promise<void> => {
     hoverHandle();
     jest.advanceTimersByTime(200);
     await settle();
@@ -119,8 +119,8 @@ beforeEach(async () => {
     app = undefined;
     document.body.innerHTML = ``;
     localStorage.clear();
-    chatFullDock.value = null;
-    chatBarPeek.value = false;
+    chatFullSlot.value = null;
+    quickBarTranscript.value = false;
     resetSandboxScope();
     // The home this whole surface exists for; `side` keeps its column, and then there is nothing to park.
     useLayout().setChatHome(`rail`);
@@ -138,11 +138,11 @@ it(`draws where no composer is already on screen, and nowhere else`, async () =>
     expect(bar()).not.toBeNull();
 
     // The /chat area publishes its slot: the whole panel is on that screen, composer included.
-    chatFullDock.value = document.createElement(`div`);
+    chatFullSlot.value = document.createElement(`div`);
     await settle();
     expect(bar()).toBeNull();
 
-    chatFullDock.value = null;
+    chatFullSlot.value = null;
     useLayout().setChatHome(`side`);
     await settle();
     expect(bar()).toBeNull();
@@ -150,11 +150,11 @@ it(`draws where no composer is already on screen, and nowhere else`, async () =>
 
 it(`publishes its slot only while it draws, so the panel parks when it doesn't`, async () => {
     await mountBar();
-    expect(chatBarDock.value?.isConnected).toBe(true);
+    expect(chatBarSlot.value?.isConnected).toBe(true);
 
     useLayout().setChatHome(`side`);
     await settle();
-    expect(chatBarDock.value).toBeNull();
+    expect(chatBarSlot.value).toBeNull();
 });
 
 it(`hovering takes the box and never the caret, so a passing pointer can't capture the keyboard`, async () => {
@@ -329,13 +329,13 @@ it(`folds a borrowed transcript away with the pointer, before the box itself goe
     hoverIn();
     await waitOutHover();
 
-    await peekThroughHandle();
-    expect(chatBarPeek.value).toBe(true);
+    await openTranscriptByHover();
+    expect(quickBarTranscript.value).toBe(true);
 
     hoverOut();
     jest.advanceTimersByTime(350);
     await settle();
-    expect([chatBarPeek.value, opened()]).toEqual([false, true]);
+    expect([quickBarTranscript.value, opened()]).toEqual([false, true]);
 
     await waitOutHover();
     expect(opened()).toBe(false);
@@ -346,14 +346,14 @@ it(`gives an overshot edge its transcript back when the pointer returns in time`
     await mountBar();
     hoverIn();
     await waitOutHover();
-    await peekThroughHandle();
+    await openTranscriptByHover();
 
     hoverOut();
     jest.advanceTimersByTime(100);
     hoverIn();
     await waitOutHover();
 
-    expect([chatBarPeek.value, opened()]).toEqual([true, true]);
+    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
 });
 
 // Selecting a line to copy starts with a press on the transcript and often ends past its edge: neither may fold it.
@@ -362,13 +362,13 @@ it(`keeps the box and its transcript once pressed, so a selection survives the p
     await mountBar();
     hoverIn();
     await waitOutHover();
-    await peekThroughHandle();
+    await openTranscriptByHover();
 
     pressOn(card());
     hoverOut();
     await waitOutHover();
 
-    expect([chatBarPeek.value, opened()]).toEqual([true, true]);
+    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
 });
 
 // The caret goes to nothing on a press on text, and to the page when a view it opens takes it: neither is a gesture.
@@ -395,7 +395,7 @@ it(`folds the transcript and an empty box on a press on the page`, async () => {
     pressOn(onThePage());
     await settle();
 
-    expect([chatBarPeek.value, opened()]).toEqual([false, false]);
+    expect([quickBarTranscript.value, opened()]).toEqual([false, false]);
 });
 
 // The bar follows the reader from view to view: switching on the rail is not going back to the page under it.
@@ -412,7 +412,7 @@ it(`keeps the box and its transcript through a view switch on the rail`, async (
     caretLeavesFor(link);
     await settle();
 
-    expect([chatBarPeek.value, opened()]).toEqual([true, true]);
+    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
 });
 
 // Words hold the composer open against the page, so copying from it into them is one press away, and the box's own
@@ -462,11 +462,11 @@ it(`keeps the transcript on a press, and gives it back one Escape before the box
 
     handle()!.click();
     await settle();
-    expect(chatBarPeek.value).toBe(true);
+    expect(quickBarTranscript.value).toBe(true);
 
     escape();
     await fadeOut();
-    expect([chatBarPeek.value, opened()]).toEqual([false, true]);
+    expect([quickBarTranscript.value, opened()]).toEqual([false, true]);
 
     escape();
     await settle();
@@ -479,16 +479,16 @@ it(`keeps a borrowed transcript on the eye's press, and folds it on the next`, a
     await mountBar();
     hoverIn();
     await waitOutHover();
-    await peekThroughHandle();
+    await openTranscriptByHover();
 
     handle()!.click();
     hoverOut();
     await waitOutHover();
-    expect([chatBarPeek.value, handle()!.getAttribute(`aria-expanded`)]).toEqual([true, `true`]);
+    expect([quickBarTranscript.value, handle()!.getAttribute(`aria-expanded`)]).toEqual([true, `true`]);
 
     handle()!.click();
     await fadeOut();
-    expect([chatBarPeek.value, handle()!.getAttribute(`aria-expanded`)]).toEqual([false, `false`]);
+    expect([quickBarTranscript.value, handle()!.getAttribute(`aria-expanded`)]).toEqual([false, `false`]);
 });
 
 // A press on transcript text leaves the caret on the body, and a view switch leaves it on the rail: the reader's
@@ -505,11 +505,11 @@ it(`hears an Escape that lands off the page while the box is the last thing pres
 
     escapeOn(onThePage());
     await settle();
-    expect([chatBarPeek.value, opened()]).toEqual([true, true]);
+    expect([quickBarTranscript.value, opened()]).toEqual([true, true]);
 
     escapeOn(railLink());
     await fadeOut();
-    expect([chatBarPeek.value, opened()]).toEqual([false, true]);
+    expect([quickBarTranscript.value, opened()]).toEqual([false, true]);
 
     escapeOn(document.body);
     await settle();
@@ -547,18 +547,18 @@ it(`the panel's floating presentation is the composer alone: no list, no transcr
     expect(document.querySelectorAll(`.chat-pane`)).toHaveLength(1);
 });
 
-// A peek is this pane's turns arriving, not a transcript built beside the one /chat draws. The card they need is the
+// A transcript is this pane's turns arriving, not a transcript built beside the one /chat draws. The card they need is the
 // strip's own, so the panel only clips to it — and the composer keeps the one class that holds its rect still, which
 // is what stops it jumping 13px up and 38px narrower as the transcript lands above it.
-it(`a peek lifts the withheld turns without moving the composer they arrive over`, async () => {
+it(`a transcript lifts the withheld turns without moving the composer they arrive over`, async () => {
     const chat = useChat();
     chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
-    chatBarPeek.value = true;
+    quickBarTranscript.value = true;
     await mount(ChatPanel, { bar: true });
 
     expect(document.querySelectorAll(`.chat-turns`)).toHaveLength(1);
     expect(document.body.textContent).toContain(`an earlier turn`);
-    expect(document.querySelector(`.chat-panel`)!.classList.contains(`chat-peeking`)).toBe(true);
+    expect(document.querySelector(`.chat-panel`)!.classList.contains(`chat-transcript-lifted`)).toBe(true);
     expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-strip`)).toBe(true);
 });
 

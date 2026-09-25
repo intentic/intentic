@@ -13,7 +13,7 @@ import { readFileWindow } from "../files/fileWindow";
 import { scopeQuery } from "../health/workspaceScope";
 import { extensionOf } from "@intentic/ui/file-format";
 import { homeGroups, homeOrder } from "./homeOrder";
-import { kindLabel, PEEK_BYTES, type PeekKind, peekLines, peekPlan } from "./peekContent";
+import { kindLabel, QUICK_LOOK_BYTES, type QuickLookKind, quickLookLines, quickLookPlan } from "./quickLookContent";
 import { thumbnailUrl } from "./thumbnails";
 import { useT } from "@intentic/ui/i18n";
 
@@ -26,14 +26,14 @@ const { entry, anchor } = defineProps<{ entry: WorkspaceTreeEntry | undefined; a
 const { listingOf, keepListed } = useWorkspaceTree();
 const layout = useLayout();
 
-const plan = computed(() => (entry === undefined ? undefined : peekPlan(entry)));
+const plan = computed(() => (entry === undefined ? undefined : quickLookPlan(entry)));
 // The extension viewer that draws this format from bytes. Reactive: switching the viewers extension off drops the
 // card back to a name and a size, the same as opening the file would.
 const documentViewer = computed(() =>
     entry === undefined || plan.value?.kind !== `document` ? undefined : renderViewerForExtension(extensionOf(entry.name)),
 );
 // What the card actually draws: a document nothing here can paint is a document with no look, whatever the plan says.
-const kind = computed<PeekKind>(() => {
+const kind = computed<QuickLookKind>(() => {
     const planned = plan.value?.kind ?? `none`;
     return planned === `document` && documentViewer.value === undefined ? `none` : planned;
 });
@@ -77,11 +77,11 @@ const rememberText = (key: string, value: string): void => {
 const cacheKey = (target: WorkspaceTreeEntry): string => `${target.path} ${target.size ?? 0}`;
 
 const fetchText = async (target: WorkspaceTreeEntry, signal: AbortSignal): Promise<string> => {
-    const window = await readFileWindow(target.path, { limit: PEEK_BYTES, signal });
+    const window = await readFileWindow(target.path, { limit: QUICK_LOOK_BYTES, signal });
     if (!window.present || window.content.includes(`\0`)) {
         return ``; // gone, or bytes after all: nothing a glance can use
     }
-    return peekLines(window.content, window.bytes, window.size);
+    return quickLookLines(window.content, window.bytes, window.size);
 };
 
 const latest = useLatest();
@@ -117,7 +117,7 @@ const readMedia = async (target: WorkspaceTreeEntry, medium: "picture" | "video"
         settle(isLatest, media, undefined);
     }
 };
-// The whole file, since a document is a zip a viewer reads end to end; the peek's size cap is what keeps that bounded.
+// The whole file, since a document is a zip a viewer reads end to end; the look's size cap is what keeps that bounded.
 const readDocument = async (target: WorkspaceTreeEntry, isLatest: () => boolean, signal: AbortSignal): Promise<void> => {
     loading.value = true;
     try {
@@ -138,7 +138,7 @@ const load = (target: WorkspaceTreeEntry | undefined): void => {
     media.value = undefined;
     documentBytes.value = undefined;
     loading.value = false;
-    const planned: PeekKind = target === undefined ? `none` : peekPlan(target).kind;
+    const planned: QuickLookKind = target === undefined ? `none` : quickLookPlan(target).kind;
     if (target === undefined) {
         return;
     }
@@ -235,7 +235,7 @@ onBeforeUnmount(() => controller?.abort());
                 >
                     <template v-if="kind === 'folder'">
                         <p v-if="folderChildren !== undefined && folderChildren.length === 0" class="px-3 py-3 text-2xs text-subtle">
-                            {{ t(`workspace.homePeek.nothingInside`) }}
+                            {{ t(`workspace.homeQuickLook.nothingInside`) }}
                         </p>
                         <ul v-else-if="folderChildren !== undefined" class="flex flex-col gap-0.5 px-2 py-2">
                             <li v-for="child in folderNames" :key="child.path" class="flex items-center gap-2 truncate px-1 text-xs text-content/80">
@@ -247,7 +247,7 @@ onBeforeUnmount(() => controller?.abort());
                                 <span class="truncate">{{ child.name }}</span>
                             </li>
                             <li v-if="folderChildren.length > folderNames.length" class="px-1 pt-1 text-2xs text-subtle">
-                                {{ t(`workspace.homePeek.more`, { count: (folderChildren.length - folderNames.length).toLocaleString() }) }}
+                                {{ t(`workspace.homeQuickLook.more`, { count: (folderChildren.length - folderNames.length).toLocaleString() }) }}
                             </li>
                         </ul>
                     </template>
@@ -273,7 +273,7 @@ onBeforeUnmount(() => controller?.abort());
                         ></video>
                     </template>
                     <template v-else-if="text !== undefined">
-                        <p v-if="text === ''" class="px-3 py-3 text-2xs text-subtle">{{ t(`workspace.homePeek.nothingInYet`) }}</p>
+                        <p v-if="text === ''" class="px-3 py-3 text-2xs text-subtle">{{ t(`workspace.homeQuickLook.nothingInYet`) }}</p>
                         <!-- The block's own frame and scrollbar are dropped: the body is already the window into the file, and a
                              card that takes no pointer can't be scrolled. -->
                         <div

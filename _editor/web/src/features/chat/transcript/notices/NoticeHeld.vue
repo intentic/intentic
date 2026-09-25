@@ -34,7 +34,7 @@ const send = (): void => {
 <template>
     <template v-if="held">
         <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="send">
-            {{ message.noticeAction === `sendAgain` ? t(`shared.sendAgain`) : t(`chat.chatMessageView.sendAnyway`) }}
+            {{ message.noticeAction === `sendAgain` ? t(`agents.words.sendAgain`) : t(`chat.chatMessageView.sendAnyway`) }}
         </button>
         <!-- What else the refusal offers, only while the message it would help still waits. -->
         <slot />

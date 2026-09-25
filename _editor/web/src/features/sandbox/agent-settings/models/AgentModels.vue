@@ -403,7 +403,7 @@ const setPickerOpen = (open: boolean): void => {
                         </p>
                         <!-- The judge model evaluates untrusted generated input. -->
                         <p v-else class="text-2xs text-subtle">
-                            {{ t(`shared.worthBetterModelThan`) }}
+                            {{ t(`sandbox.words.worthBetterModelThan`) }}
                         </p>
                     </template>
                 </ModelRoleRow>

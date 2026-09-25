@@ -35,16 +35,16 @@ const sheetOpen = ref(false);
             <Icon v-if="active" v-bind="statusIcon(active.status.value)" />
             <!-- Italic while this chat is only being looked at (Conversation.peek): the phone's tap on a fleet card is a look like the desktop's click. -->
             <span class="min-w-0 flex-1 truncate text-sm font-medium text-content" :class="{ italic: active?.peek.value }">{{
-                active?.title.value ?? (active?.isolated.value ? t(`shared.newAgent`) : t(`shared.newChat`))
+                active?.title.value ?? (active?.isolated.value ? t(`chat.words.newAgent`) : t(`chat.words.newChat`))
             }}</span>
             <PresenceAvatars
                 v-if="active && active.session.value !== undefined"
                 :members="viewersOfSession(active.session.value.id)"
-                :label="t(`shared.inChat`)"
+                :label="t(`chat.words.inChat`)"
             />
             <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
         </button>
-        <button type="button" class="composer-ghost h-10 w-10 shrink-0" @click="startAgent()" :aria-label="t(`shared.newAgent`)">
+        <button type="button" class="composer-ghost h-10 w-10 shrink-0" @click="startAgent()" :aria-label="t(`chat.words.newAgent`)">
             <Icon name="plus" class="text-base" />
         </button>
 

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import { basename } from "@intentic/ui/path";
-import { attachmentPeek } from "../features/chat/drafts/attachmentPeeks";
+import { attachmentQuickLook } from "../features/chat/drafts/attachmentQuickLooks";
 import { attachmentPreview } from "../features/chat/drafts/attachmentPreviews";
-import { isImagePath } from "../features/chat/drafts/filePeek";
+import { isImagePath } from "../features/chat/drafts/fileQuickLook";
 import ChatFileChip from "../features/chat/transcript/attachments/ChatFileChip.vue";
 
 // Floating card for a truncated session name on hover (the chat tab strip, the Changes panel's origin chips): the
@@ -40,7 +40,7 @@ interface HoverCardContent {
 }
 
 // The card's width is a share of the room beside its anchor, not a fixed number, since a flat 320px showed a
-// screenshot as a grey rectangle with half the window free beside it. SHARE keeps it a peek rather than edge to
+// screenshot as a grey rectangle with half the window free beside it. SHARE keeps it a look rather than edge to
 // edge; MIN is the width it always had (and the floor below which opening beside the anchor isn't worth it); MAX
 // keeps it a preview on a wide monitor. These four are the only statement of the size: the template binds
 // `maxWidth` from the placement computed below rather than repeating a number as a class, since a mismatch would
@@ -163,7 +163,7 @@ const messages = computed(() => {
                     .filter((image): image is { src: string; alt: string } => image.src !== undefined),
                 files: attachments
                     .filter((path) => !isImagePath(path))
-                    .map((path) => ({ name: basename(path), path, peek: attachmentPeek(path) })),
+                    .map((path) => ({ name: basename(path), path, look: attachmentQuickLook(path) })),
             };
         })
         .filter((message) => message.text !== undefined || message.images.length > 0 || message.files.length > 0);
@@ -206,7 +206,7 @@ defineExpose({ show, hide });
                 </p>
                 <!-- Placeholder tiles match transcript scale and remain inert. -->
                 <div v-if="message.files.length > 0" class="flex shrink-0 flex-wrap gap-2" :class="message.text || message.label ? 'mt-1.5' : ''">
-                    <ChatFileChip v-for="file in message.files" :key="file.path" :name="file.name" :path="file.path" :peek="file.peek" :lead="2" inert />
+                    <ChatFileChip v-for="file in message.files" :key="file.path" :name="file.name" :path="file.path" :look="file.look" :lead="2" inert />
                 </div>
 <!-- Full-bleed, out through the card's own padding, since an inset picture in an already-narrow card is a thumbnail of a thumbnail. -->
                 <div

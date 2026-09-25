@@ -14,7 +14,7 @@ const newChat = () => {
 };
 
 import { queryClient } from "../../../lib/queryPersistence";
-import { chatFullDock } from "../../../shell/window/dockSlots";
+import { chatFullSlot } from "../../../shell/window/panelSlots";
 import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -70,14 +70,14 @@ beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
     resetSandboxScope();
     // A published full-window slot is the wide surface (chatSurface.chatWide); panes are offered only there.
-    chatFullDock.value = document.createElement(`div`);
+    chatFullSlot.value = document.createElement(`div`);
     await nextTick();
 });
 
 afterEach(() => {
     app?.unmount();
     app = undefined;
-    chatFullDock.value = null;
+    chatFullSlot.value = null;
     document.body.replaceChildren();
 });
 
@@ -126,7 +126,7 @@ it(`still gives a row a column of its own when Ctrl says so`, async () => {
 it(`leaves a stored split alone when the panel is docked`, async () => {
     const ids = openThree();
     useChat().openBeside(ids[1]!);
-    chatFullDock.value = null;
+    chatFullSlot.value = null;
     const el = await mountList();
 
     row(el, ids[2]!).click();

@@ -104,7 +104,7 @@ const backgroundBy = computed(() => {
 type Live = { icon: IconName; text: string; since: number | undefined };
 const liveOfAgent = (agent: FleetAgent): Live => ({
     icon: (agent.subagents?.running ?? 0) > 0 ? `users` : activityIcon(agent.activity?.tool),
-    text: activityLine(agent) ?? t(`shared.working`),
+    text: activityLine(agent) ?? t(`ui.status.working`),
     since: agent.startedAt,
 });
 const working = (entry: OpenChat): boolean =>
@@ -137,7 +137,7 @@ const groupOf = (key: string, persona: Group[`persona`], label: string): Group =
                 : liveOfAgent(runningBackground)
             : runningOpen.agent !== undefined
               ? liveOfAgent(runningOpen.agent)
-              : { icon: activityIcon(undefined), text: t(`shared.working`), since: runningOpen.conversation.turn.turnStartedAt.value };
+              : { icon: activityIcon(undefined), text: t(`ui.status.working`), since: runningOpen.conversation.turn.turnStartedAt.value };
     const lead = runningOpen?.agent ?? runningBackground;
     const leadMeta = lead === undefined ? undefined : agentStatusMeta(lead.status);
     const stamps = [...mine.map((entry) => entry.agent?.updatedAt ?? 0), ...background.map((agent) => agent.updatedAt)].filter((at) => at > 0);
@@ -170,7 +170,7 @@ const personaGroups = computed(() =>
 );
 const busy = computed(() => personaGroups.value.filter((group) => group.open.length > 0 || group.needsYou > 0 || group.working > 0));
 const idle = computed(() => personaGroups.value.filter((group) => !busy.value.includes(group)));
-const anyone = computed(() => groupOf(ANYONE, undefined, t(`shared.anyone`)));
+const anyone = computed(() => groupOf(ANYONE, undefined, t(`chat.words.anyone`)));
 const groups = computed(() => [...busy.value, ...(anyone.value.open.length > 0 ? [anyone.value] : [])]);
 
 // Focus landing in a group opens it; a reader who folds it afterwards keeps it folded until focus moves elsewhere.
@@ -251,7 +251,7 @@ const groupMenuItems = computed<MenuItem[]>(() => {
     const archivable = archivableOf(group);
     return [
         {
-            label: group.persona === undefined ? t(`shared.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label }),
+            label: group.persona === undefined ? t(`chat.words.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label }),
             icon: `plus`,
             command: () => startAs(group),
         },
@@ -318,8 +318,8 @@ const titleOf = (agent: FleetAgent): string => agentDisplayTitle(agent, previewO
                     <template #trailing>
                         <span
                             role="button"
-                            :aria-label="group.persona === undefined ? t(`shared.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label })"
-                            v-tooltip.top="group.persona === undefined ? t(`shared.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label })"
+                            :aria-label="group.persona === undefined ? t(`chat.words.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label })"
+                            v-tooltip.top="group.persona === undefined ? t(`chat.words.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label })"
                             class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                             @click="onHeaderAction($event, () => startAs(group))"
                         >
@@ -360,7 +360,7 @@ const titleOf = (agent: FleetAgent): string => agentDisplayTitle(agent, previewO
                         @click="toggleUnfolded(group.key)"
                     >
                         <Icon :name="unfolded.has(group.key) ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                        {{ unfolded.has(group.key) ? t(`shared.showFewer`) : t(`shared.earlier`, { hiddenFinished: shownOf(group).hidden }) }}
+                        {{ unfolded.has(group.key) ? t(`ui.action.showFewer`) : t(`shared.earlier`, { hiddenFinished: shownOf(group).hidden }) }}
                     </button>
 
                     <!-- Waiting on the reader, though not open here: never folded, since a question can't be answered unseen. -->
@@ -421,7 +421,7 @@ const titleOf = (agent: FleetAgent): string => agentDisplayTitle(agent, previewO
                         @click="startAs(group)"
                     >
                         <Icon name="plus" class="text-2xs" />
-                        {{ group.persona === undefined ? t(`shared.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label }) }}
+                        {{ group.persona === undefined ? t(`chat.words.newAgent`) : t(`chat.chatPersonaRail.newChatAs`, { label: group.label }) }}
                     </button>
                 </div>
             </template>
@@ -447,11 +447,11 @@ const titleOf = (agent: FleetAgent): string => agentDisplayTitle(agent, previewO
             <!-- A real link, since the sandbox hub has an address and this is often the first place someone finds it. -->
             <RouterLink v-if="personas.length === 0" to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
                 <Icon name="plus" class="text-2xs" />
-                {{ t(`shared.setUpPersona`) }}
+                {{ t(`chat.words.setUpPersona`) }}
             </RouterLink>
             <RouterLink v-else to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
                 <Icon name="cog" class="text-2xs" />
-                {{ t(`shared.managePersonas`) }}
+                {{ t(`chat.words.managePersonas`) }}
             </RouterLink>
         </div>
         <ContextMenu ref="groupMenu" :model="groupMenuItems" :min-width="13" @hide="menuGroup = undefined" />

@@ -148,7 +148,7 @@ onUnmounted(() => {
                 v-action="logout"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-base text-muted" /></span>
-                {{ t(`shared.signOut`) }}
+                {{ t(`shell.words.signOut`) }}
             </button>
         </div>
     </AnchoredOverlay>

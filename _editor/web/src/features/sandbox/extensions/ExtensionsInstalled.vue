@@ -91,7 +91,7 @@ const sections = computed<ExtensionSection[]>(() => [
         : [
               {
                   id: `attention`,
-                  label: t(`shared.needsAttention`),
+                  label: t(`sandbox.words.needsAttention`),
                   entries: attention.value,
               },
           ]),
@@ -239,7 +239,7 @@ const confirmRemove = async (): Promise<void> => {
 
         <!-- Sections render nothing while the read is out, so this outline gives the wait the list's own shape instead of a sentence. -->
         <template v-if="isLoading">
-            <RowGroup v-if="outline" :label="t(`shared.installed`)">
+            <RowGroup v-if="outline" :label="t(`sandbox.words.installed`)">
                 <div role="status" aria-busy="true">
                     <span class="sr-only">{{ t(`sandbox.extensionsInstalled.readingSandboxsExtensions`) }}</span>
                     <SkeletonRows :rows="3" description control />
@@ -256,7 +256,7 @@ const confirmRemove = async (): Promise<void> => {
             <button v-if="matches.length === 0 && publishedMatches > 0" type="button" :class="ui.linkButton(`text-xs`)" @click="emit(`browse`)">
                 {{ t(`sandbox.extensionsInstalled.publishedMatches`, { count: publishedMatches, query: query.trim() }, publishedMatches) }}
             </button>
-            <Button v-if="matches.length === 0 && entries.length > 0" size="small" :label="t(`shared.clearFilter`)" @click="emit(`clear`)" />
+            <Button v-if="matches.length === 0 && entries.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="emit(`clear`)" />
         </div>
 
         <!-- Unenumerated workspace extensions are listed with their reason. -->

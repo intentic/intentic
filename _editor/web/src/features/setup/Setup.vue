@@ -713,8 +713,8 @@ onUnmounted(() => row.discardDraft(committed.value));
                                     <button v-if="intenticAvailable" type="button" :class="ui.linkButton()" @click="mode = `intentic`">
                                         {{ t(`setup.setup.useIntenticsDomain`) }}
                                     </button>
-                                    <InfoHint :label="t(`shared.whyCloudflareApiToken`)">
-                                        <p class="mb-1 text-sm font-medium text-content">{{ t(`shared.whyToken`) }}</p>
+                                    <InfoHint :label="t(`views.words.whyCloudflareApiToken`)">
+                                        <p class="mb-1 text-sm font-medium text-content">{{ t(`views.words.whyToken`) }}</p>
                                         <p class="mb-3 text-xs leading-relaxed text-muted">
                                             {{ t(`setup.setup.intenticReachesSandboxOver`) }}
                                         </p>
@@ -756,7 +756,7 @@ onUnmounted(() => row.discardDraft(committed.value));
                                         />
                                         <span class="text-sm break-words text-subtle">.{{ selectedZone }}</span>
                                     </div>
-                                    <span v-if="!subdomainValid" class="text-xs text-warning">{{ t(`shared.useLettersNumbersHyphens`) }}</span>
+                                    <span v-if="!subdomainValid" class="text-xs text-warning">{{ t(`setup.words.useLettersNumbersHyphens`) }}</span>
                                     <span v-else class="text-xs text-success"
                                         >{{ t(`setup.setup.sandboxReachableAt`) }}
                                         <span class="break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
@@ -842,7 +842,7 @@ onUnmounted(() => row.discardDraft(committed.value));
                                         <template #icon><Icon name="desktop" /></template>
                                     </Button>
                                     <button type="button" :class="ui.linkButton()" :disabled="hostedBusy" @click="recheckCapacity">
-                                        {{ t(`shared.checkAgain`) }}
+                                        {{ t(`ui.action.checkAgain`) }}
                                     </button>
                                 </div>
                             </template>

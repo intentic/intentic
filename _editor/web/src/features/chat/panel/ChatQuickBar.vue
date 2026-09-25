@@ -2,8 +2,8 @@
 import { isOverlayTarget, ProgressRing, ui, useHoverIntent } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
-import { chatBarPeek, chatParked } from "./chatPanelLayout";
-import { chatBarDock } from "../../../shell/window/dockSlots";
+import { quickBarTranscript, chatParked } from "./chatPanelLayout";
+import { chatBarSlot } from "../../../shell/window/panelSlots";
 import { focusComposer } from "../tabs/useChat-tabs";
 import { useChat } from "../run/useChat";
 import { useT } from "@intentic/ui/i18n";
@@ -12,7 +12,7 @@ import { contextPct } from "../../agents/fleet/agentStatus";
 import { CLOSED, type QuickBar, type QuickBarEvent, stepQuickBar } from "./quickBarHold";
 
 // The parked chat's home: a pill over the bottom of the area that grows into the focused chat's own composer (the panel
-// teleports into `slot`), with that pane's own transcript unfolding above it on request (chatBarPeek). Hover borrows the
+// teleports into `slot`), with that pane's own transcript unfolding above it on request (quickBarTranscript). Hover borrows the
 // box and a press keeps it until the reader dismisses it (quickBarHold.ts).
 
 // The section's area the bar floats over: a press there is the one gesture that means the reader went back to the page.
@@ -29,8 +29,8 @@ const expanded = computed(() => bar.value.box !== `closed`);
 // A press, the caret or a summons has made the box the reader's: only a dismissal closes it, never the pointer.
 const kept = computed(() => bar.value.box === `kept`);
 // The transcript is shown, and a press has kept it past the pointer that borrowed it.
-const peekOpen = computed(() => bar.value.peek !== `closed`);
-const peekKept = computed(() => bar.value.peek === `kept`);
+const transcriptOpen = computed(() => bar.value.transcript !== `closed`);
+const transcriptKept = computed(() => bar.value.transcript === `kept`);
 // Whether the box has ever opened: its closing animation must not play on a box that starts closed.
 const woken = ref(false);
 const float = useTemplateRef(`float`);
@@ -67,20 +67,20 @@ const rim = computed<{ percent: number; tone: string; spin: boolean } | undefine
 // overshooting an edge can cross back; the transcript's grace is shorter, so it always folds before the box. The eye is
 // reached on purpose, so its intent only has to outlast a pointer crossing it.
 const boxHover = useHoverIntent({ open: 250, close: 400 });
-const peekHover = useHoverIntent({ open: 140, close: 200 });
+const transcriptHover = useHoverIntent({ open: 140, close: 200 });
 
 const words = (): boolean => draft.value.trim() !== ``;
 const onPage = (node: EventTarget | null): boolean => node instanceof Node && page?.contains(node) === true;
 
 // The one place the bar moves. The panel is told the transcript is wanted in the same render it opens, so Escape reads
-// true at once; it is told it is no longer wanted when the card has finished fading (`onPeekGone`), since the turns
+// true at once; it is told it is no longer wanted when the card has finished fading (`onTranscriptGone`), since the turns
 // fade with the card and must stay mounted until then. A clock whose surface closed by another route is stopped too.
 const apply = (event: QuickBarEvent): void => {
     const before = bar.value;
     const next = stepQuickBar(before, event);
     bar.value = next;
-    if (next.peek !== `closed`) {
-        chatBarPeek.value = true;
+    if (next.transcript !== `closed`) {
+        quickBarTranscript.value = true;
     }
     if (next.box !== `closed` && !woken.value) {
         woken.value = true;
@@ -88,13 +88,13 @@ const apply = (event: QuickBarEvent): void => {
     if (next.box === `closed` && before.box !== `closed`) {
         boxHover.hide();
     }
-    if (next.peek === `closed` && before.peek !== `closed`) {
-        peekHover.hide();
+    if (next.transcript === `closed` && before.transcript !== `closed`) {
+        transcriptHover.hide();
     }
 };
-const onPeekGone = (): void => {
-    if (!peekOpen.value) {
-        chatBarPeek.value = false;
+const onTranscriptGone = (): void => {
+    if (!transcriptOpen.value) {
+        quickBarTranscript.value = false;
     }
 };
 
@@ -108,11 +108,11 @@ const expand = (caret: boolean): void => {
 const collapse = (): void => apply({ kind: `fold` });
 
 const onEnter = (): void => {
-    peekHover.cancel();
+    transcriptHover.cancel();
     boxHover.enter(() => expand(false));
 };
 const onLeave = (): void => {
-    peekHover.leave(() => apply({ kind: `peekLeave` }));
+    transcriptHover.leave(() => apply({ kind: `transcriptLeave` }));
     boxHover.leave(() => apply({ kind: `leave`, words: words() }));
 };
 // A press anywhere on the box's content keeps it and whatever it is showing; the tools act on their own presses.
@@ -163,14 +163,14 @@ const onEscape = (event: KeyboardEvent): void => {
     }
 };
 
-const onEyeEnter = (): void => peekHover.enter(() => apply({ kind: `peek`, keep: false }));
+const onEyeEnter = (): void => transcriptHover.enter(() => apply({ kind: `transcript`, keep: false }));
 const onEyeLeave = (): void => {
-    if (!peekOpen.value) {
-        peekHover.cancel();
+    if (!transcriptOpen.value) {
+        transcriptHover.cancel();
     }
 };
 // A press keeps what a hover only borrowed, and a second press folds it: keyboard and touch have no hover to borrow with.
-const onEyePress = (): void => apply({ kind: `peek`, keep: true });
+const onEyePress = (): void => apply({ kind: `transcript`, keep: true });
 const openChat = (): void => {
     collapse();
     void router.push(`/chat`);
@@ -188,7 +188,7 @@ watch(composerFocus, () => {
 watch(
     [() => chatParked.value, slot],
     ([parked, element]) => {
-        chatBarDock.value = parked ? element : null;
+        chatBarSlot.value = parked ? element : null;
         if (!parked) {
             collapse();
         }
@@ -196,9 +196,9 @@ watch(
     { immediate: true, flush: `post` },
 );
 onBeforeUnmount(() => {
-    chatBarDock.value = null;
+    chatBarSlot.value = null;
     collapse();
-    chatBarPeek.value = false;
+    quickBarTranscript.value = false;
 });
 
 const restingLine = computed(() => {
@@ -210,7 +210,7 @@ const restingLine = computed(() => {
     if (standing.value === `unsent`) {
         return draft.value.trim();
     }
-    return title.value ?? (standing.value === `working` ? t(`shared.working`) : t(`shared.askAnything`));
+    return title.value ?? (standing.value === `working` ? t(`ui.status.working`) : t(`chat.words.askAnything`));
 });
 
 // A question is answered where its card is drawn, so while one waits the press is a door rather than a disclosure.
@@ -242,7 +242,7 @@ const tool = ui.iconButton(`rounded-full text-subtle`);
         <div
             ref="float"
             class="chat-quick-float pointer-events-none relative w-[51rem] max-w-full"
-            :class="{ 'chat-quick-open': expanded, 'chat-quick-peeking': peekOpen, 'chat-quick-woken': woken }"
+            :class="{ 'chat-quick-open': expanded, 'chat-quick-transcript': transcriptOpen, 'chat-quick-woken': woken }"
             @pointerenter="onEnter"
             @pointerleave="onLeave"
             @pointerdown.capture="onPressInside"
@@ -252,9 +252,9 @@ const tool = ui.iconButton(`rounded-full text-subtle`);
             <!-- The transcript's glass: exactly the box's rect, drawn here so it can arrive without the composer moving. Its
                  fade out (chat.css) is what the panel's turns wait for before they unmount; a box folding whole takes it
                  with it in the same render, so no fade is waited for then. -->
-            <Transition name="chat-quick-card" :css="expanded" @after-leave="onPeekGone">
+            <Transition name="chat-quick-card" :css="expanded" @after-leave="onTranscriptGone">
                 <div
-                    v-if="peekOpen"
+                    v-if="transcriptOpen"
                     class="chat-quick-card pointer-events-auto absolute inset-0 rounded-2xl border border-line-strong bg-card/85 shadow-2xl backdrop-blur-2xl"
                 ></div>
             </Transition>
@@ -330,10 +330,10 @@ const tool = ui.iconButton(`rounded-full text-subtle`);
                     <button
                         type="button"
                         class="chat-quick-eye relative"
-                        :class="[tool, peekOpen && `bg-primary-500/15 text-primary-500 hover:bg-primary-500/20 hover:text-primary-500`]"
-                        v-tooltip.top="peekKept ? t(`chat.chatQuickBar.hideConversation`) : t(`chat.chatQuickBar.whatWasSaidHover`)"
+                        :class="[tool, transcriptOpen && `bg-primary-500/15 text-primary-500 hover:bg-primary-500/20 hover:text-primary-500`]"
+                        v-tooltip.top="transcriptKept ? t(`chat.chatQuickBar.hideConversation`) : t(`chat.chatQuickBar.whatWasSaidHover`)"
                         :aria-label="t(`chat.chatQuickBar.conversationSoFar`)"
-                        :aria-expanded="peekOpen"
+                        :aria-expanded="transcriptOpen"
                         @pointerenter="onEyeEnter"
                         @pointerleave="onEyeLeave"
                         @click="onEyePress"
@@ -341,7 +341,7 @@ const tool = ui.iconButton(`rounded-full text-subtle`);
                         <Icon name="eye" class="text-2xs" />
                         <!-- An answer arriving where nobody is looking: the one sign the box can give that there is news to read. -->
                         <span
-                            v-if="streaming && !peekOpen"
+                            v-if="streaming && !transcriptOpen"
                             class="chat-quick-news absolute top-0.5 right-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-link motion-reduce:animate-none"
                         ></span>
                     </button>

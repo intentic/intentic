@@ -61,7 +61,7 @@ const props = defineProps<{
     closable: boolean;
     // Composer and its notices alone, no transcript: what the quick bar hosts, so writing from another area is this
     // chat's own composer rather than a second one. The turns are withheld, never the chat — the stream, the draft and
-    // every pick are the same conversation the full surface shows. A peek lifts it, and what arrives is these turns.
+    // every pick are the same conversation the full surface shows. A transcript lifts it, and what arrives is these turns.
     bare?: boolean;
     // This pane is the floating strip's. Independent of `bare`, which is about the turns: this is about everything the
     // strip has no reader for — the status row is about a chat nobody is looking at, over a page they are.
@@ -313,7 +313,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
 
                 <!-- The composer and its gating notices; last row of the transcript, stuck to the bottom edge, rather than a separate band. -->
                 <!-- The strip's composer keeps ONE rect whether or not a transcript is open above it (chat.css): its padding is room a
-     peek adds above the box, never around it, since everything else would move the box being typed in. -->
+     transcript adds above the box, never around it, since everything else would move the box being typed in. -->
                 <div
                     ref="footer"
                     class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2"
@@ -429,7 +429,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         :disabled="pickedWorkflow !== undefined"
                                         @click="modeOpen = !modeOpen"
                                         :aria-expanded="modeOpen"
-                                        :aria-label="t(`shared.agentMode`)"
+                                        :aria-label="t(`chat.words.agentMode`)"
                                     >
                                         <Icon :name="modeIcon" class="text-2xs text-link" />
                                         <span class="@max-md:hidden">{{ modeLabel }}</span>
@@ -445,7 +445,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         :class="{ 'composer-flash': flashed === 'placement' }"
                                         @click="placementOpen = !placementOpen"
                                         :aria-expanded="placementOpen"
-                                        :aria-label="t(`shared.whereRuns`)"
+                                        :aria-label="t(`chat.words.whereRuns`)"
                                     >
                                         <Icon :name="remote ? `boxes` : `desktop`" class="text-2xs text-link" />
                                         <span class="@max-lg:hidden">{{ placementLabel }}</span>
@@ -629,7 +629,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         </div>
 
         <!-- The pane's status bar, the one part of the footer outside the scroller: it's about the pane (context, subscription, daemon liveness), not the message. -->
-        <!-- Withheld from the strip, peek or no peek: floating over another page, readouts about a chat are a second row of text
+        <!-- Withheld from the strip, transcript or no transcript: floating over another page, readouts about a chat are a second row of text
              around a box asked for as one. -->
         <ChatPaneStatus v-if="connected && !strip" :block="refusal" :hint="composerHint" />
 
@@ -637,13 +637,13 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" :header="t(`shared.model`)" panel-class="w-[26rem]">
             <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="modeOpen" :anchor="modeAnchor" cross="end" :header="t(`shared.agentMode`)" panel-class="w-56 p-1">
+        <ResponsiveOverlay v-model="modeOpen" :anchor="modeAnchor" cross="end" :header="t(`chat.words.agentMode`)" panel-class="w-56 p-1">
             <ChatModeMenu @selected="modeOpen = false" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="personaOpen" :anchor="personaAnchor" cross="end" :header="t(`shared.acts`)" panel-class="w-80 p-1">
+        <ResponsiveOverlay v-model="personaOpen" :anchor="personaAnchor" cross="end" :header="t(`chat.words.acts`)" panel-class="w-80 p-1">
             <ChatPersonaMenu :picked="conversation.selection.actsAs.value" @picked="pickPersona($event)" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="placementOpen" :anchor="placementPill" cross="end" :header="t(`shared.whereRuns`)" panel-class="w-80 p-1">
+        <ResponsiveOverlay v-model="placementOpen" :anchor="placementPill" cross="end" :header="t(`chat.words.whereRuns`)" panel-class="w-80 p-1">
             <ChatPlacementMenu :conversation="conversation" @selected="placementOpen = false" />
         </ResponsiveOverlay>
         <ResponsiveOverlay

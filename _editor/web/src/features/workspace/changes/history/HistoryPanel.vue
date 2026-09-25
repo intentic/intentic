@@ -89,7 +89,7 @@ const confirmRestore = (id: string): void => {
         <div class="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
             <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ words.restorePoints }}</span>
             <span class="flex-1"></span>
-            <Icon name="spinner" v-if="busy" class="text-xs text-muted" spin :aria-label="t(`shared.working2`)" />
+            <Icon name="spinner" v-if="busy" class="text-xs text-muted" spin :aria-label="t(`workspace.words.working`)" />
             <button
                 type="button"
                 :class="ui.iconButton()"
@@ -122,7 +122,7 @@ const confirmRestore = (id: string): void => {
                 </button>
 
                 <div v-if="selectedId === snapshot.id" class="pb-1.5 pl-4 pr-2">
-                    <p v-if="diffLoading" class="py-1 text-2xs text-subtle">{{ t(`shared.loadingChanges`) }}</p>
+                    <p v-if="diffLoading" class="py-1 text-2xs text-subtle">{{ t(`workspace.words.loadingChanges`) }}</p>
                     <p v-else-if="changes.length === 0" class="py-1 text-2xs text-subtle">{{ t(`workspace.historyPanel.noFileChangesRecorded`) }}</p>
                     <button
                         v-for="change in changes"

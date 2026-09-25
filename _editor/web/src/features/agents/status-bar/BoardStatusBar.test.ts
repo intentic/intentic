@@ -330,7 +330,7 @@ describe(`the main line's panel`, () => {
     const buttonNamed = (within: HTMLElement, words: string): HTMLButtonElement =>
         [...within.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => wordsOf(button) === words)!;
 
-    it(`opens docked above the bar onto the road a land travels: queued, checking, result, then the record`, async () => {
+    it(`opens above the bar onto the road a land travels: queued, checking, result, then the record`, async () => {
         const { element } = mount(redStatus());
         segment(element).click();
         await nextTick();

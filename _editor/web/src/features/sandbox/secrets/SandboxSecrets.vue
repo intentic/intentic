@@ -50,7 +50,7 @@ const opened = ref<string | undefined>(undefined);
 const filterable = computed(() => rows.value.length >= FILTERABLE_FROM);
 const missingCount = computed(() => rows.value.filter((row) => row.entry.status === `missing`).length);
 const scopeOptions = computed(() => [
-    { label: t(`shared.selectAll`), value: `all` as const, badge: rows.value.length },
+    { label: t(`sandbox.words.all`), value: `all` as const, badge: rows.value.length },
     { label: t(`sandbox.sandboxSecrets.missing`), value: `missing` as const, badge: missingCount.value },
 ]);
 const filtering = computed(() => query.value.trim() !== `` || scope.value !== `all`);
@@ -182,7 +182,7 @@ const pushToCi = async (): Promise<void> => {
             </div>
 
             <!-- Shown only while something is owed: the rows themselves, not a count of them. -->
-            <RowGroup v-if="attention.length > 0" :label="t(`shared.needsAttention`)" :count="attention.length">
+            <RowGroup v-if="attention.length > 0" :label="t(`sandbox.words.needsAttention`)" :count="attention.length">
                 <SecretEntryRow
                     v-for="row in attention"
                     :key="row.entry.key"
@@ -300,7 +300,7 @@ const pushToCi = async (): Promise<void> => {
                                 </span>
                                 {{
                                     credentialsExpanded
-                                        ? t(`shared.showLess`)
+                                        ? t(`ui.action.showLess`)
                                         : t(`sandbox.sandboxSecrets.showMoreAccounts`, { collapsedCredentialCount })
                                 }}
                             </span>
@@ -311,7 +311,7 @@ const pushToCi = async (): Promise<void> => {
 
             <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
                 <span>{{ emptyNote }}</span>
-                <Button v-if="rows.length > 0" size="small" :label="t(`shared.clearFilter`)" @click="clearFilters" />
+                <Button v-if="rows.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="clearFilters" />
             </div>
         </template>
     </div>

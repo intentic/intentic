@@ -91,7 +91,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             <PresenceAvatars
                 v-if="props.conversation.session.value !== undefined"
                 :members="viewersOfSession(props.conversation.session.value!.id)"
-                :label="t(`shared.inChat`)"
+                :label="t(`chat.words.inChat`)"
             />
             <!-- A pinned chat says so at rest, not only on hover: it is the one row no sweep will take. -->
             <span v-if="props.conversation.pinned.value" class="flex shrink-0 items-center" :aria-label="t(`chat.chatTabList.pinned`)">
@@ -102,8 +102,8 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             <span
                 v-if="props.conversation.peek.value"
                 role="button"
-                :aria-label="t(`shared.keepChatOpen`)"
-                v-tooltip.top="t(`shared.keepOpenOtherwiseChat`)"
+                :aria-label="t(`chat.words.keepChatOpen`)"
+                v-tooltip.top="t(`chat.words.keepOpenOtherwiseChat`)"
                 class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click="act($event, `keep`)"
             >
@@ -112,7 +112,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             <span
                 v-else-if="props.closable"
                 role="button"
-                :aria-label="t(`shared.closeChat`)"
+                :aria-label="t(`chat.words.closeChat`)"
                 class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click="act($event, `close`)"
             >

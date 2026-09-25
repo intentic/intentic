@@ -422,7 +422,7 @@ const confirmRemove = async (): Promise<void> => {
                 <Icon
                     name="trash"
                     @click.stop="askRemove(option)"
-                    v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`shared.leave`)"
+                    v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`ui.action.leave`)"
                     class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
                 />
             </button>
@@ -435,7 +435,7 @@ const confirmRemove = async (): Promise<void> => {
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
                     <Icon name="plus" class="text-base text-muted" />
                 </span>
-                {{ t(`shared.addSandbox`) }}
+                {{ t(`sandbox.words.addSandbox`) }}
             </RouterLink>
 
             <!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->
@@ -454,13 +454,13 @@ const confirmRemove = async (): Promise<void> => {
                     <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
                         <Icon name="wrench" class="text-xs" />
                     </span>
-                    <span class="min-w-0 flex-1 truncate text-muted">{{ t(`shared.finishSettingUp`, { name: option.name }) }}</span>
+                    <span class="min-w-0 flex-1 truncate text-muted">{{ t(`sandbox.words.finishSettingUp`, { name: option.name }) }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle transition-opacity group-hover:opacity-0" />
                     <!-- In flow, not overlaid, so hovering never shifts the text; `.prevent` stops the anchor firing too. -->
                     <Icon
                         name="trash"
                         @click.prevent.stop="askRemove(option)"
-                        v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`shared.leave`)"
+                        v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`ui.action.leave`)"
                         class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
                     />
                 </RouterLink>
@@ -485,7 +485,7 @@ const confirmRemove = async (): Promise<void> => {
     <ConfirmDialog
         :open="pending !== undefined"
         :header="pending?.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount2`) : t(`sandbox.sandboxSwitcher.leaveSandbox`)"
-        :confirm-label="pending?.role === 'owner' ? t(`ui.action.remove`) : t(`shared.leave`)"
+        :confirm-label="pending?.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
         confirm-icon="trash"
         :loading="deletingThere"
         @cancel="pending = undefined"

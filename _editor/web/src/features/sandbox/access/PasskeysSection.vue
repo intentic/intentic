@@ -78,12 +78,12 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                         v-model="label"
                         type="text"
                         autocomplete="off"
-                        :placeholder="t(`shared.nameEGWork`)"
+                        :placeholder="t(`sandbox.words.nameEGWork`)"
                         :class="ui.inputSm(`min-w-48 flex-1`)"
                     />
                     <Button
                         type="submit"
-                        :label="t(`shared.addPasskey`)"
+                        :label="t(`sandbox.words.addPasskey`)"
                         size="small"
                         :loading="busy"
                         :disabled="busy || !supported"

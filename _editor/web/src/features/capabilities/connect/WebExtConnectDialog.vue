@@ -87,7 +87,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <Modal :open="visible" size="lg" :header="t(`shared.connect`, { id })" @update:open="emit(`update:visible`, $event)">
+    <Modal :open="visible" size="lg" :header="t(`capabilities.words.connect`, { id })" @update:open="emit(`update:visible`, $event)">
         <div class="flex flex-col gap-4">
             <p class="text-sm text-content">
                 {{ t(`capabilities.webExtConnectDialog.installIntenticExtensionIn`) }}
@@ -100,7 +100,7 @@ onBeforeUnmount(() => {
             <div v-else-if="error" class="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-content">{{ error }}</div>
 
             <div v-else-if="minting || code === ``" class="text-sm text-muted">
-                {{ t(`shared.preparingOneTimeConnection`) }}
+                {{ t(`capabilities.words.preparingOneTimeConnection`) }}
             </div>
 
             <template v-else>
@@ -123,7 +123,7 @@ onBeforeUnmount(() => {
 
             <div class="rounded-md border border-subtle px-3 py-2">
                 <p class="text-2xs text-muted">
-                    {{ t(`shared.onceConnectedAgentMay`) }} <b>{{ permissions }}</b
+                    {{ t(`capabilities.words.onceConnectedAgentMay`) }} <b>{{ permissions }}</b
                     >{{ t(`capabilities.webExtConnectDialog.onlyOnSitesAllow`) }}
                 </p>
             </div>

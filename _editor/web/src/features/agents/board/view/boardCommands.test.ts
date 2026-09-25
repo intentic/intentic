@@ -54,7 +54,7 @@ describe(`the board on screen`, () => {
                 keybinding: `Mod+Z`,
                 when: `agentsUndoable && !editableTarget`,
             },
-            { command: `agents.filter`, title: t(`shared.filter`), keybinding: undefined, when: undefined },
+            { command: `agents.filter`, title: t(`ui.action.filter`), keybinding: undefined, when: undefined },
         ]);
     });
 

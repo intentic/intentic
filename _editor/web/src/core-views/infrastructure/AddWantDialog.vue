@@ -214,7 +214,7 @@ const submit = async (): Promise<void> => {
             <!-- A want needs Cloudflare and a server; both are collected inline rather than sending the user elsewhere. -->
             <CloudflareConnect v-if="cloudflareEntries.length === 0" />
             <ConnectHost v-else-if="hostOptions.length === 0">
-                <template #reason>{{ t(`shared.whatWantNeedsServer`) }}</template>
+                <template #reason>{{ t(`views.words.whatWantNeedsServer`) }}</template>
             </ConnectHost>
             <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
                 <label class="ui-field">
@@ -236,7 +236,7 @@ const submit = async (): Promise<void> => {
                         <span class="whitespace-nowrap font-mono text-sm text-subtle">.{{ zone }}</span>
                     </div>
                     <span v-if="subdomain.trim().length > 0 && !subdomainValid" class="text-xs text-warning">{{
-                        subdomainError ?? t(`shared.useLettersNumbersHyphens`)
+                        subdomainError ?? t(`setup.words.useLettersNumbersHyphens`)
                     }}</span>
                     <span v-else-if="subdomainValid" class="text-xs text-success"
                         >{{ t(`views.addWantDialog.reachableAt`) }} <span class="font-mono">{{ subdomain.trim() }}.{{ zone }}</span></span
@@ -302,7 +302,7 @@ const submit = async (): Promise<void> => {
                         </div>
                     </button>
                 </div>
-                <span :class="ui.sectionLabel('mb-2 block')">{{ t(`shared.selfHostedServices`) }}</span>
+                <span :class="ui.sectionLabel('mb-2 block')">{{ t(`views.words.selfHostedServices`) }}</span>
             </template>
 
             <div class="grid grid-cols-2 gap-3">

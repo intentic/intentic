@@ -53,7 +53,7 @@ const pick = (value: string): void => {
 </script>
 
 <template>
-    <div v-if="efforts.length > 0" class="flex shrink-0 items-center gap-1.5" role="group" :aria-label="t(`shared.reasoningEffort`)">
+    <div v-if="efforts.length > 0" class="flex shrink-0 items-center gap-1.5" role="group" :aria-label="t(`chat.words.reasoningEffort`)">
         <!-- Touch: the ladder is inert ink inside one button; the button says the whole state in words. -->
         <template v-if="coarse">
             <button
@@ -86,7 +86,7 @@ const pick = (value: string): void => {
                     </span>
                 </span>
             </button>
-            <ResponsiveOverlay v-model="sheetOpen" :anchor="trigger ?? undefined" :header="t(`shared.reasoningEffort`)" panel-class="w-56 p-1">
+            <ResponsiveOverlay v-model="sheetOpen" :anchor="trigger ?? undefined" :header="t(`chat.words.reasoningEffort`)" panel-class="w-56 p-1">
                 <div class="flex flex-col gap-0.5">
                     <button
                         v-for="(option, index) in efforts"

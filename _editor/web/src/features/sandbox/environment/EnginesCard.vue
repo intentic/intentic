@@ -51,13 +51,13 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
         hint: t(`sandbox.enginesCard.intenticTestedUpdatesIn`),
     },
     {
-        label: t(`shared.latest`),
+        label: t(`sandbox.words.latest`),
         value: `latest`,
         icon: `download`,
         hint: t(`sandbox.enginesCard.upstreamsNewestRelease`),
     },
     { label: t(`sandbox.enginesCard.pinned`), value: `pinned`, icon: `lock`, hint: t(`sandbox.enginesCard.freezeRunningVersion`) },
-    { label: t(`shared.image2`), value: `image`, icon: `box`, hint: t(`sandbox.enginesCard.imageCopyOnly`) },
+    { label: t(`sandbox.words.image`), value: `image`, icon: `box`, hint: t(`sandbox.enginesCard.imageCopyOnly`) },
 ]);
 </script>
 

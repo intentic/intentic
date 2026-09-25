@@ -7,19 +7,19 @@ import { resolveFile } from "../explorer/fileType";
 // plays silently, a document is drawn as its own first page, a folder lists what it holds; anything else (a PDF, an
 // archive, a font) has no cheap look and gets its name and size only. Pure, no framework code.
 
-export type PeekKind = "folder" | "text" | "picture" | "video" | "document" | "none";
+export type QuickLookKind = "folder" | "text" | "picture" | "video" | "document" | "none";
 
-export interface PeekPlan {
-    readonly kind: PeekKind;
+export interface QuickLookPlan {
+    readonly kind: QuickLookKind;
     // Shiki grammar for the text kind; undefined renders plain.
     readonly lang?: ShikiLang;
 }
 
 // Parsed on the main thread under the pointer, so a document this big is left to the tab that can afford it.
 const DOCUMENT_MAX_BYTES = 4 * 1024 * 1024;
-const documentPlan = (size: number | undefined): PeekPlan => ((size ?? 0) > DOCUMENT_MAX_BYTES ? { kind: `none` } : { kind: `document` });
+const documentPlan = (size: number | undefined): QuickLookPlan => ((size ?? 0) > DOCUMENT_MAX_BYTES ? { kind: `none` } : { kind: `document` });
 
-export const peekPlan = (entry: WorkspaceTreeEntry): PeekPlan => {
+export const quickLookPlan = (entry: WorkspaceTreeEntry): QuickLookPlan => {
     if (entry.type === `dir`) {
         return { kind: `folder` };
     }
@@ -45,7 +45,7 @@ export const peekPlan = (entry: WorkspaceTreeEntry): PeekPlan => {
 };
 
 // The word for a format with no name of its own.
-const BY_CATEGORY: Record<FileCategory, string> = {
+const BY_CATEGORY = {
     code: `Code`,
     style: `Style sheet`,
     config: `Config`,
@@ -59,7 +59,7 @@ const BY_CATEGORY: Record<FileCategory, string> = {
     lock: `Lockfile`,
     binary: `File`,
     generic: `File`,
-};
+} satisfies Record<FileCategory, string>;
 
 export const kindLabel = (entry: Pick<WorkspaceTreeEntry, "name" | "type">): string => {
     if (entry.type === `dir`) {
@@ -70,15 +70,15 @@ export const kindLabel = (entry: Pick<WorkspaceTreeEntry, "name" | "type">): str
 };
 
 // Lines the card shows: enough to recognise a file, few enough to stay a glance.
-export const PEEK_LINES = 14;
-// Bytes asked for: PEEK_LINES of long lines, and a cheap round trip whatever the file's size.
-export const PEEK_BYTES = 2048;
+export const QUICK_LOOK_LINES = 14;
+// Bytes asked for: QUICK_LOOK_LINES of long lines, and a cheap round trip whatever the file's size.
+export const QUICK_LOOK_BYTES = 2048;
 
-// The card's text: the first PEEK_LINES lines, a cut line dropped rather than shown torn. `bytes` is how much of the
+// The card's text: the first QUICK_LOOK_LINES lines, a cut line dropped rather than shown torn. `bytes` is how much of the
 // file `content` decodes from; a window shorter than the file may end mid-line.
-export const peekLines = (content: string, bytes: number, size: number): string => {
+export const quickLookLines = (content: string, bytes: number, size: number): string => {
     const lines = content.split(`\n`);
     const whole = bytes >= size;
     const kept = whole ? lines : lines.slice(0, -1);
-    return kept.slice(0, PEEK_LINES).join(`\n`);
+    return kept.slice(0, QUICK_LOOK_LINES).join(`\n`);
 };

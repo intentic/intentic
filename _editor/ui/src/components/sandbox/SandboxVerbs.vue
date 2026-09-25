@@ -87,8 +87,8 @@ const items = computed<MenuItem[]>(() => [
             :loading="menuBusy"
             :disabled="disabled"
             aria-haspopup="menu"
-            :aria-label="t(`ui.sandboxVerbs.moreActions`)"
-            v-tooltip.top="t(`ui.sandboxVerbs.moreActions`)"
+            :aria-label="t(`ui.action.moreActions`)"
+            v-tooltip.top="t(`ui.action.moreActions`)"
             @click="menu?.show($event)"
         >
             <template #icon><Icon name="ellipsis" /></template>

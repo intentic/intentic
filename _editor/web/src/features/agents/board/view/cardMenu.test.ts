@@ -69,7 +69,7 @@ describe(`what a card's menu offers`, () => {
     it(`keeps a look, and leaves the review to the card's own tap on a phone`, () => {
         expect(rows(menuItemsFor(landed, facts({ peeked: true, mobile: true }), actions()))).toEqual([
             t(`ui.action.open`),
-            t(`shared.keepOpen`),
+            t(`ui.action.keepOpen`),
             `—`,
             t(`agents.agentsView.copySessionName`),
             `—`,
@@ -78,7 +78,7 @@ describe(`what a card's menu offers`, () => {
     });
 
     it(`restores an archived card, and closes a draft that has nothing to file`, () => {
-        expect(rows(menuItemsFor(card(`old`, { archivedAt: 9 }), facts(), actions()))).toEqual([t(`ui.action.open`), `—`, t(`shared.restore`)]);
+        expect(rows(menuItemsFor(card(`old`, { archivedAt: 9 }), facts(), actions()))).toEqual([t(`ui.action.open`), `—`, t(`ui.action.restore`)]);
         expect(rows(menuItemsFor(card(`new`, { status: `draft` }), facts(), actions()))).toEqual([t(`ui.action.open`), `—`, t(`ui.action.close`)]);
     });
 
@@ -100,7 +100,7 @@ describe(`what a card's menu offers`, () => {
         const items = menuItemsFor(landed, facts({ peeked: true }), act);
         for (const label of [
             t(`ui.action.open`),
-            t(`shared.keepOpen`),
+            t(`ui.action.keepOpen`),
             reviewAction(landed)!,
             t(`agents.agentsView.copySessionName`),
             t(`agents.agentsView.archive`),
@@ -156,7 +156,7 @@ describe(`the one menu`, () => {
         expect(show.mock.calls).toEqual([[event]]);
         expect(rows(menu.cardMenuItems.value)).toEqual([
             t(`ui.action.open`),
-            t(`shared.keepOpen`),
+            t(`ui.action.keepOpen`),
             reviewAction(landed)!,
             `—`,
             t(`agents.agentsView.copySessionName`),

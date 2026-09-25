@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 import { clipboardOf } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 import { onScopeDispose, type Ref, ref } from "vue";
@@ -96,7 +97,7 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
             return;
         }
         if (clip.mode === `copy`) {
-            await copyInto(clip.paths, dir, `Couldn't paste those items.`);
+            await copyInto(clip.paths, dir, t(`workspace.fileVerbs.couldntPaste`));
             return;
         }
         const sources = movableInto(clip.paths, dir);
@@ -105,7 +106,7 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
             return;
         }
         const landed = sources.map((source) => landedAs(source, joinPath(dir, basename(source))));
-        const write = store.run(() => store.moveIntoMany(sources, dir), `Couldn't move those items.`);
+        const write = store.run(() => store.moveIntoMany(sources, dir), t(`workspace.fileVerbs.couldntMove`));
         revealLanded(dir, landed);
         await write;
     };
@@ -149,11 +150,11 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
     // rewrites one, and a drag that silently deleted from a zip would be the wrong surprise either way.
     const dragOnto = async (paths: readonly string[], dir: string): Promise<void> => {
         if (paths.some((path) => rules.archived(path))) {
-            await copyInto(paths, dir, `Couldn't copy those items out.`);
+            await copyInto(paths, dir, t(`workspace.fileVerbs.couldntCopyOut`));
             return;
         }
         const landed = paths.map((path) => landedAs(path, joinPath(dir, basename(path))));
-        const write = store.run(() => store.moveIntoMany(paths, dir), `Couldn't move those items.`);
+        const write = store.run(() => store.moveIntoMany(paths, dir), t(`workspace.fileVerbs.couldntMove`));
         // The folder dropped on stays as it was, but the nest opens: a file dropped into an open package folder would
         // otherwise vanish under its package.json.
         host.openNest(dir, landed);
@@ -238,8 +239,8 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
             const landed = await store.extractEntry(path);
             // An extract lands a folder unless the listing already says otherwise.
             revealLanded(parentDir(landed), [{ path: landed, type: host.byPath.value.get(landed)?.type ?? `dir` }]);
-            host.say(`Extracted to ${basename(landed)}`);
-        }, `Couldn't extract that.`);
+            host.say(t(`workspace.fileVerbs.extractedTo`, { name: basename(landed) }));
+        }, t(`workspace.fileVerbs.couldntExtract`));
     };
 
     return { stage, paste, extract, onCopyEvent, onPasteEvent, onPointerDown, carried, dropDir, dropLit, onDragOver, onDragLeave, onDrop };

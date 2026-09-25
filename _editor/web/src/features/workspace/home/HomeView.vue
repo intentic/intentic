@@ -23,7 +23,7 @@ import { homeGroups, homeOrder, labelsShown } from "./homeOrder";
 import { contentMatches, nameMatches, RESULTS_CAP } from "./homeResults";
 import { HOME_DIR_ACTIONS, HOME_SEARCH, useHome } from "./useHome";
 import { useHomeActions } from "./useHomeActions";
-import HomePeek from "./HomePeek.vue";
+import HomeQuickLook from "./HomeQuickLook.vue";
 import HomeTile from "./HomeTile.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -188,7 +188,7 @@ const { selection, select, clear, rules, inline, endEdit, transfer, menu, menuIt
         // Closures, not the functions: both are declared below, and are only ever called later.
         open: (entry) => open(entry),
         openCreated: (path) => {
-            // A new file opens straight into edit mode; kept, not previewed, so a later peek can't close it mid-type.
+            // A new file opens straight into edit mode; kept, not previewed, so a later look can't close it mid-type.
             openFile(path, `keep`);
             layout.setEditMode(true);
         },
@@ -206,7 +206,7 @@ const direction = ref<"forward" | "back">(`forward`);
 // `selected` is the shared current entry (useHome): a tile click lands here, and so does a click in the tree.
 const selectedEntry = computed(() => order.value.find((entry) => entry.path === selected.value));
 const go = (dir: string, toward: "forward" | "back"): void => {
-    closePeek();
+    closeLook();
     void endEdit(`cancel`);
     // A query is about the folder it was typed in; going somewhere else starts fresh.
     if (querying.value) {
@@ -266,7 +266,7 @@ const onTileSelect = (entry: WorkspaceTreeEntry, event: MouseEvent): void => {
 };
 
 const open = (entry: WorkspaceTreeEntry): void => {
-    closePeek();
+    closeLook();
     // A locked folder opens its explanation like a locked file: there is nothing inside it to enter.
     if (isLockedWorkspacePath(entry.path)) {
         openFile(entry.path, `keep`);
@@ -294,18 +294,18 @@ const open = (entry: WorkspaceTreeEntry): void => {
 // A short dwell before the first card, so a pointer crossing the home raises nothing; once one is up, the next tile
 // shows at once, and that readiness outlives a close by a moment, as tooltips do.
 const look = useHoverIntent({ open: 160, close: 150, warm: 300 });
-const peekAt = shallowRef<{ readonly entry: WorkspaceTreeEntry; readonly el: HTMLElement }>();
-const peekEntry = computed(() => (look.shown.value ? peekAt.value?.entry : undefined));
-const peekAnchor = computed(() => (look.shown.value ? peekAt.value?.el : undefined));
-const closePeek = (): void => look.hide();
+const lookAt = shallowRef<{ readonly entry: WorkspaceTreeEntry; readonly el: HTMLElement }>();
+const lookEntry = computed(() => (look.shown.value ? lookAt.value?.entry : undefined));
+const lookAnchor = computed(() => (look.shown.value ? lookAt.value?.el : undefined));
+const closeLook = (): void => look.hide();
 const onTileEnter = (entry: WorkspaceTreeEntry, el: HTMLElement): void => {
     // Nothing to look into: the padlock and the placeholder say all there is; a drag or a rename is not a look.
     if (isLockedWorkspacePath(entry.path) || pending(entry.path) || dragging.value || editing.value) {
-        closePeek();
+        closeLook();
         return;
     }
     look.enter(() => {
-        peekAt.value = { entry, el };
+        lookAt.value = { entry, el };
     });
 };
 const onTileLeave = (): void => look.leave();
@@ -351,7 +351,7 @@ const onNavigationKey = (event: KeyboardEvent): boolean => {
     }
     if (event.key === `Escape`) {
         clear();
-        closePeek();
+        closeLook();
         return true;
     }
     if (event.key === `Enter`) {
@@ -406,7 +406,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
         class="relative flex h-full min-h-0 flex-col bg-canvas focus:outline-none"
         tabindex="-1"
         @keydown="onKeydown"
-        @pointerdown="closePeek"
+        @pointerdown="closeLook"
         @pointerleave="onTileLeave"
         @click="onBackgroundClick"
         @contextmenu="onBackgroundMenu"
@@ -443,7 +443,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             <!-- Says why there is no New File here and why a drop bounces; the menu's own note only shows on a right-click. -->
             <span v-if="archiveHere" class="ui-chip ml-2 h-5 shrink-0 gap-1 px-1.5 text-2xs text-muted">
                 <Icon name="box" aria-hidden="true" />
-                {{ t(`shared.readOnly`) }}
+                {{ t(`workspace.words.readOnly`) }}
             </span>
             <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. -->
             <div v-if="search !== undefined" class="ml-auto flex items-center gap-2 pl-4">
@@ -472,7 +472,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                         v-if="query"
                         type="button"
                         class="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                        :aria-label="t(`shared.clearFilter`)"
+                        :aria-label="t(`ui.action.clearFilter`)"
                         @click.stop="clearQuery"
                     >
                         <Icon name="times" />
@@ -488,7 +488,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             class="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
             @scroll.passive="
                 bands.onScroll();
-                closePeek();
+                closeLook();
             "
         >
             <!-- The measure: one tile and one label wearing the real classes, laid out but not painted. Outside the
@@ -538,7 +538,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                 <input
                                     v-model="draft"
                                     type="text"
-                                    :aria-label="edit.type === 'dir' ? t(`shared.newFolderName`) : t(`shared.newFileName`)"
+                                    :aria-label="edit.type === 'dir' ? t(`workspace.words.newFolderName`) : t(`workspace.words.newFileName`)"
                                     class="ui-field-box ui-field-inline w-full min-w-0 px-1 text-center text-xs"
                                     :class="createError !== undefined ? 'ui-field-error-box' : ''"
                                     @click.stop
@@ -632,7 +632,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             </span>
         </div>
 
-        <HomePeek :entry="peekEntry" :anchor="peekAnchor" />
+        <HomeQuickLook :entry="lookEntry" :anchor="lookAnchor" />
         <ContextMenu ref="menu" :model="menuItems" :min-width="10" />
     </div>
 </template>

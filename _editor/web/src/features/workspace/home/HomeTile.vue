@@ -192,7 +192,7 @@ const seekFrame = (event: Event): void => {
                 v-if="entry.link !== undefined"
                 name="link"
                 class="absolute right-2 bottom-0 text-[0.65rem] text-subtle"
-                :aria-label="t(`shared.link`)"
+                :aria-label="t(`workspace.words.symlink`)"
             />
         </span>
         <!-- The field owns its keys (arrows move the caret, Enter commits, Escape cancels); none reach the home. -->

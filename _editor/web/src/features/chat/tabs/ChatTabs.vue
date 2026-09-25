@@ -56,7 +56,7 @@ const { agentById, rename, archive, fleet, open: openAgent } = useAgents();
 const { floats } = useChatFloating();
 const router = useRouter();
 // Tooltip and accessible name in one string; hidden where the panel already floats.
-const floatHint = computed(() => withShortcut(t(`shared.moveChatIntoNewWindow`), `chat.toggleFloating`));
+const floatHint = computed(() => withShortcut(t(`chat.words.moveChatIntoNewWindow`), `chat.toggleFloating`));
 // Moves the chat's home to the rail (a tile); return paths live on the tile itself and this bar's own menu.
 const railHint = computed(() => withShortcut(t(`chat.chatTabs.dockChatToRailHint`), `chat.toggleHome`));
 
@@ -184,22 +184,22 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
 const barMenu = ref<{ show: (event: Event) => void } | undefined>();
 const barVerbs = (): MenuItem[] => [
     {
-        label: t(`shared.closeFinished`),
+        label: t(`chat.words.closeFinished`),
         disabled: tabsInLane(`finished`).size === 0,
         shortcut: commandShortcut(`chat.closeFinishedTabs`),
         command: () => emit(`close`, tabsInLane(`finished`)),
     },
-    { label: t(`shared.closeAll2`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
-    { label: t(`shared.reopenClosedChat`), disabled: !hasClosed.value, shortcut: commandShortcut(`chat.reopenClosed`), command: () => reopenClosed() },
+    { label: t(`chat.words.closeAll`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
+    { label: t(`chat.words.reopenClosedChat`), disabled: !hasClosed.value, shortcut: commandShortcut(`chat.reopenClosed`), command: () => reopenClosed() },
     { separator: true },
     // The chat's other two homes, in the header buttons' own order: move within this window, then leave it.
     {
-        label: chatOnRail.value ? t(`shell.shellDesktop.dockChatBackTo`) : t(`shared.dockChatToRail`),
+        label: chatOnRail.value ? t(`shell.shellDesktop.dockChatBackTo`) : t(`chat.words.dockChatToRail`),
         shortcut: commandShortcut(`chat.toggleHome`),
         command: (): void => toggleChatHome(router),
     },
     {
-        label: floats.value ? t(`shared.dockChatBack`) : t(`shared.moveChatIntoNewWindow`),
+        label: floats.value ? t(`chat.words.dockChatBack`) : t(`chat.words.moveChatIntoNewWindow`),
         shortcut: commandShortcut(`chat.toggleFloating`),
         command: (): void => toggleChatFloating(),
     },
@@ -260,7 +260,7 @@ onMounted(() => {
     const entries: Omit<CommandRegistration, `owner`>[] = [
         {
             command: `chat.rename`,
-            title: t(`shared.rename`),
+            title: t(`ui.action.renameEllipsis`),
             icon: `pencil`,
             keybinding: `F2`,
             when: `tabSurface == 'chat'`,
@@ -286,7 +286,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeOtherTabs`,
-            title: t(`shared.closeOthers`),
+            title: t(`chat.words.closeOthers`),
             icon: `times`,
             keybinding: `Ctrl+Shift+,`,
             when: `tabSurface == 'chat'`,
@@ -299,7 +299,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeTabsToRight`,
-            title: t(`shared.closeToRight`),
+            title: t(`ui.action.closeToRight`),
             icon: `times`,
             keybinding: `Ctrl+Shift+.`,
             when: `tabSurface == 'chat'`,
@@ -314,7 +314,7 @@ onMounted(() => {
             // Unbound by default, no file-tab equivalent for "finished"; still reachable via the palette and
             // Keybindings.
             command: `chat.closeFinishedTabs`,
-            title: t(`shared.closeFinished`),
+            title: t(`chat.words.closeFinished`),
             icon: `times`,
             when: `tabSurface == 'chat'`,
             handler: (): void => {
@@ -326,7 +326,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeAllTabs`,
-            title: t(`shared.closeAll2`),
+            title: t(`chat.words.closeAll`),
             icon: `times`,
             keybinding: `Ctrl+Shift+Backspace`,
             when: `tabSurface == 'chat'`,
@@ -354,7 +354,7 @@ onMounted(() => {
         },
         {
             command: `chat.reopenClosed`,
-            title: t(`shared.reopenClosedChat`),
+            title: t(`chat.words.reopenClosedChat`),
             icon: `history`,
             when: `tabSurface == 'chat'`,
             handler: () => void reopenClosed(),
@@ -384,7 +384,7 @@ onMounted(() => {
         {
             // Unbound, like Close Finished, reachable from the row menu; takes back the column, the chat stays open.
             command: `chat.closePane`,
-            title: t(`shared.closePane`),
+            title: t(`chat.words.closePane`),
             when: `tabSurface == 'chat'`,
             handler: () => closePane(activeId.value),
         },
@@ -439,8 +439,8 @@ const openHistory = (event: Event): void => {
                 v-model="edit.draft"
                 type="text"
                 maxlength="80"
-                :aria-label="t(`shared.chatTitle`)"
-                :placeholder="active.isolated.value ? t(`shared.newAgent`) : t(`shared.newChat`)"
+                :aria-label="t(`chat.words.chatTitle`)"
+                :placeholder="active.isolated.value ? t(`chat.words.newAgent`) : t(`chat.words.newChat`)"
                 class="ui-field-box ui-field-inline h-7 min-w-0 flex-1 select-text px-2 text-2xs"
                 @keydown.enter.stop.prevent="edit.commit()"
                 @keydown.esc.stop.prevent="edit.cancel()"
@@ -478,7 +478,7 @@ const openHistory = (event: Event): void => {
                 <PresenceAvatars
                     v-if="active.session.value !== undefined"
                     :members="viewersOfSession(active.session.value.id)"
-                    :label="t(`shared.inChat`)"
+                    :label="t(`chat.words.inChat`)"
                 />
                 <!-- The other sessions (running, attention) as two compact marks instead of a truncated title. -->
                 <span
@@ -519,8 +519,8 @@ const openHistory = (event: Event): void => {
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="keepChat(active.conversationId)"
-                v-tooltip.bottom="t(`shared.keepOpenOtherwiseChat`)"
-                :aria-label="t(`shared.keepChatOpen`)"
+                v-tooltip.bottom="t(`chat.words.keepOpenOtherwiseChat`)"
+                :aria-label="t(`chat.words.keepChatOpen`)"
             >
                 <Icon name="pin" class="text-sm" />
             </button>
@@ -528,8 +528,8 @@ const openHistory = (event: Event): void => {
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="startAgent()"
-                v-tooltip.bottom="t(`shared.newAgent`)"
-                :aria-label="t(`shared.newAgent`)"
+                v-tooltip.bottom="t(`chat.words.newAgent`)"
+                :aria-label="t(`chat.words.newAgent`)"
             >
                 <Icon name="plus" class="text-sm" />
             </button>
@@ -565,7 +565,7 @@ const openHistory = (event: Event): void => {
 
         <!-- Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no ellipsis (there's no chooser to promise). -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
-            <Button size="small" @click="startAgent()"> <Icon name="plus" />{{ t(`shared.newAgent`) }} </Button>
+            <Button size="small" @click="startAgent()"> <Icon name="plus" />{{ t(`chat.words.newAgent`) }} </Button>
             <button type="button" class="composer-ghost h-7 gap-1.5 px-2 text-2xs" @click="openHistory">
                 <Icon name="history" class="text-2xs" />
                 <span>{{ t(`chat.chatTabs.pastChats`) }}</span>
@@ -588,8 +588,8 @@ const openHistory = (event: Event): void => {
                     v-model="query"
                     variant="field"
                     clearable
-                    :aria-label="t(`shared.searchChats`)"
-                    :placeholder="t(`shared.searchChats2`)"
+                    :aria-label="t(`chat.words.searchChats`)"
+                    :placeholder="t(`chat.words.searchChatsEllipsis`)"
                     class="m-1 shrink-0"
                 />
                 <div class="flex min-h-0 max-h-80 flex-col gap-0.5 overflow-auto p-1 pt-0">

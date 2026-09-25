@@ -115,7 +115,7 @@ const lone = computed(() => (manySided(machine) ? undefined : machine.environmen
                         <span v-else-if="line.running === undefined" class="shrink-0 text-2xs text-muted">{{
                             t(`sandbox.deviceBoardCard.notRunningHere`)
                         }}</span>
-                        <StatusBadge v-if="line.self" variant="info" size="xs" :label="t(`shared.oneYoureUsing`)" class="shrink-0" />
+                        <StatusBadge v-if="line.self" variant="info" size="xs" :label="t(`sandbox.words.oneYoureUsing`)" class="shrink-0" />
                         <!-- Facts are counted and uncoloured; a warning keeps its ink and is the reason to open this machine. -->
                         <span class="ml-auto flex min-w-0 shrink items-center gap-x-2.5 pl-3">
                             <span v-for="fact in line.facts" :key="fact" class="shrink-0 text-2xs text-subtle">{{ fact }}</span>

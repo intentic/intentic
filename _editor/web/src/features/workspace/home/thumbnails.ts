@@ -5,7 +5,7 @@ import { sandboxBlob } from "../../sandbox/client/sandboxClient";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { mediaUrl } from "../files/mediaUrl";
 import { workspaceAgent } from "../health/workspaceScope";
-import { peekPlan } from "./peekContent";
+import { quickLookPlan } from "./quickLookContent";
 
 // A workspace file at the size it is drawn: a daemon rendition (`tile`, `strip`, `view`) or its own bytes (`original`).
 
@@ -125,7 +125,7 @@ export const downloadOriginal = async (scope: string | undefined, path: string):
 export type ThumbnailKind = "picture" | "video";
 
 export const thumbnailKind = (entry: WorkspaceTreeEntry): ThumbnailKind | undefined => {
-    const { kind } = peekPlan(entry);
+    const { kind } = quickLookPlan(entry);
     return kind === `picture` || kind === `video` ? kind : undefined;
 };
 

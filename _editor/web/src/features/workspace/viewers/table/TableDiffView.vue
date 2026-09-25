@@ -100,7 +100,7 @@ const plain = (cell: CellDiff): string => cell.after ?? cell.before ?? ``;
                     sheetBadge(sheet.kind)
                 }}</span>
                 <span v-else-if="sheet.kind === `changed`" class="text-2xs tabular-nums text-muted">
-                    {{ t(`shared.rowsChanged`, { count: sheet.changedRows }, sheet.changedRows) }}
+                    {{ t(`workspace.words.rowsChanged`, { count: sheet.changedRows }, sheet.changedRows) }}
                 </span>
                 <span v-else class="text-2xs text-subtle">{{ t(`workspace.tableDiffView.unchanged`) }}</span>
             </header>

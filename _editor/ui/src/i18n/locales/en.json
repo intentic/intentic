@@ -1,42 +1,70 @@
 {
     "action": {
         "add": "Add",
+        "answer": "Answer",
         "apply": "Apply",
         "approve": "Approve",
         "back": "Back",
+        "browse": "Browse",
         "cancel": "Cancel",
+        "checkAgain": "Check again",
         "clear": "Clear",
+        "clearFilter": "Clear filter",
         "close": "Close",
+        "closeToRight": "Close to the Right",
         "connect": "Connect",
         "continue": "Continue",
         "copied": "Copied",
         "copy": "Copy",
+        "copyLink": "Copy link",
         "create": "Create",
         "delete": "Delete",
+        "discard": "Discard",
         "disconnect": "Disconnect",
         "dismiss": "Dismiss",
         "done": "Done",
         "download": "Download",
         "edit": "Edit",
+        "filter": "Filter…",
+        "keepOpen": "Keep Open",
+        "leave": "Leave",
+        "moreActions": "More actions",
         "next": "Next",
+        "no": "No",
         "open": "Open",
+        "openInNewTab": "Open in new tab",
+        "paste": "Paste",
+        "publish": "Publish",
+        "reconnect": "Reconnect",
         "refresh": "Refresh",
+        "reload": "Reload",
         "remove": "Remove",
         "rename": "Rename",
+        "renameEllipsis": "Rename…",
+        "restart": "Restart",
+        "restore": "Restore",
         "retry": "Retry",
+        "revoke": "Revoke",
         "save": "Save",
         "send": "Send",
+        "settings": "Settings…",
+        "showFewer": "Show fewer",
+        "showLess": "Show less",
+        "signIn": "Sign in",
+        "skip": "Skip",
         "start": "Start",
+        "startOver": "Start over",
         "stop": "Stop",
         "tryAgain": "Try again",
-        "update": "Update"
+        "undo": "Undo",
+        "update": "Update",
+        "viewLogs": "View logs"
     },
     "agentRunButton": {
         "configureStartRun": "Configure and start this run — {spend}"
     },
     "code": {
-        "showAll": "Show all",
-        "showLess": "Show less"
+        "showAll": "Show all"
     },
     "colorPicker": {
         "accentColour": "Accent colour",
@@ -97,12 +125,6 @@
         "sync": "Sync",
         "working": "working…"
     },
-    "deviceRunLog": {
-        "working": "Working…"
-    },
-    "filterBar": {
-        "filter": "Filter…"
-    },
     "imageView": {
         "actualSize1": "Actual size (1)",
         "ctrlScrollToZoom": "Ctrl + scroll to zoom · drag to pan · double-click to fit",
@@ -128,15 +150,11 @@
     "markdownDocumentSurface": {
         "document": "Document"
     },
-    "navRail": {
-        "filter": "Filter…"
-    },
     "noteEditor": {
         "copyRawNote": "Copy the raw note",
         "editNote": "Edit this note",
         "it": "{verb} it",
         "keep": "Keep it",
-        "loading": "Loading…",
         "note": "{verb} this note",
         "note2": "Note",
         "unsaved": "unsaved",
@@ -194,14 +212,9 @@
         "sandboxRestartsOntoImage": "The sandbox restarts onto the image it ran before its last update. Its files are kept.",
         "sandboxRestartsOntoNewest": "The sandbox restarts onto the newest image and is unavailable while that happens — seconds if the update is already downloaded, a few minutes if not. Its files are kept."
     },
-    "sandboxVerbs": {
-        "moreActions": "More actions"
-    },
     "searchBar": {
         "aa": "Aa",
         "clearEsc": "Clear (Esc)",
-        "clearFilter": "Clear filter",
-        "filter": "Filter…",
         "matchCase": "Match case"
     },
     "stepSection": {
@@ -213,5 +226,15 @@
     "useOsPreference": {
         "linuxMacos": "Linux / macOS",
         "windowsPowershell": "Windows (PowerShell)"
+    },
+    "resizeSeam": {
+        "dragToResize": "Drag to resize · double-click to reset"
+    },
+    "status": {
+        "starting": "Starting…",
+        "loading": "Loading…",
+        "working": "Working…",
+        "reading": "Reading…",
+        "sending": "Sending…"
     }
 }

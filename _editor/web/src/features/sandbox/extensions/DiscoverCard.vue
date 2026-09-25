@@ -45,7 +45,7 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
                         name="shield"
                         class="shrink-0 text-success"
                         v-tooltip.top="listing.entry.trustReason ?? t(`sandbox.discoverCard.deterministicScanAgentAudit`)"
-                        :aria-label="t(`shared.verified`)"
+                        :aria-label="t(`sandbox.words.verified`)"
                     />
                 </div>
                 <div v-if="name.publisher !== ``" class="truncate text-2xs text-subtle">{{ name.publisher }}</div>

@@ -64,7 +64,7 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <Modal v-model:open="open" size="md" :header="t(`shared.newExtension`)">
+    <Modal v-model:open="open" size="md" :header="t(`sandbox.words.newExtension`)">
         <div class="flex flex-col gap-4">
             <p class="text-2xs text-subtle">
                 {{ t(`sandbox.newExtensionDialog.writesWorkingExtensionInto`) }}

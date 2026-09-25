@@ -1,42 +1,70 @@
 {
     "action": {
         "add": "Hinzufügen",
+        "answer": "Antworten",
         "apply": "Übernehmen",
         "approve": "Genehmigen",
         "back": "Zurück",
+        "browse": "Durchsuchen",
         "cancel": "Abbrechen",
+        "checkAgain": "Erneut prüfen",
         "clear": "Leeren",
+        "clearFilter": "Filter leeren",
         "close": "Schließen",
+        "closeToRight": "Nach rechts schließen",
         "connect": "Verbinden",
         "continue": "Fortfahren",
         "copied": "Kopiert",
         "copy": "Kopieren",
+        "copyLink": "Link kopieren",
         "create": "Erstellen",
         "delete": "Löschen",
+        "discard": "Verwerfen",
         "disconnect": "Trennen",
         "dismiss": "Ausblenden",
         "done": "Fertig",
         "download": "Herunterladen",
         "edit": "Bearbeiten",
+        "filter": "Filtern…",
+        "keepOpen": "Offen halten",
+        "leave": "Verlassen",
+        "moreActions": "Weitere Aktionen",
         "next": "Weiter",
+        "no": "Nein",
         "open": "Öffnen",
+        "openInNewTab": "In neuem Tab öffnen",
+        "paste": "Einfügen",
+        "publish": "Veröffentlichen",
+        "reconnect": "Neu verbinden",
         "refresh": "Neu laden",
+        "reload": "Neu laden",
         "remove": "Entfernen",
         "rename": "Umbenennen",
+        "renameEllipsis": "Umbenennen…",
+        "restart": "Neu starten",
+        "restore": "Wiederherstellen",
         "retry": "Wiederholen",
+        "revoke": "Widerrufen",
         "save": "Speichern",
         "send": "Senden",
+        "settings": "Einstellungen…",
+        "showFewer": "Weniger anzeigen",
+        "showLess": "Weniger anzeigen",
+        "signIn": "Anmelden",
+        "skip": "Überspringen",
         "start": "Starten",
+        "startOver": "Von vorn beginnen",
         "stop": "Stoppen",
         "tryAgain": "Erneut versuchen",
-        "update": "Aktualisieren"
+        "undo": "Rückgängig",
+        "update": "Aktualisieren",
+        "viewLogs": "Protokolle ansehen"
     },
     "agentRunButton": {
         "configureStartRun": "Diesen Lauf einrichten und starten — {spend}"
     },
     "code": {
-        "showAll": "Alle anzeigen",
-        "showLess": "Weniger anzeigen"
+        "showAll": "Alle anzeigen"
     },
     "colorPicker": {
         "accentColour": "Akzentfarbe",
@@ -85,12 +113,6 @@
         "stopped": "gestoppt",
         "sync": "Synchronisierung"
     },
-    "deviceRunLog": {
-        "working": "Läuft…"
-    },
-    "filterBar": {
-        "filter": "Filtern…"
-    },
     "imageView": {
         "actualSize1": "Originalgröße (1)",
         "ctrlScrollToZoom": "Strg + Scrollen zum Zoomen · Ziehen zum Verschieben · Doppelklick zum Einpassen",
@@ -116,15 +138,11 @@
     "markdownDocumentSurface": {
         "document": "Dokument"
     },
-    "navRail": {
-        "filter": "Filtern…"
-    },
     "noteEditor": {
         "copyRawNote": "Rohtext der Notiz kopieren",
         "editNote": "Diese Notiz bearbeiten",
         "it": "{verb}",
         "keep": "Behalten",
-        "loading": "Wird geladen…",
         "note": "{verb}",
         "note2": "Notiz",
         "unsaved": "nicht gespeichert",
@@ -178,13 +196,8 @@
         "sandboxRestartsOntoImage": "Die Sandbox startet auf dem Image neu, das sie vor ihrem letzten Update hatte. Ihre Dateien bleiben erhalten.",
         "sandboxRestartsOntoNewest": "Die Sandbox startet auf dem neuesten Image neu und ist währenddessen nicht verfügbar — Sekunden, wenn das Update schon heruntergeladen ist, sonst ein paar Minuten. Ihre Dateien bleiben erhalten."
     },
-    "sandboxVerbs": {
-        "moreActions": "Weitere Aktionen"
-    },
     "searchBar": {
         "clearEsc": "Leeren (Esc)",
-        "clearFilter": "Filter leeren",
-        "filter": "Filtern…",
         "matchCase": "Groß-/Kleinschreibung beachten"
     },
     "stepSection": {
@@ -192,5 +205,15 @@
     },
     "timeWindow": {
         "all": "Alle"
+    },
+    "resizeSeam": {
+        "dragToResize": "Ziehen zum Ändern der Größe · Doppelklick zum Zurücksetzen"
+    },
+    "status": {
+        "starting": "Startet…",
+        "loading": "Wird geladen…",
+        "working": "Arbeitet…",
+        "reading": "Wird gelesen…",
+        "sending": "Wird gesendet…"
     }
 }

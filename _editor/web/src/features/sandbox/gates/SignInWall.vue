@@ -156,10 +156,10 @@ const backToSetup = async (): Promise<void> => {
                                 v-model="label"
                                 type="text"
                                 autocomplete="off"
-                                :placeholder="t(`shared.nameEGWork`)"
+                                :placeholder="t(`sandbox.words.nameEGWork`)"
                                 :class="ui.inputSm(`w-full`)"
                             />
-                            <Button type="submit" :label="t(`shared.addPasskey`)" class="w-full justify-center" :loading="busy">
+                            <Button type="submit" :label="t(`sandbox.words.addPasskey`)" class="w-full justify-center" :loading="busy">
                                 <template #icon><Icon name="key" /></template>
                             </Button>
                         </form>
@@ -203,7 +203,7 @@ const backToSetup = async (): Promise<void> => {
                     <!-- Google's own button does nothing when clicked here, so the desktop app hands off to the real browser instead. -->
                     <Button
                         v-if="desktop"
-                        :label="t(`shared.continueGoogleInBrowser`)"
+                        :label="t(`auth.words.continueGoogleInBrowser`)"
                         severity="secondary"
                         class="mt-2 w-full justify-center"
                         @click="signInOutside"

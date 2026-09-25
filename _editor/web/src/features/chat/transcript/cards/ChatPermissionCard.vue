@@ -62,9 +62,9 @@ const commandOpen = ref(false);
                 tone="secondary"
                 icon="times"
                 :disabled="settling"
-                v-tooltip.bottom="t(`shared.alsoStopsTurn`)"
+                v-tooltip.bottom="t(`chat.words.alsoStopsTurn`)"
                 @click="reply({ kind: 'permission', decision: 'deny' })"
-                >{{ t(`shared.no`) }}</ChatDecisionButton
+                >{{ t(`ui.action.no`) }}</ChatDecisionButton
             >
         </template>
     </ChatCard>

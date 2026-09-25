@@ -38,7 +38,7 @@ const applyNotice = computed<NoticeModel | undefined>(() =>
                     }}
                 </span>
             </div>
-            <Button :label="t(`shared.viewLogs`)" size="small" severity="secondary" :text="true" @click="progress.viewLogs()">
+            <Button :label="t(`ui.action.viewLogs`)" size="small" severity="secondary" :text="true" @click="progress.viewLogs()">
                 <template #icon><Icon name="window-maximize" /></template>
             </Button>
         </div>

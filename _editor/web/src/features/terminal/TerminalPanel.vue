@@ -203,7 +203,7 @@ watch(
             :min="MIN_HEIGHT"
             :max="maxHeight"
             :reset="DEFAULT_HEIGHT"
-            :title="t(`shared.dragToResizeDouble`)"
+            :title="t(`ui.resizeSeam.dragToResize`)"
         />
         <TerminalStrip :tabs="tabs" :floating="floating" :vertical="vertical">
             <WorkTerminals />
@@ -243,7 +243,7 @@ watch(
                 <div class="flex items-start gap-2">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
                     <div class="min-w-0 flex-1 text-xs text-content">
-                        <span class="font-medium">{{ t(`shared.agentNeedsHelp`) }}</span>
+                        <span class="font-medium">{{ t(`chat.words.agentNeedsHelp`) }}</span>
                         {{ help.message }}
                         <span class="text-muted">{{ t(`terminal.terminalPanel.typeBelowHandBack`) }}</span>
                     </div>
@@ -252,13 +252,13 @@ watch(
                     <input
                         v-model="helpNote"
                         type="text"
-                        :placeholder="t(`shared.optionalNoteBackTo`)"
+                        :placeholder="t(`chat.words.optionalNoteBackTo`)"
                         class="ui-field-box ui-field-sm min-w-40 flex-1"
                         @keydown.enter="resolveHelp(true)"
                     />
-                    <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> {{ t(`shared.doneHandBack`) }} </Button>
+                    <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> {{ t(`chat.words.doneHandBack`) }} </Button>
                     <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)">
-                        {{ t(`shared.cantHelpNow`) }}
+                        {{ t(`chat.words.cantHelpNow`) }}
                     </Button>
                 </div>
             </div>
@@ -408,7 +408,7 @@ watch(
                         />
                     </template>
                     <span v-else-if="scrollbackFailed">{{ t(`terminal.terminalPanel.couldntReadTerminalsScrollback`) }}</span>
-                    <span v-else-if="scrollbackPending">{{ t(`shared.reading`) }}</span>
+                    <span v-else-if="scrollbackPending">{{ t(`ui.status.reading`) }}</span>
                 </div>
                 <pre
                     v-if="scrollback"

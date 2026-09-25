@@ -170,7 +170,7 @@ const commandSummary = (program: string): string => {
             </template>
         </FilterBar>
 
-        <RowGroup :label="t(`shared.recentDecisions`)">
+        <RowGroup :label="t(`sandbox.words.recentDecisions`)">
             <SkeletonRows v-if="isLoading" :rows="4" description />
 
             <RowNote v-else-if="error !== undefined" variant="block">

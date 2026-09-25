@@ -103,8 +103,8 @@ const commandOpen = ref(false);
                 v-if="terminal !== undefined"
                 type="button"
                 class="-mr-1 flex shrink-0 items-center rounded p-0.5 transition-colors hover:bg-overlay hover:text-content"
-                v-tooltip.top="t(`shared.watchInTerminal`)"
-                :aria-label="t(`shared.watchInTerminal`)"
+                v-tooltip.top="t(`chat.words.watchInTerminal`)"
+                :aria-label="t(`chat.words.watchInTerminal`)"
                 @click="surface.watchTerminal?.(terminal)"
             >
                 <Icon name="desktop" class="text-2xs" />

@@ -218,7 +218,7 @@ const emptyNote = computed<string | undefined>(() => {
     <div class="flex flex-col gap-5">
         <!-- Where the list came from, stated rather than asked for; changing it is one click, not a blocking field. -->
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs">
-            <span class="text-subtle">{{ t(`shared.source`) }}</span>
+            <span class="text-subtle">{{ t(`sandbox.words.source`) }}</span>
             <span class="font-medium text-content">{{
                 isOfficial ? (registryName ?? t(`sandbox.extensionsBrowse.officialRegistry`)) : (registryName ?? url)
             }}</span>
@@ -246,7 +246,7 @@ const emptyNote = computed<string | undefined>(() => {
                     @keyup.enter="applyChange"
                 />
                 <input v-model="draftToken" type="password" autocomplete="off" :placeholder="t(`shared.token`)" :class="ui.input(`w-32`)" />
-                <Button :label="t(`shared.browse`)" size="small" :disabled="draftUrl.trim() === ``" @click="applyChange" />
+                <Button :label="t(`ui.action.browse`)" size="small" :disabled="draftUrl.trim() === ``" @click="applyChange" />
                 <Button :label="t(`ui.action.cancel`)" size="small" text @click="changing = false" />
             </div>
             <p class="text-2xs text-subtle">{{ t(`sandbox.extensionsBrowse.tokenOnlyNeededPrivate`) }}</p>
@@ -286,7 +286,7 @@ const emptyNote = computed<string | undefined>(() => {
 
         <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-8`)">
             <span>{{ emptyNote }}</span>
-            <Button v-if="listings.length > 0" size="small" :label="t(`shared.clearFilter`)" @click="emit(`clear`)" />
+            <Button v-if="listings.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="emit(`clear`)" />
         </div>
 
         <!-- The first place this app says publishing is possible, and how cheap it is (a repo topic, no account or queue). -->

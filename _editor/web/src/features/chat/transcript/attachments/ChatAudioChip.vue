@@ -198,7 +198,7 @@ watch(
                     :type="openable ? `button` : undefined"
                     class="flex min-w-0 items-center text-left text-xs text-content"
                     :class="openable ? `cursor-pointer` : ``"
-                    :aria-label="openable ? t(`shared.openInWorkspace`, { name }) : undefined"
+                    :aria-label="openable ? t(`chat.words.openInWorkspace`, { name }) : undefined"
                     @click="openable && open()"
                 >
                     <ChatChipName :name="name" />

@@ -71,7 +71,7 @@ const mayRelease = computed(() => {
                 :disabled="settling || !mayRelease"
                 v-tooltip="mayRelease ? undefined : t(`chat.chatMessageView.onlyCanAnswer`, { approvers: card.offer.approvers.join(`, `) })"
                 @click="reply({ kind: 'credential_offer', approve: false })"
-                >{{ t(`shared.skip`) }}</ChatDecisionButton
+                >{{ t(`ui.action.skip`) }}</ChatDecisionButton
             >
         </template>
     </ChatCard>

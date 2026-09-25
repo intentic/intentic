@@ -30,7 +30,7 @@ const query = defineModel<string>({ required: true });
         <div class="ui-search-row flex h-8 min-w-40 flex-1 items-center overflow-hidden rounded-md border border-line bg-canvas">
             <SearchBar
                 v-model="query"
-                :placeholder="placeholder ?? t(`ui.filterBar.filter`)"
+                :placeholder="placeholder ?? t(`ui.action.filter`)"
                 :busy="busy"
                 :clearable="clearable"
                 :aria-label="ariaLabel"

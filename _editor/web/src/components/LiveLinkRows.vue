@@ -220,8 +220,8 @@ const openMenu = (id: string, event: Event): void => {
 const items = computed<MenuItem[]>(() => {
     const id = menuFor.value ?? ``;
     return [
-        { label: t(`shared.settings2`), icon: `cog`, command: () => emit(`edit`, id) },
-        { label: t(`shared.rename`), icon: `pencil`, command: () => emit(`rename`, id) },
+        { label: t(`ui.action.settings`), icon: `cog`, command: () => emit(`edit`, id) },
+        { label: t(`ui.action.renameEllipsis`), icon: `pencil`, command: () => emit(`rename`, id) },
         { label: t(`ui.action.remove`), icon: `trash`, danger: true, command: () => emit(`remove`, id) },
     ];
 });
@@ -279,7 +279,7 @@ const items = computed<MenuItem[]>(() => {
                         :loading="busy.has(row.id)"
                         @click="onOpen(row.id)"
                     />
-                    <button type="button" :class="ui.iconButton()" :aria-label="t(`shared.moreActions`)" @click="openMenu(row.id, $event)">
+                    <button type="button" :class="ui.iconButton()" :aria-label="t(`ui.action.moreActions`)" @click="openMenu(row.id, $event)">
                         <Icon name="ellipsis" />
                     </button>
                 </div>

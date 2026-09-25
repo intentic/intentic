@@ -87,7 +87,7 @@ const PLACEHOLDER: Record<SendIntent, (words: ComposerWords) => string> = {
     // Read only once the box is cleared, exactly when "what was I doing?" needs answering.
     edit: () => t(`chat.composerIntent.placeholderEdit`),
     plan: () => t(`chat.composerIntent.placeholderPlan`),
-    idle: (words) => (words.onTrial ? t(`shared.askAnything`) : t(`chat.composerIntent.placeholderIdle`, { provider: words.provider })),
+    idle: (words) => (words.onTrial ? t(`chat.words.askAnything`) : t(`chat.composerIntent.placeholderIdle`, { provider: words.provider })),
     parked: () => t(`chat.composerIntent.placeholderParked`),
     steer: (words) => t(`chat.composerIntent.placeholderSteer`, { provider: words.provider }),
     queue: () => t(`chat.composerIntent.placeholderQueue`),

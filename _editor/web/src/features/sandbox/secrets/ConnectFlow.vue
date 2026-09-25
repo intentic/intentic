@@ -339,7 +339,7 @@ watch(flow, (live) => {
                 <button v-if="!namingAccount" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingAccount = true">
                     {{ t(`sandbox.connectFlow.nameAccount`) }}
                 </button>
-                <input v-else v-model="connectLabel" name="accountLabel" :placeholder="t(`shared.accountName`)" :class="ui.inputSm(`min-w-0`)" />
+                <input v-else v-model="connectLabel" name="accountLabel" :placeholder="t(`sandbox.words.accountName`)" :class="ui.inputSm(`min-w-0`)" />
             </template>
         </template>
     </div>

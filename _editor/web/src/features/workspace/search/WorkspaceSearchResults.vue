@@ -259,7 +259,7 @@ const onKeydown = (event: KeyboardEvent): void => {
                     @click="emit('loadMore')"
                 >
                     <Icon :name="loadingMore ? `spinner` : `chevron-down`" :spin="loadingMore" class="text-[0.6rem]" />
-                    {{ loadingMore ? t(`shared.loading`) : t(`workspace.workspaceSearchResults.showMoreMatches`) }}
+                    {{ loadingMore ? t(`ui.status.loading`) : t(`workspace.workspaceSearchResults.showMoreMatches`) }}
                 </button>
             </div>
         </div>

@@ -31,6 +31,14 @@ Each package registers its own slice of one message tree, so no two packages can
 | [`_editor/share-view/src/i18n/locales`](../../_editor/share-view/src/i18n/locales) | `share.` |
 | each extension's `src/locales` | `ext.<extension id>.` |
 
+Inside the editor's own catalog, a word's key says who owns its meaning, not who happened to say it first:
+
+- `ui.action.*` in the kit holds a verb any control can carry (Cancel, Restore, Show less), and `ui.status.*` the progress words (Loading…, Working…).
+- `shared.*` holds a noun, or the state a thing is in, that means the same in every feature saying it: the sections' own names, Agent, Model, Running. The same English is not a reason to share a key. "Access" the sandbox section and "Access" a capability's grant are two keys.
+- `<area>.words.*` holds a word several of one feature's components say. A phrase another feature borrows stays with the feature it belongs to.
+
+Every top-level section of the editor's catalog is typed in [`app/i18n/index.ts`](../../_editor/web/src/app/i18n/index.ts), and `i18nSections.test.ts` fails on one that is not.
+
 An extension builds its catalog and translator in one call, `extensionI18n` from [`_shared/extension-ui/src/i18n.ts`](../../_shared/extension-ui/src/i18n.ts), and the host mounts it before calling `activate`. The loader stays a literal template (`import(\`./locales/${locale}.json\`)`) so the bundler emits one chunk per language.
 
 ## Words are built when they are read
@@ -45,6 +53,6 @@ An extension builds its catalog and translator in one call, `extensionI18n` from
 
 - [`i18n-catalogs.mjs`](../../_tools/checks/i18n-catalogs.mjs): a translation holds only keys English has, with the same placeholders and plural forms. `--fix` drops the extras.
 - [`i18n-keys.mjs`](../../_tools/checks/i18n-keys.mjs): every `t()` key exists, every message is used, and every message compiles. vue-i18n's `t` accepts any string, so the compiler cannot catch a typo.
-- [`i18n-literals.mjs`](../../_tools/checks/i18n-literals.mjs): no English typed into a shipped `.vue` template.
+- [`i18n-literals.mjs`](../../_tools/checks/i18n-literals.mjs): no English typed into a shipped `.vue` template, nor handed from code to what says it on screen (`say`, `warn`, `noticeOf`, `noticeFrom`, a store's `run(task, wrote)`).
 
 The daemon, the CLIs and the public site do not render through vue-i18n and are outside these rules.

@@ -1,4 +1,5 @@
 import { commandShortcut } from "../../../../shell/commands/useCommands";
+import { t } from "@intentic/ui/i18n";
 import { useNotifications } from "../../../../shell/notifications/notifications";
 import { type DeleteBatch, takeDelete } from "./deleteUndo";
 import { restoredReceipt } from "../entryNames";
@@ -27,11 +28,11 @@ export const useDeleteUndo = () => {
                 gone,
             );
             if (said === undefined) {
-                warn(gone === 1 ? `That is no longer in the trash` : `Those are no longer in the trash`);
+                warn(t(`workspace.fileVerbs.noLongerInTrash`, {}, gone));
                 return;
             }
             say(said);
-        }, `Couldn't restore that.`);
+        }, t(`workspace.fileVerbs.couldntRestore`));
     };
 
     // A delete's receipt, whose Undo takes back exactly that batch and whose tooltip names the chord where one is bound.

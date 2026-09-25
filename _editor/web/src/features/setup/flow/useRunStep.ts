@@ -65,7 +65,7 @@ export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, openDes
     });
     // Labels shed a qualifier on a phone; compose's own label lives in its panel's first line, not the tab.
     const runTabOptions = computed(() => [
-        { label: t(`shared.linuxMacos`), value: `unix` as const },
+        { label: t(`ui.useOsPreference.linuxMacos`), value: `unix` as const },
         { label: mobile.value ? `Windows` : `Windows (PowerShell)`, value: `windows` as const },
         { label: mobile.value ? `Compose` : `Docker Compose`, value: `compose` as const, title: t(`setup.setup.noScriptRunsRead`) },
     ]);

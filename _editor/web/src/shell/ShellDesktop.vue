@@ -52,7 +52,7 @@ import { useLiveLinks } from "../features/sandbox/devices/useLiveLinks";
 import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
-import { chatDock, terminalDock } from "./window/dockSlots";
+import { chatSlot, terminalSlot } from "./window/panelSlots";
 import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { useRailPins } from "./rail/railPins";
 import RailIcon from "./rail/RailIcon.vue";
@@ -699,8 +699,8 @@ useKeybindings();
                     ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),
                     { 'border-link bg-primary-600/15 text-link': isNavActive('/capabilities') },
                 ]"
-                :aria-label="t(`shared.addCapability`)"
-                v-tooltip.right="t(`shared.addCapability`)"
+                :aria-label="t(`shell.words.addCapability`)"
+                v-tooltip.right="t(`shell.words.addCapability`)"
             >
                 <RailIcon section="capabilities" class="icon-rail-glyph" />
             </RouterLink>
@@ -710,7 +710,7 @@ useKeybindings();
         </nav>
 
         <!-- This slot serves the panel's docked and floating instances. -->
-        <div ref="chatDock" class="contents"></div>
+        <div ref="chatSlot" class="contents"></div>
 
         <main ref="page" class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
             <SandboxGate>
@@ -718,7 +718,7 @@ useKeybindings();
                     <RouterView />
                 </div>
                 <!-- Inside the gate: a docked terminal stays mounted through a stall, its own recovery keeping scrollback. -->
-                <div ref="terminalDock" class="contents"></div>
+                <div ref="terminalSlot" class="contents"></div>
             </SandboxGate>
         </main>
 

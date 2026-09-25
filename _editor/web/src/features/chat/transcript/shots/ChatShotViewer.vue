@@ -168,8 +168,8 @@ watch(at, async () => {
                     v-if="surface.openFile"
                     type="button"
                     :class="ui.iconButton()"
-                    :aria-label="t(`shared.openInWorkspace2`)"
-                    v-tooltip.bottom="t(`shared.openInWorkspace2`)"
+                    :aria-label="t(`chat.words.openInWorkspaceShort`)"
+                    v-tooltip.bottom="t(`chat.words.openInWorkspaceShort`)"
                     @click="openInWorkspace"
                 >
                     <Icon name="external-link" class="text-xs" />
@@ -195,7 +195,7 @@ watch(at, async () => {
                         @click="actual = !actual"
                     />
                     <p v-else-if="drawn" class="m-auto flex items-center gap-1.5 text-xs text-subtle">
-                        <Icon name="image" class="text-xs" />{{ t(`shared.gone`) }}
+                        <Icon name="image" class="text-xs" />{{ t(`chat.words.gone`) }}
                     </p>
                     <Icon v-else name="spinner" spin class="m-auto text-subtle" />
                 </div>

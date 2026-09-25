@@ -503,8 +503,8 @@ watch(
                     <button
                         type="button"
                         :class="ui.iconButton()"
-                        :aria-label="t(`shared.reload`)"
-                        v-tooltip.bottom="t(`shared.reload`)"
+                        :aria-label="t(`ui.action.reload`)"
+                        v-tooltip.bottom="t(`ui.action.reload`)"
                         @click="view.reload()"
                     >
                         <Icon name="refresh" class="text-2xs" />
@@ -619,10 +619,10 @@ watch(
                             />
                             <div class="flex justify-end gap-2">
                                 <Button v-if="dialog.kind !== `alert`" size="small" severity="secondary" @click="answerDialog(false)">
-                                    {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.stay`) : t(`shared.cancel`) }}
+                                    {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.stay`) : t(`ui.action.cancel`) }}
                                 </Button>
                                 <Button size="small" @click="answerDialog(true)">
-                                    {{ dialog.kind === `beforeunload` ? t(`shared.leave`) : t(`browsers.browsers.ok`) }}
+                                    {{ dialog.kind === `beforeunload` ? t(`ui.action.leave`) : t(`browsers.browsers.ok`) }}
                                 </Button>
                             </div>
                         </div>
@@ -643,7 +643,7 @@ watch(
                             >
                                 <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
                                 <span class="max-w-80 truncate">{{ current.help.message }}</span>
-                                <span class="shrink-0 text-link">{{ t(`shared.answer`) }}</span>
+                                <span class="shrink-0 text-link">{{ t(`ui.action.answer`) }}</span>
                             </button>
                             <div
                                 v-else
@@ -654,7 +654,7 @@ watch(
                                     <!-- Kept on separate lines from the instruction below it: joined, a message ending in a period collides with a clause starting with a colon. -->
                                     <div class="min-w-0 flex-1">
                                         <div class="text-xs text-content">
-                                            <span class="font-medium">{{ t(`shared.agentNeedsHelp`) }}</span>
+                                            <span class="font-medium">{{ t(`chat.words.agentNeedsHelp`) }}</span>
                                             {{ current.help.message }}
                                         </div>
                                         <div class="text-2xs text-muted">{{ t(`browsers.browsers.takeControlFixStep`) }}</div>
@@ -673,15 +673,15 @@ watch(
                                     <input
                                         v-model="helpNote"
                                         type="text"
-                                        :placeholder="t(`shared.optionalNoteBackTo`)"
+                                        :placeholder="t(`chat.words.optionalNoteBackTo`)"
                                         class="ui-field-box ui-field-sm min-w-40 flex-1"
                                         @keydown.enter="resolveHelp(true)"
                                     />
                                     <Button size="small" class="shrink-0" @click="() => resolveHelp(true)">
-                                        {{ t(`shared.doneHandBack`) }}
+                                        {{ t(`chat.words.doneHandBack`) }}
                                     </Button>
                                     <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)">
-                                        {{ t(`shared.cantHelpNow`) }}
+                                        {{ t(`chat.words.cantHelpNow`) }}
                                     </Button>
                                 </div>
                             </div>

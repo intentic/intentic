@@ -262,7 +262,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
 
             <!-- The rest of this PC, as rows in the same list: a distro that is here but holds no door yet. A
                  connected one is already a row above, and saying so twice is what made this a second list. -->
-            <Row v-for="distro in distros" :key="distro.name" icon="desktop" :description="t(`shared.notConnected`)">
+            <Row v-for="distro in distros" :key="distro.name" icon="desktop" :description="t(`sandbox.words.notConnected`)">
                 <template #title
                     ><span class="font-mono">{{ distro.name }}</span></template
                 >
@@ -384,7 +384,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                             variant="info"
                             size="xs"
                             :label="t(`sandbox.devicePage.thisSandbox`)"
-                            v-tooltip.top="t(`shared.oneYoureUsing`)"
+                            v-tooltip.top="t(`sandbox.words.oneYoureUsing`)"
                             class="-my-0.5 shrink-0"
                         />
                     </template>
@@ -471,7 +471,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                                 size="small"
                                 severity="danger"
                                 :text="true"
-                                :label="t(`shared.unpair`)"
+                                :label="t(`sandbox.words.unpair`)"
                                 :loading="ops.syncRunning(ops.rowKey(group), `sync-unpair`)"
                                 :disabled="ops.working.value"
                                 v-tooltip.top="t(`sandbox.devicePage.stopDeviceSyncingSandbox`)"
@@ -548,7 +548,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                             :lines="ops.lines(group)"
                             :running="ops.verbRunning(group)"
                             :empty="t(`sandbox.devicePage.startingOnDevice`)"
-                            :note="t(`shared.runningOnDeviceKeeps`)"
+                            :note="t(`sandbox.words.runningOnDeviceKeeps`)"
                         />
                         <DeviceOpFailure
                             v-if="ops.failure.value?.key === ops.rowKey(group)"
@@ -588,7 +588,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                         <Button
                             size="small"
                             severity="danger"
-                            :label="t(`shared.revokeAccess`)"
+                            :label="t(`sandbox.words.revokeAccess`)"
                             :disabled="ops.working.value"
                             @click="ops.confirmingRevoke.value = environment"
                         >
@@ -692,7 +692,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
             :header="
                 t(`sandbox.devicePage.unpairHeader`, { sandbox: ops.confirmingUnpair.value?.group.title ?? t(`sandbox.devicePage.thisSandbox`) })
             "
-            :confirm-label="t(`shared.unpair`)"
+            :confirm-label="t(`sandbox.words.unpair`)"
             :destructive="true"
             @cancel="ops.confirmingUnpair.value = undefined"
             @confirm="ops.confirmUnpair()"
@@ -711,7 +711,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
         <ConfirmDialog
             :open="ops.confirmingRevoke.value !== undefined"
             :header="t(`sandbox.devicePage.revokeSAccess2`, { label: ops.confirmingRevoke.value?.device.label ?? machine.label })"
-            :confirm-label="t(`shared.revokeAccess`)"
+            :confirm-label="t(`sandbox.words.revokeAccess`)"
             confirm-icon="times"
             :destructive="true"
             :loading="ops.revoking.value"

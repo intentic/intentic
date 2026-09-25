@@ -100,7 +100,7 @@ export const listingSections = (listings: readonly DiscoverListing[]): readonly 
     [
         {
             id: `verified`,
-            label: t(`shared.verified`),
+            label: t(`sandbox.words.verified`),
             caption: ``,
             listings: listings.filter((listing) => listing.entry.trust === `verified`),
         },

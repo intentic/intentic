@@ -12,7 +12,7 @@ import { openPanel, PANEL_DEFAULT_HEIGHT, PANEL_MIN_HEIGHT, panelHeight, panelMa
 
 // THE BOARD'S STATUS BAR: the main tree's own check and the sandbox's geek metrics, as two segments of one bar at the
 // board's foot. Each says at rest what a reader most needs from it (what is running, what is red, how full the box
-// is); pressing one opens its panel docked above the bar, in the layout rather than over it, so the board moves up
+// is); pressing one opens its panel above the bar, in the layout rather than over it, so the board moves up
 // instead of being covered, and nothing but the reader closes it again (its segment, its ×, or Escape inside it). The
 // segments work as tabs: one panel at a time, with the whole width. The reader sets its height on the seam above it,
 // and both are remembered (statusBarState.ts). Opaque, so a skin's backdrop does not show through. Absent while
@@ -86,7 +86,7 @@ const close = (id: StatusSegment): void => {
                 :min="PANEL_MIN_HEIGHT"
                 :max="panelMaxHeight"
                 :reset="PANEL_DEFAULT_HEIGHT"
-                :title="t(`shared.dragToResizeDouble`)"
+                :title="t(`ui.resizeSeam.dragToResize`)"
             />
             <section
                 :id="panelId(shown.id)"

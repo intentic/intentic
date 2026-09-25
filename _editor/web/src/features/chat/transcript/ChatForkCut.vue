@@ -152,7 +152,7 @@ const editRow = computed<MenuItem[]>(() => {
     }
     return [
         {
-            label: t(`shared.editMessage`),
+            label: t(`chat.words.editMessage`),
             icon: `pencil`,
             hint: !anchored.value
                 ? `No saved state for this point`

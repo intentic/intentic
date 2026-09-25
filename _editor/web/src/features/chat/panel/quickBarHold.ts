@@ -7,10 +7,10 @@ export type Hold = `closed` | `borrowed` | `kept`;
 
 export interface QuickBar {
     readonly box: Hold;
-    readonly peek: Hold;
+    readonly transcript: Hold;
 }
 
-export const CLOSED: QuickBar = { box: `closed`, peek: `closed` };
+export const CLOSED: QuickBar = { box: `closed`, transcript: `closed` };
 
 export type QuickBarEvent =
     // The box grows: borrowed by a hover that stayed or a summons, kept by a press that takes the caret. A question
@@ -19,9 +19,9 @@ export type QuickBarEvent =
     // The pointer's grace ran out: a borrowed box goes back, unless words in it hold it.
     | { readonly kind: `leave`; readonly words: boolean }
     // The same for the transcript, whose grace is shorter so it always folds first.
-    | { readonly kind: `peekLeave` }
+    | { readonly kind: `transcriptLeave` }
     // The eye: a hover borrows the transcript; a press keeps it (and the box), and a second press folds it.
-    | { readonly kind: `peek`; readonly keep: boolean }
+    | { readonly kind: `transcript`; readonly keep: boolean }
     // A press on the box's content keeps the box and whatever it is showing.
     | { readonly kind: `press` }
     // The caret came into the box.
@@ -45,24 +45,24 @@ export const stepQuickBar = (bar: QuickBar, event: QuickBarEvent): QuickBar => {
             return { ...bar, box: event.keep ? `kept` : open(bar.box) ? bar.box : `borrowed` };
         case `leave`:
             return bar.box === `borrowed` && !event.words ? CLOSED : bar;
-        case `peekLeave`:
-            return bar.peek === `borrowed` ? { ...bar, peek: `closed` } : bar;
-        case `peek`:
+        case `transcriptLeave`:
+            return bar.transcript === `borrowed` ? { ...bar, transcript: `closed` } : bar;
+        case `transcript`:
             if (!open(bar.box)) {
                 return bar;
             }
             if (!event.keep) {
-                return open(bar.peek) ? bar : { ...bar, peek: `borrowed` };
+                return open(bar.transcript) ? bar : { ...bar, transcript: `borrowed` };
             }
-            return bar.peek === `kept` ? { ...bar, peek: `closed` } : { box: `kept`, peek: `kept` };
+            return bar.transcript === `kept` ? { ...bar, transcript: `closed` } : { box: `kept`, transcript: `kept` };
         case `press`:
-            return open(bar.box) ? { box: `kept`, peek: open(bar.peek) ? `kept` : `closed` } : bar;
+            return open(bar.box) ? { box: `kept`, transcript: open(bar.transcript) ? `kept` : `closed` } : bar;
         case `focus`:
             return open(bar.box) ? { ...bar, box: `kept` } : bar;
         case `release`:
-            return event.words && open(bar.box) ? { box: `borrowed`, peek: `closed` } : CLOSED;
+            return event.words && open(bar.box) ? { box: `borrowed`, transcript: `closed` } : CLOSED;
         case `escape`:
-            return open(bar.peek) ? { ...bar, peek: `closed` } : CLOSED;
+            return open(bar.transcript) ? { ...bar, transcript: `closed` } : CLOSED;
         case `fold`:
             return CLOSED;
     }

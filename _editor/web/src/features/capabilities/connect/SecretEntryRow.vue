@@ -231,7 +231,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                         type="button"
                         :class="ACTION"
                         :disabled="!canReveal"
-                        :aria-label="revealedValue !== undefined ? t(`shared.hideValue`) : t(`capabilities.secretEntryRow.revealValueOwnerOnly`)"
+                        :aria-label="revealedValue !== undefined ? t(`capabilities.words.hideValue`) : t(`capabilities.secretEntryRow.revealValueOwnerOnly`)"
                         v-action="toggleReveal"
                     >
                         <Icon :name="revealedValue !== undefined ? `eye-slash` : `eye`" class="text-xs" />

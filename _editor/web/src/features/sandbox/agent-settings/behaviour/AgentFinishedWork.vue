@@ -43,7 +43,7 @@ const RETENTION_OPTIONS = computed(() => [
     { label: t(`sandbox.agentFinishedWork.n1Day`), value: `1` },
     { label: t(`sandbox.agentFinishedWork.n3Days`), value: `3` },
     { label: t(`sandbox.agentFinishedWork.n1Week`), value: `7` },
-    { label: t(`shared.never`), value: `0` },
+    { label: t(`sandbox.words.never`), value: `0` },
 ]);
 </script>
 
@@ -52,7 +52,7 @@ const RETENTION_OPTIONS = computed(() => [
         <!-- Daemon-side, not a browser preference, since automation-opened agents (Discord, webhooks, email) finish with no browser present. -->
         <Row
             icon="download"
-            :title="t(`shared.landFinishedWorkAutomatically`)"
+            :title="t(`sandbox.words.landFinishedWorkAutomatically`)"
             :description="t(`sandbox.agentFinishedWork.applyCompletedWorkDirectly`)"
         >
             <template #control>
@@ -61,7 +61,7 @@ const RETENTION_OPTIONS = computed(() => [
         </Row>
 
         <!-- Worktrees are cut from HEAD, so an owner who never commits would start every agent on a tree without the last one's work. -->
-        <Row icon="history" :title="t(`shared.saveVersionAcceptedWork`)" :description="t(`sandbox.agentFinishedWork.commitWhatEachLanded`)">
+        <Row icon="history" :title="t(`sandbox.words.saveVersionAcceptedWork`)" :description="t(`sandbox.agentFinishedWork.commitWhatEachLanded`)">
             <template #control>
                 <ToggleSwitch :model-value="version()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setVersion" />
             </template>

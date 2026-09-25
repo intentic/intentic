@@ -473,7 +473,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     const toRight = new Set(paneTabs.slice(index + 1).map((tab) => tab.id));
     return [
         // Promotes the preview tab, mirroring the double-click that does the same thing.
-        ...(id === strip.value[home].preview ? [{ label: t(`shared.keepOpen`), command: () => keepTab(id) }, { separator: true }] : []),
+        ...(id === strip.value[home].preview ? [{ label: t(`ui.action.keepOpen`), command: () => keepTab(id) }, { separator: true }] : []),
         // The way into a split for pairings nothing can guess: a README beside its code, a test beside its subject.
         ...(canSplit.value
             ? [
@@ -494,7 +494,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
             command: () => requestClose(others),
         },
         {
-            label: t(`shared.closeToRight`),
+            label: t(`ui.action.closeToRight`),
             disabled: toRight.size === 0,
             shortcut: commandShortcut(`workspace.closeTabsToRight`),
             command: () => requestClose(toRight),
@@ -897,7 +897,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                             ref="filterInput"
                             v-model="filter"
                             type="text"
-                            :placeholder="contentMode ? t(`shared.searchInFiles`) : t(`workspace.workspaceDesktop.filterFiles`)"
+                            :placeholder="contentMode ? t(`workspace.words.searchInFiles`) : t(`workspace.workspaceDesktop.filterFiles`)"
                             class="ui-field-box ui-field-sm w-full min-w-0 pl-7"
                             :class="textMode ? `pr-[4.75rem]` : `pr-7`"
                             @keydown.esc="clearFilter"
@@ -929,7 +929,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                                 type="button"
                                 class="flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
                                 v-tooltip.bottom="t(`workspace.workspaceDesktop.clearEsc`)"
-                                :aria-label="t(`shared.clearFilter`)"
+                                :aria-label="t(`ui.action.clearFilter`)"
                                 @click="clearFilter"
                             >
                                 <Icon name="times" />
@@ -946,9 +946,9 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                         <input
                             v-model="search.include.value"
                             type="text"
-                            :placeholder="t(`shared.filesToIncludeE`)"
+                            :placeholder="t(`workspace.words.filesToIncludeE`)"
                             class="ui-field-box ui-field-sm w-full min-w-0 pr-2 pl-7"
-                            :aria-label="t(`shared.filesToInclude`)"
+                            :aria-label="t(`workspace.words.filesToInclude`)"
                             v-tooltip.bottom="t(`workspace.workspaceDesktop.filesToIncludeComma`)"
                             @keydown.esc="search.include.value = ``"
                         />
@@ -970,8 +970,8 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 transition-colors"
                             :class="filtersActive ? 'bg-primary-600/15 text-link' : 'text-muted hover:text-content'"
                             aria-haspopup="menu"
-                            :aria-label="t(`shared.filterWhatExplorerLists`)"
-                            v-tooltip.bottom="lensLine ?? t(`shared.filter2`)"
+                            :aria-label="t(`workspace.words.filterWhatExplorerLists`)"
+                            v-tooltip.bottom="lensLine ?? t(`workspace.words.filter`)"
                             @click="filterMenu?.show($event)"
                         >
                             <Icon name="filter" class="text-xs" />
@@ -1050,7 +1050,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                 :min="toScreenPx(MIN_SIDEBAR_WIDTH)"
                 :max="toScreenPx(MAX_SIDEBAR_WIDTH)"
                 :reset="toScreenPx(defaultSidebarWidth())"
-                :title="t(`shared.dragToResizeDouble`)"
+                :title="t(`ui.resizeSeam.dragToResize`)"
             />
 
             <!-- Dismisses the drawer by clicking the file it covers, the only affordance the toggle doesn't already provide. -->
@@ -1106,7 +1106,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                                 >{{ actionError.title }}</span
                             >
                             <!-- The one remaining status: a single spinner for both a running file action and a tree (re)load. -->
-                            <Icon name="spinner" v-if="busy || isLoading" class="text-sm text-muted" spin :aria-label="t(`shared.working2`)" />
+                            <Icon name="spinner" v-if="busy || isLoading" class="text-sm text-muted" spin :aria-label="t(`workspace.words.working`)" />
                             <!-- Suppressed while the scope itself is broken, since the pane below already says so at full size. -->
                             <span v-if="error && !scopeBroken" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{
                                 error

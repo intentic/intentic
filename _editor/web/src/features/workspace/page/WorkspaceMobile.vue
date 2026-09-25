@@ -272,8 +272,8 @@ const confirmRename = (): void => {
     // Said only once the move lands, and named: on a phone a row changing its own name is easy to miss under a thumb.
     void run(async () => {
         await moveEntry(write.from, write.to);
-        say(`Renamed to ${basename(write.to)}`);
-    }, `Couldn't rename that.`);
+        say(t(`workspace.fileVerbs.renamedTo`, { name: basename(write.to) }));
+    }, t(`workspace.fileVerbs.couldntRename`));
 };
 // No confirm: it goes to the trash, and the receipt's Undo brings it back, which a thumb reaches as easily as a dialog.
 const removeEntry = (target: WorkspaceTreeEntry): void => {
@@ -285,7 +285,7 @@ const copyPath = (target: WorkspaceTreeEntry): void => {
     // Reached through this view's root so a floating panel writes the focused window; unavailability is swallowed.
     void clipboardOf(rootEl.value)
         .writeText(target.path)
-        .then(() => say(`Path copied`))
+        .then(() => say(t(`workspace.fileVerbs.pathCopied`)))
         .catch(() => undefined);
 };
 const download = (target: WorkspaceTreeEntry): void => {
@@ -298,7 +298,7 @@ const download = (target: WorkspaceTreeEntry): void => {
         anchor.download = target.name;
         anchor.click();
         URL.revokeObjectURL(url);
-    }, `Couldn't download that file.`);
+    }, t(`workspace.fileVerbs.couldntDownload`));
 };
 
 // Upload (the drag-drop replacement): a picker FAB targeting the current directory.
@@ -411,7 +411,7 @@ const onPick = (event: Event): void => {
                     :class="
                         ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`, layout.showIgnored.value || layout.hideTests.value ? `text-link` : ``)
                     "
-                    :aria-label="t(`shared.filterWhatExplorerLists`)"
+                    :aria-label="t(`workspace.words.filterWhatExplorerLists`)"
                     @click="filterSheet = true"
                 >
                     <Icon name="filter" class="text-base" />
@@ -456,7 +456,7 @@ const onPick = (event: Event): void => {
                         <input
                             v-model="filter"
                             type="search"
-                            :placeholder="contentMode ? t(`shared.searchInFiles`) : t(`shared.filter`)"
+                            :placeholder="contentMode ? t(`workspace.words.searchInFiles`) : t(`ui.action.filter`)"
                             class="ui-field-box w-full min-w-0 pl-8 pr-3"
                             @keydown.esc="clearFilter"
                         />
@@ -482,8 +482,8 @@ const onPick = (event: Event): void => {
                         <input
                             v-model="search.include.value"
                             type="search"
-                            :placeholder="t(`shared.filesToIncludeE`)"
-                            :aria-label="t(`shared.filesToInclude`)"
+                            :placeholder="t(`workspace.words.filesToIncludeE`)"
+                            :aria-label="t(`workspace.words.filesToInclude`)"
                             class="ui-field-box w-full min-w-0 pl-8 pr-3"
                         />
                     </div>
@@ -617,7 +617,7 @@ const onPick = (event: Event): void => {
                             />
                         </button>
                         <p v-if="dirLoading && listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">
-                            {{ t(`shared.loading`) }}
+                            {{ t(`ui.status.loading`) }}
                         </p>
                         <p v-else-if="listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">
                             {{ filter ? t(`workspace.workspaceMobile.noMatchingEntries`) : t(`workspace.workspaceMobile.directoryEmpty`) }}
@@ -653,7 +653,7 @@ const onPick = (event: Event): void => {
         </template>
 
         <!-- A checked row draws its mark; the gutter holds the space either way, so the label can't shift on flip. -->
-        <BottomSheet v-model="filterSheet" :header="t(`shared.filter2`)">
+        <BottomSheet v-model="filterSheet" :header="t(`workspace.words.filter`)">
             <div class="flex flex-col gap-0.5">
                 <button
                     type="button"
@@ -714,7 +714,7 @@ const onPick = (event: Event): void => {
                 </p>
                 <!-- Everything below Copy path is refused by the sandbox on a locked entry, so it gets the explanation instead. -->
                 <p v-if="isLockedWorkspacePath(sheetEntry.path)" class="flex h-12 items-center gap-3 px-3 text-sm text-muted">
-                    <Icon name="lock" class="text-base text-subtle" /> {{ t(`shared.keptPrivateBySandbox`) }}
+                    <Icon name="lock" class="text-base text-subtle" /> {{ t(`workspace.words.keptPrivateBySandbox`) }}
                 </p>
                 <template v-else>
                     <button
@@ -743,10 +743,10 @@ const onPick = (event: Event): void => {
                         </button>
                     </template>
                     <p v-else-if="archived(sheetEntry.path)" class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
-                        <Icon name="box" class="text-base text-subtle" /> {{ t(`shared.insideArchiveExtractTo`) }}
+                        <Icon name="box" class="text-base text-subtle" /> {{ t(`workspace.words.insideArchiveExtractTo`) }}
                     </p>
                     <p v-else class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
-                        <Icon name="lock" class="text-base text-subtle" /> {{ t(`shared.readOnlyChangingFiles`) }}
+                        <Icon name="lock" class="text-base text-subtle" /> {{ t(`workspace.words.readOnlyChangingFiles`) }}
                     </p>
                 </template>
             </div>

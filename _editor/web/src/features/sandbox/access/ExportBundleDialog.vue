@@ -35,7 +35,7 @@ watch(
             <!-- The dialog describes the bundle contents and delayed result. -->
             <p class="text-xs text-subtle">
                 {{ t(`sandbox.exportBundleDialog.packsSandboxsDefinitionTogether`) }}
-                <span class="font-medium text-content">{{ t(`shared.exports`) }}</span>
+                <span class="font-medium text-content">{{ t(`sandbox.words.exports`) }}</span>
                 {{ t(`sandbox.exportBundleDialog.doneCloseTabWhile`) }}
             </p>
 
@@ -68,7 +68,7 @@ watch(
             <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="emit(`cancel`)" />
             <!-- Label mirrors the switch, so the confirm carries the choice too, not just the switch. -->
             <Button
-                :label="secrets ? t(`sandbox.exportBundleDialog.exportSecrets`) : t(`shared.export`)"
+                :label="secrets ? t(`sandbox.exportBundleDialog.exportSecrets`) : t(`sandbox.words.export`)"
                 :severity="secrets ? `warn` : undefined"
                 autofocus
                 :loading="busy"

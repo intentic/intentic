@@ -91,7 +91,7 @@ const clear = (): void => {
             v-bind="passAttrs"
             v-model="query"
             type="text"
-            :placeholder="placeholder ?? t(`ui.searchBar.filter`)"
+            :placeholder="placeholder ?? t(`ui.action.filter`)"
             :class="inputClass"
             role="searchbox"
             :aria-label="ariaLabel"
@@ -119,7 +119,7 @@ const clear = (): void => {
                 type="button"
                 class="touch-target flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
                 v-tooltip.bottom="t(`ui.searchBar.clearEsc`)"
-                :aria-label="t(`ui.searchBar.clearFilter`)"
+                :aria-label="t(`ui.action.clearFilter`)"
                 @click="clear"
             >
                 <Icon name="times" />

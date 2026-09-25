@@ -171,7 +171,7 @@ const cancel = (): Promise<void> =>
     <div class="flex flex-col gap-4">
         <template v-if="plan === undefined">
             <!-- Connected devices go first, since a connected machine needs no archive or file dialog. -->
-            <RowGroup v-if="hosts.length > 0" flat :label="t(`shared.devices`)">
+            <RowGroup v-if="hosts.length > 0" flat :label="t(`sandbox.words.devices`)">
                 <Row
                     v-for="host in hosts"
                     :key="host.id"
@@ -199,7 +199,7 @@ const cancel = (): Promise<void> =>
                             type="button"
                             :class="ui.iconButton()"
                             :aria-label="t(`sandbox.arrivalPanel.checkDeviceAgain`)"
-                            v-tooltip.top="t(`shared.checkAgain`)"
+                            v-tooltip.top="t(`ui.action.checkAgain`)"
                             v-action="recheck"
                         >
                             <Icon name="refresh" :spin="probing" class="text-sm" />

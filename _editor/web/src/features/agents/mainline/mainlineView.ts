@@ -16,7 +16,7 @@ import { formatClock, formatDate, formatDayMonthTime } from "@intentic/ui/format
 import { t } from "@intentic/ui/i18n";
 
 // THE MAIN LINE AS ONE READOUT: what the main tree's own check says, in the order and the words a reader takes it in.
-// Pure over the status the daemon serves (workspace.mainline); the status dock draws it, and a card's mark borrows its
+// Pure over the status the daemon serves (workspace.mainline); the status bar draws it, and a card's mark borrows its
 // words for what became of a red run, so the rail, the board and the dock never name one decision two ways.
 //
 // Two questions are kept apart everywhere it is drawn, because one sentence answering both is what made it unreadable:

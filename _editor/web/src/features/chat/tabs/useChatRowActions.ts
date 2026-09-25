@@ -128,7 +128,7 @@ export const createChatRowActions = (host: ChatRowHost) => {
             // Labelled "Latest" only when two prompts differ; a fresh draft with neither shows no preview.
             messages: [
                 ...(first === undefined ? [] : [{ text: first.text, attachments: first.attachments }]),
-                ...(last === undefined || last === first ? [] : [{ label: t(`shared.latest`), text: last.text, attachments: last.attachments }]),
+                ...(last === undefined || last === first ? [] : [{ label: t(`chat.words.latest`), text: last.text, attachments: last.attachments }]),
             ],
         });
     };
@@ -169,7 +169,7 @@ export const createChatRowActions = (host: ChatRowHost) => {
         const pinned = conversation.pinned.value;
         return [
             // Keep Open leads the menu on a preview tab: same convention and wording as WorkspaceDesktop.
-            ...(conversation.peek.value ? [{ label: t(`shared.keepOpen`), command: () => keepChat(id) }] : []),
+            ...(conversation.peek.value ? [{ label: t(`ui.action.keepOpen`), command: () => keepChat(id) }] : []),
             {
                 label: pinned ? t(`chat.chatTabList.unpin`) : t(`chat.chatTabList.pin`),
                 icon: `pin` as IconName,
@@ -184,7 +184,7 @@ export const createChatRowActions = (host: ChatRowHost) => {
             ...(paneable.value
                 ? [
                       showing(id) && split.value
-                          ? { label: t(`shared.closePane`), shortcut: commandShortcut(`chat.closePane`), command: () => closePane(id) }
+                          ? { label: t(`chat.words.closePane`), shortcut: commandShortcut(`chat.closePane`), command: () => closePane(id) }
                           : { label: t(`chat.chatTabList.openBeside`), shortcut: commandShortcut(`chat.splitView`), command: () => openBeside(id) },
                       { separator: true },
                   ]
@@ -195,18 +195,18 @@ export const createChatRowActions = (host: ChatRowHost) => {
                 ? [{ label: t(`chat.chatTabList.archive`), icon: `box` as IconName, shortcut: commandShortcut(`chat.archive`), command: () => void archive([id]) }]
                 : []),
             { separator: true },
-            { label: t(`shared.closeOthers`), disabled: others.size === 0, shortcut: commandShortcut(`chat.closeOtherTabs`), command: () => host.close(others) },
-            { label: t(`shared.closeToRight`), disabled: toRight.size === 0, shortcut: commandShortcut(`chat.closeTabsToRight`), command: () => host.close(toRight) },
+            { label: t(`chat.words.closeOthers`), disabled: others.size === 0, shortcut: commandShortcut(`chat.closeOtherTabs`), command: () => host.close(others) },
+            { label: t(`ui.action.closeToRight`), disabled: toRight.size === 0, shortcut: commandShortcut(`chat.closeTabsToRight`), command: () => host.close(toRight) },
             {
-                label: t(`shared.closeFinished`),
+                label: t(`chat.words.closeFinished`),
                 disabled: finished.size === 0,
                 shortcut: commandShortcut(`chat.closeFinishedTabs`),
                 command: () => host.close(finished),
             },
-            { label: t(`shared.closeAll2`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => host.close(allTabs()) },
+            { label: t(`chat.words.closeAll`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => host.close(allTabs()) },
             { separator: true },
             {
-                label: floats.value ? t(`shared.dockChatBack`) : t(`shared.moveChatIntoNewWindow`),
+                label: floats.value ? t(`chat.words.dockChatBack`) : t(`chat.words.moveChatIntoNewWindow`),
                 shortcut: commandShortcut(`chat.toggleFloating`),
                 command: (): void => toggleChatFloating(),
             },

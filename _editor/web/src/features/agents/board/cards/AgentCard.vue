@@ -470,7 +470,7 @@ const grab = (event: PointerEvent): void => {
                 v-model="edit.draft"
                 type="text"
                 maxlength="80"
-                :aria-label="t(`shared.agentTitle`)"
+                :aria-label="t(`agents.words.agentTitle`)"
                 class="ui-field-box ui-field-inline min-w-0 flex-1 select-text px-1 font-semibold"
                 :class="live ? 'text-sm' : 'text-xs'"
                 @click.stop
@@ -495,8 +495,8 @@ const grab = (event: PointerEvent): void => {
                 <button
                     v-if="peek"
                     type="button"
-                    :aria-label="t(`shared.keepChatOpen`)"
-                    v-tooltip.top="t(`shared.keepOpenOtherwiseChat`)"
+                    :aria-label="t(`chat.words.keepChatOpen`)"
+                    v-tooltip.top="t(`chat.words.keepOpenOtherwiseChat`)"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`keep`)"
                 >
@@ -820,7 +820,7 @@ const grab = (event: PointerEvent): void => {
                         v-tooltip.top="t(`agents.agentCard.sendTurnAgainSame`)"
                         @click.stop="sendAgain"
                     >
-                        {{ resending ? t(`shared.sending`) : t(`shared.sendAgain`) }}<Icon name="arrow-right" class="text-2xs" />
+                        {{ resending ? t(`ui.status.sending`) : t(`agents.words.sendAgain`) }}<Icon name="arrow-right" class="text-2xs" />
                     </button>
                     <button
                         v-else-if="review !== undefined && lane === 'attention'"

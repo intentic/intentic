@@ -11,7 +11,7 @@ import { markPreviewOpened } from "../../preview/previewSurface";
 import { ACTIVE_KEY } from "../../sandbox/overview/activeSandbox";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { useLayout } from "../../../shell/window/useLayout";
-import { chatFullDock, previewDock, terminalDock } from "../../../shell/window/dockSlots";
+import { chatFullSlot, previewSlot, terminalSlot } from "../../../shell/window/panelSlots";
 
 const route = useRoute();
 const router = useRouter();
@@ -77,7 +77,7 @@ useShellCommands();
 useKeybindings();
 
 const slot = useTemplateRef(`slot`);
-const dockRef = computed(() => (panel === `chat` ? chatFullDock : panel === `terminal` ? terminalDock : previewDock));
+const dockRef = computed(() => (panel === `chat` ? chatFullSlot : panel === `terminal` ? terminalSlot : previewSlot));
 onMounted(() => {
     dockRef.value.value = slot.value;
 });

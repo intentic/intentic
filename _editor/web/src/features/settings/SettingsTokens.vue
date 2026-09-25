@@ -53,7 +53,7 @@ const pasteSnippet = `Capabilities → Sandbox fleet → Provisioning token`;
         <RowGroup :label="t(`shared.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
             <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
                 <template #control>
-                    <Button :label="t(`shared.revoke`)" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
+                    <Button :label="t(`ui.action.revoke`)" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
                 </template>
             </Row>
 

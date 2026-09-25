@@ -36,7 +36,7 @@ const ROW = `flex items-start gap-2 rounded-lg px-2.5 py-1.5`;
             <CopyButton :text="branch" :aria-label="t(`agents.sessionIdentity.copyBranchName`)" />
         </div>
         <div :class="ROW">
-            <span class="w-16 shrink-0 pt-px text-2xs text-subtle">{{ t(`shared.link`) }}</span>
+            <span class="w-16 shrink-0 pt-px text-2xs text-subtle">{{ t(`agents.words.link`) }}</span>
             <span class="min-w-0 flex-1 select-text break-all font-mono text-2xs text-content">{{ link }}</span>
             <CopyButton :text="link" :aria-label="t(`agents.sessionIdentity.copyLinkToAgent`)" />
         </div>

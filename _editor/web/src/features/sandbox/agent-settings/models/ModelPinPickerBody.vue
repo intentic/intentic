@@ -147,9 +147,9 @@ const unpickable = (entry: PickerEntry): boolean =>
 
                 <!-- Model limits must be visible before an unattended run starts. -->
                 <div v-if="limitations.length > 0" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`shared.notAvailableHere`) }}</span>
-                    <InfoHint :label="t(`shared.whatIsntAvailableHere`)" :text="`${limitations.length}`" class="shrink-0">
-                        <span class="block text-xs font-medium text-content">{{ t(`shared.notAvailableHere`) }}</span>
+                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.words.notAvailableHere`) }}</span>
+                    <InfoHint :label="t(`chat.words.whatIsntAvailableHere`)" :text="`${limitations.length}`" class="shrink-0">
+                        <span class="block text-xs font-medium text-content">{{ t(`chat.words.notAvailableHere`) }}</span>
                         <ul class="mt-1 flex flex-col gap-1 text-xs">
                             <li v-for="limit in limitations" :key="limit" class="flex items-start gap-1.5">
                                 <span class="mt-[0.4rem] h-1 w-1 shrink-0 rounded-full bg-line-strong" aria-hidden="true"></span>

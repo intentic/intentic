@@ -41,7 +41,7 @@ const setLandCheck = (runner: string | undefined): void => {
             {{ t(`sandbox.agentOffload.intro`) }}
             <template v-if="noRunners">
                 {{ t(`sandbox.agentOffload.noRunnersBefore`) }}
-                <RouterLink :to="{ name: `sandbox`, params: { tab: `devices` }, query: {} }" class="underline">{{ t(`shared.devices2`) }}</RouterLink>
+                <RouterLink :to="{ name: `sandbox`, params: { tab: `devices` }, query: {} }" class="underline">{{ t(`sandbox.words.devicesSection`) }}</RouterLink>
                 {{ t(`sandbox.agentOffload.noRunnersAfter`) }}
             </template>
         </RowNote>

@@ -26,7 +26,7 @@ const openTerminal = (): void =>
         <template v-if="card.status === 'pending'" #actions>
             <ChatDecisionButton tone="primary" icon="terminal" @click="openTerminal">{{ t(`chat.chatMessageView.openTerminal`) }}</ChatDecisionButton>
             <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="reply({ kind: 'terminal_help', helped: false })">{{
-                t(`shared.cantHelpNow`)
+                t(`chat.words.cantHelpNow`)
             }}</ChatDecisionButton>
         </template>
     </ChatCard>

@@ -80,7 +80,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
 </script>
 
 <template>
-    <RowGroup v-if="proposal || pending || applied || awaiting.length" :label="t(`shared.environment`)">
+    <RowGroup v-if="proposal || pending || applied || awaiting.length" :label="t(`sandbox.words.environment`)">
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <SegmentedControl v-if="!unsupported" v-model="view" :options="VIEWS" />

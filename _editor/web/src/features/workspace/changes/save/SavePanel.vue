@@ -286,13 +286,13 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                     {{ t(`workspace.savePanel.moreChangesHereThan`) }}
                 </p>
                 <p v-if="actions.discardAsk.value.back > 0" class="mt-2 text-xs text-muted">
-                    {{ actions.discardAsk.value.partial ? t(`shared.atLeast`) : `` }}
+                    {{ actions.discardAsk.value.partial ? t(`workspace.words.atLeast`) : `` }}
                     {{ t(`workspace.savePanel.filesGoBack`, { count: actions.discardAsk.value.back }, actions.discardAsk.value.back) }}
                 </p>
                 <!-- The one genuinely lossy half, named file by file: nothing has a copy of these. -->
                 <div v-if="actions.discardAsk.value.gone.length > 0" class="mt-2">
                     <p class="text-xs text-danger">
-                        {{ actions.discardAsk.value.partial ? t(`shared.atLeast`) : `` }}
+                        {{ actions.discardAsk.value.partial ? t(`workspace.words.atLeast`) : `` }}
                         {{
                             t(
                                 `workspace.savePanel.newFilesDeleted`,

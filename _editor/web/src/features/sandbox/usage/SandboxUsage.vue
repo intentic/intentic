@@ -263,7 +263,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                 <span class="text-subtle">{{ comparedTo }}</span>
                             </template>
                             <span v-else class="text-subtle">{{
-                                comparedTo === undefined ? t(`shared.allTime`) : t(`sandbox.sandboxUsage.noSpendInPrevious`)
+                                comparedTo === undefined ? t(`sandbox.words.allTime`) : t(`sandbox.sandboxUsage.noSpendInPrevious`)
                             }}</span>
                         </div>
                     </Card>
@@ -389,7 +389,7 @@ const hasSpend = computed(() => current.value.length > 0);
                             <thead class="text-left text-subtle">
                                 <tr class="border-b border-line-subtle">
                                     <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.sandboxUsage.day`) }}</th>
-                                    <th class="py-1.5 pr-3 font-medium">{{ t(`shared.provider`) }}</th>
+                                    <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.words.provider`) }}</th>
                                     <th class="py-1.5 pr-3 font-medium">{{ t(`shared.model`) }}</th>
                                     <th class="py-1.5 pr-3 font-medium">{{ t(`shared.agent`) }}</th>
                                     <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.turns`) }}</th>

@@ -36,11 +36,11 @@ export const sandboxAvailabilityVisual = (availability: SandboxAvailability): Sa
             return { label: t(`sandbox.availability.busyCatchingUp`), variant: "neutral", dotClass: "bg-info", inkClass: "text-info" };
         case "warming":
         case "starting":
-            return { label: t(`shared.starting2`), variant: "neutral", dotClass: "bg-subtle", inkClass: "text-subtle" };
+            return { label: t(`sandbox.words.starting`), variant: "neutral", dotClass: "bg-subtle", inkClass: "text-subtle" };
         // Off, not broken: its machine is asleep or its container is stopped, and it says so rather than pretending
         // to be on its way up, which is what "starting" did for as long as anyone left the tab open.
         case "detached":
-            return { label: t(`shared.notConnected`), variant: "neutral", dotClass: "bg-subtle", inkClass: "text-subtle" };
+            return { label: t(`sandbox.words.notConnected`), variant: "neutral", dotClass: "bg-subtle", inkClass: "text-subtle" };
         case "removed":
             return { label: t(`shared.removed`), variant: "warning", dotClass: "bg-warning", inkClass: "text-warning" };
         case "blocked":

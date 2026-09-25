@@ -103,7 +103,7 @@ const GRANT_GROUPS = computed(() => [
         key: `devices` as const,
         kind: `device` as const,
         icon: `desktop` as const,
-        label: t(`shared.devices`),
+        label: t(`sandbox.words.devices`),
         empty: t(`sandbox.personaPowersFields.noDevicesConnectedYet`),
     },
     {

@@ -28,7 +28,7 @@ const token = computed({ get: () => cf.cfToken.value, set: cf.setToken });
 <template>
     <label class="ui-field">
         <span class="ui-field-label">{{ t(`capabilities.cloudflareTokenField.apiToken`) }}</span>
-        <SecretField v-model="token" :secret-key="CF_TOKEN_KEY" collect no-hint :placeholder="t(`shared.pasteCloudflareApiToken`)" />
+        <SecretField v-model="token" :secret-key="CF_TOKEN_KEY" collect no-hint :placeholder="t(`views.words.pasteCloudflareApiToken`)" />
     </label>
 
     <p v-if="cf.cfToken.value.length === 0" class="text-xs text-muted">{{ storageNote }}</p>

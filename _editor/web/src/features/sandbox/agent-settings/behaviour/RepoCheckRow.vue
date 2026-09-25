@@ -129,7 +129,7 @@ const STATUS_TEXT = { success: `text-success`, warning: `text-warning`, default:
                         <RuleCommand :command="line.run" wrap />
                         <!-- Repo-relative, as the file spells them; the daemon is the one that prefixes the repository. -->
                         <span v-if="line.paths.length > 0" class="flex min-w-0 flex-wrap items-center gap-1.5 text-2xs text-subtle">
-                            {{ t(`shared.onlyTouching`) }}
+                            {{ t(`sandbox.words.onlyTouching`) }}
                             <span
                                 v-for="glob in line.paths"
                                 :key="glob"

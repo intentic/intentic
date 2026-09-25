@@ -301,7 +301,7 @@ watch(() => route.query[`connect`], focusConnect);
                     <span
                         class="h-1.5 w-1.5 shrink-0 rounded-full"
                         :class="!accountsLoaded ? 'bg-content/25' : providerReady(tab.value) ? 'bg-success' : 'bg-content/25'"
-                        :aria-label="!accountsLoaded ? `checking` : providerReady(tab.value) ? `connected` : t(`shared.notConnected`)"
+                        :aria-label="!accountsLoaded ? `checking` : providerReady(tab.value) ? `connected` : t(`sandbox.words.notConnected`)"
                     />
                     {{ tab.label }}
                     <!-- "Free" shown on the chip itself, not only after opening it, so comparing providers doesn't require opening each one. -->
@@ -366,7 +366,7 @@ watch(() => route.query[`connect`], focusConnect);
                     <template #control>
                         <Button
                             v-if="needsReconnect(state) && canConnectMore && !nativeFlowLive"
-                            :label="t(`shared.reconnect`)"
+                            :label="t(`ui.action.reconnect`)"
                             size="small"
                             :loading="accountBusy === managedProvider"
                             @click="connectHere"
@@ -387,7 +387,7 @@ watch(() => route.query[`connect`], focusConnect);
                     v-if="accountRows.length === 0"
                     :title="t(`sandbox.aiAccountSection.account`, { managedLabel })"
                     state="missing"
-                    :note="flowNote(nativeFlowLive) ?? t(`shared.notConnected`)"
+                    :note="flowNote(nativeFlowLive) ?? t(`sandbox.words.notConnected`)"
                     :note-busy="nativeFlowLive && connectSent"
                 >
                     <template #control>
@@ -480,7 +480,7 @@ watch(() => route.query[`connect`], focusConnect);
                     :key="`connect-${routedProvider}`"
                     :title="ROUTED_ROW[routedProvider].title"
                     state="missing"
-                    :note="flowNote(routedFlowLive) ?? t(`shared.notConnected`)"
+                    :note="flowNote(routedFlowLive) ?? t(`sandbox.words.notConnected`)"
                     :note-busy="routedFlowLive && connectSent"
                 >
                     <template #control>
@@ -538,7 +538,7 @@ watch(() => route.query[`connect`], focusConnect);
                         <span class="flex w-[1.125rem] shrink-0 justify-center">
                             <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
                         </span>
-                        {{ expanded ? t(`shared.showLess`) : t(`sandbox.aiAccountSection.showMoreAccounts`, { collapsedCount }) }}
+                        {{ expanded ? t(`ui.action.showLess`) : t(`sandbox.aiAccountSection.showMoreAccounts`, { collapsedCount }) }}
                     </span>
                 </template>
             </Row>

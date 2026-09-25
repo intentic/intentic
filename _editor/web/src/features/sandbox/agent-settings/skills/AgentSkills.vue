@@ -147,14 +147,14 @@ const removeSkill = (skill: SkillSummary): void => {
 
         <!-- Adding uses the same row surface a written skill is read on. -->
         <!-- Padding and tint values mirror <DisclosureRow>'s own; keep them in sync if that component's spacing changes. -->
-        <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`shared.newSkill`)" @update:open="close">
+        <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`sandbox.words.newSkill`)" @update:open="close">
             <template #below>
                 <SkillForm :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
             </template>
         </DisclosureRow>
 
         <!-- Hidden while a row is open, so only one skill is written or read at a time. -->
-        <RowNote v-else-if="openId === undefined" variant="action" :label="t(`shared.writeSkill`)" @click="startAdd" />
+        <RowNote v-else-if="openId === undefined" variant="action" :label="t(`sandbox.words.writeSkill`)" @click="startAdd" />
 
         <!-- Borrowed skills come last, inside the same list rather than a separate section. -->
         <details v-if="borrowed.length > 0" class="group/fold" :open="borrowedOpen" @toggle="rememberFold">

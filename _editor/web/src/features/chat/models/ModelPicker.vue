@@ -403,7 +403,7 @@ onMounted(() => {
                                 v-if="providerNeedsReauth(section.provider)"
                                 name="exclamation-triangle"
                                 class="text-2xs text-warning"
-                                v-tooltip.top="t(`shared.accountNeedsToReconnected`)"
+                                v-tooltip.top="t(`chat.words.accountNeedsToReconnected`)"
                             />
                             <template v-if="section.badge !== undefined">
                                 <span
@@ -501,7 +501,7 @@ onMounted(() => {
                         @click="toggleExpanded(section.key)"
                     >
                         <Icon :name="section.expanded ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
-                        <span>{{ section.expanded ? t(`shared.showFewer`) : t(`chat.modelPicker.showOlder`, { hidden: section.hidden }) }}</span>
+                        <span>{{ section.expanded ? t(`ui.action.showFewer`) : t(`chat.modelPicker.showOlder`, { hidden: section.hidden }) }}</span>
                     </button>
                     <!-- Catalog state row (loading / error+retry): searching hides it. -->
                     <template v-if="!searching && section.label !== undefined && section.rowCount === 0">

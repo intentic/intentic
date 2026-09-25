@@ -53,7 +53,7 @@ const { audience, setAudience } = useAudience();
 const audienceOptions = computed(
     () =>
         [
-            { label: t(`shared.iWriteCode`), value: `developer`, title: t(`settings.appearance.work.developerHint`) },
+            { label: t(`settings.words.iWriteCode`), value: `developer`, title: t(`settings.appearance.work.developerHint`) },
             { label: t(`settings.appearance.work.maker`), value: `maker`, title: t(`settings.appearance.work.makerHint`) },
         ] satisfies readonly { label: string; value: Audience; title: string }[],
 );
@@ -100,14 +100,14 @@ const setThemeChoice = (value: ThemeRow): void => {
 };
 const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: t(`settings.appearance.explorer.${value}`), value })));
 const iconRailOptions = computed(() => [
-    { label: t(`shared.iconRailCompact`), value: `compact` as const },
-    { label: t(`shared.iconRailComfortable`), value: `comfortable` as const },
+    { label: t(`settings.words.iconRailCompact`), value: `compact` as const },
+    { label: t(`settings.words.iconRailComfortable`), value: `comfortable` as const },
 ]);
 // Labeled by effect, not percentage, so nobody sets this and the browser's 110% zoom together.
 const textSizeOptions = computed(() => [
-    { label: t(`shared.iconRailCompact`), value: `compact` as const },
+    { label: t(`settings.words.iconRailCompact`), value: `compact` as const },
     {
-        label: t(`shared.iconRailComfortable`),
+        label: t(`settings.words.iconRailComfortable`),
         value: `default` as const,
         title: t(`settings.appearance.look.textSizeComfortableHint`),
     },
@@ -139,8 +139,8 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 <template>
     <div class="flex flex-col gap-6">
         <!-- Who the words are for; first, since it decides what the rest of the app is called. -->
-        <RowGroup :label="t(`shared.group`)">
-            <Row icon="user" :title="t(`shared.group`)" :description="t(`settings.appearance.work.hint`)">
+        <RowGroup :label="t(`settings.words.group`)">
+            <Row icon="user" :title="t(`settings.words.group`)" :description="t(`settings.appearance.work.hint`)">
                 <template #control
                     ><SegmentedControl :model-value="audience" :options="audienceOptions" @update:model-value="setAudience"
                 /></template>
@@ -283,7 +283,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 
         <!-- How much of an agent's working-out shows in transcripts; also flipped from the chat's own readout row. -->
         <RowGroup :label="t(`shared.chat`)">
-            <Row as="label" icon="eye" :title="t(`shared.showToolCalls`)" :description="t(`settings.appearance.chat.showToolCallsHint`)">
+            <Row as="label" icon="eye" :title="t(`chat.words.showToolCalls`)" :description="t(`settings.appearance.chat.showToolCallsHint`)">
                 <template #control><ToggleSwitch v-model="showToolCalls" /></template>
             </Row>
         </RowGroup>
@@ -302,7 +302,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 
         <!-- Work terminals are hidden by default (evidence, not kept tabs); this toggle is the way back. -->
         <RowGroup :label="t(`shared.terminal`)">
-            <Row as="label" icon="sparkles" :title="t(`shared.workTerminals`)">
+            <Row as="label" icon="sparkles" :title="t(`terminal.words.workTerminals`)">
                 <template #control><ToggleSwitch v-model="showWorkTerminals" /></template>
             </Row>
         </RowGroup>

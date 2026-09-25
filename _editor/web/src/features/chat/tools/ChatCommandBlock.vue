@@ -66,7 +66,7 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
                 :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
                 @click="expanded = !expanded"
             >
-                {{ expanded ? t(`shared.showLess`) : t(`chat.chatCommandBlock.showAllLines`, { count: lines.length }) }}
+                {{ expanded ? t(`ui.action.showLess`) : t(`chat.chatCommandBlock.showAllLines`, { count: lines.length }) }}
                 <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
             </button>
             <!-- Says there's more rather than ending mid-word; nothing to expand to here, since the rest was never sent (see the transcript). -->

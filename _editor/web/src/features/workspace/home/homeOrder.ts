@@ -20,7 +20,7 @@ const groupOrder = (): readonly { readonly key: HomeGroupKey; readonly label: st
     { key: `documents`, label: t(`workspace.homeOrder.documents`) },
     { key: `pictures`, label: t(`workspace.homeOrder.pictures`) },
     { key: `media`, label: t(`workspace.homeOrder.media`) },
-    { key: `code`, label: t(`shared.code`) },
+    { key: `code`, label: t(`workspace.words.code`) },
     { key: `styles`, label: t(`workspace.homeOrder.styles`) },
     { key: `data`, label: t(`workspace.homeOrder.data`) },
     { key: `config`, label: t(`workspace.homeOrder.config`) },

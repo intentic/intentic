@@ -120,7 +120,7 @@ const activeAccountReauth = computed(() => {
             v-tooltip.top="t(`chat.chatPaneNotices.putAgentBackOn`)"
             @click="restore([activeArchived.id])"
         >
-            {{ t(`shared.restore`) }}
+            {{ t(`ui.action.restore`) }}
         </Button>
     </div>
     <ChatAccountPanel />
@@ -161,7 +161,7 @@ const activeAccountReauth = computed(() => {
                  the day's allowance who wants to connect now should not have to run out first. A place, so a link drawn
                  as a button: Ctrl/Cmd-click keeps this conversation. -->
             <Button :as="RouterLink" to="/connect" size="small" :text="true" v-tooltip.top="t(`chat.chatPaneNotices.connectTooltip`)">
-                {{ t(`shared.connectAModel`) }}
+                {{ t(`chat.words.connectAModel`) }}
             </Button>
         </div>
     </div>
@@ -174,7 +174,7 @@ const activeAccountReauth = computed(() => {
         <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
         <span
             >{{ activeAccountReauth.detail ?? t(`chat.chatPaneNotices.accountNeedsToReconnected`) }}
-            <span class="font-semibold underline">{{ t(`shared.reconnect`) }}</span></span
+            <span class="font-semibold underline">{{ t(`ui.action.reconnect`) }}</span></span
         >
     </RouterLink>
 </template>

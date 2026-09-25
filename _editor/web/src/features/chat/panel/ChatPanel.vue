@@ -8,7 +8,7 @@ import type { Conversation } from "../session/conversation";
 import { traceFocus } from "../run/focusTrace";
 import { openRunSessions } from "../run/openRun";
 import { DEFAULT_RAIL_WIDTH, railWidth } from "../../agents/board/columnWidth";
-import { chatBarPeek, chatOnRail, chatWide } from "./chatPanelLayout";
+import { quickBarTranscript, chatOnRail, chatWide } from "./chatPanelLayout";
 import { useChat } from "../run/useChat";
 import { useChatFloating } from "./chatFloating";
 import { useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
@@ -43,11 +43,11 @@ const { mobile } = useDevice();
 // The panel's own element; the left-edge resize handle measures against it.
 const root = ref<HTMLElement>();
 
-// The strip, asked for its transcript (ChatQuickBar's handle). It withholds the turns until then, so a peek is this
+// The strip, asked for its transcript (ChatQuickBar's handle). It withholds the turns until then, so a transcript is this
 // pane's own turns arriving — never a second transcript beside the one /chat draws.
-const peeking = computed(() => bar && chatBarPeek.value);
+const lifted = computed(() => bar && quickBarTranscript.value);
 // What the panel lies on. The strip is one composer floating over someone else's page, so it paints nothing: the box
-// draws its own edge and a surface behind it reads as a tray. A peek needs a card, since turns cannot be read over a
+// draws its own edge and a surface behind it reads as a tray. A transcript needs a card, since turns cannot be read over a
 // page showing through them — but that card is the strip's own (ChatQuickBar draws it, so it can arrive without the
 // composer arriving with it). All this does is clip the turns to its shape and refuse to outgrow the view; the top
 // padding is the band the strip's tools stand in, so they never cover a pinned prompt.
@@ -55,7 +55,7 @@ const ground = computed(() => {
     if (!bar) {
         return `ground-card h-full overflow-hidden bg-card`;
     }
-    return peeking.value ? `chat-peeking ground-card max-h-[60vh] overflow-hidden rounded-2xl pt-3` : ``;
+    return lifted.value ? `chat-transcript-lifted ground-card max-h-[60vh] overflow-hidden rounded-2xl pt-3` : ``;
 });
 
 // How narrow a chat may shrink (useLayout's MIN_PANE_PX), imported rather than restated since the docked column
@@ -260,7 +260,7 @@ const seamWidth = computed<number>({
             :min="toScreenPx(MIN_CHAT_WIDTH)"
             :max="toScreenPx(maxChatWidth())"
             :reset="toScreenPx(defaultChatWidth())"
-            :title="t(`shared.dragToResizeDouble`)"
+            :title="t(`ui.resizeSeam.dragToResize`)"
         />
 
         <template v-if="tabs && !bar">
@@ -319,7 +319,7 @@ const seamWidth = computed<number>({
                     :conversation="conversation"
                     :focused="conversation.conversationId === activeId"
                     :closable="split"
-                    :bare="bar && !peeking"
+                    :bare="bar && !lifted"
                     :strip="bar"
                     @focus="setActive(conversation.conversationId)"
                     @close="closePane(conversation.conversationId)"

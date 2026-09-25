@@ -369,8 +369,8 @@ const roster = computed(() => {
                         v-model="rosterQuery"
                         variant="field"
                         clearable
-                        :aria-label="t(`shared.filterAccounts2`)"
-                        :placeholder="t(`shared.filterAccounts`)"
+                        :aria-label="t(`chat.words.filterAccounts2`)"
+                        :placeholder="t(`chat.words.filterAccounts`)"
                         class="ml-auto w-full @xl:w-56"
                     />
                 </div>
@@ -380,7 +380,7 @@ const roster = computed(() => {
                         <thead class="text-left text-subtle">
                             <tr class="border-b border-line-subtle">
                                 <th class="py-1.5 pr-3 font-medium">{{ t(`shared.account`) }}</th>
-                                <th class="py-1.5 pr-3 font-medium">{{ t(`shared.provider`) }}</th>
+                                <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.words.provider`) }}</th>
                                 <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.bindingPool`) }}</th>
                                 <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.planLimitsPanel.used`) }}</th>
                                 <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.reopens`) }}</th>
@@ -416,7 +416,7 @@ const roster = computed(() => {
     <!-- An unread state is not an empty one: drawn as the panel itself (headline, band strip, legend), not a "Reading..." sentence in its place. -->
     <RowGroup v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
         <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
-        <span class="sr-only">{{ t(`shared.readingConnections`) }}</span>
+        <span class="sr-only">{{ t(`sandbox.words.readingConnections`) }}</span>
         <RowNote variant="block" aria-hidden="true">
             <div class="flex flex-col gap-2">
                 <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">

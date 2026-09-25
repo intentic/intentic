@@ -101,7 +101,7 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
             <div v-if="error" class="border-b border-danger/30 bg-danger/10 px-4 py-2 text-xs text-danger">{{ error }}</div>
         </template>
 
-        <p v-if="loading && !editing" class="px-4 py-6 text-xs text-subtle">{{ t(`ui.noteEditor.loading`) }}</p>
+        <p v-if="loading && !editing" class="px-4 py-6 text-xs text-subtle">{{ t(`ui.status.loading`) }}</p>
         <template v-else>
             <!-- `save="none"`: this frame's Cancel/Save pair is the save policy, so the document must not offer its own. -->
             <div

@@ -10,24 +10,24 @@ import { t } from "@intentic/ui/i18n";
 export const coreViews = (): readonly ViewRegistration[] => [
     {
         id: `infrastructure`,
-        label: t(`shared.infrastructure`),
+        label: t(`views.words.infrastructure`),
         surface: `rail`,
         // deploy.config.ts is the ledger's day-one marker; the role dir is the fallback for a renamed one.
         detect: (repos) => {
             const intent = repos.find((repo) => repo.deployConfig || repo.role === `intent`);
-            return intent === undefined ? [] : [{ key: intent.repo, title: t(`shared.infrastructure`), icon: `server`, repo: intent.repo }];
+            return intent === undefined ? [] : [{ key: intent.repo, title: t(`views.words.infrastructure`), icon: `server`, repo: intent.repo }];
         },
         view: async () => (await import(`./infrastructure/InfrastructureView.vue`)).default,
     },
     {
         id: `live-status`,
-        label: t(`shared.liveStatus`),
+        label: t(`views.words.liveStatus`),
         surface: `rail`,
         // A fresh desired-state repo has no content marker until the first resolve, so the role dir is day-one
         // evidence. `cloud`, not `sitemap`, pairs it with Infrastructure's `server` (declared vs. actually up).
         detect: (repos) => {
             const target = repos.find((repo) => repo.role === `desired-state` || repo.desiredState);
-            return target === undefined ? [] : [{ key: target.repo, title: t(`shared.liveStatus`), icon: `cloud`, repo: target.repo }];
+            return target === undefined ? [] : [{ key: target.repo, title: t(`views.words.liveStatus`), icon: `cloud`, repo: target.repo }];
         },
         view: async () => (await import(`./live-status/LiveStatusView.vue`)).default,
     },

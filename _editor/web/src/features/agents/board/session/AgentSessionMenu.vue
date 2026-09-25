@@ -152,7 +152,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         >
             <Icon name="check" class="mt-0.5 text-xs text-success" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">{{ t(`shared.landNow`) }}</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.words.landNow`) }}</span>
                 <span class="text-2xs text-subtle">
                     {{
                         writing
@@ -170,7 +170,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         <button v-if="away !== undefined && canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value" @click="relandNow">
             <Icon name="undo" class="mt-0.5 text-xs text-warning" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">{{ t(`shared.landAgain`) }}</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.words.landAgain`) }}</span>
                 <span class="text-2xs text-subtle">{{ writing ? t(`agents.agentSessionMenu.agentStillWritingYoull2`) : away.text }}</span>
             </span>
         </button>
@@ -203,7 +203,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         <button v-if="phone && sessionName !== undefined" type="button" :class="ITEM" @click="run(() => emit(`identity`))">
             <Icon name="code" class="mt-0.5 text-xs text-subtle" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">{{ t(`shared.sessionName`) }}</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.words.sessionName`) }}</span>
                 <span class="truncate font-mono text-2xs text-subtle">{{ sessionName }}</span>
             </span>
         </button>
@@ -272,23 +272,23 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.archive`) }}</span>
                 <span class="text-2xs text-subtle">
-                    {{ streaming ? t(`shared.waitAgentTurnTo`) : t(`agents.agentSessionMenu.branchDiffConversationKept`) }}
+                    {{ streaming ? t(`agents.words.waitAgentTurnTo`) : t(`agents.agentSessionMenu.branchDiffConversationKept`) }}
                 </span>
             </span>
         </button>
         <button v-else type="button" :class="ITEM" :disabled="archiveBusy" @click="run(() => restore([agentId]))">
             <Icon name="history" class="mt-0.5 text-xs text-link" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-link md:text-xs">{{ t(`shared.restore`) }}</span>
+                <span class="text-sm text-link md:text-xs">{{ t(`ui.action.restore`) }}</span>
                 <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.putsBackOnBoard`) }}</span>
             </span>
         </button>
         <button v-if="canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value || streaming" @click="run(() => emit(`discard`))">
             <Icon name="trash" class="mt-0.5 text-xs text-danger" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-danger md:text-xs">{{ t(`shared.discard`) }}</span>
+                <span class="text-sm text-danger md:text-xs">{{ t(`ui.action.discard`) }}</span>
                 <span class="text-2xs text-subtle">
-                    {{ streaming ? t(`shared.waitAgentTurnTo`) : t(`agents.agentSessionMenu.dropsAgentsBranchWorktree`) }}
+                    {{ streaming ? t(`agents.words.waitAgentTurnTo`) : t(`agents.agentSessionMenu.dropsAgentsBranchWorktree`) }}
                 </span>
             </span>
         </button>

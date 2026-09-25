@@ -8,8 +8,8 @@ import { CHAT_SURFACE } from "../tools/chatToolSurface";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 
-jest.mock("../drafts/attachmentPeeks", () => ({
-    attachmentPeek: () => ({
+jest.mock("../drafts/attachmentQuickLooks", () => ({
+    attachmentQuickLook: () => ({
         present: true,
         size: 2_400_000,
         head: `21:26:45 INFO  starting setup`,
@@ -64,7 +64,7 @@ it("keeps a sent sound playable instead of naming it", () => {
     expect(element.querySelector(`button[aria-label="Play voice-note.m4a"]`)).not.toBeNull();
 });
 
-// Everything not a picture and not a sound keeps the text peek; the audio branch must not swallow the rest.
+// Everything not a picture and not a sound keeps the text look; the audio branch must not swallow the rest.
 it("leaves a log to the file chip's own lead lines", () => {
     const element = mount([{ name: `desktop-setup.log`, path: `${STATE_DIR}/x/desktop-setup.log` }]);
 

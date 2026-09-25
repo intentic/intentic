@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import { computed, type Ref, ref, shallowRef } from "vue";
@@ -71,7 +72,7 @@ export const useTreeEdits = (host: TreeEditsHost) => {
     // package.json starts a fold, which opens so its siblings don't vanish under it.
     const renameTo = (from: string, to: string): void => {
         const type = host.byPath.value.get(from)?.type ?? `file`;
-        void store.run(() => store.moveEntry(from, to), `Couldn't rename that.`);
+        void store.run(() => store.moveEntry(from, to), t(`workspace.fileVerbs.couldntRename`));
         host.openLanding(parentDir(to), [{ path: to, type }]);
         host.selectSingle(to);
     };
@@ -86,8 +87,8 @@ export const useTreeEdits = (host: TreeEditsHost) => {
         }
         const write =
             type === `dir`
-                ? store.run(() => store.createDir(path), `Couldn't create that folder.`)
-                : store.run(() => store.createFile(path), `Couldn't create that file.`);
+                ? store.run(() => store.createDir(path), t(`workspace.fileVerbs.couldntCreateFolder`))
+                : store.run(() => store.createFile(path), t(`workspace.fileVerbs.couldntCreateFile`));
         host.openLanding(parentDir(path), [{ path, type }]);
         host.selectSingle(path);
         await host.focusLead();

@@ -163,7 +163,7 @@ const liveOf = (session: SubagentSession): { icon: IconName; text: string; since
     if (session.status === `blocked`) {
         return { icon: `question-circle`, text: session.summary ?? `Needs input`, since: session.startedAt };
     }
-    return { icon: activityIcon(session.lastTool), text: session.lastTool ?? t(`shared.working`), since: session.startedAt };
+    return { icon: activityIcon(session.lastTool), text: session.lastTool ?? t(`ui.status.working`), since: session.startedAt };
 };
 
 // Whether the facts line has anything to show, so a `v-if` doesn't draw an empty strip. Now only the
@@ -378,7 +378,7 @@ watch(
                                     :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
                                     @click="reportExpanded = !reportExpanded"
                                 >
-                                    {{ reportExpanded ? t(`shared.showLess`) : t(`chat.subagents.showFullReport`) }}
+                                    {{ reportExpanded ? t(`ui.action.showLess`) : t(`chat.subagents.showFullReport`) }}
                                     <Icon :name="reportExpanded ? `chevron-up` : `chevron-down`" />
                                 </button>
                             </section>

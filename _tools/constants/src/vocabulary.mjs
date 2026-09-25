@@ -107,6 +107,30 @@ export const RETIRED = [
         became: "section",
         since: "2026-09-21",
     },
+    {
+        // A teleport target a surface publishes is a SLOT; `dock` is left to a panel living in the main window rather than
+        // floating in its own.
+        id: "dock-slot",
+        pattern: /\b(dockSlots|chatDock|chatFullDock|chatBarDock|previewDock|terminalDock)\b/,
+        became: "slot (panelSlots.ts: chatSlot, chatFullSlot, chatBarSlot, previewSlot, terminalSlot)",
+        since: "2026-09-25",
+    },
+    {
+        // The stored `ui-board-dock-*` preference keys are exempt by shape: renaming them would close every open panel.
+        id: "status-dock",
+        pattern: /\b(StatusDock|AgentsDock|boardDock|defineDockState|DockSegment|DockState|DOCK_MAX_HEIGHT|DOCK_MIN_HEIGHT|DOCK_DEFAULT_HEIGHT)\b|[Ss]tatus dock/,
+        became: "status bar (features/agents/status-bar/)",
+        since: "2026-09-25",
+    },
+    {
+        // `peek` is left to one idea: a tab opened as a look (Conversation.peek). A hover card is a quick look, and what the
+        // quick bar unfolds is its transcript.
+        id: "peek-look",
+        pattern:
+            /\b(HomePeek|homePeek|PicturePeek|picturePeek|PeekBox|peekBox|PeekKind|PeekPlan|peekPlan|peekContent|peekLines|PEEK_LINES|PEEK_BYTES|FilePeek|filePeek|attachmentPeeks?|peekOmitted|peekLead|chatBarPeek)\b|chat-quick-peeking|chat-peeking|chat-peek-(card|turns)|[Bb]ottom strip/,
+        became: "quick look (a card a hover raises) or the quick bar's transcript; `peek` names only a tab opened as a look",
+        since: "2026-09-25",
+    },
 ];
 
 /** Every retired spelling this text still carries, as `{id, became, line}` findings. */

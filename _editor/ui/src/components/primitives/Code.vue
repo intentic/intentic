@@ -157,7 +157,7 @@ watch(
                 :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
                 @click="expanded = !expanded"
             >
-                {{ expanded ? t(`ui.code.showLess`) : t(`ui.code.showAll`) }}
+                {{ expanded ? t(`ui.action.showLess`) : t(`ui.code.showAll`) }}
                 <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
             </button>
         </div>

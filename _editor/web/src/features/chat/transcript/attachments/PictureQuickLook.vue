@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { PeekBox } from "./picturePeek";
+import type { QuickLookBox } from "./pictureQuickLook";
 
-// The bigger version of a hovered picture, drawn in the region peekBox chose. Teleports out of the chat scroller's
+// The bigger version of a hovered picture, drawn in the region quickLookBox chose. Teleports out of the chat scroller's
 // clipping, and never takes the pointer, so it can't eat the hover that summons it.
 
-defineProps<{ src: string | undefined; alt: string; box: PeekBox | undefined }>();
+defineProps<{ src: string | undefined; alt: string; box: QuickLookBox | undefined }>();
 
 const FLEX = { start: `flex-start`, center: `center`, end: `flex-end` } as const;
 </script>

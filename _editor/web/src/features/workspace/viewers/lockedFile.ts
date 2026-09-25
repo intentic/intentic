@@ -25,28 +25,28 @@ const locked = (): Record<string, LockedFile> => ({
     "identity/owner.json": {
         subject: `owner.json`,
         holds: `who this sandbox belongs to`,
-        manage: { label: t(`shared.access`), to: `/sandbox/access` },
+        manage: { label: t(`sandbox.words.access`), to: `/sandbox/access` },
     },
     "identity/members.json": {
         subject: `members.json`,
         holds: `who you've invited to this sandbox`,
-        manage: { label: t(`shared.access`), to: `/sandbox/access` },
+        manage: { label: t(`sandbox.words.access`), to: `/sandbox/access` },
     },
     "identity/control-tokens.json": {
         subject: `control-tokens.json`,
         holds: `the tokens that let this sandbox be driven from outside it`,
-        manage: { label: t(`shared.access`), to: `/sandbox/access` },
+        manage: { label: t(`sandbox.words.access`), to: `/sandbox/access` },
     },
     "identity/passkeys.json": {
         subject: `passkeys.json`,
         holds: `the passkeys that open this sandbox, whether one is required, and the fingerprints of your recovery codes`,
-        manage: { label: t(`shared.access`), to: `/sandbox/access` },
+        manage: { label: t(`sandbox.words.access`), to: `/sandbox/access` },
     },
     "secrets/ci.json": { subject: `ci.json`, holds: `the secret your builds use to reach this sandbox` },
     "secrets/doors.json": {
         subject: `doors.json`,
         holds: `the tokens behind your webhooks, release gates and bug intakes`,
-        manage: { label: t(`shared.access`), to: `/sandbox/access` },
+        manage: { label: t(`sandbox.words.access`), to: `/sandbox/access` },
     },
     // Provider CLI's own home, at the state dir's root: written by the agent's runtime, not a daemon store.
     "claude.json": {

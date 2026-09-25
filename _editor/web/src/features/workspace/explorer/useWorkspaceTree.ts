@@ -166,7 +166,7 @@ export function useWorkspaceTree() {
         if (canEditFiles.value) {
             return false;
         }
-        actionError.value = noticeOf(`Changing files needs writer access. Yours is read-only here.`);
+        actionError.value = noticeOf(t(`workspace.fileVerbs.needsWriter`));
         return true;
     };
 

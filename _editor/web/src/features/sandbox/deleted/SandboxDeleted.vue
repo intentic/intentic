@@ -36,7 +36,7 @@ const restore = async (trashId: string): Promise<void> => {
     <div class="flex flex-col gap-4">
         <Notice v-if="notice" :of="notice" />
 
-        <RowGroup v-if="trash.deleted.value === undefined && trash.readError.value === undefined" :label="t(`shared.recentlyDeleted`)">
+        <RowGroup v-if="trash.deleted.value === undefined && trash.readError.value === undefined" :label="t(`sandbox.words.recentlyDeleted`)">
             <div role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`sandbox.sandboxDeleted.reading`) }}</span>
                 <SkeletonRows :rows="2" description control />
@@ -55,7 +55,7 @@ const restore = async (trashId: string): Promise<void> => {
 
         <RowGroup
             v-else
-            :label="t(`shared.recentlyDeleted`)"
+            :label="t(`sandbox.words.recentlyDeleted`)"
             :count="trash.recoverable.value.length"
             :caption="t(`sandbox.sandboxDeleted.keptForDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)"
         >
@@ -75,7 +75,7 @@ const restore = async (trashId: string): Promise<void> => {
                     <Button
                         size="small"
                         severity="secondary"
-                        :label="t(`shared.restore`)"
+                        :label="t(`ui.action.restore`)"
                         :loading="trash.restoring.value === row.id"
                         :disabled="trash.restoring.value !== undefined"
                         @click="void restore(row.id)"

@@ -41,8 +41,8 @@ const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finishe
         :class="ui.iconButton()"
         :aria-expanded="panelOpen"
         @click="panelOpen = !panelOpen"
-        v-tooltip.top="t(`shared.workTerminals`)"
-        :aria-label="t(`shared.workTerminals`)"
+        v-tooltip.top="t(`terminal.words.workTerminals`)"
+        :aria-label="t(`terminal.words.workTerminals`)"
     >
         <Icon name="wave-pulse" class="text-xs" :class="live ? 'text-link' : 'text-muted'" />
     </button>

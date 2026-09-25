@@ -5,7 +5,7 @@ import { useSandboxReadout } from "./sandboxFigures";
 
 // The board's geek metrics at rest, inside their status-bar segment: three small gauges (CPU, memory, disk) and nothing
 // else until something nears a limit, when that figure joins the line tinted. The rest (load, processes, pressure, the
-// daemon, memory by kind) is the panel the segment opens, docked above the bar for as long as the reader keeps it.
+// daemon, memory by kind) is the panel the segment opens above the status bar for as long as the reader keeps it.
 
 const props = defineProps<{
     metrics: SandboxMetrics;

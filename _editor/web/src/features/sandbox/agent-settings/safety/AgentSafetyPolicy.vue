@@ -27,7 +27,7 @@ const draft = useDraft(() => (isLoading.value ? undefined : text.value));
             :saving="isSaving"
             save="explicit"
             :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)"
-            :placeholder="isLoading ? t(`shared.loading`) : t(`sandbox.agentSafetyPolicy.whatAssistantShouldStop`)"
+            :placeholder="isLoading ? t(`ui.status.loading`) : t(`sandbox.agentSafetyPolicy.whatAssistantShouldStop`)"
             @save="save"
         >
             <template #note>

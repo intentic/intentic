@@ -28,7 +28,7 @@ const card = computed(() => props.message.browserHelp!);
                 t(`chat.chatMessageView.openBrowser`)
             }}</ChatDecisionButton>
             <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="reply({ kind: 'browser_help', helped: false })">{{
-                t(`shared.cantHelpNow`)
+                t(`chat.words.cantHelpNow`)
             }}</ChatDecisionButton>
         </template>
     </ChatCard>

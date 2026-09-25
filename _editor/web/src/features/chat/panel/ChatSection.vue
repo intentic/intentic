@@ -1,10 +1,10 @@
-<!-- Full-screen /chat route, desktop only: publishes the dock slot the chat panel teleports into (shell/dockSlots.ts). -->
+<!-- Full-screen /chat route, desktop only: publishes the dock slot the chat panel teleports into (shell/panelSlots.ts). -->
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import { onMounted, onUnmounted, useTemplateRef } from "vue";
 import { useChatFloating } from "./chatFloating";
 import { useLayout } from "../../../shell/window/useLayout";
-import { chatFullDock } from "../../../shell/window/dockSlots";
+import { chatFullSlot } from "../../../shell/window/panelSlots";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -16,10 +16,10 @@ useLayout().setChatHome(`rail`);
 
 const slot = useTemplateRef(`slot`);
 onMounted(() => {
-    chatFullDock.value = slot.value;
+    chatFullSlot.value = slot.value;
 });
 onUnmounted(() => {
-    chatFullDock.value = null;
+    chatFullSlot.value = null;
 });
 </script>
 

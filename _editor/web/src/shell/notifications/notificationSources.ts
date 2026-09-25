@@ -212,7 +212,7 @@ export const startNotificationSources = (): void => {
             tone: `warning`,
             title: t(`shell.notificationSources.signedIntoGoogle`, { presented }),
             detail: t(`shell.notificationSources.intenticAccountSwitchBefore`, { account }),
-            actions: [{ label: t(`shared.switchAccount`), severity: `secondary` as const, run: signInAgain }],
+            actions: [{ label: t(`shell.words.switchAccount`), severity: `secondary` as const, run: signInAgain }],
         };
     });
 
@@ -303,7 +303,7 @@ export const startNotificationSources = (): void => {
             title: t(`shell.notificationSources.fasterSandboxRunsOn`),
             detail: t(`shell.notificationSources.browserAskToAllow`),
             actions: [
-                { label: t(`shared.no`), severity: `secondary` as const, run: (): void => decline(sandboxId) },
+                { label: t(`ui.action.no`), severity: `secondary` as const, run: (): void => decline(sandboxId) },
                 {
                     label: t(`shell.notificationSources.allow`),
                     // Probes immediately, inside the click: the friendliest moment to ask a browser for a device

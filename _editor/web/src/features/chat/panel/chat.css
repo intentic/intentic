@@ -546,9 +546,9 @@
     background: var(--color-card);
     pointer-events: none;
 }
-/* THE STRIP'S COMPOSER KEEPS ONE RECT, peek or no peek. Every pixel of padding, gutter or mask that a transcript
+/* THE STRIP'S COMPOSER KEEPS ONE RECT, transcript or no transcript. Every pixel of padding, gutter or mask that a transcript
    brings with it would otherwise come out of the box the reader is typing in — measured at 13px up and 38px narrower,
-   which is a box moving under a pointer that is aiming at it. What a peek adds is room ABOVE it and nothing else; the
+   which is a box moving under a pointer that is aiming at it. What a transcript adds is room ABOVE it and nothing else; the
    card it needs around it is drawn by the strip itself (ChatQuickBar), spilling past this box rather than insetting it.
    Nothing to mask here either: no transcript under the padding, and no page of ours below the box. */
 .chat-footer-strip {
@@ -557,19 +557,19 @@
 .chat-footer-strip::after {
     content: none;
 }
-.chat-peeking .chat-footer-strip {
+.chat-transcript-lifted .chat-footer-strip {
     padding-top: 0.75rem;
 }
-/* A scrollbar arriving with the peek would take its width out of the composer's, for the same reason. The peek opens
+/* A scrollbar arriving with the transcript would take its width out of the composer's, for the same reason. The transcript opens
    pinned to the newest turn and is read by hovering, so the wheel is the gesture it is actually driven by — and with
    no bar to say "there is more above", the top edge says it instead, by fading the turns out rather than cutting the
    line they were on in half. */
-.chat-panel.chat-peeking .chat-scroller {
+.chat-panel.chat-transcript-lifted .chat-scroller {
     scrollbar-gutter: auto;
     scrollbar-width: none;
     mask-image: linear-gradient(to bottom, transparent 0, #000 1.5rem);
 }
-.chat-panel.chat-peeking .chat-scroller::-webkit-scrollbar {
+.chat-panel.chat-transcript-lifted .chat-scroller::-webkit-scrollbar {
     width: 0;
     height: 0;
 }
@@ -634,7 +634,7 @@
     }
 }
 
-/* THE PEEK'S MOTION. Both of these MOUNT with the peek, and a transition has no earlier value to run from on the frame
+/* THE TRANSCRIPT'S MOTION. Both of these MOUNT with the transcript, and a transition has no earlier value to run from on the frame
    a thing mounts — so the way in is an animation and the way out is a transition to the resting rule, which is the
    state each is written at. That is also why neither needs a flag set a frame late: the class arrives with the
    element, and a flag that is wrong for one frame is a flag Escape can arrive in. */
@@ -645,29 +645,29 @@
         opacity 130ms ease-in,
         transform 130ms ease-in;
 }
-.chat-quick-peeking .chat-quick-card {
+.chat-quick-transcript .chat-quick-card {
     opacity: 1;
     transform: none;
-    animation: chat-peek-card 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    animation: chat-transcript-card 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-@keyframes chat-peek-card {
+@keyframes chat-transcript-card {
     from {
         opacity: 0;
         transform: translateY(8px);
     }
 }
 /* The turns arrive and leave WITH the card behind them, never on their own: the strip holds them mounted through the
-   fade (chatBarPeek outlives peekOpen) and this is what fades. Opacity only — a transform here would make this the
+   fade (quickBarTranscript outlives transcriptOpen) and this is what fades. Opacity only — a transform here would make this the
    containing block for the sticky prompts inside it. */
-.chat-peeking .chat-turns {
+.chat-transcript-lifted .chat-turns {
     opacity: 0;
     transition: opacity 130ms ease-in;
 }
-.chat-quick-peeking .chat-peeking .chat-turns {
+.chat-quick-transcript .chat-transcript-lifted .chat-turns {
     opacity: 1;
-    animation: chat-peek-turns 200ms ease;
+    animation: chat-transcript-turns 200ms ease;
 }
-@keyframes chat-peek-turns {
+@keyframes chat-transcript-turns {
     from {
         opacity: 0;
     }
@@ -676,8 +676,8 @@
 .chat-quick-tools {
     animation: chat-quick-tools-in 300ms ease-out;
 }
-.chat-quick-peeking .chat-quick-tools {
-    animation: chat-peek-card 200ms cubic-bezier(0.16, 1, 0.3, 1);
+.chat-quick-transcript .chat-quick-tools {
+    animation: chat-transcript-card 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes chat-quick-tools-in {
     from,
@@ -687,13 +687,13 @@
 }
 @media (prefers-reduced-motion: reduce) {
     .chat-quick-card,
-    .chat-peeking .chat-turns {
+    .chat-transcript-lifted .chat-turns {
         transition: none;
     }
-    .chat-quick-peeking .chat-quick-card,
-    .chat-quick-peeking .chat-peeking .chat-turns,
+    .chat-quick-transcript .chat-quick-card,
+    .chat-quick-transcript .chat-transcript-lifted .chat-turns,
     .chat-quick-tools,
-    .chat-quick-peeking .chat-quick-tools {
+    .chat-quick-transcript .chat-quick-tools {
         animation: none;
     }
 }

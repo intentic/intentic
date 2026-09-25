@@ -250,7 +250,7 @@ const showDelivery = (result: { link: string; delivery: InviteDelivery; reason?:
                   title: DELIVERY_NOTE[result.delivery],
                   detail: result.reason,
                   action: {
-                      label: t(`shared.copyLink`),
+                      label: t(`ui.action.copyLink`),
                       // Uses the clicked element's own window; best-effort, so a refusal here isn't the invite failing.
                       run: () => void Promise.resolve(clipboardOf(document.activeElement)?.writeText(result.link)).catch(() => undefined),
                   },
@@ -441,7 +441,7 @@ const revoke = async (target: string): Promise<void> => {
     <div class="flex flex-col gap-6">
         <!-- Members + invites (owner) / read-only note (member). -->
         <!-- Rows use <Row>, taking the group's own tier, like every other list in the app. -->
-        <RowGroup :label="t(`shared.access`)">
+        <RowGroup :label="t(`sandbox.words.access`)">
             <template v-if="isOwner">
                 <Row icon="user" :title="user?.email">
                     <template #meta><StatusBadge variant="primary" :label="t(`sandbox.sandboxAccess.owner`)" size="xs" /></template>
@@ -481,7 +481,7 @@ const revoke = async (target: string): Promise<void> => {
                             <!-- Opens this row's fence; the badges above already say what it holds. -->
                             <Button
                                 v-if="rowRole(member) !== 'maintainer'"
-                                :label="t(`shared.areas`)"
+                                :label="t(`sandbox.words.areas`)"
                                 size="small"
                                 severity="secondary"
                                 :text="true"
@@ -502,7 +502,7 @@ const revoke = async (target: string): Promise<void> => {
                                 severity="danger"
                                 :text="true"
                                 :disabled="busy"
-                                :aria-label="t(`shared.revokeAccess`)"
+                                :aria-label="t(`sandbox.words.revokeAccess`)"
                                 @click="revoke(member.email)"
                             >
                                 <template #icon><Icon name="times" /></template>

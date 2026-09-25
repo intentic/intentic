@@ -83,12 +83,12 @@ const scopeOptions = computed<readonly PickerOption<ControlScope>[]>(() =>
 );
 
 const EXPIRY_OPTIONS = computed((): readonly PickerOption<Expiry>[] => [
-    { value: `30`, label: t(`shared.n30Days`) },
-    { value: `90`, label: t(`shared.n90Days`) },
+    { value: `30`, label: t(`sandbox.words.n30Days`) },
+    { value: `90`, label: t(`sandbox.words.n90Days`) },
     { value: `365`, label: t(`sandbox.controlTokensSection.n1Year`) },
     {
         value: `never`,
-        label: t(`shared.never`),
+        label: t(`sandbox.words.never`),
         hint: t(`sandbox.controlTokensSection.livesUntilRevokedRight`),
     },
 ]);
@@ -194,7 +194,7 @@ const describe = (token: ControlToken): string =>
                 <StatusBadge variant="danger" :label="t(`sandbox.controlTokensSection.expired`)" size="xs" />
             </template>
             <template #control>
-                <Button :label="t(`shared.revoke`)" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
+                <Button :label="t(`ui.action.revoke`)" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
             </template>
         </Row>
 

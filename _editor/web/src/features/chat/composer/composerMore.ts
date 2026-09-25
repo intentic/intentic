@@ -77,7 +77,7 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
             return {
                 key: control,
                 icon: meta.icon,
-                label: t(`shared.agentMode`),
+                label: t(`chat.words.agentMode`),
                 value: meta.label,
                 description: t(`chat.composerMore.howMuchMayDo`),
             };
@@ -86,7 +86,7 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
             return {
                 key: control,
                 icon: `users`,
-                label: t(`shared.acts`),
+                label: t(`chat.words.acts`),
                 value: `Anyone`,
                 description: t(`chat.composerMore.onePersonasAccountsOnly`),
             };

@@ -316,7 +316,7 @@ const onPersonaSelect = (id: string): void => {
             clearable
             :busy="searching"
             :aria-label="t(`chat.chatTabList.filterChatsByMessages`)"
-            :placeholder="t(`shared.filterByMessages`)"
+            :placeholder="t(`agents.words.filterByMessages`)"
             class="shrink-0"
         />
         <!-- A different list, not this one regrouped — its own component (see ChatPersonaRail). -->
@@ -378,7 +378,7 @@ const onPersonaSelect = (id: string): void => {
                     @click="showAllFinished = !showAllFinished"
                 >
                     <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                    {{ showAllFinished ? t(`shared.showFewer`) : t(`shared.earlier`, { hiddenFinished }) }}
+                    {{ showAllFinished ? t(`ui.action.showFewer`) : t(`shared.earlier`, { hiddenFinished }) }}
                 </button>
             </RailLane>
 

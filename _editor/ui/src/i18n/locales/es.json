@@ -1,42 +1,69 @@
 {
     "action": {
         "add": "Añadir",
+        "answer": "Responder",
         "apply": "Aplicar",
         "approve": "Aprobar",
         "back": "Atrás",
+        "browse": "Explorar",
         "cancel": "Cancelar",
+        "checkAgain": "Comprobar de nuevo",
         "clear": "Vaciar",
+        "clearFilter": "Vaciar el filtro",
         "close": "Cerrar",
+        "closeToRight": "Cerrar a la derecha",
         "connect": "Conectar",
         "continue": "Continuar",
         "copied": "Copiado",
         "copy": "Copiar",
+        "copyLink": "Copiar el enlace",
         "create": "Crear",
         "delete": "Eliminar",
+        "discard": "Descartar",
         "disconnect": "Desconectar",
         "dismiss": "Descartar",
         "done": "Listo",
         "download": "Descargar",
         "edit": "Editar",
+        "filter": "Filtrar…",
+        "keepOpen": "Mantener abierto",
+        "leave": "Salir",
+        "moreActions": "Más acciones",
         "next": "Siguiente",
         "open": "Abrir",
+        "openInNewTab": "Abrir en una pestaña nueva",
+        "paste": "Pegar",
+        "publish": "Publicar",
+        "reconnect": "Volver a conectar",
         "refresh": "Recargar",
+        "reload": "Recargar",
         "remove": "Quitar",
         "rename": "Renombrar",
+        "renameEllipsis": "Renombrar…",
+        "restart": "Reiniciar",
+        "restore": "Restaurar",
         "retry": "Reintentar",
+        "revoke": "Revocar",
         "save": "Guardar",
         "send": "Enviar",
+        "settings": "Ajustes…",
+        "showFewer": "Mostrar menos",
+        "showLess": "Mostrar menos",
+        "signIn": "Iniciar sesión",
+        "skip": "Omitir",
         "start": "Iniciar",
+        "startOver": "Empezar de cero",
         "stop": "Detener",
         "tryAgain": "Inténtalo de nuevo",
-        "update": "Actualizar"
+        "undo": "Deshacer",
+        "update": "Actualizar",
+        "viewLogs": "Ver los registros"
     },
     "agentRunButton": {
         "configureStartRun": "Configura e inicia esta ejecución — {spend}"
     },
     "code": {
-        "showAll": "Mostrar todo",
-        "showLess": "Mostrar menos"
+        "showAll": "Mostrar todo"
     },
     "colorPicker": {
         "accentColour": "Color de acento",
@@ -90,12 +117,6 @@
         "stopped": "detenido",
         "sync": "Sincronización"
     },
-    "deviceRunLog": {
-        "working": "Trabajando…"
-    },
-    "filterBar": {
-        "filter": "Filtrar…"
-    },
     "imageView": {
         "actualSize1": "Tamaño real (1)",
         "ctrlScrollToZoom": "Ctrl + rueda para ampliar · arrastra para desplazar · doble clic para encajar",
@@ -121,15 +142,11 @@
     "markdownDocumentSurface": {
         "document": "Documento"
     },
-    "navRail": {
-        "filter": "Filtrar…"
-    },
     "noteEditor": {
         "copyRawNote": "Copiar la nota en crudo",
         "editNote": "Editar esta nota",
         "it": "{verb}",
         "keep": "Conservarla",
-        "loading": "Cargando…",
         "note": "{verb} esta nota",
         "note2": "Nota",
         "unsaved": "sin guardar",
@@ -185,13 +202,8 @@
         "sandboxRestartsOntoImage": "El sandbox se reinicia sobre la imagen que tenía antes de su última actualización. Sus archivos se conservan.",
         "sandboxRestartsOntoNewest": "El sandbox se reinicia sobre la imagen más reciente y no está disponible mientras eso ocurre: segundos si la actualización ya está descargada, unos minutos si no. Sus archivos se conservan."
     },
-    "sandboxVerbs": {
-        "moreActions": "Más acciones"
-    },
     "searchBar": {
         "clearEsc": "Vaciar (Esc)",
-        "clearFilter": "Vaciar el filtro",
-        "filter": "Filtrar…",
         "matchCase": "Distinguir mayúsculas"
     },
     "stepSection": {
@@ -199,5 +211,15 @@
     },
     "timeWindow": {
         "all": "Todo"
+    },
+    "resizeSeam": {
+        "dragToResize": "Arrastra para cambiar el tamaño · doble clic para restablecer"
+    },
+    "status": {
+        "starting": "Iniciando…",
+        "loading": "Cargando…",
+        "working": "Trabajando…",
+        "reading": "Leyendo…",
+        "sending": "Enviando…"
     }
 }

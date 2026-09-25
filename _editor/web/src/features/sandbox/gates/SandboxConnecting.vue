@@ -100,7 +100,7 @@ const signIn = async (): Promise<void> => {
                 <Button :as="RouterLink" to="/settings/billing" :label="notice.action.label" icon-pos="right" class="ui-button-loud">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
-                <Button :as="RouterLink" :to="setupTo" :label="t(`shared.runOnMyComputer`)" severity="secondary" />
+                <Button :as="RouterLink" :to="setupTo" :label="t(`sandbox.words.runOnMyComputer`)" severity="secondary" />
             </template>
         </template>
     </GateCard>

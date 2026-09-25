@@ -10,20 +10,36 @@ type AppMessages = typeof base;
 //
 // One line per top-level section, rather than `extends AppMessages`, because an empty interface body is banned.
 // A section is one feature area: `src/features/<area>` keys under `<area>`, core-views under `views`, `src/shell`
-// under `shell`, `src/components` under `common`.
+// under `shell`, `src/components` under `common`. Every top-level section is listed, and `i18nSections.test.ts` fails
+// on one that is not.
+//
+// Where a word lives:
+// - `ui.action.*` (the kit's): a verb any surface's control can carry (Cancel, Restore, Show less); `ui.status.*` the
+//   progress words (Loading…, Working…).
+// - `shared.*`: a NOUN (or a state a thing is in) that means the same in every feature that says it: the sections'
+//   own names, Agent, Model, Running. English alone is not a reason to share: "Access" the sandbox section and
+//   "Access" a capability's grant are two keys.
+// - `<area>.words.*`: a word several of one feature's components say; a phrase another feature borrows stays with the
+//   feature it belongs to.
+// - `<area>.<component>.*`: everything else.
 declare module "vue-i18n" {
     interface DefineLocaleMessage {
         readonly agents: AppMessages["agents"];
+        readonly app: AppMessages["app"];
         readonly auth: AppMessages["auth"];
         readonly browsers: AppMessages["browsers"];
         readonly capabilities: AppMessages["capabilities"];
         readonly chat: AppMessages["chat"];
         readonly common: AppMessages["common"];
+        readonly connect: AppMessages["connect"];
+        readonly "extension-host": AppMessages["extension-host"];
         readonly extensions: AppMessages["extensions"];
         readonly preview: AppMessages["preview"];
+        readonly router: AppMessages["router"];
         readonly sandbox: AppMessages["sandbox"];
         readonly settings: AppMessages["settings"];
         readonly setup: AppMessages["setup"];
+        readonly shared: AppMessages["shared"];
         readonly shell: AppMessages["shell"];
         readonly terminal: AppMessages["terminal"];
         readonly views: AppMessages["views"];

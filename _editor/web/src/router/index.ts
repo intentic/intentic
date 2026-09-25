@@ -220,7 +220,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `connect`,
                 name: `connect`,
-                meta: { title: () => t(`shared.connectAModel`) },
+                meta: { title: () => t(`chat.words.connectAModel`) },
                 component: asyncView(() => import(`../features/connect/Connect.vue`)),
             },
             {

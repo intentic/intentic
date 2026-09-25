@@ -118,7 +118,7 @@ const processesLine = computed(() => {
                         ? t(`sandbox.extensionRemoveDialog.writtenInWorkspace`)
                         : plan.source === `installed`
                           ? t(`sandbox.extensionRemoveDialog.installedRepository`)
-                          : t(`shared.builtIntoSandboxImage`)
+                          : t(`sandbox.words.builtIntoSandboxImage`)
                 }}
             </p>
 

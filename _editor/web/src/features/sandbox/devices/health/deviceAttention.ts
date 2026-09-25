@@ -132,7 +132,7 @@ const BLOCK_ACTION: Partial<Record<ManageBlock[`kind`], string>> = {
 // card hands out, which installs or re-enrolls the agent and registers it to come back after a reboot.
 const reconnect = (): DeviceConnectFix => ({
     kind: `connect`,
-    label: t(`shared.reconnect`),
+    label: t(`ui.action.reconnect`),
     hint: t(`sandbox.deviceAttention.handsFreshOneTime`),
 });
 

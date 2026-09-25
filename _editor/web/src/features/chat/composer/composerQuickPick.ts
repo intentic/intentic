@@ -9,8 +9,8 @@ import { t } from "@intentic/ui/i18n";
 // neither the summary nor a search. Files are the component's own list, appended after these.
 
 export const kindMeta = (): Record<QuickKind, { readonly label: string; readonly badge: string; readonly icon: IconName }> => ({
-    persona: { label: t(`shared.acts`), badge: `Persona`, icon: `users` },
-    sandbox: { label: t(`shared.whereRuns`), badge: `Where`, icon: `desktop` },
+    persona: { label: t(`chat.words.acts`), badge: `Persona`, icon: `users` },
+    sandbox: { label: t(`chat.words.whereRuns`), badge: `Where`, icon: `desktop` },
     model: { label: t(`shared.model`), badge: `Model`, icon: `cpu` },
     effort: { label: t(`chat.composerQuickPick.effort`), badge: `Effort`, icon: `bolt` },
 });
@@ -76,7 +76,7 @@ const personaRows = (source: NonNullable<QuickPickSources[`persona`]>, query: st
             kind: `persona`,
             key: `persona:`,
             id: undefined,
-            label: t(`shared.anyone`),
+            label: t(`chat.words.anyone`),
             detail: t(`chat.composerQuickPick.everyConnectedAccount`),
             current: source.picked === undefined,
         },

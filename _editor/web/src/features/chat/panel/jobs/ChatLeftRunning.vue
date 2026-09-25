@@ -149,8 +149,8 @@ const preview = (job: AgentJob): void => {
                     v-if="row.job !== undefined && surface.watchTerminal !== undefined"
                     type="button"
                     class="flex items-center rounded p-1 transition-colors hover:bg-overlay hover:text-content"
-                    v-tooltip.top="t(`shared.watchInTerminal`)"
-                    :aria-label="t(`shared.watchInTerminal`)"
+                    v-tooltip.top="t(`chat.words.watchInTerminal`)"
+                    :aria-label="t(`chat.words.watchInTerminal`)"
                     @click="surface.watchTerminal(row.job.session)"
                 >
                     <Icon name="desktop" class="text-2xs" />
@@ -163,7 +163,7 @@ const preview = (job: AgentJob): void => {
                     v-tooltip.top="row.watch !== undefined ? t(`chat.chatLeftRunning.stopWatchingHint`) : t(`chat.chatLeftRunning.stopHint`)"
                     @click="stop(row)"
                 >
-                    {{ row.watch !== undefined ? t(`shared.stopWatching`) : t(`ui.action.stop`) }}
+                    {{ row.watch !== undefined ? t(`agents.words.stopWatching`) : t(`ui.action.stop`) }}
                 </button>
             </div>
         </div>

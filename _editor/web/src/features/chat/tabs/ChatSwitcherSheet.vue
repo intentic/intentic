@@ -69,7 +69,7 @@ const startNew = (): void => {
                 @click="startNew"
             >
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center"><Icon name="plus" class="text-base" /></span>
-                {{ t(`shared.newAgent`) }}
+                {{ t(`chat.words.newAgent`) }}
             </button>
             <button
                 v-for="c in conversations"
@@ -81,18 +81,18 @@ const startNew = (): void => {
             >
                 <Icon v-bind="statusIcon(c.status.value)" />
                 <span class="min-w-0 flex-1 truncate text-sm" :class="activeId === c.conversationId ? 'text-link' : 'text-content'">{{
-                    c.title.value ?? (c.isolated.value ? t(`shared.newAgent`) : t(`shared.newChat`))
+                    c.title.value ?? (c.isolated.value ? t(`chat.words.newAgent`) : t(`chat.words.newChat`))
                 }}</span>
                 <!-- Archived: off the agents board, but the conversation is still open right here. -->
                 <Icon v-if="isArchived(c.conversationId)" name="box" class="shrink-0 text-2xs text-subtle" />
-                <PresenceAvatars v-if="c.session.value !== undefined" :members="viewersOfSession(c.session.value.id)" :label="t(`shared.inChat`)" />
+                <PresenceAvatars v-if="c.session.value !== undefined" :members="viewersOfSession(c.session.value.id)" :label="t(`chat.words.inChat`)" />
                 <!-- span, not button: a real button can't nest inside the row button. -->
                 <span
                     v-if="conversations.length > 1"
                     role="button"
                     class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-subtle active:bg-content/10"
                     @click.stop="emit('close', new Set([c.conversationId]))"
-                    :aria-label="t(`shared.closeChat`)"
+                    :aria-label="t(`chat.words.closeChat`)"
                 >
                     <Icon name="times" class="text-xs" />
                 </span>
@@ -102,8 +102,8 @@ const startNew = (): void => {
                 v-model="query"
                 variant="field"
                 clearable
-                :aria-label="t(`shared.searchChats`)"
-                :placeholder="t(`shared.searchChats2`)"
+                :aria-label="t(`chat.words.searchChats`)"
+                :placeholder="t(`chat.words.searchChatsEllipsis`)"
                 class="mx-1 mb-1 mt-2"
             />
             <PastChatList :sessions="sessions" :query="query" :failure="sessionsFailure" touch @open="openFromHistory" />

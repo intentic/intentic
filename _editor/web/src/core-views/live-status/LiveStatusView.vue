@@ -103,13 +103,13 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 <template>
     <div class="h-full min-h-0 overflow-auto">
         <Page width="full">
-            <PageHeader :title="t(`shared.liveStatus`)">
+            <PageHeader :title="t(`views.words.liveStatus`)">
                 <template #info>
-                    <InfoHint :label="t(`shared.liveStatus`)">
-                        <span class="block text-sm font-medium text-content">{{ t(`shared.liveStatus`) }}</span>
+                    <InfoHint :label="t(`views.words.liveStatus`)">
+                        <span class="block text-sm font-medium text-content">{{ t(`views.words.liveStatus`) }}</span>
                         <span class="mt-1 block text-xs text-muted">
-                            <b>{{ t(`shared.planned`) }}</b> {{ t(`views.liveStatusView.whatConfigurationResolvesTo`) }}
-                            <b>{{ t(`shared.runningNow`) }}</b> {{ t(`views.liveStatusView.whatsReallyOnServer`) }} <b>{{ t(`shared.upToDate`) }}</b
+                            <b>{{ t(`views.words.planned`) }}</b> {{ t(`views.liveStatusView.whatConfigurationResolvesTo`) }}
+                            <b>{{ t(`views.words.runningNow`) }}</b> {{ t(`views.liveStatusView.whatsReallyOnServer`) }} <b>{{ t(`shared.upToDate`) }}</b
                             >.
                         </span>
                     </InfoHint>
@@ -142,7 +142,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                 <!-- TOP, desired state: the dependency graph, nodes colored by their last reconcile status. -->
                 <section class="rounded-lg border border-line bg-card p-4">
                     <h3 :class="ui.sectionLabel('mb-3 flex items-center gap-2')">
-                        {{ t(`shared.planned`) }}
+                        {{ t(`views.words.planned`) }}
                         <InfoHint :label="t(`views.liveStatusView.graphLegend`)">
                             <span class="block text-xs font-medium text-content">{{ t(`shared.category`) }}</span>
                             <ul class="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
@@ -172,7 +172,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 
                 <!-- BOTTOM, actual state: live Komodo deployments plus an on-demand live `intentic deploy plan` read. -->
                 <section class="rounded-lg border border-line bg-card p-4">
-                    <h3 :class="ui.sectionLabel('mb-3 flex items-baseline gap-2')">{{ t(`shared.runningNow`) }}</h3>
+                    <h3 :class="ui.sectionLabel('mb-3 flex items-baseline gap-2')">{{ t(`views.words.runningNow`) }}</h3>
 
                     <Notice v-if="appsNotice" :of="appsNotice" class="mb-3" />
 
@@ -189,7 +189,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                         <span class="truncate font-medium text-content">{{ d.name }}</span>
                                         <StatusBadge
                                             :variant="d.live ? 'success' : 'neutral'"
-                                            :label="d.live ? t(`shared.live`) : t(`views.liveStatusView.notDeployed`)"
+                                            :label="d.live ? t(`views.words.live`) : t(`views.liveStatusView.notDeployed`)"
                                             size="xs"
                                             dot
                                         />
@@ -212,7 +212,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                     <Button
                                         v-if="d.komodoDeploymentUrl"
                                         as="a"
-                                        :label="t(`shared.komodo`)"
+                                        :label="t(`views.words.komodo`)"
                                         size="small"
                                         :text="true"
                                         :href="d.komodoDeploymentUrl"
@@ -261,7 +261,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 
                 <!-- Access: URLs + admin logins for what's provisioned. -->
                 <section v-if="access.length > 0" class="rounded-lg border border-line bg-card p-4">
-                    <h3 :class="ui.sectionLabel('mb-3')">{{ t(`shared.access`) }}</h3>
+                    <h3 :class="ui.sectionLabel('mb-3')">{{ t(`views.words.access`) }}</h3>
                     <Notice v-if="accessError" :of="accessError" class="mb-2" />
                     <div class="flex flex-col gap-2">
                         <div v-for="entry in access" :key="entry.id" class="flex flex-col gap-1.5 rounded-lg border border-line px-3 py-2.5">

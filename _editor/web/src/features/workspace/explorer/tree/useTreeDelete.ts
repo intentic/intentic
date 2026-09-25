@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, ref, watch } from "vue";
 import type { useNotifications } from "../../../../shell/notifications/notifications";
 import type { BarrenChain } from "../emptyDirs";
@@ -31,11 +32,11 @@ export const branchOf = (path: string, chainOf: (path: string) => BarrenChain): 
 export const sweepReceipt = (roots: readonly string[], chainOf: (path: string) => BarrenChain): string => {
     const [only] = roots;
     if (roots.length !== 1 || only === undefined) {
-        return `${roots.length} empty folders removed`;
+        return t(`workspace.fileVerbs.emptyFoldersRemoved`, { count: roots.length });
     }
     // The whole path in one string: a receipt has no room to shade the two parts differently.
     const branch = branchOf(only, chainOf);
-    return `${branch.where === `` ? branch.label : `${branch.where} / ${branch.label}`} removed`;
+    return t(`workspace.fileVerbs.branchRemoved`, { path: branch.where === `` ? branch.label : `${branch.where} / ${branch.label}` });
 };
 
 // Sends `paths` to the daemon's trash and says so once it lands, the receipt's Undo taking back exactly that batch. The
@@ -48,7 +49,7 @@ export const deleteEntries = (
     seams.store.run(async () => {
         const batch = await seams.store.removeEntries(paths);
         seams.sayDeleted(receipt, batch);
-    }, `Couldn't delete that.`);
+    }, t(`workspace.fileVerbs.couldntDelete`));
 
 export interface TreeDeleteHost {
     readonly byPath: Readonly<Ref<ReadonlyMap<string, WorkspaceTreeEntry>>>;
@@ -98,8 +99,8 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
         const { tail } = emptyDirs.chainOf(path);
         await store.run(async () => {
             await store.createFile(joinPath(tail, `.gitkeep`));
-            host.say(`Folder kept`);
-        }, `Couldn't keep that folder.`);
+            host.say(t(`workspace.fileVerbs.folderKept`));
+        }, t(`workspace.fileVerbs.couldntKeepFolder`));
     };
 
     // The sweep line names each branch, so one can be kept rather than all-or-nothing; the one pointed at is outlined in

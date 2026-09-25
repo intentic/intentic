@@ -1,42 +1,70 @@
 {
     "action": {
         "add": "Dodaj",
+        "answer": "Odpowiedz",
         "apply": "Zastosuj",
         "approve": "Zatwierdź",
         "back": "Wstecz",
+        "browse": "Przeglądaj",
         "cancel": "Anuluj",
+        "checkAgain": "Sprawdź ponownie",
         "clear": "Wyczyść",
+        "clearFilter": "Wyczyść filtr",
         "close": "Zamknij",
+        "closeToRight": "Zamknij na prawo",
         "connect": "Połącz",
         "continue": "Kontynuuj",
         "copied": "Skopiowano",
         "copy": "Kopiuj",
+        "copyLink": "Kopiuj link",
         "create": "Utwórz",
         "delete": "Usuń",
+        "discard": "Odrzuć",
         "disconnect": "Rozłącz",
         "dismiss": "Odrzuć",
         "done": "Gotowe",
         "download": "Pobierz",
         "edit": "Edytuj",
+        "filter": "Filtruj…",
+        "keepOpen": "Trzymaj otwarte",
+        "leave": "Opuść",
+        "moreActions": "Więcej akcji",
         "next": "Dalej",
+        "no": "Nie",
         "open": "Otwórz",
+        "openInNewTab": "Otwórz w nowej karcie",
+        "paste": "Wklej",
+        "publish": "Opublikuj",
+        "reconnect": "Połącz ponownie",
         "refresh": "Odśwież",
+        "reload": "Odśwież",
         "remove": "Usuń z listy",
         "rename": "Zmień nazwę",
+        "renameEllipsis": "Zmień nazwę…",
+        "restart": "Uruchom ponownie",
+        "restore": "Przywróć",
         "retry": "Ponów",
+        "revoke": "Unieważnij",
         "save": "Zapisz",
         "send": "Wyślij",
+        "settings": "Ustawienia…",
+        "showFewer": "Pokaż mniej",
+        "showLess": "Pokaż mniej",
+        "signIn": "Zaloguj się",
+        "skip": "Pomiń",
         "start": "Uruchom",
+        "startOver": "Zacznij od nowa",
         "stop": "Zatrzymaj",
         "tryAgain": "Spróbuj ponownie",
-        "update": "Zaktualizuj"
+        "undo": "Cofnij",
+        "update": "Zaktualizuj",
+        "viewLogs": "Zobacz dzienniki"
     },
     "agentRunButton": {
         "configureStartRun": "Skonfiguruj i uruchom ten przebieg — {spend}"
     },
     "code": {
-        "showAll": "Pokaż wszystko",
-        "showLess": "Pokaż mniej"
+        "showAll": "Pokaż wszystko"
     },
     "colorPicker": {
         "accentColour": "Kolor akcentu",
@@ -88,12 +116,6 @@
         "stopped": "zatrzymany",
         "sync": "Synchronizacja"
     },
-    "deviceRunLog": {
-        "working": "Pracuje…"
-    },
-    "filterBar": {
-        "filter": "Filtruj…"
-    },
     "imageView": {
         "actualSize1": "Rozmiar rzeczywisty (1)",
         "ctrlScrollToZoom": "Ctrl + kółko przybliża · przeciąganie przesuwa · dwuklik dopasowuje",
@@ -119,15 +141,11 @@
     "markdownDocumentSurface": {
         "document": "Dokument"
     },
-    "navRail": {
-        "filter": "Filtruj…"
-    },
     "noteEditor": {
         "copyRawNote": "Kopiuj surową notatkę",
         "editNote": "Edytuj tę notatkę",
         "it": "{verb}",
         "keep": "Zostaw ją",
-        "loading": "Wczytywanie…",
         "note": "{verb} tę notatkę",
         "note2": "Notatka",
         "unsaved": "niezapisane",
@@ -183,13 +201,8 @@
         "sandboxRestartsOntoImage": "Sandbox restartuje na obrazie, na którym działał przed ostatnią aktualizacją. Jego pliki zostają.",
         "sandboxRestartsOntoNewest": "Sandbox restartuje na najnowszym obrazie i przez ten czas jest niedostępny — sekundy, jeśli aktualizacja jest już pobrana, kilka minut, jeśli nie. Jego pliki zostają."
     },
-    "sandboxVerbs": {
-        "moreActions": "Więcej akcji"
-    },
     "searchBar": {
         "clearEsc": "Wyczyść (Esc)",
-        "clearFilter": "Wyczyść filtr",
-        "filter": "Filtruj…",
         "matchCase": "Uwzględniaj wielkość liter"
     },
     "stepSection": {
@@ -197,5 +210,15 @@
     },
     "timeWindow": {
         "all": "Wszystko"
+    },
+    "resizeSeam": {
+        "dragToResize": "Przeciągnij, aby zmienić rozmiar · dwuklik przywraca"
+    },
+    "status": {
+        "starting": "Uruchamianie…",
+        "loading": "Wczytywanie…",
+        "working": "Pracuje…",
+        "reading": "Odczytywanie…",
+        "sending": "Wysyłanie…"
     }
 }

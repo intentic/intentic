@@ -213,7 +213,7 @@ onBeforeUnmount(() => {
                             <Icon name="sparkles" class="text-info" />
                             <span class="text-xs text-content">{{ t(`capabilities.capabilities.recommendedSetup`) }}</span>
                             <span class="text-2xs text-muted">{{ t(`capabilities.capabilities.left`, { count: walkQueue.length }) }}</span>
-                            <Button class="ml-auto" :label="t(`shared.skip`)" size="small" severity="secondary" text @click="skip" />
+                            <Button class="ml-auto" :label="t(`ui.action.skip`)" size="small" severity="secondary" text @click="skip" />
                         </div>
 
                         <!-- Tile heading plus, for a singleton tile, its state (which describes the whole screen, not one row) and its removal control. -->
@@ -251,7 +251,7 @@ onBeforeUnmount(() => {
                             class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-warning hover:underline"
                         >
                             <Icon name="exclamation-triangle" />
-                            {{ soleInstance.status.detail ?? t(`shared.needsSandboxRebuild`) }}{{ t(`capabilities.capabilities.finishSetup`) }}
+                            {{ soleInstance.status.detail ?? t(`capabilities.words.needsSandboxRebuild`) }}{{ t(`capabilities.capabilities.finishSetup`) }}
                         </RouterLink>
 
                         <form class="flex flex-col gap-3" @submit.prevent="submit">
@@ -328,7 +328,7 @@ onBeforeUnmount(() => {
                                             <template #icon><Icon name="align-left" /></template>
                                         </Button>
                                         <Button
-                                            :label="row.running ? t(`shared.restart`) : t(`ui.action.start`)"
+                                            :label="row.running ? t(`ui.action.restart`) : t(`ui.action.start`)"
                                             size="small"
                                             :text="true"
                                             :disabled="processBusy === row.id"
@@ -439,7 +439,7 @@ onBeforeUnmount(() => {
                             <!-- A device's access as a posture: the preset sets all switches at once; the sentence states what they currently spell. -->
                             <label v-if="selected.kind === 'device'" class="flex items-start justify-between gap-4">
                                 <span class="min-w-0">
-                                    <span class="ui-field-label">{{ t(`shared.access`) }}</span>
+                                    <span class="ui-field-label">{{ t(`capabilities.words.access`) }}</span>
                                     <span class="mt-0.5 block text-2xs text-muted">{{ hostGrantSummary(values) }}</span>
                                 </span>
                                 <SegmentedControl

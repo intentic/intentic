@@ -202,7 +202,7 @@ const actionLabel = computed(() => {
             </div>
 
             <div v-if="sourceHref" class="flex flex-wrap items-baseline gap-x-2 text-2xs">
-                <span class="text-subtle">{{ t(`shared.source`) }}</span>
+                <span class="text-subtle">{{ t(`sandbox.words.source`) }}</span>
                 <a
                     :href="sourceHref"
                     target="_blank"

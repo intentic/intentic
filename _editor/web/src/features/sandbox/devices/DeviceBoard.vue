@@ -35,9 +35,9 @@ const inDesktopApp = desktopApp() !== undefined;
 </script>
 
 <template>
-    <RowGroup :label="t(`shared.devices2`)">
+    <RowGroup :label="t(`sandbox.words.devicesSection`)">
         <template #actions>
-            <Button size="small" severity="secondary" :label="t(`shared.addDevice`)" @click="emit(`add`)">
+            <Button size="small" severity="secondary" :label="t(`sandbox.words.addDevice`)" @click="emit(`add`)">
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </template>

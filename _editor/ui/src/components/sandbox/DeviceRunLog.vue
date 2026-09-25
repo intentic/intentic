@@ -55,7 +55,7 @@ onMounted(() => void toTail());
             class="max-h-48 overflow-auto rounded-lg border border-line bg-canvas p-2 font-mono text-2xs leading-relaxed text-subtle"
             @scroll="onScroll"
         >
-            <p v-if="lines.length === 0" class="text-muted">{{ empty ?? t(`ui.deviceRunLog.working`) }}</p>
+            <p v-if="lines.length === 0" class="text-muted">{{ empty ?? t(`ui.status.working`) }}</p>
             <p v-for="(line, index) in lines" :key="index" class="whitespace-pre-wrap break-all">{{ line }}</p>
         </div>
         <p v-if="running && note" class="flex items-center gap-1.5 text-2xs text-muted">

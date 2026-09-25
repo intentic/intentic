@@ -376,7 +376,7 @@ const confirmHandOver = async (): Promise<void> => {
                 v-model="edit.draft"
                 type="text"
                 maxlength="80"
-                :aria-label="t(`shared.agentTitle`)"
+                :aria-label="t(`agents.words.agentTitle`)"
                 class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-xs font-medium"
                 @keydown.enter.prevent="edit.commit()"
                 @keydown.esc.prevent="edit.cancel()"
@@ -503,7 +503,7 @@ const confirmHandOver = async (): Promise<void> => {
                 @click="crossToAgent"
                 v-tooltip.bottom="t(`agents.agentDetail.switchesWindowToWhere`, { remoteName })"
             >
-                <Icon name="arrow-right" />{{ t(`shared.openIn`) }} {{ remoteName }}
+                <Icon name="arrow-right" />{{ t(`agents.words.openIn`) }} {{ remoteName }}
             </Button>
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
@@ -569,7 +569,7 @@ const confirmHandOver = async (): Promise<void> => {
         <ResponsiveOverlay
             v-model="identityOpen"
             :anchor="identityAnchor ?? undefined"
-            :header="t(`shared.sessionName`)"
+            :header="t(`agents.words.sessionName`)"
             side="bottom"
             cross="start"
             panel-class="w-96"

@@ -219,7 +219,7 @@ const restingClass = (action: RowAction, path: string): string =>
                         <input
                             v-model="draft"
                             type="text"
-                            :aria-label="edit.type === 'dir' ? t(`shared.newFolderName`) : t(`shared.newFileName`)"
+                            :aria-label="edit.type === 'dir' ? t(`workspace.words.newFolderName`) : t(`workspace.words.newFileName`)"
                             class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
                             :class="createError !== undefined ? 'ui-field-error-box' : ''"
                             @click.stop
@@ -301,7 +301,7 @@ const restingClass = (action: RowAction, path: string): string =>
                             <span
                                 class="flex shrink-0 items-center justify-center"
                                 :class="treat(row).slotClass"
-                                v-tooltip.right="isLockedWorkspacePath(row.entry.path) ? t(`shared.keptPrivateBySandbox`) : undefined"
+                                v-tooltip.right="isLockedWorkspacePath(row.entry.path) ? t(`workspace.words.keptPrivateBySandbox`) : undefined"
                             >
                                 <Icon :name="treat(row).icon" :class="[treat(row).sizeClass, treat(row).colorClass]" />
                             </span>
@@ -426,7 +426,7 @@ const restingClass = (action: RowAction, path: string): string =>
                                 <input
                                     v-model="draft"
                                     type="text"
-                                    :aria-label="edit.type === 'dir' ? t(`shared.newFolderName`) : t(`shared.newFileName`)"
+                                    :aria-label="edit.type === 'dir' ? t(`workspace.words.newFolderName`) : t(`workspace.words.newFileName`)"
                                     class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
                                     :class="createError !== undefined ? 'ui-field-error-box' : ''"
                                     @click.stop

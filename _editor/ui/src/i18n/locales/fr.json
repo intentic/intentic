@@ -1,42 +1,70 @@
 {
     "action": {
         "add": "Ajouter",
+        "answer": "Répondre",
         "apply": "Appliquer",
         "approve": "Approuver",
         "back": "Retour",
+        "browse": "Parcourir",
         "cancel": "Annuler",
+        "checkAgain": "Vérifier à nouveau",
         "clear": "Vider",
+        "clearFilter": "Vider le filtre",
         "close": "Fermer",
+        "closeToRight": "Fermer à droite",
         "connect": "Connecter",
         "continue": "Continuer",
         "copied": "Copié",
         "copy": "Copier",
+        "copyLink": "Copier le lien",
         "create": "Créer",
         "delete": "Supprimer",
+        "discard": "Jeter",
         "disconnect": "Déconnecter",
         "dismiss": "Masquer",
         "done": "Terminé",
         "download": "Télécharger",
         "edit": "Modifier",
+        "filter": "Filtrer…",
+        "keepOpen": "Garder ouvert",
+        "leave": "Quitter",
+        "moreActions": "Autres actions",
         "next": "Suivant",
+        "no": "Non",
         "open": "Ouvrir",
+        "openInNewTab": "Ouvrir dans un nouvel onglet",
+        "paste": "Coller",
+        "publish": "Publier",
+        "reconnect": "Reconnecter",
         "refresh": "Recharger",
+        "reload": "Recharger",
         "remove": "Retirer",
         "rename": "Renommer",
+        "renameEllipsis": "Renommer…",
+        "restart": "Redémarrer",
+        "restore": "Restaurer",
         "retry": "Réessayer",
+        "revoke": "Révoquer",
         "save": "Enregistrer",
         "send": "Envoyer",
+        "settings": "Paramètres…",
+        "showFewer": "Afficher moins",
+        "showLess": "Afficher moins",
+        "signIn": "Se connecter",
+        "skip": "Passer",
         "start": "Démarrer",
+        "startOver": "Tout reprendre",
         "stop": "Arrêter",
         "tryAgain": "Recommencer",
-        "update": "Mettre à jour"
+        "undo": "Annuler",
+        "update": "Mettre à jour",
+        "viewLogs": "Voir les journaux"
     },
     "agentRunButton": {
         "configureStartRun": "Configurer et lancer cette exécution — {spend}"
     },
     "code": {
-        "showAll": "Tout afficher",
-        "showLess": "Afficher moins"
+        "showAll": "Tout afficher"
     },
     "colorPicker": {
         "accentColour": "Couleur d'accent",
@@ -83,12 +111,6 @@
         "stopped": "arrêté",
         "sync": "Synchronisation"
     },
-    "deviceRunLog": {
-        "working": "En cours…"
-    },
-    "filterBar": {
-        "filter": "Filtrer…"
-    },
     "imageView": {
         "actualSize1": "Taille réelle (1)",
         "ctrlScrollToZoom": "Ctrl + molette pour zoomer · glisser pour déplacer · double-clic pour ajuster",
@@ -108,15 +130,11 @@
     "layoutRepoRail": {
         "allRepositories": "Tous les dépôts"
     },
-    "navRail": {
-        "filter": "Filtrer…"
-    },
     "noteEditor": {
         "copyRawNote": "Copier la note brute",
         "editNote": "Modifier cette note",
         "it": "{verb}",
         "keep": "La garder",
-        "loading": "Chargement…",
         "note": "{verb} cette note",
         "unsaved": "non enregistrée",
         "writeNote": "Écrivez la note."
@@ -171,13 +189,8 @@
         "sandboxRestartsOntoImage": "Le sandbox redémarre sur l'image qu'il avait avant sa dernière mise à jour. Ses fichiers sont conservés.",
         "sandboxRestartsOntoNewest": "Le sandbox redémarre sur l'image la plus récente et reste indisponible pendant ce temps : quelques secondes si la mise à jour est déjà téléchargée, quelques minutes sinon. Ses fichiers sont conservés."
     },
-    "sandboxVerbs": {
-        "moreActions": "Autres actions"
-    },
     "searchBar": {
         "clearEsc": "Vider (Échap)",
-        "clearFilter": "Vider le filtre",
-        "filter": "Filtrer…",
         "matchCase": "Respecter la casse"
     },
     "stepSection": {
@@ -185,5 +198,15 @@
     },
     "timeWindow": {
         "all": "Tout"
+    },
+    "resizeSeam": {
+        "dragToResize": "Glisser pour redimensionner · double-clic pour réinitialiser"
+    },
+    "status": {
+        "starting": "Démarrage…",
+        "loading": "Chargement…",
+        "working": "Travaille…",
+        "reading": "Lecture…",
+        "sending": "Envoi…"
     }
 }

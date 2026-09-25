@@ -95,7 +95,7 @@ const judge = (): RailGroup => ({
     items: [signal(`approvals`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
 });
 // Authored once, then left alone. Automations never badges: a held wake is counted by Approvals instead.
-const setup = (): RailGroup => ({ id: `setup`, label: t(`shared.setUp`), items: [signal(`workflows`), signal(`automations`)] });
+const setup = (): RailGroup => ({ id: `setup`, label: t(`views.words.setUp`), items: [signal(`workflows`), signal(`automations`)] });
 // Consulted deliberately, not summoned; Documentation badges rarely and meaningfully, the others don't at all.
 const know = (): RailGroup => ({
     id: `know`,
