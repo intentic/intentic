@@ -21,3 +21,9 @@ export const openLandConversation = (conversationId: string, title?: string): vo
         caret: false,
     });
 };
+
+// A land as a reader knows it: the title it landed under, else the roster's, else its id when neither has one.
+export const useLandTitle = (): ((conversationId: string, title?: string) => string) => {
+    const { agentById } = useAgents();
+    return (conversationId, title) => title ?? agentById(conversationId)?.title ?? conversationId;
+};

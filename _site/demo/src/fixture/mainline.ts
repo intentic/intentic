@@ -2,7 +2,7 @@ import type { MainlineRun, MainlineStatus } from "@intentic/sandbox-contract";
 import { FEATURED_AGENT_ID, LAND_FIX_AGENT_ID } from "./fleet";
 
 // The main tree's own check after work lands (GET /workspace/mainline), one state per recording. The whole fleet carries
-// the story the strip exists for: the release notes' land turned `web` red, the conversation that landed it had gone
+// the story the main line exists for: the release notes' land turned `web` red, the conversation that landed it had gone
 // cold, so a fresh one was started on it (fleet.ts), while the checkout run's latest land waits for the next check. The
 // curated board has that check running; the minimal one, which the marketing shots are taken of, the all-clear. A desk
 // has no code to check, so it has no main line at all. Times are relative to page load, like the roster's.

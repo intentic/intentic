@@ -4,14 +4,8 @@ import { formatClock, formatDate, formatDayMonthTime } from "@intentic/ui/format
 import { t } from "@intentic/ui/i18n";
 
 // THE MAIN LINE AS ONE READOUT: which of the main tree's checks a reader hears about first, and in what words. Pure over
-// the status the daemon serves (workspace.mainline); the strip draws it, and a card's mark borrows its words for what
-// became of a red run, so the rail, the board and the strip never name one decision two ways.
-
-export type MainlineHeadline =
-    | { readonly kind: `running`; readonly project: string; readonly lands: number; readonly startedAt: number }
-    | { readonly kind: `red`; readonly project: string; readonly failures: number; readonly since: number }
-    | { readonly kind: `queued`; readonly lands: number }
-    | { readonly kind: `green`; readonly at: number };
+// the status the daemon serves (workspace.mainline); the status dock draws it, and a card's mark borrows its words for
+// what became of a red run, so the rail, the board and the dock never name one decision two ways.
 
 // One project red right now: the run that says so, when its streak began, and the latest decision about it.
 export interface MainlineRed {
@@ -51,27 +45,40 @@ export const queuedLands = (status: MainlineStatus): { readonly land: MainlineLa
     );
 };
 
-// What the strip leads with: a check running now, since whatever it finds replaces what is known; then a red; then work
-// waiting; then the all-clear. Nothing while no land has been checked at all, so a sandbox that never landed anything
-// carries no strip.
-export const mainlineHeadline = (status: MainlineStatus | undefined): MainlineHeadline | undefined => {
+// The check running now: one at a time across the whole tree, so at most one project carries it.
+export interface MainlineRunning {
+    readonly project: string;
+    readonly command: string;
+    readonly startedAt: number;
+    readonly lands: readonly MainlineLand[];
+}
+
+// WHAT THE STATUS BAR SAYS AT REST, every part a reader watches for at once rather than one headline standing for the
+// rest: the check running now and whose work it measures, every red project, how many lands wait, and, only while none
+// of those says anything, when main was last seen green. Undefined while no land was ever checked, so a sandbox that
+// never landed anything carries no main line at all.
+export interface MainlineSummary {
+    readonly running: MainlineRunning | undefined;
+    // Longest red first (redsOf).
+    readonly reds: readonly MainlineRed[];
+    readonly waiting: number;
+    readonly greenAt: number | undefined;
+}
+
+export const mainlineSummary = (status: MainlineStatus | undefined): MainlineSummary | undefined => {
     if (status === undefined || status.projects.length === 0) {
         return undefined;
     }
-    const running = status.projects.find((project) => project.running !== undefined);
-    if (running?.running !== undefined) {
-        return { kind: `running`, project: running.project, lands: running.running.lands.length, startedAt: running.running.startedAt };
+    const project = status.projects.find((candidate) => candidate.running !== undefined);
+    const running = project?.running === undefined ? undefined : { project: project.project, ...project.running };
+    const reds = redsOf(status);
+    const waiting = queuedLands(status).length;
+    const lastAt = Math.max(0, ...status.projects.map((candidate) => candidate.last?.at ?? 0));
+    const quiet = running === undefined && reds.length === 0 && waiting === 0;
+    if (quiet && lastAt === 0) {
+        return undefined;
     }
-    const red = redsOf(status)[0];
-    if (red !== undefined) {
-        return { kind: `red`, project: red.project, failures: red.run.failureCount, since: red.since };
-    }
-    const queued = queuedLands(status).length;
-    if (queued > 0) {
-        return { kind: `queued`, lands: queued };
-    }
-    const at = Math.max(0, ...status.projects.map((project) => project.last?.at ?? 0));
-    return at === 0 ? undefined : { kind: `green`, at };
+    return { running, reds, waiting, greenAt: quiet ? lastAt : undefined };
 };
 
 // The lands a red run's failures were laid at: the suspects when the sandbox named any (a suspect may have landed in an
@@ -92,7 +99,7 @@ export const sinceWhen = (at: number, now: number = Date.now()): string => (form
 
 export interface RoutingMeta {
     readonly icon: IconName;
-    // A clause, for the strip's second line and a card's hover.
+    // A clause, for the status bar beside a red and a card's hover.
     readonly words: string;
     // One or two words, for the rail card beside "Broke 2".
     readonly short: string | undefined;

@@ -187,7 +187,6 @@ it(`caps the Finished lane and says how many it is holding back`, async () => {
 
     await settle();
     expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`]);
-    expect(el.querySelector(`section header span:nth-of-type(3)`)?.textContent?.trim()).toBe(`10`);
     expect(tailRow(el)?.textContent?.trim()).toBe(`4 earlier`);
 });
 

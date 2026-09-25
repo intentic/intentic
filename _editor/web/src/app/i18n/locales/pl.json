@@ -392,15 +392,19 @@
             "stopsWhen": "Zatrzymuje się samo, gdy zaczyna się tura, gdy konto przekroczy {reserve}% limitu albo gdy prompt następnej tury przestałby pasować.",
             "stop": "Przestań utrzymywać ciepłą"
         },
+        "dock": {
+            "boardLabel": "Stan tablicy",
+            "railLabel": "Stan głównej linii",
+            "show": "Zostaw {title} otwarte",
+            "hide": "Zamknij {title}",
+            "close": "Zamknij {title}"
+        },
         "mainline": {
             "title": "Główna linia",
             "explain": "Praca jest scalana bez czekania na to sprawdzenie: uruchamia się ono potem na głównym drzewie, po jednym projekcie naraz, i nic, co znajdzie, nie wstrzymuje scalenia, commita ani pusha.",
             "root": "przestrzeń robocza",
             "checkingMain": "Sprawdzanie main",
-            "lands": "{count} scalenie | {count} scalenia | {count} scaleń",
-            "mainRed": "main jest czerwony",
             "failures": "{count} błąd | {count} błędy | {count} błędów",
-            "since": "od {time}",
             "landsWaiting": "{count} scalenie czeka na sprawdzenie main | {count} scalenia czekają na sprawdzenie main | {count} scaleń czeka na sprawdzenie main",
             "mainGreen": "main jest zielony",
             "checkedAgo": "sprawdzono {ago}",
@@ -431,7 +435,12 @@
             "shortFixUp": "naprawa",
             "shortReported": "zgłoszone",
             "shortResolved": "rozwiązane",
-            "shortSpent": "wyczerpane"
+            "shortSpent": "wyczerpane",
+            "measuring": "Mierzy to, co scalono z",
+            "idle": "Żadne sprawdzenie nie trwa. Następne zacznie się, gdy coś zostanie scalone.",
+            "andMore": "{title} +{count}",
+            "moreRed": "+{count} więcej czerwonych",
+            "waitingShort": "{count} czeka"
         },
         "landCheck": {
             "checking": "Sprawdzanie main",

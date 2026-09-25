@@ -6,7 +6,7 @@ import { IconStub } from "@intentic/ui/testing";
 import { type App, type Component, computed, createApp, h } from "vue";
 
 const { default: SessionMetrics } = await import("./SessionMetrics.vue");
-const { default: SandboxMetricsBar } = await import("./SandboxMetricsBar.vue");
+const { default: SandboxMetricsSummary } = await import("./SandboxMetricsSummary.vue");
 const { default: SandboxMetricsDetails } = await import("./SandboxMetricsDetails.vue");
 const { LIVE_METRICS_KEY } = await import("./liveMetrics");
 
@@ -95,18 +95,18 @@ describe("a card's line", () => {
     });
 });
 
-describe("the sandbox bar", () => {
+describe("the sandbox segment", () => {
     it("reads the three figures that run out, as short as the line allows, and nothing else while all is well", () => {
-        expect(figuresOf(mount(SandboxMetricsBar, { metrics: reading() }))).toEqual([`CPU 23%`, `Memory 5.5 / 16 GB`, `Disk 400 / 1,000 GB`]);
+        expect(figuresOf(mount(SandboxMetricsSummary, { metrics: reading() }))).toEqual([`CPU 23%`, `Memory 5.5 / 16 GB`, `Disk 400 / 1,000 GB`]);
     });
 
     it("keeps both units when used and total differ, and a dash for a first reading's CPU", () => {
-        const el = mount(SandboxMetricsBar, { metrics: reading({ sandbox: { cpuPercent: undefined, memoryBytes: 900 * MIB } }) });
+        const el = mount(SandboxMetricsSummary, { metrics: reading({ sandbox: { cpuPercent: undefined, memoryBytes: 900 * MIB } }) });
         expect(figuresOf(el).slice(0, 2)).toEqual([`CPU –`, `Memory 900 MB / 16 GB`]);
     });
 
     it("raises a figure past its limit onto the line, tinted, so it needs no click to be seen", () => {
-        const el = mount(SandboxMetricsBar, {
+        const el = mount(SandboxMetricsSummary, {
             metrics: reading({ sandbox: { memoryBytes: 15 * GIB, pressure: { cpu: 0, memory: 30, io: 0 } }, daemon: { eventLoopPercent: 95 } }),
         });
         expect(figuresOf(el)).toEqual([

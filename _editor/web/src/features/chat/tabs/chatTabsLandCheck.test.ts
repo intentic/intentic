@@ -150,10 +150,14 @@ it(`badges what the last turn showed of its own work`, async () => {
     expect(markOf(rowOf(el, `proven`), `land`)).toBeNull();
 });
 
-it(`heads the rail with the main line itself`, async () => {
-    const strip = (await mountRail()).querySelector<HTMLElement>(`[role="group"][aria-label="Main line"]`)!;
-    expect(strip.textContent).toContain(`Main is red · web · 3 failures`);
-    expect(strip.textContent).toContain(`A fresh conversation is fixing it`);
+// At the column's foot, not over the header that decides what it lists: the top of the rail is the rail's own.
+it(`carries the main line itself at the rail's foot`, async () => {
+    const el = await mountRail();
+    const dock = el.querySelector<HTMLElement>(`[role="region"][aria-label="Main line status"]`)!;
+    expect(dock.querySelector(`[data-item="red"]`)?.textContent).toContain(`3 failures`);
+    expect(dock.querySelector(`[data-item="red"]`)?.textContent).toContain(`web red since`);
+    expect(dock.textContent).toContain(`A fresh conversation is fixing it`);
+    expect(rowOf(el, `breaker`).compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 });
 
 // The board spells it out and can open the conversation the red was handed to, which the rail's row (a button) cannot.

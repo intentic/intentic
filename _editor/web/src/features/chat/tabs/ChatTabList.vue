@@ -7,7 +7,8 @@ import { agentDisplayTitle, type FleetLane } from "../../agents/fleet/agentStatu
 import { useAgentFilter } from "../../agents/board/useAgentFilter";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { FINISHED_WINDOW, type FleetAgent, finishedLaneOrder, windowFinished } from "../../agents/fleet/useAgents-fleet";
-import MainlineStrip from "../../agents/mainline/MainlineStrip.vue";
+import AgentsDock from "../../agents/dock/AgentsDock.vue";
+import { railDock } from "../../agents/dock/dockState";
 import { provideMainline } from "../../agents/mainline/useMainline";
 import HoverCard from "../../../components/HoverCard.vue";
 import RailCard from "../../../components/RailCard.vue";
@@ -296,8 +297,6 @@ const onPersonaSelect = (id: string): void => {
 
 <template>
     <div ref="root" class="flex min-h-0 flex-col gap-1.5">
-        <!-- Sandbox-wide, so above the header that decides what the column lists: it reads the same under either cut. A press on a conversation it names is a pick like a row's, so the docked sheet steps aside. -->
-        <MainlineStrip :status="mainline" @opened="(id: string) => emit('select', id)" />
         <!-- Reading order top to bottom: narrow with the filter, pick a lane, and when the query reaches past what's open, the "Not open" group at the foot. -->
         <!-- The `Aa` case toggle mirrors the board's: a mode only one of the two search boxes could see or undo would be confusing. -->
         <!-- Tabs, not a pill track: this switch decides what the column IS, so it reads as the column's own header — and a bordered track here stacked a second box directly above the filter field's, which made the header two grey boxes rather than a heading over a control. -->
@@ -428,6 +427,9 @@ const onPersonaSelect = (id: string): void => {
                 </div>
             </RailLane>
         </div>
+        <!-- Sandbox-wide, so at the column's foot under either cut rather than above the header that decides what it lists.
+             A press on a conversation it names is a pick like a row's, so the docked sheet steps aside. -->
+        <AgentsDock :mainline="mainline" :state="railDock" :label="t(`agents.dock.railLabel`)" @opened="(id: string) => emit('select', id)" />
         <!-- A failed rename leaves the card's field open with the typed name in it; this says why, and is cleared by
              the next attempt. -->
         <span v-if="edit.error !== undefined" class="shrink-0 truncate px-1 text-2xs text-danger" v-tooltip.bottom.overflow="edit.error">{{

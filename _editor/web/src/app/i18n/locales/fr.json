@@ -388,15 +388,19 @@
             "stopsWhen": "S'arrête de lui-même quand un tour commence, quand le compte dépasse {reserve} % d'une limite, ou quand la consigne du prochain tour ne correspondrait plus.",
             "stop": "Ne plus garder chaud"
         },
+        "dock": {
+            "boardLabel": "État du tableau",
+            "railLabel": "État de la ligne principale",
+            "show": "Garder {title} ouvert",
+            "hide": "Fermer {title}",
+            "close": "Fermer {title}"
+        },
         "mainline": {
             "title": "Ligne principale",
             "explain": "Le travail est intégré sans attendre cette vérification : elle tourne ensuite sur l'arbre principal, un projet à la fois, et rien de ce qu'elle trouve ne retient une intégration, un commit ou un push.",
             "root": "espace de travail",
             "checkingMain": "Vérification de main",
-            "lands": "{count} intégration | {count} intégrations",
-            "mainRed": "main est rouge",
             "failures": "{count} échec | {count} échecs",
-            "since": "depuis {time}",
             "landsWaiting": "{count} intégration attend la vérification de main | {count} intégrations attendent la vérification de main",
             "mainGreen": "main est vert",
             "checkedAgo": "vérifié {ago}",
@@ -427,7 +431,12 @@
             "shortFixUp": "réparation",
             "shortReported": "signalé",
             "shortResolved": "résolu",
-            "shortSpent": "épuisé"
+            "shortSpent": "épuisé",
+            "measuring": "Mesure ce qui a été intégré depuis",
+            "idle": "Aucune vérification en cours. La prochaine démarre dès que du travail est intégré.",
+            "andMore": "{title} +{count}",
+            "moreRed": "+{count} autres en rouge",
+            "waitingShort": "{count} en attente"
         },
         "landCheck": {
             "checking": "Vérification de main",

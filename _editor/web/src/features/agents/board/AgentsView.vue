@@ -25,9 +25,9 @@ import { summonChat } from "../../chat/run/summon";
 import { chatStrip } from "../../chat/panel/useChat-strip";
 import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
-import SandboxMetricsBar from "../metrics/SandboxMetricsBar.vue";
+import AgentsDock from "../dock/AgentsDock.vue";
+import { boardDock } from "../dock/dockState";
 import { LIVE_METRICS_KEY, useLiveMetrics } from "../metrics/liveMetrics";
-import MainlineStrip from "../mainline/MainlineStrip.vue";
 import { provideMainline } from "../mainline/useMainline";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
@@ -54,7 +54,7 @@ const { archived, archiveLoading, archiveFailure, archive, restore, notice, dism
 // Read only while this board is mounted and the reader opted in (liveMetrics.ts); the cards take theirs from here.
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
-// The main tree's own check: one read for the board, drawn as the bar below the header and on every card from here.
+// The main tree's own check: one read for the board, drawn in its status dock and on every card from here.
 const mainline = provideMainline();
 const drag = useAgentDrag();
 const { dragged, dragging, draggedId, over, action, accepts, ghostStyle, pendingResolve, confirmResolve, cancelResolve } = drag;
@@ -163,8 +163,6 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                 <Button size="small" class="ui-button-thumb shrink-0" @click="startAgent()"> <Icon name="plus" />{{ t(`shared.newAgent`) }} </Button>
             </div>
         </div>
-        <!-- Always on while any land has been checked: work lands without waiting for it, so this is where its verdict is seen. -->
-        <MainlineStrip :status="mainline" bar />
         <!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->
         <p v-if="notice !== undefined" class="flex shrink-0 items-center gap-2 border-b border-line bg-danger/10 px-3 py-1.5 text-2xs text-danger">
             <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
@@ -481,8 +479,10 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                 </section>
             </div>
         </div>
-        <!-- Opt-in (Settings ▸ Appearance), docked at the foot like a status bar: absent, nothing was measured, not merely hidden. -->
-        <SandboxMetricsBar v-if="liveMetrics !== undefined" :metrics="liveMetrics" />
+        <!-- The board's status bar: the main line whenever a land has been checked (work lands without waiting for it, so
+             this is where its verdict is seen), and the opt-in geek metrics (Settings ▸ Appearance). At the foot, since
+             the header is the board's own; a segment's panel docks above it and stays until the reader closes it. -->
+        <AgentsDock :mainline="mainline" :metrics="liveMetrics" :state="boardDock" :label="t(`agents.dock.boardLabel`)" />
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div
             v-if="dragging"

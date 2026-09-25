@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
-import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useSandboxReadout } from "./sandboxFigures";
 
-// The panel the board's metrics bar opens: every figure the bar leaves out, grouped by what it answers. The gauges
-// again at full width, then the machine's other readings, then which kinds of process hold the memory. Every figure
-// explains itself on hover, since "load" or "pressure" is a number only a reader who already knows it can read bare.
+// The panel the board's metrics segment opens, docked above its status bar: every figure the bar leaves out, grouped by
+// what it answers. The gauges again with their capacity, then the machine's other readings, then which kinds of process
+// hold the memory, side by side while the dock is wide. Every figure explains itself on hover, since "load" or
+// "pressure" is a number only a reader who already knows it can read bare. Its heading, its note and the way to turn
+// geek metrics off are the dock's header (BoardDock.vue).
 
 const t = useT();
 
@@ -14,29 +15,11 @@ const props = defineProps<{
     metrics: SandboxMetrics;
 }>();
 
-const emit = defineEmits<{
-    // Turns geek metrics off, from where they are seen rather than from Settings.
-    hide: [];
-}>();
-
 const readout = useSandboxReadout(() => props.metrics);
 </script>
 
 <template>
-    <div class="flex w-80 flex-col gap-3 p-3" :aria-label="t(`agents.liveMetrics.sandboxLabel`)">
-        <div class="flex items-center gap-2">
-            <Icon name="server" class="shrink-0 text-2xs text-subtle" />
-            <h3 class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ t(`agents.liveMetrics.sandboxLabel`) }}</h3>
-            <button
-                type="button"
-                v-tooltip.top="t(`agents.liveMetrics.hideHint`)"
-                :class="ui.textAction(`shrink-0 text-2xs text-muted`)"
-                @click="emit(`hide`)"
-            >
-                {{ t(`agents.liveMetrics.hide`) }}
-            </button>
-        </div>
-
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] items-start gap-x-6 gap-y-3 pt-1">
         <!-- The figures that run out, each a meter: its fill says how close, its track the rest of the room. -->
         <div role="group" data-section="gauges" class="flex flex-col gap-2.5">
             <div v-for="gauge in readout.gauges" :key="gauge.key" v-tooltip.left="gauge.hint" data-figure class="flex cursor-help flex-col gap-1">
@@ -66,15 +49,21 @@ const readout = useSandboxReadout(() => props.metrics);
         <dl
             role="group"
             data-section="figures"
-            class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 border-t border-line-subtle pt-3 text-2xs"
+            class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-2xs"
         >
             <template v-for="figure in readout.figures" :key="figure.key">
                 <dt v-tooltip.left="figure.hint" class="cursor-help text-muted">{{ figure.label }}</dt>
-                <dd class="truncate text-right tabular-nums" :class="figure.warn ? `text-warning` : `text-content`">{{ figure.value }}</dd>
+                <dd
+                    class="truncate text-right tabular-nums"
+                    :class="figure.warn ? `text-warning` : `text-content`"
+                    v-tooltip.bottom.overflow="figure.value"
+                >
+                    {{ figure.value }}
+                </dd>
             </template>
         </dl>
 
-        <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex flex-col gap-1.5 border-t border-line-subtle pt-3">
+        <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex flex-col gap-1.5">
             <h4
                 v-tooltip.left="t(`agents.liveMetrics.rolesHint`)"
                 class="cursor-help self-start text-2xs font-medium uppercase tracking-wide text-subtle"
@@ -85,16 +74,14 @@ const readout = useSandboxReadout(() => props.metrics);
                 v-for="role in readout.roles"
                 :key="role.key"
                 data-figure
-                class="grid grid-cols-[7.5rem_minmax(0,1fr)_auto] items-center gap-2 text-2xs"
+                class="grid grid-cols-[minmax(0,7.5rem)_minmax(1.5rem,1fr)_auto] items-center gap-2 text-2xs"
             >
                 <span class="truncate text-muted">{{ role.label }}</span>
                 <div class="h-1 overflow-hidden rounded-full bg-content/5" aria-hidden="true">
                     <div class="h-full rounded-full bg-primary-600/60 transition-[width] duration-500" :style="{ width: `${role.share * 100}%` }" />
                 </div>
-                <span class="text-right tabular-nums text-content">{{ role.value }}</span>
+                <span class="text-right whitespace-nowrap tabular-nums text-content">{{ role.value }}</span>
             </div>
         </div>
-
-        <p class="text-2xs leading-relaxed text-subtle">{{ t(`agents.liveMetrics.measuredNote`) }}</p>
     </div>
 </template>

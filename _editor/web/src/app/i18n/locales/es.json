@@ -392,15 +392,19 @@
             "stopsWhen": "Se detiene sola cuando empieza un turno, cuando la cuenta supera el {reserve} % de un límite o cuando la indicación del siguiente turno ya no coincidiría.",
             "stop": "Dejar de mantener caliente"
         },
+        "dock": {
+            "boardLabel": "Estado del tablero",
+            "railLabel": "Estado de la línea principal",
+            "show": "Mantener {title} abierto",
+            "hide": "Cerrar {title}",
+            "close": "Cerrar {title}"
+        },
         "mainline": {
             "title": "Línea principal",
             "explain": "El trabajo se integra sin esperar a esta comprobación: se ejecuta después sobre el árbol principal, un proyecto cada vez, y nada de lo que encuentre retiene una integración, un commit ni un push.",
             "root": "espacio de trabajo",
             "checkingMain": "Comprobando main",
-            "lands": "{count} integración | {count} integraciones",
-            "mainRed": "main está en rojo",
             "failures": "{count} fallo | {count} fallos",
-            "since": "desde {time}",
             "landsWaiting": "{count} integración espera la comprobación de main | {count} integraciones esperan la comprobación de main",
             "mainGreen": "main en verde",
             "checkedAgo": "comprobado {ago}",
@@ -431,7 +435,12 @@
             "shortFixUp": "reparación",
             "shortReported": "notificado",
             "shortResolved": "resuelto",
-            "shortSpent": "agotado"
+            "shortSpent": "agotado",
+            "measuring": "Midiendo lo integrado desde",
+            "idle": "No hay ninguna comprobación en curso. La siguiente empieza cuando se integre trabajo.",
+            "andMore": "{title} +{count}",
+            "moreRed": "+{count} más en rojo",
+            "waitingShort": "{count} en espera"
         },
         "landCheck": {
             "checking": "Comprobando main",

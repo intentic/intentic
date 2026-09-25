@@ -387,15 +387,19 @@
             "stopsWhen": "Endet von selbst, wenn ein Zug beginnt, wenn das Konto {reserve} % eines Limits überschreitet oder wenn der Prompt des nächsten Zuges nicht mehr passen würde.",
             "stop": "Nicht mehr warm halten"
         },
+        "dock": {
+            "boardLabel": "Board-Status",
+            "railLabel": "Status der Hauptlinie",
+            "show": "{title} offen halten",
+            "hide": "{title} schließen",
+            "close": "{title} schließen"
+        },
         "mainline": {
             "title": "Hauptlinie",
             "explain": "Arbeit landet, ohne auf diese Prüfung zu warten: Sie läuft danach auf dem Hauptbaum, ein Projekt nach dem anderen, und nichts, was sie findet, hält ein Landen, einen Commit oder einen Push auf.",
             "root": "Arbeitsbereich",
             "checkingMain": "Prüfe main",
-            "lands": "{count} Landung | {count} Landungen",
-            "mainRed": "main ist rot",
             "failures": "{count} Fehler | {count} Fehler",
-            "since": "seit {time}",
             "landsWaiting": "{count} Landung wartet auf die Prüfung von main | {count} Landungen warten auf die Prüfung von main",
             "mainGreen": "main ist grün",
             "checkedAgo": "geprüft {ago}",
@@ -426,7 +430,12 @@
             "shortFixUp": "Reparatur",
             "shortReported": "gemeldet",
             "shortResolved": "erledigt",
-            "shortSpent": "erschöpft"
+            "shortSpent": "erschöpft",
+            "measuring": "Misst, was gelandet ist von",
+            "idle": "Keine Prüfung läuft. Die nächste beginnt, wenn Arbeit landet.",
+            "andMore": "{title} +{count}",
+            "moreRed": "+{count} weitere rot",
+            "waitingShort": "{count} wartend"
         },
         "landCheck": {
             "checking": "Prüfe main",
