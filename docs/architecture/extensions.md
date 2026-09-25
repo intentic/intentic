@@ -10,6 +10,7 @@ flowchart LR
     daemon --> procs["declared processes<br/>under the supervisor"]
     ui -->|"api.sandbox · permissions.sandbox"| daemon
     backend -->|"extension token · permissions.daemon"| daemon
+    procs -->|"same extension token"| daemon
 ```
 
 ## The package
@@ -38,12 +39,14 @@ A registry ([`_shared/registry`](../../_shared/registry)) is a git repository of
 
 - **UI.** Extensions compiled into the editor are imported from [`builtins.ts`](../../_editor/web/src/extension-host/builtins.ts). Any other bundle is fetched from the daemon and imported as a module by [`loader.ts`](../../_editor/web/src/extension-host/loader.ts); its bare imports resolve through the page's import map to the host's own copies, and [`bundle.ts`](../../_shared/extension-manifest/src/bundle.ts) refuses any other import. There is no iframe: UI code runs in the editor's window.
 - **Backend.** Every enabled `server` bundle runs in one Node child process beside the daemon ([`backend-supervisor.ts`](../../_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts)), and the daemon proxies `/x/<id>/*` to it. Each extension loads in its own try/catch.
-- **Processes.** `contributes.processes` run under the daemon's service supervisor, such as the chat gateways built on [`_shared/connector-runtime`](../../_shared/connector-runtime).
+- **Processes.** `contributes.processes` run under the daemon's service supervisor, such as the chat gateways built on [`_shared/connector-runtime`](../../_shared/connector-runtime). Each is started with its extension's own token in `INTENTIC_EXTENSION_TOKEN`, never the panel token.
 
 ## Isolation
 
 - The host refuses any view, command, viewer, setting or process the manifest did not declare ([`apiImpl.ts`](../../_editor/web/src/extension-host/apiImpl.ts)), so the manifest is the approval surface the install dialog shows.
 - A UI bundle's calls into the sandbox pass `permissions.sandbox`, a list of `METHOD path-glob` entries (`sandboxRouteAllowed` in [`permissions.ts`](../../_shared/extension-manifest/src/permissions.ts)). The browser enforces this list, since the code already runs with the owner's session in the owner's window.
-- A backend calls the daemon with its own minted token, which the daemon checks against `permissions.daemon` ([`grants.ts`](../../_sandbox/sandbox/src/auth/grants.ts)).
+- A backend and the extension's processes call the daemon with one token minted for that extension, which the daemon checks against `permissions.daemon` ([`grants.ts`](../../_sandbox/sandbox/src/auth/grants.ts)). An extension that declares `contributes.listener` also reaches that one provider's `/listeners/<provider>/*` routes without listing them, and no other provider's, whatever its globs say. `/state` hands it only the connectors whose card it contributes itself.
+- The panel token reaches no route that returns or uses a stored credential (`panel: false` in [`route-meta.ts`](../../_shared/sandbox-contract/src/protocol/route-meta.ts)). That token goes to every repo's operator panel, and extension code never holds it.
+- An extension card's MCP endpoint (`/mcp/extensions/<card>`) is mounted into a turn with a bearer minted for that turn, which reaches only the cards the turn was granted and stops working when the turn ends ([`extension-mcp.ts`](../../_sandbox/sandbox/src/extensions/backend/extension-mcp.ts)). A conversation keeps one bearer across its turns, since an ACP agent's session keeps its MCP config, but between turns that bearer reaches nothing.
 - Kinds of capability that carry real privilege stay in the core catalog, so a manifest cannot contribute them ([capabilities.md](capabilities.md)).
 - Extensions are trusted code inside the owner's sandbox and browser. The boundary is what they declare and what the owner approved, not a process sandbox.

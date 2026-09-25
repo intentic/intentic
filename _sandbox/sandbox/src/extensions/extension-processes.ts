@@ -15,10 +15,12 @@ export const startExtensionProcess = async (services: Services, extension: Insta
     await services.serviceProcesses.start(key, {
         command: process.command,
         cwd: process.cwd === undefined ? extension.dir : join(extension.dir, process.cwd),
-        // Reaches the daemon over loopback via the panel token; INTENTIC_WORKSPACE lets it write into the workspace.
+        // Reaches the daemon over loopback with its extension's own token, so it gets the reach the manifest declared
+        // (`permissions.daemon`, plus its listener provider's routes), never the panel token's; INTENTIC_WORKSPACE lets
+        // it write into the workspace.
         env: {
             INTENTIC_DAEMON: `http://127.0.0.1:${services.config.sandbox.port}`,
-            INTENTIC_PANEL_TOKEN: services.panelToken,
+            INTENTIC_EXTENSION_TOKEN: services.extensionBackend.grantFor(extension),
             INTENTIC_WORKSPACE: services.workspace.root,
         },
     });

@@ -95,14 +95,14 @@ export const capabilitiesContract = {
         })
         .input(CapabilityIdParamSchema)
         .output(CapabilityStatusSchema),
-    // Gated by `permissions.daemon` in the manifest (ext-deployments reads its Komodo key pair this way).
+    // Gated by `permissions.daemon` in the manifest, and in the handler to the cards the calling extension contributes.
     connection: capabilityRoute
         .route({
             method: "GET",
             path: "/capabilities/{id}/connection",
             summary: "A connection's settings, credentials included",
             description:
-                "The one call that hands back stored secrets, so an extension's own backend can dial the service behind a connection. Never answered for a signed-in person: only a machine credential reaches it, and an extension's only if its manifest asked for this route out loud at install time.",
+                "The one call that hands back stored secrets, so an extension's own backend can dial the service behind a connection. Never answered for a signed-in person: only a machine credential reaches it, and an extension's only if its manifest asked for this route out loud at install time, and only for a connection of a kind that extension itself contributes.",
         })
         // Answers with the secrets included: withheld from the panel token every panel process holds.
         .meta({ panel: false })

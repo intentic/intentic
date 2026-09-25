@@ -2,11 +2,12 @@ import type { ListenerDispatchFrame, ListenerMessage, ListenerStatus } from "@in
 import type { Logger } from "./log.js";
 
 // The gateway's client for the daemon's provider-scoped listener routes (app.ts / listener.routes.ts): the daemon holds
-// no provider connection itself, so every automation interaction rides these four routes, authenticated with
-// INTENTIC_PANEL_TOKEN. Types come from the contract's listener-protocol, the same declaration the daemon parses with.
+// no provider connection itself, so every automation interaction rides these four routes, authenticated with the
+// extension's own INTENTIC_EXTENSION_TOKEN: the daemon answers them only for the extension whose manifest declares this
+// provider as its listener. Types come from the contract's listener-protocol, the same declaration the daemon parses with.
 
-// The reconcile feed /listeners/<provider>/state serves: enabled automations for this provider, plus connector
-// capabilities with full config (secrets included, the gateway needs them). `TConfig` is the connector's own config
+// The reconcile feed /listeners/<provider>/state serves: enabled automations for this provider, plus the connector
+// capabilities this extension contributes, with full config (secrets included, the gateway needs them). `TConfig` is the connector's own config
 // shape.
 export interface DaemonState<TConfig> {
     readonly automations: ReadonlyArray<{ id: string; enabled: boolean }>;
@@ -22,9 +23,12 @@ export interface DaemonClient<TConfig> {
     readonly status: (snapshot: ListenerStatus) => Promise<void>;
 }
 
+// The header the daemon's extension grant reads a per-extension token from (the sandbox's auth/grants.ts).
+const EXTENSION_TOKEN_HEADER = "x-intentic-extension";
+
 export const createDaemonClient = <TConfig>(provider: string, base: string, token: string, log: Logger): DaemonClient<TConfig> => {
-    const url = (path: string): string => `${base}/listeners/${provider}/${path}`;
-    const jsonHeaders = { "content-type": "application/json", "x-intentic-panel": token };
+    const url = (path: string): string => `${base}/listeners/${encodeURIComponent(provider)}/${path}`;
+    const jsonHeaders = { "content-type": "application/json", [EXTENSION_TOKEN_HEADER]: token };
     const report = async (path: "failure" | "status", body: unknown, context: object): Promise<void> => {
         try {
             const res = await fetch(url(path), { method: "POST", headers: jsonHeaders, body: JSON.stringify(body) });
@@ -38,7 +42,7 @@ export const createDaemonClient = <TConfig>(provider: string, base: string, toke
     };
     return {
         state: async () => {
-            const res = await fetch(url("state"), { headers: { "x-intentic-panel": token } });
+            const res = await fetch(url("state"), { headers: { [EXTENSION_TOKEN_HEADER]: token } });
             if (!res.ok) {
                 throw new Error(`/listeners/${provider}/state returned ${res.status}`);
             }

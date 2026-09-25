@@ -11,20 +11,45 @@ import { DEBOUNCE_MS, dispatchListenerMessage, reportListenerFailure } from "../
 import { PAYLOAD_MAX, type TurnStream } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
-import { listenerState } from "./listener-state.js";
+import { callingExtension, type ExtensionGrant } from "../auth/grants.js";
+import { listenerStateOf } from "./listener-state.js";
 import { setListenerStatus } from "./listener-status.js";
 
 // Control surface for an extension's listener gateway; the gateway holds the provider connection, not the daemon.
 // Four routes: /state (reconcile), /dispatch (inbound events, optional ndjson stream), and failure/status reports.
-// Reached only with the per-boot panel token, server-side; /state returning connector secrets is not a new exposure.
+// Each answers only the extension token of the extension whose manifest declares this provider as its listener: /state
+// hands back connector credentials, and the others would let a stranger fire or mark that provider's automations.
+// The grant table admits nothing else (panel: false, control: "never"); the handler checks again, for a loopback daemon.
+
+// The calling extension when it owns this provider's listener; a Response refusing it otherwise.
+const listenerCaller = (services: Services, c: Context<AppEnv, "/listeners/:provider">): ExtensionGrant | Response => {
+    const caller = callingExtension(services.extensionBackend.verifyExtensionToken, (name) => c.req.header(name));
+    if (caller === undefined) {
+        return c.json({ error: "the listener routes answer an extension's own token only" }, 403);
+    }
+    return caller.listener === c.req.param("provider")
+        ? caller
+        : c.json({ error: `extension "${caller.id}" does not declare a listener for this provider` }, 403);
+};
 
 export const createListenerRoutes = (services: Services) => ({
-    // Reconcile feed: enabled listener automations plus connector configs (bot tokens included); polled to connect.
-    state: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => c.json(await listenerState(services, c.req.param("provider"))),
+    // Reconcile feed: enabled listener automations plus the calling extension's own connector configs (bot tokens
+    // included); polled to connect.
+    state: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
+        const caller = listenerCaller(services, c);
+        if (caller instanceof Response) {
+            return caller;
+        }
+        return c.json(await listenerStateOf(services, c.req.param("provider"), caller.id));
+    },
 
     // One inbound event routed to matching listener automations; plain calls fire-and-return.
     // `?stream=1` holds an ndjson response, one frame stream per matched automation, closed once every turn ends.
     dispatch: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
+        const caller = listenerCaller(services, c);
+        if (caller instanceof Response) {
+            return caller;
+        }
         const provider = c.req.param("provider");
         const declared = Number(c.req.header("content-length"));
         if (Number.isFinite(declared) && declared > PAYLOAD_MAX) {
@@ -74,6 +99,10 @@ export const createListenerRoutes = (services: Services) => ({
 
     // Fatal source failure (bad credential, missing intent), surfaced on the provider's automations and activity feed.
     failure: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
+        const caller = listenerCaller(services, c);
+        if (caller instanceof Response) {
+            return caller;
+        }
         const provider = c.req.param("provider");
         const body = (await c.req.json().catch(() => undefined)) as { detail?: unknown } | undefined;
         await reportListenerFailure(services, provider, typeof body?.detail === "string" ? body.detail : "listener failure");
@@ -82,6 +111,10 @@ export const createListenerRoutes = (services: Services) => ({
 
     // Gateway's periodic live status, into the map /activity/status reads; the daemon can't probe it directly.
     status: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
+        const caller = listenerCaller(services, c);
+        if (caller instanceof Response) {
+            return caller;
+        }
         const provider = c.req.param("provider");
         let body: ListenerStatus;
         try {

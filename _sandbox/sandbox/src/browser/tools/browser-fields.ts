@@ -7,13 +7,16 @@ import type { BrowserTurnTools } from "./browser-tools.js";
 // belong to would have the prompt promise tools the turn never mounted. Its own module, not browser-tools.ts, so an
 // arm can compose a request without pulling the Chromium bring-up in behind it.
 // A turn's loop that closes its browser routers when it ends, however it ends: the routers live in the daemon, so
-// nothing else notices the turn is over and kills the browsers they started.
-export const releasingBrowsers = <R>(loop: (request: R) => AsyncGenerator<AgentEvent>, browser: Pick<BrowserTurnTools, "release">) =>
+// nothing else notices the turn is over and kills the browsers they started. Anything else the turn mounted in the
+// daemon rides the same release (its extension cards' mount, turn-tools.ts).
+export const releasingBrowsers = <R>(loop: (request: R) => AsyncGenerator<AgentEvent>, ...held: readonly Pick<BrowserTurnTools, "release">[]) =>
     async function* (request: R): AsyncGenerator<AgentEvent> {
         try {
             yield* loop(request);
         } finally {
-            browser.release();
+            for (const mount of held) {
+                mount.release();
+            }
         }
     };
 

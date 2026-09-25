@@ -81,8 +81,8 @@ export const RAW_ROUTES = {
     "GET /extensions/{id}/bundle": { lane: "bulk" },
     // An extension backend's own namespace, proxied verbatim.
     "ALL /x/*": {},
-    // An extension card's MCP endpoint (its manifest's `mcp`), forwarded to the backend host; the per-boot token its
-    // handler checks is the one the turn's tool config carries.
+    // An extension card's MCP endpoint (its manifest's `mcp`), forwarded to the backend host; its handler checks the
+    // per-turn mount token the turn's tool config carries, and that the card is one that turn was granted.
     "POST /mcp/extensions/{id}": { auth: "door" },
     "GET /mcp/extensions/{id}": { auth: "door" },
     "DELETE /mcp/extensions/{id}": { auth: "door" },
@@ -107,11 +107,12 @@ export const RAW_ROUTES = {
     "GET /fleet": { agent: true },
     "POST /fleet/message": { agent: true },
     "GET /fleet/{handle}": { agent: true },
-    // An extension gateway's realtime-listener control, reached with the panel token.
-    "GET /listeners/{provider}/state": {},
-    "POST /listeners/{provider}/dispatch": {},
-    "POST /listeners/{provider}/failure": {},
-    "POST /listeners/{provider}/status": {},
+    // An extension gateway's realtime-listener control: /state hands back its connectors' stored credentials, so only the
+    // extension token of the extension declaring that `listener.provider` reaches them, checked in the handler too.
+    "GET /listeners/{provider}/state": { floor: "maintainer", panel: false, control: "never" },
+    "POST /listeners/{provider}/dispatch": { panel: false, control: "never" },
+    "POST /listeners/{provider}/failure": { panel: false, control: "never" },
+    "POST /listeners/{provider}/status": { panel: false, control: "never" },
     // The CI webhook receiver, gated by the per-sandbox webhook secret.
     "POST /ci/webhook/{host}": { auth: "door" },
     // Below maintainer a pairing is capped to port-mirror, so a collaborator may mint a preview tunnel.

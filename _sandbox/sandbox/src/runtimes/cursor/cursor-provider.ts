@@ -70,7 +70,7 @@ export type CursorPlanDeps = Pick<
     | "cursorAgent"
     | "cursorModels"
     | "cursorStore"
-    | "extensionMcpToken"
+    | "extensionMcpMounts"
     | "files"
     | "hostBridgeToken"
     | "observedLimits"
@@ -110,7 +110,8 @@ export const planCursorTurn = async (
     }
     // The same remote MCP set the harness and ACP arms mount, which cursorMcpServers turns into http servers: a machine,
     // a connected browser or an mcp capability the owner granted must reach a Cursor turn like any other.
-    const tools = await turnToolsOf(services, granted, input.conversationId);
+    const mounted = await turnToolsOf(services, granted, input.conversationId);
+    const tools = mounted.tools;
     const request: AgentRequest<CursorCredential> = {
         ...context.base,
         spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
@@ -124,7 +125,7 @@ export const planCursorTurn = async (
     };
     // Real account id, not a shared marker: usage and rate-limit frames can name which connection paid. Attachments fold
     // into the prompt as a file list; Cursor's read tool takes them off disk, like OpenCode/Pi.
-    return armPlan(releasingBrowsers(services.cursorAgent, browser), withAttachments(request, context.attachmentPaths), account.id);
+    return armPlan(releasingBrowsers(services.cursorAgent, browser, mounted), withAttachments(request, context.attachmentPaths), account.id);
 };
 
 // Nothing to probe on PATH, no server to reach: what can be missing is the SDK module (a pack) or a usable credential,

@@ -8,8 +8,9 @@ import { errorMessage } from "@intentic/base/errors";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import type { Logger } from "pino";
 import { tokenEquals } from "../../auth/auth.js";
+import type { ExtensionGrant } from "../../auth/grants.js";
 import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../extension-readiness.js";
-import { enabledExtensions, type ExtensionHost } from "../installed-extensions.js";
+import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../installed-extensions.js";
 import { freePort } from "../../processes/free-port.js";
 import {
     BACKEND_CONFIG_ENV,
@@ -24,8 +25,8 @@ import {
 // code cannot be unloaded.
 // Every lifecycle change is a host restart (/x routes answer 503 meanwhile); the daemon spawns, waits for health,
 // forwards logs, and respawns with backoff.
-// Owns the HOST token (proves a request came through the daemon's gate) and per-extension tokens verified against the
-// manifest's permissions.daemon.
+// Owns the HOST token (proves a request came through the daemon's gate) and the per-extension tokens, one per enabled
+// extension, which its backend and its processes both carry and the extension grant verifies (auth/grants.ts).
 
 // One extension's backend row: the host's own /health states, plus two the supervisor alone can know (absent,
 // incompatible).
@@ -49,8 +50,13 @@ export interface ExtensionBackend {
     statusOf(id: string): BackendStatus | undefined;
     // Where the /x proxy forwards while the host is up; undefined means answer 503 with the current state's detail.
     proxyTarget(): { readonly port: number; readonly hostToken: string } | undefined;
-    // Extension grant resolver (auth/grants.ts): maps a minted backend token to its declared daemon reach.
-    verifyExtensionToken(presented: string): { readonly permissions: readonly string[] } | undefined;
+    // Extension grant resolver (auth/grants.ts): maps a minted per-extension token to the extension and its declared
+    // daemon reach, as of the last converge or grantFor.
+    verifyExtensionToken(presented: string): ExtensionGrant | undefined;
+    // The token an extension's process is started with: minted (once per daemon lifetime) and made to resolve now,
+    // so a process that dials the daemon before the next converge is not refused. A disabled or removed extension's
+    // stops resolving at the converge its toggle or removal triggers.
+    grantFor(extension: InstalledExtension): string;
 }
 
 // Resolves the host entry beside this file so dev and dist take the same code path (.js under node, .ts under tsx).
@@ -87,8 +93,13 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         tokens.set(id, minted);
         return minted;
     };
-    // Token to the permissions.daemon it was minted for, as of the last converge.
-    let reach = new Map<string, readonly string[]>();
+    // Token to the grant it was minted for, as of the last converge: every enabled extension, backend or not.
+    let reach = new Map<string, ExtensionGrant>();
+    const grantOf = (extension: InstalledExtension): ExtensionGrant => ({
+        id: extension.id,
+        permissions: extension.manifest.permissions?.daemon ?? [],
+        ...(extension.manifest.contributes?.listener === undefined ? {} : { listener: extension.manifest.contributes.listener.provider }),
+    });
 
     let generation = 0;
     let desired = false;
@@ -111,12 +122,15 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
     const collect = async (): Promise<{
         runnable: BackendHostExtension[];
         reported: BackendStatus[];
-        tokenReach: Map<string, readonly string[]>;
+        tokenReach: Map<string, ExtensionGrant>;
     }> => {
         const runnable: BackendHostExtension[] = [];
         const reported: BackendStatus[] = [];
-        const tokenReach = new Map<string, readonly string[]>();
+        const tokenReach = new Map<string, ExtensionGrant>();
         for (const extension of await enabledExtensions(services())) {
+            // Every enabled extension resolves, not just a backend's: its processes carry the same token.
+            const grant = grantOf(extension);
+            tokenReach.set(tokenFor(extension.id), grant);
             const server = extension.manifest.server;
             if (server === undefined) {
                 continue;
@@ -134,10 +148,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
                 reported.push({ id: extension.id, state: "absent", detail: RUNTIME_ABSENT_DETAIL });
                 continue;
             }
-            const daemonToken = tokenFor(extension.id);
-            const daemonPermissions = extension.manifest.permissions?.daemon ?? [];
-            tokenReach.set(daemonToken, daemonPermissions);
-            runnable.push({ id: extension.id, dir: extension.dir, server, daemonToken, daemonPermissions });
+            runnable.push({ id: extension.id, dir: extension.dir, server, daemonToken: tokenFor(extension.id), daemonPermissions: grant.permissions });
         }
         return { runnable, reported, tokenReach };
     };
@@ -174,7 +185,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         const run = ++generation;
         clearTimeout(retry);
         kill();
-        let collected: { runnable: BackendHostExtension[]; reported: BackendStatus[]; tokenReach: Map<string, readonly string[]> };
+        let collected: { runnable: BackendHostExtension[]; reported: BackendStatus[]; tokenReach: Map<string, ExtensionGrant> };
         try {
             collected = await collect();
         } catch (error) {
@@ -263,12 +274,17 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         statusOf: (id) => state.extensions.find((extension) => extension.id === id),
         proxyTarget: () => (host !== undefined && state.state === "running" ? { port: host.port, hostToken: host.hostToken } : undefined),
         verifyExtensionToken: (presented) => {
-            for (const [token, permissions] of reach) {
+            for (const [token, grant] of reach) {
                 if (tokenEquals(presented, token)) {
-                    return { permissions };
+                    return grant;
                 }
             }
             return undefined;
+        },
+        grantFor: (extension) => {
+            const token = tokenFor(extension.id);
+            reach = new Map(reach).set(token, grantOf(extension));
+            return token;
         },
     };
 };

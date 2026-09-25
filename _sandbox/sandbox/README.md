@@ -29,7 +29,11 @@ flowchart LR
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`agents/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.
-- Extension code never runs in the daemon process; it runs in a supervised backend host.
+- Extension code never runs in the daemon process; it runs in a supervised backend host and in declared processes.
+  Both reach the daemon on one token per extension, held to its manifest's `permissions.daemon` (`auth/grants.ts`).
+  A turn reaches an extension card's MCP endpoint on a bearer minted per turn for the cards that turn was granted
+  (`extensions/backend/extension-mcp.ts`). The panel token that repo operator panels hold reaches no route that
+  returns a stored secret.
 - Stored files evolve under one engine (`store/`). Each is declared with `defineDocument` beside its store, carrying
   the conversions its shape has had; `jsonFile` runs them on every read and keeps what it does not know on writes.
   Before any store opens, `store/evolution/state-convergence.ts` writes converted files back under a journal a rolled-back build

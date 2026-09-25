@@ -40,6 +40,7 @@ const writeManifest = async (dir: string, body: object): Promise<void> => {
 const fakeServices = (extensionsDir: string, automations: AutomationRecord[], capabilities: Capability[]) => {
     const started: string[] = [];
     const stopped: string[] = [];
+    const envs = new Map<string, Readonly<Record<string, string>>>();
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root: mkdtempSync(join(tmpdir(), "ext-proc-work-")) }),
         files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
@@ -47,9 +48,13 @@ const fakeServices = (extensionsDir: string, automations: AutomationRecord[], ca
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
         config: { ...testConfig, extensionsDir },
         panelToken: "panel-token",
+        extensionBackend: unstubbed<Services["extensionBackend"]>("extensionBackend", {
+            grantFor: (extension) => `ext-token:${extension.id}`,
+        }),
         serviceProcesses: unstubbed<Services["serviceProcesses"]>("serviceProcesses", {
-            start: async (key) => {
+            start: async (key, spec) => {
                 started.push(key);
+                envs.set(key, spec.env ?? {});
             },
             stop: (key) => {
                 stopped.push(key);
@@ -58,7 +63,7 @@ const fakeServices = (extensionsDir: string, automations: AutomationRecord[], ca
         }),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {}, error: () => {} }),
     });
-    return { services, started, stopped };
+    return { services, started, stopped, envs };
 };
 
 const listenerAutomation = (id: string): AutomationRecord => ({
@@ -98,6 +103,19 @@ test("a non-listener extension's autoStart processes start unconditionally", asy
     const { services, started } = fakeServices(baked, [], []);
     await startAllExtensionProcesses(services);
     expect(started).toEqual([extensionProcessKey("acme.tool", "watcher")]);
+});
+
+// The process's whole daemon credential is its own extension's token: the panel token reaches /secrets-adjacent routes a
+// connector has no business with, and never rides into a process's environment.
+test("an extension process is started with its extension's own token, never the panel token", async () => {
+    const baked = mkdtempSync(join(tmpdir(), "ext-proc-baked-"));
+    await writeManifest(join(baked, "acme.tool"), plainManifest);
+    const { services, envs } = fakeServices(baked, [], []);
+    await startAllExtensionProcesses(services);
+    const env = envs.get(extensionProcessKey("acme.tool", "watcher")) ?? {};
+    expect(env["INTENTIC_EXTENSION_TOKEN"]).toBe("ext-token:acme.tool");
+    expect(Object.keys(env)).not.toContain("INTENTIC_PANEL_TOKEN");
+    expect(Object.values(env)).not.toContain("panel-token");
 });
 
 test("reconcile starts a wanted gateway and stops an unwanted one", async () => {

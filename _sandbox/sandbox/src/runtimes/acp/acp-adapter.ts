@@ -11,6 +11,7 @@ import {
 } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { turnToolsOf } from "../../agent/tools/turn-tools.js";
+import { releasingBrowsers } from "../../browser/tools/browser-fields.js";
 import type { Services } from "../../composition.js";
 
 // Any provider id outside the native six is an installed `agent`-kind capability served over the Agent Client Protocol.
@@ -20,7 +21,7 @@ import type { Services } from "../../composition.js";
 // What the ACP adapter reads: the installed manifest, the daemon's tools it passes through, and the warm connection pool.
 export type AcpAdapterDeps = Pick<
     Services,
-    "acpAgent" | "capabilities" | "config" | "extensionMcpToken" | "files" | "hostBridgeToken" | "tools" | "webextBridgeToken" | "workspace"
+    "acpAgent" | "capabilities" | "config" | "extensionMcpMounts" | "files" | "hostBridgeToken" | "tools" | "webextBridgeToken" | "workspace"
 >;
 
 // Harness doesn't apply here, the agent is its own loop, and neither do the Claude-only request fields; MCP tools pass
@@ -37,9 +38,11 @@ export const planAcpTurn = async (
         return { ok: false, message: `Unknown agent provider "${provider}", add it as an Agent capability first.` };
     }
     const acpConfig = capability.config;
-    const tools = await turnToolsOf(services, granted, input.conversationId);
+    const mounted = await turnToolsOf(services, granted, input.conversationId);
+    const tools = mounted.tools;
     return armPlan(
-        (request) => services.acpAgent(provider, acpConfig, request),
+        // The agent's warm session keeps the mount bearer across turns; the release only empties it until the next.
+        releasingBrowsers((request) => services.acpAgent(provider, acpConfig, request), mounted),
         withAttachments(
             {
                 ...context.base,

@@ -132,11 +132,12 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
         () =>
             log.error({ name }, "missing required env: the gateway can't start");
     const daemonBase = requireEnv("INTENTIC_DAEMON", missing("INTENTIC_DAEMON"));
-    const panelToken = requireEnv("INTENTIC_PANEL_TOKEN", missing("INTENTIC_PANEL_TOKEN"));
+    // The extension's own daemon credential, which the daemon starts every extension process with.
+    const extensionToken = requireEnv("INTENTIC_EXTENSION_TOKEN", missing("INTENTIC_EXTENSION_TOKEN"));
     const port = Number(requireEnv("PORT", missing("PORT")));
     const workspaceRoot = process.env["INTENTIC_WORKSPACE"] ?? WORKSPACE_ROOT;
 
-    const daemon: DaemonClient<TConfig> = createDaemonClient(spec.provider, daemonBase, panelToken, log);
+    const daemon: DaemonClient<TConfig> = createDaemonClient(spec.provider, daemonBase, extensionToken, log);
 
     // Which connection each slot holds, and the config key it was built from (to detect a token edit as a change).
     const wired = new Map<string, { key: string; handle: THandle }>();

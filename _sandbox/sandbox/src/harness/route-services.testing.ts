@@ -187,6 +187,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             statusOf: () => undefined,
             proxyTarget: () => undefined,
             verifyExtensionToken: () => undefined,
+            grantFor: (extension) => `extension-token-${extension.id}`,
         },
         panelToken: "panel-secret",
         // The /vpn-scoped secret the in-container CLI presents; fixed here, minted per boot in production.

@@ -96,11 +96,11 @@ test("the sync grant reaches ports, its own report and the ssh transport, and no
     expect(await verdict(sync, "intruder", "GET", "/system/sync/ssh")).toBe("unauthorized");
 });
 
-// The panel grant is broad on purpose (a panel is an app somebody else wrote), with exactly one route carved out:
-// `/capabilities/<id>/connection`, which returns a capability's config with secrets included.
-// That token is injected into every panel/connector process, so leaving it in reach would make stored passwords and
-// TOTP seeds readable by anything that can read /proc.
-test("the panel grant reaches the daemon broadly but never the capability connection read", async () => {
+// The panel grant is broad on purpose (a repo's operator panel is an app somebody else wrote), with the routes that hand
+// back or put in motion a stored credential carved out. That token is injected into every operator panel, so leaving
+// one in reach would make stored passwords, bot tokens and TOTP seeds readable by anything that can read /proc.
+// Extension processes no longer hold it (they carry their own extension token), so the listener routes are out too.
+test("the panel grant reaches the daemon broadly but never a route that returns a stored secret", async () => {
     const grants = grantsOf({
         panelToken: "panel",
         agentToken: "agent",
@@ -112,17 +112,31 @@ test("the panel grant reaches the daemon broadly but never the capability connec
     if (panel === undefined) {
         throw new Error("no panel grant in the table");
     }
-    // What a panel and a connector gateway actually do, still allowed.
-    expect(await verdict(panel, "panel", "GET", "/listeners/discord/state")).toBe("ok");
-    expect(await verdict(panel, "panel", "POST", "/listeners/discord/dispatch")).toBe("ok");
+    // What an operator panel actually does, still allowed.
     expect(await verdict(panel, "panel", "GET", "/capabilities")).toBe("ok");
     expect(await verdict(panel, "panel", "GET", "/capabilities/reddit/status")).toBe("ok");
-    // The doors that were never meant for it: the one that hands a stored credential back.
-    expect(await verdict(panel, "panel", "GET", "/capabilities/reddit/connection")).toBe("out-of-scope");
-    expect(await verdict(panel, "panel", "GET", "/capabilities/npm/connection")).toBe("out-of-scope");
-    // And the one that sends it: `probe` rehydrates a stored credential and dials a caller-supplied URL.
-    // The same disclosure as the connection read, but with nothing in the response to show for it.
-    expect(await verdict(panel, "panel", "POST", "/capabilities/probe")).toBe("out-of-scope");
+    expect(await verdict(panel, "panel", "GET", "/system/terminals")).toBe("ok");
+    // Every route that returns a stored secret: a connector's config from /state, a card's connection, a vault value.
+    const secretReturning = [
+        ["GET", "/listeners/discord/state"],
+        ["GET", "/listeners/cloudflare/state"],
+        ["GET", "/capabilities/reddit/connection"],
+        ["GET", "/capabilities/npm/connection"],
+        ["POST", "/secrets/reveal"],
+    ] as const;
+    for (const [method, path] of secretReturning) {
+        expect(`${method} ${path} ${await verdict(panel, "panel", method, path)}`).toBe(`${method} ${path} out-of-scope`);
+    }
+    // And the ones that put one in motion: a gateway's dispatch, failure and status reports act on a provider's
+    // automations with that provider's credential; `probe` rehydrates a stored credential and dials a caller's URL.
+    for (const [method, path] of [
+        ["POST", "/listeners/discord/dispatch"],
+        ["POST", "/listeners/discord/failure"],
+        ["POST", "/listeners/discord/status"],
+        ["POST", "/capabilities/probe"],
+    ] as const) {
+        expect(`${method} ${path} ${await verdict(panel, "panel", method, path)}`).toBe(`${method} ${path} out-of-scope`);
+    }
     // And the carve-out stays narrow: a connection named "probe" is not the probe route.
     expect(await verdict(panel, "panel", "GET", "/capabilities/probe/status")).toBe("ok");
     // A wrong secret on an in-scope route is 401, never a fall-through to the bearer check behind it.
@@ -138,7 +152,8 @@ test("the extension grant reaches exactly the declared daemon routes", async () 
         agentToken: "agent",
         controlTokens: { resolve: async () => undefined, touch: async () => undefined } as unknown as ControlTokens,
         verifySync: async () => false,
-        verifyExtension: (presented) => (presented === "ext-token" ? { permissions: ["GET /workspace/file", "POST /agents"] } : undefined),
+        verifyExtension: (presented) =>
+            presented === "ext-token" ? { id: "acme.tool", permissions: ["GET /workspace/file", "POST /agents"] } : undefined,
     });
     const extension = grants.find((grant) => grant.header === "x-intentic-extension");
     if (extension === undefined) {
@@ -152,6 +167,44 @@ test("the extension grant reaches exactly the declared daemon routes", async () 
     expect(await verdict(extension, "ext-token", "DELETE", "/workspace/file")).toBe("out-of-scope");
     // An unknown token is 401 whatever it asked for: there is no scope to speak of until the token resolves.
     expect(await verdict(extension, "intruder", "GET", "/workspace/file")).toBe("unauthorized");
+});
+
+// A listener extension's gateway reaches its own provider's four listener routes without declaring them, and no other
+// provider's, even when its manifest globs every provider: /state hands back that provider's stored credentials.
+// The same token is what the extension's processes carry, so their reach is exactly this too.
+test("an extension grant reaches only its own listener provider's routes, whatever its globs say", async () => {
+    const grants = grantsOf({
+        panelToken: "panel",
+        agentToken: "agent",
+        controlTokens: { resolve: async () => undefined, touch: async () => undefined } as unknown as ControlTokens,
+        verifySync: async () => false,
+        verifyExtension: (presented) =>
+            presented === "discord-token"
+                ? { id: "intentic.discord", permissions: ["GET /listeners/*/state", "GET /ports"], listener: "discord" }
+                : presented === "plain-token"
+                  ? { id: "acme.tool", permissions: ["GET /listeners/*/state", "POST /listeners/*/dispatch"] }
+                  : undefined,
+    });
+    const extension = grants.find((grant) => grant.header === "x-intentic-extension");
+    if (extension === undefined) {
+        throw new Error("no extension grant in the table");
+    }
+    expect(await verdict(extension, "discord-token", "GET", "/listeners/discord/state")).toBe("ok");
+    expect(await verdict(extension, "discord-token", "POST", "/listeners/discord/dispatch")).toBe("ok");
+    expect(await verdict(extension, "discord-token", "POST", "/listeners/discord/dispatch?stream=1")).toBe("ok");
+    expect(await verdict(extension, "discord-token", "POST", "/listeners/discord/failure")).toBe("ok");
+    expect(await verdict(extension, "discord-token", "POST", "/listeners/discord/status")).toBe("ok");
+    // Its declared reach elsewhere is untouched.
+    expect(await verdict(extension, "discord-token", "GET", "/ports")).toBe("ok");
+    // Another provider, an unknown one, or one smuggled in encoded, is out of scope despite the glob.
+    expect(await verdict(extension, "discord-token", "GET", "/listeners/cloudflare/state")).toBe("out-of-scope");
+    expect(await verdict(extension, "discord-token", "GET", "/listeners/slack/state")).toBe("out-of-scope");
+    expect(await verdict(extension, "discord-token", "GET", "/listeners/%E0%A4%A/state")).toBe("out-of-scope");
+    // A verb the route does not serve is not in reach for its own provider either.
+    expect(await verdict(extension, "discord-token", "DELETE", "/listeners/discord/state")).toBe("out-of-scope");
+    // An extension declaring no listener reaches none, globs or not.
+    expect(await verdict(extension, "plain-token", "GET", "/listeners/discord/state")).toBe("out-of-scope");
+    expect(await verdict(extension, "plain-token", "POST", "/listeners/discord/dispatch")).toBe("out-of-scope");
 });
 
 // The control grant names its holder: a per-boot secret admits a process, but a control token was minted by a person

@@ -39,7 +39,7 @@ interface Seen {
 const daemonGranting = (permissions: readonly string[]): Seen[] => {
     const seen: Seen[] = [];
     const grants = grantsOf(
-        unstubbed<GrantSources>("grant sources", { verifyExtension: (presented) => (presented === TOKEN ? { permissions } : undefined) }),
+        unstubbed<GrantSources>("grant sources", { verifyExtension: (presented) => (presented === TOKEN ? { id: "acme.conformance", permissions } : undefined) }),
     );
     stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const request = new Request(input, init);

@@ -3,6 +3,7 @@ import { type Capability, capabilitiesContract, CapabilitySchema, collidesWithRe
 import { implement, ORPCError } from "@orpc/server";
 import { forkedExec } from "@intentic/scaffold";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
+import { callingExtension } from "../auth/grants.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { capabilityJobSession } from "../terminal/terminal-session.js";
@@ -315,16 +316,25 @@ export const createCapabilitiesRoutes = (services: Services) => {
             }
             return registry[capability.kind].status(ctx, capability.id, capability.config);
         }),
-        // One capability's stored config with secrets included, for an extension backend's credential read. The gate is
-        // the identity check: this route serves only callers the bearer middleware never sets `identity` for, and is
-        // unreachable from anything that renders.
+        // One capability's stored config with secrets included, for an extension's credential read. Only an extension
+        // token is served (never a signed-in browser, a panel or a control token), and only for a card that extension
+        // owns: one its own contribution describes, or its own install record. The manifest's `permissions.daemon` glob
+        // only says the extension reads connections at all.
         connection: i.connection.handler(async ({ input, context }) => {
-            if (context.identity !== undefined) {
+            const caller = callingExtension(services.extensionBackend.verifyExtensionToken, (name) => context.headers.get(name));
+            if (context.identity !== undefined || caller === undefined) {
                 throw new ORPCError("FORBIDDEN", { message: "the connection read serves extension backends, never a signed-in browser" });
             }
             const capability = await services.capabilities.get(input.id);
             if (capability === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
+            }
+            const owner =
+                capability.kind === "extension"
+                    ? capability.id
+                    : contributionFor(await contributionRegistry(services), capability.kind, capability.config)?.extension.id;
+            if (owner !== caller.id) {
+                throw new ORPCError("FORBIDDEN", { message: `"${capability.id}" is not a connection extension "${caller.id}" contributes` });
             }
             // Only string fields survive; a connection is env-shaped, so a structured value would confuse a header
             // caller.

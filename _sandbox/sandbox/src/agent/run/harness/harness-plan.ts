@@ -38,7 +38,7 @@ export type HarnessPlanDeps = HarnessCredentialDeps &
         Services,
         | "agent"
         | "capabilities"
-        | "extensionMcpToken"
+        | "extensionMcpMounts"
         | "browserRouters"
         | "files"
         | "heavyCommands"
@@ -192,7 +192,8 @@ export const planHarnessTurn = async (
     if (!resolved.ok) {
         return { ok: false, ...opt("code", resolved.code), message: resolved.message };
     }
-    const remote = await turnToolsOf(deps, granted, input.conversationId);
+    const mounted = await turnToolsOf(deps, granted, input.conversationId);
+    const remote = mounted.tools;
     // What this turn may reach out of the container, and the owner's own browsers: the cards peerToolsOf just mounted,
     // through Services, since the hosts and webext subsystems reach back into this one.
     const hostDevices = await deps.hostReach(granted);
@@ -230,7 +231,7 @@ export const planHarnessTurn = async (
         }),
     );
     return armPlan(
-        releasingBrowsers(deps.agent, browser),
+        releasingBrowsers(deps.agent, browser, mounted),
         {
             ...context.base,
             ...gated,

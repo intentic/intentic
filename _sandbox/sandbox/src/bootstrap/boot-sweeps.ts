@@ -156,4 +156,6 @@ export const startBootSweeps = (phase: BootPhase): void => {
     shutdown.push(() => services.reaper.stop());
     // Turns' browsers are this daemon's children: a restart must not leave them driving pages nobody can reach.
     shutdown.push(() => services.browserRouters.closeAll());
+    // And their extension-card mounts: no bearer minted by this boot answers once it is winding down.
+    shutdown.push(() => services.extensionMcpMounts.closeAll());
 };

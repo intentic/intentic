@@ -12,7 +12,8 @@ const KOMODO = {
 };
 
 // Auth ENABLED (the grants middleware only exists on the exposed daemon) with an extension backend holding
-// one minted token whose declared reach is exactly this route.
+// two minted tokens whose declared reach is exactly this route: the shipped connectors extension, which contributes the
+// komodo card, and a stranger that contributes nothing of it.
 const appWith = (permissions: readonly string[]) =>
     createApp(
         services({
@@ -25,7 +26,13 @@ const appWith = (permissions: readonly string[]) =>
                 status: () => ({ state: "stopped", extensions: [] }),
                 statusOf: () => undefined,
                 proxyTarget: () => undefined,
-                verifyExtensionToken: (presented) => (presented === "ext-tok" ? { permissions } : undefined),
+                verifyExtensionToken: (presented) =>
+                    presented === "ext-tok"
+                        ? { id: "intentic.connectors", permissions }
+                        : presented === "other-tok"
+                          ? { id: "acme.stranger", permissions }
+                          : undefined,
+                grantFor: (extension) => `extension-token-${extension.id}`,
             },
         }),
     );
@@ -67,4 +74,20 @@ test("an unknown capability answers 404 to a granted caller", async () => {
         headers: { "x-intentic-extension": "ext-tok" },
     });
     expect(response.status).toBe(404);
+});
+
+// The glob only says an extension reads connections at all; which ones is the card's own contribution. An extension
+// declaring `GET /capabilities/*/connection` does not thereby read another extension's card, nor does the panel token.
+test("an extension reads only the connections of cards it contributes, and the panel token none", async () => {
+    const app = appWith(["GET /capabilities/*/connection"]);
+    const stranger = await app.request("http://sandbox.test/capabilities/prod-komodo/connection", {
+        headers: { "x-intentic-extension": "other-tok" },
+    });
+    expect(stranger.status).toBe(403);
+    expect(await stranger.text()).not.toContain("K-SECRET");
+    const panel = await app.request("http://sandbox.test/capabilities/prod-komodo/connection", {
+        headers: { "x-intentic-panel": "panel-secret" },
+    });
+    expect(panel.status).toBe(403);
+    expect(await panel.text()).not.toContain("K-SECRET");
 });

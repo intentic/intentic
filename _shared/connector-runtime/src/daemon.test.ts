@@ -47,3 +47,22 @@ test("an accepted report logs nothing", async () => {
     await createDaemonClient("telegram", "http://127.0.0.1:1", "token", log).status({ connections: [] });
     expect(warned).toEqual([]);
 });
+
+// The listener routes answer only the extension's own token, so every call carries it in the extension grant's header
+// and nothing in the panel token's.
+test("every call rides the extension token header", async () => {
+    const seen: Array<Record<string, string>> = [];
+    stubGlobal(
+        "fetch",
+        jest.fn(async (_url: string, init?: RequestInit) => {
+            seen.push({ ...(init?.headers as Record<string, string>) });
+            return new Response(JSON.stringify({ automations: [], connectors: [] }), { status: 200 });
+        }),
+    );
+    const { log } = recordingLog();
+    const client = createDaemonClient("discord", "http://127.0.0.1:1", "ext-token", log);
+    await client.state();
+    await client.status({ connections: [] });
+    expect(seen.map((headers) => headers["x-intentic-extension"])).toEqual(["ext-token", "ext-token"]);
+    expect(seen.flatMap((headers) => Object.keys(headers)).filter((name) => name === "x-intentic-panel")).toEqual([]);
+});

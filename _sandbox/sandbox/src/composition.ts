@@ -289,6 +289,7 @@ import { conversationBusy } from "./agent/run/turn/turn-liveness.js";
 import { type UsageStore, fileUsageStore } from "./usage/usage-store.js";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { createExtensionBackend, type ExtensionBackend } from "./extensions/backend/backend-supervisor.js";
+import { createExtensionMcpMounts, type ExtensionMcpMounts } from "./extensions/backend/extension-mcp.js";
 import { type SecretKeyResolver, vaultExtensionSettingSecrets } from "./extensions/extension-settings.js";
 import { enabledExtensions, installedExtensions } from "./extensions/installed-extensions.js";
 import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
@@ -382,9 +383,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly browserRouters: BrowserRouterHub;
     // Same pair for the user's own browsers; a separate bridge token so one leaking can't open the other's door.
     readonly webextBridgeToken: string;
-    // Per-boot secret a turn's tool config carries to reach /mcp/extensions/:id, an extension card's MCP endpoint on
-    // the shared backend host; its own token so a leak opens only the extension MCP door, not a peer's.
-    readonly extensionMcpToken: string;
+    // Every live turn's hold on its granted extension cards, reached at /mcp/extensions/:id with a mount bearer of its
+    // own that opens only those cards, and only while the turn runs.
+    readonly extensionMcpMounts: ExtensionMcpMounts;
     readonly webexts: WebExtStore;
     readonly webextHub: WebExtHub;
     // Which of the owner's own browsers a turn may work in, and what each of them is, for the same reason hostReach
@@ -1300,7 +1301,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger, peerTools),
         browserRouters: createBrowserRouters(() => services),
         webextBridgeToken: randomBytes(32).toString("hex"),
-        extensionMcpToken: randomBytes(32).toString("hex"),
+        extensionMcpMounts: createExtensionMcpMounts(),
         webexts: filePeerStore(config.historyRoot, WEBEXT_PEER.store),
         webextHub: createPeerHub<WebExtClient, WebExtAnnounced, WebExtFacts, WebExtScopes>(WEBEXT_PEER.hub, logger, peerTools),
         // Held readings only (webext/webext-peer.ts), like hostReach: a browser that is closed costs the turn nothing.

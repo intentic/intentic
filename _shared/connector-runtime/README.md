@@ -12,7 +12,9 @@ flowchart LR
 
 - Runs in the sandbox as each connector extension's auto-started process, not inside the daemon. The daemon holds no
   provider connection; the gateway opens them and talks to the daemon only through the provider-scoped listener
-  routes, authenticated with `INTENTIC_PANEL_TOKEN`.
+  routes, authenticated with the extension's own `INTENTIC_EXTENSION_TOKEN`. The daemon answers those routes only for
+  the extension whose manifest names that provider as its listener, and `/state` hands it only the connectors whose card
+  that extension contributes.
 - `runConnectorGateway` reconciles the connections a connector wants against the daemon's state on a timer, backs off
   after a fatal connect, reports status, serves `/health`, and shuts down on SIGTERM. A connector supplies only its
   `GatewayHooks`.

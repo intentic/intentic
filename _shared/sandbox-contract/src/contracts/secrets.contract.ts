@@ -64,6 +64,8 @@ export const secretsContract = {
             description:
                 "The only call that hands a value back, and it is for the owner alone. Sent as a body rather than in the address, so the name never ends up in a log or a browser's history.",
         })
+        // Hands a stored value back: withheld from the panel token every panel process holds.
+        .meta({ panel: false })
         .input(SecretKeyParamSchema)
         .output(SecretRevealSchema),
     // Gate policy lives off the workspace, not in agent-editable `.intentic/config/`, so agents can't hold the key.
