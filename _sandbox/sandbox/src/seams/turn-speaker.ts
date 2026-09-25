@@ -1,6 +1,7 @@
 import { speakerActor, speakerOwner, type TurnSpeaker } from "@intentic/sandbox-contract";
 import type { Caller } from "../auth/auth.js";
 import type { Principal } from "../auth/principal.js";
+import { opt } from "../opt.js";
 import type { TurnInput } from "./turn-starter.js";
 
 // Who is speaking, built once at a door from what the middleware verified on the request, never from the body: a
@@ -10,7 +11,7 @@ import type { TurnInput } from "./turn-starter.js";
 /** The verified speaker behind a request; undefined for a caller the sandbox cannot name (a per-boot secret). */
 export const speakerOf = (identity: Caller | undefined, principal: Principal | undefined): TurnSpeaker | undefined => {
     if (identity !== undefined) {
-        return { kind: "person", email: identity.email, ...(identity.name === undefined ? {} : { name: identity.name }) };
+        return { kind: "person", email: identity.email, ...opt("name", identity.name) };
     }
     return principal === undefined ? undefined : { kind: "program", token: principal.label };
 };
@@ -20,7 +21,5 @@ export const spokenBy = (speaker: TurnSpeaker | undefined): Pick<TurnInput, "spe
     if (speaker === undefined) {
         return {};
     }
-    const actor = speakerActor(speaker);
-    const owner = speakerOwner(speaker);
-    return { speaker, ...(actor === undefined ? {} : { actor }), ...(owner === undefined ? {} : { owner }) };
+    return { speaker, ...opt("actor", speakerActor(speaker)), ...opt("owner", speakerOwner(speaker)) };
 };

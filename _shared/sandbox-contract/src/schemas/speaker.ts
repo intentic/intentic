@@ -54,8 +54,16 @@ export const speakerVoice = (speaker: TurnSpeaker): MessageVoice =>
     speaker.kind === "program" ? "person" : speaker.kind === "agent" ? "agent" : speaker.kind === "sandbox" ? "sandbox" : "person";
 
 /** The member who owns what this speaker opens; a program, an agent and the sandbox own nothing, so theirs stay claimable. */
-export const speakerOwner = (speaker: TurnSpeaker): Pick<SessionOwner, "email" | "name"> | undefined =>
-    speaker.kind === "person" ? { email: speaker.email, ...(speaker.name === undefined ? {} : { name: speaker.name }) } : undefined;
+export const speakerOwner = (speaker: TurnSpeaker): Pick<SessionOwner, "email" | "name"> | undefined => {
+    if (speaker.kind !== "person") {
+        return undefined;
+    }
+    const owner: Pick<SessionOwner, "email" | "name"> = { email: speaker.email };
+    if (speaker.name !== undefined) {
+        owner.name = speaker.name;
+    }
+    return owner;
+};
 
 /** A person, verified, at the keyboard: never a program holding a token a person minted. */
 export const spokenByPerson = (speaker: TurnSpeaker | undefined): boolean => speaker?.kind === "person";

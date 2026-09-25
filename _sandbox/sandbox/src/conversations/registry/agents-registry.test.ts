@@ -1,3 +1,4 @@
+import { opt } from "../../opt.js";
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { waitFor } from "@intentic/testing/bun";
 import { WORKSPACE_ROOT } from "@intentic/constants";
@@ -2335,7 +2336,7 @@ describe("the persona a conversation speaks as", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         const ran = async (actsAs: string | undefined, at: number): Promise<void> => {
-            await beginTurn(conversations, turn({ profile: { agent: "claude", harness: "native", ...(actsAs === undefined ? {} : { actsAs }) } }), at);
+            await beginTurn(conversations, turn({ profile: { agent: "claude", harness: "native", ...opt("actsAs", actsAs) } }), at);
             await conversations.send("c1", { kind: "settle" }, at + 1).settled;
         };
         await ran("support", 1_000);
