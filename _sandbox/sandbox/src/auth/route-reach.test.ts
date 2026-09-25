@@ -23,6 +23,7 @@ const RECORDED: Readonly<Record<string, string>> = {
     "GET /activity": "bearer waits timed viewer panel read drive land",
     "GET /activity/status": "bearer waits timed viewer panel read drive land",
     "POST /agent": "bearer waits timed collaborator guest panel editor drive land",
+    "POST /agent/account": "bearer waits timed collaborator guest panel drive land",
     "POST /agent/attach": "bearer waits stream viewer guest panel read drive land",
     "GET /agent/commands": "bearer waits timed viewer guest panel read drive land",
     "POST /agent/queue/edit": "bearer waits timed collaborator guest panel drive land",

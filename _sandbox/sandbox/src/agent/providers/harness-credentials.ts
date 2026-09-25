@@ -17,8 +17,8 @@ import { unversionedBase } from "../../endpoints/endpoint-config.js";
 import { endpointModelId } from "../../endpoints/endpoint-translator.js";
 import { endpointConfigOf } from "../../endpoints/local-model.js";
 import type { Services } from "../../composition.js";
-import { serviceabilities } from "../../usage/serviceability.js";
-import type { TurnLimit } from "../../usage/fleet-limit.js";
+import { serviceabilities } from "../../usage/serviceability/serviceability.js";
+import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { HarnessCredential } from "./agent-request.js";
 
 // What authenticates a Claude Code harness turn, per provider. Two mutually exclusive shapes: `claude` carries the
@@ -111,7 +111,13 @@ export const harnessCredentialOf = (credentials: HarnessCredentials): HarnessCre
 
 export type HarnessCredentialsResult =
     | { readonly ok: true; readonly credentials: HarnessCredentials }
-    | { readonly ok: false; readonly code?: "subscription-required" | "claude-reauth" | "trial-unavailable"; readonly message: string };
+    | {
+          readonly ok: false;
+          readonly code?: "subscription-required" | "claude-reauth" | "trial-unavailable";
+          readonly message: string;
+          // The account the refusal is about, where it names one: what a reconnect badge belongs on.
+          readonly account?: string;
+      };
 
 const requirementOf = (provider: NativeProvider): string => PROVIDER_ACCESS[provider].requirement;
 
@@ -405,7 +411,12 @@ export const resolveHarnessCredentials = async (
         // A connected-but-revoked account gets a reconnect refusal, not a generic no-account message.
         const revoked = accountId !== undefined && (await services.claudeStore.list()).some((a) => a.id === accountId && a.needsReauth === true);
         if (revoked) {
-            return { ok: false, code: "claude-reauth", message: "Claude sign-in was revoked, reconnect the account to pick this conversation back up." };
+            return {
+                ok: false,
+                code: "claude-reauth",
+                message: "Claude sign-in was revoked, reconnect the account to pick this conversation back up.",
+                account: accountId,
+            };
         }
         return { ok: false, message: named ? goneAccountMessage("Claude") : "No Claude account connected, connect it in Setup before chatting." };
     }

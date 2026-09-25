@@ -249,6 +249,8 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
             kind: "error",
             code: "rate_limit",
             message: "Claude usage limit reached.",
+            // The account that served the turn rides on its failure, so no window guesses where the pool is spent.
+            account: "default",
             held: { ran: false, handoffTokens: expect.any(Number) },
             resetsAt: 1_900_000_000,
             autoResume: "available",
@@ -360,6 +362,7 @@ test("an outage goes out as the breaker's retry frame, and remembers the session
             kind: "error",
             code: "provider-outage",
             message: "Anthropic is overloaded.",
+            account: "default",
             autoResume: "available",
             outage: { retryAt: expect.any(Number) },
             retries: { made: 0, max: 6 },
@@ -408,7 +411,7 @@ test("a refused credential is promised a re-mint and held for it, unless the tur
     expect(frames).toStrictEqual([
         OPENING_CHECKS_PREAMBLE,
         { kind: "session", sessionId: "s-token", account: "default" },
-        { kind: "error", code: "claude-token-refused", message: "401 invalid bearer token", autoResume: "scheduled" },
+        { kind: "error", code: "claude-token-refused", message: "401 invalid bearer token", account: "default", autoResume: "scheduled" },
         { kind: "done" },
     ]);
     expect(writes.providerRefusals).toStrictEqual([
@@ -439,6 +442,7 @@ test("a refused credential is promised a re-mint and held for it, unless the tur
         kind: "error",
         code: "claude-token-refused",
         message: "401 invalid bearer token",
+        account: "default",
     });
     expect(resumes).toStrictEqual([
         { conversationId: "frames-token-again", event: { kind: "resume-superseded" } },
@@ -461,7 +465,7 @@ test("a turn that ends with nothing to show gets its failure synthesized ahead o
     expect(frames).toStrictEqual([
         OPENING_CHECKS_PREAMBLE,
         { kind: "tool_call", id: "call-read", name: "Read", category: "read", status: "completed", locations: [{ path: "/work/src/parser.ts" }] },
-        { kind: "error", message: sentence, held: { ran: true }, autoResume: "available" },
+        { kind: "error", message: sentence, account: "default", held: { ran: true }, autoResume: "available" },
         { kind: "done" },
     ]);
     expect(writes.activity.map(({ type, error }) => ({ type, error }))).toStrictEqual([

@@ -482,6 +482,24 @@ const limitChat = (): Conversation => {
     return conversation;
 };
 
+// A conversation the daemon holds moves in one command (switchAccount), which re-runs the held turn there; the two-step
+// press below is only for a daemon that cannot take that command.
+it(`continues on the other account in one daemon command when the conversation is the daemon's`, async () => {
+    twoAccounts(100, 10);
+    const conversation = limitChat();
+    conversation.registered.value = true;
+    const moved = jest.spyOn(conversation.turn, `continueOn`).mockResolvedValue(true);
+    const resume = jest.spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
+    await mountPanel();
+
+    await openWays();
+    button(`Continue on`)?.click();
+    await settle();
+
+    expect(moved.mock.calls).toEqual([[`acc-2`, false]]);
+    expect(resume).not.toHaveBeenCalled();
+});
+
 it(`offers the other account by name on a spent allowance, and re-runs the held turn on it`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();

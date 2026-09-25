@@ -8,7 +8,7 @@ import {
     observedTurnLimit,
     pickObservedAccount,
 } from "../../usage/observed-limits.js";
-import type { TurnLimit } from "../../usage/fleet-limit.js";
+import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { CursorCatalog } from "./cursor-catalog.js";
 import { type CursorStore, liveCursorAccounts, type StoredCursorAccount } from "./cursor-credentials.js";
 

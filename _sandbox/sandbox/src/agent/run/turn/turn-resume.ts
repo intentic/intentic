@@ -24,6 +24,7 @@ import { POST_PLAN_MODE } from "../agent.js";
 import { formatAnswers } from "../../tools/question-answers.js";
 import { personaRunModel, runRoleModel } from "../../models/run-role-model.js";
 import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
+import { type Routing, routingFor } from "../../providers/routing.js";
 import { consumeEntry, type JournalEntry, type JournalledTurn, resumeBars, spendAttempt } from "./turn-journal.js";
 import type { SentTurn, StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { refusedBegin } from "../conversation/turn-placement.js";
@@ -68,16 +69,17 @@ export interface HeldTurn {
     readonly remint?: { readonly account: string; readonly refusedToken: string } | undefined;
 }
 
-// Whether the press keeps the held turn's runtime. Absent fields default to the wire's claude/native, so spelling them
-// out isn't a switch.
-const sameRuntime = (input: AgentTurn, routing: ResumeRouting): boolean =>
-    routing.agent === (input.agent ?? "claude") && routing.harness === (input.harness ?? "native");
+// Where a press sends the held turn, by the one routing rule (agent/providers/routing.ts), with the held turn's own
+// routing as the profile: naming no account keeps the held turn's on its provider, since only a person's explicit pick
+// (switchAccount, or an older editor's `account`) moves a conversation to another account.
+const pressed = (input: AgentTurn, routing: ResumeRouting): Routing =>
+    routingFor({ provider: input.agent ?? "claude", harness: input.harness ?? "native", account: input.account }, routing);
 
-// The account a press runs on. Naming none on the same runtime keeps the held turn's: only a person's explicit pick
-// moves a conversation to another account, and a press that names nothing chose nothing. On another runtime the held
-// account belongs to the one being left, so nothing carries over.
-const pressedAccount = (input: AgentTurn, routing: ResumeRouting): string | undefined =>
-    routing.account ?? (sameRuntime(input, routing) ? input.account : undefined);
+// Whether the press keeps the held turn's runtime (provider and loop), whatever it does to the account.
+const sameRuntime = (input: AgentTurn, routing: ResumeRouting): boolean => {
+    const where = pressed(input, routing);
+    return where.provider === (input.agent ?? "claude") && where.harness === (input.harness ?? "native");
+};
 
 // The turn's own fields come from the held copy; routing (agent/harness/account/model) comes from the press when named.
 // Destructure-then-add so a press onto another runtime leaves none of the old runtime's fields standing.
@@ -88,7 +90,7 @@ const reroutedInput = (input: TurnInput & { conversationId: string }, routing: R
     const { agent: _agent, harness: _harness, account: _account, model: _model, ...rest } = input;
     // No model in the press keeps the refused turn's; an unloaded catalog has no pick to send.
     const model = routing.model ?? input.model;
-    const account = pressedAccount(input, routing);
+    const { account } = pressed(input, routing);
     return {
         ...rest,
         agent: routing.agent,
@@ -100,11 +102,11 @@ const reroutedInput = (input: TurnInput & { conversationId: string }, routing: R
 
 // Retires the session on an agent/harness change (not a model swap) unless `carry` covers an account change too.
 const retiresSession = (input: AgentTurn, routing: ResumeRouting | undefined): boolean =>
-    routing !== undefined && (!sameRuntime(input, routing) || (pressedAccount(input, routing) !== input.account && routing.carry !== true));
+    routing !== undefined && (!sameRuntime(input, routing) || (pressed(input, routing).account !== input.account && routing.carry !== true));
 
 // Same runtime, different account: the case the `carried` note describes.
 const movesAccount = (input: AgentTurn, routing: ResumeRouting | undefined): boolean =>
-    routing !== undefined && sameRuntime(input, routing) && pressedAccount(input, routing) !== input.account;
+    routing !== undefined && sameRuntime(input, routing) && pressed(input, routing).account !== input.account;
 
 // A re-run's note, whether it opens fresh, and whether it replaces an earlier attempt's note rather than keeping it.
 interface RerunNote {

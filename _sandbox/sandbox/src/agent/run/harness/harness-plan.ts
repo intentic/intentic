@@ -167,7 +167,7 @@ export const planHarnessTurn = async (
 ): Promise<TurnArmPlan> => {
     const [resolved, settings, safetyPolicy] = await harnessReads(deps, input, context);
     if (!resolved.ok) {
-        return { ok: false, ...opt("code", resolved.code), message: resolved.message };
+        return { ok: false, ...opt("code", resolved.code), message: resolved.message, ...opt("account", resolved.account) };
     }
     // What this turn may reach out of the container, and the owner's own browsers: the cards peerToolsOf mounts, through
     // Services, since the hosts and webext subsystems reach back into this one.

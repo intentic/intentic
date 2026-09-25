@@ -16,7 +16,8 @@ import { uuid } from "../../../lib/uuid";
 import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
-import { resumes, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
+import { accountIntent, resumes, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
+import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import { type AttachHead, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor, isNudgeText } from "../transcript/transcript";
@@ -54,17 +55,15 @@ const repeatsNudge = (message: { readonly text: string; readonly attachments: re
     return isNudgeText(message.text) && isNudgeText(waiting.text);
 };
 
-// Routing for re-running a held turn, read at the press; an empty pick means the daemon keeps the held model, and an
-// unnamed account the held turn's (turn-resume.ts pressedAccount). The account is named for a pick made in this chat,
-// or for a switch of runtime away from the session, whose account belongs to the runtime being left; this window's
-// guess otherwise would move a conversation the press only meant to continue. `carry` keeps the provider session
-// across an account change, only when asked.
+// What a press re-runs a held turn on: the runtime and model the composer holds, the account only as intent (the same
+// rule a send names it by, accountIntent). An empty pick means the daemon keeps the held model. `carry` keeps the
+// provider session across an account change, only when asked; moving to another account is switchAccount's (continueOn).
 const heldRouting = (settings: TurnSettings, session: SessionRef | undefined, options: { readonly carry?: boolean }): ResumeRouting => {
-    const runtimeSwitch = session !== undefined && (session.provider !== settings.agent || session.harness !== settings.harness);
+    const account = accountIntent(settings, { registered: true, resume: resumes(session, settings) ? session : undefined });
     return {
         agent: settings.agent,
         harness: settings.harness,
-        account: settings.accountPicked === true || runtimeSwitch ? settings.account : undefined,
+        ...(account === undefined ? {} : { account }),
         model: settings.model || undefined,
         ...(options.carry === true ? { carry: true } : {}),
     };
@@ -628,6 +627,55 @@ export class TurnClient {
         this.host.selection.apply({ kind: `rerun` });
         if (!(await this.askResume(routing))) {
             return false;
+        }
+        await this.reattach();
+        return true;
+    }
+
+    // Asks the daemon to move this conversation to `account` (switchAccount), the one way a conversation it holds changes
+    // who pays. A chat it does not hold yet, another box, or a daemon too old for the route leaves the pick to ride the next
+    // turn instead (accountIntent), and so does a turn running now (409): the pick stays on the selection either way.
+    moveAccount(account: string): void {
+        const { host } = this;
+        if (!host.registered.value || host.box.value !== undefined || !supportsRoute(`agent.switchAccount`)) {
+            return;
+        }
+        // A refusal (a turn running) or an unreachable daemon leaves the pick on the selection, where the next turn names it.
+        void orRefusal(sandboxRpc.agent.switchAccount({ conversationId: host.conversationId, account }, { context: { at: host.box.value } })).catch((error: unknown) => {
+            host.error.value = errorMessage(error, `The sandbox did not answer.`);
+        });
+    }
+
+    // Continues a held turn on another account: one command, the daemon moving the conversation and re-running the turn
+    // there (switchAccount). `carry` keeps the provider session (re-reads once, cold); fresh reseeds from the record.
+    // False, having done nothing, where that command cannot answer (nothing held, another box, a daemon too old for the
+    // route): the caller then takes the two steps an older daemon understood, the pick and the press naming it.
+    async continueOn(account: string, carry: boolean): Promise<boolean> {
+        const { host } = this;
+        const held = host.registered.value && host.pickUp.value?.held !== undefined;
+        if (this.streaming.value || !held || host.box.value !== undefined || !supportsRoute(`agent.switchAccount`)) {
+            return false;
+        }
+        if (this.stopping !== undefined) {
+            await this.stopping;
+        }
+        host.selection.apply({ kind: `accountMoved`, account });
+        if (!carry) {
+            this.cutSegment();
+        }
+        host.selection.apply({ kind: `rerun` });
+        try {
+            const moved = await orRefusal(
+                sandboxRpc.agent.switchAccount({ conversationId: host.conversationId, account, ...(carry ? { carry } : {}) }, { context: { at: host.box.value } }),
+            );
+            if (moved instanceof SandboxHttpError) {
+                host.error.value = moved.message;
+                return true;
+            }
+        } catch (error) {
+            // Unreachable, not refused: said on the red line, and the held turn stays for the next press.
+            host.error.value = errorMessage(error, `The sandbox did not answer.`);
+            return true;
         }
         await this.reattach();
         return true;

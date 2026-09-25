@@ -2,7 +2,7 @@ import { unstubbed } from "@intentic/testing";
 import type { UsageWindow } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
-import type { TurnLimit } from "../../usage/fleet-limit.js";
+import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import { spentRung } from "./role-model-quota.js";
 
 // Quota reads must only ever say spent on evidence, never as a guess; the undefined-returning cases are what this suite

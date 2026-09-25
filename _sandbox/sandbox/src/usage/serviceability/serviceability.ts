@@ -9,7 +9,7 @@ import {
     type TranslatorAccount,
     type TranslatorAccounts,
 } from "@intentic/sandbox-contract";
-import type { Services } from "../composition.js";
+import type { Services } from "../../composition.js";
 
 // "Can this account serve a turn?", answered in one place. The rule itself is the contract's (`serviceState` in
 // models/plan-pools.ts); this module feeds it every fact the daemon holds: revoke marks and seat refusals, the plan-limit
@@ -33,7 +33,7 @@ const routedFacts = (account: TranslatorAccount): ServiceFacts => ({ account: ac
 
 // Claude's accounts from its own store with their seat marks joined in (the store's rows carry none, which is how the
 // limit move once landed on a seatless account); a routed provider's from the translator, bench included.
-const factsOf = async (deps: ServiceabilityDeps, provider: AgentProvider): Promise<readonly ServiceFacts[]> => {
+export const accountFactsOf = async (deps: ServiceabilityDeps, provider: AgentProvider): Promise<readonly ServiceFacts[]> => {
     if (provider === "claude") {
         const [accounts, seats, usage] = await Promise.all([deps.claudeStore.list(), deps.claudeSeats.read(), deps.accountUsage.read()]);
         return accounts.map((account) => ({ ...nativeFacts(account), seatRefusal: seats[account.id]?.reason, usage: usage[account.id] }));
@@ -47,7 +47,7 @@ export const serviceabilities = async (
     provider: AgentProvider,
     model?: ModelRef,
 ): Promise<readonly { readonly id: string; readonly state: AccountState }[]> => {
-    const [facts, refusals] = await Promise.all([factsOf(deps, provider), deps.providerRefusals.read()]);
+    const [facts, refusals] = await Promise.all([accountFactsOf(deps, provider), deps.providerRefusals.read()]);
     const states = serviceStates(facts, refusals[provider], model);
     return facts.map((entry) => ({ id: entry.account, state: states.get(entry.account) ?? { kind: "unknown" } }));
 };

@@ -7,24 +7,16 @@ import {
     type ProviderRefusal,
     type TranslatorAccounts,
 } from "@intentic/sandbox-contract";
-import { computed, watch, type WritableComputedRef } from "vue";
-import { type AccountPicks, accountPicks } from "./accountPreference";
+import { watch } from "vue";
 import { perProvider } from "./providerCatalog";
 
-// Who can run a turn on each provider, as last heard from the daemon: connected accounts, translator
-// subscriptions, observed refusals, and the rule that resolves a conversation's next account.
+// Who can run a turn on each provider, as last heard from the daemon: connected accounts, translator subscriptions and
+// observed refusals. Which account a conversation runs on is the daemon's record (AgentSummary.account), never resolved
+// here.
 // In-memory only (account ids are sandbox-scoped); lives outside useChat so any reader can import it
-// without a cycle. The user's last pick is a separate, persisted preference in accountPreference.ts.
+// without a cycle.
 
 export const providerAccounts = sandboxRef<Record<AgentProvider, readonly OauthAccount[]>>(() => perProvider<readonly OauthAccount[]>(() => []));
-
-// Not a ref of its own: reads and writes go straight through to the scoped sandbox's stored preference.
-export const selectedAccountId: WritableComputedRef<AccountPicks> = computed({
-    get: () => accountPicks().value,
-    set: (picks) => {
-        accountPicks().value = picks;
-    },
-});
 
 // One empty slot per routed provider, built from the contract's own list; a missing slot would throw
 // when a reader checks its length. The translator's subscriptions are the other half of "can this
@@ -88,32 +80,12 @@ watch(
 // Whether the lists have been read yet: distinguishes "no account" from "haven't asked".
 export const accountsLoaded = sandboxRef(() => false);
 
-// A guess at which account an unnamed turn probably runs on, for readers of account-keyed state (the
-// usage map). Not authoritative: the daemon decides, and reports back on the session frame.
-export const effectiveAccount = (provider: AgentProvider, picked: string | undefined): string | undefined =>
-    picked ?? providerAccounts.value[provider]?.[0]?.id;
-
-// The account a fresh turn on a provider uses: the user's explicit pick when it's still connected, else the
-// provider's first connected account. The single source every account-reset site routes through.
-export const rememberedAccountFor = (provider: AgentProvider): string | undefined => {
-    // An unseeded provider key (an ACP agent) has no daemon account store, its own credential store serves it.
+// Marks one account as needing a new sign-in, ahead of the next list read that will say the same: the account a failure
+// frame named, never one resolved here.
+export const markNeedsReauth = (provider: AgentProvider, account: string, detail: string): void => {
     const accounts = providerAccounts.value[provider] ?? [];
-    const picked = selectedAccountId.value[provider];
-    // Before the list loads, trust the persisted pick outright; once loaded, a pick it doesn't contain is
-    // stale.
-    if (!accountsLoaded.value) {
-        return picked;
-    }
-    return accounts.some((account) => account.id === picked) ? picked : accounts[0]?.id;
-};
-
-// Marks the account a turn actually ran under for reauth, using the same resolution rule every
-// account-keyed reader follows; its verdict moves with it, the one the daemon gives a revoked sign-in.
-export const markAccountReauth = (provider: AgentProvider, picked: string | undefined, detail: string): void => {
-    const accounts = providerAccounts.value[provider] ?? [];
-    const accountId = effectiveAccount(provider, picked);
-    const marked = accounts.map((account: OauthAccount) =>
-        account.id === accountId ? Object.assign({}, account, { needsReauth: true, detail, state: { kind: `blocked`, fix: `reconnect`, reason: detail } as const }) : account,
+    const marked = accounts.map((entry: OauthAccount) =>
+        entry.id === account ? Object.assign({}, entry, { needsReauth: true, detail, state: { kind: `blocked`, fix: `reconnect`, reason: detail } as const }) : entry,
     );
     providerAccounts.value = { ...providerAccounts.value, [provider]: marked };
 };

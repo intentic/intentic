@@ -1,7 +1,7 @@
 import type { UsageWindow } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import type { TurnLimit } from "../../usage/fleet-limit.js";
+import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import { limitReopensAt } from "./limit-reset.js";
 
 // Pins that the refusal frame's reopen time reads the same whichever runtime ran the turn, and the two cases where

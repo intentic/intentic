@@ -10,7 +10,6 @@ const WORLD: PickWorld = {
     generating: false,
     session: undefined,
     local: true,
-    rememberedAccount: (provider) => `${provider}-account`,
     rememberedModel: (provider) => `${provider}-model`,
     defaults: () => ({ provider: `claude`, picked: undefined, harness: `native`, effort: `high`, thinking: true, auto: false }),
 };
@@ -29,7 +28,8 @@ describe(`seeding`, () => {
             ...UNPICKED,
             provider: `claude`,
             harness: `native`,
-            account: `claude-account`,
+            // Auto: never a seeded guess, so the daemon places the first turn by serviceability.
+            account: undefined,
             model: `claude-model`,
             effortPick: `high`,
             thinking: true,
@@ -52,7 +52,8 @@ describe(`the provider`, () => {
             selection: {
                 ...SENT,
                 provider: `codex`,
-                account: `codex-account`,
+                // Another provider starts on auto: an account never crosses providers, and no pick is remembered.
+                account: undefined,
                 model: `codex-model`,
                 displacedModel: undefined,
                 sentModel: undefined,
@@ -78,7 +79,7 @@ describe(`the provider`, () => {
             selection: {
                 ...SEEDED,
                 provider: `codex`,
-                account: `codex-account`,
+                account: undefined,
                 model: `codex-model`,
                 movedFrom: { provider: `claude`, value: `claude-model` },
             },
@@ -100,7 +101,7 @@ describe(`the provider`, () => {
         };
 
         expect(reduceSelection(moved, { kind: `restoreProvider` }, WORLD)).toEqual({
-            selection: { ...moved, provider: `claude`, account: `claude-account`, model: `opus`, movedFrom: undefined, sentModel: undefined },
+            selection: { ...moved, provider: `claude`, account: undefined, model: `opus`, movedFrom: undefined, sentModel: undefined },
             effects: { segmentCut: true, divider: `refresh` },
         });
         expect(reduceSelection(SEEDED, { kind: `restoreProvider` }, WORLD).selection).toBe(SEEDED);
@@ -121,7 +122,7 @@ describe(`the model`, () => {
         expect(reduceSelection(SENT, { kind: `selectModel`, pick: { provider: `codex`, value: `gpt-5` } }, WORLD).selection).toEqual({
             ...SENT,
             provider: `codex`,
-            account: `codex-account`,
+            account: undefined,
             model: `gpt-5`,
             sentModel: undefined,
         });
@@ -178,10 +179,17 @@ describe(`the settings`, () => {
         });
     });
 
-    it(`takes an account while a card waits, owing the divider to the settle`, () => {
+    it(`takes an account while a card waits, owing the divider to the settle, and asks the daemon to move there`, () => {
         expect(reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, PARKED)).toEqual({
-            selection: { ...SEEDED, account: `second`, accountPicked: true, switchedMidTurn: true },
-            effects: { kept: true, accountPick: { provider: `claude`, account: `second` }, divider: `refresh` },
+            selection: { ...SEEDED, account: `second`, switchedMidTurn: true },
+            effects: { kept: true, switchAccount: `second`, divider: `refresh` },
+        });
+    });
+
+    it(`follows a move the daemon made at this window's press, asking nothing of it again`, () => {
+        expect(reduceSelection(SEEDED, { kind: `accountMoved`, account: `second` }, WORLD)).toEqual({
+            selection: { ...SEEDED, account: `second` },
+            effects: { divider: `refresh` },
         });
     });
 
@@ -213,7 +221,7 @@ describe(`a live turn`, () => {
 describe(`the session`, () => {
     it(`moves the held session onto a reconnected credential, retracting the divider rather than drawing one`, () => {
         expect(reduceSelection(SEEDED, { kind: `rebindAccount`, account: `renewed` }, { ...WORLD, session: CLAUDE_SESSION })).toEqual({
-            selection: { ...SEEDED, account: `renewed`, accountPicked: true },
+            selection: { ...SEEDED, account: `renewed` },
             effects: { session: { ...CLAUDE_SESSION, account: `renewed` }, divider: `drop` },
         });
     });
@@ -242,26 +250,26 @@ describe(`the session`, () => {
         });
     });
 
-    it(`holds a pick the conversation isn't running on yet, and settles it once the session shows it`, () => {
+    // A pick went to the daemon as switchAccount the moment it was made, so there is no window-side pick to guard: the
+    // daemon's session is where the conversation runs, and a session already on the pick changes nothing.
+    it(`takes the daemon's word over a pick, and settles quietly when the session already shows it`, () => {
         const picked = reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, WORLD).selection;
 
-        expect(reduceSelection(picked, { kind: `bindSession`, session: CLAUDE_SESSION }, WORLD)).toEqual({ selection: picked, effects: { session: CLAUDE_SESSION } });
-        expect(reduceSelection(picked, { kind: `bindSession`, session: { ...CLAUDE_SESSION, account: `second` } }, WORLD).selection).toEqual({
-            ...picked,
-            accountPicked: false,
+        expect(reduceSelection(picked, { kind: `bindSession`, session: CLAUDE_SESSION }, WORLD)).toEqual({
+            selection: { ...picked, account: `claude-account` },
+            effects: { session: CLAUDE_SESSION, divider: `refresh` },
         });
+        const settled = { ...CLAUDE_SESSION, account: `second` };
+        expect(reduceSelection(picked, { kind: `bindSession`, session: settled }, WORLD)).toEqual({ selection: picked, effects: { session: settled } });
     });
 
-    it(`drops a pick made on the provider it leaves`, () => {
+    it(`drops a pick made on the provider it leaves: the next one starts on auto`, () => {
         const picked = reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, WORLD).selection;
 
-        expect(reduceSelection(picked, { kind: `selectProvider`, provider: `codex` }, WORLD).selection).toMatchObject({
-            account: `codex-account`,
-            accountPicked: false,
-        });
+        expect(reduceSelection(picked, { kind: `selectProvider`, provider: `codex` }, WORLD).selection.account).toBeUndefined();
     });
 
-    it(`resumes a history session on Claude's remembered account and native loop, planning first`, () => {
+    it(`resumes a history session on Claude, on auto, in the native loop, planning first`, () => {
         const away = { ...SENT, provider: `codex` as const, account: `codex-account`, model: `codex-model`, displacedModel: `gpt-4` };
 
         expect(reduceSelection(away, { kind: `resumeHistory`, sessionId: `s-9` }, WORLD)).toEqual({
@@ -270,12 +278,12 @@ describe(`the session`, () => {
                 modePick: `plan`,
                 provider: `claude`,
                 harness: `native`,
-                account: `claude-account`,
+                account: undefined,
                 model: `claude-model`,
                 displacedModel: undefined,
                 sentModel: undefined,
             },
-            effects: { session: { id: `s-9`, provider: `claude`, account: `claude-account`, harness: `native` } },
+            effects: { session: { id: `s-9`, provider: `claude`, account: undefined, harness: `native` } },
         });
     });
 });

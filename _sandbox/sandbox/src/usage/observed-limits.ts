@@ -2,7 +2,7 @@ import { type AccountUsage, gatingWindows, humanizeModelId, type ModelRef, type 
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
-import type { TurnLimit } from "./fleet-limit.js";
+import type { TurnLimit } from "./serviceability/fleet-limit.js";
 
 // The reading for a plan that publishes none. Cursor's API vends /me, /models, /agents and /repositories and nothing
 // about allowances, so the only measurement its accounts ever produce is a refusal — exact where a poll is a floor, but

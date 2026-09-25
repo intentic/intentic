@@ -14,11 +14,9 @@ export interface TurnSettings {
     readonly agent: AgentProvider;
     // Which harness runs the turn (native runtime vs the Claude Code loop); orthogonal to `agent`.
     readonly harness: AgentHarness;
-    // Which connected account of the provider serves the turn; undefined means the daemon's first account.
+    // The account the person picked, or the daemon's own record of where the conversation runs; undefined is auto (the
+    // daemon picks by serviceability). Sent only as intent (accountIntent).
     readonly account: string | undefined;
-    // The person picked `account` in this chat and the conversation isn't running on it yet (Selection.accountPicked):
-    // the one case a turn continuing the conversation asks the daemon for an account (namesAccount).
-    readonly accountPicked?: boolean;
     // Persona id the turn acts as; undefined means an ordinary chat with every connected account reachable.
     readonly actsAs: string | undefined;
     // The folder the conversation opens in (the project it belongs to); undefined means the workspace root. The daemon
@@ -54,19 +52,25 @@ export const boundSession = (
 ): SessionRef => ({ id: sessionId, provider: turn.provider, account: resolvedAccount ?? turn.account, harness: turn.harness });
 
 // True when a session's runtime, account and harness still match the current selection; any mismatch means the
-// next turn starts fresh.
+// next turn starts fresh. A selection on auto names no account, so it continues wherever the daemon runs the session.
 export const resumes = (
     session: SessionRef | undefined,
     selection: { agent: AgentProvider; account: string | undefined; harness: AgentHarness },
 ): boolean =>
-    session !== undefined && session.provider === selection.agent && session.account === selection.account && session.harness === selection.harness;
+    session !== undefined &&
+    session.provider === selection.agent &&
+    (selection.account === undefined || session.account === selection.account) &&
+    session.harness === selection.harness;
 
-// Whether a turn names its account or leaves the daemon to run it where the conversation already runs. Named for a pick
-// made in this chat, and wherever there's no conversation of the daemon's to follow: a chat's first turn, or a switch of
-// runtime that leaves the session behind. Otherwise omitted, since this window's idea of the account can be older than
-// the conversation's (another window, a limit move), and sending it moved the conversation back to it unasked.
-export const namesAccount = (settings: TurnSettings, facts: { readonly registered: boolean; readonly resume: SessionRef | undefined }): boolean =>
-    settings.accountPicked === true || !facts.registered || facts.resume === undefined;
+// The account a request names: intent only. The conversation's account is the daemon's record (AgentSummary.account),
+// moved by `switchAccount`, so a turn that continues the session this window holds names none: this window's idea of it
+// can be older than the conversation's (another window, a limit move). Named only where there is nothing to continue:
+// a chat's first turn, or a turn that leaves the session behind (another runtime, or a pick a daemon too old for
+// `switchAccount` could only take this way). Undefined there too is auto.
+export const accountIntent = (
+    settings: Pick<TurnSettings, "account">,
+    facts: { readonly registered: boolean; readonly resume: SessionRef | undefined },
+): string | undefined => (facts.registered && facts.resume !== undefined ? undefined : settings.account);
 
 // Flags that ride only when true, since the daemon reads false and unset the same way. `autoPicked` is deliberately not
 // one of them: unset there would leave an earlier turn's veto standing on the conversation.
@@ -95,14 +99,14 @@ export const turnRequestBody = (input: {
     readonly runner?: string | undefined;
     // Not a wire field: the address this body is posted to (Conversation.box). Fields scoped to one daemon's own
     // store must not cross to another box:
-    //   account – a key in the box's credential store; omitted picks its first account.
+    //   account – a key in the box's credential store; omitted, that box picks by serviceability.
     //   actsAs – a persona card in the box's record; unresolved names send an ordinary chat.
     //   editorContext – a path in this workspace, meaningless on another box.
     // Model and provider do cross: the target daemon resolves the model against its own catalog.
     readonly box?: string | undefined;
     readonly mode: PermissionMode;
     readonly settings: TurnSettings;
-    // The daemon has this conversation on record, so a turn naming no account runs on the one it is on (namesAccount).
+    // The daemon has this conversation on record, so a turn naming no account runs on the one it is on (accountIntent).
     readonly registered: boolean;
     // Session this turn resumes, if the selection still matches the runtime and account that minted it.
     readonly resume: SessionRef | undefined;
@@ -131,8 +135,8 @@ export const turnRequestBody = (input: {
         // `native` is the daemon's default and stays unsent; only `claude-code` rides the wire.
         ...(input.settings.harness === `claude-code` ? { harness: input.settings.harness } : {}),
         // Omitted when this body targets another box, since that daemon holds no such selection, and wherever the turn
-        // continues the conversation on the account it already runs on (namesAccount).
-        account: here && namesAccount(input.settings, input) ? input.settings.account : undefined,
+        // continues the conversation on the account it already runs on (accountIntent).
+        account: here ? accountIntent(input.settings, input) : undefined,
         // Omitted rather than empty: an unresolved persona card gets an ordinary chat, not an error.
         ...(here && input.settings.actsAs !== undefined ? { actsAs: input.settings.actsAs } : {}),
         // Omitted for another box, whose projects are its own.

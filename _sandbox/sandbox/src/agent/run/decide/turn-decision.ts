@@ -1,3 +1,4 @@
+import { routingFor } from "../../providers/routing.js";
 import type {
     AgentCapabilities,
     AgentHarness,
@@ -68,13 +69,13 @@ export interface TurnDecision extends DecidedEffects {
 const underRepoChecks = (settings: SandboxSettings, declared: readonly Rule[]): SandboxSettings =>
     declared.length === 0 ? settings : { ...settings, rules: withRepoChecks(settings.rules, declared) };
 
-// A turn naming no account runs where its conversation last ran: a session resumes only under the account that minted
-// it, and an account idle because it is refusing would otherwise read as the emptiest and be picked again. Only onto the
-// provider that account belongs to: another provider's id names nothing there, and would fall to whatever it defaults to.
-const latchedAccount = (input: AgentTurn, entry: ConversationEntry | undefined): AgentTurn =>
-    input.account === undefined && entry?.profile.account !== undefined && entry.profile.provider === (input.agent ?? "claude")
-        ? { ...input, account: entry.profile.account }
-        : input;
+// The account the arm is called with, by the one routing rule (agent/providers/routing.ts): the one the turn names, else
+// the one its conversation runs on for this provider, else none, which the credential resolver answers by serviceability.
+// A session resumes only under the account that minted it, so a turn naming none must not wander.
+const routedInput = (input: AgentTurn, entry: ConversationEntry | undefined): AgentTurn => {
+    const { account } = routingFor(entry?.profile, input);
+    return account === undefined || account === input.account ? input : { ...input, account };
+};
 
 // Taught through the `agents` CLI to runtimes with only a shell door (the Claude Code loop and Cursor carry the tools
 // in-prompt), once, on the conversation's opening turn.
@@ -198,7 +199,7 @@ export const decideTurn = (facts: TurnFacts, input: AgentTurn, context: TurnCont
         ok: true,
         provider: runtime.provider,
         harness: runtime.harness,
-        input: latchedAccount(input, facts.entry),
+        input: routedInput(input, facts.entry),
         context: planned,
         granted: mounts.capabilities,
         dependencyDir: premise.startIn ?? "",

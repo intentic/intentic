@@ -330,7 +330,12 @@ export type StopResult = z.infer<typeof StopResultSchema>;
 export const ResumeRoutingSchema = z.object({
     agent: AgentProviderSchema.describe("Which provider serves the re-run."),
     harness: AgentHarnessSchema.describe("Which agentic loop runs it."),
-    account: z.string().optional().describe("Which of that provider's accounts pays for it. Leave it out for the first one."),
+    account: z
+        .string()
+        .optional()
+        .describe(
+            "Which of that provider's accounts pays for it. Leave it out to keep the account the conversation runs on, or, on another provider, to take whichever of its accounts can serve with the most room. Moving to another account of the same provider is `switchAccount`'s job; naming one here still works.",
+        ),
     // A client whose catalog hasn't loaded has nothing to send; the turn's own model is the better fallback.
     model: z.string().optional().describe("Which model. Leave it out to keep the one the refused turn named."),
     // A session is a file the daemon keeps; a credential is an env var. That's what lets a same-provider account switch
@@ -374,3 +379,23 @@ export const QueueResumeSchema = z.object({
     ),
 });
 export type QueueResume = z.infer<typeof QueueResumeSchema>;
+// Moves a conversation to another account of the provider it runs on: the one command that changes who pays, so the
+// account a conversation runs on is always the daemon's record and never a window's guess.
+export const SwitchAccountSchema = z.object({
+    conversationId: z.string().min(1).describe("Which conversation to move."),
+    account: z.string().min(1).describe("Which of the conversation's provider's connected accounts pays for its turns from now on."),
+    carry: z
+        .boolean()
+        .optional()
+        .describe(
+            "Keep the provider session across the move (the model keeps everything, and re-reads all of it once on the other account) rather than opening a fresh one seeded from the record.",
+        ),
+});
+export type SwitchAccount = z.infer<typeof SwitchAccountSchema>;
+export const AccountSwitchedSchema = z.object({
+    run: z
+        .string()
+        .optional()
+        .describe("The run that re-ran a held turn on the new account, when one was waiting: attach to it. Absent when nothing was held."),
+});
+export type AccountSwitched = z.infer<typeof AccountSwitchedSchema>;

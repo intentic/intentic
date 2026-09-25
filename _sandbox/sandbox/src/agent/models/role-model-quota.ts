@@ -1,6 +1,6 @@
 import { KeyedProviderSchema, type ModelChoice, renewsInWords } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import { fleetLimit, type TurnLimit } from "../../usage/fleet-limit.js";
+import { fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 
 // Reads a rung's recorded quota instead of discovering it by asking and being refused; a rung whose every account is
 // spent is stepped over on that reading, scoped per-model through fleet-limit's own gates. Only ever says spent —

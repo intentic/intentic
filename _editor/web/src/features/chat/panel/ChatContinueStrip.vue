@@ -169,15 +169,18 @@ watch(
     },
 );
 
-// Two steps, not a new daemon verb: `selectAccount` points the conversation, then the press resumes the held turn
-// under the new credential. `carry` keeps the provider session (re-reads once, cold); fresh reseeds from the
-// record (a short hand-off, and anything not recorded is lost).
-const continueOnFallback = (carry: boolean): void => {
+// One daemon command (switchAccount) moves the conversation and re-runs the held turn on the new credential. `carry`
+// keeps the provider session (re-reads once, cold); fresh reseeds from the record (a short hand-off, and anything not
+// recorded is lost). Where that command cannot answer, the two steps an older daemon understood: the pick, then the press.
+const continueOnFallback = async (carry: boolean): Promise<void> => {
     const target = fallback.value;
     if (target === undefined || !reachable.value) {
         return;
     }
     waysOpen.value = false;
+    if (await conversation.value.turn.continueOn(target.id, carry)) {
+        return;
+    }
     conversation.value.selection.apply({ kind: `selectAccount`, account: target.id });
     emit(`continue`, { carry });
 };
@@ -210,7 +213,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                       icon: `user` as IconName,
                       title: t(`chat.chatContinueStrip.continueOnKeepingSession`, { fallback: fallbackLabel(target) }),
                       note: carryLine.value,
-                      press: () => continueOnFallback(true),
+                      press: () => void continueOnFallback(true),
                   },
               ]
             : []),
@@ -221,7 +224,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                 ? t(`chat.chatContinueStrip.continueOnFresh`, { model: fallbackLabel(target) })
                 : t(`chat.chatContinueStrip.continueOn`, { model: fallbackLabel(target) }),
             note: freshLine.value,
-            press: () => continueOnFallback(false),
+            press: () => void continueOnFallback(false),
         },
     ];
 });

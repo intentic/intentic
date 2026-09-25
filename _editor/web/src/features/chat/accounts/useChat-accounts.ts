@@ -12,7 +12,7 @@ import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension
 import { errorMessage } from "@intentic/ui/async";
 import { computed, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { accountsLoaded, providerAccounts, providerRefusals, selectedAccountId, translatorAccounts } from "./providerAccounts";
+import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
 import { endpointProviders, trialStatus } from "./providerCatalog";
 import { rememberedProviderFor, turnDefaults } from "../run/turnDefaults";
 import { accessKnown, firstReadyProvider, hasSignIn, providerReadyOn } from "../session/access";
@@ -109,11 +109,10 @@ watch([providerAccounts, translatorAccounts, accessKnown, endpointProviders, tri
     }
 });
 
-// Add a freshly-connected account to its provider's list and make it the selected one.
+// Add a freshly-connected account to its provider's list.
 export const addAccount = (target: AgentProvider, added: OauthAccount): void => {
     const existing = accountsOf(target).filter((a) => a.id !== added.id);
     providerAccounts.value = { ...providerAccounts.value, [target]: [...existing, added] };
-    selectedAccountId.value = { ...selectedAccountId.value, [target]: added.id };
     adoptStranded(target, added);
 };
 
@@ -145,21 +144,19 @@ const adoptStranded = (target: AgentProvider, added: OauthAccount): void => {
     }
 };
 
-// adoptStranded's mirror, for chats that have not run: pinned to an account the list no longer has, they move onto the
-// live pick. Rebound, not selected, so no "switched to…" divider is raised; nothing to move to leaves the pin alone. A
-// chat that has run keeps its pin: which account it goes on is its person's call, and its next turn is refused saying
-// so rather than landing on whichever account this list happens to start with (harness-credentials.ts).
+// adoptStranded's mirror, for chats that have not run: pinned to an account the list no longer has, they go back to
+// auto, for the daemon to place by serviceability. No "switched to…" divider: nothing ran on the pick. A chat that has
+// run keeps its pin: which account it goes on is its person's call, and its next turn is refused saying so rather than
+// landing on whichever account happens to be left (harness-credentials.ts).
 const repointStranded = (target: AgentProvider, live: readonly OauthAccount[]): void => {
-    const picked = selectedAccountId.value[target];
-    // Resolved against this list directly, not rememberedAccountFor, which leaves the pick unvalidated longer.
-    const next = live.some((entry) => entry.id === picked) ? picked : live[0]?.id;
-    if (next === undefined) {
+    // An empty list is not a verdict on anyone's pick: a read that came back with nothing leaves every pin alone.
+    if (live.length === 0) {
         return;
     }
     for (const conversation of conversations.value) {
         const pin = conversation.selection.account.value;
         if (conversation.selection.provider.value === target && pin !== undefined && !live.some((entry) => entry.id === pin) && !hasRun(conversation)) {
-            conversation.selection.apply({ kind: `rebindAccount`, account: next });
+            conversation.selection.apply({ kind: `set`, picks: { account: undefined } });
         }
     }
 };
@@ -328,9 +325,6 @@ export const disconnect = async (id: string): Promise<void> => {
     }
     const remaining = accountsOf(target).filter((entry) => entry.id !== id);
     providerAccounts.value = { ...providerAccounts.value, [target]: remaining };
-    if (selectedAccountId.value[target] === id) {
-        selectedAccountId.value = { ...selectedAccountId.value, [target]: remaining[0]?.id };
-    }
     // The chats that were running on it move on too, rather than holding an id nothing can serve.
     repointStranded(target, remaining);
 };

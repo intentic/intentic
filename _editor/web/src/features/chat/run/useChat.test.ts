@@ -54,6 +54,7 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({
             stop: procedureOf(`agent.stop`),
             resume: procedureOf(`agent.resume`),
             queueResume: procedureOf(`agent.queueResume`),
+            switchAccount: procedureOf(`agent.switchAccount`),
         },
         providers: { list: procedureOf(`providers.list`), models: procedureOf(`providers.models`) },
         endpoints: { models: procedureOf(`endpoints.models`), trial: procedureOf(`endpoints.trial`) },
@@ -160,7 +161,7 @@ const newChat = () => {
 const { closedDrafts } = await import("../drafts/closedDrafts");
 // Asserts the projection the board reads (tabFacts.unasked, over a live conversation), not an internal flag.
 const { unaskedDraft } = await import("../tabs/tabFacts");
-const { selectedAccountId, usageByAccount } = await import("../accounts/providerAccounts");
+const { usageByAccount } = await import("../accounts/providerAccounts");
 const { Conversation } = await import("../session/conversation");
 const { endpointProviders, endpointsLoaded, trialStatus } = await import("../accounts/providerCatalog");
 const { turnDefaults } = await import("./turnDefaults");
@@ -573,7 +574,9 @@ describe(`the remembered account`, () => {
         await loadAccountStatus();
     });
 
-    it(`opens a new session on the account last picked, not on the provider's first`, async () => {
+    // An open chat keeps its pick through a reload; a new one is not seeded from it: its first turn is the daemon's to
+    // place by serviceability, and a remembered pick would be a guess standing in for that.
+    it(`keeps an open chat's pick through a reload, and opens a new chat on auto`, async () => {
         const chat = useChat();
         chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
 
@@ -581,7 +584,7 @@ describe(`the remembered account`, () => {
         expect(chat.account.value).toBe(`second`);
 
         newChat();
-        expect(chat.account.value).toBe(`second`);
+        expect(chat.account.value).toBeUndefined();
     });
 
     it(`holds the pick through the window where the daemon hasn't answered yet`, async () => {
@@ -613,7 +616,7 @@ describe(`the remembered account`, () => {
         expect(restored(other.conversationId)).toBe(`second`);
     });
 
-    it(`moves a chat off an account that was disconnected while the window was away`, async () => {
+    it(`moves a chat off an account that was disconnected while the window was away, back to auto`, async () => {
         const chat = useChat();
         chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
 
@@ -622,7 +625,7 @@ describe(`the remembered account`, () => {
         resetSandboxScope();
         await loadAccountStatus();
 
-        expect(chat.account.value).toBe(`first`);
+        expect(chat.account.value).toBeUndefined();
     });
 
     // A conversation that has run is on an account its person chose; which one it goes on once that account is gone is
@@ -691,7 +694,7 @@ describe(`the remembered account`, () => {
         expect(chat.account.value).toBe(`second`);
         chat.draft.value = `this tab is in use`;
         newChat();
-        expect(chat.account.value).toBe(`second`);
+        expect(chat.account.value).toBeUndefined();
     });
 
     it(`drops a disconnected account from the list, and keeps one the daemon refused to disconnect, saying why`, async () => {
@@ -725,7 +728,7 @@ describe(`the remembered account`, () => {
         expect(chat.usageLoaded.value).toBe(true);
     });
 
-    it(`moves an open chat off a pick the list no longer has, and still remembers the pick`, async () => {
+    it(`moves an open chat off a pick the list no longer has back to auto, and remembers no pick for the next`, async () => {
         const chat = useChat();
         chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
         await nextTick();
@@ -733,14 +736,14 @@ describe(`the remembered account`, () => {
         mockConnections({ accounts: (provider) => (provider === `claude` ? [{ id: `first`, label: `Claude`, connectedAt: 1 }] : []) });
         resetSandboxScope();
         await loadAccountStatus();
-        expect(chat.account.value).toBe(`first`);
+        expect(chat.account.value).toBeUndefined();
 
         mockConnections({ accounts: TWO });
         resetSandboxScope();
         await loadAccountStatus();
         chat.draft.value = `this tab is in use`;
         newChat();
-        expect(chat.account.value).toBe(`second`);
+        expect(chat.account.value).toBeUndefined();
     });
 });
 
@@ -1685,8 +1688,7 @@ describe(`opening a fleet agent`, () => {
     // An unpinned tab takes the account the daemon says served the session (Conversation.bindSession), so the picker
     // and the chip agree and the next send can resume.
     it(`pins a tab that opened unpinned to the account the daemon says its session ran on`, async () => {
-        // No remembered pick and no account list yet: the seed the tab falls back to is nothing at all.
-        selectedAccountId.value = { ...selectedAccountId.value, claude: undefined };
+        // A tab opened unpinned is on auto: nothing seeds it.
         const conversation = openAgentConversation({ id: `a4`, sessionId: `sess-s`, provider: `claude`, harness: `native` });
         expect(conversation.selection.account.value).toBeUndefined();
 

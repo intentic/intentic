@@ -55,6 +55,7 @@ import { applyReply, editorContextNote } from "../run/turn/turn-interactions.js"
 import { withRuntimeHistory } from "../providers/runtime-history.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
 import { limitWayOf } from "../models/limit-way.js";
+import { switchAccount } from "../providers/switch-account.js";
 import { nameAgentTitle } from "../models/title-namer.js";
 import { planTurn, type TurnPlan } from "../run/turn/turn-plan.js";
 import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "../run/frames/classify-failure.js";
@@ -472,6 +473,7 @@ const refusalFrame = (
         readonly message: string;
         // The cgroup reading behind a `sandbox-memory-low`, so the row it becomes can offer the raise as a press.
         readonly memory?: Extract<AgentEvent, { kind: "error" }>["memory"];
+        readonly account?: string;
     },
     unattended: boolean,
 ) =>
@@ -480,6 +482,7 @@ const refusalFrame = (
         ...(refusal.code !== undefined ? { code: refusal.code } : {}),
         ...(unattended ? { unattended: true } : {}),
         ...(refusal.memory !== undefined ? { memory: refusal.memory } : {}),
+        ...(refusal.account !== undefined ? { account: refusal.account } : {}),
         message: refusal.message,
     }) as const satisfies AgentEvent;
 
@@ -670,7 +673,8 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
     services.logger[failure.log.level](failure.log.fields, failure.log.message);
     performFailureWrites(services, failure.writes);
     frames.hold(failure.held);
-    return failure.frame;
+    // The account that actually served (or was refused for) the turn rides on its frame, so no window guesses it.
+    return turn.account === undefined || failure.frame.account !== undefined ? failure.frame : { ...failure.frame, account: turn.account };
 };
 
 // What a turn holds for its life, released together once its frames end: the account, so a proactive refresh waits for
@@ -832,6 +836,18 @@ export const createAgentRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: "no held turn to run again for that conversation" });
             }
             return { run: run.id };
+        }),
+        // The one command that moves who pays (agent/providers/switch-account.ts); a held turn re-runs there at once.
+        switchAccount: i.switchAccount.handler(async ({ input, context }) => {
+            own(context, input.conversationId);
+            const outcome = await switchAccount(services, input);
+            if (outcome.kind === "unknown") {
+                throw new ORPCError("NOT_FOUND", { message: "no conversation with that id" });
+            }
+            if (outcome.kind === "busy") {
+                throw new ORPCError("CONFLICT", { message: "a turn is running in that conversation: move it once the turn ends" });
+            }
+            return outcome.run === undefined ? {} : { run: outcome.run };
         }),
         // Renders the run: its head, then every change as it lands, `end` when it settles.
         attach: i.attach.handler(async function* ({ input, context, signal }) {

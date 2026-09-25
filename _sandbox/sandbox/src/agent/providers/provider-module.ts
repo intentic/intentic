@@ -9,7 +9,7 @@ import type {
 } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { stateRelPath } from "../../state-paths.js";
-import type { TurnLimit } from "../../usage/fleet-limit.js";
+import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { AgentAdapter } from "./adapter.js";
 
 // What a native provider owes the daemon, so shared surfaces (adapters, catalogs, readiness, boot, packs, secrets)

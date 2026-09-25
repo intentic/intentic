@@ -164,8 +164,14 @@ const AgentTurnFieldsSchema = z.object({
     // Which agentic loop runs the turn, absent = provider's own; "claude-code" forces the SDK loop for any
     // provider.
     harness: AgentHarnessSchema.optional().describe("Which agentic loop runs the turn. Leave it out to use each provider's own."),
-    // Which connected account of that provider serves the turn; absent = the provider's first account.
-    account: z.string().optional().describe("Which of that provider's connected accounts pays for the turn. Leave it out for the first one."),
+    // Intent, not a guess: absent continues on the conversation's own account, or picks by serviceability where there is
+    // none on this provider yet (agent/providers/routing.ts).
+    account: z
+        .string()
+        .optional()
+        .describe(
+            "Which of that provider's connected accounts pays for the turn. Leave it out to continue on the account the conversation runs on, or, for its first turn on this provider, to take whichever account can serve with the most room. To move a running conversation, use `switchAccount`.",
+        ),
     // Distinct from `account` (who pays): whose name the turn posts as; absent means something different for each
     // mode.
     actsAs: entryId.optional().describe("Which persona the turn speaks as out in the world. Not the same as which account pays for it."),
@@ -357,7 +363,9 @@ export const AgentRunPickSchema = z
         account: z
             .string()
             .optional()
-            .describe("Which connected account of that provider pays, by its daemon-minted id. Leave it out for whichever has headroom."),
+            .describe(
+                "Which connected account of that provider pays, by its daemon-minted id. Leave it out to take whichever account can serve with the most room.",
+            ),
         harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it. Leave it out to use the provider's own."),
         effort: z
             .string()

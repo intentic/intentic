@@ -22,7 +22,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { Conversation } from "./conversation";
 import { planFeedback } from "./cardReplies";
 import { seedFork } from "./forkSeed";
-import { providerAccounts, selectedAccountId, usageByAccount } from "../accounts/providerAccounts";
+import { providerAccounts, usageByAccount } from "../accounts/providerAccounts";
 import { turnDefaults } from "../run/turnDefaults";
 import { resolvePrompt } from "../../agents/review/conflictResolution";
 import { errands } from "../run/errands";
@@ -88,10 +88,6 @@ const seedTurnDefaults = (): void => {
     turnDefaults.provider.value = `claude`;
 };
 
-// selectAccount writes a sandbox-wide preference (selectedAccountId), not per-conversation; save and restore it so
-// one test's switch doesn't leak into the next.
-const accountPicks = { ...selectedAccountId.value };
-
 // The typewriter drains via requestAnimationFrame; run frames synchronously so deltas land immediately.
 beforeEach(() => {
     runsMinted = 0;
@@ -107,7 +103,6 @@ afterEach(() => {
     unstubAllGlobals();
     jest.clearAllMocks();
     seedTurnDefaults();
-    selectedAccountId.value = { ...accountPicks };
 });
 
 // One attach frame as it comes off the wire: parsed afresh, never an object the fixture still holds.
@@ -404,7 +399,9 @@ describe(`Conversation`, () => {
 
     // Made at the picker, which is what makes it the user's: an account the app wrote in (a restored tab, a route) is only
     // this window's guess, and the daemon's session replaces it (the test above).
-    it(`leaves a pin the user made alone when the daemon reports the session on another account`, async () => {
+    // The account a conversation runs on is the daemon's record: what the session frame says it served on is what the
+    // composer shows next, whatever this window had picked.
+    it(`shows the account the daemon reports the session on, over a pick`, async () => {
         const conversation = new Conversation(`c-pinned`);
         conversation.selection.apply({ kind: `selectAccount`, account: `acct-1` });
         daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1`, account: `acct-2` }, { kind: `done` }]));
@@ -412,7 +409,7 @@ describe(`Conversation`, () => {
         await conversation.turn.send(`hi`, { ...settings, account: `acct-1` });
 
         expect(conversation.session.value?.account).toBe(`acct-2`);
-        expect(conversation.selection.account.value).toBe(`acct-1`);
+        expect(conversation.selection.account.value).toBe(`acct-2`);
     });
 
     // Driven off a stalled clock rather than the file's synchronous RAF stub, and tool calls rather than deltas, since

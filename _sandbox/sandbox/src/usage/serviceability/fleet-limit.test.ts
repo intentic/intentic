@@ -58,11 +58,20 @@ test("a Claude account's spent Opus slice does not count against a Haiku call", 
 });
 
 test("the translator's bench of a credential is spent whatever its reading says, with the proxy's retry instant", () => {
+    const until = Math.floor(Date.now() / 1000) + 600;
     const fleet = [
-        { ...reading("benched", window({ kind: "seven_day", utilization: 5 })), cooling: { until: 700, reason: "quota exceeded" } },
+        { ...reading("benched", window({ kind: "seven_day", utilization: 5 })), cooling: { until, reason: "quota exceeded" } },
         { ...reading("never-read"), usage: undefined },
     ];
-    expect(fleetLimit(fleet, { id: "kimi-k2" })).toEqual({ spent: 1, withHeadroom: 0, reopensAt: 700 });
+    expect(fleetLimit(fleet, { id: "kimi-k2" })).toEqual({ spent: 1, withHeadroom: 0, reopensAt: until });
+    // A bench whose instant has passed has lifted: the reading under it speaks again.
+    expect(fleetLimit([{ ...fleet[0]!, cooling: { until: 700 } }], { id: "kimi-k2" })).toEqual({ spent: 0, withHeadroom: 1, roomMeasuredAt: 1_000 });
+});
+
+test("a revoked sign-in or a lost seat is nothing to spend, however idle its meter", () => {
+    const idle = reading("seatless", window({ kind: "seven_day", utilization: 0 }));
+    expect(fleetLimit([{ ...idle, seatRefusal: "No seat." }], { id: "claude-opus-4-6" })).toEqual({ spent: 1, withHeadroom: 0 });
+    expect(fleetLimit([{ ...idle, needsReauth: true }], { id: "claude-opus-4-6" })).toEqual({ spent: 1, withHeadroom: 0 });
 });
 
 test("with no model named, every pool that gates anything counts and one gating nothing never does", () => {

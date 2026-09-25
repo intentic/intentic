@@ -44,6 +44,8 @@ export type TurnRefusal = {
     // `sandbox-memory-low` only: the cgroup reading behind it, so the refusal can offer the raise rather than
     // describe it. Rides the refusal onto the error frame of the same name.
     readonly memory?: Extract<AgentEvent, { kind: "error" }>["memory"];
+    // The account the refusal is about, where the arm resolved one; rides onto the error frame.
+    readonly account?: string;
 };
 
 // What one runtime's arm answers when it serves: the request it planned, and its loop bound to everything in that request

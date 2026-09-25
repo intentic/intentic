@@ -1,6 +1,5 @@
 import { capabilitiesOf, clampMode, fastAllowed, type PermissionMode, providerLabel, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import { computed, shallowRef } from "vue";
-import { rememberedAccountFor, selectedAccountId } from "../accounts/providerAccounts";
 import { modelLabelFor, providerModels, providerTabs } from "../accounts/providerCatalog";
 import { clampEffort } from "../models/run-settings/effortScale";
 import { rememberedModelFor, rememberedProviderFor, rememberPick, turnDefaults } from "../run/turnDefaults";
@@ -54,7 +53,7 @@ export const midTurnSwitchText = (point: SwitchPoint, switchedMidTurn: boolean):
 // What a selection reads and writes of the conversation around it.
 type SelectionHost = Pick<Conversation, "session" | "activeModel" | "contextUsage" | "fastMode" | "box" | "peek"> & {
     readonly transcript: Pick<TranscriptView, "messages" | "notice" | "rewordNotice" | "write">;
-    readonly turn: Pick<TurnClient, "streaming" | "generating">;
+    readonly turn: Pick<TurnClient, "streaming" | "generating" | "moveAccount">;
 };
 
 export class ComposerSelection {
@@ -121,8 +120,8 @@ export class ComposerSelection {
         if (effects.fastStale === true) {
             this.host.fastMode.value = undefined;
         }
-        if (effects.accountPick !== undefined) {
-            selectedAccountId.value = { ...selectedAccountId.value, [effects.accountPick.provider]: effects.accountPick.account };
+        if (effects.switchAccount !== undefined) {
+            this.host.turn.moveAccount(effects.switchAccount);
         }
         if (effects.session !== undefined) {
             this.host.session.value = effects.session;
@@ -138,7 +137,6 @@ export class ComposerSelection {
             agent: state.value.provider,
             harness: state.value.harness,
             account: state.value.account,
-            ...(state.value.accountPicked ? { accountPicked: true } : {}),
             actsAs: state.value.actsAs,
             startIn: state.value.startIn,
             model: state.value.model,
@@ -159,7 +157,6 @@ export class ComposerSelection {
             generating: this.host.turn.generating.value,
             session: this.host.session.value,
             local: this.host.box.value === undefined,
-            rememberedAccount: rememberedAccountFor,
             rememberedModel: rememberedModelFor,
             defaults: () => ({
                 provider: rememberedProviderFor(),

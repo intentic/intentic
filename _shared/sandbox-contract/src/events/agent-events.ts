@@ -271,6 +271,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
             .optional(),
         // rate_limit only: epoch seconds when the exhausted window reopens; absent when the reset instant is unknown.
         resetsAt: z.number().optional(),
+        // The daemon's word, never the window's guess: which account a reconnect badge or a spent pool belongs to.
+        account: z.string().optional().describe("Which of the provider's accounts served (or was refused for) the turn, where the sandbox holds it."),
         // Gated codes only: "scheduled" if this conversation arms the resume, "available" if one exists but isn't.
         autoResume: z.enum(["scheduled", "available"]).optional(),
         // "scheduled" only: epoch seconds the booked send actually fires. Distinct from `resetsAt` (the provider's fact

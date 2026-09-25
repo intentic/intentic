@@ -4,17 +4,19 @@ import {
     type Model,
     type ModelOffer,
     type NativeProvider,
+    type OauthAccount,
     type OfferedAccount,
     type OfferedModel,
     type OfferedWindow,
     TRANSLATOR_PROVIDERS,
+    type TranslatorAccount,
     type TranslatorProvider,
     gatingWindows,
     windowLive,
     windowPeriod,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import { type FleetReading, fleetLimit } from "../../usage/fleet-limit.js";
+import { type FleetReading, fleetLimit } from "../../usage/serviceability/fleet-limit.js";
 import { providerAccountLists, providerReadiness, sharedProviderReads } from "../providers/provider-registry.js";
 
 // What the Auto judge may choose from: every provider that can run a turn now, the models it publishes, and the
@@ -49,25 +51,28 @@ const offeredWindows = (usage: AccountUsage | undefined): readonly OfferedWindow
 // translator's auth files (every routed subscription). A provider can hold both; the two are one list to a picker.
 const accountsOf = (
     provider: NativeProvider,
-    native: readonly { readonly id: string; readonly label: string; readonly usage?: AccountUsage | undefined }[],
-    routed: readonly { readonly name: string; readonly label: string; readonly usage?: AccountUsage | undefined; readonly cooling?: unknown }[],
+    native: readonly OauthAccount[],
+    routed: readonly TranslatorAccount[],
     now: number,
 ): { readonly offered: readonly OfferedAccount[]; readonly readings: readonly FleetReading[] } => {
-    // Normalised to one list first, so what the judge reads and what the filter enforces cannot come apart.
-    const accounts = [
-        ...native.map((entry) => ({ id: entry.id, label: entry.label, usage: liveUsage(entry.usage, now), cooling: undefined as FleetReading["cooling"] })),
+    // Normalised to one list first, so what the judge reads and what the filter enforces cannot come apart; each carries
+    // the marks the serviceability rule reads (a revoke, a lost seat, a bench), so the judge never counts them as room.
+    const accounts: readonly (FleetReading & { readonly label: string })[] = [
+        ...native.map((entry) => ({
+            account: entry.id,
+            label: entry.label,
+            usage: liveUsage(entry.usage, now),
+            needsReauth: entry.needsReauth,
+            detail: entry.detail,
+            seatRefusal: entry.seatRefusal,
+        })),
         ...(isTranslator(provider)
-            ? routed.map((entry) => ({
-                  id: entry.name,
-                  label: entry.label,
-                  usage: liveUsage(entry.usage, now),
-                  cooling: entry.cooling as FleetReading["cooling"],
-              }))
+            ? routed.map((entry) => ({ account: entry.name, label: entry.label, usage: liveUsage(entry.usage, now), cooling: entry.cooling }))
             : []),
     ];
     return {
-        offered: accounts.map((entry) => ({ id: entry.id, label: entry.label, windows: offeredWindows(entry.usage) })),
-        readings: accounts.map((entry) => ({ account: entry.id, usage: entry.usage, ...(entry.cooling === undefined ? {} : { cooling: entry.cooling }) })),
+        offered: accounts.map((entry) => ({ id: entry.account, label: entry.label, windows: offeredWindows(entry.usage) })),
+        readings: accounts.map(({ label: _label, ...reading }) => reading),
     };
 };
 

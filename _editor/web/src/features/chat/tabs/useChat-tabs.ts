@@ -7,7 +7,6 @@ import { chatRun } from "../run/chatRun";
 import { traceFocus } from "../run/focusTrace";
 import { Conversation } from "../session/conversation";
 import type { Picks } from "../session/selectionReducer";
-import { rememberedAccountFor } from "../accounts/providerAccounts";
 import { rememberedModelFor, startingMode } from "../run/turnDefaults";
 import { untouchedDraft } from "./tabFacts";
 import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, type TabSnapshot, writeTabSnapshot } from "./tabSnapshot";
@@ -218,8 +217,8 @@ const restoredPicks = (tab: StoredTab, isolated: boolean): Partial<Picks> => ({
         ? {}
         : {
               provider: tab.provider,
-              // An open chat keeps its own account, not the provider's remembered pick; only an unpinned tab falls back.
-              account: tab.account ?? rememberedAccountFor(tab.provider),
+              // An open chat keeps its own account; an unpinned tab stays on auto, for the daemon to place.
+              account: tab.account,
               model: tab.model ?? rememberedModelFor(tab.provider),
               // Whether the app parked it on a fallback account (a mid-redirect), so reconciliation can move it back.
               movedFrom: tab.movedFrom,

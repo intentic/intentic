@@ -16,6 +16,7 @@ import {
     type SessionOwner,
 } from "@intentic/sandbox-contract";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../agent/providers/failure-sentences.js";
+import { routingFor } from "../../agent/providers/routing.js";
 import type { JournalledTurn, TurnJournalRows } from "../../agent/run/turn/turn-journal.js";
 import { opt } from "../../opt.js";
 import { parentOfActor } from "../../auth/principal.js";
@@ -314,16 +315,15 @@ const freshEntry = (turn: BeginTurn, now: number): PersistedAgent => ({
 });
 
 // Each setting falls back to the last turn's, so a turn naming none keeps describing the agent by what it actually ran;
-// provider and harness are the turn's own, never carried. So is the account across a provider change: an account belongs
-// to the provider that minted it, and carried onto another it would be latched into that provider's next turn.
+// provider, harness and account are the one routing rule's (agent/providers/routing.ts), which never carries an account
+// onto a provider that did not mint it.
 const settingsOf = (existing: StoredProfile, profile: TurnProfile): StoredProfile => {
-    const provider = profile.agent ?? "claude";
-    const { account: held, ...kept } = existing;
-    const account = profile.account ?? (existing.provider === provider ? held : undefined);
+    const { provider, harness, account } = routingFor(existing, profile);
+    const { account: _held, ...kept } = existing;
     return {
         ...kept,
         provider,
-        harness: profile.harness ?? "native",
+        harness,
         ...opt("model", profile.model),
         ...opt("effort", profile.effort),
         ...opt("thinking", profile.thinking),
@@ -484,6 +484,9 @@ export interface AgentsRegistry {
     // died, so arming it mid-unwind is the ordinary case, and a limit's press is often made on a card whose turn died
     // hours ago. Refuses an answer the ending does not allow rather than persisting one no pass would ever read.
     readonly setBreakPolicy: (id: string, ending: TurnBreak, policy: TurnBreakPolicy | null) => Promise<AgentSummary | undefined>;
+    // Points the conversation at another account of the provider it runs on: the one write that moves who pays
+    // (switchAccount). The session goes with the caller's say, separately (`session-cleared`). Leaves `updatedAt` alone.
+    readonly switchAccount: (id: string, account: string) => Promise<AgentSummary | undefined>;
     // Stamps a collaborator's ask to land; leaves `updatedAt` alone. Re-asking re-stamps rather than queuing; the land
     // or discard that answers it clears the ask.
     readonly requestLand: (id: string, by: { email: string; name?: string }, at: number) => Promise<AgentSummary | undefined>;
@@ -1022,6 +1025,7 @@ export const createFleet = (
                 return { ...entry, postures: (policy === null ? held : { ...held, [ending]: policy }) as Postures };
             });
         },
+        switchAccount: (id, account) => amend(id, (entry) => ({ ...entry, profile: { ...entry.profile, account } })),
         requestLand: (id, by, at) =>
             amend(id, (entry) => ({ ...entry, social: { ...entry.social, landRequested: { email: by.email, ...opt("name", by.name), at } } })),
         assign: (id, to, at) => amend(id, (entry) => ({ ...entry, social: { ...entry.social, owner: { email: to.email, ...opt("name", to.name), since: at } } })),

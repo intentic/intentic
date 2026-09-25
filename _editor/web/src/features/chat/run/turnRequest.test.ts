@@ -1,4 +1,4 @@
-import { turnRequestBody } from "./turnRequest";
+import { resumes, turnRequestBody } from "./turnRequest";
 
 // Baseline turn settings reused across the request-shape tests below.
 const settings = {
@@ -91,9 +91,13 @@ describe(`turnRequestBody`, () => {
             expect(wire(turnRequestBody({ ...base, registered: true, settings: onA, resume: session }))).not.toHaveProperty(`account`);
         });
 
-        it(`is named for a pick made in this chat`, () => {
-            const picked = { ...settings, account: `acct-b`, accountPicked: true };
-            expect(wire(turnRequestBody({ ...base, registered: true, settings: picked, resume: session }))).toMatchObject({ account: `acct-b` });
+        // A pick on a conversation the daemon holds goes as switchAccount; it rides a turn too only because that turn
+        // resumes nothing on the old account (resumes() says so), which is also how a daemon too old for the route learns it.
+        it(`is named for a pick that leaves the session behind`, () => {
+            const picked = { ...settings, account: `acct-b` };
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: picked, resume: resumes(session, picked) ? session : undefined }))).toMatchObject({
+                account: `acct-b`,
+            });
         });
 
         it(`is named where there is no conversation to follow: its first turn, or a turn that leaves the session behind`, () => {

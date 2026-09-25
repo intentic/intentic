@@ -1,6 +1,6 @@
 import { type AgentProvider, roomiestAccount } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import { serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability.js";
+import { serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
 import { breakPolicyFor } from "../run/turn/turn-resume.js";
 
 // Claude-only: a routed provider balances its own credentials before refusing, so a refusal there already means nothing

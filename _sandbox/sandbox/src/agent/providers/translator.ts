@@ -22,7 +22,7 @@ import { type CompatEntry, compatYaml, endpointCompatEntries, translatedEndpoint
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { engineBinary } from "../../engines/engine-resolve.js";
 import type { AccountUsageStore } from "../../usage/account-usage.js";
-import { fleetLimit, type TurnLimit } from "../../usage/fleet-limit.js";
+import { fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { HeadroomSource } from "../../usage/headroom.js";
 import { authFileCooling, fetchTranslatorUsage, type TranslatorAuthFile } from "../../usage/translator-usage.js";
 

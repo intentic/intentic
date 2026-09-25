@@ -314,24 +314,25 @@ describe(`a run's lifecycle`, () => {
         expect(client.firstSight(`t2`)).toBe(true);
     });
 
-    // The composer's account is this window's guess unless the person picked it here: another window may have moved the
-    // conversation since. A plain Continue naming the guess moved the conversation back to it and cut its session.
-    it(`presses Continue naming only an account the person picked, keeping the session otherwise`, async () => {
+    // The composer's account follows the daemon's session (bindSession), so a plain Continue on it names none and keeps
+    // the session. One that differs is a pick the daemon has not taken yet (a daemon too old for switchAccount), and the
+    // press names it, as intent, like a send would.
+    it(`presses Continue naming no account on the one the conversation runs on, and a pick that leaves it`, async () => {
         const session: SessionRef = { id: `s-1`, provider: `claude`, account: `acct-now`, harness: `native` };
         resume.mockImplementation(async () => ({ run: `r-press` }));
         attach.mockImplementation(async () => attached(`r-press`, 4_000, `clean the sandbox`));
 
-        const guessed = clientOf({ ...SETTINGS, account: `acct-before` });
-        guessed.host.session.value = session;
-        guessed.host.pickUp.value = { reason: `limit`, held: { ran: true } };
-        expect(await guessed.client.resumeHeldTurn()).toBe(true);
+        const bound = clientOf({ ...SETTINGS, account: `acct-now` });
+        bound.host.session.value = session;
+        bound.host.pickUp.value = { reason: `limit`, held: { ran: true } };
+        expect(await bound.client.resumeHeldTurn()).toBe(true);
         expect(resume.mock.calls.at(-1)?.[0]).toEqual({
             conversationId: `c1`,
-            routing: { agent: `claude`, harness: `native`, account: undefined, model: `opus` },
+            routing: { agent: `claude`, harness: `native`, model: `opus` },
         });
-        expect(guessed.host.session.value).toEqual(session);
+        expect(bound.host.session.value).toEqual(session);
 
-        const picked = clientOf({ ...SETTINGS, account: `acct-other`, accountPicked: true });
+        const picked = clientOf({ ...SETTINGS, account: `acct-other` });
         picked.host.session.value = session;
         picked.host.pickUp.value = { reason: `limit`, held: { ran: true } };
         expect(await picked.client.resumeHeldTurn({ carry: true })).toBe(true);

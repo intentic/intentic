@@ -1,3 +1,4 @@
+import { routingFor } from "../../providers/routing.js";
 import { randomUUID } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
 import { MENTION_LIMIT, type MessageReceipt, profileOf } from "@intentic/sandbox-contract";
@@ -160,14 +161,9 @@ export const together = (items: readonly QueuedItem[]): readonly QueuedItem[] =>
 };
 
 // Whether a drained batch goes on in the conversation's session: only on the runtime and account the session was minted
-// on, the rule a composer sending directly applies for itself (turnRequest.ts `resumes`).
-const continuesSession = (services: Services, routing: Pick<Turn, "conversationId" | "agent" | "harness" | "account">): boolean => {
-    const profile = services.agents.entry(routing.conversationId)?.profile;
-    if (profile === undefined || profile.provider !== (routing.agent ?? "claude") || profile.harness !== (routing.harness ?? "native")) {
-        return false;
-    }
-    return routing.account === undefined || routing.account === profile.account;
-};
+// on, by the one routing rule (agent/providers/routing.ts).
+const continuesSession = (services: Services, routing: Pick<Turn, "conversationId" | "agent" | "harness" | "account">): boolean =>
+    routingFor(services.agents.entry(routing.conversationId)?.profile, routing).continues;
 
 // The turn a batch of waiting messages makes: the sandbox's alone on the session it continues; a person's words joined,
 // their files together, on the newest sender's routing, which is the latest pick. Its opening row is the first message's.

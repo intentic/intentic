@@ -1,5 +1,4 @@
 import {
-    type AccountUsage,
     type AgentProvider,
     bindingWindow,
     type Model,
@@ -7,9 +6,11 @@ import {
     NATIVE_PROVIDERS,
     type NativeProvider,
     PROVIDERS,
+    serviceState,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import { type FleetReading, fleetLimit, type TurnLimit } from "../../usage/fleet-limit.js";
+import { type FleetReading, fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
+import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
 
 // What a parent may spend on a child right now: connected providers, their models' headroom, and how much. Reads happen
 // once per provider, not per model. Three states: measured with room, measured full (left out), or unmeasured (marked
@@ -41,58 +42,42 @@ export interface SpawnableProvider {
     readonly reopensAt?: number;
 }
 
-// Every connected account's headroom, per provider, in as few round trips as there are providers. A provider absent
-// from the map means nothing on file measures it, read as unmetered rather than empty.
+// Every connected account as the serviceability rule reads it, per provider, in as few round trips as there are
+// providers: Claude's with its seat marks and revokes (usage/serviceability.ts), the translator's four with their benches
+// in one management call. A provider absent from the map has nothing on file, read as unmetered rather than empty.
 const fleetReadings = async (services: Services): Promise<Map<AgentProvider, readonly FleetReading[]>> => {
     const readings = new Map<AgentProvider, readonly FleetReading[]>();
-    const [connected, usage, routed] = await Promise.all([
-        services.claudeStore.list().catch(() => []),
-        services.accountUsage.read().catch((): Record<string, AccountUsage> => ({})),
-        // The translator's four providers in one management call, not one call per provider.
-        services.cliProxy.accounts().catch(() => undefined),
-    ]);
-    if (connected.length > 0) {
-        readings.set(
-            "claude",
-            connected.map((account) => ({ account: account.id, usage: usage[account.id] })),
-        );
+    const [claude, routed] = await Promise.all([accountFactsOf(services, "claude").catch(() => []), services.cliProxy.accounts().catch(() => undefined)]);
+    if (claude.length > 0) {
+        readings.set("claude", claude);
     }
     for (const [provider, accounts] of Object.entries(routed ?? {})) {
         if (accounts.length > 0) {
             readings.set(
                 provider as AgentProvider,
-                accounts.map((account) => ({
-                    account: account.name,
-                    usage: account.usage,
-                    ...(account.cooling === undefined ? {} : { cooling: account.cooling }),
-                })),
+                accounts.map((account) => ({ account: account.name, usage: account.usage, cooling: account.cooling })),
             );
         }
     }
     return readings;
 };
 
-// Most room any one account has left for this model; undefined if no account publishes a gating pool. A cooling account
-// is skipped: the translator is routing around it regardless of its last quota reading.
+// Most room any one account the rule calls ready has left for this model; undefined if none has proven room.
 const bestHeadroom = (readings: readonly FleetReading[], model: ModelRef): ModelHeadroom | undefined => {
-    const windows = readings.flatMap((reading) => {
-        if (reading.cooling !== undefined) {
-            return [];
-        }
-        const window = bindingWindow(reading.usage, model);
-        return window === undefined ? [] : [window];
-    });
-    const best = windows.reduce<(typeof windows)[number] | undefined>(
-        (room, window) => (room === undefined || window.utilization < room.utilization ? window : room),
-        undefined,
-    );
+    const best = readings
+        .flatMap((reading) => {
+            const state = serviceState(reading, undefined, model);
+            return state.kind === "ready" ? [{ reading, room: state.room }] : [];
+        })
+        .reduce<{ readonly reading: FleetReading; readonly room: number } | undefined>((most, next) => (most === undefined || next.room > most.room ? next : most), undefined);
     if (best === undefined) {
         return undefined;
     }
+    const pool = bindingWindow(best.reading.usage, model);
     return {
-        percentLeft: Math.max(0, Math.round(100 - best.utilization)),
+        percentLeft: Math.max(0, Math.round(best.room)),
         // Only a pool the plan scopes is worth naming; mirrors the rule in fleet-limit.ts.
-        ...(best.gates === "all" || best.label === undefined ? {} : { pool: best.label }),
+        ...(pool === undefined || pool.gates === "all" || pool.label === undefined ? {} : { pool: pool.label }),
     };
 };
 

@@ -71,7 +71,8 @@ test("does not count an account the proxy is routing around", async () => {
         cliProxy: {
             ...codexConnectedProxy,
             accounts: async () => ({
-                codex: [{ name: "codex-user.json", label: "user@example.com", usage: roomy, cooling: { until: 2_000 } }],
+                // Benched until a retry instant still ahead: one already past has lifted, and the reading speaks again.
+                codex: [{ name: "codex-user.json", label: "user@example.com", usage: roomy, cooling: { until: Math.floor(Date.now() / 1000) + 600 } }],
                 grok: [],
                 kimi: [],
                 gemini: [],

@@ -12,7 +12,9 @@ import {
     QueueEditSchema,
     QueueResumeSchema,
     ResumeTurnSchema,
+    AccountSwitchedSchema,
     SteerSchema,
+    SwitchAccountSchema,
     StopResultSchema,
     StopTurnSchema,
 } from "../schemas/providers/plan-limits.js";
@@ -127,6 +129,18 @@ export const agentContract = {
         .meta({ floor: "collaborator", guest: true })
         .input(ResumeTurnSchema)
         .output(StartedTurnSchema),
+    // CONFLICT while the model is generating (a turn parked on a card may move); NOT_FOUND for an unknown conversation.
+    switchAccount: procedure
+        .route({
+            method: "POST",
+            path: "/agent/account",
+            summary: "Move a conversation to another account",
+            description:
+                "Points the conversation at another connected account of the provider it runs on, for every turn from now on. A turn held by a spent allowance or a stop runs again at once on that account, which is how a refused turn continues elsewhere. Without `carry` the next turn opens a fresh session seeded from the record.",
+        })
+        .meta({ floor: "collaborator", guest: true })
+        .input(SwitchAccountSchema)
+        .output(AccountSwitchedSchema),
     // CONFLICT while a turn is running; NOT_FOUND when the message has no checkpoint; PRECONDITION_FAILED when the
     // position no longer holds the message named.
     rewind: procedure

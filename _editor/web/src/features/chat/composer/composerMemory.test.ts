@@ -7,8 +7,8 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { activeSandboxId } from "../../sandbox/overview/activeSandbox";
 
 // The composer's picks are one answer per account, not per browser window; this suite proves it by making the
-// picks here and opening a second window's copy of the modules that hold them over the same storage. Shares a
-// rule with rememberedAccountFor: a thin catalog read costs one substitution, never the pick itself.
+// picks here and opening a second window's copy of the modules that hold them over the same storage. A thin catalog
+// read costs one substitution, never the pick itself.
 
 const TWO = [
     { id: `first`, label: `Claude one`, connectedAt: 1 },
@@ -71,13 +71,13 @@ const { useChat } = await import("../run/useChat");
 const { loadAccountStatus } = await import("../accounts/useChat-accounts");
 const { loadProviderModels } = await import("../models/useChat-catalog");
 
-// A window that opens now: the two modules holding the picks, evaluated again over the same storage, which is
-// what a second copy of the app reads at load. bun has no module-registry reset, so the whole graph cannot be
-// forked; these two are where every persisted pick lives, and Conversation seeds from exactly them.
+// A window that opens now: the module holding the picks, evaluated again over the same storage, which is what a second
+// copy of the app reads at load. bun has no module-registry reset, so the whole graph cannot be forked; this is where
+// every persisted pick lives, and Conversation seeds from exactly it. No account is among them: a new chat's account is
+// the daemon's to place (auto), never a pick carried over from another chat.
 const openWindow = async () => {
     const turn = await freshImport<typeof import("../run/turnDefaults")>("../run/turnDefaults", import.meta.url);
-    const accounts = await freshImport<typeof import("../accounts/accountPreference")>("../accounts/accountPreference", import.meta.url);
-    return { turn, accounts };
+    return { turn };
 };
 
 describe(`the composer's remembered picks`, () => {
@@ -92,13 +92,11 @@ describe(`the composer's remembered picks`, () => {
         // The chat, popped out into a window of its own, where the user makes their picks.
         useChat().selectModel({ provider: `claude`, value: `claude-opus-4-6` });
         useChat().effort.value = `high`;
-        useChat().active.value.selection.apply({ kind: `selectAccount`, account: `second` });
 
-        // The fleet board's window, opening on the same account: "New agent" there starts on those picks.
+        // The fleet board's window: "New agent" there starts on those picks.
         const board = await openWindow();
         expect(board.turn.rememberedModelFor(`claude`)).toBe(`claude-opus-4-6`);
         expect(board.turn.turnDefaults.effort.value).toBe(`high`);
-        expect(board.accounts.accountPicks().value[`claude`]).toBe(`second`);
     });
 
     // A pick is a pair, provider and model, and both halves travel; picking a second model on the same

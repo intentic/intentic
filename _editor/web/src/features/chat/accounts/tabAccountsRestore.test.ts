@@ -61,7 +61,7 @@ const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => 
 const local = store(`localStorage`);
 const session = store(`sessionStorage`);
 
-// What the window wrote before closing: two chats on different accounts, "second" as the last pick.
+// What the window wrote before closing: two chats on different accounts.
 session.set(
     `intentic.chatTabs.sb1`,
     JSON.stringify({
@@ -92,7 +92,6 @@ session.set(
         ],
     }),
 );
-local.set(`ui-chat-accounts-sb1`, JSON.stringify({ claude: `second` }));
 // The sandbox the window was pointed at, persisted the way activeSandbox.ts reads it back at module scope.
 local.set(`intentic.activeSandboxId`, `sb1`);
 
@@ -107,7 +106,7 @@ const newChat = () => {
     return conversation;
 };
 
-it(`comes back from a refresh on the accounts the tabs were using, and opens a new chat on the last pick`, async () => {
+it(`comes back from a refresh on the accounts the tabs were using, and opens a new chat on auto`, async () => {
     const chat = useChat();
     const accountOf = (id: string): string | undefined =>
         chat.conversations.value.find((conversation) => conversation.conversationId === id)?.selection.account.value;
@@ -123,7 +122,7 @@ it(`comes back from a refresh on the accounts the tabs were using, and opens a n
     expect(accountOf(`tab-a`)).toBe(`first`);
     expect(accountOf(`tab-b`)).toBe(`second`);
 
-    // A chat started after the refresh inherits the remembered pick, not the first account.
+    // A chat started after the refresh inherits no pick: its first turn is the daemon's to place.
     newChat();
-    expect(chat.account.value).toBe(`second`);
+    expect(chat.account.value).toBeUndefined();
 });

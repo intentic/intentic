@@ -365,7 +365,7 @@ test("a failed isolated turn lands nothing, leaves its books alone, and settles 
 
     expect(frames.slice(2)).toStrictEqual([
         OPENING_CHECKS_PREAMBLE,
-        { kind: "error", code: "context-window-too-small", message: "this model cannot hold the turn" },
+        { kind: "error", code: "context-window-too-small", message: "this model cannot hold the turn", account: "default" },
         { kind: "done" },
     ]);
     expect(lands(writes)).toStrictEqual([]);

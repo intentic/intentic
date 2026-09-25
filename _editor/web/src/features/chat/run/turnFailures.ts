@@ -1,13 +1,13 @@
 import type { TurnFact } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import type { PickUp } from "./pickUp";
-import { markAccountReauth } from "../accounts/providerAccounts";
 import { bindingWindow, usageStatusFor } from "../session/usageStatus";
 import type { ComposerSelection } from "../session/composerSelection";
 import type { Conversation } from "../session/conversation";
 import type { TranscriptView } from "../session/transcriptView";
 import type { TurnClient } from "../session/turnClient";
 import { importOrReload } from "../../../router/staleChunk";
+import { markNeedsReauth } from "../accounts/providerAccounts";
 
 // Maps a turn failure's code to what this window does: whether the user is needed (red line) or merely informed, and
 // whether the turn returns on its own. The daemon owns the failure's transcript line and keeps a refused message in the
@@ -60,11 +60,11 @@ export class TurnFailures {
             case `claude-reauth`:
                 // Credential dead, nothing ran: the daemon holds the message in the queue until the account is back.
                 // No red line: the composer already shows a reauth banner with the one-click fix.
-                this.markReauth(message);
+                this.markReauth(error, message);
                 return;
             case `codex-reauth`:
                 // Same badge as claude-reauth, but also red line: no held message here to replay instead.
-                this.markReauth(message);
+                this.markReauth(error, message);
                 this.host.error.value = message;
                 return;
             case `claude-token-refused`:
@@ -146,17 +146,22 @@ export class TurnFailures {
         }
     }
 
-    // Lights the reauth badge on the account this turn ran under; both reauth codes mark the same account the
-    // same way.
-    private markReauth(detail: string): void {
-        markAccountReauth(this.host.selection.provider.value, this.host.selection.account.value, detail);
+    // Lights the reauth badge at once, on the account the frame names as having served the turn: the daemon's word, never
+    // a guess. A daemon too old to name it leaves the conversation's own account (the daemon's record, bindSession).
+    private markReauth(error: Pick<TurnError, "account">, detail: string): void {
+        const account = error.account ?? this.host.selection.account.value;
+        if (account !== undefined) {
+            markNeedsReauth(this.host.selection.provider.value, account, detail);
+        }
     }
 
     // A spent allowance is a wait, not a crash: muted, not red, and nothing is resent unless this conversation's
     // answer for the ending says so. `held` means continuing resends the same turn, not a new message.
     private applyLimitError(error: TurnError): void {
         const model = this.host.selection.model.value === `` ? undefined : { id: this.host.selection.model.value };
-        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.selection.provider.value, this.host.selection.account.value, model), model)?.resetsAt;
+        // The account the frame names served the turn; this window's selection is only the fallback for an older daemon.
+        const account = error.account ?? this.host.selection.account.value;
+        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.selection.provider.value, account, model), model)?.resetsAt;
         this.host.pickUp.value = {
             reason: `limit`,
             // `resetsAt` always comes from the frame, never the store's fallback; `nextAt` is the daemon's own booking.
@@ -191,7 +196,7 @@ export class TurnFailures {
     // watched via a probe rather than surfaced as broken. No armed renewal means the credential is dead: reconnect.
     private applyAuthRefusedError(error: TurnError): void {
         if (error.autoResume !== `scheduled`) {
-            this.markReauth(error.message);
+            this.markReauth(error, error.message);
             return;
         }
         // Wait opens here; armRenewalProbe (armed once this turn's stream ends) is what closes it. What waits in the
@@ -299,7 +304,7 @@ export class TurnFailures {
         }
         this.credentialRenewal.value = undefined;
         const detail = `Claude sign-in could not be renewed: reconnect the account.`;
-        this.markReauth(detail);
+        this.markReauth({}, detail);
         this.host.transcript.notice(`${detail} This turn stopped where it was; sending again picks the conversation back up.`);
         this.host.transcript.persist();
     }

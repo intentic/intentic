@@ -2,7 +2,6 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import type { ContextUsage, TurnFact } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { computed, reactive, ref } from "vue";
-import { selectedAccountId } from "../accounts/providerAccounts";
 import { modelLabelFor, providerTabs } from "../accounts/providerCatalog";
 import { AUTO_PROVIDER } from "../models/modelPickerState";
 import { turnDefaults } from "../run/turnDefaults";
@@ -24,6 +23,8 @@ const CLAUDE_SESSION: SessionRef = { id: `s-1`, provider: `claude`, account: `a1
 // the test. The transcript is a real one, since the divider is rows in it.
 const selectionOf = () => {
     const live = reactive({ streaming: false, generating: false });
+    // What the selection asked the daemon to move the conversation to (switchAccount), in order.
+    const moved: string[] = [];
     const transcript = new TranscriptView(() => undefined, unstubbed<TranscriptHost>(`transcriptHost`, {}));
     const host = {
         session: ref<SessionRef | undefined>(),
@@ -32,11 +33,11 @@ const selectionOf = () => {
         fastMode: ref<Extract<TurnFact, { kind: `fast_mode` }> | undefined>({ kind: `fast_mode`, state: `on` }),
         transcript,
         box: ref<string | undefined>(),
-        turn: { streaming: computed(() => live.streaming), generating: computed(() => live.generating) },
+        turn: { streaming: computed(() => live.streaming), generating: computed(() => live.generating), moveAccount: (account: string) => void moved.push(account) },
         peek: ref(true),
     };
     const notices = (): string[] => transcript.messages.value.filter((message) => message.role === `notice`).map((message) => message.text);
-    return { live, host, notices, selection: new ComposerSelection(host) };
+    return { live, host, notices, moved, selection: new ComposerSelection(host) };
 };
 
 const seedTurnDefaults = (): void => {
@@ -50,7 +51,6 @@ const seedTurnDefaults = (): void => {
 
 beforeEach(() => {
     seedTurnDefaults();
-    selectedAccountId.value = { ...selectedAccountId.value, claude: `a1` };
 });
 afterEach(() => {
     resetSandboxScope();
@@ -95,12 +95,13 @@ describe(`the words a switch owes`, () => {
 });
 
 describe(`ComposerSelection`, () => {
-    it(`starts a chat on the remembered picks`, () => {
+    it(`starts a chat on the remembered picks, and on auto for its account`, () => {
         const { selection } = selectionOf();
 
         expect(selection.provider.value).toBe(`claude`);
         expect(selection.model.value).toBe(`opus`);
-        expect(selection.account.value).toBe(`a1`);
+        // Never a seeded guess: the daemon places the first turn by serviceability.
+        expect(selection.account.value).toBeUndefined();
         expect(selection.effortPick.value).toBe(`high`);
         expect(selection.thinking.value).toBe(true);
         expect(selection.auto.value).toBe(false);
@@ -121,7 +122,7 @@ describe(`ComposerSelection`, () => {
     });
 
     it(`reads the live turn off the chat: a pick waits it out, and an account waits only while the model generates`, () => {
-        const { selection, live, host } = selectionOf();
+        const { selection, live, host, moved } = selectionOf();
         live.streaming = true;
 
         selection.apply({ kind: `selectProvider`, provider: `codex` });
@@ -129,7 +130,7 @@ describe(`ComposerSelection`, () => {
 
         live.generating = true;
         selection.apply({ kind: `selectAccount`, account: `a2` });
-        expect(selection.account.value).toBe(`a1`);
+        expect(selection.account.value).toBeUndefined();
         // Nothing refused was done to the chat, so it is still only being looked at.
         expect(host.peek.value).toBe(true);
 
@@ -138,6 +139,8 @@ describe(`ComposerSelection`, () => {
         selection.apply({ kind: `selectAccount`, account: `a2` });
         expect(selection.account.value).toBe(`a2`);
         expect(host.peek.value).toBe(false);
+        // Asked of the daemon once, as a move of the conversation (switchAccount), never as a remembered default.
+        expect(moved).toEqual([`a2`]);
     });
 
     it(`keeps one divider for the next send, reworded as picks move and gone once they come back`, () => {
@@ -204,7 +207,7 @@ describe(`ComposerSelection`, () => {
         expect(selection.turnSettings()).toEqual({
             agent: `claude`,
             harness: `native`,
-            account: `a1`,
+            account: undefined,
             actsAs: `backend`,
             startIn: `api`,
             model: `opus`,

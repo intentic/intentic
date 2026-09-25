@@ -13,7 +13,7 @@ import type { Holding } from "../../../agents/actor/conversation-holdings.js";
 import { type IsolationAnchor, startAnchor } from "../../../agents/worktrees/isolation.js";
 import { ensureFreshToken, holdAccount } from "../../../runtimes/claude/claude-credentials.js";
 import { opt } from "../../../opt.js";
-import { serviceability, type ServiceabilityDeps } from "../../../usage/serviceability.js";
+import { serviceability, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import { SteeringQueue } from "../../checkpoints/agent-steering.js";
 import type { AgentRequest, HarnessCredential } from "../../providers/agent-request.js";
