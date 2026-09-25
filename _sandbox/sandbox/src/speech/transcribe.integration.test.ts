@@ -62,18 +62,29 @@ test("a status poll on an absent model starts ONE download and reports ready onc
     let fetches = 0;
     let release: (blob: Blob | null) => void = () => {};
     const gate = new Promise<Blob | null>((resolve) => (release = resolve));
+    // The download is entered only after the engine's own `stat` of the absent model resolves, and that stat and the
+    // next poll's identical one complete in whichever order the fs threadpool hands back: a busy box returns the second
+    // poll first often enough that reading `fetches` off it saw 0. Each poll decides whether to fetch synchronously,
+    // before it returns, so once both polls have returned AND the first fetch has been entered the count cannot move
+    // again — which is the moment the "one download, not one per poll" claim is answerable.
+    let entered: () => void = () => {};
+    const firstFetch = new Promise<void>((resolve) => (entered = resolve));
     const speech = createSpeech({
         workspaceRoot: rootWith(false),
         log: () => {},
         exec: () => Promise.resolve({ stdout: "usage: whisper-cli" }),
         fetchModel: () => {
             fetches += 1;
+            entered();
             return gate;
         },
     });
     // The latch keeps concurrent polls to one download, not one per poll.
     expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
     expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
+    // Bounded by the suite's hang detector, not by a wait of its own: an engine that never downloads has no moment to
+    // count at, and that is the failure, not a slow one.
+    await firstFetch;
     expect(fetches).toBe(1);
     // Transcribing mid-download is answered as "wait," not held open for minutes.
     await expect(speech.transcribe(Buffer.from("RIFF"), "en")).rejects.toBeInstanceOf(SpeechModelNotReadyError);
