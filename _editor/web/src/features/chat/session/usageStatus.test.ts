@@ -1,6 +1,15 @@
-import type { AccountUsage, OauthAccount, ProviderRefusal, TranslatorAccounts, UsageWindow } from "@intentic/sandbox-contract";
+import {
+    type AccountUsage,
+    type OauthAccount,
+    type ProviderRefusal,
+    type ServiceFacts,
+    serviceState,
+    type TranslatorAccounts,
+    type UsageWindow,
+} from "@intentic/sandbox-contract";
 import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "../accounts/providerAccounts";
 import {
+    accountState,
     bindingWindow,
     formatAge,
     formatReset,
@@ -18,8 +27,8 @@ import {
     planLimitSummary,
     type PlanHeadroom,
     planHeadroom,
+    refusalFor,
     refusalNote,
-    type RefusalReading,
     usageDetail,
     usagePercent,
     usageStatusFor,
@@ -28,6 +37,11 @@ import {
 
 const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: `seven_day`, utilization: 42.4, gates: `all`, ...over });
 const usage = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: 0, ...over });
+// One account as a refusal is judged against: its reading's age and fill, and whether its sign-in still renews.
+const facts = (over: { account?: string; measuredAt?: number; percent?: number; needsReauth?: boolean } = {}): ServiceFacts => {
+    const { account = `a`, measuredAt = 2_000, percent = 3, needsReauth = false } = over;
+    return { account, needsReauth, usage: { measuredAt, windows: [{ kind: `seven_day`, utilization: percent, gates: `all` }] } };
+};
 // Unwraps planHeadroom since these tests always have a reading; the undefined case is tested separately below.
 const headroom = (over: Partial<AccountUsage> = {}): PlanHeadroom => {
     const projected = planHeadroom(usage(over));
@@ -340,8 +354,8 @@ describe(`isSpent`, () => {
     });
 
     it(`agrees with the ring's own danger tone at the boundary`, () => {
-        const at = usage({ windows: [window({ utilization: 90 })] });
-        const below = usage({ windows: [window({ utilization: 89 })] });
+        const at = usage({ windows: [window({ utilization: 100 })] });
+        const below = usage({ windows: [window({ utilization: 99 })] });
         expect([isSpent(at), planHeadroom(at)?.tone]).toEqual([true, `text-danger`]);
         expect([isSpent(below), planHeadroom(below)?.tone]).toEqual([false, `text-warning`]);
     });
@@ -435,7 +449,10 @@ describe(`liveUsage under a standing refusal`, () => {
         const reopened = usage({ windows: [window({ utilization: 12 })], measuredAt: 2_000 });
         expect(liveUsage(`claude`, `claude-1`, reopened)).toBe(reopened);
         // Measured since and still spent is the refusal being confirmed, not answered.
-        expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 2_000 })))).toEqual([40, 100]);
+        const stillSpent = usage({ windows: [window({ kind: `five_hour`, utilization: 40 }), window({ kind: `seven_day`, utilization: 100 })], measuredAt: 2_000 });
+        expect(percentsOf(liveUsage(`claude`, `claude-1`, stillSpent))).toEqual([40, 100]);
+        // Short of the contract's one spent line is room, the same verdict the daemon's pickers reach.
+        expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 2_000 })))).toEqual([40, 99.2]);
     });
 
     // Routed refusal names nobody; it speaks for every connection the provider holds.
@@ -465,12 +482,16 @@ describe(`liveUsage under a standing refusal`, () => {
     });
 
     // Judged on raw readings, not the pinned ones; a pin can't keep confirming its own refusal forever.
-    it(`cannot keep itself standing, the verdict is the same on the pinned figure as on the raw one`, () => {
+    it(`cannot keep itself standing: the note is judged on the raw reading, never on the pin it causes`, () => {
         const refusal = refusedFor();
-        const verdict = (percent: number): boolean | undefined =>
-            refusalNote(refusal, [{ account: `claude-1`, measuredAt: 2_000, percent, needsReauth: false }], 5_000)?.current;
-        expect(verdict(99)).toBe(true);
+        providerRefusals.value = spent();
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `c`, connectedAt: 0, usage: pools({ measuredAt: 2_000 }) }] };
+        // The raw 99.2% taken since answers it, so nothing is pinned and the note agrees.
+        expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 2_000 })))).toEqual([40, 99.2]);
+        expect(refusalFor(`claude`, 5_000)?.current).toBe(false);
+        const verdict = (percent: number): boolean | undefined => refusalNote(refusal, [facts({ account: `claude-1`, percent })], 5_000)?.current;
         expect(verdict(100)).toBe(true);
+        usageByAccount.value = {};
     });
 });
 
@@ -559,41 +580,94 @@ describe(`planLimitRows`, () => {
         usageByAccount.value = {};
     });
 
-    it(`carries the translator's own bench of a routed credential onto its row`, () => {
+    it(`carries the translator's own bench of a routed credential onto its row, as a verdict waiting lifts`, () => {
         const rows = planLimitRows(
             {},
-            { ...noRouted, kimi: [{ name: `kimi-1`, label: `Kimi Code`, cooling: { until: 9_000, reason: `quota exceeded` } }] },
+            { ...noRouted, kimi: [{ name: `kimi-1`, label: `Kimi Code`, cooling: { until: 4_000_000_000, reason: `quota exceeded` } }] },
         );
-        expect(rows[0]?.cooling).toEqual({ until: 9_000, reason: `quota exceeded` });
+        expect(rows[0]?.state).toEqual({ kind: `blocked`, fix: `wait`, reason: `quota exceeded`, until: 4_000_000_000 });
+    });
+
+    it(`reads the daemon's verdict when it sends one, and the same rule over the old fields when it does not`, () => {
+        const seat = `Your organization has disabled Claude Code`;
+        const [published] = planLimitRows({ claude: [account({ usage: usage(), state: { kind: `blocked`, fix: `admin`, reason: seat } })] }, noRouted);
+        expect(published?.state).toEqual({ kind: `blocked`, fix: `admin`, reason: seat });
+        // A daemon older than `state` still sends the seat mark; the fallback reaches the same verdict from it.
+        const [legacy] = planLimitRows({ claude: [account({ usage: usage(), seatRefusal: seat })] }, noRouted);
+        expect(legacy?.state).toEqual({ kind: `blocked`, fix: `admin`, reason: seat });
+        // A revoked sign-in outranks the seat, in the fallback as on the daemon.
+        const [both] = planLimitRows({ claude: [account({ usage: usage(), seatRefusal: seat, needsReauth: true })] }, noRouted);
+        expect(both?.state).toEqual({ kind: `blocked`, fix: `reconnect`, reason: `sign-in expired` });
+    });
+});
+
+// The one verdict every headroom surface reads: the daemon's for what only its list carries, the live reading for the
+// plan-limit half, since readings stream in between lists.
+describe(`accountState`, () => {
+    afterEach(() => {
+        usageByAccount.value = {};
+        providerRefusals.value = {};
+    });
+    const row = (over: Partial<ServiceFacts & { state: ReturnType<typeof accountState> }> = {}) => ({ account: `claude-1`, ...over });
+
+    it(`re-reads the plan-limit half on a reading that landed after the list`, () => {
+        usageByAccount.value = { "claude:claude-1": usage({ windows: [window({ utilization: 100, resetsAt: 9_000 })], measuredAt: 900 }) };
+        expect(accountState(`claude`, row({ usage: usage({ measuredAt: 500 }), state: { kind: `ready`, room: 58 } }))).toEqual({ kind: `spent`, reopensAt: 9_000 });
+    });
+
+    it(`keeps the daemon's verdict when there is no reading to re-read`, () => {
+        expect(accountState(`claude`, row({ state: { kind: `spent` } }))).toEqual({ kind: `spent` });
+        expect(accountState(`claude`, row({ state: { kind: `unknown` } }))).toEqual({ kind: `unknown` });
+    });
+
+    it(`lets a bench lift at its own instant, whatever the list that reported it said`, () => {
+        const benched = row({ state: { kind: `blocked`, fix: `wait`, reason: `cooling down`, until: 1_000 }, usage: usage({ measuredAt: 500 }) });
+        expect(accountState(`claude`, benched, undefined, 999_000)).toEqual({ kind: `blocked`, fix: `wait`, reason: `cooling down`, until: 1_000 });
+        expect(accountState(`claude`, benched, undefined, 1_000_000)).toEqual({ kind: `ready`, room: 57.6 });
+    });
+
+    it(`answers for the model asked about, not the account's tightest pool`, () => {
+        const opusSpent = usage({ windows: [window({ utilization: 30 }), window({ kind: `model:Opus`, utilization: 100, gates: { models: [`Opus`] } })], measuredAt: 500 });
+        expect(accountState(`claude`, row({ usage: opusSpent }))).toEqual({ kind: `ready`, room: 70 });
+        expect(accountState(`claude`, row({ usage: opusSpent }), { id: `claude-opus-4-6` })).toEqual({ kind: `spent` });
     });
 });
 
 // The aggregate a row list can't answer past dozens of accounts: how much of the fleet can run, where, and
 // what's broken.
 describe(`plan-limit aggregates`, () => {
-    const at = (percent: number | undefined, over: Partial<PlanLimitRow> = {}): PlanLimitRow => ({
-        id: `claude:${percent ?? `none`}`,
-        provider: `claude`,
-        account: `${percent ?? `none`}`,
-        label: `account`,
-        identity: undefined,
-        unread: undefined,
-        percent,
-        pools: percent === undefined ? [] : [{ kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000, gates: `all` }],
-        binding: percent === undefined ? undefined : { kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000, gates: `all` },
-        measuredAt: percent === undefined ? undefined : 0,
-        stale: false,
-        readable: true,
-        needsReauth: false,
-        seatRefusal: undefined,
-        routed: false,
-        cooling: undefined,
-        ...over,
-    });
+    // A row as planLimitRows would build it, its verdict judged by the contract's rule from `facts` (now = 0).
+    const at = (percent: number | undefined, over: Partial<PlanLimitRow> & { readonly marks?: Partial<ServiceFacts> } = {}): PlanLimitRow => {
+        const { marks, ...rest } = over;
+        const account = `${percent ?? `none`}`;
+        const judged: ServiceFacts = {
+            account,
+            usage: percent === undefined ? undefined : { measuredAt: 0, windows: [{ kind: `seven_day`, label: `Weekly`, utilization: percent, resetsAt: 5_000, gates: `all` }] },
+            ...marks,
+        };
+        return {
+            id: `claude:${account}`,
+            provider: `claude`,
+            account,
+            label: `account`,
+            identity: undefined,
+            unread: undefined,
+            percent,
+            pools: percent === undefined ? [] : [{ kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000, gates: `all` }],
+            binding: percent === undefined ? undefined : { kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000, gates: `all` },
+            measuredAt: percent === undefined ? undefined : 0,
+            stale: false,
+            readable: true,
+            routed: false,
+            state: serviceState(judged, undefined, undefined, 0),
+            facts: judged,
+            ...rest,
+        };
+    };
 
-    it(`bands on the same two thresholds the meters wear, and keeps the two kinds of "no reading" apart`, () => {
+    it(`bands on the contract's one spent line and the tight tint, and keeps the two kinds of "no reading" apart`, () => {
         expect(at(89).percent).toBe(89);
-        expect([planLimitBand(at(90)), planLimitBand(at(89)), planLimitBand(at(75)), planLimitBand(at(74))]).toEqual([
+        expect([planLimitBand(at(100)), planLimitBand(at(99)), planLimitBand(at(75)), planLimitBand(at(74))]).toEqual([
             `spent`,
             `tight`,
             `tight`,
@@ -636,22 +710,16 @@ describe(`plan-limit aggregates`, () => {
     });
 
     // Headroom answers a spent pool, a working credential answers a rejected one — and only from the same account.
-    const reading = (over: Partial<RefusalReading> = {}): RefusalReading => ({
-        account: `a`,
-        measuredAt: 2_000,
-        percent: 3,
-        needsReauth: false,
-        ...over,
-    });
+    const reading = facts;
 
     it(`keeps a spent-pool refusal standing until a reading taken since finds headroom`, () => {
         const refusal = { at: 1_000, kind: `limit` as const, message: `spent` };
-        const current = (readings: RefusalReading[]): boolean | undefined => refusalNote(refusal, readings, 5_000)?.current;
+        const current = (readings: ServiceFacts[]): boolean | undefined => refusalNote(refusal, readings, 5_000)?.current;
         // Nothing measured at all, and a reading from before the refusal: neither can contradict it.
         expect(current([])).toBe(true);
         expect(current([reading({ measuredAt: 500 })])).toBe(true);
         // Measured since, and still spent: the refusal is exactly what that pool is saying.
-        expect(current([reading({ percent: 99 })])).toBe(true);
+        expect(current([reading({ percent: 100 })])).toBe(true);
         // Measured since, with room: the pool reopened and the refusal is history.
         expect(current([reading()])).toBe(false);
         expect(refusalNote(undefined, [], 5_000)).toBeUndefined();
@@ -659,7 +727,7 @@ describe(`plan-limit aggregates`, () => {
 
     it(`answers a rejected credential with the named account's own sign-in, not a sibling's percentage`, () => {
         const refusal = { at: 1_000, kind: `auth` as const, message: `401 OAuth access token has been revoked.`, account: `a` };
-        const current = (readings: RefusalReading[]): boolean | undefined => refusalNote(refusal, readings, 5_000)?.current;
+        const current = (readings: ServiceFacts[]): boolean | undefined => refusalNote(refusal, readings, 5_000)?.current;
         // Sibling account b reads fine; the named account a's own reading predates the refusal — neither answers it.
         expect(current([reading({ account: `b` }), reading({ measuredAt: 500 })])).toBe(true);
         // Named account a reads since: the credential itself worked, proving the token was re-minted.
@@ -674,7 +742,7 @@ describe(`plan-limit aggregates`, () => {
     // its pools still publish normally. Only the daemon's own turn-succeeded clear settles it.
     it(`keeps a revoked seat standing under a reading that would answer any other refusal`, () => {
         const refusal = { at: 1_000, kind: `entitlement` as const, message: `organization has disabled`, account: `a` };
-        const current = (readings: RefusalReading[]): boolean | undefined => refusalNote(refusal, readings, 5_000)?.current;
+        const current = (readings: ServiceFacts[]): boolean | undefined => refusalNote(refusal, readings, 5_000)?.current;
         // Would answer an `auth` or `limit` refusal; says nothing about whether the seat may run at all.
         expect(current([reading({ measuredAt: 2_000, percent: 3, needsReauth: false })])).toBe(true);
         // Not even a reading taken long after it, which is the state a five-minute sweep guarantees.
@@ -726,12 +794,12 @@ describe(`plan-limit aggregates`, () => {
     // Only a credential that can't be refreshed is.
     it(`raises only a credential that cannot be refreshed, never a pool that will reopen on its own`, () => {
         const summary = planLimitSummary([
-            at(95, { id: `spent` }),
+            at(100, { id: `spent` }),
             at(10, { id: `fine` }),
-            at(undefined, { id: `broken`, needsReauth: true }),
+            at(undefined, { id: `broken`, marks: { needsReauth: true } }),
             at(undefined, { id: `unread` }),
         ]);
-        expect(summary.attention).toEqual([{ reason: `sign-in expired`, rows: [expect.objectContaining({ id: `broken` })] }]);
+        expect(summary.attention).toEqual([{ fix: `reconnect`, rows: [expect.objectContaining({ id: `broken` })], reasons: [`sign-in expired`] }]);
         // Every account is still banded, so what the alarm dropped the capacity strip keeps; the dead one bands as
         // blocked rather than as one more account waiting on a reading.
         expect(summary.counts).toEqual({ blocked: 1, spent: 1, tight: 0, room: 1, unread: 1, none: 0 });
@@ -740,30 +808,32 @@ describe(`plan-limit aggregates`, () => {
 
     // Its pools still read after an organisation takes the seat away, so only the refusal can say it serves nothing.
     it(`raises an account that lost its seat, and names a dead sign-in on it first`, () => {
-        const seatless = at(20, { id: `seatless`, seatRefusal: `Your organization has disabled Claude Code` });
-        const both = at(20, { id: `both`, needsReauth: true, seatRefusal: `Your organization has disabled Claude Code` });
+        const seatless = at(20, { id: `seatless`, marks: { seatRefusal: `Your organization has disabled Claude Code` } });
+        const both = at(20, { id: `both`, marks: { needsReauth: true, seatRefusal: `Your organization has disabled Claude Code` } });
         expect(planLimitBand(seatless)).toBe(`blocked`);
+        // Grouped by who can fix it, never by the words: the admin hands a seat back, a sign-in is renewed here.
         expect(planLimitSummary([seatless, both]).attention).toEqual([
-            { reason: `no seat`, rows: [expect.objectContaining({ id: `seatless` })] },
-            { reason: `sign-in expired`, rows: [expect.objectContaining({ id: `both` })] },
+            { fix: `reconnect`, rows: [expect.objectContaining({ id: `both` })], reasons: [`sign-in expired`] },
+            { fix: `admin`, rows: [expect.objectContaining({ id: `seatless` })], reasons: [`Your organization has disabled Claude Code`] },
         ]);
     });
 
     // Even a spent account whose credential is dead belongs here: on the reauth, not on the spend.
     it(`raises a dead credential whatever its pools say`, () => {
-        const summary = planLimitSummary([at(99, { id: `both`, needsReauth: true }), at(99, { id: `justSpent` })]);
+        const summary = planLimitSummary([at(100, { id: `both`, marks: { needsReauth: true } }), at(100, { id: `justSpent` })]);
         expect(summary.attention.flatMap((group) => group.rows.map((row) => row.id))).toEqual([`both`]);
     });
 
     // The state that made a 33-account Google fleet read 100% with two untouched allowances sitting in it: a
     // credential the translator has taken out of rotation for good reads as neither spent nor unread.
     it(`raises a credential benched for good, and leaves one benched until an instant to reopen on its own`, () => {
-        const benched = at(undefined, { id: `no-project`, routed: true, cooling: { reason: `no Antigravity project on this Google account` } });
-        const cooling = at(undefined, { id: `cooling`, routed: true, cooling: { until: 9_000, reason: `Individual quota reached` } });
+        const benched = at(undefined, { id: `no-project`, routed: true, marks: { cooling: { reason: `no Antigravity project on this Google account` } } });
+        const cooling = at(undefined, { id: `cooling`, routed: true, marks: { cooling: { until: 9_000, reason: `Individual quota reached` } } });
         const summary = planLimitSummary([benched, cooling]);
         expect(summary.attention).toEqual([
-            { reason: `no Antigravity project on this Google account`, rows: [expect.objectContaining({ id: `no-project` })] },
+            { fix: `reconnect`, rows: [expect.objectContaining({ id: `no-project` })], reasons: [`no Antigravity project on this Google account`] },
         ]);
-        expect([planLimitBand(benched), planLimitBand(cooling)]).toEqual([`blocked`, `unread`]);
+        // A bench with an instant is waited out like a spent pool, and counted as one.
+        expect([planLimitBand(benched), planLimitBand(cooling)]).toEqual([`blocked`, `spent`]);
     });
 });

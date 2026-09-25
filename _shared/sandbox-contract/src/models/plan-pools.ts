@@ -1,10 +1,11 @@
-import type { AccountUsage, UsageWindow, WindowGates } from "../schemas/providers/plan-limits.js";
+import type { AccountState, AccountUsage, ProviderRefusal, UsageWindow, WindowGates } from "../schemas/providers/plan-limits.js";
 
 // Single reading of which account pool gates a given model (or, with none named, the account's tightest pool), shared
 // by the daemon's picker/refusal logic and the browser's rings and rail. A pool gated `none` is excluded from the
 // no-model case: visible to the account, never a gate on a turn.
 
-// 100 = exhaustion (the call will be refused), not the browser's 90% warning threshold (usageStatus SPENT_PERCENT).
+// 100 = exhaustion (the call will be refused). The one spent line: the daemon's pickers and every surface read it, and
+// anything short of it still has room.
 export const SPENT_UTILIZATION = 100;
 
 export interface ModelRef {
@@ -132,3 +133,152 @@ export const windowLive = (window: UsageWindow, measuredAt: number, now: number)
     const period = windowPeriod(window);
     return period === undefined || measuredAt + period.seconds * 1000 > now;
 };
+
+// Whether an account can serve a turn: the one rule every picker and surface reads (AccountState). The daemon runs it and
+// publishes the verdict on each account row; the editor runs it only on a row from a daemon older than that field.
+
+/** Everything the serviceability rule reads of one account, as the account rows already carry it. */
+export interface ServiceFacts {
+    // The daemon's key: a native account's id, a routed credential's auth-file name.
+    readonly account: string;
+    readonly needsReauth?: boolean | undefined;
+    // Why the sign-in needs renewing, where the provider said.
+    readonly detail?: string | undefined;
+    readonly seatRefusal?: string | undefined;
+    readonly cooling?: { readonly until?: number | undefined; readonly reason?: string | undefined } | undefined;
+    readonly usage?: AccountUsage | undefined;
+}
+
+// A spent allowance is over once a reading with room lands after it; a refused credential once any reading does (the
+// token worked). Nothing a reading says answers an entitlement refusal: a seatless account authenticates and reads fine.
+const answers = (refusal: ProviderRefusal, facts: ServiceFacts): boolean => {
+    const measuredAt = facts.usage?.measuredAt;
+    if (refusal.kind === "entitlement" || measuredAt === undefined || measuredAt <= refusal.at) {
+        return false;
+    }
+    if (refusal.kind === "auth") {
+        return facts.needsReauth !== true;
+    }
+    const binding = bindingWindow(facts.usage);
+    return binding !== undefined && binding.utilization < SPENT_UTILIZATION;
+};
+
+/**
+ * How a provider's last refusal stands against everything read since, over every account the provider holds: `gone` once
+ * the account it named is disconnected, `answered` once that account (or, for a refusal naming none, any account) has a
+ * later reading that contradicts it, else `standing`. An empty list is one not loaded yet, so the refusal stands.
+ */
+export const refusalVerdict = (refusal: ProviderRefusal, accounts: readonly ServiceFacts[]): "standing" | "answered" | "gone" => {
+    const named = accounts.filter((facts) => facts.account === refusal.account);
+    if (refusal.account !== undefined && named.length === 0) {
+        return accounts.length === 0 ? "standing" : "gone";
+    }
+    return (refusal.account === undefined ? accounts : named).some((facts) => answers(refusal, facts)) ? "answered" : "standing";
+};
+
+// The account reopens for this question when the pools holding it shut do: all of them for a model's own question (or
+// the pools gating every model), the first to reopen when only per-model slices are full. Unknown if any is unpublished.
+const reopening = (full: readonly UsageWindow[], first: boolean): number | undefined => {
+    const resets = full.flatMap((window) => (window.resetsAt === undefined ? [] : [window.resetsAt]));
+    return resets.length === full.length && resets.length > 0 ? (first ? Math.min(...resets) : Math.max(...resets)) : undefined;
+};
+
+const spent = (reopensAt: number | undefined): AccountState => (reopensAt === undefined ? { kind: "spent" } : { kind: "spent", reopensAt });
+
+/**
+ * The plan-limit half of the verdict, at the contract's one spent line. With a model, the pools that model spends: spent
+ * once any is full, else the room the fullest leaves. With none, whether the account can serve SOME turn: spent once a
+ * pool gating every model is full, or every per-model slice is; a full slice alone (Opus at 100%) leaves the other
+ * models their room, which is then read off the fullest pool still open.
+ */
+export const headroomState = (usage: AccountUsage | undefined, model?: ModelRef): AccountState => {
+    const windows = gatingWindows(usage, model);
+    if (windows.length === 0) {
+        return { kind: "unknown" };
+    }
+    const full = windows.filter((window) => window.utilization >= SPENT_UTILIZATION);
+    const open = windows.filter((window) => window.utilization < SPENT_UTILIZATION);
+    if (model !== undefined || full.some((window) => window.gates === "all") || open.length === 0) {
+        const holding = model !== undefined ? full : full.some((window) => window.gates === "all") ? full.filter((window) => window.gates === "all") : full;
+        if (holding.length > 0) {
+            return spent(reopening(holding, model === undefined && !holding.some((window) => window.gates === "all")));
+        }
+    }
+    return { kind: "ready", room: SPENT_UTILIZATION - Math.max(...open.map((window) => window.utilization)) };
+};
+
+// A standing limit refusal reads its pool as full, since a polled reading freezes the moment a pool actually empties: the
+// pool the refused turn's model spends, else the one asked about, else the tightest. Never another model's allowance.
+const refusedPool = (usage: AccountUsage | undefined, refusal: ProviderRefusal, model: ModelRef | undefined): AccountState => {
+    const refusedModel = refusal.model === undefined ? model : { id: refusal.model };
+    const binding = bindingWindow(usage, refusedModel);
+    if (usage === undefined || binding === undefined) {
+        // No pool to pin: the refusal itself is the evidence, unless it was about a different model than this question.
+        const sameModel = refusal.model === undefined || model === undefined || refusal.model === model.id;
+        return sameModel ? { kind: "spent" } : headroomState(usage, model);
+    }
+    const pinned = usage.windows.map((window) => (window === binding ? { ...window, utilization: Math.max(window.utilization, SPENT_UTILIZATION) } : window));
+    return headroomState({ ...usage, windows: pinned }, model);
+};
+
+/**
+ * One account's verdict. `refusal` is the provider's last refusal only when it still stands and covers this account
+ * (serviceStates decides that). Precedence: a revoked sign-in outranks a lost seat (reconnecting fixes one, nothing here
+ * fixes the other), both outrank a standing refusal, then a translator bench, then the plan limits.
+ */
+export const serviceState = (facts: ServiceFacts, refusal?: ProviderRefusal, model?: ModelRef, now: number = Date.now()): AccountState => {
+    if (facts.needsReauth === true) {
+        return { kind: "blocked", fix: "reconnect", reason: facts.detail ?? "sign-in expired" };
+    }
+    if (facts.seatRefusal !== undefined) {
+        return { kind: "blocked", fix: "admin", reason: facts.seatRefusal };
+    }
+    if (refusal?.kind === "auth") {
+        return { kind: "blocked", fix: "reconnect", reason: refusal.message };
+    }
+    if (refusal?.kind === "entitlement") {
+        return { kind: "blocked", fix: "admin", reason: refusal.message };
+    }
+    const cooling = facts.cooling;
+    // A bench with no instant is one no wait lifts (a Google account with no project): somebody has to connect again.
+    if (cooling !== undefined && cooling.until === undefined) {
+        return { kind: "blocked", fix: "reconnect", reason: cooling.reason ?? "benched by the translator" };
+    }
+    if (cooling?.until !== undefined && cooling.until * 1000 > now) {
+        return { kind: "blocked", fix: "wait", reason: cooling.reason ?? "cooling down", until: cooling.until };
+    }
+    return refusal?.kind === "limit" ? refusedPool(facts.usage, refusal, model) : headroomState(facts.usage, model);
+};
+
+/** Every account of one provider, judged together, since a refusal naming no account is answered by any of them. */
+export const serviceStates = (
+    accounts: readonly ServiceFacts[],
+    refusal: ProviderRefusal | undefined,
+    model?: ModelRef,
+    now: number = Date.now(),
+): ReadonlyMap<string, AccountState> => {
+    const standing = refusal !== undefined && refusalVerdict(refusal, accounts) === "standing" ? refusal : undefined;
+    return new Map(
+        accounts.map((facts) => [
+            facts.account,
+            serviceState(facts, standing !== undefined && (standing.account ?? facts.account) === facts.account ? standing : undefined, model, now),
+        ]),
+    );
+};
+
+// Worst last: proven room, no reading either way, known spent, and nothing a turn can run on.
+const PREFERENCE: Record<AccountState["kind"], number> = { ready: 0, unknown: 1, spent: 2, blocked: 3 };
+
+/** The account an unnamed turn runs on: ready by most room, then unmeasured, then spent, blocked only when that is all there is. Ties keep the caller's order. */
+export const preferredAccount = <T extends { readonly state: AccountState }>(entries: readonly T[]): T | undefined =>
+    entries.reduce<T | undefined>((best, next) => {
+        if (best === undefined) {
+            return next;
+        }
+        const tier = PREFERENCE[next.state.kind] - PREFERENCE[best.state.kind];
+        return tier < 0 || (tier === 0 && next.state.kind === "ready" && best.state.kind === "ready" && next.state.room > best.state.room) ? next : best;
+    }, undefined);
+
+/** The roomiest account with proven room, or none: what a move off a refused account may land on. Ties keep the caller's order. */
+export const roomiestAccount = <T extends { readonly state: AccountState }>(entries: readonly T[]): T | undefined =>
+    preferredAccount(entries.filter((entry) => entry.state.kind === "ready"));

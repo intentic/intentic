@@ -3,7 +3,9 @@ import {
     endpointIdOf,
     type MintedProvider,
     mintedVariant,
+    type ModelRef,
     type NativeProvider,
+    preferredAccount,
     PROVIDER_ACCESS,
     PROVIDER_VENDOR,
     providerLabel,
@@ -15,7 +17,7 @@ import { unversionedBase } from "../../endpoints/endpoint-config.js";
 import { endpointModelId } from "../../endpoints/endpoint-translator.js";
 import { endpointConfigOf } from "../../endpoints/local-model.js";
 import type { Services } from "../../composition.js";
-import { accountWithHeadroom } from "../../usage/account-usage.js";
+import { serviceabilities } from "../../usage/serviceability.js";
 import type { TurnLimit } from "../../usage/fleet-limit.js";
 import type { HarnessCredential } from "./agent-request.js";
 
@@ -138,6 +140,21 @@ export type HarnessCredentialDeps = Pick<
     | "trial"
     | "wakeLocalModel"
 >;
+
+// The model an unnamed Claude pick is judged for: the one the turn names, else the catalog's default, which is what the
+// CLI runs. Asked with no model, the rule answers whether SOME turn can run, and an account whose only full pool is the
+// default model's own slice would win a pick it then loses.
+const pickModel = async (services: Pick<Services, "providerCatalogs">, model: string | undefined): Promise<ModelRef | undefined> => {
+    if (model !== undefined && model !== "") {
+        return { id: model };
+    }
+    // silent-catch: an unreadable catalog only leaves the pick asking whether SOME turn can run, never fails the turn.
+    const fallback = await services.providerCatalogs.claude.models().then(
+        (catalog) => catalog.default,
+        () => undefined,
+    );
+    return fallback === undefined ? undefined : { id: fallback };
+};
 
 // openai-protocol endpoints run through the translator, keeping the user's key out of the harness; anthropic-protocol
 // endpoints get the harness pointed at them directly, key and all.
@@ -362,23 +379,16 @@ export const resolveHarnessCredentials = async (
             },
         };
     }
-    // An unnamed account is picked by headroom and last refusal; a named account is never filtered.
-    const refusal = (await services.providerRefusals.read())["claude"];
-    const [connected, seats] = await Promise.all([services.claudeStore.list(), services.claudeSeats.read()]);
-    const usable = connected.flatMap((account) => (account.needsReauth === true || seats[account.id] !== undefined ? [] : [account.id]));
-    const candidates = usable.length > 0 ? usable : connected.map((account) => account.id);
+    // An unnamed account is picked by the one serviceability rule (usage/serviceability.ts); a named account is never
+    // filtered. The only account there is runs whatever its state: a failure now explains itself, unlike a stale verdict.
     // Refreshed within a bounded wait: a slow endpoint costs the pick freshness, not the turn its start.
-    if (input.account === undefined && candidates.length > 1) {
+    const unnamed = input.account === undefined;
+    const connected = unnamed ? await services.claudeStore.list() : [];
+    if (unnamed && connected.length > 1) {
         await services.headroom.refresh({ scope: { providers: ["claude"] }, withinMs: PICK_REFRESH_WAIT_MS });
     }
     const accountId =
-        input.account ??
-        (await accountWithHeadroom(
-            services.accountUsage,
-            candidates,
-            refusal?.kind === "limit" ? undefined : refusal?.account,
-            input.model === undefined || input.model === "" ? undefined : { id: input.model },
-        ));
+        input.account ?? (connected.length > 1 ? preferredAccount(await serviceabilities(services, "claude", await pickModel(services, input.model)))?.id : connected[0]?.id);
     // A refresh failure joins the other refusals rather than throwing past the caller.
     let oauthToken: string | undefined;
     if (accountId !== undefined) {

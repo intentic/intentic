@@ -108,12 +108,12 @@ export const rememberedAccountFor = (provider: AgentProvider): string | undefine
 };
 
 // Marks the account a turn actually ran under for reauth, using the same resolution rule every
-// account-keyed reader follows.
+// account-keyed reader follows; its verdict moves with it, the one the daemon gives a revoked sign-in.
 export const markAccountReauth = (provider: AgentProvider, picked: string | undefined, detail: string): void => {
     const accounts = providerAccounts.value[provider] ?? [];
     const accountId = effectiveAccount(provider, picked);
     const marked = accounts.map((account: OauthAccount) =>
-        account.id === accountId ? Object.assign({}, account, { needsReauth: true, detail }) : account,
+        account.id === accountId ? Object.assign({}, account, { needsReauth: true, detail, state: { kind: `blocked`, fix: `reconnect`, reason: detail } as const }) : account,
     );
     providerAccounts.value = { ...providerAccounts.value, [provider]: marked };
 };

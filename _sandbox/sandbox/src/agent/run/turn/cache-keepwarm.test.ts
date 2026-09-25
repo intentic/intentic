@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentEvent, type AccountUsage, type PromptFingerprint, SandboxSettingsSchema, type UsageTurn } from "@intentic/sandbox-contract";
+import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { services } from "../../../harness/route-services.testing.js";
 import { beginTurn } from "../../../testing.js";
@@ -39,7 +40,7 @@ interface Harness {
 }
 
 // The frames a refresh hears, stopping where its own signal says it was cut off.
-const harness = (frames: readonly AgentEvent[], opts: { usage?: AccountUsage; keepWarm?: boolean } = {}): Harness => {
+const harness = (frames: readonly AgentEvent[], opts: { usage?: AccountUsage; keepWarm?: boolean; seatRefusal?: string } = {}): Harness => {
     const sent: HarnessRequest[] = [];
     const rows: Omit<UsageTurn, "at" | "day">[] = [];
     const deps = services({
@@ -52,8 +53,15 @@ const harness = (frames: readonly AgentEvent[], opts: { usage?: AccountUsage; ke
                 yield frame;
             }
         },
-        claudeStore: { read: async (id: string) => ({ id, label: id, connectedAt: 0, accessToken: `fresh-${id}` }) },
-        headroom: { read: async () => (opts.usage === undefined ? {} : { acct: opts.usage }) } as unknown as Services["headroom"],
+        claudeStore: {
+            read: async (id: string) => ({ id, label: id, connectedAt: 0, accessToken: `fresh-${id}` }),
+            list: async () => [{ id: "acct", label: "acct", connectedAt: 0 }],
+        },
+        claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", {
+            read: async () => (opts.seatRefusal === undefined ? {} : { acct: { at: 0, reason: opts.seatRefusal } }),
+        }),
+        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}) }),
+        accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => (opts.usage === undefined ? {} : { acct: opts.usage }) }),
         sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ keepWarm: opts.keepWarm ?? false }) },
         usage: {
             record: async (row) => {
@@ -189,6 +197,18 @@ describe("tending a hold", () => {
         await tendKeepWarm(deps, ID, T0 + 51 * MINUTE);
         expect(sent).toHaveLength(0);
         expect(hold(deps)?.ended).toEqual({ at: T0 + 51 * MINUTE, reason: "allowance", detail: "90%" });
+    });
+
+    test("ends without sending anything once the account is spent, or can serve no turn at all", async () => {
+        const usage: AccountUsage = { measuredAt: T0, windows: [{ kind: "five_hour", utilization: 100, gates: "all" }] };
+        const spent = await armed(refreshed(T0 + 51 * MINUTE), { usage });
+        await tendKeepWarm(spent.deps, ID, T0 + 51 * MINUTE);
+        expect(spent.sent).toHaveLength(0);
+        expect(hold(spent.deps)?.ended).toEqual({ at: T0 + 51 * MINUTE, reason: "allowance", detail: "100%" });
+        const seatless = await armed(refreshed(T0 + 51 * MINUTE), { seatRefusal: "Your organization has disabled Claude Code." });
+        await tendKeepWarm(seatless.deps, ID, T0 + 51 * MINUTE);
+        expect(seatless.sent).toHaveLength(0);
+        expect(hold(seatless.deps)?.ended).toEqual({ at: T0 + 51 * MINUTE, reason: "failed", detail: "Your organization has disabled Claude Code." });
     });
 
     test("ends when the time asked for has run out", async () => {

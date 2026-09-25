@@ -927,6 +927,8 @@ const DEMO_CLAUDE_ACCOUNT: OauthAccount = {
     email: `ada@acme.dev`,
     organization: `Acme`,
     connectedAt: STARTED_AT - 30 * 24 * 3_600_000,
+    // The daemon's serviceability verdict, as a current daemon sends it: nothing measured, nothing in the way.
+    state: { kind: `unknown` },
 };
 
 const DEMO_CLAUDE_ACCOUNT_SECOND: OauthAccount = {
@@ -935,10 +937,11 @@ const DEMO_CLAUDE_ACCOUNT_SECOND: OauthAccount = {
     email: `work@acme.dev`,
     organization: `Acme`,
     connectedAt: STARTED_AT - 12 * 24 * 3_600_000,
+    state: { kind: `unknown` },
 };
 
 const DEMO_TRANSLATOR_ACCOUNTS: TranslatorAccounts = {
-    codex: [{ name: `chatgpt-ada`, label: `ChatGPT Pro · ada@acme.dev` }],
+    codex: [{ name: `chatgpt-ada`, label: `ChatGPT Pro · ada@acme.dev`, state: { kind: `unknown` } }],
     grok: [],
     kimi: [],
     gemini: [],

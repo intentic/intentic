@@ -1,4 +1,5 @@
 import {
+    type AccountState,
     type AgentHarness,
     type AgentProvider,
     harnessChoosable as contractHarnessChoosable,
@@ -11,18 +12,19 @@ import { relativeTime } from "../models/catalog";
 import { providerDisplayLabel } from "./providerCatalog";
 import { providerRefusals, translatorAccounts } from "./providerAccounts";
 import {
+    accountFacts,
+    accountState,
     formatAge,
     liveUsage,
     oldestMovableReading,
     PLAN_LIMIT_BAND_LABEL,
     PLAN_LIMIT_BANDS,
-    type PlanHeadroom,
     planHeadroom,
     type PlanLimitBand,
     planLimitBand,
     planLimitBandTone,
-    type PlanLimitRow,
     refusalFor,
+    routedAccountFacts,
 } from "../session/usageStatus";
 import { accountsOf, refreshConnections, subscriptionOnly } from "./useChat-accounts";
 import { t } from "@intentic/ui/i18n";
@@ -46,24 +48,13 @@ export interface CapacityCount {
 
 export const capacityCounts = (
     provider: AgentProvider,
-    // Credential state rides along with the ring: an account nothing can run on is not a degree of fullness.
-    rows: readonly {
-        readonly headroom: PlanHeadroom | undefined;
-        readonly needsReauth?: boolean;
-        readonly seatRefusal?: string | undefined;
-        readonly cooling?: PlanLimitRow[`cooling`];
-    }[],
+    // The row's verdict (accountState), so an account nothing can run on is never counted as a degree of fullness.
+    rows: readonly { readonly state: AccountState }[],
 ): readonly CapacityCount[] => {
     const readable = reportsPlanLimits(provider);
     const counts = new Map<PlanLimitBand, number>();
     for (const row of rows) {
-        const band = planLimitBand({
-            percent: row.headroom?.percent,
-            readable,
-            needsReauth: row.needsReauth === true,
-            seatRefusal: row.seatRefusal,
-            cooling: row.cooling,
-        });
+        const band = planLimitBand({ state: row.state, readable });
         counts.set(band, (counts.get(band) ?? 0) + 1);
     }
     // Worst first; `none` is dropped, since unpublished limits aren't a fullness reading.
@@ -113,8 +104,8 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
                   name: entry.name,
                   label: entry.label,
                   headroom: planHeadroom(liveUsage(provider.value, entry.name, entry.usage, modelRef.value), modelRef.value),
-                  // The proxy's own verdict on the credential, which no reading of its pools can contradict.
-                  cooling: entry.cooling,
+                  // Whether it can take this model's turn: a bench the proxy holds it on outranks any reading of its pools.
+                  state: accountState(provider.value, routedAccountFacts(entry), modelRef.value),
               })),
     );
 
@@ -147,17 +138,22 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
         const note = providerRefusalNote.value;
         return accounts.value.map((entry) => {
             const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label);
+            const subtitle =
+                identity.length > 0 ? identity.join(` · `) : ambiguousLabels.value.has(entry.label) ? `connected ${relativeTime(entry.connectedAt)}` : undefined;
+            const state = accountState(provider.value, accountFacts(entry), modelRef.value);
             return Object.assign({}, entry, {
-                subtitle:
-                    identity.length > 0
-                        ? identity.join(` · `)
-                        : ambiguousLabels.value.has(entry.label)
-                          ? `connected ${relativeTime(entry.connectedAt)}`
-                          : undefined,
+                subtitle,
                 // liveUsage, not the streamed map alone: the row's own reading is usually the newer of the two.
                 headroom: planHeadroom(liveUsage(provider.value, entry.id, entry.usage, modelRef.value), modelRef.value),
-                // A lost seat outlives the turn it refused; any other refusal shows only while it stands, on the account it names.
-                refused: entry.seatRefusal ?? (note?.current === true && refusal?.account === entry.id ? note.line : undefined),
+                state,
+                // Why no turn runs on it (a lost seat outlives the turn it refused), unless the reconnect button already says
+                // so; any other refusal shows only while it stands, on the account it names.
+                refused:
+                    state.kind === `blocked` && entry.needsReauth !== true
+                        ? state.reason
+                        : note?.current === true && refusal?.account === entry.id
+                          ? note.line
+                          : undefined,
             });
         });
     });

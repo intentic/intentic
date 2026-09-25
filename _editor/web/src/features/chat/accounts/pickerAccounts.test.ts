@@ -1,3 +1,4 @@
+import { type AccountState, headroomState } from "@intentic/sandbox-contract";
 import { capacityCounts, matchAccounts } from "./pickerAccounts";
 import type { PlanHeadroom } from "../session/usageStatus";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
@@ -24,20 +25,28 @@ const headroom = (percent: number): PlanHeadroom => ({
     binding: undefined,
 });
 
-const row = (label: string, percent?: number, subtitle?: string) => ({
+// A row as the picker builds it: its ring, and the verdict the contract's rule gives that reading.
+const row = (label: string, percent?: number, subtitle?: string, state?: AccountState) => ({
     label,
     subtitle,
     headroom: percent === undefined ? undefined : headroom(percent),
+    state:
+        state ??
+        headroomState(percent === undefined ? undefined : { measuredAt: 0, windows: [{ kind: `seven_day`, utilization: percent, gates: `all` }] }),
 });
 
 test("bands a pool by account count, worst first: the one figure that survives folding", () => {
-    // 90/75 are the shared thresholds, so this summary and the Usage tab's bar agree on the same account.
-    const counts = capacityCounts(`claude`, [row(`a`, 12), row(`b`, 80), row(`c`, 95), row(`d`, 40)]);
+    // Banded off each row's verdict, so this summary and the Usage tab's bar agree on the same account: spent is the
+    // contract's line (100), tight a tint from 75.
+    const counts = capacityCounts(`claude`, [row(`a`, 12), row(`b`, 80), row(`c`, 100), row(`d`, 40), row(`e`, 95)]);
     expect(counts.map((count) => [count.band, count.count])).toEqual([
         [`spent`, 1],
-        [`tight`, 1],
+        [`tight`, 2],
         [`room`, 2],
     ]);
+    // A seat nothing can run on is not a degree of fullness, whatever its ring says.
+    const blocked = capacityCounts(`claude`, [row(`a`, 3, undefined, { kind: `blocked`, fix: `admin`, reason: `No seat.` })]);
+    expect(blocked.map((count) => [count.band, count.count])).toEqual([[`blocked`, 1]]);
 });
 
 test("counts a never-measured account as unread rather than as room: unknown is not headroom", () => {

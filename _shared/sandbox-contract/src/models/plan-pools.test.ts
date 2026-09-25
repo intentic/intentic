@@ -1,5 +1,18 @@
-import { bindingWindow, gatesModel, gatingWindows, scopedWindow, windowLive, windowPeriod } from "./plan-pools.js";
-import type { AccountUsage, UsageWindow } from "../schemas/providers/plan-limits.js";
+import {
+    bindingWindow,
+    gatesModel,
+    gatingWindows,
+    headroomState,
+    preferredAccount,
+    refusalVerdict,
+    roomiestAccount,
+    scopedWindow,
+    serviceState,
+    serviceStates,
+    windowLive,
+    windowPeriod,
+} from "./plan-pools.js";
+import type { AccountState, AccountUsage, ProviderRefusal, UsageWindow } from "../schemas/providers/plan-limits.js";
 
 // One rule for which pool blocks a given model, shared by the daemon and the browser: a plan can meter models
 // separately, so the account's fullest pool need not be the model's own.
@@ -101,4 +114,110 @@ test("a reading is live until its reset, or, with none published, for one window
 
     // And a pool whose length nothing names has only its reset instant; without one it stands.
     expect(windowLive(window({ kind: "claude:tangelo" }), NOW - 400 * HOUR, NOW)).toBe(true);
+});
+
+// Serviceability: the one verdict on whether an account can serve a turn.
+
+const at = (measuredAt: number, ...windows: UsageWindow[]): AccountUsage => ({ windows, measuredAt });
+const refusal = (over: Partial<ProviderRefusal> & Pick<ProviderRefusal, "kind">): ProviderRefusal => ({ at: 1_000, message: "no.", ...over });
+
+test("spent is the contract's one line: 99.5% still has room, 100% is spent until its last full pool reopens", () => {
+    expect(headroomState(usage(window({ kind: "five_hour", utilization: 99.5 })))).toEqual({ kind: "ready", room: 0.5 });
+    expect(
+        headroomState(usage(window({ kind: "five_hour", utilization: 100, resetsAt: 50 }), window({ kind: "seven_day", utilization: 100, resetsAt: 900 }))),
+    ).toEqual({ kind: "spent", reopensAt: 900 });
+    expect(headroomState(usage(window({ kind: "five_hour", utilization: 100 })))).toEqual({ kind: "spent" });
+    expect(headroomState(undefined)).toEqual({ kind: "unknown" });
+    expect(headroomState(CLAUDE, { id: "claude-haiku-4-5" })).toEqual({ kind: "ready", room: 70 });
+    expect(headroomState(CLAUDE, { id: "claude-opus-4-6" })).toEqual({ kind: "spent" });
+});
+
+test("with no model named, an account is spent only when no model can run on it", () => {
+    // A full Opus slice leaves every other model the room of the fullest pool still open.
+    expect(headroomState(CLAUDE)).toEqual({ kind: "ready", room: 70 });
+    expect(headroomState(GOOGLE)).toEqual({ kind: "ready", room: 73 });
+    // A pool gating every model, full: nothing runs, and it reopens with that pool.
+    expect(headroomState(usage(window({ kind: "seven_day", utilization: 100, resetsAt: 900 }), window({ kind: "model:Opus", utilization: 10, gates: { models: ["Opus"] } })))).toEqual({
+        kind: "spent",
+        reopensAt: 900,
+    });
+    // Every slice full: the first to reopen lets some model run again.
+    expect(
+        headroomState(
+            usage(
+                window({ kind: "g", utilization: 100, resetsAt: 500, gates: { models: ["gemini"] } }),
+                window({ kind: "c", utilization: 100, resetsAt: 800, gates: { models: ["claude"] } }),
+            ),
+        ),
+    ).toEqual({ kind: "spent", reopensAt: 500 });
+});
+
+test("a revoked sign-in outranks a lost seat, which outranks a bench, whatever the meters say", () => {
+    const facts = { account: "a", usage: usage(window({ kind: "five_hour", utilization: 0 })) };
+    expect(serviceState({ ...facts, needsReauth: true, seatRefusal: "no seat" })).toEqual({ kind: "blocked", fix: "reconnect", reason: "sign-in expired" });
+    expect(serviceState({ ...facts, seatRefusal: "Your org disabled Claude Code." })).toEqual({
+        kind: "blocked",
+        fix: "admin",
+        reason: "Your org disabled Claude Code.",
+    });
+    expect(serviceState({ ...facts, cooling: { reason: "no project" } })).toEqual({ kind: "blocked", fix: "reconnect", reason: "no project" });
+    expect(serviceState({ ...facts, cooling: { until: 2_000 } }, undefined, undefined, 1_000_000)).toEqual({
+        kind: "blocked",
+        fix: "wait",
+        reason: "cooling down",
+        until: 2_000,
+    });
+    // A bench whose instant has passed is over.
+    expect(serviceState({ ...facts, cooling: { until: 999 } }, undefined, undefined, 1_000_000)).toEqual({ kind: "ready", room: 100 });
+});
+
+test("a standing refusal blocks by its kind, and a limit refusal pins only the pool its model spends", () => {
+    const facts = { account: "a", usage: CLAUDE };
+    expect(serviceState(facts, refusal({ kind: "auth" }))).toEqual({ kind: "blocked", fix: "reconnect", reason: "no." });
+    expect(serviceState(facts, refusal({ kind: "entitlement" }))).toEqual({ kind: "blocked", fix: "admin", reason: "no." });
+    // Refused on Haiku: the 5-hour/weekly binding pool (seven_day, 30%) reads full, so Haiku is spent too.
+    expect(serviceState(facts, refusal({ kind: "limit", model: "claude-haiku-4-5" }), { id: "claude-haiku-4-5" })).toEqual({ kind: "spent" });
+    // Refused on Opus: its own slice was already full; Haiku keeps the room its pools show.
+    expect(serviceState(facts, refusal({ kind: "limit", model: "claude-opus-4-6" }), { id: "claude-haiku-4-5" })).toEqual({ kind: "ready", room: 70 });
+    // No reading at all: the refusal is the evidence, unless it was about another model.
+    expect(serviceState({ account: "a" }, refusal({ kind: "limit" }))).toEqual({ kind: "spent" });
+    expect(serviceState({ account: "a" }, refusal({ kind: "limit", model: "opus" }), { id: "haiku" })).toEqual({ kind: "unknown" });
+});
+
+test("a refusal stands until a later reading contradicts it, and never past its account's disconnection", () => {
+    const room = at(2_000, window({ kind: "five_hour", utilization: 40 }));
+    const full = at(2_000, window({ kind: "five_hour", utilization: 100 }));
+    const before = at(500, window({ kind: "five_hour", utilization: 40 }));
+    expect(refusalVerdict(refusal({ kind: "limit", account: "a" }), [{ account: "a", usage: room }])).toBe("answered");
+    expect(refusalVerdict(refusal({ kind: "limit", account: "a" }), [{ account: "a", usage: full }])).toBe("standing");
+    expect(refusalVerdict(refusal({ kind: "limit", account: "a" }), [{ account: "a", usage: before }])).toBe("standing");
+    // Another account's room proves nothing about the one refused.
+    expect(refusalVerdict(refusal({ kind: "limit", account: "a" }), [{ account: "a", usage: before }, { account: "b", usage: room }])).toBe("standing");
+    // A refusal naming no account is answered by any of them.
+    expect(refusalVerdict(refusal({ kind: "limit" }), [{ account: "a", usage: before }, { account: "b", usage: room }])).toBe("answered");
+    expect(refusalVerdict(refusal({ kind: "auth", account: "a" }), [{ account: "a", usage: full }])).toBe("answered");
+    expect(refusalVerdict(refusal({ kind: "auth", account: "a" }), [{ account: "a", usage: full, needsReauth: true }])).toBe("standing");
+    expect(refusalVerdict(refusal({ kind: "entitlement", account: "a" }), [{ account: "a", usage: room }])).toBe("standing");
+    expect(refusalVerdict(refusal({ kind: "limit", account: "gone" }), [{ account: "a", usage: room }])).toBe("gone");
+    expect(refusalVerdict(refusal({ kind: "limit", account: "a" }), [])).toBe("standing");
+});
+
+test("a provider's accounts are judged together: a standing refusal lands only on the account it names", () => {
+    const room = at(500, window({ kind: "five_hour", utilization: 40 }));
+    const states = serviceStates([{ account: "a", usage: room }, { account: "b", usage: room }], refusal({ kind: "entitlement", account: "a" }));
+    expect(Object.fromEntries(states)).toEqual({ a: { kind: "blocked", fix: "admin", reason: "no." }, b: { kind: "ready", room: 60 } });
+    const answered = serviceStates([{ account: "a", usage: at(2_000, window({ kind: "five_hour", utilization: 40 })) }], refusal({ kind: "limit", account: "a" }));
+    expect(answered.get("a")).toEqual({ kind: "ready", room: 60 });
+});
+
+test("an unnamed turn takes the most room, then an unmeasured account, then a spent one, and a blocked one only when that is all", () => {
+    const entry = (id: string, state: AccountState) => ({ id, state });
+    const blocked: AccountState = { kind: "blocked", fix: "admin", reason: "no seat" };
+    expect(preferredAccount([entry("seatless", blocked), entry("spent", { kind: "spent" }), entry("low", { kind: "ready", room: 5 }), entry("high", { kind: "ready", room: 60 })])?.id).toBe("high");
+    expect(preferredAccount([entry("seatless", blocked), entry("spent", { kind: "spent" }), entry("unread", { kind: "unknown" })])?.id).toBe("unread");
+    expect(preferredAccount([entry("seatless", blocked), entry("spent", { kind: "spent" })])?.id).toBe("spent");
+    expect(preferredAccount([entry("seatless", blocked), entry("other", blocked)])?.id).toBe("seatless");
+    expect(preferredAccount([entry("first", { kind: "ready", room: 60 }), entry("second", { kind: "ready", room: 60 })])?.id).toBe("first");
+    expect(roomiestAccount([entry("seatless", blocked), entry("unread", { kind: "unknown" })])).toBeUndefined();
+    expect(roomiestAccount([entry("low", { kind: "ready", room: 5 }), entry("high", { kind: "ready", room: 60 })])?.id).toBe("high");
 });

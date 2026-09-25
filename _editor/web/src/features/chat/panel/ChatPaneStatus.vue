@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import { formatTokens, Icon, ProgressRing, ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock } from "@intentic/ui/format";
@@ -9,7 +10,7 @@ import { contextPct, formatElapsed, turnInFlight } from "../../agents/fleet/agen
 import { cacheAlive, cacheCooling, endedLine, keptWarm } from "../../agents/fleet/promptCache";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { effectiveAccount } from "../accounts/providerAccounts";
-import { formatReset, formatUtilization, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../session/usageStatus";
+import { formatReset, formatUtilization, planHeadroom, usageStatusFor } from "../session/usageStatus";
 import { usePaneView } from "./useChat-view";
 import { sandboxAvailabilityVisual } from "../../sandbox/overview/availability";
 import { useSandboxAvailability } from "../../sandbox/overview/useSandboxAvailability";
@@ -106,7 +107,7 @@ const usageChip = computed(() => {
         return undefined;
     }
     // Once a pool is effectively spent, its reset joins the visible label instead of waiting behind a hover.
-    const reset = headroom.percent >= SPENT_PERCENT && headroom.binding.resetsAt !== undefined ? ` · ${formatReset(headroom.binding.resetsAt)}` : ``;
+    const reset = headroom.percent >= SPENT_UTILIZATION && headroom.binding.resetsAt !== undefined ? ` · ${formatReset(headroom.binding.resetsAt)}` : ``;
     return { headroom, label: `${formatUtilization(headroom.percent, headroom.stale)}${reset}` };
 });
 </script>

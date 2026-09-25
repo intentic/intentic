@@ -3,6 +3,7 @@ import {
     type AccountUsage,
     type AgentProvider,
     isFreeProvider,
+    type AccountState,
     type KeyedProvider,
     mintedVariants,
     type OauthAccount,
@@ -18,7 +19,15 @@ import { relativeTime } from "../../chat/models/catalog";
 import { providerTabs } from "../../chat/accounts/providerCatalog";
 import { useChat } from "../../chat/run/useChat";
 import { refreshConnections, subscriptionOnly } from "../../chat/accounts/useChat-accounts";
-import { blockedReason, isSpent, liveUsage, type PlanHeadroom, planHeadroom } from "../../chat/session/usageStatus";
+import {
+    type AccountFacts,
+    accountFacts,
+    accountState,
+    liveUsage,
+    type PlanHeadroom,
+    planHeadroom,
+    routedAccountFacts,
+} from "../../chat/session/usageStatus";
 import { useSandbox } from "../client/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import EstatePicker from "./EstatePicker.vue";
@@ -154,29 +163,33 @@ const usageLine = (id: string): string => {
 // pass per row feeds both the ring and the row's dimming from the same object so they can't disagree; a ring's meaning
 // lives in usageStatus.ts, shared with the composer.
 
-// A row ready to render: the account, its headroom (ring + card), and whether it's effectively spent.
+// A row ready to render: the account, its headroom (ring + card), its serviceability verdict, and whether that verdict
+// is one waiting fixes (spent, or a bench that lifts by itself).
 interface AccountRow<T> {
     account: T;
     headroom: PlanHeadroom | undefined;
+    state: AccountState;
     exhausted: boolean;
 }
 
 // Decorates and sorts active-before-spent in one pass; an account with no reading counts as active (unknown is
 // not exhausted). Order within each group follows the daemon's.
-const rowsOf = <T,>(provider: AgentProvider, accounts: readonly T[], keyOf: (account: T) => string): AccountRow<T>[] => {
+const rowsOf = <T,>(provider: AgentProvider, accounts: readonly T[], factsOf: (account: T) => AccountFacts): AccountRow<T>[] => {
     const active: AccountRow<T>[] = [];
     const spent: AccountRow<T>[] = [];
     for (const account of accounts) {
+        const facts = factsOf(account);
         // Shared live-usage map, seeded from these rows and kept current by turns and daemon pushes.
-        const usage = liveUsage(provider, keyOf(account));
-        const row = { account, headroom: planHeadroom(usage), exhausted: isSpent(usage) };
+        const state = accountState(provider, facts);
+        const waiting = state.kind === `spent` || (state.kind === `blocked` && state.fix === `wait`);
+        const row = { account, headroom: planHeadroom(liveUsage(provider, facts.account)), state, exhausted: waiting };
         (row.exhausted ? spent : active).push(row);
     }
     return [...active, ...spent];
 };
 
 const accountRows = computed<readonly AccountRow<OauthAccount>[]>(() =>
-    rowsOf(managedProvider.value, managedAccounts.value, (account) => account.id),
+    rowsOf(managedProvider.value, managedAccounts.value, accountFacts),
 );
 
 // What to do about a benched credential, where there is anything to do: only Google's own onboarding can give an
@@ -187,14 +200,29 @@ const blockedFix = (provider: KeyedProvider, reason: string): string =>
         ? `${reason}. Disconnect it, open antigravity.google.com with that account to finish Google's setup, then connect it again.`
         : reason;
 
+// The row's dot by who can fix it: signing in again (`reauth`), or somebody this sandbox cannot reach (`blocked`: an
+// organisation's admin handing a seat back). Never a seat refusal drawn as a reconnect.
+const connectionState = (state: AccountState): `connected` | `reauth` | `blocked` =>
+    state.kind !== `blocked` || state.fix === `wait` ? `connected` : state.fix === `reconnect` ? `reauth` : `blocked`;
+
+const needsReconnect = (state: AccountState): boolean => state.kind === `blocked` && state.fix === `reconnect`;
+
+// Why no turn runs on it, in the provider's words; an expired sign-in that gave none says what to do instead.
+const blockedLine = (account: OauthAccount, state: AccountState): string | undefined => {
+    if (state.kind !== `blocked` || state.fix === `wait`) {
+        return undefined;
+    }
+    return account.needsReauth === true && account.detail === undefined ? t(`sandbox.aiAccountSection.signedOutReconnectTo`) : state.reason;
+};
+
 const translatorRows = computed(() =>
     routedProvider.value === undefined
         ? []
-        : rowsOf(routedProvider.value, translatorAccounts.value[routedProvider.value], (account) => account.name).map((row) => ({
+        : rowsOf(routedProvider.value, translatorAccounts.value[routedProvider.value], routedAccountFacts).map((row) => ({
               ...row,
-              // The translator's own verdict on the credential, which no reading of its pools can contradict: this is
-              // the tab a reader is sent to when one can serve nothing, so it has to say which row that was.
-              blocked: blockedReason({ needsReauth: false, seatRefusal: undefined, cooling: row.account.cooling }),
+              // What a person has to do before it serves again: this is the tab a reader is sent to when one can serve
+              // nothing, so it has to say which row that was. A bench that lifts by itself is only dimmed.
+              blocked: row.state.kind === `blocked` && row.state.fix !== `wait` ? row.state.reason : undefined,
           })),
 );
 
@@ -323,21 +351,21 @@ watch(() => route.query[`connect`], focusConnect);
             <!-- Native accounts: Claude and Grok only. Codex, Kimi and Gemini skip straight to the subscription row below. -->
             <template v-if="hasNativeAccounts">
                 <ConnectionRow
-                    v-for="{ account, headroom, exhausted } in visibleNativeAccounts"
+                    v-for="{ account, headroom, exhausted, state } in visibleNativeAccounts"
                     :key="account.id"
                     :title="account.label"
-                    :state="account.needsReauth || account.seatRefusal !== undefined ? `reauth` : `connected`"
-                    :tone="account.needsReauth || account.seatRefusal !== undefined ? `warning` : `default`"
+                    :state="connectionState(state)"
+                    :tone="state.kind === `blocked` && state.fix !== `wait` ? `warning` : `default`"
                     :note="identityNote(account)"
-                    :description="account.needsReauth ? (account.detail ?? t(`sandbox.aiAccountSection.signedOutReconnectTo`)) : account.seatRefusal"
-                    :activity="account.needsReauth || !usageLoaded ? undefined : usageLine(account.id)"
+                    :description="blockedLine(account, state)"
+                    :activity="needsReconnect(state) || !usageLoaded ? undefined : usageLine(account.id)"
                     :rename="renameOf(account)"
                     :headroom="headroom"
                     :exhausted="exhausted"
                 >
                     <template #control>
                         <Button
-                            v-if="account.needsReauth && canConnectMore && !nativeFlowLive"
+                            v-if="needsReconnect(state) && canConnectMore && !nativeFlowLive"
                             :label="t(`shared.reconnect`)"
                             size="small"
                             :loading="accountBusy === managedProvider"
@@ -424,10 +452,10 @@ watch(() => route.query[`connect`], focusConnect);
             <!-- Subscription rows (translator): the primary control for Codex/Kimi/Gemini, secondary under Grok's native account. -->
             <template v-if="routedProvider">
                 <ConnectionRow
-                    v-for="{ account, headroom, exhausted, blocked } in translatorRows.slice(0, visibleRoutedLimit)"
+                    v-for="{ account, headroom, exhausted, blocked, state } in translatorRows.slice(0, visibleRoutedLimit)"
                     :key="account.name"
                     :title="ROUTED_ROW[routedProvider].title"
-                    :state="blocked === undefined ? `connected` : `reauth`"
+                    :state="connectionState(state)"
                     :tone="blocked === undefined ? `default` : `warning`"
                     :note="account.label"
                     :description="blocked === undefined ? undefined : blockedFix(routedProvider, blocked)"

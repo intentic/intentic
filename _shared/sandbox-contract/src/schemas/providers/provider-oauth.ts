@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AccountUsageSchema } from "./plan-limits.js";
+import { AccountStateSchema, AccountUsageSchema } from "./plan-limits.js";
 import { KeyedProviderSchema } from "./provider-subscriptions.js";
 // Claude uses PKCE paste-back (start → exchange); Codex uses OpenAI's device-code flow (start → poll). A sandbox can
 // hold several accounts per provider; `id` is the store key, `label` the display name. Tokens never ride this shape —
@@ -30,6 +30,9 @@ export const OauthAccountSchema = z.object({
         ),
     usage: AccountUsageSchema.optional().describe(
         "How full its plan limits were when last measured, so a picker can show what is left before committing work to it. Absent until a reading exists, which reads as unknown rather than as nothing left.",
+    ),
+    state: AccountStateSchema.optional().describe(
+        "Whether it can serve a turn now, judged once from the sign-in, the seat, the provider's last refusal and the plan limits: the verdict every picker in the sandbox uses. Read this rather than the fields it was judged from. Absent from a daemon older than this field.",
     ),
 });
 export type OauthAccount = z.infer<typeof OauthAccountSchema>;

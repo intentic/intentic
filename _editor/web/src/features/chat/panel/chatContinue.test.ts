@@ -501,7 +501,8 @@ it(`offers the other account by name on a spent allowance, and re-runs the held 
 
 // The common case: one subscription, no second pool to move to.
 it(`offers no second account when the only other connection is spent too`, async () => {
-    twoAccounts(99, 99);
+    // Spent is the contract's one line: 99% would still be room to move to.
+    twoAccounts(100, 100);
     limitChat();
     await mountPanel();
 

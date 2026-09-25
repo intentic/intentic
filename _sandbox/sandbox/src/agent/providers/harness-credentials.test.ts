@@ -188,11 +188,13 @@ test("a sandbox whose every seat is refused still resolves a credential", async 
     expect(result.ok && result.credentials.account).toBe("refused");
 });
 
-test("a spent allowance does not bench an account: the meters already describe that", async () => {
-    // A `limit` refusal is the one kind a later reading can contradict; benching on it too would retire an account for
-    // a window that's since reopened.
-    const result = await resolved({ at: Date.now(), kind: "limit", message: "usage limit reached", account: "refused" });
-    expect(result.ok && result.credentials.account).toBe("refused");
+test("a spent allowance reads its account as spent until a reading with room lands after it", async () => {
+    // A polled reading freezes the moment a pool empties, so the refusal is the fresher fact; a later reading with room
+    // contradicts it, which is how a window that has since reopened gets its account back.
+    const standing = await resolved({ at: Date.now(), kind: "limit", message: "usage limit reached", account: "refused" });
+    expect(standing.ok && standing.credentials.account).toBe("working");
+    const answered = await resolved({ at: -1, kind: "limit", message: "usage limit reached", account: "refused" });
+    expect(answered.ok && answered.credentials.account).toBe("refused");
 });
 
 test("a named account is still the account that runs, refused or not", async () => {

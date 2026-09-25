@@ -87,7 +87,8 @@ test("Claude: the list reflects the store, a start keeps its proof here, disconn
 });
 
 // An org-disabled account shows the provider's refusal instead of a reconnect prompt, since the credential itself is
-// healthy. A revoked credential still outranks the org message, since that one really is fixed by reconnecting.
+// healthy. Both marks ride on a revoked row; which one wins (the revoke, since reconnecting really fixes it) is the
+// serviceability rule's call, in the `state` the account route adds.
 test("Claude: an account its organization turned away says so without asking for a reconnect", async () => {
     const refusal = "Your organization has disabled Claude subscription access for Claude Code";
     const accounts = new Map<string, StoredAccount>([
@@ -119,7 +120,7 @@ test("Claude: an account its organization turned away says so without asking for
     );
     expect(await claude.list(false)).toEqual([
         { id: "a", label: "Work", connectedAt: 1, seatRefusal: refusal },
-        { id: "b", label: "Old", connectedAt: 2, needsReauth: true, detail: "Signed out" },
+        { id: "b", label: "Old", connectedAt: 2, needsReauth: true, detail: "Signed out", seatRefusal: refusal },
     ]);
     // Rename replaces the whole row; the seat refusal must survive it too.
     expect(await claude.rename("a", "Job")).toEqual({ id: "a", label: "Job", connectedAt: 1, seatRefusal: refusal });

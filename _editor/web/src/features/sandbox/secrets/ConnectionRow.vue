@@ -20,8 +20,9 @@ const {
     interactive = false,
 } = defineProps<{
     title: string;
-    // `unknown` is the honest first frame: the daemon hasn't answered, so the dot must not claim either way.
-    state: `connected` | `reauth` | `missing` | `unknown` | `add`;
+    // `unknown` is the honest first frame: the daemon hasn't answered, so the dot must not claim either way. `blocked`
+    // is connected but refused by somebody a reconnect cannot reach (an organisation's admin, a provider's own setup).
+    state: `connected` | `reauth` | `blocked` | `missing` | `unknown` | `add`;
     // The state line beside the title (the signed-in identity, "not connected", "signing in...").
     note?: string;
     // Whether `note` is a live wait, which earns it a spinner: the one moving thing in the row.
@@ -39,13 +40,14 @@ const {
     headroom?: PlanHeadroom;
     // Spend on this connection, shown in the ring's card, not the row; omitted with no ring (Cursor, Grok).
     activity?: string;
-    // Whether this account is exhausted (>=90% utilization). Dims the row so active accounts stand out.
+    // Whether this account is waiting to reopen (spent, or benched until an instant). Dims the row so active accounts stand out.
     exhausted?: boolean;
 }>();
 
 const DOT_TONE: Record<string, string> = {
     connected: `bg-success`,
     reauth: `bg-warning`,
+    blocked: `bg-danger`,
     missing: `bg-content/25`,
     // Pulsing: not a verdict, something is still being read.
     unknown: `bg-content/25`,

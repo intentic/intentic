@@ -2,17 +2,18 @@ import {
     type AgentEvent,
     capabilitiesOf,
     changedParts,
-    gatingWindows,
     type KeepWarmEnd,
     keepWarmCap,
     keepWarmDueAt,
     type PromptFingerprint,
+    SPENT_UTILIZATION,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import type { Holding } from "../../../agents/actor/conversation-holdings.js";
 import { type IsolationAnchor, startAnchor } from "../../../agents/worktrees/isolation.js";
 import { ensureFreshToken, holdAccount } from "../../../runtimes/claude/claude-credentials.js";
 import { opt } from "../../../opt.js";
+import { serviceability, type ServiceabilityDeps } from "../../../usage/serviceability.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import { SteeringQueue } from "../../checkpoints/agent-steering.js";
 import type { AgentRequest, HarnessCredential } from "../../providers/agent-request.js";
@@ -35,7 +36,7 @@ export interface WarmRecipe {
     readonly fingerprint: PromptFingerprint | undefined;
 }
 
-export type KeepWarmDeps = Pick<Services, "agent" | "agents" | "claudeStore" | "cliProxy" | "conversations" | "headroom" | "logger" | "sandboxSettings" | "usage">;
+export type KeepWarmDeps = ServiceabilityDeps & Pick<Services, "agent" | "agents" | "conversations" | "headroom" | "logger" | "sandboxSettings" | "usage">;
 
 const RECIPES: Holding<WarmRecipe> = { name: "keep-warm recipes" };
 // Conversations with a live hold, so a pass walks those alone.
@@ -298,12 +299,19 @@ export const refreshCache = async (deps: KeepWarmDeps, conversationId: string, r
     return verdict;
 };
 
-// The fullest limit the account's model spends, in percent; undefined when nothing was measured.
-const spentOf = async (deps: KeepWarmDeps, recipe: WarmRecipe): Promise<number | undefined> => {
-    const usage = (await deps.headroom.read())[recipe.account];
+// Whether the account can afford another refresh, by the one serviceability rule: a refresh is itself a turn, so it
+// stops where the rule says no turn runs, and short of that, once only the owner's reserve is left. Unmeasured goes on.
+const allowanceStop = async (deps: KeepWarmDeps, recipe: WarmRecipe): Promise<{ readonly reason: KeepWarmEnd; readonly detail: string } | undefined> => {
     const model = recipe.request.spec.model;
-    const windows = gatingWindows(usage, model === undefined ? undefined : { id: model });
-    return windows.length === 0 ? undefined : Math.max(...windows.map((window) => window.utilization));
+    const state = await serviceability(deps, "claude", recipe.account, model === undefined ? undefined : { id: model });
+    if (state.kind === "blocked") {
+        return { reason: "failed", detail: state.reason };
+    }
+    if (state.kind === "spent") {
+        return { reason: "allowance", detail: `${SPENT_UTILIZATION}%` };
+    }
+    const { keepWarmReserve } = await deps.sandboxSettings.get();
+    return state.kind === "ready" && state.room <= keepWarmReserve ? { reason: "allowance", detail: `${Math.round(SPENT_UTILIZATION - state.room)}%` } : undefined;
 };
 
 /** One conversation's hold, looked at once: ended, waited on, or refreshed. */
@@ -349,10 +357,9 @@ export const tendKeepWarm = async (deps: KeepWarmDeps, conversationId: string, n
     if (cache.at + cache.ttlMs >= kept.until || now < keepWarmDueAt(cache)) {
         return;
     }
-    const spent = await spentOf(deps, recipe);
-    const { keepWarmReserve } = await deps.sandboxSettings.get();
-    if (spent !== undefined && spent >= 100 - keepWarmReserve) {
-        end("allowance", `${Math.round(spent)}%`);
+    const stop = await allowanceStop(deps, recipe);
+    if (stop !== undefined) {
+        end(stop.reason, stop.detail);
         return;
     }
     const verdict = await refreshCache(deps, conversationId, recipe, now);

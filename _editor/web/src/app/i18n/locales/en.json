@@ -863,6 +863,11 @@
         }
     },
     "chat": {
+        "accountFix": {
+            "admin": "no seat",
+            "reconnect": "needs connecting again",
+            "wait": "benched for now"
+        },
         "cardStatus": {
             "allowed": "Allowed",
             "alwaysAllowed": "Always allowed",

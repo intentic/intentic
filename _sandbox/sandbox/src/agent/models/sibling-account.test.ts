@@ -1,6 +1,7 @@
 import type { AccountUsage, OauthAccount } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
+import type { SeatRefusal } from "../../runtimes/claude/claude-seats.js";
 import { conversationEntry } from "../../testing.js";
 import { bookLimitMove, siblingWithRoom } from "./sibling-account.js";
 
@@ -14,8 +15,12 @@ const fakeServices = (params: {
     readonly moveAfterLimit?: boolean;
     readonly limitMoveCarryUnder?: number;
     readonly override?: boolean;
-}): Pick<Services, "claudeStore" | "accountUsage" | "agents" | "sandboxSettings"> => ({
+    readonly seats?: Record<string, SeatRefusal>;
+}): Pick<Services, "claudeStore" | "claudeSeats" | "cliProxy" | "providerRefusals" | "accountUsage" | "agents" | "sandboxSettings"> => ({
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...params.accounts] }),
+    claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => params.seats ?? {} }),
+    cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {}),
+    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}) }),
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage }),
     agents: unstubbed<Services["agents"]>("agents", {
         entry: () =>
@@ -33,6 +38,26 @@ test("picks the emptiest sibling with room, skipping the refused, the dead and t
         usage: { spent: reading(100), half: reading(50), "nearly-empty": reading(5), dead: reading(0) },
     });
     expect(await siblingWithRoom(services, { provider: "claude", model: undefined, refused: "spent" })).toBe("nearly-empty");
+});
+
+test("never moves a held turn onto an idle account whose organisation refused its seat", async () => {
+    // The seat mark lives outside the account record, and a seatless account reads full headroom: the emptiest meter
+    // here is the one account no turn can run on.
+    const services = fakeServices({
+        accounts: [account("spent"), account("seatless"), account("busy")],
+        usage: { spent: reading(100), seatless: reading(0), busy: reading(80) },
+        seats: { seatless: { at: 1, reason: "Your organization has disabled Claude Code." } },
+    });
+    expect(await siblingWithRoom(services, { provider: "claude", model: undefined, refused: "spent" })).toBe("busy");
+    const onlySeatless = fakeServices({
+        accounts: [account("spent"), account("seatless")],
+        usage: { spent: reading(100), seatless: reading(0) },
+        seats: { seatless: { at: 1, reason: "Your organization has disabled Claude Code." } },
+        moveAfterLimit: true,
+    });
+    expect(
+        await bookLimitMove(onlySeatless, { conversationId: "c", provider: "claude", model: undefined, refused: "spent", ran: true, contextTokens: 1 }),
+    ).toBeUndefined();
 });
 
 test("answers nothing when every other account is at the cap, and for a routed provider", async () => {

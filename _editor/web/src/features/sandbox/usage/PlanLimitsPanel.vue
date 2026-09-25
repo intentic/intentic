@@ -7,11 +7,10 @@ import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat
 import { refreshConnections } from "../../chat/accounts/useChat-accounts";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import {
-    blockedReason,
+    accountFixLabel,
     formatAge,
     formatReset,
     formatUtilization,
-    NO_SEAT,
     PLAN_LIMIT_BAND_LABEL,
     type PlanLimitBand,
     PLAN_LIMIT_BANDS,
@@ -113,12 +112,16 @@ const barTooltip = (row: PlanLimitRow): string =>
 const ATTENTION_SHOWN = 12;
 const attentionExpanded = ref(false);
 const attentionTotal = computed(() => summary.value.attention.reduce((count, group) => count + group.rows.length, 0));
-// Split by door: a lost seat is handed back by the organisation, every other condition by signing in again.
-const seatTotal = computed(() => summary.value.attention.find((group) => group.reason === NO_SEAT)?.rows.length ?? 0);
-const reconnectTotal = computed(() => attentionTotal.value - seatTotal.value);
+// Split by who can fix it (the verdict's `fix`): a lost seat is handed back by the organisation, the rest by signing in again.
+const fixTotal = (fix: `reconnect` | `admin`): number => summary.value.attention.find((group) => group.fix === fix)?.rows.length ?? 0;
+const seatTotal = computed(() => fixTotal(`admin`));
+const reconnectTotal = computed(() => fixTotal(`reconnect`));
 const attentionShown = computed(() =>
     summary.value.attention.map((group) => ({
-        reason: group.reason,
+        fix: group.fix,
+        reason: accountFixLabel(group.fix),
+        // The providers' own words, each once, under the fix's name: thirty expired sign-ins are one line, not thirty.
+        detail: group.reasons.join(` · `),
         rows: attentionExpanded.value ? group.rows : group.rows.slice(0, ATTENTION_SHOWN),
         hidden: attentionExpanded.value ? 0 : Math.max(0, group.rows.length - ATTENTION_SHOWN),
     })),
@@ -147,7 +150,7 @@ const roster = computed(() => {
             )
             // Reconciling one account is what this table is for, and "why is this one doing nothing" is a question its
             // meter columns answer with a dash.
-            .map((row) => ({ row, blocked: blockedReason(row) }))
+            .map((row) => ({ row, blocked: row.state.kind === `blocked` ? row.state.reason : undefined }))
     );
 });
 </script>
@@ -322,11 +325,17 @@ const roster = computed(() => {
                         {{ t(`sandbox.planLimitsPanel.seatFromAdmin`, { count: seatTotal }, seatTotal) }}
                     </span>
                 </div>
-                <div v-for="group in attentionShown" :key="group.reason" class="flex flex-col gap-1">
+                <div v-for="group in attentionShown" :key="group.fix" class="flex flex-col gap-1">
                     <span class="text-2xs text-muted">{{ group.reason }}</span>
+                    <span class="text-2xs text-subtle">{{ group.detail }}</span>
                     <!-- Wraps as a set, not a column: names are short, unordered, and scanned for the one you recognise. -->
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span v-for="row in group.rows" :key="row.id" v-tooltip.top="row.identity" class="flex min-w-0 items-center gap-1.5 text-2xs">
+                        <span
+                            v-for="row in group.rows"
+                            :key="row.id"
+                            v-tooltip.top="[row.identity, row.state.reason].filter(Boolean).join(` · `)"
+                            class="flex min-w-0 items-center gap-1.5 text-2xs"
+                        >
                             <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
                             <span class="min-w-0 truncate text-muted">{{ row.label }}</span>
                         </span>

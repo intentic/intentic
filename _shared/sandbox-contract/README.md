@@ -22,6 +22,12 @@ flowchart LR
   machine, the browser extension and a runner over the socket each one opens, with the daemon as the client.
 - The daemon names the routes it implements on the `/events` hello frame, and the browser diffs that list against its
   own build, so a route an older daemon lacks shows as a missing feature instead of a 404.
+- Some rules live here as code, not only shapes, because both ends must reach the same answer. The main one is
+  whether an account can serve a turn: `serviceState` in `src/models/plan-pools.ts` turns a revoked sign-in, a lost
+  seat, a translator bench, a standing refusal and the plan limits into one `AccountState` (`ready` · `spent` ·
+  `blocked` with its `fix` · `unknown`), and `SPENT_UTILIZATION` is the only spent line. The daemon runs it for every
+  picker and publishes it as `state` on each account row. The editor reads that field, and runs the same function only
+  for a daemon too old to send it.
 - `./documents` is the vocabulary stored files evolve by, shared by the daemon's stores and an extension's own files
   (`sandboxDocument`): guarded, pure conversions of raw JSON that settle on their own output, and the passthrough that
   keeps what a build does not know on its writes.

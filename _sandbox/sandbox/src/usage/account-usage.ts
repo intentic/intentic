@@ -2,7 +2,6 @@ import {
     type AccountUsage,
     AccountUsageSchema,
     bindingWindow,
-    gatingWindows,
     type ModelRef,
     type UsageUnread,
     type UsageWindow,
@@ -54,37 +53,6 @@ export const accountLimitReset = async (store: AccountUsageStore, account: strin
         return undefined;
     }
     return bindingWindow((await store.read())[account], model)?.resetsAt;
-};
-
-// Which account an unnamed caller runs on. Four tiers, since "no reading", "read as 100%", and "refused" are different
-// facts, worst last:
-// 0 measured with room, headroom proven
-// 1 never measured, no evidence either way
-// 2 measured at the cap, known spent
-// 3 refused a turn, worse than spent since an idle meter still looks best
-// Within a tier the lowest spend wins; ties keep the caller's order. Spend is read only on the pools the turn's model
-// spends (gatingWindows), so an unrelated per-model slice can't bench an account for another model.
-export const accountWithHeadroom = async (
-    store: AccountUsageStore,
-    accounts: readonly string[],
-    // Account with a refusal still standing, if any; undefined leaves the ranking as it was.
-    refused?: string,
-    model?: ModelRef,
-): Promise<string | undefined> => {
-    const [first] = accounts;
-    // The only account there is runs regardless of refusal; a failure now explains itself, unlike a stale refusal.
-    if (first === undefined || accounts.length === 1) {
-        return first;
-    }
-    // read() has already dropped reset windows, so what's left is what the plan still counts.
-    const usage = await store.read();
-    const ranked = accounts.map((account) => {
-        const windows = gatingWindows(usage[account], model);
-        const spent = windows.reduce((worst, window) => Math.max(worst, window.utilization), 0);
-        return { account, tier: account === refused ? 3 : windows.length === 0 ? 1 : spent >= 100 ? 2 : 0, spent };
-    });
-    return ranked.reduce((best, next) => (next.tier !== best.tier ? (next.tier < best.tier ? next : best) : next.spent < best.spent ? next : best))
-        .account;
 };
 
 export const fileAccountUsageStore = (path: string): AccountUsageStore => {

@@ -4,8 +4,9 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
 import { usageKey } from "../providers/translator.js";
+import { withRoutedStates } from "../../usage/serviceability.js";
 
-export type TranslatorRoutesDeps = Pick<Services, "cliProxy" | "headroom" | "logger">;
+export type TranslatorRoutesDeps = Pick<Services, "cliProxy" | "headroom" | "logger" | "providerRefusals">;
 
 // oRPC replaces a non-ORPCError throw's message with a generic 'Internal server error'; these handlers rethrow the
 // translator's own message instead. 502 marks a failure from the bundled proxy itself, not the daemon.
@@ -38,7 +39,8 @@ export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
                     benched.length === 0 ? undefined : services.logger.warn({ accounts: benched }, "translator: benched credentials that can serve no turn"),
                 )
                 .catch((error: unknown) => services.logger.warn({ err: error }, "translator: could not bench unusable credentials"));
-            return accounts;
+            // Each credential carries the one serviceability verdict, bench and the provider's last refusal included.
+            return withRoutedStates(services, accounts);
         }),
         connect: i.connect.handler(({ input }) => upstream(services.cliProxy.connect(input.provider))),
         status: i.status.handler(({ input }) => upstream(services.cliProxy.status(input.provider, input.state))),

@@ -2,7 +2,7 @@
 import type { AccountUsage, OauthAccount } from "@intentic/sandbox-contract";
 import { fallbackAccount, fallbackLabel } from "./limitFallback";
 import { providerRefusals, setAccountUsage, usageByAccount } from "../accounts/providerAccounts";
-import { SPENT_PERCENT } from "./usageStatus";
+import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 
 const account = (id: string, extra: Partial<OauthAccount> = {}): OauthAccount => ({
     id,
@@ -47,6 +47,16 @@ it(`does not offer an account nobody has measured`, () => {
     expect(fallbackAccount(`claude`, `a`, ACCOUNTS)?.id).toBeUndefined();
 });
 
+it(`does not offer an idle account whose organisation refused its seat`, () => {
+    setAccountUsage(`claude`, `a`, reading(99));
+    setAccountUsage(`claude`, `b`, reading(0));
+    setAccountUsage(`claude`, `c`, reading(60));
+
+    expect(fallbackAccount(`claude`, `a`, [account(`a`), account(`b`, { seatRefusal: `Your organization has disabled Claude Code.` }), account(`c`)])?.id).toBe(`c`);
+    // The daemon's verdict is the one read, whatever the meters say.
+    expect(fallbackAccount(`claude`, `a`, [account(`a`), account(`b`, { state: { kind: `blocked`, fix: `admin`, reason: `No seat.` } })])?.id).toBeUndefined();
+});
+
 it(`does not offer an account that needs reconnecting`, () => {
     setAccountUsage(`claude`, `a`, reading(99));
     setAccountUsage(`claude`, `b`, reading(5));
@@ -54,13 +64,13 @@ it(`does not offer an account that needs reconnecting`, () => {
     expect(fallbackAccount(`claude`, `a`, [account(`a`), account(`b`, { needsReauth: true })])?.id).toBeUndefined();
 });
 
-it(`treats the app's own spent threshold as spent`, () => {
+it(`treats the contract's one spent line as spent, and anything short of it as room`, () => {
     setAccountUsage(`claude`, `a`, reading(99));
-    setAccountUsage(`claude`, `b`, reading(SPENT_PERCENT));
+    setAccountUsage(`claude`, `b`, reading(SPENT_UTILIZATION));
 
     expect(fallbackAccount(`claude`, `a`, ACCOUNTS)?.id).toBeUndefined();
 
-    setAccountUsage(`claude`, `b`, reading(SPENT_PERCENT - 1));
+    setAccountUsage(`claude`, `b`, reading(SPENT_UTILIZATION - 1));
     expect(fallbackAccount(`claude`, `a`, ACCOUNTS)?.id).toBe(`b`);
 });
 

@@ -1,10 +1,9 @@
-import { type AgentProvider, type PlanLimitsHeld, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
+import type { AccountFix, AgentProvider, PlanLimitsHeld } from "@intentic/sandbox-contract";
 import { providerAccounts, providerRefusals, translatorAccounts } from "../accounts/providerAccounts";
 import { providerDisplayLabel } from "../accounts/providerCatalog";
 import {
+    accountFixLabel,
     attentionGroups,
-    blockedReason,
-    NO_SEAT,
     oldestMovableReading,
     type PlanLimitGroup,
     planLimitGroups,
@@ -84,13 +83,15 @@ export interface CapacityOut {
     readonly detail: string | undefined;
 }
 
-/** Credentials held back by one missing thing, and whether signing in again is the fix. */
+/** Credentials held back until one kind of person acts: signing in again, or an organisation's admin. */
 export interface CapacityBlocked {
+    readonly fix: AccountFix;
+    // The fix's own name, in the reader's language (accountFixLabel).
     readonly reason: string;
+    // What the providers said, each once: printed beside the fix when there is just one, else on hover.
+    readonly reasons: readonly string[];
     readonly count: number;
-    // False only for a lost seat, which an organisation's admin hands back, never a new sign-in.
-    readonly reconnect: boolean;
-    // Account labels, for the hover the counted line is too narrow to print.
+    // Each account's label with its own reason, for the hover the counted line is too narrow to print.
     readonly labels: readonly string[];
 }
 
@@ -131,36 +132,9 @@ const openPercent = (pools: readonly PlanLimitPool[]): number | undefined => {
     return scoped.length === 0 ? undefined : Math.min(...scoped);
 };
 
-// True once every runnable pool has reached the wire's own SPENT_UTILIZATION, not the app's 90% warning line; a pool
-// between the two stays listed and merely wears red.
-const spentOutright = (row: PlanLimitRow): boolean => {
-    const open = openPercent(row.pools);
-    return open !== undefined && open >= SPENT_UTILIZATION;
-};
-
-// A native refusal excludes the one account it names; a routed refusal names none and excludes the whole provider. A
-// `limit` refusal doesn't count here since it already shows up in the pool's percentage.
-interface Refused {
-    readonly all: boolean;
-    readonly one: string | undefined;
-}
-
-const refusedAccounts = (group: PlanLimitGroup): Refused => {
-    const refusal = providerRefusals.value[group.provider];
-    if (group.refusal?.current !== true || refusal === undefined || refusal.kind === `limit`) {
-        return { all: false, one: undefined };
-    }
-    return refusal.account === undefined ? { all: true, one: undefined } : { all: false, one: group.refusedRow?.id };
-};
-
-// Four ways to be unusable: spent (waits), blocked until a person acts, a standing refusal, or benched by the
-// translator. No reading at all is still usable; unknown is not exhausted.
-const canServe = (row: PlanLimitRow, refused: Refused): boolean => {
-    if (blockedReason(row) !== undefined || row.cooling !== undefined || refused.all || refused.one === row.id) {
-        return false;
-    }
-    return !spentOutright(row);
-};
+// Whether the row can take the next task: the one serviceability verdict, where an unmeasured account is usable and a
+// spent, benched, refused or blocked one is not.
+const canServe = (row: PlanLimitRow): boolean => row.state.kind === `ready` || row.state.kind === `unknown`;
 
 // Roomiest first; a row with no reading sorts after every measured row, never as headroom, and a reading whose re-read
 // keeps failing sorts after every one that can still move: its figure is a floor from before it stopped, so it would
@@ -217,6 +191,9 @@ const capacityLanes = (row: PlanLimitRow): readonly CapacityLane[] =>
         )
         .map((entry) => entry.lane);
 
+// A credential no turn runs on until someone acts: named by what it is missing, never dated by a figure.
+const needsAPerson = (row: PlanLimitRow): boolean => row.state.kind === `blocked` && row.state.fix !== `wait`;
+
 const capacityRow = (row: PlanLimitRow, label: string | undefined): CapacityRow => ({
     id: row.id,
     label,
@@ -234,7 +211,7 @@ const capacityProvider = (group: PlanLimitGroup, ready: readonly PlanLimitRow[])
     const shown = pooled ? ready.slice(0, 1) : ready.slice(0, ROWS_PER_PROVIDER);
     const named = !pooled && group.rows.length > 1;
     const ambiguous = ambiguousLabels(group.rows);
-    const blocked = group.rows.filter((row) => blockedReason(row) !== undefined).length;
+    const blocked = attentionGroups(group.rows).reduce((count, entry) => count + entry.rows.length, 0);
     return {
         provider: group.provider,
         label: providerDisplayLabel(group.provider),
@@ -248,34 +225,30 @@ const capacityProvider = (group: PlanLimitGroup, ready: readonly PlanLimitRow[])
 };
 
 // Order a reader can act on; a condition a person has to fix comes first, then spend, since naming that gives the
-// reopen instant with it.
-const outReason = (group: PlanLimitGroup, refused: Refused): string => {
+// reopen instant with it. Chosen by the verdicts' kinds and fixes, never by their words.
+const outReason = (group: PlanLimitGroup): string => {
     // Only when it covers the whole provider, and in the words of what is missing: a fleet nothing can run on is not
     // waiting for a pool, and must not be dated as though it were.
     const blocked = attentionGroups(group.rows);
     if (blocked.length > 0 && blocked.reduce((count, entry) => count + entry.rows.length, 0) === group.rows.length) {
-        return blocked.length === 1 ? (blocked[0]?.reason ?? `nothing available`) : `nothing that can serve`;
+        return blocked.length === 1 && blocked[0] !== undefined ? accountFixLabel(blocked[0].fix) : `nothing that can serve`;
     }
-    // Same exhaustion test as the row list; a slice that never gated anything can't read a provider as spent.
-    if (group.rows.some(spentOutright)) {
+    if (group.rows.some((row) => row.state.kind === `spent`)) {
         return `spent`;
     }
-    if (group.rows.every((row) => row.cooling !== undefined)) {
+    if (group.rows.every((row) => row.state.kind === `blocked` && row.state.fix === `wait`)) {
         return `cooling down`;
     }
-    return refused.all || refused.one !== undefined ? `refused your last turn` : `nothing available`;
+    return group.refusal?.current === true ? `refused your last turn` : `nothing available`;
 };
 
-// Soonest pool that is actually full, not the soonest of all of them (the 5-hour window resets within the hour
-// regardless). Past instants are ignored: they describe a pool that has already reopened.
+// Soonest instant an account that is waiting comes back: a spent account's reopening, or a bench's own retry instant,
+// the same kind of promise. Past instants are ignored: they describe something that has already reopened.
 const reopensAt = (group: PlanLimitGroup, now: number): number | undefined => {
-    const upcoming = group.rows.flatMap((row) => [
-        ...row.pools.flatMap((pool) =>
-            pool.percent >= SPENT_UTILIZATION && pool.resetsAt !== undefined && pool.resetsAt * 1000 > now ? [pool.resetsAt] : [],
-        ),
-        // The translator's own retry instant for a benched credential, the same kind of promise as a reset.
-        ...(row.cooling?.until !== undefined && row.cooling.until * 1000 > now ? [row.cooling.until] : []),
-    ]);
+    const upcoming = group.rows.flatMap((row) => {
+        const at = row.state.kind === `spent` ? row.state.reopensAt : row.state.kind === `blocked` && row.state.fix === `wait` ? row.state.until : undefined;
+        return at !== undefined && at * 1000 > now ? [at] : [];
+    });
     return upcoming.length === 0 ? undefined : Math.min(...upcoming);
 };
 
@@ -283,12 +256,9 @@ const reopensAt = (group: PlanLimitGroup, now: number): number | undefined => {
 const roomOf = (entry: CapacityProvider): number => entry.rows[0]?.percent ?? Number.POSITIVE_INFINITY;
 
 export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number = Date.now()): ChatCapacity => {
-    const rows = planLimitRows(providerAccounts.value, translatorAccounts.value);
+    const rows = planLimitRows(providerAccounts.value, translatorAccounts.value, now);
     const groups = planLimitGroups(rows, providerRefusals.value, now);
-    const judged = groups.map((group) => {
-        const refused = refusedAccounts(group);
-        return { group, refused, ready: group.rows.filter((row) => canServe(row, refused)).toSorted(byRoom) };
-    });
+    const judged = groups.map((group) => ({ group, ready: group.rows.filter(canServe).toSorted(byRoom) }));
     // An account whose provider is holding reads off has an age nothing can move, so it must not date the fleet: one
     // stuck credential would otherwise print "11h ago" over thirty accounts read a minute ago. It is not dropped from
     // the reckoning, it is said separately (heldReadings), which is the only form of it a reader can act on. The daemon
@@ -296,7 +266,7 @@ export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number =
     const heldNow = new Set(held.flatMap((entry) => (entry.resumesAt * 1000 > now ? [`${entry.provider}:${entry.account}`] : [])));
     // Held to the rows whose reading this rail rests something on: a credential no turn can run on is named by what it
     // is missing, never by a figure, so its last reading — of any age — must not date the ones that are drawn.
-    const dated = rows.filter((row) => blockedReason(row) === undefined && !heldNow.has(row.id));
+    const dated = rows.filter((row) => !needsAPerson(row) && !heldNow.has(row.id));
     return {
         providers: judged
             .flatMap((entry) => (entry.ready.length === 0 ? [] : [capacityProvider(entry.group, entry.ready)]))
@@ -308,17 +278,18 @@ export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number =
                       {
                           provider: entry.group.provider,
                           label: providerDisplayLabel(entry.group.provider),
-                          reason: outReason(entry.group, entry.refused),
+                          reason: outReason(entry.group),
                           reopensAt: reopensAt(entry.group, now),
                           detail: entry.group.refusal?.current === true ? entry.group.refusal.detail : undefined,
                       },
                   ],
         ),
         blocked: attentionGroups(rows).map((entry) => ({
-            reason: entry.reason,
+            fix: entry.fix,
+            reason: accountFixLabel(entry.fix),
+            reasons: entry.reasons,
             count: entry.rows.length,
-            reconnect: entry.reason !== NO_SEAT,
-            labels: entry.rows.map((row) => row.label),
+            labels: entry.rows.map((row) => `${row.label} (${row.state.reason})`),
         })),
         measuredAt: oldestMovableReading(dated),
         unread: unreadGroups(dated).map((entry) => ({
@@ -344,12 +315,12 @@ export interface CapacityHeld {
 // instant has passed is dropped rather than restated: the next trigger reads that account, so the claim is over. A
 // blocked credential is dropped too: the rail names it by what it is missing and draws no figure a re-read could move.
 export const heldReadings = (held: readonly PlanLimitsHeld[], now: number = Date.now()): CapacityHeld | undefined => {
-    const rows = planLimitRows(providerAccounts.value, translatorAccounts.value);
+    const rows = planLimitRows(providerAccounts.value, translatorAccounts.value, now);
     const rowOf = (entry: PlanLimitsHeld): PlanLimitRow | undefined =>
         rows.find((candidate) => candidate.provider === entry.provider && candidate.account === entry.account);
     const standing = held.flatMap((entry) => {
         const row = rowOf(entry);
-        return entry.resumesAt * 1000 > now && (row === undefined || blockedReason(row) === undefined) ? [{ entry, row }] : [];
+        return entry.resumesAt * 1000 > now && (row === undefined || !needsAPerson(row)) ? [{ entry, row }] : [];
     });
     if (standing.length === 0) {
         return undefined;

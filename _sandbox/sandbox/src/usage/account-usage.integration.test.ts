@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
-import { accountLimitReset, accountWithHeadroom, fileAccountUsageStore } from "./account-usage.js";
+import { accountLimitReset, fileAccountUsageStore } from "./account-usage.js";
 
 // Path's parent directory doesn't exist yet; the store must create it on write.
 const tempStore = () => {
@@ -135,84 +135,4 @@ test("accountLimitReset names the reset of the pool the refused MODEL spends, no
     });
     expect(await accountLimitReset(store, "acct-1", { id: "claude-sonnet-4-6" })).toBe(inAnHour());
     expect(await accountLimitReset(store, "acct-1", { id: "claude-opus-4-6" })).toBe(inAnHour() + 86_400);
-});
-
-test("ranks accounts on the pools the turn's model spends: a spent Opus slice does not bench an account for Haiku", async () => {
-    const { store } = tempStore();
-    await store.record("opus-spent", {
-        measuredAt: Date.now(),
-        windows: [window({ kind: "seven_day", utilization: 10 }), window({ kind: "model:Opus", utilization: 100, gates: { models: ["Opus"] } })],
-    });
-    await store.record("steady", { measuredAt: Date.now(), windows: [window({ kind: "seven_day", utilization: 60 })] });
-    expect(await accountWithHeadroom(store, ["steady", "opus-spent"], undefined, { id: "claude-haiku-4-5" })).toBe("opus-spent");
-    expect(await accountWithHeadroom(store, ["steady", "opus-spent"], undefined, { id: "claude-opus-4-6" })).toBe("steady");
-    // With no model named, every gating pool counts, so the spent Opus slice benches its account too.
-    expect(await accountWithHeadroom(store, ["steady", "opus-spent"])).toBe("steady");
-});
-
-test("prefers the account with the most room left", async () => {
-    const { store } = tempStore();
-    await store.record("busy", { measuredAt: Date.now(), windows: [window({ utilization: 92 })] });
-    await store.record("free", { measuredAt: Date.now(), windows: [window({ utilization: 18 })] });
-    expect(await accountWithHeadroom(store, ["busy", "free"])).toBe("free");
-});
-
-test("reads an account at its WORST pool, not its kindest", async () => {
-    // Five-hour room is no use to a turn its weekly window will refuse.
-    const { store } = tempStore();
-    await store.record("weekly-spent", {
-        measuredAt: Date.now(),
-        windows: [window({ utilization: 4 }), window({ kind: "seven_day", utilization: 100 })],
-    });
-    await store.record("steady", { measuredAt: Date.now(), windows: [window({ utilization: 60 })] });
-    expect(await accountWithHeadroom(store, ["weekly-spent", "steady"])).toBe("steady");
-});
-
-test("ranks a never-measured account below a proven one, and a spent one below that", async () => {
-    const { store } = tempStore();
-    await store.record("proven", { measuredAt: Date.now(), windows: [window({ utilization: 70 })] });
-    await store.record("capped", { measuredAt: Date.now(), windows: [window({ utilization: 100 })] });
-    expect(await accountWithHeadroom(store, ["unmeasured", "proven", "capped"])).toBe("proven");
-    expect(await accountWithHeadroom(store, ["capped", "unmeasured"])).toBe("unmeasured");
-});
-
-test("keeps the caller's order between equals, so the pick does not flap", async () => {
-    // Ties resolve to the caller's own order, not a rotation.
-    const { store } = tempStore();
-    await store.record("first", { measuredAt: Date.now(), windows: [window({ utilization: 50 })] });
-    await store.record("second", { measuredAt: Date.now(), windows: [window({ utilization: 50 })] });
-    expect(await accountWithHeadroom(store, ["first", "second"])).toBe("first");
-    expect(await accountWithHeadroom(store, ["second", "first"])).toBe("second");
-});
-
-test("a window the provider has already reset stops counting against an account", async () => {
-    // A reset window leaves its account unmeasured, not capped: beats capped but not one proven to have room.
-    const { store } = tempStore();
-    await store.record("reset", { measuredAt: Date.now(), windows: [window({ utilization: 100, resetsAt: 1 })] });
-    await store.record("capped", { measuredAt: Date.now(), windows: [window({ utilization: 100 })] });
-    await store.record("proven", { measuredAt: Date.now(), windows: [window({ utilization: 80 })] });
-    expect(await accountWithHeadroom(store, ["capped", "reset"])).toBe("reset");
-    expect(await accountWithHeadroom(store, ["reset", "proven"])).toBe("proven");
-});
-
-test("one account, or none, needs no reading at all", async () => {
-    const { store } = tempStore();
-    expect(await accountWithHeadroom(store, ["only"])).toBe("only");
-    expect(await accountWithHeadroom(store, [])).toBeUndefined();
-});
-
-test("passes over the account the provider has refused, however good its meter looks", async () => {
-    const { store } = tempStore();
-    await store.record("refused", { measuredAt: Date.now(), windows: [window({ utilization: 2 })] });
-    await store.record("working", { measuredAt: Date.now(), windows: [window({ utilization: 88 })] });
-    expect(await accountWithHeadroom(store, ["refused", "working"], "refused")).toBe("working");
-    // No refused id named: ranked exactly as an ordinary sandbox would be.
-    expect(await accountWithHeadroom(store, ["refused", "working"])).toBe("refused");
-});
-
-test("still runs the only account there is, refused or not", async () => {
-    // A filed refusal can be stale; with no fallback, the turn goes and its failure explains why if it recurs.
-    const { store } = tempStore();
-    await store.record("only", { measuredAt: Date.now(), windows: [window({ utilization: 5 })] });
-    expect(await accountWithHeadroom(store, ["only"], "only")).toBe("only");
 });

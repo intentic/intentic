@@ -1,12 +1,19 @@
 import {
+    type AccountFix,
+    type AccountState,
     type AccountUsage,
     type AgentProvider,
     bindingWindow,
+    headroomState,
     type ModelRef,
     type OauthAccount,
     type ProviderRefusal,
+    refusalVerdict,
     reportsPlanLimits,
     scopedWindow,
+    type ServiceFacts,
+    serviceStates,
+    SPENT_UTILIZATION,
     type TranslatorAccounts,
     type UsageUnread,
     type UsageWindow,
@@ -15,6 +22,7 @@ import {
     type WindowPeriod,
 } from "@intentic/sandbox-contract";
 import { formatWhen, timeAgo } from "@intentic/ui/format";
+import { t } from "@intentic/ui/i18n";
 import { lookupUsage, providerAccounts, providerRefusals, translatorAccounts } from "../accounts/providerAccounts";
 
 // Re-exported so callers get the contract's binding-pool rule from this module too.
@@ -58,21 +66,14 @@ export const usagePercent = (usage: AccountUsage | undefined, model?: ModelRef):
     return window === undefined ? undefined : Math.round(window.utilization);
 };
 
-// Severity shared by every surface that draws a percentage, so it means the same thing everywhere. Danger
-// is reserved for an effectively spent pool.
+// Severity shared by every surface that draws a percentage, so it means the same thing everywhere. Danger is the
+// contract's one spent line (SPENT_UTILIZATION), the same the daemon's pickers use; warning is only a tint on the way.
 export const usageTone = (percent: number): string =>
-    percent >= SPENT_PERCENT ? `text-danger` : percent >= TIGHT_PERCENT ? `text-warning` : `text-link`;
+    percent >= SPENT_UTILIZATION ? `text-danger` : percent >= TIGHT_PERCENT ? `text-warning` : `text-link`;
 
-// Named thresholds so every surface (dimming, ring colour, capacity bands) agrees on spent vs tight.
-export const SPENT_PERCENT = 90;
+// Past this a pool is drawn as tight; never a verdict, which is the contract's alone.
 const TIGHT_PERCENT = 75;
-export const isSpent = (usage: AccountUsage | undefined, model?: ModelRef): boolean => {
-    const percent = usagePercent(usage, model);
-    return percent !== undefined && percent >= SPENT_PERCENT;
-};
-
-// Same threshold, inverted: room means below SPENT_PERCENT. Shared with answersRefusal's judgement.
-const hasRoom = (percent: number | undefined): boolean => percent !== undefined && percent < SPENT_PERCENT;
+export const isSpent = (usage: AccountUsage | undefined, model?: ModelRef): boolean => headroomState(usage, model).kind === `spent`;
 
 // Reading for an account: the shared map (providerAccounts.usageByAccount) if present, else the attached
 // row a caller holds (used by planLimitRows). The map always wins: turns and daemon pushes keep it current.
@@ -87,10 +88,10 @@ const freshest = (provider: AgentProvider, account: string, attached: AccountUsa
 const spentByRefusal = (provider: AgentProvider, account: string, usage: AccountUsage | undefined, model: ModelRef | undefined): AccountUsage | undefined => {
     const refused = providerRefusals.value[provider]?.model;
     const binding = bindingWindow(usage, refused === undefined ? model : { id: refused });
-    if (usage === undefined || binding === undefined || binding.utilization >= 100 || !limitStandsFor(provider, account, usage)) {
+    if (usage === undefined || binding === undefined || binding.utilization >= SPENT_UTILIZATION || !limitStandsFor(provider, account, usage)) {
         return usage;
     }
-    return { ...usage, windows: usage.windows.map((entry) => (entry === binding ? { ...entry, utilization: 100 } : entry)) };
+    return { ...usage, windows: usage.windows.map((entry) => (entry === binding ? { ...entry, utilization: SPENT_UTILIZATION } : entry)) };
 };
 
 // An account's reading as any surface should draw it: freshest data, corrected for what the plan has since
@@ -318,55 +319,90 @@ export interface PlanLimitRow {
     readonly unread: UsageUnread | undefined;
     readonly stale: boolean;
     readonly readable: boolean;
-    // Credential can no longer be refreshed; unrelated to headroom, decides whether it can serve a turn.
-    readonly needsReauth: boolean;
-    // Provider's own sentence when the account's organisation took its seat away; its pools may still read, but no
-    // turn can run on it.
-    readonly seatRefusal: string | undefined;
     // Pickable by name (native) or balanced automatically (routed); provider alone can't tell — Grok is both.
     readonly routed: boolean;
-    // Translator routes around this credential now, regardless of its last reading; undefined means in rotation.
-    readonly cooling: { readonly until?: number | undefined; readonly reason?: string | undefined } | undefined;
+    // Whether it can serve a turn (accountState): every band, group, count and fix on a headroom surface reads this.
+    readonly state: AccountState;
+    // What the verdict was judged from, as the wire carried it with the freshest reading: what a refusal is read against.
+    readonly facts: ServiceFacts;
 }
 
-// The one blocked condition signing in again cannot fix: only the organisation's admin can hand a seat back.
-export const NO_SEAT = `no seat`;
+// An account row as the daemon sends it, whichever list it came in.
+export type AccountFacts = ServiceFacts & { readonly state?: AccountState | undefined };
 
-// What stops this credential serving any turn at all, in the words of what is missing; undefined when only its meters
-// stand in the way. Never a full pool (it reopens on its own) and never a timed bench (the translator lifts it):
-// only the states a person has to act on, which is why a fleet can read 100% while an account with an untouched
-// allowance sits in it unusable.
-export const blockedReason = (row: Pick<PlanLimitRow, `needsReauth` | `seatRefusal` | `cooling`>): string | undefined => {
-    if (row.needsReauth) {
-        return `sign-in expired`;
-    }
-    if (row.seatRefusal !== undefined) {
-        return NO_SEAT;
-    }
-    return row.cooling !== undefined && row.cooling.until === undefined ? (row.cooling.reason ?? `benched by the translator`) : undefined;
+/** A provider's own account row, as the serviceability rule reads it. */
+export const accountFacts = (account: OauthAccount): AccountFacts => ({
+    account: account.id,
+    needsReauth: account.needsReauth,
+    detail: account.detail,
+    seatRefusal: account.seatRefusal,
+    usage: account.usage,
+    state: account.state,
+});
+
+/** A routed credential, as the serviceability rule reads it. */
+export const routedAccountFacts = (account: TranslatorAccounts[keyof TranslatorAccounts][number]): AccountFacts => ({
+    account: account.name,
+    usage: account.usage,
+    cooling: account.cooling,
+    state: account.state,
+});
+
+// Every connection a provider holds (native and routed are one list to the reader), each with its freshest raw
+// reading: never corrected by spentByRefusal, since judging a refusal on corrected data would let a pinned 100% feed
+// itself forever.
+const providerFacts = (provider: AgentProvider): readonly AccountFacts[] =>
+    [...(providerAccounts.value[provider] ?? []).map(accountFacts), ...routedAccounts(provider).map(routedAccountFacts)].map((facts) => ({
+        ...facts,
+        usage: freshest(provider, facts.account, facts.usage),
+    }));
+
+// FALLBACK for a daemon older than `AccountState`: the contract's own rule (the one the daemon runs) over the fields
+// that daemon did send. Delete once no supported daemon lacks `state`.
+const legacyState = (provider: AgentProvider, facts: AccountFacts, now: number): AccountState => {
+    // The row's own facts first: the lists a caller holds can be newer than the module's copy.
+    const own = { ...facts, usage: freshest(provider, facts.account, facts.usage) };
+    const judged = [own, ...providerFacts(provider).filter((entry) => entry.account !== facts.account)];
+    return serviceStates(judged, providerRefusals.value[provider], undefined, now).get(facts.account) ?? { kind: `unknown` };
 };
 
-// Common shape a row is built from: the daemon's account key, its label/identity, and the reading attached.
-// Named fields, not positionals — label and identity are both strings and easy to swap by accident.
+// A bench whose instant has passed has lifted, whatever the list that reported it said.
+const stillBlocked = (state: AccountState, now: number): boolean =>
+    state.kind === `blocked` && (state.fix !== `wait` || state.until === undefined || state.until * 1000 > now);
+
+/**
+ * Whether an account can serve a turn: the daemon's verdict (`state`), read as it stands for what only the account list
+ * carries (a revoked sign-in, a lost seat, a bench, a refusal). The plan-limit half is re-read on the live reading when
+ * there is one, by the contract's one rule (`headroomState`), since readings and limit refusals stream in between lists,
+ * and a question about one model asks about the pools that model spends.
+ */
+export const accountState = (provider: AgentProvider, facts: AccountFacts, model?: ModelRef, now: number = Date.now()): AccountState => {
+    const verdict = facts.state ?? legacyState(provider, facts, now);
+    if (stillBlocked(verdict, now)) {
+        return verdict;
+    }
+    const live = liveUsage(provider, facts.account, facts.usage, model);
+    return live === undefined && verdict.kind !== `blocked` ? verdict : headroomState(live, model);
+};
+
+// Common shape a row is built from: the daemon's facts, its label/identity. Named fields, not positionals — label and
+// identity are both strings and easy to swap by accident.
 interface PlanLimitSource {
-    readonly account: string;
+    readonly facts: AccountFacts;
     readonly label: string;
     readonly identity: string | undefined;
-    readonly attached: AccountUsage | undefined;
-    readonly needsReauth: boolean;
-    readonly seatRefusal: string | undefined;
     readonly routed: boolean;
-    readonly cooling: PlanLimitRow["cooling"];
 }
 
-const planLimitRow = (provider: AgentProvider, source: PlanLimitSource): PlanLimitRow => {
-    const usage = liveUsage(provider, source.account, source.attached);
+const planLimitRow = (provider: AgentProvider, source: PlanLimitSource, now: number): PlanLimitRow => {
+    const { account } = source.facts;
+    const usage = liveUsage(provider, account, source.facts.usage);
     const pools = usage === undefined ? [] : usagePools(usage);
     const binding = usage === undefined ? undefined : bindingPool(usage, pools, undefined);
     return {
-        id: `${provider}:${source.account}`,
+        id: `${provider}:${account}`,
         provider,
-        account: source.account,
+        account,
         label: source.label,
         identity: source.identity,
         percent: binding?.percent,
@@ -376,46 +412,30 @@ const planLimitRow = (provider: AgentProvider, source: PlanLimitSource): PlanLim
         unread: usage?.unread,
         stale: usage !== undefined && isStale(usage),
         readable: reportsPlanLimits(provider),
-        needsReauth: source.needsReauth,
-        seatRefusal: source.seatRefusal,
         routed: source.routed,
-        cooling: source.cooling,
+        state: accountState(provider, source.facts, undefined, now),
+        facts: { ...source.facts, usage: freshest(provider, account, source.facts.usage) },
     };
 };
 
 // Measured rows first, tightest on top — the account about to gate a turn should be visible without scrolling.
 // Unmeasured rows sink; unknown isn't headroom.
-export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, routed: TranslatorAccounts): PlanLimitRow[] =>
+export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, routed: TranslatorAccounts, now: number = Date.now()): PlanLimitRow[] =>
     [
         ...Object.entries(native).flatMap(([provider, accounts]) =>
             accounts.map((account) =>
                 planLimitRow(provider, {
-                    account: account.id,
+                    facts: accountFacts(account),
                     label: account.label,
                     // Omitted when it would just repeat the label (already the account's email).
                     identity: account.email === account.label ? undefined : account.email,
-                    attached: account.usage,
-                    needsReauth: account.needsReauth === true,
-                    seatRefusal: account.seatRefusal,
                     routed: false,
-                    cooling: undefined,
-                }),
+                }, now),
             ),
         ),
-        // Routed accounts have no reauth flag (broken ones are dropped) and no separate identity (label is the name).
+        // Routed accounts have no separate identity (label is the name).
         ...Object.entries(routed).flatMap(([provider, accounts]) =>
-            accounts.map((account) =>
-                planLimitRow(provider, {
-                    account: account.name,
-                    label: account.label,
-                    identity: undefined,
-                    attached: account.usage,
-                    needsReauth: false,
-                    seatRefusal: undefined,
-                    routed: true,
-                    cooling: account.cooling,
-                }),
-            ),
+            accounts.map((account) => planLimitRow(provider, { facts: routedAccountFacts(account), label: account.label, identity: undefined, routed: true }, now)),
         ),
     ].toSorted((left, right) => {
         if (left.percent === undefined || right.percent === undefined) {
@@ -430,16 +450,20 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
 export const PLAN_LIMIT_BANDS = [`blocked`, `spent`, `tight`, `room`, `unread`, `none`] as const;
 export type PlanLimitBand = (typeof PLAN_LIMIT_BANDS)[number];
 
-// `blocked` and `none` aren't fullness levels — one can serve nothing whatever its meters say, the other publishes
-// no meters at all — so both are counted beside the capacity bar rather than inside it.
-export const planLimitBand = (row: Pick<PlanLimitRow, `percent` | `readable` | `needsReauth` | `seatRefusal` | `cooling`>): PlanLimitBand => {
-    if (blockedReason(row) !== undefined) {
-        return `blocked`;
+// Straight off the verdict. `blocked` and `none` aren't fullness levels — one can serve nothing whatever its meters
+// say, the other publishes no meters at all — so both are counted beside the capacity bar rather than inside it. A
+// bench that lifts by itself is waited out like a spent pool, so it counts as one.
+export const planLimitBand = (row: Pick<PlanLimitRow, `state` | `readable`>): PlanLimitBand => {
+    switch (row.state.kind) {
+        case `blocked`:
+            return row.state.fix === `wait` ? `spent` : `blocked`;
+        case `spent`:
+            return `spent`;
+        case `ready`:
+            return SPENT_UTILIZATION - row.state.room >= TIGHT_PERCENT ? `tight` : `room`;
+        case `unknown`:
+            return row.readable ? `unread` : `none`;
     }
-    if (row.percent === undefined) {
-        return row.readable ? `unread` : `none`;
-    }
-    return row.percent >= SPENT_PERCENT ? `spent` : row.percent >= TIGHT_PERCENT ? `tight` : `room`;
 };
 
 // Sentence fragments, not headings — read as "3 with room · 1 tight".
@@ -511,7 +535,11 @@ export const planLimitGroups = (
                 counts: countBands(groupRows),
                 tightest,
                 nextResetAt: nextReset(groupRows, now),
-                refusal: refusalNote(refusal, groupRows, now),
+                refusal: refusalNote(
+                    refusal,
+                    groupRows.map((row) => row.facts),
+                    now,
+                ),
                 refusedRow: groupRows.find((row) => row.account === refusal?.account),
             };
         })
@@ -540,48 +568,13 @@ export interface RefusalNote {
     readonly current: boolean;
 }
 
-// An account's state, as much as a refusal can be judged against. Shaped like PlanLimitRow so the Usage tab
-// passes rows straight in.
-export interface RefusalReading {
-    readonly account: string;
-    readonly measuredAt: number | undefined;
-    readonly percent: number | undefined;
-    readonly needsReauth: boolean;
-}
-
-// Whether a refusal is over, which differs by kind: a spent pool needs a reading with headroom; a rejected
-// credential needs any reading since (proof the token still works).
-const answersRefusal = (refusal: ProviderRefusal, reading: RefusalReading): boolean => {
-    // Entitlement can't be answered by a reading — a blocked account still authenticates and reads fine.
-    if (refusal.kind === `entitlement`) {
-        return false;
-    }
-    if (reading.measuredAt === undefined || reading.measuredAt <= refusal.at) {
-        return false;
-    }
-    return refusal.kind === `auth` ? !reading.needsReauth : hasRoom(reading.percent);
-};
-
-// Only the named account's later readings answer a refusal (others prove nothing); disconnected settles it,
-// not-yet-loaded keeps it standing. An unnamed refusal is judged against the whole list.
-const refusalAnswer = (refusal: ProviderRefusal, readings: readonly RefusalReading[]): string | undefined => {
-    const named = readings.filter((reading) => reading.account === refusal.account);
-    if (refusal.account !== undefined && named.length === 0) {
-        return readings.length === 0 ? undefined : `that account is no longer connected`;
-    }
-    const speaking = refusal.account === undefined ? readings : named;
-    return speaking.some((reading) => answersRefusal(refusal, reading)) ? REFUSAL_ANSWERED[refusal.kind] : undefined;
-};
-
-export const refusalNote = (
-    refusal: ProviderRefusal | undefined,
-    readings: readonly RefusalReading[],
-    now: number = Date.now(),
-): RefusalNote | undefined => {
+// Whether the refusal is over is the contract's call (refusalVerdict, the one the daemon judges by); this only says it.
+export const refusalNote = (refusal: ProviderRefusal | undefined, accounts: readonly ServiceFacts[], now: number = Date.now()): RefusalNote | undefined => {
     if (refusal === undefined) {
         return undefined;
     }
-    const answer = refusalAnswer(refusal, readings);
+    const verdict = refusalVerdict(refusal, accounts);
+    const answer = verdict === `gone` ? `that account is no longer connected` : verdict === `answered` ? REFUSAL_ANSWERED[refusal.kind] : undefined;
     const opening = `${REFUSAL_CONDITION[refusal.kind]} ${formatAge(refusal.at, now)}`;
     return {
         line: answer === undefined ? `${opening}, ${refusal.message}` : `${opening}, ${answer}.`,
@@ -590,27 +583,10 @@ export const refusalNote = (
     };
 };
 
-// Both lists (native + routed): a provider's connections are one list to the reader. Raw, uncorrected by
-// spentByRefusal — judging on corrected data would let a pinned 100% feed itself forever.
-const rawReading = (provider: AgentProvider, account: string, attached: AccountUsage | undefined): Pick<RefusalReading, `measuredAt` | `percent`> => {
-    const raw = freshest(provider, account, attached);
-    return { measuredAt: raw?.measuredAt, percent: usagePercent(raw) };
-};
-
-const providerReadings = (provider: AgentProvider): readonly RefusalReading[] => [
-    ...(providerAccounts.value[provider] ?? []).map((entry) => ({
-        account: entry.id,
-        ...rawReading(provider, entry.id, entry.usage),
-        needsReauth: entry.needsReauth === true,
-    })),
-    // Routed accounts have no reauth flag; CLIProxyAPI drops an unrefreshable file instead of leaving it broken.
-    ...routedAccounts(provider).map((entry) => ({ account: entry.name, ...rawReading(provider, entry.name, entry.usage), needsReauth: false })),
-];
-
 // Provider's refusal read against everything since, for a caller holding only the provider. Same verdict
 // spentByRefusal pins a pool on, and the composer footer and Agent tab both print.
 export const refusalFor = (provider: AgentProvider, now: number = Date.now()): RefusalNote | undefined =>
-    refusalNote(providerRefusals.value[provider], providerReadings(provider), now);
+    refusalNote(providerRefusals.value[provider], providerFacts(provider), now);
 
 // Whether a `limit` refusal still stands for this account: must be a limit refusal, must name this account or
 // none (then it covers every connection), and must be unanswered by a since reading with room.
@@ -619,12 +595,9 @@ const limitStandsFor = (provider: AgentProvider, account: string, reading: Accou
     if (refusal === undefined || refusal.kind !== `limit` || (refusal.account !== undefined && refusal.account !== account)) {
         return false;
     }
-    // This account's fresher reading goes first, ahead of any stale copy; needsReauth is unused for a limit refusal.
-    const readings = [
-        { account, measuredAt: reading?.measuredAt, percent: usagePercent(reading), needsReauth: false },
-        ...providerReadings(provider).filter((entry) => entry.account !== account),
-    ];
-    return refusalAnswer(refusal, readings) === undefined;
+    // This account's fresher reading goes first, ahead of any stale copy.
+    const accounts = [{ account, usage: reading }, ...providerFacts(provider).filter((entry) => entry.account !== account)];
+    return refusalVerdict(refusal, accounts) === `standing`;
 };
 
 // Readings that stopped moving, grouped by the provider's reason: four accounts Google wants verified are one sentence,
@@ -652,28 +625,38 @@ export const unreadGroups = (rows: readonly PlanLimitRow[]): PlanLimitUnread[] =
         .toSorted((left, right) => right.rows.length - left.rows.length || left.reason.localeCompare(right.reason));
 };
 
-// Accounts held back by one missing thing. Grouped, since the fix belongs to the reason and not to each name: thirty
-// expired sign-ins are one instruction, not thirty.
+/** What a blocked account is waiting on, by who can fix it: the heading a group of them is named by, in the reader's language. */
+export const accountFixLabel = (fix: AccountFix): string => {
+    switch (fix) {
+        case `reconnect`:
+            return t(`chat.accountFix.reconnect`);
+        case `admin`:
+            return t(`chat.accountFix.admin`);
+        case `wait`:
+            return t(`chat.accountFix.wait`);
+    }
+};
+
+// Accounts held back until a person acts, grouped by who that is, since the instruction belongs to the fix and not to
+// each name: thirty expired sign-ins are one instruction, not thirty. Each row's own reason stays on the row. A bench
+// that lifts by itself (`wait`) needs nobody, so it is not here.
 export interface PlanLimitAttention {
-    readonly reason: string;
-    readonly rows: readonly PlanLimitRow[];
+    readonly fix: AccountFix;
+    readonly rows: readonly (PlanLimitRow & { readonly state: Extract<AccountState, { kind: `blocked` }> })[];
+    // Their reasons, each once, in row order: what the provider said, beside the fix's own name.
+    readonly reasons: readonly string[];
 }
 
+const FIX_ORDER: readonly AccountFix[] = [`reconnect`, `admin`];
+
 // Most accounts first, so the condition holding the most of the fleet back leads.
-export const attentionGroups = (rows: readonly PlanLimitRow[]): PlanLimitAttention[] => {
-    const byReason = new Map<string, PlanLimitRow[]>();
-    for (const row of rows) {
-        const reason = blockedReason(row);
-        if (reason !== undefined) {
-            const grouped = byReason.get(reason) ?? [];
-            grouped.push(row);
-            byReason.set(reason, grouped);
-        }
-    }
-    return [...byReason]
-        .map(([reason, grouped]): PlanLimitAttention => ({ reason, rows: grouped }))
-        .toSorted((left, right) => right.rows.length - left.rows.length || left.reason.localeCompare(right.reason));
-};
+export const attentionGroups = (rows: readonly PlanLimitRow[]): PlanLimitAttention[] =>
+    FIX_ORDER.map((fix) => {
+        const held = rows.flatMap((row) => (row.state.kind === `blocked` && row.state.fix === fix ? [{ ...row, state: row.state }] : []));
+        return { fix, rows: held, reasons: [...new Set(held.map((row) => row.state.reason))] };
+    })
+        .filter((group) => group.rows.length > 0)
+        .toSorted((left, right) => right.rows.length - left.rows.length);
 
 export interface PlanLimitSummary {
     readonly accounts: number;

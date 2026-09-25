@@ -1,4 +1,4 @@
-import { capabilitiesOf, clampMode, fastAllowed, type PermissionMode, providerLabel } from "@intentic/sandbox-contract";
+import { capabilitiesOf, clampMode, fastAllowed, type PermissionMode, providerLabel, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import { computed, shallowRef } from "vue";
 import { rememberedAccountFor, selectedAccountId } from "../accounts/providerAccounts";
 import { modelLabelFor, providerModels, providerTabs } from "../accounts/providerCatalog";
@@ -9,7 +9,7 @@ import type { Conversation } from "./conversation";
 import { type PickAction, type PickEffects, type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
 import type { TranscriptView } from "./transcriptView";
 import type { TurnClient } from "./turnClient";
-import { formatReset, formatUtilization, isStale, modelAllowance, SPENT_PERCENT, usageStatusFor } from "./usageStatus";
+import { formatReset, formatUtilization, isStale, modelAllowance, usageStatusFor } from "./usageStatus";
 
 // A conversation's selection as the composer binds it: the value `reduceSelection` moves, read one pick at a time, and
 // the one "switched" divider a change of it owes the transcript. Which picks a switch retires is the reducer's rule;
@@ -236,7 +236,7 @@ export class ComposerSelection {
         if (usage === undefined || allowance === undefined) {
             return ``;
         }
-        const resetsAt = allowance.percent >= SPENT_PERCENT ? allowance.resetsAt : undefined;
+        const resetsAt = allowance.percent >= SPENT_UTILIZATION ? allowance.resetsAt : undefined;
         return ` · ${allowance.name} ${formatUtilization(allowance.percent, isStale(usage))} used${
             resetsAt === undefined ? `` : `, resets ${formatReset(resetsAt)}`
         }`;

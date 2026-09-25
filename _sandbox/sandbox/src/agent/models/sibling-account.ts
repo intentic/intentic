@@ -1,45 +1,27 @@
-import { type AccountUsage, type AgentProvider, bindingWindow, type ModelRef, type OauthAccount, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
+import { type AgentProvider, roomiestAccount } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
+import { serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability.js";
 import { breakPolicyFor } from "../run/turn/turn-resume.js";
 
 // Claude-only: a routed provider balances its own credentials before refusing, so a refusal there already means nothing
-// is left. Picks the emptiest account with an actual reading, skipping the refused, unmeasured, and dead ones.
+// is left. Picks the roomiest account the one serviceability rule calls ready: a revoked, seatless, benched, refused,
+// spent or unmeasured account is never a move's destination, however idle its meter looks.
 export const siblingWithRoom = async (
-    services: Pick<Services, "claudeStore" | "accountUsage">,
+    services: ServiceabilityDeps,
     params: { readonly provider: AgentProvider; readonly model: string | undefined; readonly refused: string | undefined },
 ): Promise<string | undefined> => {
     if (params.provider !== "claude") {
         return undefined;
     }
-    const [accounts, usage] = await Promise.all([
-        services.claudeStore.list().catch(() => []),
-        services.accountUsage.read().catch((): Record<string, AccountUsage> => ({})),
-    ]);
     const model = params.model === undefined || params.model === "" ? undefined : { id: params.model };
-    const candidates = accounts.flatMap((account) => {
-        const utilization = roomOf(account, usage[account.id], model, params.refused);
-        return utilization === undefined ? [] : [{ id: account.id, utilization }];
-    });
-    return candidates.reduce<(typeof candidates)[number] | undefined>(
-        (best, candidate) => (best === undefined || candidate.utilization < best.utilization ? candidate : best),
-        undefined,
-    )?.id;
-};
-
-// One account's room for the model, from its fullest gating window; undefined for the refused, dead, unmeasured, or
-// capped account.
-const roomOf = (account: OauthAccount, usage: AccountUsage | undefined, model: ModelRef | undefined, refused: string | undefined): number | undefined => {
-    if (account.id === refused || account.needsReauth === true) {
-        return undefined;
-    }
-    const window = bindingWindow(usage, model);
-    return window === undefined || window.utilization >= SPENT_UTILIZATION ? undefined : window.utilization;
+    const accounts = await serviceabilities(services, "claude", model).catch(() => []);
+    return roomiestAccount(accounts.filter((account) => account.id !== params.refused))?.id;
 };
 
 // Where a held turn moves to, decided once at the failure; undefined means no policy applies or no account has room.
 // `carry` requires the turn to have run, a known context under the owner's line, and not already refused elsewhere.
 export const bookLimitMove = async (
-    services: Pick<Services, "claudeStore" | "accountUsage" | "agents" | "sandboxSettings">,
+    services: ServiceabilityDeps & Pick<Services, "agents" | "sandboxSettings">,
     params: {
         readonly conversationId: string;
         readonly provider: AgentProvider;

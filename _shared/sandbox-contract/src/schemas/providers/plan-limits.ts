@@ -44,6 +44,38 @@ export const AccountUsageSchema = z.object({
     ),
 });
 export type AccountUsage = z.infer<typeof AccountUsageSchema>;
+// Who has to act for a blocked account, which is the only thing a surface chooses its instruction by: the reason is the
+// words for a person, never a key.
+export const AccountFixSchema = z.enum(["reconnect", "admin", "wait"]);
+export type AccountFix = z.infer<typeof AccountFixSchema>;
+// Whether an account can serve a turn, decided once by the daemon (models/plan-pools.ts `serviceState`) from every fact
+// it holds about it: a revoked sign-in, a lost seat, a translator bench, a refusal still standing, and its plan limits.
+// Every picker (an unnamed turn, a limit move, a keep-warm refresh) and every surface reads this one verdict.
+export const AccountStateSchema = z.discriminatedUnion("kind", [
+    z.object({
+        kind: z.literal("ready"),
+        room: z
+            .number()
+            .describe("How much of the fullest pool that gates the turn is left, in percent (above 0, up to 100). Pickers take the most room."),
+    }),
+    z.object({
+        kind: z.literal("spent"),
+        reopensAt: z
+            .number()
+            .optional()
+            .describe("When every full pool has reopened, in epoch seconds, where the plan publishes it. Absent means unknown, never now."),
+    }),
+    z.object({
+        kind: z.literal("blocked"),
+        fix: AccountFixSchema.describe(
+            "Who can make it serve again: `reconnect` (sign in again on this sandbox), `admin` (an organisation admin hands the seat back), or `wait` (it lifts by itself, at `until` where known).",
+        ),
+        reason: z.string().describe("Why, in words a person can act on: the provider's own sentence where it gave one."),
+        until: z.number().optional().describe("When waiting lifts it, in epoch seconds, for `wait` only."),
+    }),
+    z.object({ kind: z.literal("unknown").describe("Nothing blocks it and nothing has been measured: usable, never read as room.") }),
+]);
+export type AccountState = z.infer<typeof AccountStateSchema>;
 // Anthropic's once-a-week reset of the session window only; the weekly allowance is untouched. The answer is entirely
 // the provider's — never infer `available` from a 100% window. `reason` is its own word, carried verbatim.
 export const LimitResetStatusSchema = z.object({
@@ -120,6 +152,9 @@ export const TranslatorAccountSchema = z.object({
             reason: z.string().optional(),
         })
         .optional(),
+    state: AccountStateSchema.optional().describe(
+        "Whether it can serve a turn now, judged from everything above plus the provider's last refusal. Absent from a daemon older than this field.",
+    ),
 });
 export type TranslatorAccount = z.infer<typeof TranslatorAccountSchema>;
 // A list per provider, not a flag: CLIProxyAPI holds several auth files per provider and balances across them. Built

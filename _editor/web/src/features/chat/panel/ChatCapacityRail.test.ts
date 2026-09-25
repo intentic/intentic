@@ -149,7 +149,7 @@ it(`names a provider that has fallen off the list, and when it comes back`, () =
 
 // An account past the red line but not yet exhausted keeps its row; steering is by tone (danger red) rather than
 // by dropping it, which read as the account having gone missing.
-it(`draws an account that is nearly spent in the danger tone rather than dropping it`, () => {
+it(`draws an account that is nearly spent in the warning tone rather than dropping it: danger is the contract's spent line`, () => {
     const el = mount([
         {
             id: `a`,
@@ -160,7 +160,7 @@ it(`draws an account that is nearly spent in the danger tone rather than droppin
 
     expect(barWidths(el)).toEqual([`96%`]);
     expect(el.textContent).not.toContain(`Unavailable`);
-    expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.className).toContain(`text-danger`);
+    expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.className).toContain(`text-warning`);
 });
 
 it(`spells out for a screen reader what the bar says by its width`, () => {
