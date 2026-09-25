@@ -4,9 +4,12 @@ import { useT } from "@intentic/ui/i18n";
 import { stopWaiting, whenNear } from "../../../workspace/home/nearViewport";
 import { type ChatShot, shotName } from "./shots";
 import { picture } from "../../../workspace/home/thumbnails";
+import PicturePeek from "../attachments/PicturePeek.vue";
+import { type PeekBox, aspectOf, peekBox } from "../attachments/picturePeek";
 
 // The pictures a finished turn's tools showed the agent, standing at the turn's end where its answer is read: the last
-// few as tiles, the rest behind a count on the first. A press opens the conversation's viewer at that picture.
+// few as tiles, the rest behind a count on the first. A pointer resting on a tile peeks it bigger (picturePeek), and a
+// press opens the conversation's viewer at that picture.
 
 const t = useT();
 
@@ -43,6 +46,24 @@ const prefetch = (shot: ChatShot): void => {
     picture(props.agent, shot.path, `view`);
 };
 
+// The tile being peeked and where its peek is drawn. The peek shows the tile's own shot (not the one a counted tile
+// opens), at the viewer's size once that arrives and the strip's until then, so it never waits on a blank.
+const peeked = ref<{ shot: ChatShot; box: PeekBox }>();
+const peek = (event: Event, shot: ChatShot, opens: ChatShot): void => {
+    prefetch(opens);
+    prefetch(shot);
+    const tile = event.currentTarget as HTMLElement;
+    peeked.value = { shot, box: peekBox(tile, aspectOf(tile.querySelector(`img`))) };
+};
+const unpeek = (): void => {
+    peeked.value = undefined;
+};
+onBeforeUnmount(unpeek);
+const peekSrc = computed(() => {
+    const shot = peeked.value?.shot;
+    return shot === undefined ? undefined : (picture(props.agent, shot.path, `view`)?.url ?? picture(props.agent, shot.path, `strip`)?.url);
+});
+
 const tiles = computed(() =>
     props.shots.slice(-SHOWN).map((shot, index) => ({
         shot,
@@ -64,10 +85,13 @@ const tiles = computed(() =>
             type="button"
             class="chat-inset relative aspect-[16/10] min-w-0 cursor-pointer overflow-hidden rounded-md border border-line transition-colors hover:border-line-strong"
             :aria-label="tile.counted ? t(`chat.chatTurnShots.openAll`, { count: shots.length }) : t(`chat.chatTurnShots.open`, { name: tile.name })"
-            v-tooltip.top="tile.name"
-            @pointerenter="prefetch(tile.opens)"
+            @pointerenter="peek($event, tile.shot, tile.opens)"
+            @pointerleave="unpeek"
             @focus="prefetch(tile.opens)"
-            @click="emit(`view`, tile.opens)"
+            @click="
+                unpeek();
+                emit(`view`, tile.opens);
+            "
         >
             <!-- Cropped from the top: a full-page capture is tall, and its top is the part that says which page it is. -->
             <img v-if="tile.picture?.url" :src="tile.picture.url" alt="" class="h-full w-full object-cover object-top" />
@@ -85,5 +109,6 @@ const tiles = computed(() =>
                 {{ t(`chat.chatTurnShots.more`, { count: earlier + 1 }) }}
             </span>
         </button>
+        <PicturePeek :src="peekSrc" :alt="peeked ? shotName(peeked.shot.path) : ``" :box="peeked?.box" />
     </section>
 </template>
