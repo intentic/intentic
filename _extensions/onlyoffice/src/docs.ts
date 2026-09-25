@@ -1,7 +1,7 @@
-import { NAMESPACE, type DocsState, type OpenRequest, type OpenResult } from "./contract.js";
+import { NAMESPACE, type DocsState, type ForceSaveRequest, type OpenRequest, type OpenResult } from "./contract.js";
 import { host } from "./host.js";
 
-// The viewer's two calls into its own backend; the namespace needs no manifest grant, it is this extension's own code.
+// The viewer's calls into its own backend; the namespace needs no manifest grant, it is this extension's own code.
 
 const json = (body: unknown): RequestInit => ({ method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) });
 
@@ -24,4 +24,12 @@ export const startDocs = async (): Promise<DocsState> => {
         throw new Error(await response.text());
     }
     return (await response.json()) as DocsState;
+};
+
+// Writes what a session's editor holds to the workspace now, for an editor the viewer keeps alive out of sight.
+export const forceSaveDocument = async (request: ForceSaveRequest): Promise<void> => {
+    const response = await host().sandbox.request(`${NAMESPACE}/forcesave`, json(request));
+    if (!response.ok) {
+        throw new Error(await response.text());
+    }
 };

@@ -46,6 +46,7 @@ describe(`container answers`, () => {
             labels: {},
             restart: `no`,
             startedAt: 0,
+            entrypoint: [],
         });
     });
 
@@ -66,6 +67,7 @@ describe(`container answers`, () => {
             labels: {},
             restart: `unless-stopped`,
             startedAt: Math.floor(Date.parse(`2026-09-17T13:17:20.5Z`) / 1000),
+            entrypoint: [],
         });
     });
 
@@ -86,7 +88,16 @@ describe(`container answers`, () => {
             labels: {},
             restart: `no`,
             startedAt: 0,
+            entrypoint: [],
         });
+    });
+
+    it(`reads the entrypoint a container was created with, in either form the engine answers`, () => {
+        const inspect = (entrypoint: unknown): readonly string[] =>
+            parseInspect(JSON.stringify({ State: {}, Config: { Image: `x`, Entrypoint: entrypoint } })).entrypoint;
+        expect(inspect([`/bin/bash`, `-c`, `exec run`])).toEqual([`/bin/bash`, `-c`, `exec run`]);
+        expect(inspect(`/app/ds/run-document-server.sh`)).toEqual([`/app/ds/run-document-server.sh`]);
+        expect(inspect(null)).toEqual([]);
     });
 
     it(`publishes port 80 on loopback only and names the sandbox for the container`, () => {
@@ -102,6 +113,11 @@ describe(`container answers`, () => {
                 ExtraHosts: [`host.docker.internal:host-gateway`],
                 RestartPolicy: { Name: `unless-stopped` },
             },
+        });
+        // An entrypoint of its own replaces the image's, under the engine's key for it.
+        expect(createBody({ image: `img:1`, env: [], hostPort: 1, labels: {}, entrypoint: [`/bin/bash`, `-c`, `true`] })).toMatchObject({
+            Image: `img:1`,
+            Entrypoint: [`/bin/bash`, `-c`, `true`],
         });
     });
 });

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { appLink, Button, Checkbox, Icon, ProgressRing, ui } from "@intentic/extension-ui";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { DocsState } from "./contract.js";
-import { openDocument, startDocs } from "./docs.js";
+import { forceSaveDocument, openDocument, startDocs } from "./docs.js";
 import { host } from "./host.js";
 import { AUTO_START } from "./settings.js";
+import { EditorSlot } from "./slot.js";
 import { t } from "./i18n.js";
 
-/* A document in ONLYOFFICE Docs: an iframe on the editor's own origin once the document server answers, and until then a card saying what stands between the reader and it. */
+/* A document in ONLYOFFICE Docs: an editor frame on the editor's own origin once the document server answers, and until then a card saying what stands between the reader and it. The frame is placed by EditorSlot rather than by the template, so that leaving the document can keep the editor alive and coming back shows it again at once. */
 
 // `agent` is the conversation whose checkout the file is read from; such a copy is never editable, like text.
 const { path, agent } = defineProps<{ path: string; agent?: string }>();
@@ -16,12 +17,14 @@ defineEmits<{ download: [] }>();
 // Between polls while the server is pulling or starting; the pull is minutes, a start is tens of seconds.
 const POLL_MS = 1500;
 
-const url = ref<string>();
+const slot = ref<HTMLElement>();
+// Whether an editor is in the slot; the card shows otherwise.
+const framed = ref(false);
 const status = ref<DocsState>();
 const failure = ref<string>();
 // One-shot timers chained by hand, cleared on unmount; no repeating clock.
 let pending: ReturnType<typeof setTimeout> | undefined;
-let generation = 0;
+let editor: EditorSlot | undefined;
 
 // Editing needs a tier that may write files, and the shared tree: a scoped copy can't be written into at all.
 const editable = computed(() => agent === undefined && [`owner`, `maintainer`].includes(host().sandbox.role()));
@@ -30,37 +33,23 @@ const theme = (): `light` | `dark` => (document.documentElement.dataset[`mode`] 
 const settled = (state: DocsState): boolean => state.state !== `pulling` && state.state !== `starting`;
 
 const load = async (): Promise<void> => {
-    const mine = ++generation;
     clearTimeout(pending);
     failure.value = undefined;
+    if (editor === undefined) {
+        return;
+    }
     try {
-        const result = await openDocument({
-            path,
-            ...(agent === undefined ? {} : { agent }),
-            mode: editable.value ? `edit` : `view`,
-            theme: theme(),
-        });
-        if (mine !== generation) {
-            return;
-        }
-        if (`url` in result) {
-            // The public address the backend built, or its loopback twin when this browser is on the sandbox's machine.
-            const address = await host().sandbox.previewAddress(result.url);
-            if (mine !== generation) {
-                return;
+        const loaded = await editor.load({ path, agent, mode: editable.value ? `edit` : `view`, theme: theme() });
+        if (`status` in loaded) {
+            status.value = loaded.status;
+            if (!settled(loaded.status)) {
+                pending = setTimeout(() => void load(), POLL_MS);
             }
+        } else if (`framed` in loaded) {
             status.value = undefined;
-            url.value = address;
-            return;
-        }
-        status.value = result.status;
-        if (!settled(result.status)) {
-            pending = setTimeout(() => void load(), POLL_MS);
         }
     } catch (error) {
-        if (mine === generation) {
-            failure.value = error instanceof Error ? error.message : String(error);
-        }
+        failure.value = error instanceof Error ? error.message : String(error);
     }
 };
 
@@ -74,14 +63,29 @@ const start = async (): Promise<void> => {
     }
 };
 
+// The slot exists only once mounted, and a kept editor is placed into it synchronously, so the first load waits for it.
+onMounted(() => {
+    if (slot.value === undefined) {
+        return;
+    }
+    editor = new EditorSlot(slot.value, {
+        open: openDocument,
+        // The public address the backend built, or its loopback twin when this browser is on the sandbox's machine.
+        address: (url) => host().sandbox.previewAddress(url),
+        forceSave: (session) => forceSaveDocument({ session }),
+        framed: (value) => {
+            framed.value = value;
+        },
+    });
+    void load();
+});
 watch(
     () => [path, agent] as const,
     () => {
-        url.value = undefined;
+        editor?.leave();
         status.value = undefined;
         void load();
     },
-    { immediate: true },
 );
 // The standing choice, offered where the wait is felt; the same value the Extensions tab edits, kept in step through
 // the host's settings store.
@@ -102,9 +106,9 @@ const setAutoStart = async (value: boolean): Promise<void> => {
 const settingsLink = appLink(host().href(`/sandbox/extensions?view=installed`), () => host().navigate(`/sandbox/extensions?view=installed`));
 
 onBeforeUnmount(() => {
-    generation++;
     clearTimeout(pending);
     settingsWatch.dispose();
+    editor?.leave();
 });
 
 const percent = computed(() => (status.value?.state === `pulling` ? status.value.percent : undefined));
@@ -113,8 +117,8 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
 </script>
 
 <template>
-    <iframe v-if="url" :src="url" class="h-full w-full border-0" allow="clipboard-read; clipboard-write" :title="path" />
-    <div v-else class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+    <div ref="slot" v-show="framed" class="h-full w-full" />
+    <div v-if="!framed" class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
         <template v-if="failure">
             <Icon name="exclamation-circle" class="text-4xl text-subtle" />
             <p class="max-w-sm text-sm text-muted">{{ failure }}</p>

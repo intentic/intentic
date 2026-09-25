@@ -19,6 +19,8 @@ export interface ContainerState {
     readonly labels: Readonly<Record<string, string>>;
     // The engine's restart policy name ("no", "unless-stopped", …); what brings the container back at boot.
     readonly restart: string;
+    // The entrypoint it was created with; empty for the image's own.
+    readonly entrypoint: readonly string[];
     // When the current run began, in unix seconds; 0 for a container never started.
     readonly startedAt: number;
 }
@@ -28,6 +30,8 @@ export interface ContainerSpec {
     readonly env: readonly string[];
     readonly hostPort: number;
     readonly labels: Readonly<Record<string, string>>;
+    // In place of the image's own; absent keeps the image's.
+    readonly entrypoint?: readonly string[];
 }
 
 export interface DockerEngine {
@@ -42,7 +46,8 @@ export interface DockerEngine {
     // Stops and KEEPS; a container already stopped or gone is not an error. The idle stop uses this rather than
     // `remove` so the next open restarts the same container on the port it already holds.
     readonly stop: (name: string) => Promise<void>;
-    // Stops and deletes; a container that is already gone is not an error.
+    // Stops and deletes, with the anonymous volumes the image declares (nothing else could ever mount them again); a
+    // container that is already gone is not an error.
     readonly remove: (name: string) => Promise<void>;
     // The container's output since a unix time, as text. The engine's frame headers are left in between the lines,
     // which a substring search does not mind.
@@ -224,6 +229,7 @@ const pullImage = (socketPath: string, ref: string, onProgress: (percent: number
 // sandbox boot), since a cold start of this image is minutes of font, theme and gzip generation nobody should wait on.
 export const createBody = (spec: ContainerSpec): Record<string, unknown> => ({
     Image: spec.image,
+    ...(spec.entrypoint === undefined ? {} : { Entrypoint: spec.entrypoint }),
     Env: spec.env,
     Labels: spec.labels,
     ExposedPorts: { "80/tcp": {} },
@@ -240,7 +246,12 @@ type PortBindings = Record<string, { readonly HostPort?: string }[] | null>;
 
 interface InspectBody {
     readonly State?: { readonly Running?: boolean; readonly StartedAt?: string };
-    readonly Config?: { readonly Image?: string; readonly Env?: string[]; readonly Labels?: Record<string, string> | null };
+    readonly Config?: {
+        readonly Image?: string;
+        readonly Env?: string[];
+        readonly Labels?: Record<string, string> | null;
+        readonly Entrypoint?: string[] | string | null;
+    };
     // Live bindings, populated only while running; the created-with bindings live under HostConfig either way.
     readonly NetworkSettings?: { readonly Ports?: PortBindings };
     readonly HostConfig?: { readonly PortBindings?: PortBindings; readonly RestartPolicy?: { readonly Name?: string } };
@@ -263,6 +274,10 @@ const secondsOf = (iso: string | undefined): number => {
 
 const restartPolicyOf = (parsed: InspectBody): string => parsed.HostConfig?.RestartPolicy?.Name ?? "no";
 
+// The engine answers a string for an entrypoint given in shell form, and null for none.
+const entrypointOf = (entrypoint: string[] | string | null | undefined): readonly string[] =>
+    typeof entrypoint === "string" ? [entrypoint] : (entrypoint ?? []);
+
 // The state an inspect answer describes.
 export const parseInspect = (body: string): ContainerState => {
     const parsed = JSON.parse(body) as InspectBody;
@@ -275,6 +290,7 @@ export const parseInspect = (body: string): ContainerState => {
         labels: config.Labels ?? {},
         restart: restartPolicyOf(parsed),
         startedAt: secondsOf(parsed.State?.StartedAt),
+        entrypoint: entrypointOf(config.Entrypoint),
     };
 };
 
@@ -335,7 +351,7 @@ const stopContainer = async (socketPath: string, name: string): Promise<void> =>
 };
 
 const removeContainer = async (socketPath: string, name: string): Promise<void> => {
-    const response = await request(socketPath, "DELETE", `/containers/${encodeURIComponent(name)}?force=true`);
+    const response = await request(socketPath, "DELETE", `/containers/${encodeURIComponent(name)}?force=true&v=true`);
     if (response.status !== 204 && response.status !== 404) {
         throw failure(`removing ${name}`, response);
     }

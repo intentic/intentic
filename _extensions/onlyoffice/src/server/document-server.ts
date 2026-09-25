@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import http from "node:http";
 import net from "node:net";
 import type { DocsState } from "../contract.js";
@@ -14,11 +15,36 @@ export const CONTAINER_LABELS: Readonly<Record<string, string>> = { "dev.intenti
 // existing container without it is recreated once (or `docker update --restart unless-stopped` spares the restart).
 export const RESTART_POLICY = "unless-stopped";
 
-// A cold start of this image is about two minutes (fonts, presentation themes and gzip are generated on every start,
-// none of it baked), longer on a busy machine; a pull that just extracted 2 GB is slower still.
+// A container's first start is about two and a half minutes (fonts, presentation themes, script caches and gzip are
+// generated, none of it baked into the image), longer on a busy machine; a pull that just extracted 2 GB is slower
+// still. Every start after that is seconds (SETUP_ONCE).
 const HEALTHY_WITHIN_MS = 8 * 60 * 1000;
-const HEALTH_POLL_MS = 2000;
+const HEALTH_POLL_MS = 1000;
 const HEALTH_TIMEOUT_MS = 3000;
+
+// The image's entrypoint redoes its whole setup on every start: font lists and thumbnails, presentation theme previews
+// and the converter's script caches (~80 s), the default plugins fetched again from the marketplace, and a `gzip -9` of
+// ~10k static files (~60 s). All of it lands in the container's own layer and stays valid for the container's life, so
+// this runs the image's entrypoint with each step turned off once it has been done, and a start after the first (a
+// sandbox boot, the open after an idle stop) takes seconds instead of minutes. A new image means a new container,
+// which does it all once more.
+export const SETUP_ONCE = [
+    `DS=/var/www/onlyoffice/documentserver`,
+    // The script caches are the pass's last step, so their presence means fonts and themes were finished too.
+    `if [ -s "$DS/sdkjs/common/AllFonts.js" ] && [ -s "$DS/sdkjs/word/sdk-all.cache" ] && [ -s "$DS/sdkjs/cell/sdk-all.cache" ] && [ -s "$DS/sdkjs/slide/sdk-all.cache" ]; then export GENERATE_FONTS=false; fi`,
+    `if ls -d "$DS"/sdkjs-plugins/{*} >/dev/null 2>&1; then export PLUGINS_ENABLED=false; fi`,
+    // After one full pass only api.js wants it again: the cache-tag step rewrites it, and drops its .gz, every start.
+    `if [ -s "$DS/sdkjs/word/sdk-all-min.js.gz" ]; then printf '#!/bin/sh\\ngzip -kf9 %s/web-apps/apps/api/documents/api.js\\n' "$DS" > /usr/bin/documentserver-static-gzip.sh; fi`,
+    `exec /app/ds/run-document-server.sh`,
+].join("\n");
+export const ENTRYPOINT: readonly string[] = ["/bin/bash", "-c", SETUP_ONCE];
+
+// The image names its static files under a cache tag it mints from the clock on every start, and serves them as
+// immutable for a year; the editor's own service worker caches them by the same path. A tag per start threw all of it
+// away at every sandbox boot and idle stop: the next open fetched some 50 MB again, through the tunnel. The tag is read
+// from HASH when the environment has one, so each container gets one of its own at creation instead: stable for the
+// container's life, fresh for a new image.
+const CACHE_TAG = /^HASH=[0-9a-f]{32}$/;
 
 // The healthcheck answers true well before the image's entrypoint is done: it still generates fonts, restarts the
 // converter and the docservice and reloads nginx, and a document opened meanwhile fails to download. The entrypoint
@@ -40,6 +66,8 @@ export interface DocumentServerDeps {
     readonly healthy?: (port: number) => Promise<boolean>;
     readonly freePort?: () => Promise<number>;
     readonly sleep?: (ms: number) => Promise<void>;
+    // The cache tag a new container is created with (CACHE_TAG); random unless a test pins it.
+    readonly cacheTag?: () => string;
 }
 
 // GET /healthcheck answers the literal `true` once every service inside is up.
@@ -79,15 +107,19 @@ export class DocumentServer {
     // When the server was last asked for, for the idle stop. Set by `bringUp` as well as `running()`: a server just
     // brought up has been used by definition, and starting the clock at 0 would stop it on the very next tick.
     private lastUsedAt = 0;
+    // Counts the runs this backend has brought up (see `run()`).
+    private runs = 0;
     private inFlight: Promise<void> | undefined;
     private readonly healthy: (port: number) => Promise<boolean>;
     private readonly freePort: () => Promise<number>;
     private readonly sleep: (ms: number) => Promise<void>;
+    private readonly cacheTag: () => string;
 
     constructor(private readonly deps: DocumentServerDeps) {
         this.healthy = deps.healthy ?? documentServerHealthy;
         this.freePort = deps.freePort ?? freeLoopbackPort;
         this.sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+        this.cacheTag = deps.cacheTag ?? (() => randomBytes(16).toString("hex"));
     }
 
     // The loopback port to proxy to, only while the server is known to answer.
@@ -103,7 +135,14 @@ export class DocumentServer {
         return { port: this.port };
     }
 
-    // Stops the container once nothing has proxied through it for `idleMs`, and reports whether it did.
+    // Which run of the server is up: it changes whenever the server is brought up again, since a restarted server holds
+    // none of the editing sessions the one before it held.
+    run(): number {
+        return this.runs;
+    }
+
+    // Stops the container once nothing has proxied through it for `idleMs`, and reports whether it did. An editor with its
+    // socket open is somebody reading, however long they go without a request, so `editorsConnected` holds it too.
     //
     // WHY THIS EXISTS: the container carries `restart: unless-stopped`, so once started it outlives every document
     // anyone opened. Measured on a sandbox four hours after its last use: 27 processes, 122 MB resident and 2.6 GB of
@@ -112,8 +151,15 @@ export class DocumentServer {
     //
     // Stopped, not removed: `ensureRunning` finds the stopped container and `bringUp` starts it again on the same
     // published port, so the cost of being wrong is one entrypoint wait, not a lost address.
-    async stopIfIdle(idleMs: number): Promise<boolean> {
-        if (this.port === undefined || this.busy() || Date.now() - this.lastUsedAt < idleMs) {
+    async stopIfIdle(idleMs: number, editorsConnected = 0): Promise<boolean> {
+        if (this.port === undefined || this.busy()) {
+            return false;
+        }
+        if (editorsConnected > 0) {
+            this.lastUsedAt = Date.now();
+            return false;
+        }
+        if (Date.now() - this.lastUsedAt < idleMs) {
             return false;
         }
         try {
@@ -151,6 +197,26 @@ export class DocumentServer {
             return found === undefined ? { state: "not-started" } : found.running ? { state: "starting" } : { state: "not-started" };
         } catch (error) {
             return { state: "error", detail: errorMessage(error) };
+        }
+    }
+
+    // Adopts a container the engine is already running (its restart policy brought it back with the sandbox), so the
+    // first open after this backend starts finds the server ready rather than waiting out the readiness check. A
+    // stopped one stays stopped: the idle stop put it there, and an open or the owner's auto-start brings it back.
+    async adopt(): Promise<void> {
+        if (this.busy() || this.port !== undefined || (await this.deps.engine.unreachable()) !== undefined) {
+            return;
+        }
+        let found: ContainerState | undefined;
+        try {
+            found = await this.deps.engine.inspect(CONTAINER);
+        } catch (error) {
+            this.deps.log(`could not look for a running document server: ${errorMessage(error)}`);
+            return;
+        }
+        if (found?.running === true) {
+            const running = found;
+            this.launch(() => this.bringUp(running));
         }
     }
 
@@ -254,7 +320,7 @@ export class DocumentServer {
         this.phase = { kind: "starting" };
         let port = found?.hostPort;
         if (found !== undefined && !this.matches(found)) {
-            this.deps.log(`recreating ${CONTAINER}: it was built from another image or secret, or without the restart policy`);
+            this.deps.log(`recreating ${CONTAINER}: it was built from another image, secret or entrypoint, or without the restart policy or cache tag`);
             await this.deps.engine.remove(CONTAINER);
             port = undefined;
         }
@@ -262,9 +328,10 @@ export class DocumentServer {
             port = await this.freePort();
             await this.deps.engine.create(CONTAINER, {
                 image: this.deps.image,
-                env: this.env(),
+                env: [...this.env(), `HASH=${this.cacheTag()}`],
                 hostPort: port,
                 labels: CONTAINER_LABELS,
+                entrypoint: ENTRYPOINT,
             });
         }
         // A container already running is adopted as of the run it is in; one started here is read from this moment.
@@ -272,6 +339,7 @@ export class DocumentServer {
         await this.deps.engine.start(CONTAINER);
         await this.waitReady(port, since);
         this.port = port;
+        this.runs += 1;
         this.lastUsedAt = Date.now();
         this.deps.log(`document server answering on 127.0.0.1:${port}`);
     }
@@ -281,7 +349,10 @@ export class DocumentServer {
             found.image === this.deps.image &&
             found.hostPort !== undefined &&
             found.env.includes(`JWT_SECRET=${this.deps.secret}`) &&
-            found.restart === RESTART_POLICY
+            found.env.some((entry) => CACHE_TAG.test(entry)) &&
+            found.restart === RESTART_POLICY &&
+            found.entrypoint.length === ENTRYPOINT.length &&
+            found.entrypoint.every((part, index) => part === ENTRYPOINT[index])
         );
     }
 

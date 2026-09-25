@@ -19,7 +19,20 @@ export interface OpenRequest {
     readonly agent?: string;
     readonly mode: "edit" | "view";
     readonly theme: "light" | "dark";
+    // The session of an editor the viewer kept alive for this document. When it still holds what an open would get, the
+    // answer is `resumed` and the viewer shows that editor again instead of loading a new one.
+    readonly resume?: string;
 }
 
-// `url` is the editor page to frame; `status` is why there is none yet.
-export type OpenResult = { readonly url: string } | { readonly status: DocsState };
+// `url` is the editor page to frame, running under `session`; `resumed` keeps the editor named by `resume`; `status`
+// is why there is neither yet.
+export type OpenResult =
+    | { readonly url: string; readonly session: string }
+    | { readonly resumed: true }
+    | { readonly status: DocsState };
+
+// Asks the document server to write a session's document to the workspace now: the viewer's call when it keeps an
+// editor alive out of sight. Best effort, and a no-op for a document with nothing unsaved.
+export interface ForceSaveRequest {
+    readonly session: string;
+}

@@ -10,6 +10,7 @@ const session = (mode: `edit` | `view`): Session => ({
     mode,
     theme: `dark`,
     expiresAt: 0,
+    run: 0,
 });
 
 const input = (mode: `edit` | `view`): Parameters<typeof editorConfig>[0] => ({
@@ -37,7 +38,7 @@ describe(`editor config`, () => {
             editorConfig: {
                 mode: `edit`,
                 callbackUrl: `http://host.docker.internal:1/callback/k`,
-                customization: { forcesave: true, uiTheme: `theme-dark` },
+                customization: { forcesave: true, uiTheme: `theme-dark`, features: { featuresTips: false } },
             },
         });
         expect(editorConfig(input(`view`))).toMatchObject({
@@ -55,6 +56,14 @@ describe(`host page`, () => {
         expect(page).not.toContain(`</script><script>alert`);
         expect(page).toContain(`\\u003c/script>\\u003cscript>alert(1)`);
         expect(page).toContain(`<title>&lt;/title&gt;&lt;b&gt;x&lt;/b&gt;</title>`);
+    });
+
+    it(`answers the server's "version changed" by moving onto a fresh key in place, never by reloading the page`, () => {
+        const page = hostPage({}, `t`, `light`);
+        expect(page).toContain(`onRequestRefreshFile: function () {`);
+        expect(page).toContain(`fetch("/refresh" + window.location.search, { cache: "no-store" })`);
+        expect(page).toContain(`editor.refreshFile(fresh);`);
+        expect(page).not.toContain(`location.reload`);
     });
 
     it(`paints the frame in the editor's own theme before api.js arrives`, () => {

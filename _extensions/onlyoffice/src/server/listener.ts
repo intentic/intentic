@@ -3,7 +3,7 @@ import type { Readable } from "node:stream";
 import { relayUpgrade } from "@intentic/sandbox-contract/upgrade-relay";
 import { endedPage } from "./host-page.js";
 import { bearerOf, verifyJwt } from "./jwt.js";
-import type { Session, Sessions } from "./sessions.js";
+import type { FileStat, Session, Sessions } from "./sessions.js";
 
 // The listener the document server and the browser reach, outside the daemon's auth: the daemon's /x/ namespace is
 // bearer-gated and a separate process can't hold a bearer. Every route here has its own credential: the editor page
@@ -21,25 +21,34 @@ export interface ListenerDeps {
     // The document server's loopback port while it answers; undefined answers 503 to what would be proxied.
     readonly documentServerPort: () => number | undefined;
     readonly pageFor: (session: Session) => string;
+    // The signed editor config for `session` moved onto a fresh key, for an editor the server told to reload its
+    // document; undefined when the document is gone.
+    readonly refresh: (session: Session) => Promise<Record<string, unknown> | undefined>;
     // The document's bytes, or undefined when it is gone.
     readonly readDocument: (document: Document) => Promise<Readable | undefined>;
-    // Fetches the edited document the server offers at `url` and writes it to the workspace.
-    readonly saveDocument: (key: string, document: Document, url: string) => Promise<void>;
+    // Fetches the edited document the server offers at `url`, writes it to the workspace, and answers what it left.
+    readonly saveDocument: (document: Document, url: string) => Promise<FileStat>;
     readonly log: (line: string) => void;
 }
 
 export interface Listener {
     readonly server: http.Server;
-    readonly listen: () => Promise<number>;
+    // Binds `port` when it is free, else any; answers the port it got.
+    readonly listen: (port?: number) => Promise<number>;
     readonly close: () => Promise<void>;
+    // Editor connections open right now: a reader who sends nothing for an hour still holds one.
+    readonly editorsConnected: () => number;
 }
 
 // Bounded: a callback is a few hundred bytes of JSON.
 const MAX_CALLBACK_BYTES = 1024 * 1024;
 
-// The document server posts these when the document should be written: every editor closed (2), or a Ctrl+S with
-// forcesave on (6). The others are lifecycle notices.
-const SAVE_STATUSES = new Set([2, 6]);
+// What the document server's callback statuses mean here. 2 and 3 end the session: every editor closed, with the final
+// document to write (2) or none because the save failed (3). 6 is a forced save (Ctrl+S, or the viewer's own when a
+// document is left) inside a session that goes on. The others are lifecycle notices.
+const FINAL_SAVE = 2;
+const FINAL_SAVE_FAILED = 3;
+const FORCED_SAVE = 6;
 
 // HTTP/1.1 hop-by-hop headers, dropped before a request or response crosses the proxy.
 const HOP_BY_HOP = ["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"];
@@ -97,12 +106,15 @@ const callbackClaims = (req: http.IncomingMessage, rawBody: string, secret: stri
     return typeof token === "string" ? verifyJwt(token, secret) : undefined;
 };
 
-type Route = { readonly kind: "editor" | "proxy" } | { readonly kind: "doc" | "callback"; readonly key: string };
+type Route = { readonly kind: "editor" | "refresh" | "proxy" } | { readonly kind: "doc" | "callback"; readonly key: string };
 
-// The three routes of this listener's own, everything else being the document server's.
+// The four routes of this listener's own, everything else being the document server's.
 const routeOf = (url: URL, method: string): Route => {
     if (url.pathname === "/editor" && method === "GET") {
         return { kind: "editor" };
+    }
+    if (url.pathname === "/refresh" && method === "GET") {
+        return { kind: "refresh" };
     }
     const keyed = /^\/(doc|callback)\/([^/]+)$/.exec(url.pathname);
     if (keyed === null) {
@@ -114,6 +126,10 @@ const routeOf = (url: URL, method: string): Route => {
 };
 
 export const createListener = (deps: ListenerDeps): Listener => {
+    // Callbacks being handled, by key: a refresh waits for its key's final save to land before choosing the next key.
+    const inFlight = new Map<string, Promise<unknown>>();
+    let editorSockets = 0;
+
     const editor = (url: URL, res: http.ServerResponse): void => {
         const session = deps.sessions.session(url.searchParams.get("s") ?? "");
         if (session === undefined) {
@@ -121,6 +137,24 @@ export const createListener = (deps: ListenerDeps): Listener => {
             return;
         }
         html(res, 200, deps.pageFor(session));
+    };
+
+    // The editor page asks here when the server answers its key with "the version changed": the page is told the new
+    // key instead of the editor's own "reload the page" warning, which would reload onto the same outdated key.
+    const refresh = async (url: URL, res: http.ServerResponse): Promise<void> => {
+        const session = deps.sessions.session(url.searchParams.get("s") ?? "");
+        if (session === undefined) {
+            json(res, 404, { error: "session ended" });
+            return;
+        }
+        await inFlight.get(session.key);
+        const config = await deps.refresh(session);
+        if (config === undefined) {
+            json(res, 404, { error: "no such document" });
+            return;
+        }
+        deps.log(`refreshed ${session.path} onto a new key`);
+        json(res, 200, config);
     };
 
     const document = async (req: http.IncomingMessage, res: http.ServerResponse, key: string): Promise<void> => {
@@ -144,6 +178,31 @@ export const createListener = (deps: ListenerDeps): Listener => {
         stream.pipe(res);
     };
 
+    // Acts on one callback and answers whether it went well; a failed write is answered as one, so the server keeps the
+    // document and the key stays usable.
+    const settle = async (key: string, file: Document, claims: Record<string, unknown>): Promise<boolean> => {
+        const status = typeof claims["status"] === "number" ? claims["status"] : Number.NaN;
+        const url = typeof claims["url"] === "string" ? claims["url"] : undefined;
+        try {
+            if (status === FORCED_SAVE && url !== undefined) {
+                deps.sessions.saved(key, await deps.saveDocument(file, url));
+            } else if (status === FINAL_SAVE && url !== undefined) {
+                // Nothing changed since the last forced save wrote these very bytes: writing them again would only
+                // clobber whatever changed the file since (an agent's edit made while the editor sat idle).
+                if (claims["notmodified"] !== true) {
+                    await deps.saveDocument(file, url);
+                }
+                deps.sessions.closed(key);
+            } else if (status === FINAL_SAVE_FAILED) {
+                deps.sessions.closed(key);
+            }
+            return true;
+        } catch (error) {
+            deps.log(`saving ${file.path} failed: ${error instanceof Error ? error.message : String(error)}`);
+            return false;
+        }
+    };
+
     const callback = async (req: http.IncomingMessage, res: http.ServerResponse, key: string): Promise<void> => {
         const claims = callbackClaims(req, await readBody(req, MAX_CALLBACK_BYTES), deps.secret);
         if (claims === undefined) {
@@ -157,18 +216,15 @@ export const createListener = (deps: ListenerDeps): Listener => {
             json(res, 404, { error: "no such document" });
             return;
         }
-        const status = typeof claims["status"] === "number" ? claims["status"] : Number.NaN;
-        const url = typeof claims["url"] === "string" ? claims["url"] : undefined;
-        if (SAVE_STATUSES.has(status) && url !== undefined) {
-            try {
-                await deps.saveDocument(key, found, url);
-            } catch (error) {
-                deps.log(`saving ${found.path} failed: ${error instanceof Error ? error.message : String(error)}`);
-                json(res, 200, { error: 1 });
-                return;
+        const handled = settle(key, found, claims);
+        inFlight.set(key, handled);
+        try {
+            json(res, 200, { error: (await handled) ? 0 : 1 });
+        } finally {
+            if (inFlight.get(key) === handled) {
+                inFlight.delete(key);
             }
         }
-        json(res, 200, { error: 0 });
     };
 
     const proxy = (req: http.IncomingMessage, res: http.ServerResponse): void => {
@@ -203,6 +259,9 @@ export const createListener = (deps: ListenerDeps): Listener => {
                 case "editor":
                     editor(url, res);
                     break;
+                case "refresh":
+                    await refresh(url, res);
+                    break;
                 case "doc":
                     await document(req, res, route.key);
                     break;
@@ -229,20 +288,50 @@ export const createListener = (deps: ListenerDeps): Listener => {
             socket.end("HTTP/1.1 503 Service Unavailable\r\n\r\n");
             return;
         }
+        // Gone once either side ends it: the browser's (`end`), or the server's, which the relay passes on by ending this
+        // side (`finish`). Neither waits for the other half, which a vanished client might never close.
+        editorSockets += 1;
+        let open = true;
+        const gone = (): void => {
+            if (open) {
+                open = false;
+                editorSockets -= 1;
+            }
+        };
+        socket.once("end", gone);
+        socket.once("finish", gone);
+        socket.once("close", gone);
         relayUpgrade(http.request({ host: "127.0.0.1", port, method: req.method, path: req.url, headers: req.headers }), socket, head);
     });
 
+    // 0.0.0.0: the document server reaches this from inside its container, through the engine's host gateway.
+    const bind = (port: number): Promise<number> =>
+        new Promise((resolve, reject) => {
+            const failed = (error: Error): void => reject(error);
+            server.once("error", failed);
+            server.listen(port, "0.0.0.0", () => {
+                server.off("error", failed);
+                const address = server.address();
+                resolve(typeof address === "object" && address !== null ? address.port : 0);
+            });
+        });
+
     return {
         server,
-        // 0.0.0.0: the document server reaches this from inside its container, through the engine's host gateway.
-        listen: () =>
-            new Promise((resolve, reject) => {
-                server.on("error", reject);
-                server.listen(0, "0.0.0.0", () => {
-                    const address = server.address();
-                    resolve(typeof address === "object" && address !== null ? address.port : 0);
-                });
-            }),
+        listen: async (port = 0) => {
+            if (port === 0) {
+                return bind(0);
+            }
+            try {
+                return await bind(port);
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") {
+                    throw error;
+                }
+                return bind(0);
+            }
+        },
         close: () => new Promise((resolve) => server.close(() => resolve())),
+        editorsConnected: () => editorSockets,
     };
 };

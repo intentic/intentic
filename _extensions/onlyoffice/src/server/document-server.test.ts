@@ -1,5 +1,20 @@
 import type { ContainerSpec, ContainerState, DockerEngine } from "./docker.js";
-import { CONTAINER, CONTAINER_LABELS, DocumentServer, IMAGE, RESTART_POLICY, SETUP_DONE_MARKER } from "./document-server.js";
+import { CONTAINER, CONTAINER_LABELS, DocumentServer, ENTRYPOINT, IMAGE, RESTART_POLICY, SETUP_DONE_MARKER } from "./document-server.js";
+
+// The cache tag every container these tests create is given.
+const TAG = `c0ffee`.padEnd(32, `0`);
+// A container as this backend creates one today, stopped, on port 5000.
+const current = (overrides: Partial<ContainerState> = {}): ContainerState => ({
+    running: false,
+    hostPort: 5000,
+    image: IMAGE,
+    env: [`JWT_SECRET=sec`, `HASH=${TAG}`],
+    labels: CONTAINER_LABELS,
+    restart: RESTART_POLICY,
+    startedAt: 0,
+    entrypoint: ENTRYPOINT,
+    ...overrides,
+});
 
 // The lifecycle against a scripted engine: what the owner's start does, what an open does after it, and what is
 // recreated rather than reused.
@@ -24,7 +39,7 @@ const scripted = (initial: Partial<Scripted[`state`]> = {}): Scripted => {
         },
         inspect: async () => state.container,
         create: async (name, spec: ContainerSpec) => {
-            calls.push(`create ${name} ${spec.hostPort} ${spec.env.join(` `)}`);
+            calls.push(`create ${name} ${spec.hostPort} ${spec.env.join(` `)}${spec.entrypoint === ENTRYPOINT ? ` +setup-once` : ``}`);
             state.container = {
                 running: false,
                 hostPort: spec.hostPort,
@@ -33,6 +48,7 @@ const scripted = (initial: Partial<Scripted[`state`]> = {}): Scripted => {
                 labels: spec.labels,
                 restart: RESTART_POLICY,
                 startedAt: 0,
+                entrypoint: spec.entrypoint ?? [],
             };
         },
         start: async (name) => {
@@ -61,6 +77,7 @@ const server = (script: Scripted, log: string[] = []): DocumentServer =>
         healthy: async () => script.state.healthy,
         freePort: async () => 4321,
         sleep: async () => undefined,
+        cacheTag: () => TAG,
     });
 
 describe(`before the owner's first start`, () => {
@@ -84,7 +101,7 @@ describe(`the owner's start`, () => {
         await docs.settled();
         expect(script.calls).toEqual([
             `pull`,
-            `create ${CONTAINER} 4321 JWT_ENABLED=true JWT_SECRET=sec JWT_HEADER=Authorization ALLOW_PRIVATE_IP_ADDRESS=true`,
+            `create ${CONTAINER} 4321 JWT_ENABLED=true JWT_SECRET=sec JWT_HEADER=Authorization ALLOW_PRIVATE_IP_ADDRESS=true HASH=${TAG} +setup-once`,
             `start ${CONTAINER}`,
         ]);
         expect(await docs.status()).toEqual({ state: `ready` });
@@ -197,18 +214,7 @@ describe(`readiness`, () => {
 
 describe(`an open after that`, () => {
     it(`brings a stopped container back up without pulling`, async () => {
-        const script = scripted({
-            image: true,
-            container: {
-                running: false,
-                hostPort: 5000,
-                image: IMAGE,
-                env: [`JWT_SECRET=sec`],
-                labels: CONTAINER_LABELS,
-                restart: RESTART_POLICY,
-                startedAt: 0,
-            },
-        });
+        const script = scripted({ image: true, container: current() });
         const docs = server(script);
         expect(await docs.ensureRunning()).toEqual({ state: `starting` });
         await docs.settled();
@@ -220,15 +226,7 @@ describe(`an open after that`, () => {
     it(`recreates a container built from another image, another secret or without the restart policy`, async () => {
         const script = scripted({
             image: true,
-            container: {
-                running: true,
-                hostPort: 5000,
-                image: `onlyoffice/documentserver:8.2.3`,
-                env: [`JWT_SECRET=old`],
-                labels: CONTAINER_LABELS,
-                restart: RESTART_POLICY,
-                startedAt: 0,
-            },
+            container: current({ running: true, image: `onlyoffice/documentserver:8.2.3`, env: [`JWT_SECRET=old`, `HASH=${TAG}`] }),
         });
         const log: string[] = [];
         const docs = server(script, log);
@@ -239,18 +237,7 @@ describe(`an open after that`, () => {
         expect(log.some((line) => line.includes(`recreating`))).toBe(true);
         expect(docs.running()).toEqual({ port: 4321 });
         // The same image and secret, but created before the restart policy existed: recreated once to get it.
-        const older = scripted({
-            image: true,
-            container: {
-                running: true,
-                hostPort: 5000,
-                image: IMAGE,
-                env: [`JWT_SECRET=sec`],
-                labels: CONTAINER_LABELS,
-                restart: `no`,
-                startedAt: 0,
-            },
-        });
+        const older = scripted({ image: true, container: current({ running: true, restart: `no` }) });
         const upgraded = server(older);
         await upgraded.ensureRunning();
         await upgraded.settled();
@@ -258,19 +245,30 @@ describe(`an open after that`, () => {
         expect(older.calls[1]).toContain(`create ${CONTAINER} 4321`);
     });
 
+    // Without the entrypoint a container regenerates fonts, themes and gzip on every start; without a tag of its own
+    // every start renames the static files and empties the browser's cache of them.
+    it(`recreates a container made before the setup-once entrypoint or its own cache tag, once`, async () => {
+        for (const outdated of [current({ running: true, entrypoint: [] }), current({ running: true, env: [`JWT_SECRET=sec`] })]) {
+            const script = scripted({ image: true, container: outdated });
+            const docs = server(script);
+            await docs.ensureRunning();
+            await docs.settled();
+            expect(script.calls).toEqual([
+                `remove ${CONTAINER}`,
+                `create ${CONTAINER} 4321 JWT_ENABLED=true JWT_SECRET=sec JWT_HEADER=Authorization ALLOW_PRIVATE_IP_ADDRESS=true HASH=${TAG} +setup-once`,
+                `start ${CONTAINER}`,
+            ]);
+            // Recreated with both, it is adopted as it is from then on.
+            const again = scripted({ image: true, container: script.state.container });
+            const adopted = server(again);
+            await adopted.ensureRunning();
+            await adopted.settled();
+            expect(again.calls).toEqual([`start ${CONTAINER}`]);
+        }
+    });
+
     it(`notices a server that stopped answering and starts it again`, async () => {
-        const script = scripted({
-            image: true,
-            container: {
-                running: true,
-                hostPort: 5000,
-                image: IMAGE,
-                env: [`JWT_SECRET=sec`],
-                labels: CONTAINER_LABELS,
-                restart: RESTART_POLICY,
-                startedAt: 0,
-            },
-        });
+        const script = scripted({ image: true, container: current({ running: true }) });
         const docs = server(script);
         await docs.ensureRunning();
         await docs.settled();
@@ -281,6 +279,48 @@ describe(`an open after that`, () => {
         script.state.healthy = true;
         await docs.settled();
         expect(docs.running()).toEqual({ port: 5000 });
+    });
+
+    it(`counts each run it brings up, since a restarted server holds none of the sessions before it`, async () => {
+        const script = scripted({ image: true, container: current({ running: true }) });
+        const docs = server(script);
+        expect(docs.run()).toBe(0);
+        await docs.ensureRunning();
+        await docs.settled();
+        expect(docs.run()).toBe(1);
+        // Still answering: the same run.
+        expect(await docs.ensureRunning()).toEqual({ state: `ready` });
+        expect(docs.run()).toBe(1);
+        script.state.healthy = false;
+        await docs.ensureRunning();
+        script.state.healthy = true;
+        await docs.settled();
+        expect(docs.run()).toBe(2);
+    });
+});
+
+describe(`at boot`, () => {
+    it(`adopts a container the engine already runs, without starting or creating anything`, async () => {
+        const script = scripted({ image: true, container: current({ running: true, startedAt: 1_000 }) });
+        const docs = server(script);
+        await docs.adopt();
+        await docs.settled();
+        // `start` of a running container is the engine's no-op; nothing is created or removed.
+        expect(script.calls).toEqual([`start ${CONTAINER}`]);
+        expect(docs.running()).toEqual({ port: 5000 });
+        expect(docs.run()).toBe(1);
+    });
+
+    it(`leaves a stopped container stopped, and does nothing without a container or an engine`, async () => {
+        const stopped = scripted({ image: true, container: current() });
+        await server(stopped).adopt();
+        expect(stopped.calls).toEqual([]);
+        const none = scripted();
+        await server(none).adopt();
+        expect(none.calls).toEqual([]);
+        const off = scripted({ off: `no engine`, container: current({ running: true }) });
+        await server(off).adopt();
+        expect(off.calls).toEqual([]);
     });
 });
 
@@ -334,6 +374,17 @@ describe(`the idle stop`, () => {
         await docs.settled();
         expect(docs.running()).toEqual({ port: 4321 });
         expect(script.calls.filter((call) => call.startsWith(`create `))).toHaveLength(1);
+    });
+
+    it(`holds a server an editor is still connected to, however long nobody asked for anything`, async () => {
+        const script = scripted();
+        const docs = server(script);
+        await docs.start();
+        await docs.settled();
+        expect(await docs.stopIfIdle(0, 1)).toBe(false);
+        expect(script.calls).not.toContain(`stop ${CONTAINER}`);
+        expect(await docs.stopIfIdle(0, 0)).toBe(true);
+        expect(script.calls).toContain(`stop ${CONTAINER}`);
     });
 
     it(`does not stop a server that was never up, nor one mid-start`, async () => {

@@ -43,6 +43,9 @@ export const editorConfig = (input: EditorConfigInput): Record<string, unknown> 
                 compactHeader: true,
                 feedback: false,
                 help: false,
+                // No "New: …" callouts over the toolbar. The editor records a dismissed one per origin, and the forwarded
+                // address the editor is framed at is not stable enough for that record to stick.
+                features: { featuresTips: false },
                 uiTheme: input.session.theme === "dark" ? "theme-dark" : "theme-light",
             },
         },
@@ -70,11 +73,36 @@ export const hostPage = (config: Record<string, unknown>, title: string, theme: 
 <script>
 (function () {
     var config = ${scriptJson(config)};
+    var note = function (text) {
+        document.body.innerHTML = '<p id="note"></p>';
+        document.getElementById("note").textContent = text;
+    };
     if (!window.DocsAPI) {
-        document.body.innerHTML = '<p id="note">The document server did not answer. Close this file and open it again.</p>';
+        note("The document server did not answer. Close this file and open it again.");
         return;
     }
-    new window.DocsAPI.DocEditor("placeholder", config);
+    var editor;
+    config.events = {
+        // The server holds this editor's document key as outdated. Declaring this handler replaces the editor's own
+        // "Version changed, the page will be reloaded" warning, and a reload would only land on the same key: the
+        // listener moves the session onto a fresh key and the editor reloads the document in place.
+        onRequestRefreshFile: function () {
+            fetch("/refresh" + window.location.search, { cache: "no-store" })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error(String(response.status));
+                    }
+                    return response.json();
+                })
+                .then(function (fresh) {
+                    editor.refreshFile(fresh);
+                })
+                .catch(function () {
+                    note("This document changed while it was open. Close it and open it again.");
+                });
+        }
+    };
+    editor = new window.DocsAPI.DocEditor("placeholder", config);
 })();
 </script>
 </body>
