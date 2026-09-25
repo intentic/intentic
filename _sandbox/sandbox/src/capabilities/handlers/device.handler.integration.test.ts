@@ -5,6 +5,8 @@ import { repoRoot } from "@intentic/constants/node";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
+import { HOST_PEER } from "../../hosts/host-peer.js";
+import { filePeerStore } from "../../peers/peer-store.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
 import { contributionRegistry } from "../contributions.js";
@@ -104,4 +106,47 @@ test("echoConfig renders the grant back and host holds no manifest secret", () =
         destructive: "off",
     });
     expect(secretField(laptop, new Map())).toBeUndefined();
+});
+
+// A machine with its Windows side and a WSL distro paired, beside two enrollments that are NOT its: a card whose
+// name merely starts the same, and another machine's distro. Real enrollment store on a temp /history; a hub that
+// records which sockets it was told to cut.
+const pairedMachine = async () => {
+    const hosts = filePeerStore(mkdtempSync(join(tmpdir(), "cap-history-")), HOST_PEER.store);
+    const tokens = new Map<string, string>();
+    for (const id of ["rog", "rog::wsl:archlinux", "rogue", "omen::wsl:archlinux"]) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- each enrollment rewrites the file whole
+        const enrolled = await hosts.enroll(hosts.mintPairing(id).token);
+        tokens.set(id, enrolled?.token ?? "");
+    }
+    const disconnected: string[] = [];
+    const ctx = {
+        ...tempCtx().ctx,
+        hosts,
+        hostHub: { online: () => false, disconnect: (id: string) => void disconnected.push(id) },
+    } as unknown as CapabilityCtx;
+    const ids = async (): Promise<string[]> => (await hosts.list()).map((peer) => peer.id).toSorted();
+    return { ctx, hosts, tokens, disconnected, ids };
+};
+
+test("removing a device revokes every OS install it holds, and nothing that merely shares a prefix", async () => {
+    const { ctx, disconnected, ids } = await pairedMachine();
+
+    await deviceHandler.remove?.(ctx, "rog", laptop.config);
+
+    // The WSL side left behind was a live key no card listed: exactly how rog::wsl and omen::wsl outlived their
+    // cards' removal and re-attached, unasked, when a card of the same name came back.
+    expect(await ids()).toEqual(["omen::wsl:archlinux", "rogue"]);
+    expect(disconnected).toEqual(["rog", "rog::wsl:archlinux"]);
+});
+
+test("renaming a device carries every OS install to the new name, each keeping its own key", async () => {
+    const { ctx, hosts, tokens, disconnected, ids } = await pairedMachine();
+
+    await deviceHandler.rename.carry?.(ctx, "rog", "desk", laptop.config);
+
+    expect(await ids()).toEqual(["desk", "desk::wsl:archlinux", "omen::wsl:archlinux", "rogue"]);
+    // No re-pairing: the distro's own token now answers to the new name.
+    expect(await hosts.verify(tokens.get("rog::wsl:archlinux") ?? "")).toEqual({ kind: "enrolled", id: "desk::wsl:archlinux" });
+    expect(disconnected).toEqual(["rog", "rog::wsl:archlinux"]);
 });
