@@ -4,32 +4,32 @@
         "flags": "--predictable --predictable-gc-schedule --random-seed=1 --max-old-space-size=2048 --max-semi-space-size=16 --expose-gc",
         "valgrind": "valgrind-3.24.0",
         "arch": "x64",
-        "cpu": "Intel(R) Core(TM) Ultra 9 275HX"
+        "cpu": "11th Gen Intel(R) Core(TM) i9-11900H @ 2.50GHz"
     },
     "scenarios": {
         "code-lines": {
-            "instructions": 1599288419
+            "instructions": 1473484762
         },
         "code-recount": {
-            "instructions": 883054348
+            "instructions": 1545523603
         },
         "fuzzy-rank": {
-            "instructions": 1475596578
+            "instructions": 1476158498
         },
         "fuzzy-typing": {
-            "instructions": 640363315
+            "instructions": 640867692
         },
         "ignore-rewalk": {
-            "instructions": 54624901
+            "instructions": 54603636
         },
         "ignore-walk": {
-            "instructions": 760830487
+            "instructions": 761653835
         },
         "transcript-fold": {
-            "instructions": 163677958
+            "instructions": 163408947
         },
         "transcript-rows": {
-            "instructions": 246493129
+            "instructions": 246421002
         }
     }
 }

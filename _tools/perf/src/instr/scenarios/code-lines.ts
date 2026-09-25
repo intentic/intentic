@@ -10,7 +10,9 @@ export const scenario: Scenario = {
         const after = edited(before);
         // The counting worker is long-lived, so the count is of a warm tokenizer: a same-sized file of other text goes first.
         const other = typescriptModule(2, 40);
-        await codeLineStat(other, edited(other), "src/rows.ts", grammars);
+        if ((await codeLineStat(other, edited(other), "src/rows.ts", grammars)) === undefined) {
+            throw new Error("the warm-up count gave up, so the work would start from a cold tokenizer");
+        }
         return async () => {
             const count = await codeLineStat(before, after, "src/rows.ts", grammars);
             if (count === undefined || !("stat" in count) || count.stat.additions === 0) {

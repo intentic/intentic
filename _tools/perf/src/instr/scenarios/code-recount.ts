@@ -10,8 +10,12 @@ export const scenario: Scenario = {
         const saved = edited(before);
         const savedAgain = `${saved}\nexport const extra = 1;\n`;
         const other = typescriptModule(2, 40);
-        await codeLineStat(other, edited(other), "src/rows.ts", grammars);
-        await codeLineStat(before, saved, "src/rows.ts", grammars);
+        if ((await codeLineStat(other, edited(other), "src/rows.ts", grammars)) === undefined) {
+            throw new Error("the warm-up count gave up, so the work would start from a cold tokenizer");
+        }
+        if ((await codeLineStat(before, saved, "src/rows.ts", grammars)) === undefined) {
+            throw new Error("the first count gave up, so the recount would not start from a counted save");
+        }
         return async () => {
             const count = await codeLineStat(before, savedAgain, "src/rows.ts", grammars);
             if (count === undefined || !("stat" in count) || count.stat.additions === 0) {
