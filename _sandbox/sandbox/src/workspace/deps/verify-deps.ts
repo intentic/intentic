@@ -205,7 +205,10 @@ const offloadTarget = async (deps: VerifyDeps): Promise<string | undefined> =>
 // The check handed to offload-run (bin/offload-run): the land's base and the report path travel, the report and the
 // tree verdict come back, and the queued form is kept for running it here when the runner cannot take it.
 const offloadedCommand = async (command: string, runner: string, deps: VerifyDeps): Promise<string> => {
-    const prefix = await (deps.heavyPrefix?.(command) ?? Promise.resolve("")).catch(() => "");
+    const prefix = await (deps.heavyPrefix?.(command) ?? Promise.resolve("")).catch((error: unknown) => {
+        deps.logger.warn({ err: error, command }, "dependency verify: could not determine heavy prefix for offloaded check");
+        return "";
+    });
     return `${offloadPrefix(runner, LAND_CHECK_LABEL, prefix, ["INTENTIC_LAND_FROM"], ["INTENTIC_VERIFY_REPORT", "INTENTIC_VERDICT_OUT"])}bash -c ${shellQuote(command)}`;
 };
 

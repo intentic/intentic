@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { RunnerCommand, RunnerCommandFrame } from "@intentic/sandbox-contract";
 import { endSession } from "../seams/session-processes.js";
 
@@ -111,6 +112,7 @@ const endLine = async (pid: number): Promise<void> => {
     } catch {
         // silent-catch: a leader already gone is what the signal was for
     }
+    // silent-catch: a leader already gone or session ended needs no further cleanup
     await endSession(pid).catch(() => false);
     try {
         process.kill(pid, "SIGKILL");
@@ -151,7 +153,7 @@ const setupLine = (cwd: string, line: string, say: (text: string) => void, signa
 // The lockfile a tree installs from, at its root, first found.
 const lockfileOf = (tree: string): (typeof LOCKFILES)[number] | undefined => LOCKFILES.find((name) => existsSync(join(tree, name)));
 
-const readStamp = async (path: string): Promise<string> => (await readFile(path, "utf8").catch(() => "")).trim();
+const readStamp = async (path: string): Promise<string> => ((await readFile(path, "utf8").catch(undefinedIfMissing)) ?? "").trim();
 
 // Brings the offload tree to the snapshot: fetched through the git door, checked out over whatever the last run left,
 // untracked files cleaned but ignored ones kept; then installed and prepared when what they depend on moved.
@@ -257,12 +259,13 @@ export const createRunnerCommands = (deps: RunnerCommandDeps): RunningCommands =
                 controller.signal.removeEventListener("abort", stop);
                 // The line is back, so nothing it started should outlive it here either.
                 if (child.pid !== undefined) {
+                    // silent-catch: a process already exited needs no further session cleanup
                     await endSession(child.pid).catch(() => false);
                 }
                 const patch = await changesOf(deps, tree, scratch);
                 const files: Record<string, string> = {};
                 for (const [name, path] of Object.entries(exported)) {
-                    const bytes = await readFile(path).catch(() => undefined);
+                    const bytes = await readFile(path).catch(undefinedIfMissing);
                     if (bytes !== undefined && bytes.length <= EXPORT_CEILING_BYTES) {
                         files[name] = bytes.toString("base64");
                     }
