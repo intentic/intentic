@@ -133,7 +133,6 @@
     "ports -> terminal": "",
     "processes -> terminal": "",
     "push -> system": "",
-    "rules -> agent": "rules/turn-ending.ts is the engine's Stop hook and reads the engine's verification ledgers.",
     "rules -> workspace": "",
     "runners -> agents": "",
     "runners -> auth": "",
