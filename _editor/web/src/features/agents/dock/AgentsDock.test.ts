@@ -317,15 +317,6 @@ describe(`the board's dock`, () => {
         expect(state.open.value).toEqual([`metrics`, `mainline`]);
     });
 
-    it(`turns geek metrics off from the metrics panel`, async () => {
-        showLiveMetrics.value = true;
-        const { element } = mount(undefined, { metrics: metrics(), state: freshState([`metrics`]) });
-        const hide = [...panel(element, `metrics`)!.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Hide`)!;
-        hide.click();
-        await nextTick();
-        expect(showLiveMetrics.value).toBe(false);
-    });
-
     it(`draws metrics alone when main has never been checked`, () => {
         const { element } = mount(undefined, { metrics: metrics() });
         expect(element.querySelector(`[data-segment="mainline"]`)).toBeNull();

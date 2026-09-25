@@ -307,9 +307,6 @@
             "rolesLabel": "Pamięć według rodzaju",
             "sandboxLabel": "Zasoby sandboxa",
             "sessionHint": "Czego używają procesy tej rozmowy: CPU z ostatnich sekund, gdzie 100% to cały rdzeń, oraz pamięci rezydentnej.",
-            "hide": "Ukryj",
-            "hideHint": "Wyłącz metryki dla geeków. Włączysz je z powrotem w Ustawienia ▸ Wygląd.",
-            "measuredNote": "Mierzone co kilka sekund i tylko wtedy, gdy tablica agentów jest otwarta.",
             "swapHint": "Pamięć, którą jądro przeniosło na dysk. Trochę to norma; dużo i wciąż rośnie oznacza, że sandboxowi brakuje pamięci."
         },
         "ownerMark": {

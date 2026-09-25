@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import type { MainlineStatus, SandboxMetrics } from "@intentic/sandbox-contract";
-import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import MainlinePanel from "../mainline/MainlinePanel.vue";
 import MainlineRouting from "../mainline/MainlineRouting.vue";
 import MainlineSummary from "../mainline/MainlineSummary.vue";
 import { mainlineSummary } from "../mainline/mainlineView";
-import { showLiveMetrics } from "../metrics/liveMetrics";
 import SandboxMetricsDetails from "../metrics/SandboxMetricsDetails.vue";
 import SandboxMetricsSummary from "../metrics/SandboxMetricsSummary.vue";
 import type { DockSegment, DockState } from "./dockState";
@@ -37,21 +35,8 @@ const segments = computed<DockSegment[]>(() => [
         : [{ id: `mainline`, title: t(`agents.mainline.title`), icon: `list-check` as const, hint: t(`agents.mainline.explain`), weight: 3 }]),
     ...(props.metrics === undefined
         ? []
-        : [
-              {
-                  id: `metrics`,
-                  title: t(`agents.liveMetrics.sandboxLabel`),
-                  icon: `server` as const,
-                  hint: t(`agents.liveMetrics.measuredNote`),
-                  end: true,
-                  weight: 2,
-              },
-          ]),
+        : [{ id: `metrics`, title: t(`agents.liveMetrics.sandboxLabel`), icon: `server` as const, end: true, weight: 2 }]),
 ]);
-
-const hideMetrics = (): void => {
-    showLiveMetrics.value = false;
-};
 </script>
 
 <template>
@@ -72,12 +57,6 @@ const hideMetrics = (): void => {
         </template>
         <template #summary-metrics>
             <SandboxMetricsSummary v-if="metrics !== undefined" :metrics="metrics" />
-        </template>
-        <!-- Turns geek metrics off from where they are seen rather than from Settings. -->
-        <template #actions-metrics>
-            <button type="button" v-tooltip.top="t(`agents.liveMetrics.hideHint`)" :class="ui.textAction(`text-2xs text-muted`)" @click="hideMetrics">
-                {{ t(`agents.liveMetrics.hide`) }}
-            </button>
         </template>
         <template #panel-metrics>
             <SandboxMetricsDetails v-if="metrics !== undefined" :metrics="metrics" />
