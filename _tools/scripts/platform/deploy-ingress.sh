@@ -23,6 +23,16 @@
 #                     run and a branch that is not production are all inert rather than broken.
 #   INGRESS_IMAGE     the exact image to deploy; defaults to the `latest` this push just wrote.
 #   INGRESS_APP       the Fly app, default from fly.toml's own name.
+#   INGRESS_FLY_CONFIG, or the first argument
+#                     which Fly config to deploy, relative to the repository root or absolute; default
+#                     _platform/ingress/fly.toml, the one CI deploys on every push. The edge's other shape,
+#                     _platform/ingress/fly.edge-tls.toml, is deployed by hand during the switch to terminating TLS
+#                     at the edge (ingress/README.md), and rolled back the same way with fly.toml.
+#
+# TLS MODE is read off the config itself: one with no [http_service] has no Fly proxy in front of it, so the edge
+# holds the certificate and serves UDP beside it. Then the edge must also DECLARE that on /health
+# (`"transports":["quic","h3","webtransport"]`), since fronts and editors reach for QUIC and WebTransport only where
+# it is declared; an edge that answers without it is one whose INGRESS_QUIC_PORT is not set, and the deploy fails.
 set -euo pipefail
 
 if [ -z "${FLY_API_TOKEN:-}" ]; then
@@ -34,7 +44,20 @@ fi
 . "$(dirname "$0")/../lib/repo-root.sh"
 
 ROOT="$(repo_root)"
-CONFIG="$ROOT/_platform/ingress/fly.toml"
+CONFIG="${1:-${INGRESS_FLY_CONFIG:-_platform/ingress/fly.toml}}"
+case "$CONFIG" in
+    /*) ;;
+    *) CONFIG="$ROOT/$CONFIG" ;;
+esac
+if [ ! -f "$CONFIG" ]; then
+    echo >&2 "error: no Fly config at $CONFIG"
+    exit 1
+fi
+if grep -q '^\[http_service\]' "$CONFIG"; then
+    TLS_MODE=false
+else
+    TLS_MODE=true
+fi
 APP="${INGRESS_APP:-intentic-ingress}"
 IMAGE="${INGRESS_IMAGE:-ghcr.io/intentic/ingress:latest}"
 HEALTH_URL="${INGRESS_HEALTH_URL:-https://ingress.sbx.intentic.dev/health}"
@@ -59,7 +82,7 @@ if [ -z "$EXPECTED" ] || [ "$EXPECTED" = "unreleased" ]; then
     exit 1
 fi
 
-echo "deploying $IMAGE to Fly app '$APP' (build $EXPECTED)"
+echo "deploying $IMAGE to Fly app '$APP' (build $EXPECTED) with $(basename "$CONFIG")$([ "$TLS_MODE" = true ] && echo ', terminating TLS at the edge')"
 flyctl deploy --config "$CONFIG" --app "$APP" --image "$IMAGE" --yes
 
 # AND THEN READ IT BACK FROM THE PUBLIC ADDRESS, not from Fly's own report of the release. Fly answering
@@ -84,11 +107,32 @@ done
 echo
 echo "$APP is serving build $EXPECTED"
 
+# TERMINATING TLS, THE EDGE MUST SAY SO. The build answering above proves the process is up behind the new services;
+# the declaration proves it bound the QUIC door those services send UDP to, which is what every front and editor now
+# goes by. Fly accepted the UDP service either way, so nothing else here would notice an edge that never listens on it.
+if [ "$TLS_MODE" = true ]; then
+    declared="$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null | sed -n 's/.*"transports":\[\([^]]*\)\].*/\1/p')"
+    for transport in quic h3 webtransport; do
+        case "$declared" in
+            *"\"$transport\""*) ;;
+            *)
+                echo >&2 "error: $APP terminates TLS under $(basename "$CONFIG") but its /health declares [${declared}], not $transport."
+                echo >&2 "  The edge declares what it binds: INGRESS_QUIC_PORT (8443) and INGRESS_QUIC_HOST=fly-global-services"
+                echo >&2 "  must be set on it ('flyctl secrets list -a $APP'). Until they are, fronts dial no QUIC and editors open"
+                echo >&2 "  no WebTransport; the WebSocket lanes still carry everything. ingress/README.md has the runbook."
+                exit 1
+                ;;
+        esac
+    done
+    echo "$APP declares quic, h3 and webtransport"
+fi
+
 # The hosted lane's own switch, warned about rather than enforced: whether this deployment HAS a hosted lane
 # is the platform's fact, not this script's, and an edge with no hosted sandboxes behind it is a legitimate
 # deployment. The api knows the answer and alarms on it every health sweep (hosted-health.ts `edge`), which is
 # where a missing HOSTED_APP_PREFIX is caught. This line is just the early, cheap warning.
-if ! curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null | grep -q '"replay":true'; then
+# Terminating TLS, there is no replay to switch on: no Fly proxy in front of 443 acts on one.
+if [ "$TLS_MODE" = false ] && ! curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null | grep -q '"replay":true'; then
     echo "warning: this edge reports replay:false — HOSTED_APP_PREFIX is unset on it, so hosted sandboxes"
     echo "         will answer 502 at their own addresses. Set it to match the api's, per ingress/README.md."
 fi

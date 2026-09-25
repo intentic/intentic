@@ -1,9 +1,9 @@
 //! Terminals, served by the front itself: `GET /system/terminal` upgrades onto a tmux session or a service's log, which
-//! Node authorizes with one question and never carries a byte of. A browser's socket is a WebSocket, or frames on a
-//! WebTransport stream the edge relays as an `intentic-terminal` upgrade.
+//! Node authorizes with one question and never carries a byte of. A browser's socket is always a WebSocket: over TCP, or
+//! spoken by the editor itself on a WebTransport stream the edge relays as one HTTP/1.1 connection, which reaches here
+//! as the same upgrade.
 
 mod control;
-mod frames;
 mod hub;
 mod screen;
 
@@ -13,8 +13,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use browser_wire::{TERMINAL_PATH, TERMINAL_UPGRADE, TerminalClientMessage, TerminalServerMessage};
 use bytes::Bytes;
-use front_wire::{TerminalClientMessage, TerminalPlan, TerminalServerMessage, TerminalUpgrade};
+use front_wire::TerminalPlan;
 use futures_util::{Sink, SinkExt, Stream, StreamExt};
 use http::header::{
     CONNECTION, HeaderMap, SEC_WEBSOCKET_ACCEPT, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE,
@@ -28,15 +29,13 @@ use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, Role, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
-use tokio_util::codec::Framed;
 
 use crate::body::{self, Body};
-use frames::Frames;
 use hub::{Controls, Outbox, Taken};
 pub use hub::{Hubs, Tmux};
 
 /// Every route the front answers itself; the contract marks each `front` (raw-routes.ts), and a test holds them equal.
-pub const ROUTES: [(&str, &str); 1] = [("GET", "/system/terminal")];
+pub const ROUTES: [(&str, &str); 1] = [("GET", TERMINAL_PATH)];
 
 // A per-sandbox bound, not a quota; 1013 sends the browser to its usual backoff.
 const MAX_TERMINALS: usize = 32;
@@ -64,17 +63,14 @@ pub fn serves(method: &Method, path: &str) -> bool {
         .any(|(verb, route)| method.as_str() == *verb && path == *route)
 }
 
-/// How a terminal socket's messages travel once it has upgraded.
+/// A terminal's WebSocket handshake, answered with this `Sec-WebSocket-Accept`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Framing {
-    /// A WebSocket, answered with this `Sec-WebSocket-Accept`.
-    WebSocket { accept: String },
-    /// `front_wire` frames, on a stream no WebSocket rides.
-    Frames,
+pub struct Handshake {
+    accept: String,
 }
 
-impl Framing {
-    /// The upgrade a request asks for, when it is one a terminal opens with.
+impl Handshake {
+    /// The handshake a request opens, when it is a WebSocket's.
     pub fn of(headers: &HeaderMap) -> Option<Self> {
         let names = |header, token: &str| {
             headers
@@ -87,46 +83,33 @@ impl Framing {
                         .any(|named| named.trim().eq_ignore_ascii_case(token))
                 })
         };
-        if !names(CONNECTION, "upgrade") {
+        if !names(CONNECTION, "upgrade")
+            || !names(UPGRADE, TERMINAL_UPGRADE)
+            || headers.get(SEC_WEBSOCKET_VERSION)?.as_bytes() != b"13"
+        {
             return None;
         }
-        if names(UPGRADE, TerminalUpgrade::Frames.token()) {
-            return Some(Self::Frames);
-        }
-        if !names(UPGRADE, "websocket") || headers.get(SEC_WEBSOCKET_VERSION)?.as_bytes() != b"13" {
-            return None;
-        }
-        Some(Self::WebSocket {
+        Some(Self {
             accept: derive_accept_key(headers.get(SEC_WEBSOCKET_KEY)?.as_bytes()),
         })
     }
 
     pub fn switching(&self) -> Response<Body> {
-        let builder = Response::builder()
+        Response::builder()
             .status(StatusCode::SWITCHING_PROTOCOLS)
-            .header(CONNECTION, "Upgrade");
-        let builder = match self {
-            Self::WebSocket { accept } => builder
-                .header(UPGRADE, "websocket")
-                .header(SEC_WEBSOCKET_ACCEPT, accept.as_str()),
-            Self::Frames => builder.header(UPGRADE, TerminalUpgrade::Frames.token()),
-        };
-        builder
+            .header(CONNECTION, "Upgrade")
+            .header(UPGRADE, TERMINAL_UPGRADE)
+            .header(SEC_WEBSOCKET_ACCEPT, self.accept.as_str())
             .body(body::empty())
             .expect("a switching response always builds")
     }
 
     /// The same answer as raw h1, for a socket that arrived down the tunnel as a CONNECT stream.
     pub fn switching_head(&self) -> Vec<u8> {
-        match self {
-            Self::WebSocket { accept } => format!(
-                "HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: {accept}\r\n\r\n"
-            ),
-            Self::Frames => format!(
-                "HTTP/1.1 101 Switching Protocols\r\nupgrade: {}\r\nconnection: Upgrade\r\n\r\n",
-                TerminalUpgrade::Frames.token()
-            ),
-        }
+        format!(
+            "HTTP/1.1 101 Switching Protocols\r\nupgrade: {TERMINAL_UPGRADE}\r\nconnection: Upgrade\r\nsec-websocket-accept: {}\r\n\r\n",
+            self.accept
+        )
         .into_bytes()
     }
 }
@@ -216,26 +199,17 @@ impl Terminals {
     pub async fn serve<S>(
         self: Arc<Self>,
         io: S,
-        framing: &Framing,
         plan: TerminalPlan,
         member: Option<String>,
         query: &str,
     ) where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
-        match framing {
-            Framing::WebSocket { .. } => {
-                let config = WebSocketConfig::default()
-                    .max_message_size(Some(MESSAGE_MAX))
-                    .max_frame_size(Some(MESSAGE_MAX));
-                let socket = WebSocketStream::from_raw_socket(io, Role::Server, Some(config)).await;
-                self.serve_socket(socket, plan, member, query).await;
-            }
-            Framing::Frames => {
-                let socket = Framed::new(io, Frames::new(MESSAGE_MAX));
-                self.serve_socket(socket, plan, member, query).await;
-            }
-        }
+        let config = WebSocketConfig::default()
+            .max_message_size(Some(MESSAGE_MAX))
+            .max_frame_size(Some(MESSAGE_MAX));
+        let socket = WebSocketStream::from_raw_socket(io, Role::Server, Some(config)).await;
+        self.serve_socket(socket, plan, member, query).await;
     }
 
     async fn serve_socket<T, E>(
@@ -493,32 +467,30 @@ mod tests {
     }
 
     #[test]
-    fn only_a_websocket_or_a_frames_upgrade_opens_a_terminal() {
+    fn only_a_websocket_upgrade_opens_a_terminal() {
         let mut headers = HeaderMap::new();
         headers.insert(UPGRADE, "websocket".parse().unwrap());
         headers.insert(CONNECTION, "keep-alive, Upgrade".parse().unwrap());
         headers.insert(SEC_WEBSOCKET_VERSION, "13".parse().unwrap());
-        assert_eq!(Framing::of(&headers), None);
+        assert_eq!(Handshake::of(&headers), None);
         // RFC 6455's own example key and answer.
         headers.insert(
             SEC_WEBSOCKET_KEY,
             "dGhlIHNhbXBsZSBub25jZQ==".parse().unwrap(),
         );
+        let handshake = Handshake::of(&headers).unwrap();
         assert_eq!(
-            Framing::of(&headers),
-            Some(Framing::WebSocket {
-                accept: "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=".into()
-            })
+            String::from_utf8(handshake.switching_head()).unwrap(),
+            "HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n"
         );
-        headers.insert(UPGRADE, "h2c".parse().unwrap());
-        assert_eq!(Framing::of(&headers), None);
+        // The framing an earlier editor spoke on a WebTransport stream is no terminal any more: it is refused, and that
+        // editor's own fallback takes the WebSocket.
         headers.insert(UPGRADE, "intentic-terminal".parse().unwrap());
-        assert_eq!(Framing::of(&headers), Some(Framing::Frames));
+        assert_eq!(Handshake::of(&headers), None);
+        headers.insert(UPGRADE, "h2c".parse().unwrap());
+        assert_eq!(Handshake::of(&headers), None);
+        headers.insert(UPGRADE, "websocket".parse().unwrap());
         headers.insert(CONNECTION, "keep-alive".parse().unwrap());
-        assert_eq!(Framing::of(&headers), None);
-        assert_eq!(
-            String::from_utf8(Framing::Frames.switching_head()).unwrap(),
-            "HTTP/1.1 101 Switching Protocols\r\nupgrade: intentic-terminal\r\nconnection: Upgrade\r\n\r\n"
-        );
+        assert_eq!(Handshake::of(&headers), None);
     }
 }

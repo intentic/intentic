@@ -247,3 +247,41 @@ async fn a_browser_over_http_3_reaches_a_sandbox_down_its_tunnel() {
     assert_eq!(response.status(), 502);
     assert_eq!(response.headers()["x-intentic-edge"], "no-tunnel");
 }
+
+// What a front and the platform read to know whether to reach for QUIC, HTTP/3 and WebTransport at all: the edge's own
+// declaration, off what it binds, on its answer to every tunnel and on `/health`. An edge binding no UDP declares nothing.
+#[tokio::test]
+async fn the_edge_declares_what_it_serves_on_every_tunnels_answer_and_on_health() {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    use tunnel::{GRANT_HEADER, TRANSPORTS_HEADER};
+
+    let keys = Keys::default();
+    let declaring = door(&keys).await;
+    let silent = support::start(support::lone(&keys)).await;
+    for (port, declared, tokens) in [
+        (
+            declaring.running.port,
+            Some("quic, h3, webtransport"),
+            serde_json::json!(["quic", "h3", "webtransport"]),
+        ),
+        (silent.port, None, serde_json::json!([])),
+    ] {
+        let mut request = format!("ws://127.0.0.1:{port}/tunnel/v1")
+            .into_client_request()
+            .unwrap();
+        request
+            .headers_mut()
+            .insert(GRANT_HEADER, keys.grant(SANDBOX_ID).parse().unwrap());
+        let (_socket, answer) = tokio_tungstenite::connect_async(request).await.unwrap();
+        assert_eq!(
+            answer
+                .headers()
+                .get(TRANSPORTS_HEADER)
+                .map(|value| value.to_str().unwrap()),
+            declared
+        );
+        let health = get(port, &format!("ingress.{ZONE}"), "/health").await;
+        let health: serde_json::Value = serde_json::from_str(&health.body).unwrap();
+        assert_eq!(health["transports"], tokens);
+    }
+}

@@ -3,19 +3,21 @@
 // JavaScript unless the responder allows it — so the verdict rides an exposed header and the edge CORS-allows its own
 // errors. Ingress writes it, the editor's connection machine reads it; both sides import this file so they cannot drift.
 
+import type { EdgeVerdict } from "../front/generated/browser-wire.js";
+
 export const EDGE_VERDICT_HEADER = "x-intentic-edge";
 
-export type EdgeVerdict =
-    // No tunnel is registered for this sandbox: its container is not running, or the machine it runs on is off.
-    // Retrying is right — a container that comes back redials within seconds.
-    | "no-tunnel"
-    // The platform has no such sandbox. The row is deleted, no tunnel for this id will ever be accepted again, and
-    // nothing the reader waits for can change that.
-    | "unknown-sandbox"
-    // A tunnel was held and the forward failed mid-flight: the box went away between being routed to and answering.
-    | "dropped";
+// The verdicts themselves are the edge's (browser-wire's `EdgeVerdict`), each documented there:
+// - no-tunnel: no tunnel is registered for this sandbox, and retrying is right, since a container that comes back redials
+//   within seconds;
+// - unknown-sandbox: the platform has no such sandbox, and nothing the reader waits for can change that;
+// - dropped: a tunnel was held and the forward failed mid-flight.
+export type { EdgeVerdict };
 
-const VERDICTS: ReadonlySet<string> = new Set(["no-tunnel", "unknown-sandbox", "dropped"]);
+// Every verdict, so a new one in the Rust enum fails this file's typecheck until it is read here too.
+const VERDICTS: ReadonlySet<string> = new Set(
+    Object.keys({ "no-tunnel": true, "unknown-sandbox": true, dropped: true } satisfies Record<EdgeVerdict, true>),
+);
 
 // A header value only counts when it is one of ours: a 502 from anything else on the path (a corporate proxy, a CDN)
 // carries no verdict and must not be read as one.

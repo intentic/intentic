@@ -21,7 +21,7 @@ Every browser→outside call in the web app goes through one of these globals, r
 | --- | --- | --- |
 | `globalThis.fetch` | `features/sandbox/client/sandboxAuthFetch.ts` (every daemon call, the typed `sandboxRpc` and the raw `sandboxClient` alike), `lib/useApi.ts` (platform), better-auth's client | the daemon's `OpenAPIHandler` and its raw routes, and the platform's `/rpc` + `/api/auth/*` |
 | `globalThis.WebSocket` | `features/terminal/channel/terminalChannel.ts`, `features/browsers/useBrowserView.ts` | `/system/terminal`, `/system/browser-view` |
-| `globalThis.WebTransport` | `features/terminal/channel/webTransport.ts` | `/system/transport`, the session a terminal's stream rides; the demo answers it as one that never opens, so the terminal takes its WebSocket |
+| `globalThis.WebTransport` | `features/terminal/channel/webTransport.ts` | `/system/transport`, the session a terminal's stream rides where the edge declares it; the demo's sandbox row declares nothing, so terminals take the WebSocket, and a session asked for anyway never opens |
 
 `features/sandbox/client/sandboxRpc.ts` already documents why its fetch is resolved per request rather than
 captured: *"so a fetch replaced later (a test stub, instrumentation) still applies"*. The demo is that

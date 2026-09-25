@@ -162,9 +162,9 @@ export const sourceAliases = (): Record<string, string> => ({
     // projections (the usage window's day arithmetic, the automations clock) whose unit tests run without a DOM, and
     // because the app's very first sandbox call — offering this browser's zone — must not wait on the whole contract.
     "@intentic/sandbox-contract/time": fromRoot("_shared/sandbox-contract/src/time/zone.ts"),
-    // The terminal channel's binary frame codec and its upgrade paths, shared with the daemon's end of the socket; off
-    // the barrel so the terminal's unit tests read the codec without the whole contract.
-    "@intentic/sandbox-contract/terminal-frames": fromRoot("_shared/sandbox-contract/src/front/terminal-frames.ts"),
+    // What a browser sees of the front and the edge outside oRPC: the terminal's path and messages, the WebTransport
+    // session's path, the transports an edge declares. Off the barrel so the terminal's unit tests need none of the rest.
+    "@intentic/sandbox-contract/browser-wire": fromRoot("_shared/sandbox-contract/src/front/browser-wire.ts"),
     // The stored-document conversion vocabulary, imported by extension-api's background.ts so an extension can declare
     // its own documents' history; off the barrel like every other subpath, or the barrel alias swallows it.
     "@intentic/sandbox-contract/documents": fromRoot("_shared/sandbox-contract/src/documents/index.ts"),

@@ -26,7 +26,6 @@
     "_devices/machine/src/device/tools/agent.ts": 1,
     "_devices/machine/src/device/tools/apps.ts": 1,
     "_devices/machine/src/device/tools/files.ts": 1,
-    "_devices/machine/src/device/tools/sandboxes.ts": 2,
     "_devices/machine/src/device/tools/shell.ts": 1,
     "_devices/machine/src/environments/commands.ts": 1,
     "_devices/machine/src/environments/machine-upgrade.ts": 1,

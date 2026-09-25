@@ -2,6 +2,7 @@
 //! holds no credential that can create anything: it verifies a signature and forwards bytes.
 
 use anyhow::Context;
+use tunnel::Transport;
 
 pub struct Config {
     /// The platform's Ed25519 public key, SPKI PEM; the edge refuses to start without it (`INGRESS_PUBLIC_KEY`).
@@ -49,6 +50,16 @@ pub struct Config {
 }
 
 impl Config {
+    /// What this edge serves beyond HTTPS over TCP, read off what it binds: the QUIC door carries a front's tunnel, a
+    /// browser's HTTP/3 and its WebTransport session alike, and the process does not start when it cannot bind it.
+    pub fn transports(&self) -> Vec<Transport> {
+        if self.quic_port.is_some() {
+            Transport::ALL.to_vec()
+        } else {
+            Vec::new()
+        }
+    }
+
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             public_key: text("INGRESS_PUBLIC_KEY"),

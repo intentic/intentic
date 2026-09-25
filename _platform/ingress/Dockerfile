@@ -1,9 +1,11 @@
 # syntax=docker/dockerfile:1
 # The intentic ingress image (ghcr.io/intentic/ingress): the edge every sandbox is reached through, a Rust binary
 # compiled here in a BuildKit stage on the Debian release it then runs on, so it links the glibc it carries and no
-# job needs a toolchain. docker-release.sh passes the two sibling trees it compiles from as named contexts: `tunnel`
-# (_sandbox/front/crates/tunnel, the wire both ends of a tunnel speak) and `contract`
-# (_shared/sandbox-contract/src/protocol, whose lane table the binary embeds), so the context stays this directory.
+# job needs a toolchain. docker-release.sh passes the three sibling trees it compiles from as named contexts: `tunnel`
+# (_sandbox/front/crates/tunnel, the wire both ends of a tunnel speak), `browser-wire`
+# (_sandbox/front/crates/browser-wire, what a browser sees of the edge: the verdict header, the WebTransport path) and
+# `contract` (_shared/sandbox-contract/src/protocol, whose lane table the binary embeds), so the context stays this
+# directory.
 #
 # THERE IS NO BOOT CHAIN HERE: no migrations to apply, no schema to prove, no database to reach. The process holds
 # live connections and nothing else, so "started" and "ready" are the same moment, which is also what makes it safe
@@ -23,7 +25,9 @@
 #                           certificate is a PEM pair on disk (INGRESS_TLS_CERT_FILE, INGRESS_TLS_KEY_FILE) or the one
 #                           the platform issued (INGRESS_PLATFORM_TOKEN with PLATFORM_URL), reloaded in place.
 #   INGRESS_PROXY_PROTOCOL  the TLS port sits behind a TCP passthrough that names the browser in a PROXY header.
-#   INGRESS_QUIC_PORT       the UDP door, on the same certificate: a front's QUIC tunnel and a browser's HTTP/3.
+#   INGRESS_QUIC_PORT       the UDP door, on the same certificate: a front's QUIC tunnel and a browser's HTTP/3 and
+#                           WebTransport. Setting it is also what the edge DECLARES (x-intentic-transports on a tunnel's
+#                           answer, `transports` on /health): fronts and editors reach for UDP only where it is declared.
 #   INGRESS_QUIC_HOST       the address it binds, else INGRESS_HOST; on Fly, `fly-global-services`, the only one UDP
 #                           reaches.
 #   INGRESS_ALT_SVC         what TCP answers advertise HTTP/3 with, naming the PUBLIC UDP port: h3=":443"; ma=86400.
@@ -35,6 +39,7 @@
 # whole of why a compromised edge cannot make anything reachable.
 FROM rust:1.98.1-slim-trixie@sha256:f47a8de237dcbb0b0ce1099901e60a89728e3d51f24e664b40e947171538ade7 AS build
 COPY --from=tunnel . /src/_sandbox/front/crates/tunnel
+COPY --from=browser-wire . /src/_sandbox/front/crates/browser-wire
 COPY --from=contract tunnel-lanes.json ingress-contract.fixture.json /src/_shared/sandbox-contract/src/protocol/
 WORKDIR /src/_platform/ingress
 COPY . .

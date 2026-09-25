@@ -1,6 +1,8 @@
-//! The tunnel over QUIC where UDP reaches the edge, held beside the WebSocket lanes rather than instead of them: the edge
-//! sends every request down it while it lasts, and the lanes already standing carry everything the moment it goes. Each
-//! stream the edge opens is one HTTP/1.1 exchange, served like any request the tunnel brings.
+//! The tunnel over QUIC, dialled only once the edge has declared it serves one (its answer to a lane's upgrade names
+//! `quic`), and held beside the WebSocket lanes rather than instead of them: the edge sends every request down it while
+//! it lasts, and the lanes already standing carry everything the moment it goes. Each stream the edge opens is one
+//! HTTP/1.1 exchange, served like any request the tunnel brings. A network that carries no UDP to a declaring edge is
+//! retried on the lanes' own backoff, never probed for.
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -23,39 +25,47 @@ use crate::tunnel::{BACKOFF_CAP, BACKOFF_FLOOR, DISPLACED_WAIT, STABLE_AFTER, ji
 // A handshake or hello not answered by now is UDP that does not reach the edge.
 const HANDSHAKE_PATIENCE: Duration = Duration::from_secs(5);
 
-// Where UDP never reached the edge, or the edge refused the hello, trying again soon would only repeat it.
-const UNREACHABLE_WAIT: Duration = Duration::from_secs(300);
-
 enum Ended {
-    Unreachable(String),
     Displaced,
     Dropped(String),
     ClosedHere,
 }
 
-/// Dials and holds the QUIC tunnel for as long as `closed` stays empty.
+/// Dials and holds the QUIC tunnel whenever `declared` holds, for as long as `closed` stays empty.
 pub async fn run(
     front: Arc<Front>,
     config: TunnelConfig,
+    mut declared: watch::Receiver<bool>,
     mut closed: watch::Receiver<Option<Close>>,
 ) {
     let mut rung = BACKOFF_FLOOR;
+    // Said once per run of failures, so a network without UDP is one line, not one every backoff.
+    let mut told = false;
     loop {
+        tokio::select! {
+            waited = declared.wait_for(|declared| *declared) => if waited.is_err() {
+                return;
+            },
+            _ = tunnel::raised(&mut closed) => return,
+        }
         let started = Instant::now();
-        let wait = match dial_once(&front, &config, closed.clone()).await {
+        let ended = dial_once(&front, &config, closed.clone()).await;
+        if started.elapsed() >= STABLE_AFTER {
+            rung = BACKOFF_FLOOR;
+            told = false;
+        }
+        let wait = match ended {
             Ended::ClosedHere => return,
-            Ended::Unreachable(why) => {
-                tracing::info!(%why, "QUIC does not reach the edge; the WebSocket lanes carry the tunnel");
-                UNREACHABLE_WAIT
-            }
             Ended::Displaced => {
                 tracing::warn!("another tunnel took this sandbox's QUIC connection; standing back");
                 DISPLACED_WAIT
             }
             Ended::Dropped(why) => {
-                tracing::warn!(%why, "the QUIC tunnel dropped; the WebSocket lanes carry it meanwhile");
-                if started.elapsed() >= STABLE_AFTER {
-                    rung = BACKOFF_FLOOR;
+                if told {
+                    tracing::debug!(%why, "the QUIC tunnel is still not held");
+                } else {
+                    tracing::info!(%why, "the edge declares QUIC and it is not held; the WebSocket lanes carry the tunnel meanwhile");
+                    told = true;
                 }
                 let ceiling = (rung * 2).min(BACKOFF_CAP);
                 rung = ceiling;
@@ -75,14 +85,21 @@ async fn dial_once(
     mut closed: watch::Receiver<Option<Close>>,
 ) -> Ended {
     let Some((host, port)) = edge_address(&config.url) else {
-        return Ended::Unreachable(format!("{} names no host", config.url));
+        return Ended::Dropped(format!("{} names no host", config.url));
     };
+    // IPv4 first: an edge on Fly takes UDP on its dedicated IPv4 only, and a resolver ranks an AAAA answer ahead of it.
     let address = match tokio::net::lookup_host((host.as_str(), port))
         .await
-        .map(|mut found| found.next())
-    {
+        .map(|found| {
+            let found: Vec<SocketAddr> = found.collect();
+            found
+                .iter()
+                .find(|address| address.is_ipv4())
+                .or_else(|| found.first())
+                .copied()
+        }) {
         Ok(Some(address)) => address,
-        Ok(None) => return Ended::Unreachable(format!("{host} resolves to nothing")),
+        Ok(None) => return Ended::Dropped(format!("{host} resolves to nothing")),
         Err(error) => return Ended::Dropped(format!("{host} did not resolve: {error}")),
     };
     let bind: SocketAddr = if address.is_ipv6() {
@@ -99,10 +116,10 @@ async fn dial_once(
     let connection = match endpoint.connect_with(client_config(), address, &host) {
         Ok(connecting) => match tokio::time::timeout(HANDSHAKE_PATIENCE, connecting).await {
             Ok(Ok(connection)) => connection,
-            Ok(Err(error)) => return Ended::Unreachable(format!("the handshake failed: {error}")),
-            Err(_) => return Ended::Unreachable("no handshake answer".into()),
+            Ok(Err(error)) => return Ended::Dropped(format!("the handshake failed: {error}")),
+            Err(_) => return Ended::Dropped("no handshake answer".into()),
         },
-        Err(error) => return Ended::Unreachable(format!("could not dial: {error}")),
+        Err(error) => return Ended::Dropped(format!("could not dial: {error}")),
     };
     match tokio::time::timeout(
         HANDSHAKE_PATIENCE,
@@ -112,7 +129,7 @@ async fn dial_once(
     {
         Ok(Ok(Hello::Held)) => {}
         Ok(Ok(refusal)) => {
-            return Ended::Unreachable(format!("the edge refused the hello: {refusal:?}"));
+            return Ended::Dropped(format!("the edge refused the hello: {refusal:?}"));
         }
         Ok(Err(error)) => return Ended::Dropped(format!("the hello failed: {error}")),
         Err(_) => return Ended::Dropped("the hello went unanswered".into()),
@@ -129,7 +146,7 @@ async fn dial_once(
         error = connection.closed() => match error {
             ConnectionError::ApplicationClosed(close) if close.error_code == DISPLACED => Ended::Displaced,
             ConnectionError::ApplicationClosed(close) if close.error_code == REFUSED => {
-                Ended::Unreachable("the edge refused the tunnel".into())
+                Ended::Dropped("the edge refused the tunnel".into())
             }
             other => Ended::Dropped(other.to_string()),
         },

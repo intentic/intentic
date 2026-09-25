@@ -24,7 +24,8 @@ flowchart LR
 - **Live state.** Server state lives in vue-query, mirrored per user to IndexedDB so a reload paints the last-known
   workspace. One `/events` stream per active sandbox (`useSandboxLiveness.ts`) invalidates what each frame makes
   stale (`systemEvents.ts`). Terminals and the browser view use WebSockets opened with a short-lived ticket
-  (`wsTicket.ts`).
+  (`wsTicket.ts`); a terminal's is spoken on a stream of the edge's WebTransport session where the sandbox row says the
+  edge serves one (`features/terminal/channel/`).
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, docked
   chat and terminal) or `ShellMobile.vue` (tab bar, full-screen views).

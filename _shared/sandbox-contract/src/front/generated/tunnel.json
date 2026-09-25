@@ -1,0 +1,36 @@
+{
+  "close": {
+    "away": 1001,
+    "displaced": 4001,
+    "refused": 4003
+  },
+  "envelope": {
+    "headerPrefix": "x-ingress-h-",
+    "method": "x-ingress-method",
+    "path": "x-ingress-path"
+  },
+  "headers": {
+    "grant": "x-intentic-grant",
+    "lane": "x-intentic-lane",
+    "transports": "x-intentic-transports"
+  },
+  "lanes": [
+    "interactive",
+    "bulk"
+  ],
+  "path": "/tunnel/v1",
+  "quic": {
+    "alpn": "intentic-tunnel/1",
+    "hello": {
+      "gone": 2,
+      "held": 0,
+      "refused": 1
+    }
+  },
+  "transports": [
+    "quic",
+    "h3",
+    "webtransport"
+  ],
+  "upgrade": "websocket"
+}

@@ -1,0 +1,98 @@
+# THE EDGE TERMINATING TLS ITSELF, and the reason this is a second file rather than an edit to fly.toml: CI deploys
+# fly.toml on every push to main (deploy-ingress.sh), and this shape only works once its prerequisites exist — the
+# platform's wildcard certificate issued, INGRESS_TLS_PORT / INGRESS_PROXY_PROTOCOL / INGRESS_QUIC_* staged as secrets,
+# a dedicated IPv4 allocated for UDP, and every hosted sandbox dialling its tunnel. README.md ("Terminating TLS at the
+# edge") is the ordered runbook; its swap step is what makes this file fly.toml.
+#
+# EVERYTHING BUT THE SERVICES IS fly.toml's, and tests/fly_configs.rs holds them equal: the app, the image, the machine
+# shape. What changes is who holds the certificate. Under fly.toml Fly's HTTP proxy terminates TLS and carries no UDP,
+# so no QUIC tunnel, HTTP/3 or WebTransport can reach this process. Here Fly passes raw TCP on 443 through with a PROXY
+# v2 header naming the browser (src/proxy_protocol.rs), and UDP 443 straight to the QUIC door; the process presents the
+# certificate the platform issued (src/certificate.rs) on both, and declares on /health and on every tunnel's answer that
+# it serves QUIC, HTTP/3 and WebTransport, which is what fronts and editors go by.
+#
+# THERE IS NO REPLAY UNDER THIS FILE. A replay is a header Fly's HTTP proxy acts on, and no HTTP proxy is in front of
+# 443 any more, so a hosted sandbox is reached down the tunnel it dials like every other (src/edge.rs, `Via::Direct`),
+# and one that dials nothing answers the `no-tunnel` verdict. That is why every hosted machine must dial before this
+# file is deployed.
+#
+# The ports the process binds are set as secrets, not here: INGRESS_TLS_PORT=8443 and INGRESS_QUIC_PORT=8443 with
+# INGRESS_QUIC_HOST=fly-global-services, the only address Fly delivers UDP to. The plain listener (INGRESS_PORT, 8080)
+# stays up for the health check and the redirect on 80.
+
+app = "intentic-ingress"
+primary_region = "iad"
+
+[build]
+  # Built and pushed by the `docker:release` turbo task, never by Fly. See Dockerfile.
+  image = "ghcr.io/intentic/ingress:latest"
+
+# HTTPS and the tunnels' WSS: raw TCP, TLS terminated by the process.
+[[services]]
+  internal_port = 8443
+  protocol = "tcp"
+  # NEVER AUTO-STOP THIS, for fly.toml's reason: a stopped machine drops every tunnel it holds at once.
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 443
+    handlers = ["proxy_proto"]
+    proxy_proto_options = { version = "v2" }
+
+  [services.concurrency]
+    # Connections, not requests, for fly.toml's reason: most of what this edge carries never finishes.
+    type = "connections"
+    soft_limit = 5000
+    hard_limit = 10000
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "5s"
+
+# Plain HTTP only to be sent to HTTPS; Fly's proxy answers the redirect itself. The check reads /health off the plain
+# listener, which answers it with no tunnel, no platform call and no disk (src/edge.rs).
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.http_checks]]
+    path = "/health"
+    method = "GET"
+    protocol = "http"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "5s"
+
+# QUIC on the same public port: a front's tunnel (ALPN intentic-tunnel/1), a browser's HTTP/3 and WebTransport (h3).
+# Fly delivers UDP only to a dedicated IPv4 (`fly ips allocate-v4`) and only to fly-global-services.
+[[services]]
+  internal_port = 8443
+  protocol = "udp"
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 443
+
+[[vm]]
+  # The edge carries bytes and holds sockets; it parses nothing bigger than a header and stores nothing at
+  # all. Memory is the resource that matters, bounded per tunnel by what flow control lets it buffer (the h2
+  # windows, 1 MiB a stream and 2 MiB a session, and 256 KiB in the pump), a ceiling rather than an
+  # allocation; CPU is not, which is the opposite of the sandbox machines it serves.
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+# Nothing here publishes INGRESS_INTERNAL_PORT (8081), for fly.toml's reason: binding the private address is the peer
+# protocol's one lock.

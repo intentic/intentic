@@ -23,7 +23,7 @@ use crate::body;
 use crate::edge::{Edge, Via};
 
 /// Where a session is opened, on the address of the sandbox its streams reach.
-pub const PATH: &str = "/system/transport";
+pub const PATH: &str = browser_wire::WEBTRANSPORT_PATH;
 
 pub type Connection = h3::server::Connection<h3_quinn::Connection, Bytes>;
 pub type ConnectStream = RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>;
@@ -113,18 +113,4 @@ async fn exchange(
         .serve_connection(TokioIo::new(stream), service)
         .with_upgrades()
         .await;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_sessions_path_is_the_one_the_editor_opens() {
-        let fixture: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../_shared/sandbox-contract/src/front/terminal-frames.fixture.json"
-        ))
-        .unwrap();
-        assert_eq!(fixture["session"], PATH);
-    }
 }

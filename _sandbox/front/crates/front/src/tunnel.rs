@@ -1,6 +1,7 @@
 //! Reachability as outbound dials: present the grant, then serve HTTP/2 straight over each WebSocket, every stream
 //! routed like any listener's request. Two lanes, so a transfer never queues a keystroke behind it on one TCP
-//! connection; neither ever gives up, since the tunnel is this sandbox's reachability.
+//! connection; neither ever gives up, since the tunnel is this sandbox's reachability. The edge's answer to a lane's
+//! upgrade declares what else it serves, and only a declared QUIC door is dialled (`quic.rs`).
 
 use std::convert::Infallible;
 use std::os::fd::AsRawFd;
@@ -21,7 +22,7 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{Connector, MaybeTlsStream, connect_async_tls_with_config};
 use tunnel::{
     CONNECTION_WINDOW, Close, DISPLACED_CODE, Ended, GRANT_HEADER, LANE_HEADER, Lane, MAX_STREAMS,
-    STREAM_WINDOW,
+    STREAM_WINDOW, TRANSPORTS_HEADER, Transport,
 };
 
 use crate::link::Link;
@@ -88,6 +89,9 @@ impl Tunnel {
             return;
         };
         let (closing, closed) = watch::channel(None);
+        // Whether the edge's last answer to a lane declared its QUIC door; nothing does until a lane has been answered.
+        let (declaring, declared) = watch::channel(false);
+        let declaring = Arc::new(declaring);
         let mut dialling: Vec<JoinHandle<()>> = Lane::ALL
             .into_iter()
             .map(|lane| {
@@ -96,16 +100,20 @@ impl Tunnel {
                     self.link,
                     config.clone(),
                     lane,
-                    self.connected.clone(),
+                    Arced {
+                        connected: self.connected.clone(),
+                        declaring: declaring.clone(),
+                    },
                     closed.clone(),
                 ))
             })
             .collect();
-        // QUIC is TLS or nothing, so a plaintext edge is left to the lanes.
+        // QUIC is TLS or nothing, and shares the TLS door's host and port, so a plaintext edge is left to the lanes.
         if config.url.starts_with("wss://") {
             dialling.push(tokio::spawn(crate::quic::run(
                 self.front.clone(),
                 config.clone(),
+                declared,
                 closed.clone(),
             )));
         }
@@ -130,21 +138,27 @@ impl Tunnel {
     }
 }
 
+// What every lane shares: the state Node is told about, and where the edge's declaration goes.
+struct Arced {
+    connected: Arc<AtomicBool>,
+    declaring: Arc<watch::Sender<bool>>,
+}
+
 async fn run(
     front: Arc<Front>,
     link: &'static Link,
     config: TunnelConfig,
     lane: Lane,
-    connected: Arc<AtomicBool>,
+    shared: Arced,
     closed: watch::Receiver<Option<Close>>,
 ) {
     let reports = lane == Lane::Interactive;
     let mut rung = BACKOFF_FLOOR;
     loop {
         let started = Instant::now();
-        let ended = dial_once(&front, link, &config, lane, &connected, closed.clone()).await;
+        let ended = dial_once(&front, link, &config, lane, &shared, closed.clone()).await;
         if reports {
-            connected.store(false, Ordering::Relaxed);
+            shared.connected.store(false, Ordering::Relaxed);
             let _ = link.tell(&ToNode::Tunnel { connected: false });
         }
         if closed.borrow().is_some() {
@@ -182,7 +196,7 @@ async fn dial_once(
     link: &'static Link,
     config: &TunnelConfig,
     lane: Lane,
-    connected: &AtomicBool,
+    shared: &Arced,
     closed: watch::Receiver<Option<Close>>,
 ) -> Ended {
     let mut request = match config.url.as_str().into_client_request() {
@@ -196,7 +210,7 @@ async fn dial_once(
     request
         .headers_mut()
         .insert(LANE_HEADER, HeaderValue::from_static(lane.name()));
-    let (socket, _) = match connect_async_tls_with_config(
+    let (socket, answer) = match connect_async_tls_with_config(
         request,
         Some(tunnel::socket_config()),
         true,
@@ -207,6 +221,15 @@ async fn dial_once(
         Ok(opened) => opened,
         Err(error) => return Ended::Dropped(format!("could not dial the edge: {error}")),
     };
+    let declared = Transport::declared(
+        answer
+            .headers()
+            .get(TRANSPORTS_HEADER)
+            .and_then(|value| value.to_str().ok()),
+    );
+    shared
+        .declaring
+        .send_replace(declared.contains(&Transport::Quic));
     if lane == Lane::Interactive
         && let Some(tcp) = tcp_of(socket.get_ref())
     {
@@ -227,7 +250,7 @@ async fn dial_once(
             .serve_connection(TokioIo::new(session_side), service),
     );
     if lane == Lane::Interactive {
-        connected.store(true, Ordering::Relaxed);
+        shared.connected.store(true, Ordering::Relaxed);
         let _ = link.tell(&ToNode::Tunnel { connected: true });
     }
     tracing::info!(

@@ -5,9 +5,9 @@
 use http::header::{HeaderMap, HeaderName, HeaderValue};
 use http::{Method, Request};
 
-const METHOD_HEADER: &str = "x-ingress-method";
-const PATH_HEADER: &str = "x-ingress-path";
-const HEADER_PREFIX: &str = "x-ingress-h-";
+pub(crate) const METHOD_HEADER: &str = "x-ingress-method";
+pub(crate) const PATH_HEADER: &str = "x-ingress-path";
+pub(crate) const HEADER_PREFIX: &str = "x-ingress-h-";
 
 /// Never cross a hop: HTTP/1.1 connection management, which h2 refuses to carry at all, and `host`, which h2 carries as
 /// `:authority`.

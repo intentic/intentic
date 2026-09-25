@@ -1,33 +1,17 @@
-import { sleep } from "@intentic/base/async";
-import { WEBTRANSPORT_PATH } from "@intentic/sandbox-contract/terminal-frames";
-import { storeValue, storedValue } from "../../../lib/browserStorage";
+import { WEBTRANSPORT_PATH } from "@intentic/sandbox-contract/browser-wire";
 
-// One WebTransport session per sandbox origin, which the edge answers and whose streams never queue behind each other.
-// Only a session already ready on this connection is reused. Handshakes run beside the WebSocket opened now,
-// so changing to a network that carries no UDP never delays a terminal.
+// One WebTransport session per sandbox origin, opened only where the edge DECLARED it serves one (the sandbox row's
+// `edgeTransports`, which the platform reads off the edge's own /health), and used only once it is ready: until then,
+// and whenever it fails or closes, a terminal takes a WebSocket, so a network that carries no UDP never delays one.
+// Nothing about a failure is remembered: a session that closes is forgotten, and the next connect asks again, off the
+// terminal's path, on the channel's own backoff.
 
-// A QUIC handshake is one round trip; past this the network is not carrying it.
-const READY_WITHIN_MS = 1500;
-const REFUSED_FOR_MS = 10 * 60_000;
-const OUTCOME_KEY = `intentic.webTransport.`;
-const OK = `ok`;
-
-interface Opening {
+interface Held {
     readonly transport: WebTransport;
     ready: boolean;
 }
 
-const opening = new Map<string, Opening>();
-// Per origin: `ok` once a session opened there, else the epoch milliseconds one last failed; this page's own word, which
-// storage carries to the next.
-const outcomes = new Map<string, string>();
-
-const outcomeOf = (origin: string): string | undefined => outcomes.get(origin) ?? storedValue(`${OUTCOME_KEY}${origin}`);
-
-const remember = (origin: string, outcome: string): void => {
-    outcomes.set(origin, outcome);
-    storeValue(`${OUTCOME_KEY}${origin}`, outcome);
-};
+const sessions = new Map<string, Held>();
 
 const quietly = (transport: WebTransport): void => {
     try {
@@ -37,71 +21,43 @@ const quietly = (transport: WebTransport): void => {
     }
 };
 
-// Drops `transport` as `origin`'s session, so the next stream asks for another rather than failing on this one.
-export const forgetTransport = (origin: string, transport: WebTransport): void => {
-    if (opening.get(origin)?.transport === transport) {
-        opening.delete(origin);
-    }
-    quietly(transport);
-};
-
-// Sends `origin` to WebSockets for a while: its session never opened, or what answered a stream was not a terminal.
-export const refuseTransport = (origin: string, transport: WebTransport, now = Date.now()): void => {
-    remember(origin, String(now));
-    forgetTransport(origin, transport);
-};
-
-const open = (origin: string): Opening => {
+const open = (origin: string): Held => {
     const transport = new WebTransport(`${origin}${WEBTRANSPORT_PATH}`);
-    const held: Opening = { transport, ready: false };
-    opening.set(origin, held);
-    void Promise.race([
-        transport.ready.then(
-            () => true,
-            () => false,
-        ),
-        sleep(READY_WITHIN_MS).then(() => false),
-    ]).then((opened) => {
-        if (opening.get(origin) !== held) {
-            return;
-        }
-        if (opened) {
+    const held: Held = { transport, ready: false };
+    sessions.set(origin, held);
+    transport.ready.then(
+        () => {
             held.ready = true;
-            remember(origin, OK);
-        } else {
-            refuseTransport(origin, transport);
-        }
-    });
+        },
+        // silent-catch: a session that never opened is forgotten below, when it reports closed.
+        () => undefined,
+    );
     void transport.closed
         // silent-catch: however the session ended, clean or not, its holder forgets it the same way.
         .catch(() => undefined)
         .then(() => {
-            if (opening.get(origin) === held) {
-                opening.delete(origin);
+            if (sessions.get(origin) === held) {
+                sessions.delete(origin);
             }
         });
     return held;
 };
 
-// The session for `base`'s origin, or undefined, which means a WebSocket now: none can be had, or none has proven itself.
-export const transportFor = async (base: string, now = Date.now()): Promise<WebTransport | undefined> => {
-    if (globalThis.WebTransport === undefined || !base.startsWith(`https://`)) {
+// The ready session for `base`'s origin, or undefined, which means a WebSocket now: the edge declared none, this browser
+// has none, or the one asked for has not opened yet.
+export const transportFor = (base: string, declared: boolean): WebTransport | undefined => {
+    if (!declared || globalThis.WebTransport === undefined || !base.startsWith(`https://`)) {
         return undefined;
     }
     const origin = new URL(base).origin;
-    const outcome = outcomeOf(origin);
-    if (outcome !== undefined && outcome !== OK && now - Number(outcome) < REFUSED_FOR_MS) {
-        return undefined;
-    }
-    const held = opening.get(origin) ?? open(origin);
+    const held = sessions.get(origin) ?? open(origin);
     return held.ready ? held.transport : undefined;
 };
 
-// Test seam: what a reload forgets, every session and this page's outcomes; what storage kept stays.
+// Test seam: what a reload forgets, every session.
 export const resetTransports = (): void => {
-    for (const { transport } of opening.values()) {
+    for (const { transport } of sessions.values()) {
         quietly(transport);
     }
-    opening.clear();
-    outcomes.clear();
+    sessions.clear();
 };

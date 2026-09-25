@@ -40,7 +40,7 @@ const PREVIEW_ROUTE_ROOM: usize = 256;
 
 const ASK_PATIENCE: Duration = Duration::from_secs(5);
 
-const TERMINAL_UPGRADES: &str = "a terminal opens as a WebSocket or an intentic-terminal upgrade";
+const TERMINAL_UPGRADES: &str = "a terminal opens as a WebSocket";
 
 // Never cross a hop: HTTP/1.1 connection management, and h2 refuses to carry them at all.
 const HOP_BY_HOP: [&str; 9] = [
@@ -182,9 +182,9 @@ impl Front {
             return unavailable();
         }
         if is_front_route(&destination, inner.method(), inner.uri().path()) {
-            let framing = term::Framing::of(inner.headers());
+            let handshake = term::Handshake::of(inner.headers());
             let query = inner.uri().query().unwrap_or_default().to_owned();
-            return self.tunnel_terminal(stream, framing, query).await;
+            return self.tunnel_terminal(stream, handshake, query).await;
         }
         let (mut parts, empty) = inner.into_parts();
         outbound(&destination, &mut parts, true);
@@ -230,11 +230,11 @@ impl Front {
     }
 
     async fn terminal(self: &Arc<Self>, mut request: Request<Incoming>) -> Response<Body> {
-        let framing = match request.version() {
-            Version::HTTP_11 => term::Framing::of(request.headers()),
+        let handshake = match request.version() {
+            Version::HTTP_11 => term::Handshake::of(request.headers()),
             _ => None,
         };
-        let Some(framing) = framing else {
+        let Some(handshake) = handshake else {
             return plain(StatusCode::UPGRADE_REQUIRED, TERMINAL_UPGRADES);
         };
         let query = request.uri().query().unwrap_or_default().to_owned();
@@ -244,11 +244,11 @@ impl Front {
         };
         let upgrade = hyper::upgrade::on(&mut request);
         let terminals = self.terminals.clone();
-        let switching = framing.switching();
+        let switching = handshake.switching();
         tokio::spawn(async move {
             if let Ok(upgraded) = upgrade.await {
                 terminals
-                    .serve(TokioIo::new(upgraded), &framing, plan, member, &query)
+                    .serve(TokioIo::new(upgraded), plan, member, &query)
                     .await;
             }
         });
@@ -259,10 +259,10 @@ impl Front {
     async fn tunnel_terminal(
         self: &Arc<Self>,
         stream: OnUpgrade,
-        framing: Option<term::Framing>,
+        handshake: Option<term::Handshake>,
         query: String,
     ) -> Response<Body> {
-        let Some(framing) = framing else {
+        let Some(handshake) = handshake else {
             return bad_request(TERMINAL_UPGRADES);
         };
         let (plan, member) = match self.terminal_plan(&query).await {
@@ -275,10 +275,8 @@ impl Front {
                 return;
             };
             let mut stream = TokioIo::new(stream);
-            if stream.write_all(&framing.switching_head()).await.is_ok() {
-                terminals
-                    .serve(stream, &framing, plan, member, &query)
-                    .await;
+            if stream.write_all(&handshake.switching_head()).await.is_ok() {
+                terminals.serve(stream, plan, member, &query).await;
             }
         });
         Response::new(body::empty())

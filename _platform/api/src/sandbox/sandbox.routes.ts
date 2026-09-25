@@ -10,6 +10,7 @@ import { clientIp } from "../client-ip.js";
 import { decryptSecret } from "../crypto.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
+import { edgeTransports } from "./edge-transports.js";
 import { getMachine, isFlyGone, stopMachine } from "./hosted/fly/fly.js";
 import {
     forgetHostedMachine,
@@ -216,6 +217,7 @@ const toSummary = (
     context: OrpcContext,
 ) => {
     const zone = intenticZoneOf(context);
+    const providedAddress = sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`);
     return {
         id: sandbox.id,
         name: sandbox.name,
@@ -233,9 +235,11 @@ const toSummary = (
         hosted: sandbox.hosted === null || sandbox.hosted === undefined ? null : { region: sandbox.hosted.region, warm: sandbox.hosted.warm },
         token: connectTokenFor(context.config, sandbox.token, role),
         role,
-        providedAddress: sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`),
+        providedAddress,
         // Derived from the loopback zone, never `daemonUrl`: they are two different zones now.
         localHostname: loopbackHostname(context.config, sandbox.token),
+        // The edge's own declaration, and only for an address it is in front of; `list` reads it fresh before shaping.
+        ...(providedAddress && edgeTransports.held().length > 0 ? { edgeTransports: [...edgeTransports.held()] } : {}),
     };
 };
 
@@ -253,6 +257,8 @@ export const sandboxRoutes = {
                 include: { sandbox: { include: { hosted: true } } },
                 orderBy: { sandbox: { createdAt: `asc` } },
             }),
+            // Beside the rows, never after them: what the edge declares, which each row the edge fronts carries.
+            ingressEnabled(context.config) ? edgeTransports.read(context.config) : undefined,
         ]);
         return {
             sandboxes: [

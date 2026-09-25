@@ -1,47 +1,24 @@
-import { type TerminalFrame, encodeTerminalFrame, terminalFrameReader } from "@intentic/sandbox-contract/terminal-frames";
-import { resetTransports, transportFor } from "./webTransport";
-import { type ChannelEvents, streamChannel } from "./terminalChannel";
+import { StreamSocket } from "./streamSocket";
+import { type ChannelEvents, socketChannel } from "./terminalChannel";
 
-// The front's end of one stream: what the channel wrote, and where the front's answer goes.
+// The editor's end of a terminal on a WebTransport stream: a WebSocket spoken by hand, read through the same channel a
+// browser WebSocket is. The far end here plays the front, which answers such a stream as any WebSocket over TCP.
+
 interface FarEnd {
     readonly heard: ReadableStreamDefaultReader<Uint8Array>;
     readonly answer: WritableStreamDefaultWriter<Uint8Array>;
 }
 
-interface Fake {
-    readonly transport: WebTransport;
-    readonly nextStream: () => Promise<FarEnd>;
-}
-
-// A browser's WebTransport stand-in: each stream the channel opens hands its far end to the test.
-const fakeTransport = (ready: Promise<void> = Promise.resolve()): Fake => {
-    const waiting: ((far: FarEnd) => void)[] = [];
-    const opened: FarEnd[] = [];
-    const transport = {
-        ready,
-        closed: new Promise<WebTransportCloseInfo>(() => undefined),
-        close: () => undefined,
-        createBidirectionalStream: async () => {
-            const toFront = new TransformStream<Uint8Array, Uint8Array>();
-            const toBrowser = new TransformStream<Uint8Array, Uint8Array>();
-            const far = { heard: toFront.readable.getReader(), answer: toBrowser.writable.getWriter() };
-            const wake = waiting.shift();
-            if (wake === undefined) {
-                opened.push(far);
-            } else {
-                wake(far);
-            }
-            return { readable: toBrowser.readable, writable: toFront.writable };
-        },
-    } as unknown as WebTransport;
-    const nextStream = (): Promise<FarEnd> => {
-        const far = opened.shift();
-        return far === undefined ? new Promise((resolve) => waiting.push(resolve)) : Promise.resolve(far);
-    };
-    return { transport, nextStream };
+// One stream, as `createBidirectionalStream()` resolves it, and the front's end of it.
+const streamPair = (): { opening: Promise<WebTransportBidirectionalStream>; far: FarEnd } => {
+    const toFront = new TransformStream<Uint8Array, Uint8Array>();
+    const toBrowser = new TransformStream<Uint8Array, Uint8Array>();
+    const stream = { readable: toBrowser.readable, writable: toFront.writable } as unknown as WebTransportBidirectionalStream;
+    return { opening: Promise.resolve(stream), far: { heard: toFront.readable.getReader(), answer: toBrowser.writable.getWriter() } };
 };
 
 const utf8 = new TextEncoder();
+const text = new TextDecoder();
 
 const joined = (...parts: Uint8Array[]): Uint8Array => {
     const out = new Uint8Array(parts.reduce((length, part) => length + part.length, 0));
@@ -53,34 +30,78 @@ const joined = (...parts: Uint8Array[]): Uint8Array => {
     return out;
 };
 
-// The request head the channel wrote, then a reader of the frames after it.
-const upgradeOf = async (far: FarEnd): Promise<{ head: string; frames: () => Promise<TerminalFrame | undefined> }> => {
-    let bytes: Uint8Array = new Uint8Array(0);
-    let text = ``;
-    while (!text.includes(`\r\n\r\n`)) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a stream is read in order by definition
+// A frame as the front writes it: unmasked.
+const serverFrame = (opcode: number, payload: Uint8Array, final = true): Uint8Array => {
+    const extended = payload.length < 126 ? 0 : 2;
+    const head = new Uint8Array(2 + extended);
+    head[0] = (final ? 0x80 : 0) | opcode;
+    head[1] = extended === 0 ? payload.length : 126;
+    if (extended === 2) {
+        new DataView(head.buffer).setUint16(2, payload.length);
+    }
+    return joined(head, payload);
+};
+
+const closeFrame = (code: number, reason: string): Uint8Array => {
+    const payload = joined(new Uint8Array(2), utf8.encode(reason));
+    new DataView(payload.buffer).setUint16(0, code);
+    return serverFrame(8, payload);
+};
+
+interface ClientFrame {
+    readonly opcode: number;
+    readonly masked: boolean;
+    readonly payload: string;
+}
+
+// What the channel wrote: its request head, then a reader of the frames after it, unmasked.
+const upgradeOf = async (far: FarEnd): Promise<{ head: string; frames: () => Promise<ClientFrame | undefined> }> => {
+    let pending: Uint8Array = new Uint8Array(0);
+    const more = async (): Promise<boolean> => {
         const { value, done } = await far.heard.read();
         if (done) {
-            throw new Error(`the stream ended before its head: ${text}`);
+            return false;
         }
-        bytes = joined(bytes, value);
-        text = new TextDecoder().decode(bytes);
+        pending = joined(pending, value);
+        return true;
+    };
+    while (!text.decode(pending).includes(`\r\n\r\n`)) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- a stream is read in order by definition
+        if (!(await more())) {
+            throw new Error(`the stream ended before its head`);
+        }
     }
-    const end = text.indexOf(`\r\n\r\n`) + 4;
-    const read = terminalFrameReader(1024 * 1024);
-    const pending = [...read(bytes.subarray(end))];
-    const frames = async (): Promise<TerminalFrame | undefined> => {
-        while (pending.length === 0) {
+    const end = text.decode(pending).indexOf(`\r\n\r\n`) + 4;
+    const head = text.decode(pending.subarray(0, end));
+    pending = pending.subarray(end);
+    const frames = async (): Promise<ClientFrame | undefined> => {
+        for (;;) {
+            if (pending.length >= 2) {
+                const length = (pending[1] ?? 0) & 0x7f;
+                const masked = ((pending[1] ?? 0) & 0x80) !== 0;
+                if (length < 126 && pending.length >= 2 + (masked ? 4 : 0) + length) {
+                    const mask = masked ? pending.subarray(2, 6) : new Uint8Array(4);
+                    const body = pending.subarray(masked ? 6 : 2, (masked ? 6 : 2) + length).map((byte, at) => byte ^ (mask[at & 3] ?? 0));
+                    const frame = { opcode: (pending[0] ?? 0) & 0x0f, masked, payload: text.decode(body) };
+                    pending = pending.subarray((masked ? 6 : 2) + length);
+                    return frame;
+                }
+            }
             // oxlint-disable-next-line eslint/no-await-in-loop -- a stream is read in order by definition
-            const { value, done } = await far.heard.read();
-            if (done) {
+            if (!(await more())) {
                 return undefined;
             }
-            pending.push(...read(value));
         }
-        return pending.shift();
     };
-    return { head: text.slice(0, end), frames };
+    return { head, frames };
+};
+
+// The 101 the front answers `head` with, its accept derived from the key as RFC 6455 says.
+const switching = async (head: string, accept?: string): Promise<Uint8Array> => {
+    const key = /sec-websocket-key: (\S+)/.exec(head)?.[1] ?? ``;
+    const digest = await crypto.subtle.digest(`SHA-1`, utf8.encode(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`));
+    const derived = btoa(String.fromCharCode(...new Uint8Array(digest)));
+    return utf8.encode(`HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: ${accept ?? derived}\r\n\r\n`);
 };
 
 const recorded = (): { log: string[]; events: ChannelEvents; closed: Promise<void> } => {
@@ -92,7 +113,7 @@ const recorded = (): { log: string[]; events: ChannelEvents; closed: Promise<voi
     const events: ChannelEvents = {
         open: () => log.push(`open`),
         heard: () => undefined,
-        pane: (bytes) => log.push(`pane ${new TextDecoder().decode(bytes)}`),
+        pane: (bytes) => log.push(`pane ${text.decode(bytes)}`),
         message: (message) => log.push(`message ${message.type}`),
         closed: (code, reason) => {
             log.push(`closed ${code} ${reason}`);
@@ -112,38 +133,29 @@ const until = async (condition: () => boolean): Promise<void> => {
     }
 };
 
-const BASE = `https://sandbox-abcdef012345.sbx.test`;
-const REQUEST = { origin: BASE, host: `sandbox-abcdef012345.sbx.test`, path: `/system/terminal`, query: `ticket=t&session=main` };
-const SWITCHING = utf8.encode(`HTTP/1.1 101 Switching Protocols\r\nupgrade: intentic-terminal\r\nconnection: Upgrade\r\n\r\n`);
+const REQUEST = { host: `sandbox-abcdef012345.sbx.test`, path: `/system/terminal`, query: `ticket=t&session=main` };
 
-describe(`streamChannel`, () => {
-    it(`opens as an intentic-terminal upgrade, then carries frames both ways until the front closes it`, async () => {
-        const fake = fakeTransport();
+describe(`a terminal on a WebTransport stream`, () => {
+    it(`opens as a WebSocket, then carries the front's messages and its own, masked, until the front closes it`, async () => {
+        const { opening, far } = streamPair();
         const { log, events, closed } = recorded();
-        const channel = streamChannel(fake.transport, REQUEST, events);
-        const far = await fake.nextStream();
+        const channel = socketChannel(new StreamSocket(opening, REQUEST), events);
         const { head, frames } = await upgradeOf(far);
-        expect(head).toBe(
-            `GET /system/terminal?ticket=t&session=main HTTP/1.1\r\nhost: sandbox-abcdef012345.sbx.test\r\nconnection: Upgrade\r\nupgrade: intentic-terminal\r\n\r\n`,
+        expect(head).toMatch(
+            /^GET \/system\/terminal\?ticket=t&session=main HTTP\/1\.1\r\nhost: sandbox-abcdef012345\.sbx\.test\r\nconnection: Upgrade\r\nupgrade: websocket\r\nsec-websocket-version: 13\r\nsec-websocket-key: [A-Za-z0-9+/]{22}==\r\n\r\n$/,
         );
 
-        // The 101 and the first frames in one chunk, as a packet may carry them.
-        await far.answer.write(
-            joined(
-                SWITCHING,
-                encodeTerminalFrame({ kind: `pane`, bytes: utf8.encode(`hi`) }),
-                encodeTerminalFrame({ kind: `message`, text: `{"type":"pong"}` }),
-            ),
-        );
+        // The 101 and the first messages in one chunk, as a packet may carry them.
+        await far.answer.write(joined(await switching(head), serverFrame(2, utf8.encode(`hi`)), serverFrame(1, utf8.encode(`{"type":"pong"}`))));
         await until(() => log.length === 3);
         expect(log).toEqual([`open`, `pane hi`, `message pong`]);
 
         channel.send({ type: `resize`, cols: 80, rows: 24 });
-        expect(await frames()).toEqual({ kind: `message`, text: `{"type":"resize","cols":80,"rows":24}` });
-        await far.answer.write(encodeTerminalFrame({ kind: `ping`, bytes: Uint8Array.of(7) }));
-        expect(await frames()).toEqual({ kind: `pong`, bytes: Uint8Array.of(7) });
+        expect(await frames()).toEqual({ opcode: 1, masked: true, payload: `{"type":"resize","cols":80,"rows":24}` });
+        await far.answer.write(serverFrame(9, utf8.encode(`7`)));
+        expect(await frames()).toEqual({ opcode: 10, masked: true, payload: `7` });
 
-        await far.answer.write(encodeTerminalFrame({ kind: `close`, code: 1008, reason: `unauthorized` }));
+        await far.answer.write(closeFrame(1008, `unauthorized`));
         await closed;
         expect(log.at(-1)).toBe(`closed 1008 unauthorized`);
         channel.close();
@@ -151,70 +163,84 @@ describe(`streamChannel`, () => {
         expect(log.filter((line) => line.startsWith(`closed`))).toHaveLength(1);
     });
 
+    it(`joins a message the front sent in fragments, and one past 125 bytes`, async () => {
+        const { opening, far } = streamPair();
+        const { log, events } = recorded();
+        socketChannel(new StreamSocket(opening, REQUEST), events);
+        const { head } = await upgradeOf(far);
+        const long = `x`.repeat(300);
+        await far.answer.write(
+            joined(await switching(head), serverFrame(2, utf8.encode(`he`), false), serverFrame(0, utf8.encode(`llo`)), serverFrame(2, utf8.encode(long))),
+        );
+        await until(() => log.length === 3);
+        expect(log).toEqual([`open`, `pane hello`, `pane ${long}`]);
+    });
+
     it(`is heard closing only after close() returns, and says so on the stream`, async () => {
-        const fake = fakeTransport();
+        const { opening, far } = streamPair();
         const { log, events, closed } = recorded();
-        const channel = streamChannel(fake.transport, REQUEST, events);
-        const far = await fake.nextStream();
-        const { frames } = await upgradeOf(far);
-        await far.answer.write(SWITCHING);
+        const channel = socketChannel(new StreamSocket(opening, REQUEST), events);
+        const { head, frames } = await upgradeOf(far);
+        await far.answer.write(await switching(head));
         await until(() => log.length === 1);
 
         channel.close();
         expect(log).toEqual([`open`]);
         await closed;
         expect(log).toEqual([`open`, `closed 1005 `]);
-        expect(await frames()).toEqual({ kind: `close`, reason: `` });
+        expect(await frames()).toEqual({ opcode: 8, masked: true, payload: `` });
         expect(await frames()).toBeUndefined();
     });
-});
 
-describe(`a refused stream`, () => {
-    const original = globalThis.WebTransport;
-    let fake: Fake;
-
-    beforeEach(() => {
-        resetTransports();
-        localStorage.clear();
-        fake = fakeTransport();
-        // A constructor, as `new WebTransport(url)` needs, handing out the test's stand-in.
-        globalThis.WebTransport = function WebTransport() {
-            return fake.transport;
-        } as unknown as typeof globalThis.WebTransport;
+    it(`closes as a dropped socket on any answer but a WebSocket's, the edge's verdict and a restarting daemon alike`, async () => {
+        for (const [answer, reason] of [
+            [`HTTP/1.1 502 Bad Gateway\r\nx-intentic-edge: no-tunnel\r\ncontent-length: 0\r\n\r\n`, `HTTP 502`],
+            [`HTTP/1.1 503 Service Unavailable\r\nretry-after: 1\r\ncontent-length: 0\r\n\r\n`, `HTTP 503`],
+        ] as const) {
+            const { opening, far } = streamPair();
+            const { log, events, closed } = recorded();
+            socketChannel(new StreamSocket(opening, REQUEST), events);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one refusal after another, each on its own stream
+            await upgradeOf(far);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            await far.answer.write(utf8.encode(answer));
+            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            await closed;
+            expect(log).toEqual([`closed 1006 ${reason}`]);
+        }
     });
 
-    afterEach(() => {
-        resetTransports();
-        globalThis.WebTransport = original;
+    it(`refuses a 101 that did not answer its key, and a frame the front never sends`, async () => {
+        const unanswered = streamPair();
+        const refused = recorded();
+        socketChannel(new StreamSocket(unanswered.opening, REQUEST), refused.events);
+        await upgradeOf(unanswered.far);
+        await unanswered.far.answer.write(await switching(``, `c29tZXRoaW5nIGVsc2U=`));
+        await refused.closed;
+        expect(refused.log).toEqual([`closed 1006 not a WebSocket`]);
+
+        const masking = streamPair();
+        const masked = recorded();
+        socketChannel(new StreamSocket(masking.opening, REQUEST), masked.events);
+        const { head } = await upgradeOf(masking.far);
+        await masking.far.answer.write(joined(await switching(head), Uint8Array.of(0x82, 0x81, 1, 2, 3, 4, 5)));
+        await masked.closed;
+        expect(masked.log).toEqual([`open`, `closed 1002 a server frame is never masked`]);
     });
 
-    // The origin's session tried and opened, as a page holds it once a terminal has asked there.
-    const proven = async (): Promise<WebTransport | undefined> => {
-        await transportFor(BASE);
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        return transportFor(BASE);
-    };
+    it(`closes as dropped when the stream could not be opened or ends unsaid`, async () => {
+        const failed = recorded();
+        socketChannel(new StreamSocket(Promise.reject(new Error(`the session is gone`)), REQUEST), failed.events);
+        await failed.closed;
+        expect(failed.log).toEqual([`closed 1006 `]);
 
-    it(`sends its origin to WebSockets when what answered is not a terminal`, async () => {
-        expect(await proven()).toBe(fake.transport);
-        const { log, events, closed } = recorded();
-        streamChannel(fake.transport, REQUEST, events);
-        const far = await fake.nextStream();
-        await upgradeOf(far);
-        await far.answer.write(utf8.encode(`HTTP/1.1 426 Upgrade Required\r\ncontent-length: 0\r\n\r\n`));
-        await closed;
-        expect(log).toEqual([`closed 1006 HTTP 426`]);
-        expect(await transportFor(BASE)).toBeUndefined();
-    });
-
-    it(`keeps the session when the edge says the sandbox is away`, async () => {
-        expect(await proven()).toBe(fake.transport);
-        const { events, closed } = recorded();
-        streamChannel(fake.transport, REQUEST, events);
-        const far = await fake.nextStream();
-        await upgradeOf(far);
-        await far.answer.write(utf8.encode(`HTTP/1.1 502 Bad Gateway\r\nx-intentic-edge: no-tunnel\r\ncontent-length: 0\r\n\r\n`));
-        await closed;
-        expect(await transportFor(BASE)).toBe(fake.transport);
+        const { opening, far } = streamPair();
+        const ended = recorded();
+        socketChannel(new StreamSocket(opening, REQUEST), ended.events);
+        const { head } = await upgradeOf(far);
+        await far.answer.write(await switching(head));
+        await far.answer.close();
+        await ended.closed;
+        expect(ended.log).toEqual([`open`, `closed 1006 `]);
     });
 });

@@ -90,7 +90,7 @@ const LOOSE = {
     ic: /^(_sandbox\/ic\/|_devices\/win-launcher\/|_site\/site\/public\/scripts\/)/,
     front: /^(_sandbox\/front\/|_platform\/ingress\/|_shared\/sandbox-contract\/src\/(front\/|ids\/hostnames\.fixture\.json|protocol\/(ingress-contract\.(fixture\.json|ts)|tunnel-lanes\.json))|\.github\/workflows\/ci\.yml)/,
     images: /^(_sandbox\/sandbox\/(Dockerfile|packs\/)|_sandbox\/front\/|_tools\/scripts\/image\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
-    platform: /^(_tools\/scripts\/platform\/|_sandbox\/front\/crates\/tunnel\/|_shared\/sandbox-contract\/src\/protocol\/tunnel-lanes\.json|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
+    platform: /^(_tools\/scripts\/platform\/|_sandbox\/front\/crates\/(tunnel|browser-wire)\/|_shared\/sandbox-contract\/src\/protocol\/tunnel-lanes\.json|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     "perf-instr": /^\.github\/workflows\/ci\.yml/,
     "perf-browser": /^\.github\/workflows\/ci\.yml/,
     "ci-base-changed": /^_tools\/ci-base\//,

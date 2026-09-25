@@ -4,6 +4,6 @@
     "private": true,
     "description": "The edge every sandbox is reached through: a Rust crate; this manifest only gives turbo its release task",
     "scripts": {
-        "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh ingress --build-context tunnel=../../_sandbox/front/crates/tunnel --build-context contract=../../_shared/sandbox-contract/src/protocol"
+        "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh ingress --build-context tunnel=../../_sandbox/front/crates/tunnel --build-context browser-wire=../../_sandbox/front/crates/browser-wire --build-context contract=../../_shared/sandbox-contract/src/protocol"
     }
 }

@@ -31,7 +31,14 @@ flowchart LR
 - `./documents` is the vocabulary stored files evolve by, shared by the daemon's stores and an extension's own files
   (`sandboxDocument`): guarded, pure conversions of raw JSON that settle on their own output, and the passthrough that
   keeps what a build does not know on its writes.
-- `contract.lock.json` is every exported schema as canonical JSON Schema. Rewrite it by hand with
+- The wire no oRPC route carries is defined by the Rust crates that speak it (`_sandbox/front/crates`): `tunnel` (the
+  `/tunnel/v1` door, its headers, envelope, close codes, ALPN and the transports an edge declares), `browser-wire`
+  (what a browser sees: the terminal socket and its messages, the WebTransport path, the edge's verdict) and
+  `front-wire` (the front's control socket with Node). Their tests write TypeScript and a JSON manifest each into
+  `src/front/generated/`; `src/front/browser-wire.ts` is the browser's entry to them, and `wire-manifests.test.ts` holds
+  every value TypeScript restates to those manifests.
+- `contract.lock.json` is every exported schema as canonical JSON Schema, plus those three manifests under `wire:`
+  names, so a changed tunnel header or a gone control message is a shrink like any other. Rewrite it by hand with
   `pnpm --filter @intentic/sandbox-contract lock`. After a land that changed the contract, the land check's
   `pnpm verify` rewrites it in the main tree, where it waits as an uncommitted change. `src/state/contract-lock.test.ts`
   fails while the lock and the schemas disagree. `_tools/checks/contract-shrink.mjs` reports a push that shrinks it

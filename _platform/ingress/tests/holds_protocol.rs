@@ -439,6 +439,7 @@ async fn machine(name: &str, keys: &Keys) -> Machine {
         instance: name.into(),
         hosted_app_prefix: None,
         build: String::new(),
+        transports: Vec::new(),
     });
     let serving = edge.clone();
     let public = serve::serve_on(public, move |request, remote| {

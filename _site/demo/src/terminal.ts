@@ -1,4 +1,4 @@
-import type { TerminalServerMessage } from "@intentic/sandbox-contract/front-wire";
+import type { TerminalServerMessage } from "@intentic/sandbox-contract/browser-wire";
 import type { DemoSession, DemoSocket } from "./transport";
 
 /* THE TERMINAL, recorded. */

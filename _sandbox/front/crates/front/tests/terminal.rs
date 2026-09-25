@@ -11,7 +11,6 @@ use std::time::Duration;
 
 use front_wire::{Endpoint, FromNode, ListenConfig, PreviewRoute, TerminalPlan};
 use futures_util::{SinkExt, StreamExt};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
@@ -256,73 +255,6 @@ async fn heard_for(socket: &mut Socket, window: Duration) -> Vec<u8> {
     bytes
 }
 
-// A terminal opened as the edge relays a WebTransport stream: an `intentic-terminal` upgrade, then frames.
-async fn open_frames(port: u16, query: &str) -> TcpStream {
-    let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-    stream
-        .write_all(
-            format!(
-                "GET /system/terminal?{query} HTTP/1.1\r\nhost: 127.0.0.1:{port}\r\nconnection: Upgrade\r\nupgrade: intentic-terminal\r\n\r\n"
-            )
-            .as_bytes(),
-        )
-        .await
-        .unwrap();
-    let mut head = Vec::new();
-    let mut byte = [0_u8; 1];
-    while !head.ends_with(b"\r\n\r\n") {
-        stream.read_exact(&mut byte).await.unwrap();
-        head.push(byte[0]);
-    }
-    let head = String::from_utf8(head).unwrap();
-    assert!(
-        head.starts_with("HTTP/1.1 101 Switching Protocols\r\n"),
-        "{head}"
-    );
-    assert!(head.contains("upgrade: intentic-terminal\r\n"), "{head}");
-    stream
-}
-
-fn frame(kind: u8, payload: &[u8]) -> Vec<u8> {
-    let mut framed = vec![kind];
-    framed.extend_from_slice(&u32::try_from(payload.len()).unwrap().to_be_bytes());
-    framed.extend_from_slice(payload);
-    framed
-}
-
-// The next frame's kind and payload, or none once the stream has ended.
-async fn read_frame(stream: &mut TcpStream) -> Option<(u8, Vec<u8>)> {
-    let mut header = [0_u8; 5];
-    tokio::time::timeout(PATIENCE, stream.read_exact(&mut header))
-        .await
-        .expect("a frame within the patience")
-        .ok()?;
-    let mut payload =
-        vec![0; u32::from_be_bytes([header[1], header[2], header[3], header[4]]) as usize];
-    stream.read_exact(&mut payload).await.ok()?;
-    Some((header[0], payload))
-}
-
-// Pane bytes and messages until `done` holds of them.
-async fn frames_until(
-    stream: &mut TcpStream,
-    done: impl Fn(&str, &[String]) -> bool,
-) -> (String, Vec<String>) {
-    let mut pane = Vec::new();
-    let mut messages = Vec::new();
-    while !done(&String::from_utf8_lossy(&pane), &messages) {
-        match read_frame(stream).await {
-            Some((0, bytes)) => pane.extend_from_slice(&bytes),
-            Some((1, text)) => messages.push(String::from_utf8(text).unwrap()),
-            other => panic!(
-                "the terminal ended with {other:?}; the pane said {:?}",
-                String::from_utf8_lossy(&pane)
-            ),
-        }
-    }
-    (String::from_utf8_lossy(&pane).into_owned(), messages)
-}
-
 async fn type_in(socket: &mut Socket, keys: &str) {
     let input = serde_json::json!({ "type": "input", "data": keys }).to_string();
     socket.send(Message::text(input)).await.unwrap();
@@ -348,41 +280,6 @@ async fn an_attach_replays_the_pane_then_streams_its_bytes_intact() {
         "{:?}",
         output.text()
     );
-}
-
-#[tokio::test]
-async fn a_terminal_opened_as_frames_carries_what_its_websocket_would() {
-    let server = Server::start("frames").await;
-    server.session("frames", 80, 24).await;
-    let (_harness, daemon) = started("term-frames", &server).await;
-    let mut stream = open_frames(daemon, "plan=tmux&session=frames&cols=80&rows=24").await;
-    frames_until(&mut stream, |pane, _| pane.contains("\x1bc")).await;
-
-    let input = serde_json::json!({ "type": "input", "data": "printf 'h\\303\\251llo \\033[31mred\\033[0m\\n'\r" });
-    stream
-        .write_all(&frame(1, input.to_string().as_bytes()))
-        .await
-        .unwrap();
-    let (pane, _) = frames_until(&mut stream, |pane, _| pane.contains("\x1b[31mred")).await;
-    assert!(pane.contains("h\u{e9}llo \x1b[31mred\x1b[0m"), "{pane:?}");
-
-    stream
-        .write_all(&frame(1, br#"{"type":"ping"}"#))
-        .await
-        .unwrap();
-    let (_, messages) = frames_until(&mut stream, |_, messages| !messages.is_empty()).await;
-    assert_eq!(messages, [r#"{"type":"pong"}"#]);
-}
-
-#[tokio::test]
-async fn a_refusal_over_frames_is_a_close_frame_with_nodes_code_and_words() {
-    let server = Server::start("frames-refused").await;
-    let (_harness, daemon) = started("term-frames-refused", &server).await;
-    let mut refused = open_frames(daemon, "plan=refuse").await;
-    let mut close = 1008_u16.to_be_bytes().to_vec();
-    close.extend_from_slice(b"unauthorized");
-    assert_eq!(read_frame(&mut refused).await, Some((2, close)));
-    assert_eq!(read_frame(&mut refused).await, None);
 }
 
 #[tokio::test]

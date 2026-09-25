@@ -1,7 +1,10 @@
 // contract.lock.json is every exported schema serialized to canonical JSON Schema, so git can flag a wire-contract
 // change. contract-shrink demands a `!` commit with a Breaking-Note when a schema, field or type shrinks; additions
-// pass freely. Derived from the package's exports, not a hand-kept list.
+// pass freely. Derived from the package's exports, not a hand-kept list, plus the wire no oRPC route carries: the
+// manifests the Rust crates that define it write beside their TypeScript (the tunnel, what a browser sees of the front
+// and the edge, and the front's control socket with Node), under `wire:` names no export can take.
 
+import { readFileSync } from "node:fs";
 import { z } from "zod";
 import * as contract from "../index.js";
 
@@ -21,6 +24,9 @@ const sorted = (value: unknown): unknown => {
     return value;
 };
 
+// Each written by its crate's own test: `tunnel`, `browser-wire` and `front-wire` under _sandbox/front/crates.
+const WIRE_MANIFESTS = ["browser-wire", "front-wire", "tunnel"] as const;
+
 export const currentLock = (): Record<string, unknown> => {
     const lock: Record<string, unknown> = {};
     for (const name of Object.keys(contract).sort()) {
@@ -37,6 +43,11 @@ export const currentLock = (): Record<string, unknown> => {
             // Holds a place even when unserializable: appearing, disappearing or becoming serializable is still a diff.
             lock[name] = "<unserializable>";
         }
+    }
+    for (const manifest of WIRE_MANIFESTS) {
+        // Read from src/ whether this runs from src/ or dist/: the manifests are data `cargo test` writes, never compiled.
+        const text = readFileSync(new URL(`../../src/front/generated/${manifest}.json`, import.meta.url), "utf8");
+        lock[`wire:${manifest}`] = sorted(JSON.parse(text));
     }
     return lock;
 };

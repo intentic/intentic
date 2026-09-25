@@ -172,15 +172,15 @@
                 "default": "./dist/front/generated/wire.js"
             }
         },
-        "./terminal-frames": {
-            "types": "./dist/front/terminal-frames.d.ts",
+        "./browser-wire": {
+            "types": "./dist/front/browser-wire.d.ts",
             "import": {
-                "@intentic/src": "./src/front/terminal-frames.ts",
-                "default": "./dist/front/terminal-frames.js"
+                "@intentic/src": "./src/front/browser-wire.ts",
+                "default": "./dist/front/browser-wire.js"
             },
             "require": {
-                "@intentic/src": "./src/front/terminal-frames.ts",
-                "default": "./dist/front/terminal-frames.js"
+                "@intentic/src": "./src/front/browser-wire.ts",
+                "default": "./dist/front/browser-wire.js"
             }
         },
         "./share-paths": {

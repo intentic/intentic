@@ -283,7 +283,8 @@ async fn the_edge_reaches_node_and_upgrades_through_the_tunnel() {
         (CloseCode::Policy, "no terminals here")
     );
 
-    // A WebTransport stream's terminal arrives as the `intentic-terminal` upgrade and is answered in frames.
+    // The length-framed upgrade an earlier editor spoke on a WebTransport stream is refused as no terminal at all, with no
+    // edge verdict, which sends that editor to its WebSocket; today's editor speaks a WebSocket on the stream itself.
     let connect = Request::builder()
         .method(Method::CONNECT)
         .uri(format!("{own}:443"))
@@ -294,21 +295,7 @@ async fn the_edge_reaches_node_and_upgrades_through_the_tunnel() {
         .header("x-ingress-h-upgrade", "intentic-terminal")
         .body(Empty::<Bytes>::new())
         .unwrap();
-    let mut response = sender.send_request(connect).await.unwrap();
-    assert_eq!(response.status(), 200);
-    let mut stream = TokioIo::new(hyper::upgrade::on(&mut response).await.unwrap());
-    let mut head = Vec::new();
-    while !head.ends_with(b"\r\n\r\n") {
-        stream.read_exact(&mut byte).await.unwrap();
-        head.push(byte[0]);
-    }
-    assert_eq!(
-        String::from_utf8(head).unwrap(),
-        "HTTP/1.1 101 Switching Protocols\r\nupgrade: intentic-terminal\r\nconnection: Upgrade\r\n\r\n"
-    );
-    let mut closed = Vec::new();
-    stream.read_to_end(&mut closed).await.unwrap();
-    let mut expected = vec![2, 0, 0, 0, 19, 0x03, 0xf0];
-    expected.extend_from_slice(b"no terminals here");
-    assert_eq!(closed, expected);
+    let response = sender.send_request(connect).await.unwrap();
+    assert_eq!(response.status(), 400);
+    assert!(response.headers().get("x-intentic-edge").is_none());
 }

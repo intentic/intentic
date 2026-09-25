@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { shrunkSurfaces } from "@intentic/constants/contract-shrink";
 import { packageRoot } from "@intentic/constants/node";
 import { currentLock } from "./contract-lock.js";
 
@@ -18,3 +19,14 @@ test(
     },
     { timeout: 30_000 },
 );
+
+// The wire outside oRPC is pinned the same way: a changed tunnel path, a gone control message or a renamed verdict is a
+// shrink the push gate and the landing draft both flag, where before nothing could see it.
+test("the lock flags a change to the wire no oRPC route carries", () => {
+    const base = currentLock() as Record<string, Record<string, unknown>>;
+    const moved = structuredClone(base);
+    (moved["wire:tunnel"] as { path: string }).path = "/tunnel/v2";
+    delete (moved["wire:browser-wire"] as { webTransport?: unknown }).webTransport;
+    expect(shrunkSurfaces(base, moved)).toEqual(["wire:browser-wire.webTransport", "wire:tunnel.path"]);
+    expect(shrunkSurfaces(moved, base)).toEqual(["wire:tunnel.path"]);
+});

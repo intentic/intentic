@@ -21,6 +21,13 @@ pub const GRANT_HEADER: &str = "x-intentic-grant";
 /// Names a tunnel's lane on its upgrade; a tunnel naming none is the interactive one.
 pub const LANE_HEADER: &str = "x-intentic-lane";
 
+/// What the edge declares it serves besides the WebSocket lanes, on its answer to a tunnel's upgrade and on `/health`: the
+/// tokens of [`Transport`], comma-separated. An edge that names none serves none, which is every edge older than this.
+pub const TRANSPORTS_HEADER: &str = "x-intentic-transports";
+
+/// The upgrade a tunnel opens with, and the one a terminal opens with wherever it rides.
+pub const WEBSOCKET_UPGRADE: &str = "websocket";
+
 /// The close code of a tunnel a newer one for the same sandbox and lane displaced.
 pub const DISPLACED_CODE: u16 = 4001;
 
@@ -73,6 +80,52 @@ impl Lane {
     }
 }
 
+/// What an edge may serve beyond HTTPS over TCP, each only because its own configuration binds it: a front dials QUIC
+/// and an editor opens WebTransport only where the edge declared it, never to find out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Transport {
+    /// The tunnel over QUIC (`quic::ALPN`), beside the WebSocket lanes.
+    Quic,
+    /// A browser's HTTP/3 on the same UDP port.
+    H3,
+    /// A browser's WebTransport session at a sandbox's `/system/transport`, which the editor's terminals ride.
+    WebTransport,
+}
+
+impl Transport {
+    pub const ALL: [Self; 3] = [Self::Quic, Self::H3, Self::WebTransport];
+
+    pub const fn token(self) -> &'static str {
+        match self {
+            Self::Quic => "quic",
+            Self::H3 => "h3",
+            Self::WebTransport => "webtransport",
+        }
+    }
+
+    /// The declaration's header value.
+    pub fn declare(served: &[Self]) -> String {
+        served
+            .iter()
+            .map(|transport| transport.token())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// What a declaration names; a token this build does not know is skipped, and no header is nothing served.
+    pub fn declared(header: Option<&str>) -> Vec<Self> {
+        header
+            .unwrap_or("")
+            .split(',')
+            .filter_map(|token| {
+                Self::ALL
+                    .into_iter()
+                    .find(|transport| token.trim().eq_ignore_ascii_case(transport.token()))
+            })
+            .collect()
+    }
+}
+
 /// The leftmost DNS label of a Host, port stripped; empty when there is none.
 pub fn label_of(host: &str) -> &str {
     host.split(':')
@@ -98,33 +151,66 @@ pub fn host_owner_id(host: &str) -> Option<&str> {
 mod tests {
     use super::*;
 
-    const CONTRACT: &str =
-        include_str!("../../../../../_shared/sandbox-contract/src/protocol/ingress-contract.ts");
-    const LANES: &str =
-        include_str!("../../../../../_shared/sandbox-contract/src/protocol/tunnel-lanes.ts");
+    // THE WIRE THIS CRATE DEFINES, written where the contract's lock reads it (`contract-lock.ts`), as ts-rs writes the
+    // front's types: the TypeScript side reads these values instead of restating them, and a value that changes or goes
+    // away is a removal the lock flags like any contract removal.
+    #[test]
+    fn the_wire_is_written_where_the_contract_locks_it() {
+        let manifest = serde_json::json!({
+            "path": TUNNEL_PATH,
+            "upgrade": WEBSOCKET_UPGRADE,
+            "headers": {
+                "grant": GRANT_HEADER,
+                "lane": LANE_HEADER,
+                "transports": TRANSPORTS_HEADER,
+            },
+            "lanes": Lane::ALL.map(Lane::name),
+            "transports": Transport::ALL.map(Transport::token),
+            "close": {
+                "displaced": DISPLACED_CODE,
+                "away": quic::AWAY.into_inner(),
+                "refused": quic::REFUSED.into_inner(),
+            },
+            "envelope": {
+                "method": envelope::METHOD_HEADER,
+                "path": envelope::PATH_HEADER,
+                "headerPrefix": envelope::HEADER_PREFIX,
+            },
+            "quic": {
+                "alpn": std::str::from_utf8(quic::ALPN).unwrap(),
+                "hello": {
+                    "held": quic::Hello::Held as u8,
+                    "refused": quic::Hello::Refused as u8,
+                    "gone": quic::Hello::Gone as u8,
+                },
+            },
+        });
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../../_shared/sandbox-contract/src/front/generated/tunnel.json"
+        );
+        let written = format!("{}\n", serde_json::to_string_pretty(&manifest).unwrap());
+        if std::fs::read_to_string(path).ok().as_deref() != Some(written.as_str()) {
+            std::fs::write(path, written).unwrap();
+        }
+    }
 
     #[test]
-    fn every_constant_the_contract_names_is_the_contracts() {
-        let pinned = [
-            (
-                CONTRACT,
-                format!("export const INGRESS_TUNNEL_PATH = \"{TUNNEL_PATH}\";"),
-            ),
-            (
-                CONTRACT,
-                format!("export const INGRESS_GRANT_HEADER = \"{GRANT_HEADER}\";"),
-            ),
-            (
-                LANES,
-                format!("export const INGRESS_LANE_HEADER = \"{LANE_HEADER}\";"),
-            ),
-        ];
-        for (source, line) in pinned {
-            assert!(
-                source.contains(&line),
-                "the contract no longer says `{line}`: bring the tunnel crate in step"
-            );
-        }
+    fn a_declaration_reads_back_what_it_names_and_nothing_it_does_not_know() {
+        assert_eq!(
+            Transport::declare(&Transport::ALL),
+            "quic, h3, webtransport"
+        );
+        assert_eq!(
+            Transport::declared(Some("quic, h3, webtransport")),
+            Transport::ALL
+        );
+        assert_eq!(
+            Transport::declared(Some("WebTransport,carrier-pigeon")),
+            [Transport::WebTransport]
+        );
+        assert_eq!(Transport::declared(Some("")), []);
+        assert_eq!(Transport::declared(None), []);
     }
 
     #[derive(serde::Deserialize)]

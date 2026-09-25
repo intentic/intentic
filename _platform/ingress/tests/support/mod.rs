@@ -90,6 +90,7 @@ pub fn lone(keys: &Keys) -> EdgeOptions {
         instance: "solo".into(),
         hosted_app_prefix: None,
         build: String::new(),
+        transports: Vec::new(),
     }
 }
 
@@ -122,9 +123,13 @@ pub struct Door {
     pub trust: rustls::pki_types::CertificateDer<'static>,
 }
 
-// An edge with both doors: the WebSocket one and the QUIC one, on a certificate for the zone.
+// An edge with both doors: the WebSocket one and the QUIC one, on a certificate for the zone, declaring the second.
 pub async fn door(keys: &Keys) -> Door {
-    let running = start(lone(keys)).await;
+    let running = start(EdgeOptions {
+        transports: tunnel::Transport::ALL.to_vec(),
+        ..lone(keys)
+    })
+    .await;
     let issued =
         rcgen::generate_simple_self_signed(vec![format!("*.{ZONE}"), ZONE.to_owned()]).unwrap();
     let slot = Arc::new(intentic_ingress::tls::CertificateSlot::default());

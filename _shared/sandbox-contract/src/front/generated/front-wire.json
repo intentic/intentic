@@ -1,0 +1,670 @@
+{
+  "frame": {
+    "lengthBytes": 4,
+    "maxBytes": 67108864
+  },
+  "fromNode": {
+    "$defs": {
+      "Answer": {
+        "oneOf": [
+          {
+            "properties": {
+              "answer": {
+                "const": "preview",
+                "type": "string"
+              },
+              "route": {
+                "$ref": "#/$defs/PreviewRoute"
+              }
+            },
+            "required": [
+              "answer",
+              "route"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "answer": {
+                "const": "terminal",
+                "type": "string"
+              },
+              "member": {
+                "description": "The member whose ticket opened it, lowercased; absent when the daemon runs without auth.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "plan": {
+                "$ref": "#/$defs/TerminalPlan"
+              }
+            },
+            "required": [
+              "answer",
+              "plan"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Certificate": {
+        "description": "A PEM certificate chain and its PEM private key.",
+        "properties": {
+          "certificate": {
+            "type": "string"
+          },
+          "privateKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "certificate",
+          "privateKey"
+        ],
+        "type": "object"
+      },
+      "Endpoint": {
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "host",
+          "port"
+        ],
+        "type": "object"
+      },
+      "ListenConfig": {
+        "description": "Every port the front binds, as Node's config names them; an absent one is not bound.",
+        "properties": {
+          "daemon": {
+            "$ref": "#/$defs/Endpoint"
+          },
+          "frameAncestors": {
+            "description": "Origins that may frame a preview besides the preview itself.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "loopback": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Endpoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Endpoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "previewProbePath": {
+            "description": "A preview path Node answers whatever its host resolves to.",
+            "type": "string"
+          },
+          "sandboxId": {
+            "description": "The 12-hex id every public hostname ends in; without one, a label's prefix alone classifies it.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "daemon",
+          "frameAncestors",
+          "previewProbePath"
+        ],
+        "type": "object"
+      },
+      "PreviewRoute": {
+        "description": "Where a preview host's requests go, as Node resolved it.",
+        "oneOf": [
+          {
+            "properties": {
+              "to": {
+                "const": "upstream",
+                "type": "string"
+              },
+              "upstream": {
+                "$ref": "#/$defs/Upstream"
+              }
+            },
+            "required": [
+              "to",
+              "upstream"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Node answers the request itself: a refusal page or the outbox.",
+            "properties": {
+              "to": {
+                "const": "node",
+                "type": "string"
+              }
+            },
+            "required": [
+              "to"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Scheme": {
+        "enum": [
+          "http",
+          "https"
+        ],
+        "type": "string"
+      },
+      "TerminalPlan": {
+        "description": "What a terminal socket opens onto, as Node decided from its ticket, session name and working directory.",
+        "oneOf": [
+          {
+            "description": "The tmux session `session`; `argv` follows `tmux -C` to attach when no control client holds it yet.",
+            "properties": {
+              "argv": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "plan": {
+                "const": "tmux",
+                "type": "string"
+              },
+              "session": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "plan",
+              "session",
+              "argv"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A service's log, followed from its first line.",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "plan": {
+                "const": "tail",
+                "type": "string"
+              }
+            },
+            "required": [
+              "plan",
+              "path"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Opens only to end at once: the session names nothing there is to show.",
+            "properties": {
+              "code": {
+                "format": "int32",
+                "type": "integer"
+              },
+              "plan": {
+                "const": "exit",
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "plan",
+              "code",
+              "reason"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Closed with this WebSocket close code before anything is attached.",
+            "properties": {
+              "code": {
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "plan": {
+                "const": "refused",
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "plan",
+              "code",
+              "reason"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "TunnelConfig": {
+        "description": "The ingress tunnel's door and the reachability grant it presents there.",
+        "properties": {
+          "grant": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "grant"
+        ],
+        "type": "object"
+      },
+      "Upstream": {
+        "description": "A local upstream a preview host relays to.",
+        "properties": {
+          "frameable": {
+            "description": "Framed by the editor: `frame-ancestors` is set and `x-frame-options` dropped.",
+            "type": "boolean"
+          },
+          "host": {
+            "type": "string"
+          },
+          "localhost": {
+            "description": "Rewrites Host and Origin to `localhost:<port>`, for an app that never agreed to its preview name.",
+            "type": "boolean"
+          },
+          "port": {
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scheme": {
+            "$ref": "#/$defs/Scheme"
+          }
+        },
+        "required": [
+          "host",
+          "port",
+          "scheme",
+          "localhost",
+          "frameable"
+        ],
+        "type": "object"
+      },
+      "WatchedCheckout": {
+        "description": "A checkout whose changes the front counts: its working tree, the git dir holding its index and HEAD, and the common\ndir holding refs and excludes (the git dir itself for a repository's main checkout).",
+        "properties": {
+          "commonDir": {
+            "type": "string"
+          },
+          "dir": {
+            "type": "string"
+          },
+          "gitDir": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dir",
+          "gitDir",
+          "commonDir"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Everything Node sends the front.",
+    "oneOf": [
+      {
+        "description": "Node's HTTP socket is accepting; once per Node process.",
+        "properties": {
+          "build": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "hello",
+            "type": "string"
+          },
+          "pid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "build",
+          "pid"
+        ],
+        "type": "object"
+      },
+      {
+        "properties": {
+          "config": {
+            "$ref": "#/$defs/ListenConfig"
+          },
+          "kind": {
+            "const": "listen",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "config"
+        ],
+        "type": "object"
+      },
+      {
+        "properties": {
+          "certificate": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Certificate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "const": "certificate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "properties": {
+          "kind": {
+            "const": "tunnel",
+            "type": "string"
+          },
+          "tunnel": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/TunnelConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "properties": {
+          "answer": {
+            "$ref": "#/$defs/Answer"
+          },
+          "id": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "answer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "answer"
+        ],
+        "type": "object"
+      },
+      {
+        "properties": {
+          "id": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "refused",
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "message"
+        ],
+        "type": "object"
+      },
+      {
+        "description": "Closes every terminal the member opened; naming none closes every terminal a member opened.",
+        "properties": {
+          "kind": {
+            "const": "revoke",
+            "type": "string"
+          },
+          "member": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "description": "Counts this checkout's changes from now on; the same checkout again changes nothing.",
+        "properties": {
+          "checkout": {
+            "$ref": "#/$defs/WatchedCheckout"
+          },
+          "kind": {
+            "const": "watch",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "checkout"
+        ],
+        "type": "object"
+      },
+      {
+        "description": "Stops counting the checkout at `dir`.",
+        "properties": {
+          "dir": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "unwatch",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "dir"
+        ],
+        "type": "object"
+      },
+      {
+        "description": "Asks where each checkout's count stands, once every write that finished before this was sent is counted.",
+        "properties": {
+          "dirs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "sync",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "dirs"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "FromNode"
+  },
+  "headers": [
+    "x-intentic-preview",
+    "x-intentic-preview-unreachable"
+  ],
+  "toNode": {
+    "$defs": {
+      "Question": {
+        "description": "A question the front asks Node; the answer carries the same id.",
+        "oneOf": [
+          {
+            "properties": {
+              "host": {
+                "type": "string"
+              },
+              "question": {
+                "const": "preview",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "host"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A terminal socket asking to open, its query string as the browser sent it.",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "question": {
+                "const": "terminal",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "query"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "description": "Everything the front sends Node.",
+    "oneOf": [
+      {
+        "properties": {
+          "id": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "ask",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/$defs/Question"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "question"
+        ],
+        "type": "object"
+      },
+      {
+        "properties": {
+          "connected": {
+            "type": "boolean"
+          },
+          "kind": {
+            "const": "tunnel",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "connected"
+        ],
+        "type": "object"
+      },
+      {
+        "description": "Each asked checkout's generation, in the order asked: a number that moves whenever anything a `git status`\nthere reads may have changed, and null for a checkout the front is not counting.",
+        "properties": {
+          "generations": {
+            "items": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "synced",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "generations"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "ToNode"
+  }
+}

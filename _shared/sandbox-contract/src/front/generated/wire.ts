@@ -54,25 +54,9 @@ export type Question = { "question": "preview", host: string, } | { "question": 
 export type Scheme = "http" | "https";
 
 /**
- * What the browser sends on a terminal socket, each a JSON text frame.
- */
-export type TerminalClientMessage = { "type": "input", data: string, } | { "type": "resize", cols: number, rows: number, } | { "type": "ping" };
-
-/**
  * What a terminal socket opens onto, as Node decided from its ticket, session name and working directory.
  */
 export type TerminalPlan = { "plan": "tmux", session: string, argv: Array<string>, } | { "plan": "tail", path: string, } | { "plan": "exit", code: number, reason: string, } | { "plan": "refused", code: number, reason: string, };
-
-/**
- * What a terminal socket sends as JSON text; the pane's own bytes travel as binary frames.
- */
-export type TerminalServerMessage = { "type": "exit", code: number, reason?: string, } | { "type": "pong" };
-
-/**
- * The Upgrade a terminal opens with where no WebSocket rides the stream, a WebTransport one: its messages then travel
- * as frames (`FrameKind`). Exported as a literal type, as `FrontHeader` is.
- */
-export type TerminalUpgrade = "intentic-terminal";
 
 /**
  * Everything the front sends Node.

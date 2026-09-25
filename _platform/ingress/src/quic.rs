@@ -12,7 +12,7 @@ use crate::edge::Edge;
 use crate::tls::CertificateSlot;
 
 /// A browser's HTTP/3, beside the fronts' tunnel on the one endpoint.
-const H3: &[u8] = b"h3";
+const H3: &[u8] = browser_wire::H3_ALPN.as_bytes();
 
 pub fn endpoint(address: SocketAddr, slot: Arc<CertificateSlot>) -> anyhow::Result<Endpoint> {
     let mut tls = rustls::ServerConfig::builder_with_provider(Arc::new(

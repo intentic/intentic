@@ -1,5 +1,6 @@
-//! The control lane between intentic-front and the Node daemon: length-prefixed JSON frames over one Unix socket.
-//! These types are the lane's only definition; `cargo test -p front-wire` writes their TypeScript into the contract.
+//! The control lane between intentic-front and the Node daemon: length-prefixed JSON frames over one Unix socket. Nothing
+//! here is ever seen by a browser (that is `browser-wire`). These types are the lane's only definition; `cargo test -p
+//! front-wire` writes their TypeScript, and the manifest the contract's lock pins, into the contract.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -23,6 +24,7 @@ pub fn frame<T: Serialize>(message: &T) -> serde_json::Result<Vec<u8>> {
 /// Request headers only the front sets on what it forwards to Node; it strips them from everything arriving outside.
 /// Exported as a literal type, so a Node constant naming one that drifts from this spelling fails to compile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[ts(export, export_to = "wire.ts")]
 pub enum FrontHeader {
     /// A preview request Node answers itself: a refusal page, the probe, or the outbox.
@@ -45,6 +47,7 @@ impl FrontHeader {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[ts(export, export_to = "wire.ts")]
 pub struct Endpoint {
     pub host: String,
@@ -53,6 +56,7 @@ pub struct Endpoint {
 
 /// Every port the front binds, as Node's config names them; an absent one is not bound.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub struct ListenConfig {
@@ -75,6 +79,7 @@ pub struct ListenConfig {
 
 /// A PEM certificate chain and its PEM private key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub struct Certificate {
@@ -84,6 +89,7 @@ pub struct Certificate {
 
 /// The ingress tunnel's door and the reachability grant it presents there.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[ts(export, export_to = "wire.ts")]
 pub struct TunnelConfig {
     pub url: String,
@@ -91,6 +97,7 @@ pub struct TunnelConfig {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum Scheme {
@@ -100,6 +107,7 @@ pub enum Scheme {
 
 /// A local upstream a preview host relays to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[ts(export, export_to = "wire.ts")]
 pub struct Upstream {
     pub host: String,
@@ -113,6 +121,7 @@ pub struct Upstream {
 
 /// Where a preview host's requests go, as Node resolved it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(tag = "to", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum PreviewRoute {
@@ -125,6 +134,7 @@ pub enum PreviewRoute {
 
 /// What a terminal socket opens onto, as Node decided from its ticket, session name and working directory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(tag = "plan", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum TerminalPlan {
@@ -140,6 +150,7 @@ pub enum TerminalPlan {
 
 /// A question the front asks Node; the answer carries the same id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(tag = "question", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum Question {
@@ -153,6 +164,7 @@ pub enum Question {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(tag = "answer", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum Answer {
@@ -168,89 +180,10 @@ pub enum Answer {
     },
 }
 
-/// What the browser sends on a terminal socket, each a JSON text frame.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(export, export_to = "wire.ts")]
-pub enum TerminalClientMessage {
-    /// Keystrokes, a paste or a mouse report, written into the pane as their UTF-8 bytes.
-    Input {
-        data: String,
-    },
-    Resize {
-        cols: u16,
-        rows: u16,
-    },
-    /// The browser's keepalive against an idle tunnel; answered `pong`.
-    Ping,
-}
-
-/// What a terminal socket sends as JSON text; the pane's own bytes travel as binary frames.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(export, export_to = "wire.ts")]
-pub enum TerminalServerMessage {
-    /// The session is over, and the browser must not reconnect; `reason` is tmux's own words when it had any.
-    Exit {
-        code: i32,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        reason: Option<String>,
-    },
-    Pong,
-}
-
-/// The Upgrade a terminal opens with where no WebSocket rides the stream, a WebTransport one: its messages then travel
-/// as frames (`FrameKind`). Exported as a literal type, as `FrontHeader` is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "wire.ts")]
-pub enum TerminalUpgrade {
-    #[serde(rename = "intentic-terminal")]
-    Frames,
-}
-
-impl TerminalUpgrade {
-    pub const fn token(self) -> &'static str {
-        match self {
-            Self::Frames => "intentic-terminal",
-        }
-    }
-}
-
-/// A terminal frame is its kind byte, a big-endian u32 length, then that many bytes.
-pub const TERMINAL_FRAME_HEADER: usize = 5;
-
-/// What a terminal frame carries: one WebSocket message's worth, so a socket reads the same whichever way it came.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum FrameKind {
-    /// The pane's own bytes.
-    Pane = 0,
-    /// A JSON `TerminalClientMessage` or `TerminalServerMessage`.
-    Message = 1,
-    /// A big-endian u16 close code and its UTF-8 reason, or nothing when there is no code.
-    Close = 2,
-    /// The front's liveness probe, which the browser answers with a pong carrying the same bytes.
-    Ping = 3,
-    Pong = 4,
-}
-
-impl FrameKind {
-    pub const fn of(byte: u8) -> Option<Self> {
-        match byte {
-            0 => Some(Self::Pane),
-            1 => Some(Self::Message),
-            2 => Some(Self::Close),
-            3 => Some(Self::Ping),
-            4 => Some(Self::Pong),
-            _ => None,
-        }
-    }
-}
-
 /// A checkout whose changes the front counts: its working tree, the git dir holding its index and HEAD, and the common
 /// dir holding refs and excludes (the git dir itself for a repository's main checkout).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub struct WatchedCheckout {
@@ -261,6 +194,7 @@ pub struct WatchedCheckout {
 
 /// Everything Node sends the front.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum FromNode {
@@ -313,6 +247,7 @@ pub enum FromNode {
 
 /// Everything the front sends Node.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum ToNode {
@@ -336,6 +271,37 @@ pub enum ToNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A type's JSON Schema without the dialect banner, which every one repeats.
+    fn schema<T: schemars::JsonSchema>() -> serde_json::Value {
+        let mut schema = serde_json::to_value(schemars::schema_for!(T)).unwrap();
+        schema.as_object_mut().unwrap().remove("$schema");
+        schema
+    }
+
+    // THE LANE AS THE CONTRACT'S LOCK PINS IT (`contract-lock.ts`), written beside the TypeScript ts-rs writes: a message,
+    // field or header that changes or goes away is a removal the lock flags, so an older Node and a newer front, which
+    // meet on every sandbox mid-upgrade, cannot silently disagree.
+    #[test]
+    fn the_lane_is_written_where_the_contract_locks_it() {
+        let manifest = serde_json::json!({
+            "frame": {
+                "lengthBytes": LENGTH_BYTES,
+                "maxBytes": MAX_FRAME_BYTES,
+            },
+            "headers": FrontHeader::ALL.map(FrontHeader::name),
+            "fromNode": schema::<FromNode>(),
+            "toNode": schema::<ToNode>(),
+        });
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../../_shared/sandbox-contract/src/front/generated/front-wire.json"
+        );
+        let written = format!("{}\n", serde_json::to_string_pretty(&manifest).unwrap());
+        if std::fs::read_to_string(path).ok().as_deref() != Some(written.as_str()) {
+            std::fs::write(path, written).unwrap();
+        }
+    }
 
     #[test]
     fn a_frame_is_its_length_then_its_json() {
@@ -368,20 +334,6 @@ mod tests {
     }
 
     #[test]
-    fn the_terminal_upgrade_is_its_serialized_spelling() {
-        assert_eq!(
-            serde_json::to_string(&TerminalUpgrade::Frames).unwrap(),
-            format!("\"{}\"", TerminalUpgrade::Frames.token())
-        );
-        for byte in 0..=u8::MAX {
-            assert_eq!(
-                FrameKind::of(byte).map(|kind| kind as u8),
-                (byte <= 4).then_some(byte)
-            );
-        }
-    }
-
-    #[test]
     fn a_header_name_is_its_serialized_spelling() {
         for header in FrontHeader::ALL {
             assert_eq!(
@@ -397,33 +349,6 @@ mod tests {
         assert_eq!(json, r#"{"kind":"certificate"}"#);
         let back: FromNode = serde_json::from_str(r#"{"kind":"tunnel"}"#).unwrap();
         assert_eq!(back, FromNode::Tunnel { tunnel: None });
-    }
-
-    #[test]
-    fn a_terminal_speaks_the_json_the_editor_sends_and_reads() {
-        let resize: TerminalClientMessage =
-            serde_json::from_str(r#"{"type":"resize","cols":120,"rows":40}"#).unwrap();
-        assert_eq!(
-            resize,
-            TerminalClientMessage::Resize {
-                cols: 120,
-                rows: 40
-            }
-        );
-        let ping: TerminalClientMessage = serde_json::from_str(r#"{"type":"ping"}"#).unwrap();
-        assert_eq!(ping, TerminalClientMessage::Ping);
-        assert_eq!(
-            serde_json::to_string(&TerminalServerMessage::Exit {
-                code: 0,
-                reason: None
-            })
-            .unwrap(),
-            r#"{"type":"exit","code":0}"#
-        );
-        assert_eq!(
-            serde_json::to_string(&TerminalServerMessage::Pong).unwrap(),
-            r#"{"type":"pong"}"#
-        );
     }
 
     #[test]

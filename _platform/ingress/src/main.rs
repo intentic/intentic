@@ -153,6 +153,7 @@ async fn run(config: Config, key: GrantKey) -> anyhow::Result<()> {
         hosted_app_prefix: (!config.hosted_app_prefix.is_empty())
             .then(|| config.hosted_app_prefix.clone()),
         build: config.build.clone(),
+        transports: config.transports(),
     });
     let alt_svc = match config.alt_svc.as_str() {
         "" => None,

@@ -3,7 +3,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import { WebglAddon } from "@xterm/addon-webgl";
-import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract/front-wire";
+import { TERMINAL_PATH, type TerminalClientMessage, type TerminalServerMessage } from "@intentic/sandbox-contract/browser-wire";
 import { clipboardOf, parseLoopbackLink, useDevice } from "@intentic/ui";
 import { boundCommand } from "../../shell/commands/useCommands";
 import { isApplePlatform } from "../../shell/commands/keybindings";
@@ -11,8 +11,10 @@ import { toScreenPx } from "../../shell/window/uiScale";
 import { acquireStreamSlot } from "../sandbox/client/streamBudget";
 import { transportFor } from "./channel/webTransport";
 import { useEndpoint } from "../sandbox/secrets/useEndpoint";
+import { useSandbox } from "../sandbox/client/useSandbox";
 import { socketAddress } from "../sandbox/session/wsTicket";
-import { type ChannelEvents, type TerminalChannel, streamChannel, webSocketChannel } from "./channel/terminalChannel";
+import { type ChannelEvents, type TerminalChannel, socketChannel } from "./channel/terminalChannel";
+import { StreamSocket } from "./channel/streamSocket";
 import { editKeyBytes } from "./terminalEditKeys";
 import { registerFilePathLinks } from "./terminalFileLinks";
 import { registerUrlLinks } from "./terminalUrlLinks";
@@ -20,8 +22,8 @@ import { terminalPaint } from "./terminalTheme";
 import { openLoopbackPreview } from "./portPreview";
 import "@xterm/xterm/css/xterm.css";
 
-// One xterm bound to one tmux session over /system/terminal: a WebTransport stream where the editor reaches the edge, else
-// a WebSocket. Raw frames from tmux control-mode give xterm real scrollback and search locally; every attach replays the
+// One xterm bound to one tmux session over /system/terminal, always a WebSocket: spoken on a stream of the edge's
+// WebTransport session where the edge declares one and it is ready, else the browser's own. Raw frames from tmux control-mode give xterm real scrollback and search locally; every attach replays the
 // pane's history and screen. Each session owns a persistent host, reconnects with backoff, and pings to catch a
 // half-open channel.
 
@@ -35,9 +37,8 @@ const STABLE_MS = 5000;
 // Silence this long past a healthy ping cadence means half-open; close() reconnects normally.
 const STALE_MS = 90_000;
 
-const TERMINAL_PATH = `/system/terminal`;
-
 const { usingLocal } = useEndpoint();
+const { active } = useSandbox();
 
 export type TerminalSession = {
     // Single-member on purpose: the agent's browser view is a separate, simpler kind of cache entry.
@@ -118,15 +119,17 @@ const terminalParams = (s: TerminalSession): Record<string, string> => ({
     ...(s.cwd === undefined ? {} : { cwd: s.cwd }),
 });
 
-// A stream of the edge's WebTransport session where one has proven itself, else a WebSocket. Only the edge answers a
-// session; a loopback shortcut is one machine away, where no lost packet has a stream to stall.
-const openChannel = async (base: string, query: string, events: ChannelEvents): Promise<TerminalChannel> => {
-    const transport = usingLocal.value ? undefined : await transportFor(base);
+// Whether the address terminals open on is an edge that declared WebTransport: the sandbox row says what its edge
+// serves, and a loopback shortcut is no edge at all, so it declares nothing.
+const webTransportDeclared = (): boolean => !usingLocal.value && (active.value?.edgeTransports ?? []).includes(`webtransport`);
+
+// A WebSocket on a stream of the edge's WebTransport session where it is declared and ready, else the browser's own.
+const openChannel = (base: string, query: string, events: ChannelEvents): TerminalChannel => {
+    const transport = transportFor(base, webTransportDeclared());
     if (transport === undefined) {
-        return webSocketChannel(`${base.replace(/^http/, `ws`)}${TERMINAL_PATH}?${query}`, events);
+        return socketChannel(new WebSocket(`${base.replace(/^http/, `ws`)}${TERMINAL_PATH}?${query}`), events);
     }
-    const { origin, host } = new URL(base);
-    return streamChannel(transport, { origin, host, path: TERMINAL_PATH, query }, events);
+    return socketChannel(new StreamSocket(transport.createBidirectionalStream(), { host: new URL(base).host, path: TERMINAL_PATH, query }), events);
 };
 
 const scheduleRetry = (s: TerminalSession, uptimeMs = 0): void => {
@@ -231,12 +234,7 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
             scheduleRetry(s, openedAt === 0 ? 0 : Date.now() - openedAt);
         },
     };
-    const opened = await openChannel(address.base, address.query, events);
-    // Disposed while the session opened; its close still arrives and hands the permit back.
-    if (s.closing) {
-        opened.close();
-        return;
-    }
+    const opened = openChannel(address.base, address.query, events);
     mine.channel = opened;
     // Supersedes any straggler channel; its close handler sees a mismatched `s.channel` and stays silent.
     s.channel?.close();

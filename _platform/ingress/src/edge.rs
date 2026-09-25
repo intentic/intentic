@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+pub use browser_wire::{EdgeVerdict as Verdict, VERDICT_HEADER};
 use http::header::{self, HeaderValue};
 use http::uri::PathAndQuery;
 use http::{Method, Request, Response, StatusCode, Version};
@@ -16,8 +17,8 @@ use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tunnel::{
-    CONNECTION_WINDOW, Ended, GRANT_HEADER, LANE_HEADER, Lane, STREAM_WINDOW, TUNNEL_PATH,
-    host_owner_id, label_of,
+    CONNECTION_WINDOW, Ended, GRANT_HEADER, LANE_HEADER, Lane, STREAM_WINDOW, TRANSPORTS_HEADER,
+    TUNNEL_PATH, Transport, host_owner_id, label_of,
 };
 
 use crate::body::{self, Body};
@@ -44,29 +45,6 @@ pub enum Via {
     Direct,
 }
 
-/// Why the edge could not carry a request to a sandbox, in a header the editor reads (the contract's edge-verdict.ts).
-pub const VERDICT_HEADER: &str = "x-intentic-edge";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Verdict {
-    /// No tunnel is registered: the box is off, and one that comes back redials within seconds.
-    NoTunnel,
-    /// The platform has no such sandbox, and no tunnel for it will be accepted again.
-    UnknownSandbox,
-    /// A tunnel was held and the forward failed mid-flight.
-    Dropped,
-}
-
-impl Verdict {
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::NoTunnel => "no-tunnel",
-            Self::UnknownSandbox => "unknown-sandbox",
-            Self::Dropped => "dropped",
-        }
-    }
-}
-
 pub struct EdgeOptions {
     pub key: GrantKey,
     pub revocation: Revocation,
@@ -80,6 +58,9 @@ pub struct EdgeOptions {
     pub hosted_app_prefix: Option<String>,
     /// Which image this process is, baked at build; empty is an unreleased build.
     pub build: String,
+    /// What this edge serves beyond HTTPS over TCP, because its own configuration binds it: declared to every front on
+    /// its tunnel's answer and to everyone else on `/health`, so nothing has to find out by failing.
+    pub transports: Vec<Transport>,
 }
 
 pub struct Edge {
@@ -92,6 +73,7 @@ pub struct Edge {
     instance: String,
     hosted_app_prefix: Option<String>,
     build: String,
+    transports: Vec<Transport>,
 }
 
 impl Edge {
@@ -106,6 +88,7 @@ impl Edge {
             instance: options.instance,
             hosted_app_prefix: options.hosted_app_prefix,
             build: options.build,
+            transports: options.transports,
         })
     }
 
@@ -245,6 +228,7 @@ impl Edge {
                     "remote": self.cluster.as_ref().map_or(0, |cluster| cluster.remote_count()),
                     "replay": self.hosted_app_prefix.is_some(),
                     "build": self.build,
+                    "transports": self.transports.iter().map(|transport| transport.token()).collect::<Vec<_>>(),
                 });
                 Response::builder()
                     .header(header::CONTENT_TYPE, "application/json")
@@ -309,13 +293,15 @@ impl Edge {
                 Err(error) => tracing::debug!(%error, "a tunnel's upgrade never completed"),
             }
         });
-        Response::builder()
+        let mut switching = Response::builder()
             .status(StatusCode::SWITCHING_PROTOCOLS)
             .header(header::CONNECTION, "Upgrade")
             .header(header::UPGRADE, "websocket")
-            .header(header::SEC_WEBSOCKET_ACCEPT, accept)
-            .body(body::empty())
-            .expect("a 101 builds")
+            .header(header::SEC_WEBSOCKET_ACCEPT, accept);
+        if !self.transports.is_empty() {
+            switching = switching.header(TRANSPORTS_HEADER, Transport::declare(&self.transports));
+        }
+        switching.body(body::empty()).expect("a 101 builds")
     }
 
     /// Holds a front's QUIC connection as its sandbox's carrier: the hello's grant is checked as a WebSocket's is, and the

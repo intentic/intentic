@@ -1,0 +1,138 @@
+{
+  "edge": {
+    "verdictHeader": "x-intentic-edge",
+    "verdicts": {
+      "description": "The edge's verdicts, the only values [`VERDICT_HEADER`] carries.",
+      "oneOf": [
+        {
+          "const": "no-tunnel",
+          "description": "No tunnel is registered: the box is off, and one that comes back redials within seconds.",
+          "type": "string"
+        },
+        {
+          "const": "unknown-sandbox",
+          "description": "The platform has no such sandbox, and no tunnel for it will be accepted again.",
+          "type": "string"
+        },
+        {
+          "const": "dropped",
+          "description": "A tunnel was held and the forward failed mid-flight.",
+          "type": "string"
+        }
+      ],
+      "title": "EdgeVerdict"
+    }
+  },
+  "terminal": {
+    "client": {
+      "description": "What the browser sends on a terminal socket, each a JSON text message.",
+      "oneOf": [
+        {
+          "description": "Keystrokes, a paste or a mouse report, written into the pane as their UTF-8 bytes.",
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "type": {
+              "const": "input",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "data"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cols": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rows": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "resize",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cols",
+            "rows"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The browser's keepalive against an idle tunnel; answered `pong`.",
+          "properties": {
+            "type": {
+              "const": "ping",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ],
+      "title": "TerminalClientMessage"
+    },
+    "path": "/system/terminal",
+    "server": {
+      "description": "What a terminal socket sends as JSON text; the pane's own bytes travel as binary messages.",
+      "oneOf": [
+        {
+          "description": "The session is over, and the browser must not reconnect; `reason` is tmux's own words when it had any.",
+          "properties": {
+            "code": {
+              "format": "int32",
+              "type": "integer"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "exit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "pong",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ],
+      "title": "TerminalServerMessage"
+    },
+    "upgrade": "websocket"
+  },
+  "webTransport": {
+    "alpn": "h3",
+    "path": "/system/transport"
+  }
+}

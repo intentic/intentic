@@ -19,6 +19,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 base64 = "0.23"
+browser-wire = { path = "../../_sandbox/front/crates/browser-wire" }
 bytes = "1"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 http = "1"
@@ -44,6 +45,7 @@ tunnel = { path = "../../_sandbox/front/crates/tunnel" }
 
 [dev-dependencies]
 rcgen = "0.14"
+toml = "1"
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake"] }
 wtransport = { version = "0.7", default-features = false, features = ["ring", "dangerous-configuration"] }
 

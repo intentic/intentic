@@ -686,6 +686,11 @@ export const SandboxSummarySchema = z.object({
     localHostname: z.string().nullable(),
     // The hosted lane's live machine record, null off-platform; unreachable with `state` != started means wake it.
     hosted: SandboxHostedSchema.nullable(),
+    // What the edge in front of `daemonUrl` DECLARES it serves beyond HTTPS over TCP (`quic`, `h3`, `webtransport`,
+    // browser-wire.ts `EdgeTransport`), read off the edge's own /health. Absent from an older platform, off-platform and
+    // wherever the edge declares nothing, and absent means not served: the editor opens WebTransport only where it is
+    // named. Strings, not an enum, so a token a later edge adds never fails an older editor's parse.
+    edgeTransports: z.array(z.string()).optional(),
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 
