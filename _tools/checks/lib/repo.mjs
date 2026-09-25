@@ -117,11 +117,6 @@ export const isLinkedWorktree = () => {
     return gitDir !== undefined && commonDir !== undefined && gitDir !== commonDir;
 };
 
-// Whether a check may write a baseline back: only in the primary checkout, where it rides the owner's next commit. Not
-// in a worktree or CI runner (`CI` is set by every forge), where the write cannot become a commit and is reported
-// instead.
-export const writesBaselines = () => process.env.CI === undefined && !isLinkedWorktree();
-
 // A git question answered from the checkout, or undefined when git says no.
 export const git = (...args) => {
     const result = spawnSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });

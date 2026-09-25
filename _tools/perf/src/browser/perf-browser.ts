@@ -4,7 +4,8 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { chromium, type Browser } from "playwright";
-import { conclude, type Reading } from "../baseline.js";
+import { conclude, publish, recordingRefusal, rerecordOf, type Reading } from "../baseline.js";
+import { BROWSER_BUDGETS } from "./budgets.js";
 import { startDemo, type DemoServer } from "./demo.js";
 import { describeDisagreements, disagreements } from "./determinism.js";
 import type { ProbeOptions } from "./page-probe.js";
@@ -15,9 +16,10 @@ import { Session, VIEWPORT } from "./session.js";
 const USAGE = `perf:browser [--update] [--only a,b] [--runs N]
 
   Counts what each scenario costs the editor in a real Chromium against the demo (_site/demo): Vue renders and mounts,
-  V8 function calls, layouts and style recalcs, DOM mutations. The clock is fake and every count is exact, so a reading
-  is judged against baselines/browser.json with no tolerance. --update re-records it; --runs N measures each scenario N
-  times in fresh contexts and fails if any count differs between them.
+  V8 function calls, layouts and style recalcs, DOM mutations. The clock is fake and every count is exact. Fails only
+  on a budget (src/browser/budgets.ts); the diff against baselines/browser.json is a report. --update re-records it, in
+  the record workflow only; --runs N measures each scenario N times in fresh contexts and fails if any count differs
+  between them.
 
   scenarios:
 ${SCENARIOS.map((scenario) => `    ${scenario.name.padEnd(20)} ${scenario.about}`).join("\n")}
@@ -39,6 +41,11 @@ const flag = (name: string): string | undefined => {
 if (args.includes("--help")) {
     process.stdout.write(USAGE);
     process.exit(0);
+}
+const refusal = args.includes("--update") ? recordingRefusal(process.env, rerecordOf("browser")) : undefined;
+if (refusal !== undefined) {
+    process.stderr.write(refusal);
+    process.exit(2);
 }
 const only = flag("--only")?.split(",");
 const unknown = only?.filter((name) => !SCENARIOS.some((scenario) => scenario.name === name)) ?? [];
@@ -121,11 +128,14 @@ const outcome = conclude({
         viewport: `${VIEWPORT.width}x${VIEWPORT.height}@1`,
         platform: `${process.platform}-${process.arch}`,
     },
+    // Exact counts, so any move is named in the report; the budgets are what fail.
     tolerance: () => 0,
+    budgets: BROWSER_BUDGETS,
     update: args.includes("--update"),
     complete: only === undefined,
     binding: ["chromium", "playwright", "viewport", "platform"],
-    rerecord: `pnpm perf:browser --update${only === undefined ? "" : ` --only ${only.join(",")}`}`,
+    rerecord: rerecordOf("browser"),
 });
 process.stdout.write(`${outcome.text}\n`);
+publish("perf:browser", outcome);
 process.exit(outcome.ok ? 0 : 1);

@@ -8,7 +8,11 @@ const SETTLE_MS = 6_000;
 const TAIL_MS = 1_000;
 // Fake ms between keystrokes: a fast typist.
 const KEY_MS = 100;
-const TYPED = "the plan looks right";
+/** What chat-typing types, one key per character. */
+export const TYPED = "the plan looks right";
+/** How long agents-idle watches the board, and the shared clock's tick it steps by. */
+export const IDLE_MS = 15_000;
+export const TICK_MS = 1_000;
 
 export interface Scenario {
     readonly name: string;
@@ -59,7 +63,7 @@ export const SCENARIOS: readonly Scenario[] = [
         about: "15 s of nothing on the fleet board, where one running card arms the shared clock (useNow)",
         prepare: (session) => session.open("/demo/agents", SETTLE_MS),
         // One step per tick of the shared clock, so each tick's redraw is laid out on its own.
-        act: (session) => session.advance(15_000, 1_000),
+        act: (session) => session.advance(IDLE_MS, TICK_MS),
         navigations: 0,
         frames: true,
     },

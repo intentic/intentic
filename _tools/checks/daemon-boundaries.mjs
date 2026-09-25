@@ -182,7 +182,10 @@ const closes = ([from, to]) => {
 };
 
 // Each baseline key is one standing edge, its value the reason it stands ("" where none was recorded).
-const { grown: newEdges } = ratchet("daemon-boundaries", "daemon-cycles", new Map([...cycleEdges.keys()].map((edge) => [edge, 1])));
+// An edge stops closing a cycle when any edge on its way back goes, so any daemon source a land changed can lower one.
+const { grown: newEdges } = ratchet("daemon-boundaries", "daemon-cycles", new Map([...cycleEdges.keys()].map((edge) => [edge, 1])), {
+    touchedBy: (_edge, path) => path.startsWith("_sandbox/sandbox/src/"),
+});
 const addedCycles = newEdges
     .map(({ key }) => key)
     .sort()

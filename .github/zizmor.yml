@@ -10,7 +10,7 @@
 # So each entry below names the trade and says what would have to change for it to go away. A new entry that
 # cannot write those two things is a finding to fix, not to add here.
 rules:
-    # `ghcr.io/intentic/ci-base:latest` and `ci-desktop:latest`, in 32 `container:` blocks.
+    # `ghcr.io/intentic/ci-base:latest` and `ci-desktop:latest`, in every `container:` block the workflows below hold.
     #
     # THE PIPELINE BUILDS AND MOVES THESE TAGS ITSELF. ci.yml's `ci-base` job rebuilds the image and pushes
     # `latest` when _tools/ci-base changes, and every other job in every workflow pulls that tag on its next
@@ -31,6 +31,7 @@ rules:
             - ci.yml
             - msstore-publish.yml
             - nightly.yml
+            - perf-record.yml
             - release.yml
             - rollback.yml
             - verify.yml

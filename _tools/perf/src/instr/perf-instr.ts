@@ -2,14 +2,17 @@
 import { availableParallelism, cpus } from "node:os";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { conclude, type Reading } from "../baseline.js";
+import { conclude, publish, recordingRefusal, rerecordOf, type Reading } from "../baseline.js";
+import { INSTR_BUDGETS } from "./budgets.js";
 import { countInstructions, NODE_FLAGS, valgrindVersion } from "./cachegrind.js";
 import { spread } from "./spread.js";
 
 const USAGE = `perf:instr [--update] [--only a,b] [--runs N] [--jobs N]
 
-  Counts the instructions each scenario's work executes, under Valgrind with node --predictable, and judges them
-  against baselines/instr.json. --update re-records it; --runs N measures each scenario N times and reports the spread.
+  Counts the instructions each scenario's work executes, under Valgrind with node --predictable. Fails only on a budget
+  (src/instr/budgets.ts); the diff against baselines/instr.json is a report, compared only on the CPU it was recorded
+  on. --update re-records it, in the record workflow only; --runs N measures each scenario N times and reports the
+  spread.
 `;
 
 const here = import.meta.dirname;
@@ -17,8 +20,9 @@ const packageDir = join(here, "..", "..");
 const baselinePath = join(packageDir, "baselines", "instr.json");
 const probe = join(here, "counted-process.js");
 
-// Relative, and about 500 times the run-to-run spread (single-digit parts per million); a CPU with other features moves
-// a count by up to about 1%, which is why the baseline is recorded on the host that judges it.
+// Where the report stops calling a move "within": about 500 times the run-to-run spread (single-digit parts per
+// million). A CPU with other features moves a count by up to about 1%, so `cpu` is binding: on another CPU the diff is
+// shown and not compared.
 const TOLERANCE = 0.005;
 
 const args = process.argv.slice(2);
@@ -29,6 +33,11 @@ const flag = (name: string): string | undefined => {
 if (args.includes("--help")) {
     process.stdout.write(USAGE);
     process.exit(0);
+}
+const refusal = args.includes("--update") ? recordingRefusal(process.env, rerecordOf("instr")) : undefined;
+if (refusal !== undefined) {
+    process.stderr.write(refusal);
+    process.exit(2);
 }
 
 const version = valgrindVersion();
@@ -93,10 +102,12 @@ const outcome = conclude({
     measured,
     host: { node: process.version, flags: NODE_FLAGS.join(" "), valgrind: version, arch: process.arch, cpu: cpus()[0]?.model.trim() ?? "unknown" },
     tolerance: () => TOLERANCE,
+    budgets: INSTR_BUDGETS,
     update: args.includes("--update"),
     complete: only === undefined,
-    binding: ["node", "flags", "arch"],
-    rerecord: `pnpm perf:instr --update${only === undefined ? "" : ` --only ${only.join(",")}`}`,
+    binding: ["node", "flags", "arch", "cpu"],
+    rerecord: rerecordOf("instr"),
 });
 process.stdout.write(`${outcome.text}\n`);
+publish("perf:instr", outcome);
 process.exit(outcome.ok ? 0 : 1);

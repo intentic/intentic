@@ -674,7 +674,9 @@ jobs:
       # to a box this job shares with five others.
       - run: TEST_WORKERS=$(node _tools/scripts/verify/test-workers.mjs) pnpm turbo run test --filter=@intentic/sandbox --filter=@intentic/sandbox-contract --filter=@intentic/ext-automations --filter=@intentic/web --continue=dependencies-successful
 
-  # Counts, not timings: each is judged from one run against the baseline checked into _tools/perf (its README).
+  # Counts, not timings (_tools/perf/README.md). Each job publishes its diff against the baseline checked into
+  # _tools/perf as the job summary, and fails only on a declared budget (src/*/budgets.ts): a count that moved is a
+  # report, re-recorded by perf-record.yml when someone decides it should be, never by whoever a red run lands on.
   # Instructions executed by the daemon's pure-JS hot paths, under Valgrind with node --predictable.
   perf-instr:
     needs: [changes, preflight]

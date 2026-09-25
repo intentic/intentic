@@ -1,6 +1,6 @@
 // What a machine can decide, done to the tree before any gate judges it, so no model is sent back to type it.
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { CHECKS } from "../../checks/manifest.mjs";
 import { git } from "../lib/git.mjs";
@@ -50,7 +50,30 @@ export const fixChecks = (root, verdicts) =>
             return [check.id];
         });
 
-const CONTRACT_SOURCES = "_shared/sandbox-contract/src/";
+const BASELINES = "_tools/checks/baselines";
+
+// Lowers each ratcheted check's baseline where `changed` beat it (`--tighten`, lib/ratchet.mjs), so the lower count is
+// written for the land that earned it and no other run moves it; answers the ids whose baseline moved. Nothing when the
+// change set is unknown: an unscoped tighten would credit this land with every other change's shrinkage.
+export const tightenBaselines = (root, changed) => {
+    if (changed === undefined || changed.length === 0) {
+        return [];
+    }
+    // By content rather than `git status`: a baseline already modified in the tree reads the same there after it moves.
+    const snapshot = () => {
+        const dir = join(root, BASELINES);
+        return existsSync(dir) ? readdirSync(dir).map((name) => `${name}\n${readFileSync(join(dir, name), "utf8")}`).join("\n") : "";
+    };
+    return CHECKS.filter((check) => check.ratchet === true)
+        .filter((check) => {
+            const before = snapshot();
+            spawnSync(process.execPath, [join(root, "_tools/checks", check.file), "--tighten", changed.join(",")], { cwd: root, stdio: "ignore" });
+            return snapshot() !== before;
+        })
+        .map((check) => `${check.id} (baseline lowered)`);
+};
+
+const CONTRACT_SOURCES ="_shared/sandbox-contract/src/";
 const CONTRACT_LOCK = "_shared/sandbox-contract/contract.lock.json";
 const LOCK_WRITER = "_shared/sandbox-contract/scripts/write-lock.mjs";
 

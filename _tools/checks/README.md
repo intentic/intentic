@@ -24,12 +24,16 @@ flowchart LR
   tree. `fix` names the arguments that let it repair the tree itself.
 - After each edit, `.intentic/checks.json` runs `run.mjs --paths {file}`: scoped checks only, silent unless one
   fails. What it prints returns with the edit and never stops the turn. After each land, `pnpm verify` applies each
-  failing check's `fix` in the main tree, then runs them all and counts the tidy lines the land added as failures
+  failing check's `fix` and each ratchet's `--tighten` in the main tree, then runs them all and counts the tidy lines the land added as failures
   (`land-tiers.mjs`). At push `.githooks/pre-push` runs them all through `verify-push.mjs`, which reports and never
   refuses, and keeps what the push added for later in the editor's Main line (`push-report.mjs`). CI runs
   `--tidy=warn`, the nightly `--gate=tidy`.
-- Ratcheted checks keep their standing backlog in `baselines/` (`lib/ratchet.mjs`), which may shrink and never
-  grow; `--write-baseline` adopts the current findings.
+- Ratcheted checks (`ratchet: true`) keep their standing backlog in `baselines/` (`lib/ratchet.mjs`), which may
+  shrink and never grow unasked. A check run never writes one: it fails on growth and only says where the tree beats
+  it. After each land, `pnpm verify` runs each ratcheted check with `--tighten <the land's paths>`, which lowers only
+  the entries those paths touch. Growth is declared with a reason, which the baseline records:
+  `layout.mjs --allow <dir> --reason "<why>"` for one entry, from any checkout, or
+  `<check>.mjs --write-baseline --reason "<why>"` to adopt every finding, which runs only in the primary checkout.
 
 ## Commands
 

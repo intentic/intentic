@@ -21,7 +21,7 @@ flowchart LR
 [`layout.mjs`](../../_tools/checks/layout.mjs) keeps the tree navigable by path alone:
 
 - **A package's directory name must be its npm name without the scope.** `_search/iq` is `@intentic/iq`. Under `_extensions/` the npm name adds an `ext-` prefix the directory drops.
-- At most 30 readable files per directory under a package's `src/`. Images, fonts and media do not count, and `INDEX_DIRS` exempts directories that hold one file per member of a set, such as one `*.contract.ts` per wire group. `node _tools/checks/layout.mjs --allow <dir>` records a deliberate exception.
+- At most 30 readable files per directory under a package's `src/`. Images, fonts and media do not count, and `INDEX_DIRS` exempts directories that hold one file per member of a set, such as one `*.contract.ts` per wire group. `node _tools/checks/layout.mjs --allow <dir> --reason "<why>"` records a deliberate exception with its reason.
 - No two sibling directories one character apart, and no two files in a package with the same name (barrels, route, contract and handler files, and tests excepted).
 - No mention of a directory or scope the repository removed. Empty directories a rename leaves behind are deleted, not reported.
 

@@ -1,0 +1,79 @@
+# RE-RECORDS THE PERF BASELINES, AND IS THE ONLY THING THAT DOES.
+#
+# ci.yml's perf-instr and perf-browser jobs report every count that moved from _tools/perf/baselines/ in their job
+# summary and fail only on a declared budget (_tools/perf/README.md). A baseline is therefore re-recorded when someone
+# decides its numbers should describe the code again, never because a run went red, and always here: on the runner
+# class and image the CI jobs judge on, so the recorded host (CPU, Chromium, Node) is the one the report compares
+# against. `--update` refuses to run anywhere else (baseline.ts, recordingRefusal).
+#
+# It commits nothing. It uploads the baseline diff as a patch; whoever asked applies it
+# (`git apply perf-baselines.patch`) and commits it with the change the numbers describe.
+name: Perf record
+
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: Which baseline to re-record.
+        required: true
+        default: both
+        type: choice
+        options: [both, instr, browser]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  record:
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 45
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+      # Not $HOME, which a job container maps to a throwaway /github/home.
+      PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
+      # Six runner processes share the box (ci.yml's CI_HOST_JOBS); the counts do not depend on parallelism.
+      CI_HOST_JOBS: "6"
+      INDEXNOW_ENABLED: "0"
+      TRACK: ${{ inputs.track }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - if: ${{ inputs.track != 'browser' }}
+        run: apt-get update && apt-get install -y --no-install-recommends valgrind
+      - if: ${{ inputs.track != 'browser' }}
+        run: pnpm perf:instr --jobs 4 --update
+      - if: ${{ inputs.track != 'instr' }}
+        run: pnpm --filter @intentic/perf exec playwright install --with-deps chromium
+      # Three fresh contexts that must agree, so a nondeterministic count is refused rather than recorded.
+      - if: ${{ inputs.track != 'instr' }}
+        run: pnpm perf:browser --runs 3 --update
+      - name: The baseline diff, as a patch
+        run: |
+          git diff -- _tools/perf/baselines > perf-baselines.patch
+          {
+            echo "### Perf baselines re-recorded ($TRACK)"
+            echo
+            if [ -s perf-baselines.patch ]; then
+              echo "Apply with \`git apply perf-baselines.patch\` from the uploaded artifact, and commit it with the change it describes."
+            else
+              echo "Nothing moved: the checked-in baselines already describe this commit."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: perf-baselines
+          path: perf-baselines.patch
+          if-no-files-found: error

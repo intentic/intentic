@@ -19,7 +19,7 @@ import { runInHeavySlot } from "../lib/heavy-slot.mjs";
 import { treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
 import { checkVerdicts } from "./check-snapshot.mjs";
 import { failedTasks, takeSummary, taskOf, unitsOf, verdictUnits } from "./failure-units.mjs";
-import { fixChecks, formatCrates, regenerateContractLock, regenerateStateShapes, rustfmtAvailable, touchedCrates } from "./fixers.mjs";
+import { fixChecks, formatCrates, regenerateContractLock, regenerateStateShapes, rustfmtAvailable, tightenBaselines, touchedCrates } from "./fixers.mjs";
 import { recordFlakes, rerunFailures } from "./flakes.mjs";
 import { landTiers } from "./land-tiers.mjs";
 import { testConcurrency, testWorkers, typecheckConcurrency } from "./test-workers.mjs";
@@ -43,7 +43,8 @@ const landed = afterLand ? changedSince(root, landFrom) : undefined;
 if (afterLand) {
     const formatted = rustfmtAvailable(root) ? formatCrates(root, touchedCrates(root, landed)) : [];
     const verdicts = checkVerdicts(root);
-    const fixed = verdicts === undefined ? [] : fixChecks(root, verdicts);
+    // A ratcheted baseline is lowered only where this land's own paths beat it; no check run writes one (lib/ratchet.mjs).
+    const fixed = [...(verdicts === undefined ? [] : fixChecks(root, verdicts)), ...tightenBaselines(root, landed)];
     if (formatted.length + fixed.length > 0) {
         say(`fixed before judging: ${[...formatted.map((crate) => `${crate} (cargo fmt)`), ...fixed].join(", ")}`);
     }

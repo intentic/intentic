@@ -15,7 +15,7 @@ import { subjectFiles } from "./lib/repo.mjs";
 const root = repoRoot(import.meta.url);
 
 // Standing spellings the constants sweep didn't finish are held per file in this baseline: a count may only shrink or
-// be deleted, never grow. `--write-baseline` adopts the current findings, for the one occasion that's legitimate.
+// be deleted, never grow. `--write-baseline --reason "<why>"` adopts the current findings, for the one occasion that's legitimate.
 
 // Files allowed to spell a root literally, each for a reason about reach, not taste.
 const MAY_SPELL_A_ROOT = new Set([

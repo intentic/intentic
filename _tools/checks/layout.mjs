@@ -8,7 +8,7 @@ import { ADOPTING, allowOne, ratchet } from "./lib/ratchet.mjs";
 import { finish } from "./lib/report.mjs";
 import { EXCLUDED, packages, root, SKIP_DIRS, trackedFiles, untrackedFiles } from "./lib/repo.mjs";
 
-// One directory a change grew on purpose, recorded at what it holds; `` when the flag names nothing, which is an error.
+// One directory a change grew on purpose, recorded at what it holds with `--reason`; `` when the flag names nothing, an error.
 const allow = process.argv.includes("--allow") ? (process.argv[process.argv.indexOf("--allow") + 1] ?? "") : undefined;
 const prune = process.argv.includes("--prune");
 const MAX_FILES_PER_DIR = 30;
@@ -273,9 +273,9 @@ if (allow !== undefined) {
         process.exit(2);
     }
     const count = (found === "fanOut" ? fanOut : collisions).get(allow);
-    allowOne(RATCHETS[found], allow, count);
+    allowOne("layout", RATCHETS[found], allow, count);
     console.log(
-        `layout: recorded ${allow} at ${count}; the entry rides your next commit, and the ratchet lowers it again on its own once the tree beats it`,
+        `layout: recorded ${allow} at ${count} with its reason; the entry rides the change that needs it, and the check after a land that shrinks ${allow} lowers it again`,
     );
     process.exit(0);
 }
@@ -303,7 +303,7 @@ finish(
         [
             `these directories hold more than ${MAX_FILES_PER_DIR} files a reader reads, so listing one costs an agent a page before it can act\n` +
                 "  split by what the files DO, or, if splitting is the wrong answer here,\n" +
-                "  record it: node _tools/checks/layout.mjs --allow <dir>",
+                "  record it: node _tools/checks/layout.mjs --allow <dir> --reason \"<why>\"",
             fanOutGrown,
         ],
         [
@@ -314,7 +314,7 @@ finish(
         ["a package's directory name must be its npm name without the scope (docs/architecture/conventions.md)", nameMismatches],
         [
             "these packages hold two files with the same name, so a guessed path lands on the wrong one\n" +
-                "  rename by what each one does, or, if both names are right, record it: node _tools/checks/layout.mjs --allow <package>",
+                "  rename by what each one does, or, if both names are right, record it: node _tools/checks/layout.mjs --allow <package> --reason \"<why>\"",
             collisionsGrown,
         ],
         [

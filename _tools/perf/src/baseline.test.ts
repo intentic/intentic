@@ -1,4 +1,4 @@
-import { decide, failing, judge, table, updated, type Baseline } from "./baseline.js";
+import { decide, judge, judgeBudgets, moved, publish, recordingRefusal, table, updated, type Baseline, type Budget } from "./baseline.js";
 
 const baseline: Baseline = { host: { node: "v24" }, scenarios: { walk: { instructions: 1000, layouts: 4 } } };
 const exact = (): number => 0;
@@ -10,13 +10,13 @@ describe("judge", () => {
             ["instructions", "within"],
             ["layouts", "same"],
         ]);
-        expect(failing(rows)).toEqual([]);
+        expect(moved(rows)).toEqual([]);
     });
 
-    it("fails a count that moved past tolerance in either direction", () => {
+    it("names a count that moved past tolerance in either direction", () => {
         const rows = judge(baseline, { walk: { instructions: 1100, layouts: 3 } }, exact, true);
         expect(rows.map((row) => row.verdict)).toEqual(["regressed", "improved"]);
-        expect(failing(rows)).toHaveLength(2);
+        expect(moved(rows)).toHaveLength(2);
     });
 
     it("names a metric or scenario the baseline has never seen, and one that stopped being measured", () => {
@@ -50,46 +50,102 @@ describe("updated", () => {
     });
 });
 
-describe("decide", () => {
-    const run = {
-        path: "baselines/x.json",
-        host: { node: "v24", cpu: "a" },
-        tolerance: exact,
-        complete: true,
-        binding: ["node"],
-        rerecord: "perf --update",
-    };
+const budget = (max: number): Budget => ({
+    name: "layouts per walk",
+    claim: "a walk lays out at most a handful of times",
+    reads: ["walk"],
+    value: (measured) => measured["walk"]!["layouts"]!,
+    max,
+});
 
-    it("refuses to judge counts taken under a different runtime", () => {
-        const decision = decide(baseline, { ...run, host: { node: "v25" }, measured: baseline.scenarios, update: false });
-        expect(decision.ok).toBe(false);
+describe("judgeBudgets", () => {
+    it("holds a value at the limit and breaks one past it", () => {
+        const measured = { walk: { instructions: 1000, layouts: 4 } };
+        expect(judgeBudgets([budget(4), budget(3)], measured).map(({ value, held }) => [value, held])).toEqual([
+            [4, true],
+            [4, false],
+        ]);
+    });
+
+    it("leaves a budget unjudged when a scenario it reads was not measured", () => {
+        expect(judgeBudgets([budget(0)], {}).map(({ value, held }) => [value, held])).toEqual([[undefined, true]]);
+    });
+
+    it("breaks a budget whose value is not a number", () => {
+        expect(judgeBudgets([{ ...budget(1), value: () => Number.NaN }], { walk: {} })[0]?.held).toBe(false);
+    });
+});
+
+const run = {
+    path: "baselines/x.json",
+    host: { node: "v24", cpu: "a" },
+    tolerance: exact,
+    budgets: [] as readonly Budget[],
+    complete: true,
+    binding: ["node"],
+    rerecord: "perf record",
+};
+
+describe("decide", () => {
+
+    it("reports counts taken under a different runtime without comparing them, and passes", () => {
+        const decision = decide(baseline, { ...run, host: { node: "v25" }, measured: { walk: { instructions: 5000, layouts: 4 } }, update: false });
+        expect(decision.ok).toBe(true);
+        expect(decision.text).toContain("not compared: the baseline was recorded under a different node");
         expect(decision.text).toContain("node: v24 → v25");
     });
 
-    it("passes a matching run on a different cpu and says the host differs", () => {
+    it("passes a matching run on a non-binding host key and says the host differs", () => {
         const decision = decide({ ...baseline, host: { node: "v24", cpu: "b" } }, { ...run, measured: baseline.scenarios, update: false });
         expect(decision.ok).toBe(true);
         expect(decision.text).toContain("cpu: b → a");
         expect(decision.record).toBeUndefined();
     });
 
-    it("fails when there is no baseline yet and says how to record one", () => {
+    it("reports a run with no baseline yet and says how to record one", () => {
         const decision = decide({ host: {}, scenarios: {} }, { ...run, measured: baseline.scenarios, update: false });
-        expect(decision.ok).toBe(false);
-        expect(decision.text).toContain("no baseline at baselines/x.json; record one: perf --update");
+        expect(decision.ok).toBe(true);
+        expect(decision.text).toContain("no baseline at baselines/x.json to compare with; record one: perf record");
     });
 
     it("re-records on update, and the next run matches the record", () => {
         const measured = { walk: { instructions: 2000, layouts: 4 } };
         const recorded = decide(baseline, { ...run, measured, update: true });
         expect(recorded.record).toEqual({ host: run.host, scenarios: { walk: { instructions: 2000, layouts: 4 } } });
-        expect(decide(recorded.record!, { ...run, measured, update: false }).ok).toBe(true);
+        expect(decide(recorded.record!, { ...run, measured, update: false }).text).toContain("2 counts match baselines/x.json");
     });
 
-    it("tells an improvement apart from a regression in its advice", () => {
-        const decision = decide(baseline, { ...run, host: { node: "v24" }, measured: { walk: { instructions: 900, layouts: 4 } }, update: false });
+    it("reports a moved count in either direction and passes it", () => {
+        const decision = decide(baseline, { ...run, measured: { walk: { instructions: 900, layouts: 5 } }, update: false });
+        expect(decision.ok).toBe(true);
+        expect(decision.text).toContain("2 counts moved from baselines/x.json: a report, not a failure. To record them: perf record");
+    });
+
+    it("fails on a broken budget alone, naming it and its claim", () => {
+        const decision = decide(baseline, { ...run, budgets: [budget(3)], measured: baseline.scenarios, update: false });
         expect(decision.ok).toBe(false);
-        expect(decision.text).toContain("cheaper than recorded: lock it in: perf --update");
+        expect(decision.text).toContain("✗ layouts per walk: 4 > 3\n      a walk lays out at most a handful of times");
+        expect(decision.text).toContain("1 budget(s) broken: layouts per walk");
+    });
+
+    it("judges budgets on a host it does not compare counts on", () => {
+        const decision = decide(baseline, { ...run, host: { node: "v25" }, budgets: [budget(3)], measured: baseline.scenarios, update: false });
+        expect(decision.ok).toBe(false);
+        expect(decision.text).toContain("not compared");
+    });
+});
+
+describe("recording", () => {
+    it("is refused anywhere but the record workflow", () => {
+        expect(recordingRefusal({}, "perf record")).toBe("--update re-records a baseline, which only the record workflow does, on the CI runner class: perf record\n");
+        expect(recordingRefusal({ GITHUB_WORKFLOW_REF: "intentic/intentic/.github/workflows/ci.yml@refs/heads/main" }, "perf record")).toContain("only the record workflow");
+        expect(recordingRefusal({ GITHUB_WORKFLOW_REF: "intentic/intentic/.github/workflows/perf-record.yml@refs/heads/main" }, "perf record")).toBeUndefined();
+    });
+
+    it("publishes the report as a fenced block, and nowhere when there is no job summary", () => {
+        const decision = decide(baseline, { ...run, measured: baseline.scenarios, update: false });
+        expect(decision.summary).toBe(`\`\`\`\n${decision.text}\n\`\`\``);
+        expect(() => publish("perf:x", decision, {})).not.toThrow();
     });
 });
 

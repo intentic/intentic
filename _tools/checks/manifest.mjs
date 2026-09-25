@@ -17,6 +17,9 @@
 // subsystems — is not scopable and omits the flag; those are read whole or not at all.
 // `fix`: arguments that make the check write the tree into shape itself; the check after a land runs it on the main
 // tree before judging a failure (verify.mjs), and so does `pnpm verify:turn` on a branch.
+// `ratchet`: the check keeps a standing backlog in baselines/ (lib/ratchet.mjs) that it reads and never writes; the
+// check after a land runs it with `--tighten <the land's paths>` (fixers.mjs), which lowers only the entries that land
+// beat, so the lower count is written for the change that earned it.
 export const CHECKS = [
     { id: "control-chars", file: "control-chars.mjs", needs: "checkout", gate: "code", scoped: true, about: "no literal control bytes in tracked text" },
     { id: "skill-descriptions", file: "skill-descriptions.mjs", needs: "checkout", gate: "tidy", about: "every skill description fits the catalog budget the prompt pays for on every call" },
@@ -37,6 +40,7 @@ export const CHECKS = [
     { id: "invariant-registry", file: "invariant-registry.mjs", needs: "checkout", gate: "tidy", about: "every daemon subsystem registers a runtime invariant or says why not" },
     {
         id: "daemon-boundaries",
+        ratchet: true,
         file: "daemon-boundaries.mjs",
         needs: "checkout",
         gate: "code",
@@ -52,6 +56,7 @@ export const CHECKS = [
     },
     {
         id: "contract-paths",
+        ratchet: true,
         file: "contract-paths.mjs",
         needs: "checkout",
         gate: "code",
@@ -64,10 +69,11 @@ export const CHECKS = [
     { id: "engines", file: "engines-blessed.mjs", needs: "checkout", gate: "code", about: "engines.json blesses only versions this repo pins" },
     { id: "build-cache", file: "build-cache-mounts.mjs", needs: "checkout", gate: "code", about: "sandbox image fragments keep the build-cache contract" },
     { id: "mirror-roots", file: "mirror-roots.mjs", needs: "checkout", gate: "code", about: "build output an agent turn overlays is emptied, never removed" },
-    { id: "paths", file: "path-literals.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "no hand-spelled roots and no counted ones (ratcheted)" },
-    { id: "vocabulary", file: "vocabulary.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "a word this repo retired is not spelled again (ratcheted)" },
+    { id: "paths", file: "path-literals.mjs", needs: "checkout", gate: "tidy", scoped: true, ratchet: true, about: "no hand-spelled roots and no counted ones (ratcheted)" },
+    { id: "vocabulary", file: "vocabulary.mjs", needs: "checkout", gate: "tidy", scoped: true, ratchet: true, about: "a word this repo retired is not spelled again (ratcheted)" },
     {
         id: "silent-catch",
+        ratchet: true,
         file: "silent-catch.mjs",
         needs: "checkout",
         gate: "tidy",
@@ -81,7 +87,7 @@ export const CHECKS = [
         gate: "tidy",
         about: "every cron carries the zone it means, dates format through the kit, and a UTC day bucket says it is one",
     },
-    { id: "layout", file: "layout.mjs", needs: "checkout", gate: "tidy", about: "no ghost directories, no over-full ones, no twin or colliding names, no dead ones (ratcheted)" },
+    { id: "layout", file: "layout.mjs", needs: "checkout", gate: "tidy", ratchet: true, about: "no ghost directories, no over-full ones, no twin or colliding names, no dead ones (ratcheted)" },
     { id: "md-links", file: "md-links.mjs", needs: "checkout", gate: "tidy", about: "every relative link in the documentation resolves" },
     { id: "metaphor-home", file: "metaphor-home.mjs", needs: "checkout", gate: "tidy", about: "the four-noun picture is defined once, reached from the docs, and never from the home page" },
     { id: "alias-targets", file: "alias-targets.mjs", needs: "checkout", gate: "code", about: "every resolver alias points at a path that exists" },

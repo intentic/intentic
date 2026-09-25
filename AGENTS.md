@@ -57,7 +57,8 @@ can take all of its memory, and the check after the land runs all of it anyway, 
 the daemon runs it on the main tree in the background (or on a runner on one of the owner's machines, when the
 owner sends it there), one project at a time, and lands that arrive while it runs
 wait and are measured together in the next run (`workspace/deps/verify-deps.ts`). It first writes what a machine
-decides: rustfmt on the crates the land touched, each failing check's own `fix` (`_tools/checks/manifest.mjs`),
+decides: rustfmt on the crates the land touched, each failing check's own `fix` (`_tools/checks/manifest.mjs`), each
+ratcheted baseline lowered where the land's own paths beat it (no check run writes one),
 `contract.lock.json` regenerated after the declarations emit when the land changed the contract, and
 `state-shapes.json` when it changed a daemon or contract source (a new shape of a stored document, frozen for the
 typecheck that follows). These show up in

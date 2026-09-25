@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 
 /** One scenario's counts, metric name → count. */
 export type Reading = Readonly<Record<string, number>>;
@@ -24,11 +24,53 @@ export interface Row {
 /** Relative slack a metric is allowed before a move is a finding: 0 for a count that cannot jitter. */
 export type Tolerance = (metric: string) => number;
 
-// A verdict here means the checked-in numbers no longer describe the code, in either direction: an improvement left
-// unrecorded is slack the next regression hides in.
-const FAILING: ReadonlySet<Verdict> = new Set(["regressed", "improved", "new", "gone"]);
+// A row whose count no longer matches the baseline, in either direction. It is reported, never failed: a baseline that
+// fails on every move is a golden master, re-recorded by whoever the red lands on until the numbers mean nothing.
+const MOVED: ReadonlySet<Verdict> = new Set(["regressed", "improved", "new", "gone"]);
 
-export const failing = (rows: readonly Row[]): readonly Row[] => rows.filter((row) => FAILING.has(row.verdict));
+export const moved = (rows: readonly Row[]): readonly Row[] => rows.filter((row) => MOVED.has(row.verdict));
+
+/**
+ * A declared, one-directional claim about what the code costs: the only thing a perf run fails on. Each states the
+ * property it protects and sits well above today's value, so it moves when the claim breaks and not when a count does.
+ */
+export interface Budget {
+    readonly name: string;
+    /** What stays true while the bound holds, and why the limit is where it is. */
+    readonly claim: string;
+    /** The scenarios it reads; a run that did not measure every one of them leaves it unjudged. */
+    readonly reads: readonly string[];
+    /** The bounded quantity, read from this run's measurements. */
+    readonly value: (measured: Readonly<Record<string, Reading>>) => number;
+    /** The value may not exceed this. */
+    readonly max: number;
+}
+
+export interface BudgetResult {
+    readonly budget: Budget;
+    /** Undefined when a scenario it reads was not measured this run. */
+    readonly value: number | undefined;
+    readonly held: boolean;
+}
+
+/** Each budget against this run: held, broken, or unjudged when a scenario it reads was filtered out. */
+export const judgeBudgets = (budgets: readonly Budget[], measured: Readonly<Record<string, Reading>>): readonly BudgetResult[] =>
+    budgets.map((budget) => {
+        if (!budget.reads.every((scenario) => measured[scenario] !== undefined)) {
+            return { budget, value: undefined, held: true };
+        }
+        const value = budget.value(measured);
+        return { budget, value, held: Number.isFinite(value) && value <= budget.max };
+    });
+
+const figure = (value: number): string => (Number.isInteger(value) ? value.toLocaleString("en-US") : value.toFixed(3));
+
+const budgetLine = ({ budget, value, held }: BudgetResult): string => {
+    if (value === undefined) {
+        return `  – ${budget.name}: not judged, needs ${budget.reads.join(", ")}`;
+    }
+    return `  ${held ? "✓" : "✗"} ${budget.name}: ${figure(value)} ${held ? "≤" : ">"} ${figure(budget.max)}${held ? "" : `\n      ${budget.claim}`}`;
+};
 
 const deltaOf = (before: number, after: number): number => {
     if (before === after) {
@@ -132,54 +174,87 @@ export interface Run {
     readonly measured: Readonly<Record<string, Reading>>;
     readonly host: Baseline["host"];
     readonly tolerance: Tolerance;
+    readonly budgets: readonly Budget[];
     readonly update: boolean;
     /** Every scenario was measured, so one missing from `measured` is gone rather than filtered out. */
     readonly complete: boolean;
-    /** Host keys whose change makes every count incomparable (the runtime that executes the code under test). */
+    /** Host keys whose change makes the counts incomparable with the baseline's: the diff is then shown, not read. */
     readonly binding: readonly string[];
-    /** The command that re-records this baseline, quoted in every failure. */
+    /** How this baseline is re-recorded, quoted wherever the diff says it moved. */
     readonly rerecord: string;
 }
 
 export interface Decision {
-    /** False when the baseline no longer describes the code. */
+    /** False only when a declared budget is broken; a count that moved from the baseline is a report. */
     readonly ok: boolean;
     readonly text: string;
+    /** The same report as markdown, for a CI job summary. */
+    readonly summary: string;
     /** The baseline to write, on `update`. */
     readonly record?: Baseline;
 }
 
-/** Judges one run against `baseline`, or re-records it when the run asks to. */
+/** Judges one run: its budgets decide, and its diff against `baseline` is reported. Re-records it when the run asks to. */
 export const decide = (baseline: Baseline, run: Run): Decision => {
     const drift = hostDrift(baseline.host, run.host);
     const driftLines = drift.map((key) => `  ${key}: ${baseline.host[key] ?? "—"} → ${run.host[key] ?? "—"}`);
+    const budgets = judgeBudgets(run.budgets, run.measured);
+    const broken = budgets.filter((result) => !result.held);
+    const budgetText = budgets.length === 0 ? "" : `\n\nbudgets:\n${budgets.map(budgetLine).join("\n")}`;
+    const verdict = broken.length === 0 ? "" : `\n\n${broken.length} budget(s) broken: ${broken.map((result) => result.budget.name).join(", ")}`;
+    const finish = (diff: string, note: string, record?: Baseline): Decision => {
+        const text = `${diff}${note}${budgetText}${verdict}`;
+        return { ok: broken.length === 0, text, summary: `\`\`\`\n${text}\n\`\`\``, ...(record === undefined ? {} : { record }) };
+    };
     if (run.update) {
         const rows = judge(baseline, run.measured, () => 0, run.complete);
-        const moved = rows.filter((row) => row.verdict !== "same").length;
-        return {
-            ok: true,
-            text: `${table(rows, true)}\n\nrecorded ${run.path} (${moved} of ${rows.length} counts moved)`,
-            record: updated(baseline, run.measured, run.host, run.complete),
-        };
+        const changed = rows.filter((row) => row.verdict !== "same").length;
+        return finish(table(rows, true), `\n\nrecorded ${run.path} (${changed} of ${rows.length} counts moved)`, updated(baseline, run.measured, run.host, run.complete));
     }
     const rows = judge(baseline, run.measured, run.tolerance, run.complete);
     if (Object.keys(baseline.scenarios).length === 0) {
-        return { ok: false, text: `${table(rows, false)}\n\nno baseline at ${run.path}; record one: ${run.rerecord}` };
+        return finish(table(rows, false), `\n\nno baseline at ${run.path} to compare with; record one: ${run.rerecord}`);
     }
-    if (drift.some((key) => run.binding.includes(key))) {
-        return {
-            ok: false,
-            text: `${table(rows, false)}\n\nnot judged: the baseline was recorded under a different runtime\n${driftLines.join("\n")}\nre-record: ${run.rerecord}`,
-        };
+    const incomparable = drift.filter((key) => run.binding.includes(key));
+    if (incomparable.length > 0) {
+        return finish(
+            table(rows, true),
+            `\n\nnot compared: the baseline was recorded under a different ${incomparable.join(", ")}, so these moves are the host's as much as the code's\n${driftLines.join("\n")}`,
+        );
     }
-    const failed = failing(rows);
+    const shifted = moved(rows);
     const hostNote = drift.length > 0 ? `\n\nhost differs from the baseline's (counts may move by the host alone):\n${driftLines.join("\n")}` : "";
-    if (failed.length === 0) {
-        return { ok: true, text: `${table(rows, false)}${hostNote}\n\n${rows.length} counts match ${run.path}` };
+    if (shifted.length === 0) {
+        return finish(table(rows, false), `${hostNote}\n\n${rows.length} counts match ${run.path}`);
     }
-    const improvedOnly = failed.every((row) => row.verdict === "improved");
-    const advice = improvedOnly ? "cheaper than recorded: lock it in" : "if the change is intended, re-record and commit the baseline diff";
-    return { ok: false, text: `${table(rows, false)}${hostNote}\n\n${failed.length} counts moved past tolerance; ${advice}: ${run.rerecord}` };
+    return finish(
+        table(rows, false),
+        `${hostNote}\n\n${shifted.length} counts moved from ${run.path}: a report, not a failure. To record them: ${run.rerecord}`,
+    );
+};
+
+/** The workflow that re-records the baselines and uploads the patch. */
+export const RECORD_WORKFLOW = ".github/workflows/perf-record.yml";
+
+/** How a track's baseline is re-recorded. */
+export const rerecordOf = (track: "instr" | "browser"): string =>
+    `run the Perf record workflow (${RECORD_WORKFLOW}, track ${track}) and apply the patch it uploads`;
+
+/**
+ * Why `--update` may not run here, or undefined where it may: only in the record workflow, on the runner class the
+ * counts are judged on, so a baseline is never re-recorded on a laptop, in a sandbox, or by whoever a red run lands on.
+ */
+export const recordingRefusal = (env: Readonly<Record<string, string | undefined>>, rerecord: string): string | undefined =>
+    env["GITHUB_WORKFLOW_REF"]?.includes(RECORD_WORKFLOW) === true
+        ? undefined
+        : `--update re-records a baseline, which only the record workflow does, on the CI runner class: ${rerecord}\n`;
+
+/** Appends the report to the CI job summary, where there is one. */
+export const publish = (title: string, decision: Decision, env: Readonly<Record<string, string | undefined>> = process.env): void => {
+    const file = env["GITHUB_STEP_SUMMARY"];
+    if (file !== undefined && file !== "") {
+        appendFileSync(file, `### ${title}\n\n${decision.summary}\n\n`);
+    }
 };
 
 /** `decide` against the baseline file at `run.path`, writing it back on update. */
