@@ -5,22 +5,21 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import { stateRelPath } from "../../state-paths.js";
 import { convertDocument } from "./conversions.js";
-import { defineDocument, type DocumentRoot, type DocumentSpec, documentKey, engineEpoch, registeredDocuments } from "./documents.js";
+import { conversionDigest, defineDocument, type DocumentRoot, type DocumentSpec, documentKey, engineEpoch } from "./documents.js";
 import { jsonEntries } from "../json-file.js";
-import { newestRunEngine, recordNewestRun } from "../newest-run.js";
+import { isDowngrade, newestRunVersion, recordNewestRun } from "../newest-run.js";
 import { commitEpisodes, type Episode, GRACE_MS, type Journal, openEpisode, pruneEpisodes, readJournal, restoreEpisode, writeJournal } from "./state-journal.js";
 import { reconcileRenames, type RenameWindow, setRenameWindows } from "./rename-compat.js";
-import { registeredSteps, type StructuralStep } from "./state-steps.js";
+import type { StructuralStep } from "./state-steps.js";
 import { writeTextFile } from "../text-file.js";
-
-// The layout step the engine itself owns; every other step registers from the module whose document it evolves.
-export { stateRegroupStep } from "./steps/state-regroup.js";
+import { version as buildVersion } from "../../version.js";
 
 // The boot step that brings this workspace's stored files to this build's shapes before any store opens: moves
 // documents that changed address, runs structural steps, and writes back every document whose conversions change it,
 // all under a journal (state-journal.ts) that keeps the pre-images until the build has booted all the way. Planning is
 // separate from applying and reads only, so the pre-flight (state-plan.ts) runs the very same plan inside the target
-// image over read-only mounts before an update touches anything.
+// image over read-only mounts before an update touches anything. Both take every document and step from their caller,
+// which reads them from state-registry.ts: nothing here depends on which modules a process loaded.
 
 export type StateRoots = Readonly<Record<DocumentRoot, string>>;
 
@@ -37,8 +36,11 @@ export interface PlanFailure {
 }
 
 export interface StatePlan {
+    // The conversion count builds before the digest compared (documents.ts, engineEpoch); reported, never decided by.
     readonly engine: number;
-    // The files here were converted by a newer engine than this build's (a rollback): it opens them read-only.
+    // What identifies this build's conversion episode (documents.ts, conversionDigest).
+    readonly digest: string;
+    // A newer release than this build ran here (a rollback): its files may hold what this build cannot read.
     readonly downgrade: boolean;
     readonly steps: readonly PlanStep[];
     readonly failures: readonly PlanFailure[];
@@ -258,15 +260,18 @@ const planStep = async (step: StructuralStep, roots: StateRoots, draft: PlanDraf
 
 export interface PlanOptions {
     readonly roots: StateRoots;
-    readonly documents?: readonly DocumentSpec[];
-    readonly steps?: readonly StructuralStep[];
+    // Every document and step this build knows: state-registry.ts, or a test's own.
+    readonly documents: readonly DocumentSpec[];
+    readonly steps: readonly StructuralStep[];
+    // The release this plan is for, which a stamp naming a newer one makes a downgrade; the running build's by default.
+    readonly version?: string;
     readonly journal?: Journal;
     readonly now?: number;
 }
 
 // What converging would do, computed without writing anything: layout steps, then document moves, then content steps,
 // then per-document conversions, each reading what the ones before it planned.
-export const planState = async ({ roots, documents = registeredDocuments(), steps = registeredSteps(), journal, now = Date.now() }: PlanOptions): Promise<StatePlan> => {
+export const planState = async ({ roots, documents, steps, version = buildVersion, journal, now = Date.now() }: PlanOptions): Promise<StatePlan> => {
     const standing = journal ?? (await readJournal(roots.history));
     const onDisk = documents.filter((spec) => spec.boot);
     const draft: PlanDraft = { overlay: createOverlay(), steps: [], failures: [], touches: [], effects: [], seen: [] };
@@ -286,10 +291,10 @@ export const planState = async ({ roots, documents = registeredDocuments(), step
             await planConversion(spec, file, draft, windows);
         }
     }
-    const engine = engineEpoch(documents, steps.length);
     return {
-        engine,
-        downgrade: (newestRunEngine() ?? 0) > engine,
+        engine: engineEpoch(documents, steps),
+        digest: conversionDigest(documents, steps),
+        downgrade: isDowngrade(version),
         steps: draft.steps,
         failures: draft.failures,
         writes: draft.overlay.writes,
@@ -325,6 +330,7 @@ const LedgerEntrySchema = z.object({
     at: z.number(),
     version: z.string(),
     engine: z.number(),
+    digest: z.string().optional(),
     steps: z.array(z.object({ document: z.string(), change: z.string(), detail: z.string().optional() })),
 });
 export const conversionsDocument = defineDocument({ path: stateRelPath(".intentic/records/conversions.json"), schema: LedgerEntrySchema, granularity: "entries" });
@@ -338,7 +344,7 @@ const appendLedger = async (workspaceRoot: string, entry: z.infer<typeof LedgerE
     await ledger.update((entries) => [...entries, entry].slice(-LEDGER_KEPT));
 };
 
-// Module state the /health route reads: whether a conversion episode is open, and this build's engine epoch.
+// Module state the /health route reads: whether a conversion episode is open, and this build's conversion count.
 let journalOpen = false;
 let runningEngine = 0;
 
@@ -395,13 +401,14 @@ const publishRenameWindows = (journal: Journal, now: number): void => {
     setRenameWindows(new Map(Object.keys(journal.renames).map((key) => [key, openWindows(journal, key, now)])));
 };
 
-// A newer engine's open episode is undone before anything else: those files are the previous version's to read. An
-// older engine's is undone too, since this build plans from the files as they were before it began. Only this
-// build's own interrupted episode is resumed, its pre-images being the true originals.
-const recoverEpisodes = async (roots: StateRoots, journal: Journal, engine: number, logger: Logger): Promise<{ journal: Journal; restored: number }> => {
+// A newer build's open episode is undone before anything else: those files are the previous version's to read. An
+// older one's is undone too, since this build plans from the files as they were before it began. Only an interrupted
+// episode of this same conversion set is resumed, its pre-images being the true originals; one opened before the digest
+// existed names none, and is undone.
+const recoverEpisodes = async (roots: StateRoots, journal: Journal, digest: string, logger: Logger): Promise<{ journal: Journal; restored: number }> => {
     let current = journal;
     let restored = 0;
-    for (const episode of journal.episodes.filter((candidate) => candidate.state === "open" && candidate.engine !== engine)) {
+    for (const episode of journal.episodes.filter((candidate) => candidate.state === "open" && candidate.digest !== digest)) {
         current = await restoreEpisode(roots, current, episode);
         restored += episode.entries.length;
         logger.warn(
@@ -415,31 +422,31 @@ const recoverEpisodes = async (roots: StateRoots, journal: Journal, engine: numb
 export const convergeState = async (options: ConvergeOptions): Promise<ConvergeOutcome> => {
     const { roots, version, logger, mayWrite } = options;
     const now = options.now ?? Date.now;
-    const documents = options.documents ?? registeredDocuments();
-    const steps = options.steps ?? registeredSteps();
-    runningEngine = engineEpoch(documents, steps.length);
-    await recordNewestRun(roots.workspace, version, { engine: runningEngine, write: mayWrite });
+    const { documents, steps } = options;
+    const digest = conversionDigest(documents, steps);
+    runningEngine = engineEpoch(documents, steps);
+    await recordNewestRun(roots.workspace, version, { engine: runningEngine, digest, write: mayWrite });
     if (!mayWrite) {
         // A guest writes through the same stores, so it keeps the same windows; it only reads the journal.
         publishRenameWindows(await readJournal(roots.history), now());
         return { plan: undefined, restored: 0 };
     }
-    const recovered = await recoverEpisodes(roots, await readJournal(roots.history), runningEngine, logger);
+    const recovered = await recoverEpisodes(roots, await readJournal(roots.history), digest, logger);
     let journal = await pruneEpisodes(roots, recovered.journal, now());
     journalOpen = journal.episodes.some((episode) => episode.state === "open");
-    const plan = await planState({ roots, documents, steps, journal, now: now() });
+    const plan = await planState({ roots, documents, steps, version, journal, now: now() });
     for (const failure of plan.failures) {
         logger.warn(failure, "state: a conversion failed; the store reads that file as it stands and reports it");
     }
     if (plan.downgrade) {
-        logger.warn({ engine: plan.engine, newest: newestRunEngine() }, "state: a newer build converted these files; this one keeps its hands off what it cannot read");
+        logger.warn({ version, newest: newestRunVersion() }, "state: a newer build converted these files; this one keeps its hands off what it cannot read");
     }
     if (plan.writes.size > 0 || plan.effects.length > 0 || plan.copies.size > 0 || plan.renames.size > 0) {
         journal = await openEpisode(
             roots,
             journal,
             { writes: [...plan.writes.keys(), ...plan.touches], copies: [...plan.copies.values()], renames: plan.renames, sourceOf: plan.sourceOf },
-            { engine: plan.engine, version, now: now() },
+            { engine: plan.engine, digest, version, now: now() },
         );
         journalOpen = true;
         for (const [from, to] of plan.copies) {
@@ -457,7 +464,7 @@ export const convergeState = async (options: ConvergeOptions): Promise<ConvergeO
         for (const effect of plan.effects) {
             await effect();
         }
-        await appendLedger(roots.workspace, { at: now(), version, engine: plan.engine, steps: [...plan.steps] });
+        await appendLedger(roots.workspace, { at: now(), version, engine: plan.engine, digest, steps: [...plan.steps] });
         logger.info({ files: plan.writes.size, steps: plan.steps.length }, "state: converted this workspace's files; the journal stays open until boot finishes");
     }
     const settled = withRenameWindows(withSeen(journal, plan.seen, now()), documents, plan, now());

@@ -4,11 +4,11 @@ import { dirname, join } from "node:path";
 import pino from "pino";
 import { z } from "zod";
 import { rename, retype } from "./conversions.js";
-import { defineDocument } from "./documents.js";
+import { conversionDigest, defineDocument } from "./documents.js";
 import { jsonFile } from "../json-file.js";
 import { clearNewestRun } from "../newest-run.js";
 import { commitState, convergeState, planState, resetStateStatus, type StateRoots, stateStatus } from "./state-convergence.js";
-import { GRACE_MS, readJournal } from "./state-journal.js";
+import { GRACE_MS, readJournal, writeJournal } from "./state-journal.js";
 import type { StructuralStep } from "./state-steps.js";
 
 const logger = pino({ level: "silent" });
@@ -46,8 +46,11 @@ test("a document whose conversions change it is written back under an open journ
     const path = join(roots.workspace, "evolution/settings.json");
     await put(path, { colour: "dark", density: "2", fromNewerBuild: true });
 
-    const outcome = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [settingsAt([colour, numbered])], steps: [] });
+    const documents = [settingsAt([colour, numbered])];
+    const digest = conversionDigest(documents, []);
+    const outcome = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents, steps: [] });
 
+    expect(outcome.plan?.digest).toBe(digest);
     expect(outcome.plan?.steps).toEqual([
         { document: "evolution/settings.json", change: "renames colour to theme" },
         { document: "evolution/settings.json", change: "turns density into a number" },
@@ -55,10 +58,10 @@ test("a document whose conversions change it is written back under an open journ
     expect(await json(path)).toEqual({ theme: "dark", density: 2, fromNewerBuild: true });
     expect(stateStatus()).toEqual({ journal: "open", engine: 2 });
     const [episode] = (await readJournal(roots.history)).episodes;
-    expect(episode).toMatchObject({ state: "open", engine: 2, version: "1.400.0" });
+    expect(episode).toMatchObject({ state: "open", engine: 2, digest, version: "1.400.0" });
     expect(await json(episode?.entries[0]?.preImage ?? "")).toEqual({ colour: "dark", density: "2", fromNewerBuild: true });
     expect(await json(join(roots.workspace, ".intentic/records/conversions.json"))).toEqual([
-        { at: expect.any(Number), version: "1.400.0", engine: 2, steps: outcome.plan?.steps },
+        { at: expect.any(Number), version: "1.400.0", engine: 2, digest, steps: outcome.plan?.steps },
     ]);
 
     await commitState(roots);
@@ -92,6 +95,53 @@ test("a rolled-back build puts back what a newer one converted and never committ
     expect(outcome.plan?.downgrade).toBe(true);
     expect((await readJournal(roots.history)).episodes).toEqual([]);
     expect(await readdir(join(roots.workspace, ".intentic/secrets/converting"))).toEqual([]);
+});
+
+test("a newer release that retired a conversion's document is an update, not a downgrade", async () => {
+    const roots = await volumes();
+    await put(join(roots.workspace, "evolution/settings.json"), { theme: "dark" });
+    await put(join(roots.workspace, "evolution/other.json"), { theme: "light" });
+    const other = defineDocument({ path: "evolution/other.json", schema: Settings, history: [colour] });
+    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [settingsAt([colour, numbered]), other], steps: [] });
+    await commitState(roots);
+    clearNewestRun();
+
+    // The newer release knows fewer conversions than the one before it: a count would call it the older build.
+    const outcome = await convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [settingsAt([colour])], steps: [] });
+    expect(outcome.plan?.downgrade).toBe(false);
+    expect(outcome.plan?.engine).toBe(1);
+});
+
+test("an open episode opened before the conversion digest existed is put back, whatever its count", async () => {
+    const roots = await volumes();
+    const path = join(roots.workspace, "evolution/settings.json");
+    await put(path, { colour: "dark" });
+    const documents = [settingsAt([colour])];
+    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents, steps: [] });
+    // As a build before the digest wrote it: the same count as this one's, and no digest.
+    const journal = await readJournal(roots.history);
+    await writeJournal(roots.history, { ...journal, episodes: journal.episodes.map(({ digest: _digest, ...episode }) => episode) });
+    clearNewestRun();
+
+    const outcome = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents, steps: [] });
+    expect(outcome.restored).toBe(1);
+    // Put back, then converted again by this build under an episode of its own.
+    expect(await json(path)).toEqual({ theme: "dark" });
+    expect((await readJournal(roots.history)).episodes).toMatchObject([{ state: "open", digest: conversionDigest(documents, []) }]);
+});
+
+test("another release with the same conversion set resumes the interrupted episode instead of undoing it", async () => {
+    const roots = await volumes();
+    const path = join(roots.workspace, "evolution/settings.json");
+    await put(path, { colour: "dark" });
+    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [settingsAt([colour])], steps: [] });
+    const [opened] = (await readJournal(roots.history)).episodes;
+    clearNewestRun();
+
+    const outcome = await convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [settingsAt([colour])], steps: [] });
+    expect(outcome.restored).toBe(0);
+    expect((await readJournal(roots.history)).episodes.map(({ id, state }) => `${id} ${state}`)).toEqual([`${opened?.id ?? "no episode"} open`]);
+    expect(await json(path)).toEqual({ theme: "dark" });
 });
 
 test("an interrupted episode of the same build resumes: it keeps the original pre-images and adds new ones", async () => {

@@ -4,6 +4,7 @@ import { AGENT_SESSION_ENV, type ContainerRole } from "../platform/boot/containe
 import type { ProfileTraits } from "../platform/boot/profile.js";
 import { statePath } from "../state-paths.js";
 import { commitState, convergeState, type StateRoots } from "../store/evolution/state-convergence.js";
+import { stateDocuments, stateSteps } from "../store/evolution/state-registry.js";
 import { version } from "../version.js";
 import type { BootPhase } from "./boot-phase.js";
 
@@ -33,7 +34,14 @@ interface StateBoot {
 // strictly better than a daemon that cannot start (a hosted sandbox has no previous image to roll back to).
 export const convergeStateAtBoot = async ({ config, logger, traits, role }: StateBoot): Promise<void> => {
     try {
-        await convergeState({ roots: stateRootsOf(config), version, logger, mayWrite: mayConverge(traits, role) });
+        await convergeState({
+            roots: stateRootsOf(config),
+            documents: stateDocuments(),
+            steps: stateSteps(),
+            version,
+            logger,
+            mayWrite: mayConverge(traits, role),
+        });
     } catch (error) {
         logger.error({ err: error }, "state: converging this workspace's stored files failed; the stores convert on read instead");
     }

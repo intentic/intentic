@@ -60,6 +60,7 @@ import type { sharesDocument } from "../../share/share-store.js";
 import type { conversionsDocument } from "../../store/evolution/state-convergence.js";
 import type { issueInstallsDocument } from "../../store/installs.js";
 import type { webchatInstallsDocument } from "../../store/installs.js";
+import type { newestRunDocument } from "../../store/newest-run.js";
 import type { accountUsageDocument } from "../../usage/account-usage.js";
 import type { modelCooldownsDocument } from "../../usage/model-cooldowns.js";
 import type { modelRefusalsDocument } from "../../usage/model-refusals.js";
@@ -366,6 +367,10 @@ type OwnerDocument0 = { email: string };
 // since 2026-09-24
 type PasskeysDocument0 = { credentials: ({ aaguid: string; backedUp: boolean; counter: number; createdAt: number; email: string; id: string; label: string; lastUsedAt?: number; name?: string; picture?: string; publicKey: { alg: -7 | -257 | -8; jwk: Record<string, string> }; rpId: string; transports: string[] })[]; recovery: { hash: string; usedAt?: number }[]; required: boolean };
 
+// workspace:.intentic/local/newest-run.json
+// since 2026-09-25
+type NewestRunDocument0 = { digest?: string; engine?: number; version?: string };
+
 // workspace:.intentic/local/rule-firings.json
 // since v1.188.0
 type RuleFiringsDocument0 = Record<string, number>;
@@ -395,6 +400,8 @@ type ChoreProbesDocument0 = Record<string, { facts?: { id: "outdated"; packages:
 type ConversionsDocument0 = { at: number; engine: number; steps: { change: string; document: string }[]; version: string };
 // since 2026-09-25
 type ConversionsDocument1 = { at: number; engine: number; steps: { change: string; detail?: string; document: string }[]; version: string };
+// since 2026-09-25
+type ConversionsDocument2 = { at: number; digest?: string; engine: number; steps: { change: string; detail?: string; document: string }[]; version: string };
 
 // workspace:.intentic/records/extension-updates.json
 // since 2026-09-25
@@ -720,6 +727,8 @@ export type StateShapeChecks = [
     Fits<never, ReusedKeys<typeof ownerDocument>>,
     Fits<Accepted<typeof passkeysDocument>, Converted<PasskeysDocument0, typeof passkeysDocument>>,
     Fits<never, ReusedKeys<typeof passkeysDocument>>,
+    Fits<Accepted<typeof newestRunDocument>, Converted<NewestRunDocument0, typeof newestRunDocument>>,
+    Fits<never, ReusedKeys<typeof newestRunDocument>>,
     Fits<Accepted<typeof ruleFiringsDocument>, Converted<RuleFiringsDocument0, typeof ruleFiringsDocument>>,
     Fits<never, ReusedKeys<typeof ruleFiringsDocument>>,
     Fits<Accepted<typeof safetyLogDocument>, Converted<SafetyLogDocument0, typeof safetyLogDocument>>,
@@ -734,6 +743,7 @@ export type StateShapeChecks = [
     Fits<never, ReusedKeys<typeof choreProbesDocument>>,
     Fits<Accepted<typeof conversionsDocument>, Converted<ConversionsDocument0, typeof conversionsDocument>>,
     Fits<Accepted<typeof conversionsDocument>, Converted<ConversionsDocument1, typeof conversionsDocument>>,
+    Fits<Accepted<typeof conversionsDocument>, Converted<ConversionsDocument2, typeof conversionsDocument>>,
     Fits<never, ReusedKeys<typeof conversionsDocument>>,
     Fits<Accepted<typeof extensionUpdatesDocument>, Converted<ExtensionUpdatesDocument0, typeof extensionUpdatesDocument>>,
     Fits<never, ReusedKeys<typeof extensionUpdatesDocument>>,

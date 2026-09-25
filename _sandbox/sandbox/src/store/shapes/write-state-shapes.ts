@@ -1,17 +1,20 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, posix } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { packageRoot, repoRoot } from "@intentic/constants/node";
 import { isNewer } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { type DocumentSpec, documentKey, registeredDocuments } from "../evolution/documents.js";
+import { type DocumentSpec, documentKey } from "../evolution/documents.js";
 import { typeFromSchema } from "./json-schema-type.js";
+import { type Definition, stateModules } from "./state-modules.js";
 
-// The shape generator: freezes every shape each stored document has had and writes the type-level checks that each
-// frozen shape still converts to what today's schema accepts (store/evolution/conversion-types.ts), so a change that would strand
-// an old file fails `tsc` at the document until a conversion covers it. Run by verify-turn's fixer beside the contract
+// The shape generator: writes the state registry (store/evolution/state-registry.ts, every document and boot step the
+// source defines, which the boot step and the pre-flight read), freezes every shape each stored document has had, and
+// writes the type-level checks that each frozen shape still converts to what today's schema accepts
+// (store/evolution/conversion-types.ts), so a change that would strand an old file fails `tsc` at the document until a
+// conversion covers it. Run by verify-turn's fixer beside the contract
 // lock (`node --import tsx src/store/shapes/write-state-shapes.ts`); `--seed` backfills, once, the shapes every release
 // since the contract lock existed recorded for contract-exported schemas. Never shipped: excluded from the build.
 
@@ -28,6 +31,7 @@ const SOURCE = join(PACKAGE, "src");
 const GENERATED = join(SOURCE, "store", "generated");
 const SHAPES_FILE = join(GENERATED, "state-shapes.json");
 const CHECKS_FILE = join(GENERATED, "state-shapes.ts");
+const REGISTRY_FILE = join(SOURCE, "store", "evolution", "state-registry.ts");
 const REPO = repoRoot(import.meta.url);
 
 const git = (...args: string[]): string | undefined => {
@@ -45,21 +49,6 @@ const lockPaths = (): string[] => [
     ...new Set((git("log", "--all", "--format=", "--name-only", "--", ":(glob)**/sandbox-contract/contract.lock.json") ?? "").split("\n").filter((path) => path !== "")),
 ];
 
-// Every source module, tests and this generator's own tree aside.
-const sourceFiles = async (dir: string): Promise<string[]> => {
-    const entries = await readdir(dir, { withFileTypes: true });
-    const nested = await Promise.all(
-        entries.map(async (entry) => {
-            const path = join(dir, entry.name);
-            if (entry.isDirectory()) {
-                return entry.name === "generated" || entry.name === "shapes" ? [] : sourceFiles(path);
-            }
-            return entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts") && !entry.name.endsWith(".testing.ts") ? [path] : [];
-        }),
-    );
-    return nested.flat();
-};
-
 interface Located {
     readonly spec: DocumentSpec;
     // Package-relative module path and the name it exports the spec under, for the generated import.
@@ -67,29 +56,57 @@ interface Located {
     readonly name: string;
 }
 
-// Loads every module that defines a document (some the daemon loads lazily, which composition alone would miss), then
-// says which module exports each: the generated checks import it by that name.
-const locate = async (): Promise<Located[]> => {
-    const exportsOf = new Map<string, Record<string, unknown>>();
-    for (const file of await sourceFiles(SOURCE)) {
-        if ((await readFile(file, "utf8")).includes("defineDocument(")) {
-            exportsOf.set(relative(SOURCE, file), (await import(pathToFileURL(file).href)) as Record<string, unknown>);
-        }
+// The registry module's source: an import of every definition by the name its module exports it under, and two lists
+// read when called, so a module that reaches the registry back through an import cycle never meets an unfilled binding.
+const registrySource = (documents: readonly Definition[], steps: readonly Definition[]): string => {
+    const from = (module: string): string => {
+        const path = posix.relative("store/evolution", module.replace(/\.ts$/, ".js"));
+        return path.startsWith(".") ? path : `./${path}`;
+    };
+    const names = new Map<string, string[]>();
+    for (const { module, name } of [...documents, ...steps]) {
+        names.set(module, [...(names.get(module) ?? []), name]);
     }
-    const documents = registeredDocuments();
-    const owners = new Map<DocumentSpec, { module: string; name: string }>();
-    for (const [module, exported] of exportsOf) {
-        for (const [name, value] of Object.entries(exported)) {
-            if (documents.includes(value as DocumentSpec)) {
-                owners.set(value as DocumentSpec, { module, name });
-            }
-        }
+    const imports = [...names]
+        .toSorted(([a], [b]) => a.localeCompare(b))
+        .map(([module, exported]) => `import { ${exported.toSorted().join(", ")} } from "${from(module)}";`);
+    return [
+        "// Generated by src/store/shapes/write-state-shapes.ts from every `export const name = defineDocument(…)` and",
+        "// `defineStep(…)` in src/. Do not edit; run the generator. The one list of every stored document and structural boot",
+        "// step this build knows: the boot step (bootstrap/state-boot.ts) converges with it and the pre-flight (state-plan.ts)",
+        "// plans with it, so the two agree whatever else either process loads. state-registry.test.ts fails when a definition",
+        "// is missing from it.",
+        'import type { DocumentSpec } from "./documents.js";',
+        'import type { StructuralStep } from "./state-steps.js";',
+        ...imports,
+        "",
+        "export const stateDocuments = (): readonly DocumentSpec[] => [",
+        ...documents.map(({ name }) => `    ${name},`),
+        "];",
+        "",
+        "// By id, not by the order modules happened to load in: the plan must not depend on an import graph.",
+        "export const stateSteps = (): readonly StructuralStep[] =>",
+        `    [${steps.map(({ name }) => name).join(", ")}].toSorted((a, b) => a.id.localeCompare(b.id));`,
+        "",
+    ].join("\n");
+};
+
+// Every document the registry just written lists, beside the module and name it imports it under (the registry lists
+// them in the order of the definitions): the generated checks import each by that name. Two documents at one address
+// would be one file read two ways.
+const locate = async (documents: readonly Definition[]): Promise<Located[]> => {
+    const registry = (await import(pathToFileURL(REGISTRY_FILE).href)) as { stateDocuments: () => readonly DocumentSpec[] };
+    const listed = registry.stateDocuments();
+    if (listed.length !== documents.length) {
+        throw new Error(`the registry lists ${listed.length} documents where the source defines ${documents.length}`);
     }
-    const unexported = documents.filter((spec) => !owners.has(spec)).map(documentKey);
-    if (unexported.length > 0) {
-        throw new Error(`export these documents from the module that defines them, the generated checks import them: ${unexported.join(", ")}`);
+    const located = listed.map((spec, index) => ({ spec, module: documents[index]?.module ?? "", name: documents[index]?.name ?? "" }));
+    const keys = located.map(({ spec }) => documentKey(spec));
+    const doubled = keys.filter((key, index) => keys.indexOf(key) !== index);
+    if (doubled.length > 0) {
+        throw new Error(`two documents are declared at one address: ${[...new Set(doubled)].join(", ")}`);
     }
-    return documents.map((spec) => ({ spec, ...(owners.get(spec) ?? { module: "", name: "" }) }));
+    return located;
 };
 
 const shapeOf = (schema: unknown): string => {
@@ -192,9 +209,9 @@ const readShapes = async (): Promise<Shapes> => {
 
 const { values } = parseArgs({ options: { seed: { type: "boolean", default: false } } });
 
-// Evaluated for what it registers: every stored document the daemon knows.
-await import("../../composition.js");
-const located = await locate();
+const modules = await stateModules(SOURCE);
+await writeFile(REGISTRY_FILE, registrySource(modules.documents, modules.steps));
+const located = await locate(modules.documents);
 const shapes = await readShapes();
 if (values.seed) {
     await seed(shapes, located);
@@ -207,6 +224,7 @@ const sorted: Shapes = Object.fromEntries(Object.entries(shapes).toSorted(([a], 
 await mkdir(dirname(SHAPES_FILE), { recursive: true });
 await writeFile(SHAPES_FILE, `${JSON.stringify(sorted, undefined, 2)}\n`);
 await writeFile(CHECKS_FILE, checksSource(sorted, located));
-process.stdout.write(`${Object.values(sorted).reduce((sum, list) => sum + list.length, 0)} shapes across ${Object.keys(sorted).length} documents\n`);
-// The composition import leaves timers and handles behind that are not this script's to wait for.
-process.exit(0);
+process.stdout.write(
+    `${Object.values(sorted).reduce((sum, list) => sum + list.length, 0)} shapes across ${Object.keys(sorted).length} documents; ` +
+        `${modules.documents.length} documents and ${modules.steps.length} steps in the registry\n`,
+);

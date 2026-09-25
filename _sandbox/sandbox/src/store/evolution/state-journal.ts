@@ -8,8 +8,9 @@ import { writeJsonFile } from "../json-file.js";
 
 // The write-ahead journal of one conversion episode: before the boot step changes a file it copies the file aside
 // (its pre-image), and the episode stays open until the new version has booted all the way. A build that finds an
-// open episode written by a newer engine restores the pre-images before it opens a single store, which is how a
-// rollback lands on the files the previous version left rather than the ones the new version had started converting.
+// open episode opened by any other conversion set (its digest) restores the pre-images before it opens a single store,
+// which is how a rollback lands on the files the previous version left rather than the ones the new version had
+// started converting.
 // Committed episodes keep their pre-images for a grace window, a hand-restorable record of what each update changed.
 
 // How long committed pre-images, and earlier document addresses left beside their current one, are kept.
@@ -25,7 +26,11 @@ const EntrySchema = z.object({
 
 const EpisodeSchema = z.object({
     id: z.string(),
+    // The conversion count builds before the digest identify an episode by; still written for them.
     engine: z.number(),
+    // Which conversion set opened it (documents.ts, conversionDigest): only a build with the same one resumes it.
+    // Absent from an episode a build before the digest opened, which every later build puts back.
+    digest: z.string().optional(),
     version: z.string(),
     state: z.enum(["open", "committed"]),
     startedAt: z.number(),
@@ -99,15 +104,15 @@ export interface EpisodeWork {
 }
 
 // Copies each target aside and records the episode open, before a single target is written. A resumed episode (a
-// crash mid-apply of this same engine) keeps the pre-images it already took: those are the true originals. Entries are
-// recorded in the order the work applies, and a rollback undoes them newest first.
+// crash mid-apply of a build with this same conversion digest) keeps the pre-images it already took: those are the true
+// originals. Entries are recorded in the order the work applies, and a rollback undoes them newest first.
 export const openEpisode = async (
     roots: Readonly<Record<DocumentRoot, string>>,
     journal: Journal,
     work: EpisodeWork,
-    identity: { readonly engine: number; readonly version: string; readonly now: number },
+    identity: { readonly engine: number; readonly digest: string; readonly version: string; readonly now: number },
 ): Promise<Journal> => {
-    const resumed = journal.episodes.find((episode) => episode.state === "open" && episode.engine === identity.engine);
+    const resumed = journal.episodes.find((episode) => episode.state === "open" && episode.digest === identity.digest);
     const episode: Episode = resumed ?? { id: `${identity.now}-${process.pid}`, ...identity, state: "open", startedAt: identity.now, entries: [] };
     const recorded = new Set(episode.entries.map((entry) => entry.path));
     const entries = [...episode.entries];

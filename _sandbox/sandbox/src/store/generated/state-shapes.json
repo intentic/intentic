@@ -493,6 +493,12 @@
       "since": "2026-09-24"
     }
   ],
+  "workspace:.intentic/local/newest-run.json": [
+    {
+      "type": "{ digest?: string; engine?: number; version?: string }",
+      "since": "2026-09-25"
+    }
+  ],
   "workspace:.intentic/local/rule-firings.json": [
     {
       "type": "Record<string, number>",
@@ -536,6 +542,10 @@
     },
     {
       "type": "{ at: number; engine: number; steps: { change: string; detail?: string; document: string }[]; version: string }",
+      "since": "2026-09-25"
+    },
+    {
+      "type": "{ at: number; digest?: string; engine: number; steps: { change: string; detail?: string; document: string }[]; version: string }",
       "since": "2026-09-25"
     }
   ],

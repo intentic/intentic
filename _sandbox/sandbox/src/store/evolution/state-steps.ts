@@ -31,7 +31,7 @@ export interface StepPlan {
 }
 
 export interface StructuralStep {
-    // Stable forever: the ledger and the engine epoch count it.
+    // Stable forever: the ledger records it and the conversion digest (documents.ts) names it.
     readonly id: string;
     readonly describe: string;
     // When it runs: a layout step brings whole trees to their current addresses before documents move one by one; a
@@ -41,12 +41,6 @@ export interface StructuralStep {
     readonly plan: (context: StepContext) => Promise<StepPlan | undefined>;
 }
 
-const registry = new Map<string, StructuralStep>();
-
-export const defineStep = (step: StructuralStep): StructuralStep => {
-    registry.set(step.id, step);
-    return step;
-};
-
-// By id, not by the order modules happened to load in: the plan must not depend on an import graph.
-export const registeredSteps = (): readonly StructuralStep[] => [...registry.values()].toSorted((a, b) => a.id.localeCompare(b.id));
+// Typing only: a step registers nothing by being defined. The boot step and the pre-flight read every step from
+// state-registry.ts, which the shape generator writes from every `export const name = defineStep(…)` in the source.
+export const defineStep = (step: StructuralStep): StructuralStep => step;

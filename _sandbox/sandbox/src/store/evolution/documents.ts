@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { z } from "zod";
 import type { Conversion, Granularity } from "./conversions.js";
 
@@ -5,7 +6,9 @@ import type { Conversion, Granularity } from "./conversions.js";
 // build writes, the conversions that bring any earlier shape to it, and where it lived before. The store runs the
 // conversions on every read; the boot step (state-convergence.ts) writes converted files back and moves documents
 // that changed address; the pre-flight (state-plan.ts) plans the same work read-only; the shape generator freezes each
-// schema so a later change that would strand an old file fails the typecheck until a conversion covers it.
+// schema so a later change that would strand an old file fails the typecheck until a conversion covers it. Defining one
+// registers nothing: the boot step and the pre-flight read every document from state-registry.ts, which the shape
+// generator writes from the source, so neither depends on which modules a process happened to load.
 
 // Which volume a document's path is relative to: the workspace (/work), the history volume, or the AI-auth root
 // (`.intentic/secrets/auth/` unless AGENT_AUTH_DIR moved it).
@@ -47,9 +50,6 @@ export interface DocumentDefinition<Schema extends z.ZodType, History extends re
     readonly horizon?: string;
 }
 
-// Keyed by root and path; a module evaluated twice (a test's fresh import) replaces its own entry.
-const registry = new Map<string, DocumentSpec>();
-
 export const documentKey = (spec: Pick<DocumentSpec, "root" | "path">): string => `${spec.root}:${spec.path}`;
 
 // `const` type parameters keep the history a tuple of its literal conversions, which is what lets the generated shape
@@ -71,14 +71,30 @@ export const defineDocument = <const Schema extends z.ZodType, const History ext
     if (spec.movedFrom.includes(spec.path)) {
         throw new Error(`document ${documentKey(spec)} lists its own path among its earlier ones`);
     }
-    registry.set(documentKey(spec), spec);
     return spec;
 };
 
-// Every document defined by a module this process has loaded, in definition order.
-export const registeredDocuments = (): readonly DocumentSpec[] => [...registry.values()];
+// A count of every conversion and earlier address the documents declare, plus the steps. Kept only because builds before
+// the conversion digest read it: they stamp and compare it (newest-run.json, the journal's episodes), so this build still
+// writes it, never lower than what the stamp holds. Nothing here decides anything by it.
+export const engineEpoch = (documents: readonly DocumentSpec[], steps: readonly { readonly id: string }[]): number =>
+    documents.reduce((sum, spec) => sum + spec.history.length + spec.movedFrom.length, steps.length);
 
-// A number that only grows as conversions ship: every conversion and earlier address any document declares. The state
-// manifest records the highest one that ran here, which is how a rolled-back build knows a newer one converted files.
-export const engineEpoch = (documents: readonly DocumentSpec[] = registeredDocuments(), steps = 0): number =>
-    documents.reduce((sum, spec) => sum + spec.history.length + spec.movedFrom.length, steps);
+// What identifies a conversion episode: every conversion (its description) and earlier address each document declares,
+// under the document's key, and every step's id, in an order no import graph decides. Two builds with the same digest
+// convert the same files the same way, so one resumes the other's interrupted episode; any other open episode is put
+// back. A document with nothing to convert does not move it.
+export const conversionDigest = (documents: readonly DocumentSpec[], steps: readonly { readonly id: string }[]): string => {
+    const lines = [
+        ...documents
+            .filter((spec) => spec.history.length > 0 || spec.movedFrom.length > 0)
+            .toSorted((a, b) => documentKey(a).localeCompare(documentKey(b)))
+            .flatMap((spec) => [
+                `document ${documentKey(spec)}`,
+                ...spec.history.map((conversion) => `  converts: ${conversion.describe}`),
+                ...spec.movedFrom.map((path) => `  moved from: ${path}`),
+            ]),
+        ...steps.map((step) => `step ${step.id}`).toSorted(),
+    ];
+    return createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 16);
+};

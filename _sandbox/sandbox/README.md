@@ -37,9 +37,16 @@ flowchart LR
 - Stored files evolve under one engine (`store/`). Each is declared with `defineDocument` beside its store, carrying
   the conversions its shape has had; `jsonFile` runs them on every read and keeps what it does not know on writes.
   Before any store opens, `store/evolution/state-convergence.ts` writes converted files back under a journal a rolled-back build
-  undoes, committed once boot converges. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight, and
-  `store/shapes/write-state-shapes.ts` freezes every shape each document has had so the typecheck catches a change that
-  would strand an old file.
+  undoes, committed once boot converges. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight. Both
+  take every document and structural step from `store/evolution/state-registry.ts`, never from what a process loaded:
+  `store/shapes/write-state-shapes.ts` writes it from every `export const name = defineDocument(…)` (or `defineStep`)
+  in the source, and fails on a definition in any other form; it also freezes every shape each document has had so the
+  typecheck catches a change that would strand an old file.
+- A rollback is decided by release: `.intentic/local/newest-run.json` names the newest version that ran here, and a
+  build older than it reports a downgrade and keeps its hands off what it cannot read. The digest of a build's
+  conversions (every conversion's description, earlier address and step id) identifies its journal episode: only a
+  build with the same digest resumes one, and any other open episode is put back. The conversion count earlier builds
+  compared is still written for them, and decides nothing.
 
 More: [subsystems](docs/subsystems.md) (how the parts connect), [environment](docs/env-contract.md) (what the daemon
 reads at start), [debugging](docs/debugging.md) (logs, diagnostics, state on disk).

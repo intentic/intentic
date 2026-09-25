@@ -60,8 +60,9 @@ wait and are measured together in the next run (`workspace/deps/verify-deps.ts`)
 decides: rustfmt on the crates the land touched, each failing check's own `fix` (`_tools/checks/manifest.mjs`), each
 ratcheted baseline lowered where the land's own paths beat it (no check run writes one),
 `contract.lock.json` regenerated after the declarations emit when the land changed the contract, and
-`state-shapes.json` when it changed a daemon or contract source (a new shape of a stored document, frozen for the
-typecheck that follows). These show up in
+`state-shapes.json` and `state-registry.ts` when it changed a daemon or contract source (a new shape of a stored
+document, frozen for the typecheck that follows, and the list of documents and boot steps the boot step and the
+update pre-flight read). These show up in
 the main tree as ordinary uncommitted changes. Then it measures the whole repository, plus what the land itself
 added over the commit it landed on (`land-tiers.mjs`: lint on its files, tidy lines, rustfmt, weakened tests left
 undeclared), and logs a failure that passes when re-run alone as a flake (`flakes.mjs`). The verdict is recorded
@@ -112,7 +113,11 @@ Anything a store writes and reads back (`.intentic/`, the daemon's `/history` fi
 `sandbox.toml`, a bundle) is read by every later release, from sandboxes that skipped any number of them. A change to
 its shape ships with its conversion, in the `history` of the document's `defineDocument`
 (`_sandbox/sandbox/src/store/evolution/conversions.ts` has the vocabulary). You do not have to find out when one is needed: the
-typecheck of `src/store/generated/state-shapes.ts` fails at the document and property an old file would break on. Never
+typecheck of `src/store/generated/state-shapes.ts` fails at the document and property an old file would break on. Define
+a document or a boot step as `export const name = defineDocument(…)` (or `defineStep`) at the top of its module, and
+list it by running the shape generator (`node --import tsx src/store/shapes/write-state-shapes.ts` in
+`_sandbox/sandbox`): the boot step and the update pre-flight read only `store/evolution/state-registry.ts`, and its
+test fails on a definition missing from it. Never
 read an existing key a new way (rename it), and never reuse a retired name. [COMPATIBILITY.md](COMPATIBILITY.md#stored-data)
 has the rest and the reasons.
 
