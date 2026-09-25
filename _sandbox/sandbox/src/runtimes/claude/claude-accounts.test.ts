@@ -17,7 +17,7 @@ const door = (
     claudeAccountDoor(
         unstubbed<ClaudeAccountDeps>("claude deps", {
             claudeStore,
-            accountUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
+            accountUsage: { read: async () => ({}), record: async () => {}, markUnread: async () => undefined, clear: async () => {} },
             claudeSeats: {
                 read: async () => Object.fromEntries(seats),
                 refuse: async (id, reason) => {

@@ -2,7 +2,7 @@
 import { ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
-import { type CapacityLane, type CapacityProvider, type CapacityRow, chatCapacity, heldReadings } from "./chatCapacity";
+import { type CapacityLane, type CapacityProvider, type CapacityRow, type CapacityUnread, chatCapacity, heldReadings } from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
 import { formatAge, formatReset, formatUtilization, usageTone } from "../session/usageStatus";
 import { heldAccounts, refreshConnections } from "../accounts/useChat-accounts";
@@ -100,6 +100,14 @@ const heldNote = computed((): { readonly subject: string; readonly retry: string
     const names = entry.labels.length === entry.count ? entry.labels.join(`, `) : `${entry.count} ${entry.count === 1 ? `account` : `accounts`}`;
     return { subject: `Can't re-read ${names} yet`, retry: `retry ${formatReset(entry.resumesAt)}` };
 });
+
+// Every other reading a re-read could not reach, one line per reason in the provider's own words ("Verify your account
+// to continue"): the age above leaves these out, and this is where they go instead. Names up to two, counts past that
+// (the hover names them all), since a column this narrow can't carry four email addresses.
+const unreadLine = (entry: CapacityUnread): { readonly subject: string; readonly detail: string } => ({
+    subject: `Can't re-read ${entry.count === entry.labels.length && entry.count <= 2 ? entry.labels.join(`, `) : `${entry.count} ${entry.count === 1 ? `account` : `accounts`}`}`,
+    detail: [entry.reason.replace(/\.$/, ``), ...(entry.lastReadAt === undefined ? [] : [`last read ${formatAge(entry.lastReadAt)}`])].join(` · `),
+});
 </script>
 
 <template>
@@ -124,6 +132,10 @@ const heldNote = computed((): { readonly subject: string; readonly retry: string
         <p v-if="heldNote !== undefined" class="shrink-0 px-3 pb-2 text-2xs">
             <span class="text-warning">{{ heldNote.subject }}</span>
             <span class="text-subtle"> · {{ heldNote.retry }}</span>
+        </p>
+        <p v-for="entry in capacity.unread" :key="entry.reason" v-tooltip.left="entry.labels.join(`, `)" class="shrink-0 px-3 pb-2 text-2xs">
+            <span class="text-warning">{{ unreadLine(entry).subject }}</span>
+            <span class="text-subtle"> · {{ unreadLine(entry).detail }}</span>
         </p>
 
         <!-- Unread isn't empty: until accounts load, this must not claim the fleet has nothing — drawn as the shape that's coming, not stated in words. -->

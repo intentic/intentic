@@ -1,5 +1,5 @@
 import { type AccountUsage, type KeyedProvider, reportsPlanLimits, type UsageWindow, type WindowGates, wordsOf } from "@intentic/sandbox-contract";
-import { asNumber, asRecord, asString, clampPercent, resetFromIso } from "./payload.js";
+import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "./payload.js";
 
 // Reader for the routed subscriptions (counterpart to claude-usage.ts); returns an AccountUsage only, storage and
 // merging live elsewhere.
@@ -343,6 +343,10 @@ const GOOGLE_USAGE_URLS = [
     "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
 ] as const;
 
+// A proxied call's answer, or why there is none: the upstream's own refusal where it gave one. Kept rather than folded
+// into `undefined`, since a read that fails the same way on every sweep is a number that silently stops moving.
+type ApiAnswer = { readonly payload: unknown } | { readonly failure: string };
+
 const apiCall = async (params: {
     readonly fetchFn: typeof fetch;
     readonly managementUrl: string;
@@ -353,7 +357,7 @@ const apiCall = async (params: {
     readonly header: Record<string, string>;
     readonly data?: string;
     readonly signal: AbortSignal;
-}): Promise<unknown> => {
+}): Promise<ApiAnswer> => {
     const response = await params.fetchFn(`${params.managementUrl}/api-call`, {
         method: "POST",
         headers: { authorization: `Bearer ${params.managementToken}`, "content-type": "application/json" },
@@ -367,17 +371,32 @@ const apiCall = async (params: {
         signal: params.signal,
     });
     if (!response.ok) {
-        return undefined;
+        return { failure: `the translator refused the call (HTTP ${String(response.status)})` };
     }
     const result = (await response.json()) as ApiCallResult;
-    if ((result.status_code ?? 0) < 200 || (result.status_code ?? 0) >= 300 || result.body === undefined) {
-        return undefined;
+    const status = result.status_code ?? 0;
+    if (status < 200 || status >= 300 || result.body === undefined) {
+        return { failure: readFailure(status, result.body) };
     }
     try {
-        return JSON.parse(result.body) as unknown;
+        return { payload: JSON.parse(result.body) as unknown };
     } catch {
-        return undefined;
+        return { failure: "the provider answered something that is not JSON" };
     }
+};
+
+/** One quota read: the reading, or the provider's reason there is none. */
+export type TranslatorUsageRead = { readonly usage: AccountUsage } | { readonly failure: string };
+
+// The same "no pools in it" for every provider, so a changed payload shape reads as a failure with words, not silence.
+const NO_POOLS = "the answer carried no plan limits";
+
+const usageOr = (answer: ApiAnswer, parse: (payload: unknown) => AccountUsage | undefined): TranslatorUsageRead => {
+    if ("failure" in answer) {
+        return answer;
+    }
+    const usage = parse(answer.payload);
+    return usage === undefined ? { failure: NO_POOLS } : { usage };
 };
 
 const codexAccountId = (file: TranslatorAuthFile): string | undefined => {
@@ -392,18 +411,18 @@ export const fetchTranslatorUsage = async (params: {
     readonly managementToken: string;
     readonly provider: KeyedProvider;
     readonly file: TranslatorAuthFile;
-}): Promise<AccountUsage | undefined> => {
-    // A provider `reportsPlanLimits` rejects never enters the refresh path; its rows stay dots, not a retry failure.
+}): Promise<TranslatorUsageRead> => {
+    // A provider `reportsPlanLimits` rejects never enters the refresh path (readableFiles); said anyway, not assumed.
     const authIndex = asString(params.file.auth_index);
     if (authIndex === undefined || !reportsPlanLimits(params.provider)) {
-        return undefined;
+        return { failure: "this provider publishes no plan limits to read" };
     }
     const measuredAt = Date.now();
     const signal = AbortSignal.timeout(10_000);
     try {
         if (params.provider === "codex") {
             const accountId = codexAccountId(params.file);
-            const payload = await apiCall({
+            const answer = await apiCall({
                 ...params,
                 authIndex,
                 url: CODEX_USAGE_URL,
@@ -416,11 +435,11 @@ export const fetchTranslatorUsage = async (params: {
                 },
                 signal,
             });
-            return codexUsageFromPayload(payload, measuredAt);
+            return usageOr(answer, (payload) => codexUsageFromPayload(payload, measuredAt));
         }
 
         if (params.provider === "kimi") {
-            const payload = await apiCall({
+            const answer = await apiCall({
                 ...params,
                 authIndex,
                 url: KIMI_USAGE_URL,
@@ -428,15 +447,17 @@ export const fetchTranslatorUsage = async (params: {
                 header: { Authorization: "Bearer $TOKEN$", Accept: "application/json" },
                 signal,
             });
-            return kimiUsageFromPayload(payload, measuredAt);
+            return usageOr(answer, (payload) => kimiUsageFromPayload(payload, measuredAt));
         }
 
         const project = asString(params.file.project_id);
         if (project === undefined) {
-            return undefined;
+            return { failure: "no Antigravity project on this Google account" };
         }
+        // The first refusal is the one kept: every URL is the same service, and the first is the one Google points at.
+        let refused: TranslatorUsageRead | undefined;
         for (const url of GOOGLE_USAGE_URLS) {
-            const payload = await apiCall({
+            const answer = await apiCall({
                 ...params,
                 authIndex,
                 url,
@@ -449,13 +470,16 @@ export const fetchTranslatorUsage = async (params: {
                 data: JSON.stringify({ project }),
                 signal,
             });
-            const usage = geminiUsageFromPayload(payload, measuredAt);
-            if (usage !== undefined) {
-                return usage;
+            const read = usageOr(answer, (payload) => geminiUsageFromPayload(payload, measuredAt));
+            if ("usage" in read) {
+                return read;
             }
+            refused ??= read;
         }
-    } catch {
-        // Quota is an enhancement to the connection list, never a reason to hide the account itself.
+        return refused ?? { failure: NO_POOLS };
+    } catch (error) {
+        // Quota is an enhancement to the connection list, never a reason to hide the account itself; but a read that
+        // throws the same way every sweep is still a number that stopped moving, so it says so.
+        return { failure: error instanceof Error && error.name === "TimeoutError" ? "the provider did not answer in time" : "the translator did not answer" };
     }
-    return undefined;
 };

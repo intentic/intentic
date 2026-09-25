@@ -1,7 +1,7 @@
 import type { UsageWindow, WindowGates } from "@intentic/sandbox-contract";
 import { type ClaudeStore, ensureFreshToken } from "../runtimes/claude/claude-credentials.js";
 import type { HeadroomSource } from "./headroom.js";
-import { asNumber, asRecord, asString, clampPercent, resetFromIso } from "./payload.js";
+import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "./payload.js";
 
 // Reader for native Claude accounts (translator-usage.ts's counterpart): reads the same OAuth endpoint claude.ai and
 // Claude Code's /usage use, so numbers match. Not the SDK's usage-control request (null for an env token) or the
@@ -111,6 +111,8 @@ export interface ClaudeUsageReading {
     readonly windows: UsageWindow[];
     // Endpoint's own stay-away on a 429, in ms; the one failure a caller must not treat as just "no reading".
     readonly retryAfterMs?: number;
+    // Why there is no reading, in the endpoint's own words where it gave some; absent on success.
+    readonly failure?: string;
 }
 
 // Stay-away for a 429 whose retry-after says nothing usable (absent, malformed, or `0`, which this endpoint does send).
@@ -125,7 +127,7 @@ export const rateLimitParkMs = (response: Response): number => {
     return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : RATE_LIMIT_PARK_MS;
 };
 
-// Best-effort: every failure reads as "no reading" (caller keeps the last one), except a 429, which always carries a
+// Best-effort: every failure reads as "no reading" (caller keeps the last one) and says why, and a 429 always carries a
 // stay-away for the sweep to honour.
 export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch, timeoutMs = 10_000): Promise<ClaudeUsageReading> => {
     try {
@@ -137,11 +139,11 @@ export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch,
             return { windows: [], retryAfterMs: rateLimitParkMs(response) };
         }
         if (!response.ok) {
-            return { windows: [] };
+            return { windows: [], failure: readFailure(response.status, await response.text()) };
         }
         return { windows: claudeUsageWindows((await response.json()) as unknown) };
-    } catch {
-        return { windows: [] };
+    } catch (error) {
+        return { windows: [], failure: error instanceof Error && error.name === "TimeoutError" ? "the provider did not answer in time" : "the read failed" };
     }
 };
 
@@ -166,7 +168,9 @@ export const claudeHeadroomSource = (store: ClaudeStore, fetchFn: typeof fetch =
                 minAgeMs: BACKGROUND_FLOOR_MS,
                 read: async () => {
                     const token = await ensureFreshToken(store, account.id);
-                    return token === undefined ? { windows: [] } : readClaudeUsage(token, fetchFn, READ_TIMEOUT_MS);
+                    return token === undefined
+                        ? { windows: [], failure: "the sign-in could not be refreshed" }
+                        : readClaudeUsage(token, fetchFn, READ_TIMEOUT_MS);
                 },
             })),
 });

@@ -19,6 +19,7 @@ const headroom = (percent: number): PlanHeadroom => ({
     tone: `text-link`,
     stale: false,
     measuredAt: 0,
+    unread: undefined,
     pools: [],
     binding: undefined,
 });

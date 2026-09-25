@@ -2,6 +2,7 @@ import {
     authFileCooling,
     codexUsageFromPayload,
     codexUsageFromRateLimits,
+    fetchTranslatorUsage,
     geminiUsageFromPayload,
     kimiUsageFromPayload,
 } from "./translator-usage.js";
@@ -268,4 +269,37 @@ test("keeps the proxy's words only where they are a sentence, never a pasted ups
     expect(authFileCooling({ name: "a.json", unavailable: true, status_message: " quota exceeded \nstack trace" })).toEqual({
         reason: "quota exceeded",
     });
+});
+
+// Google's answer for an account it wants verified, as the proxy's api-call relays it: the call itself succeeds, the
+// upstream status and body ride inside. Folded into "no reading" it froze four accounts' numbers with nothing said.
+const proxied = (statusCode: number, body: unknown): typeof fetch =>
+    (async () => Response.json({ status_code: statusCode, body: JSON.stringify(body) })) as unknown as typeof fetch;
+
+const GOOGLE_FILE = { name: "antigravity-a@example.com.json", provider: "antigravity", auth_index: "idx", project_id: "p-1" };
+
+test("a refused quota read comes back with the provider's own sentence, not as nothing", async () => {
+    const verify = {
+        error: {
+            code: 403,
+            message: "Verify your account to continue.",
+            status: "PERMISSION_DENIED",
+            details: [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "VALIDATION_REQUIRED" }],
+        },
+    };
+    const read = await fetchTranslatorUsage({ fetchFn: proxied(403, verify), managementUrl: "http://proxy", managementToken: "t", provider: "gemini", file: GOOGLE_FILE });
+    expect(read).toEqual({ failure: "Verify your account to continue." });
+
+    // No sentence to lift, and a pasted body is never one: the status stands in.
+    const bare = await fetchTranslatorUsage({ fetchFn: proxied(500, { error: { message: "x".repeat(400) } }), managementUrl: "http://proxy", managementToken: "t", provider: "gemini", file: GOOGLE_FILE });
+    expect(bare).toEqual({ failure: "HTTP 500" });
+
+    const ok = await fetchTranslatorUsage({
+        fetchFn: proxied(200, { groups: [{ displayName: "Gemini", buckets: [{ bucketId: "gemini-weekly", remainingFraction: 0.75 }] }] }),
+        managementUrl: "http://proxy",
+        managementToken: "t",
+        provider: "gemini",
+        file: GOOGLE_FILE,
+    });
+    expect(ok).toEqual({ usage: expect.objectContaining({ windows: [expect.objectContaining({ kind: "google:gemini-weekly", utilization: 25 })] }) });
 });

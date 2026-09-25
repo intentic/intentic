@@ -4,6 +4,7 @@ import {
     bindingWindow,
     gatingWindows,
     type ModelRef,
+    type UsageUnread,
     type UsageWindow,
     windowLive,
 } from "@intentic/sandbox-contract";
@@ -21,6 +22,10 @@ export interface AccountUsageStore {
     // absent rather than measured-and-empty.
     readonly read: () => Promise<Record<string, AccountUsage>>;
     readonly record: (account: string, usage: AccountUsage) => Promise<void>;
+    // Says a re-read failed on the snapshot it failed to replace, in one write: a read-then-record would put back a
+    // reading a turn's stream landed in between. Keeps the first failure's `since` while failures run on. Answers the
+    // snapshot as written, or undefined when there is none to mark (nothing on screen for the failure to date).
+    readonly markUnread: (account: string, unread: UsageUnread) => Promise<AccountUsage | undefined>;
     readonly clear: (account: string) => Promise<void>;
 }
 
@@ -90,6 +95,18 @@ export const fileAccountUsageStore = (path: string): AccountUsageStore => {
         },
         record: async (account, usage) => {
             await file.update((current) => ({ ...current, [account]: usage }));
+        },
+        markUnread: async (account, unread) => {
+            let marked: AccountUsage | undefined;
+            await file.update((current) => {
+                const usage = current[account];
+                if (usage === undefined) {
+                    return current;
+                }
+                marked = { ...usage, unread: { ...unread, since: usage.unread?.since ?? unread.since } };
+                return { ...current, [account]: marked };
+            });
+            return marked === undefined ? undefined : { ...marked, windows: liveWindows(marked, Date.now()) };
         },
         clear: async (account) => {
             await file.update((current) => {

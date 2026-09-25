@@ -142,7 +142,7 @@ const memoryStore = (accounts: readonly StoredAccount[]): ClaudeStore => ({
 });
 
 const endpoint = (body: unknown, ok = true): typeof fetch =>
-    (() => Promise.resolve({ ok, json: () => Promise.resolve(body) })) as unknown as typeof fetch;
+    (() => Promise.resolve(Response.json(body, { status: ok ? 200 : 403 }))) as unknown as typeof fetch;
 
 test("publishes one target per account that can read, keyed by the account, and skips a revoked credential", async () => {
     const source = claudeHeadroomSource(memoryStore([account("a"), account("revoked", { revokedAt: 1 }), account("b")]), endpoint(LIVE_PAYLOAD));
@@ -156,9 +156,17 @@ test("publishes one target per account that can read, keyed by the account, and 
     expect(targets.map((target) => target.minAgeMs)).toEqual([300_000, 300_000]);
 });
 
-test("a refused read answers no windows, never an empty measurement", async () => {
-    // Empty windows means "could not read", never "no limits": the service keeps the last good snapshot standing.
-    const source = claudeHeadroomSource(memoryStore([account("a")]), endpoint({}, false));
-    const [target] = await source.targets();
-    expect(await target!.read()).toEqual({ windows: [] });
+test("a refused read answers no windows, never an empty measurement, and says why", async () => {
+    // Empty windows means "could not read", never "no limits": the service keeps the last good snapshot standing, and
+    // marks it with these words so no screen dates a fresh fleet by it.
+    const refused = claudeHeadroomSource(
+        memoryStore([account("a")]),
+        endpoint({ type: "error", error: { type: "permission_error", message: "OAuth token does not meet scope requirement" } }, false),
+    );
+    const [target] = await refused.targets();
+    expect(await target!.read()).toEqual({ windows: [], failure: "OAuth token does not meet scope requirement" });
+
+    // Nothing to lift from the body: the status stands in, never silence.
+    const [bare] = await claudeHeadroomSource(memoryStore([account("a")]), endpoint({}, false)).targets();
+    expect(await bare!.read()).toEqual({ windows: [], failure: "HTTP 403" });
 });

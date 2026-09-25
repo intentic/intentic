@@ -13,6 +13,7 @@ import { providerRefusals, translatorAccounts } from "./providerAccounts";
 import {
     formatAge,
     liveUsage,
+    oldestMovableReading,
     PLAN_LIMIT_BAND_LABEL,
     PLAN_LIMIT_BANDS,
     type PlanHeadroom,
@@ -165,11 +166,11 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     const accountCapacity = computed(() => capacityCounts(provider.value, accountRows.value));
     const routedCapacity = computed(() => capacityCounts(routedProvider.value ?? provider.value, routedRows.value));
 
-    // The oldest reading on screen; a header must not vouch for a fresher row than the stalest one beneath it.
-    const measuredAt = computed<number | undefined>(() => {
-        const taken = [...accountRows.value, ...routedRows.value].flatMap((row) => (row.headroom === undefined ? [] : [row.headroom.measuredAt]));
-        return taken.length === 0 ? undefined : Math.min(...taken);
-    });
+    // The oldest reading on screen a re-read can move; a header must not vouch for a fresher row than the stalest one
+    // beneath it, nor be pinned by one whose re-read keeps failing (each row's ring says its own age and why).
+    const measuredAt = computed<number | undefined>(() =>
+        oldestMovableReading([...accountRows.value, ...routedRows.value].flatMap((row) => (row.headroom === undefined ? [] : [row.headroom]))),
+    );
 
     // Forced, so it bypasses the daemon's minute-long cache; covers every connection, not just this
     // provider's.

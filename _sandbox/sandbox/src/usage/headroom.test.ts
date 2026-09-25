@@ -18,6 +18,14 @@ const memoryStore = (stored: Record<string, AccountUsage> = {}): { store: Accoun
             record: async (id, usage) => {
                 recorded[id] = usage;
             },
+            markUnread: async (id, unread) => {
+                const usage = recorded[id];
+                if (usage === undefined) {
+                    return undefined;
+                }
+                recorded[id] = { ...usage, unread: { ...unread, since: usage.unread?.since ?? unread.since } };
+                return recorded[id];
+            },
             clear: async (id) => {
                 delete recorded[id];
             },
@@ -113,8 +121,9 @@ test("two triggers landing together cost one read, and a failed read leaves the 
     answer();
     await Promise.all([first, second]);
     expect(reads).toEqual({ a: 1 });
-    // An empty window list means "could not read", never "this account has no limits".
-    expect(recorded["a"]).toBe(known);
+    // An empty window list means "could not read", never "this account has no limits": the reading stands, marked as
+    // one a re-read could not reach.
+    expect(recorded["a"]).toEqual({ ...known, unread: { since: expect.any(Number), reason: "the provider gave no reading" } });
 });
 
 test("a target's own read budget outranks any freshness a trigger asks for, and only a watched re-measure spends it early", async () => {
@@ -280,9 +289,68 @@ test("a read that failed keeps the last snapshot; one that found nothing takes i
     answer = { windows: [], empty: true };
     await service.refresh({ maxAgeMs: 0 });
     expect(recorded["a"]).toBeUndefined();
-    expect(announced).toEqual([expect.objectContaining({ windows: WINDOWS.windows }), undefined]);
+    expect(announced).toEqual([
+        expect.objectContaining({ windows: WINDOWS.windows }),
+        expect.objectContaining({ windows: WINDOWS.windows, unread: expect.objectContaining({ reason: "the provider gave no reading" }) }),
+        undefined,
+    ]);
 
     // Nothing left to take back: a second empty read must not redraw every open window each sweep.
     await service.refresh({ maxAgeMs: 0 });
-    expect(announced).toHaveLength(2);
+    expect(announced).toHaveLength(3);
+});
+
+// The rail printed "1h ago" over thirty accounts read a minute ago because four Google accounts had started answering
+// "Verify your account to continue." and the reader turned that into nothing: no mark, no log, only an age that grew.
+// Every earlier fix named one more way a read could fail; this pins the rule that covers all of them, including the ones
+// nobody has met yet: any failed attempt is stamped on the snapshot it failed to replace, with the reader's words.
+test("any failed re-read is marked on the snapshot with the provider's words, once, until a read lands", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
+    try {
+        const last: AccountUsage = { windows: [...WINDOWS.windows], measuredAt: NOW - 90 * 60_000 };
+        const { store, recorded } = memoryStore({ "gemini:g.json": last, "codex:c.json": last });
+        let google: HeadroomReading = { windows: [], failure: "Verify your account to continue." };
+        const { source: routed } = source([
+            { key: "gemini:g.json", provider: "gemini", answer: async () => google },
+            // A reader that says nothing about why is marked all the same: the words are optional, the mark is not.
+            { key: "codex:c.json", provider: "codex", answer: async () => ({ windows: [] }) },
+        ]);
+        const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [routed], logger: silent });
+        const announced: string[] = [];
+        service.onChange((_provider, account, usage) => announced.push(`${account}:${usage?.unread?.reason ?? "read"}`));
+
+        await service.refresh({ maxAgeMs: 0 });
+        expect(recorded["gemini:g.json"]).toEqual({ ...last, unread: { since: NOW, reason: "Verify your account to continue." } });
+        expect(recorded["codex:c.json"]?.unread).toEqual({ since: NOW, reason: "the provider gave no reading" });
+
+        // Failing again keeps when it started, and does not redraw every open window each sweep.
+        jest.setSystemTime(NOW + FRESH_MS);
+        await service.refresh({ maxAgeMs: 0 });
+        expect(recorded["gemini:g.json"]?.unread?.since).toBe(NOW);
+        expect(announced.toSorted()).toEqual(["codex:c.json:the provider gave no reading", "gemini:g.json:Verify your account to continue."]);
+
+        // A reading that lands is the only thing that clears it.
+        google = WINDOWS;
+        await service.refresh({ maxAgeMs: 0 });
+        expect(recorded["gemini:g.json"]).toEqual({ windows: [...WINDOWS.windows], measuredAt: NOW + FRESH_MS });
+        expect(announced.at(-1)).toBe("gemini:g.json:read");
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("a rate-limit park is marked on the snapshot too, so no screen has to learn about parks to leave it out", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
+    try {
+        const { store, recorded } = memoryStore({ a: { windows: [...WINDOWS.windows], measuredAt: NOW - 60 * 60_000 } });
+        const { source: claude } = source([{ key: "a", provider: "claude", answer: async () => ({ windows: [], retryAfterMs: 600_000 }) }]);
+        const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [claude], logger: silent });
+
+        await service.refresh({ maxAgeMs: 0, watched: true });
+        expect(recorded["a"]?.unread).toEqual({ since: NOW, reason: "the provider is rate-limiting reads" });
+    } finally {
+        jest.useRealTimers();
+    }
 });

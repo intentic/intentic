@@ -14,6 +14,9 @@ export interface HeadroomReading {
     // A read that succeeded and found no pools, as against one that failed. The only thing that may retire a snapshot:
     // without it a source whose pools come and go (observed-limits.ts) can never take one back.
     readonly empty?: boolean;
+    // Why a read that found nothing failed, in the provider's words. Optional because every failure is recorded whether
+    // or not the reader could say why (readOne): this only improves the words.
+    readonly failure?: string;
 }
 
 export interface HeadroomTarget {
@@ -140,6 +143,26 @@ export const createHeadroomService = (deps: {
         announce(provider, account, usage);
     };
 
+    // Any attempt that did not land a reading, whatever stopped it, stamped on the snapshot it failed to replace. One
+    // path for every failure, known or not: a screen that dates readings by age reads this one fact instead of keeping
+    // its own list of the ways a number can stop moving, which is the list that went stale each time a provider found a
+    // new way to say no. Logged and announced when the reason changes, not on every retry.
+    const failedReasons = new Map<string, string>();
+    const readFailed = async (target: HeadroomTarget, reason: string): Promise<void> => {
+        const marked = await deps.store.markUnread(target.key, { since: Date.now(), reason });
+        if (failedReasons.get(target.key) === reason) {
+            return;
+        }
+        failedReasons.set(target.key, reason);
+        deps.logger.warn(
+            { account: target.key, provider: target.provider, reason, lastReadAt: marked === undefined ? undefined : new Date(marked.measuredAt).toISOString() },
+            "headroom: this account's plan limits could not be re-read, its last reading stands until a read succeeds",
+        );
+        if (marked !== undefined) {
+            announce(target.provider, target.key, marked);
+        }
+    };
+
     const readOne = (target: HeadroomTarget): Promise<void> => {
         const running = inFlight.get(target.key);
         if (running !== undefined) {
@@ -156,23 +179,35 @@ export const createHeadroomService = (deps: {
                     { account: target.key, provider: target.provider, until: new Date(until).toISOString() },
                     "headroom: the provider is rate-limiting this account, holding reads off until then",
                 );
+                await readFailed(target, reading.failure ?? "the provider is rate-limiting reads");
                 return;
             }
             // A failed read leaves the last snapshot standing; an empty list alone would misread as "no limits". Only a
             // read that says it found nothing retires one, and only when there was one to retire — announcing an
             // absence nobody was shown would redraw every open window each sweep.
             if (reading.windows.length > 0) {
+                failedReasons.delete(target.key);
                 await record(target.provider, target.key, { windows: [...reading.windows], measuredAt: Date.now() });
                 return;
             }
-            // `read()` has already dropped windows that have reset, so a key still present is a reading someone was
-            // actually shown — the only case worth announcing an absence for.
-            if (reading.empty === true && (await deps.store.read())[target.key] !== undefined) {
-                await deps.store.clear(target.key);
-                announce(target.provider, target.key, undefined);
+            if (reading.empty === true) {
+                failedReasons.delete(target.key);
+                // `read()` has already dropped windows that have reset, so a key still present is a reading someone was
+                // actually shown — the only case worth announcing an absence for.
+                if ((await deps.store.read())[target.key] !== undefined) {
+                    await deps.store.clear(target.key);
+                    announce(target.provider, target.key, undefined);
+                }
+                return;
             }
+            await readFailed(target, reading.failure ?? "the provider gave no reading");
         })()
-            .catch((error: unknown) => deps.logger.warn({ err: error, account: target.key }, "headroom: read failed, the next trigger retries"))
+            .catch(async (error: unknown) => {
+                deps.logger.warn({ err: error, account: target.key }, "headroom: read failed, the next trigger retries");
+                await readFailed(target, "the read failed").catch((markError: unknown) =>
+                    deps.logger.warn({ err: markError, account: target.key }, "headroom: could not mark the failed read on the snapshot"),
+                );
+            })
             .finally(() => inFlight.delete(target.key));
         inFlight.set(target.key, read);
         return read;
@@ -243,6 +278,7 @@ export const createHeadroomService = (deps: {
         record,
         clear: async (provider, account) => {
             attemptedAt.delete(account);
+            failedReasons.delete(account);
             blockedUntil.delete(account);
             await Promise.all([deps.store.clear(account), deps.parks.clear(account)]);
             announce(provider, account, undefined);

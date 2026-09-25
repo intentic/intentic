@@ -24,11 +24,24 @@ export const UsageWindowSchema = z.object({
     gates: WindowGatesSchema,
 });
 export type UsageWindow = z.infer<typeof UsageWindowSchema>;
+// A failed re-read, whatever the cause: a 429 park, a 403 asking for verification, a 5xx, a timeout. Recorded as the fact
+// "the last attempt failed", never inferred from a list of known failure kinds, so a surface that dates readings by
+// age can leave out every reading that cannot move, including one whose failure nobody has seen before.
+export const UsageUnreadSchema = z.object({
+    since: z.number().describe("When re-reading this account first failed, in milliseconds. It has failed on every attempt since."),
+    reason: z
+        .string()
+        .describe("Why, in the provider's own words where it gave some (\"Verify your account to continue.\"). Short enough to print; never a pasted response body."),
+});
+export type UsageUnread = z.infer<typeof UsageUnreadSchema>;
 // Every window kept, not just the binding one, since which pool binds changes between turns. Utilization only climbs
 // within a window, so a stale reading is still a valid floor. `measuredAt` is epoch ms — windows are seconds.
 export const AccountUsageSchema = z.object({
     windows: z.array(UsageWindowSchema),
     measuredAt: z.number(),
+    unread: UsageUnreadSchema.optional().describe(
+        "Present while re-reading this account keeps failing: these windows are the last reading that succeeded, and `measuredAt` will not move until a read succeeds again.",
+    ),
 });
 export type AccountUsage = z.infer<typeof AccountUsageSchema>;
 // Anthropic's once-a-week reset of the session window only; the weekly allowance is untouched. The answer is entirely

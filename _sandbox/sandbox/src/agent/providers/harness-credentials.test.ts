@@ -149,6 +149,7 @@ const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string,
                 working: { measuredAt: 0, windows: [{ kind: "seven_day", utilization: 74, gates: "all" }] },
             }),
             record: async () => {},
+            markUnread: async () => undefined,
             clear: async () => {},
         },
         providerRefusals: {

@@ -21,6 +21,7 @@ const headroom = (over: Partial<PlanHeadroom> = {}): PlanHeadroom => ({
     tone: `text-warning`,
     stale: false,
     measuredAt: Date.now(),
+    unread: undefined,
     pools: [
         { kind: `five_hour`, label: `5-hour session`, percent: 56, resetsAt: RESETS_AT, gates: `all` },
         { kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: undefined, gates: `all` },

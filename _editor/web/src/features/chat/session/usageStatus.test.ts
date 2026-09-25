@@ -577,6 +577,7 @@ describe(`plan-limit aggregates`, () => {
         account: `${percent ?? `none`}`,
         label: `account`,
         identity: undefined,
+        unread: undefined,
         percent,
         pools: percent === undefined ? [] : [{ kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000, gates: `all` }],
         binding: percent === undefined ? undefined : { kind: `seven_day`, label: `Weekly`, percent, resetsAt: 5_000, gates: `all` },

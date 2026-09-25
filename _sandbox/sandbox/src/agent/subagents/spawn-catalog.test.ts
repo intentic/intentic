@@ -13,7 +13,7 @@ const usage = (...windows: UsageWindow[]): AccountUsage => ({ windows, measuredA
 const claudeOnly = (accounts: Record<string, AccountUsage>) =>
     services({
         claudeStore: { list: async () => Object.keys(accounts).map((id) => ({ id, label: id })) as never },
-        accountUsage: { read: async () => accounts, record: async () => {}, clear: async () => {} },
+        accountUsage: { read: async () => accounts, record: async () => {}, markUnread: async () => undefined, clear: async () => {} },
     });
 
 test("reports the most headroom any one account has, and names only a pool the plan scopes", async () => {

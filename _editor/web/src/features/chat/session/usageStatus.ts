@@ -8,6 +8,7 @@ import {
     reportsPlanLimits,
     scopedWindow,
     type TranslatorAccounts,
+    type UsageUnread,
     type UsageWindow,
     type WindowGates,
     windowPeriod,
@@ -213,6 +214,8 @@ export interface PlanHeadroom {
     readonly tone: string;
     readonly stale: boolean;
     readonly measuredAt: number;
+    // Set while re-reading this account keeps failing: `measuredAt` then stops moving until someone acts or it clears.
+    readonly unread: UsageUnread | undefined;
     readonly pools: readonly PlanLimitPool[];
     // Pool `percent` came from; undefined only when every pool has reset (measured, nothing left to name).
     readonly binding: PlanLimitPool | undefined;
@@ -227,7 +230,7 @@ export const planHeadroom = (usage: AccountUsage | undefined, model?: ModelRef):
     const pools = usagePools(usage);
     const binding = bindingPool(usage, pools, model);
     const percent = binding?.percent ?? 0;
-    return { percent, tone: usageTone(percent), stale: isStale(usage), measuredAt: usage.measuredAt, pools, binding };
+    return { percent, tone: usageTone(percent), stale: isStale(usage), measuredAt: usage.measuredAt, unread: usage.unread, pools, binding };
 };
 
 // Epoch-seconds reset instant as a short local label: a weekday + time inside the coming week ("Mon 15:20"), the date
@@ -259,6 +262,20 @@ export const formatWait = (epochSeconds: number, now: number = Date.now()): stri
 // Age of a reading in the kit's day-based words, not an absolute date, so staleness reads the same at any
 // distance. Taken at a turn's end, and utilization only climbs, so the number is a floor.
 export const formatAge = (measuredAt: number, now: number = Date.now()): string => timeAgo(measuredAt, { now, days: true });
+
+// The age a header may print over a set of readings: the oldest one a re-read can still move. A reading whose re-read
+// keeps failing is left out whatever stopped it (UsageUnread), since its age only grows and would date every fresh
+// reading beside it; the caller names those instead (unreadGroups). One rule for every header, keyed on the fact that
+// the read failed rather than on a list of known reasons, so a provider's next new way to refuse a read cannot pin it.
+// When nothing can move, the oldest there is: every number is stuck, and the header must say how old they are.
+export const oldestMovableReading = (
+    readings: readonly { readonly measuredAt: number | undefined; readonly unread: UsageUnread | undefined }[],
+): number | undefined => {
+    const taken = readings.flatMap((reading) => (reading.measuredAt === undefined ? [] : [reading]));
+    const movable = taken.filter((reading) => reading.unread === undefined);
+    const ages = (movable.length > 0 ? movable : taken).flatMap((reading) => (reading.measuredAt === undefined ? [] : [reading.measuredAt]));
+    return ages.length === 0 ? undefined : Math.min(...ages);
+};
 
 // Past this, a reading is a floor: other clients spend the same account-wide pools unseen.
 const STALE_AFTER_MS = 10 * 60_000;
@@ -297,6 +314,8 @@ export interface PlanLimitRow {
     // Pool the percent came from, the one gating this account's next turn; carried, not re-derived.
     readonly binding: PlanLimitPool | undefined;
     readonly measuredAt: number | undefined;
+    // Re-reading this account keeps failing, and why; `measuredAt` is then the last read that succeeded.
+    readonly unread: UsageUnread | undefined;
     readonly stale: boolean;
     readonly readable: boolean;
     // Credential can no longer be refreshed; unrelated to headroom, decides whether it can serve a turn.
@@ -354,6 +373,7 @@ const planLimitRow = (provider: AgentProvider, source: PlanLimitSource): PlanLim
         pools,
         binding,
         measuredAt: usage?.measuredAt,
+        unread: usage?.unread,
         stale: usage !== undefined && isStale(usage),
         readable: reportsPlanLimits(provider),
         needsReauth: source.needsReauth,
@@ -605,6 +625,31 @@ const limitStandsFor = (provider: AgentProvider, account: string, reading: Accou
         ...providerReadings(provider).filter((entry) => entry.account !== account),
     ];
     return refusalAnswer(refusal, readings) === undefined;
+};
+
+// Readings that stopped moving, grouped by the provider's reason: four accounts Google wants verified are one sentence,
+// not four. Each group carries its own oldest age, the one its numbers are as old as.
+export interface PlanLimitUnread {
+    readonly reason: string;
+    readonly rows: readonly PlanLimitRow[];
+    // The oldest last-successful read among them, what their numbers are as old as.
+    readonly lastReadAt: number | undefined;
+}
+
+// Most accounts first, like attentionGroups.
+export const unreadGroups = (rows: readonly PlanLimitRow[]): PlanLimitUnread[] => {
+    const byReason = new Map<string, PlanLimitRow[]>();
+    for (const row of rows) {
+        if (row.unread !== undefined) {
+            byReason.set(row.unread.reason, [...(byReason.get(row.unread.reason) ?? []), row]);
+        }
+    }
+    return [...byReason]
+        .map(([reason, grouped]): PlanLimitUnread => {
+            const ages = grouped.flatMap((row) => (row.measuredAt === undefined ? [] : [row.measuredAt]));
+            return { reason, rows: grouped, lastReadAt: ages.length === 0 ? undefined : Math.min(...ages) };
+        })
+        .toSorted((left, right) => right.rows.length - left.rows.length || left.reason.localeCompare(right.reason));
 };
 
 // Accounts held back by one missing thing. Grouped, since the fix belongs to the reason and not to each name: thirty

@@ -5,6 +5,7 @@ import {
     attentionGroups,
     blockedReason,
     NO_SEAT,
+    oldestMovableReading,
     type PlanLimitGroup,
     planLimitGroups,
     type PlanLimitPool,
@@ -12,6 +13,7 @@ import {
     planLimitRows,
     poolPeriod,
     poolScope,
+    unreadGroups,
 } from "../session/usageStatus";
 
 // Projection behind ChatCapacityRail.vue for the popped-out chat: not the Usage tab's full reconciliation, but what has
@@ -92,6 +94,16 @@ export interface CapacityBlocked {
     readonly labels: readonly string[];
 }
 
+/** Readings that stopped moving for one reason: what a re-read could not reach, in the provider's words. */
+export interface CapacityUnread {
+    readonly reason: string;
+    readonly count: number;
+    // Account labels, for the hover the counted line is too narrow to print.
+    readonly labels: readonly string[];
+    // Their oldest last successful read: how old the numbers drawn for them are.
+    readonly lastReadAt: number | undefined;
+}
+
 export interface ChatCapacity {
     // Roomiest provider first.
     readonly providers: readonly CapacityProvider[];
@@ -101,8 +113,10 @@ export interface ChatCapacity {
     // Agent tab. Without this a connected-but-unusable account is invisible: absent from every offer, and silently
     // part of no count.
     readonly blocked: readonly CapacityBlocked[];
-    // Oldest reading on screen, not the freshest, since it qualifies every bar shown under it.
+    // Oldest reading a re-read can still move, not the freshest, since it qualifies every bar shown under it.
     readonly measuredAt: number | undefined;
+    // Readings that cannot move and why, said beside the age they are left out of; never a silent exclusion.
+    readonly unread: readonly CapacityUnread[];
 }
 
 // The tightest pool that gates every model, or, if none gates everything, the roomiest scoped pool; undefined when
@@ -148,9 +162,14 @@ const canServe = (row: PlanLimitRow, refused: Refused): boolean => {
     return !spentOutright(row);
 };
 
-// Roomiest first; a row with no reading sorts after every measured row, never as headroom. Ties break by label so the
-// column holds still between reads.
+// Roomiest first; a row with no reading sorts after every measured row, never as headroom, and a reading whose re-read
+// keeps failing sorts after every one that can still move: its figure is a floor from before it stopped, so it would
+// otherwise head a provider precisely because it is old. Ties break by label so the column holds still between reads.
 const byRoom = (left: PlanLimitRow, right: PlanLimitRow): number => {
+    const stuck = Number(left.unread !== undefined) - Number(right.unread !== undefined);
+    if (stuck !== 0) {
+        return stuck;
+    }
     const [leftRoom, rightRoom] = [openPercent(left.pools), openPercent(right.pools)];
     if (leftRoom === undefined || rightRoom === undefined) {
         return leftRoom === rightRoom ? left.label.localeCompare(right.label) : leftRoom === undefined ? 1 : -1;
@@ -272,13 +291,12 @@ export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number =
     });
     // An account whose provider is holding reads off has an age nothing can move, so it must not date the fleet: one
     // stuck credential would otherwise print "11h ago" over thirty accounts read a minute ago. It is not dropped from
-    // the reckoning, it is said separately (heldReadings), which is the only form of it a reader can act on.
+    // the reckoning, it is said separately (heldReadings), which is the only form of it a reader can act on. The daemon
+    // marks the same park on the snapshot (`unread`); this covers the beat between a press's answer and that mark.
     const heldNow = new Set(held.flatMap((entry) => (entry.resumesAt * 1000 > now ? [`${entry.provider}:${entry.account}`] : [])));
     // Held to the rows whose reading this rail rests something on: a credential no turn can run on is named by what it
     // is missing, never by a figure, so its last reading — of any age — must not date the ones that are drawn.
-    const measured = rows.flatMap((row) =>
-        row.measuredAt === undefined || blockedReason(row) !== undefined || heldNow.has(row.id) ? [] : [row.measuredAt],
-    );
+    const dated = rows.filter((row) => blockedReason(row) === undefined && !heldNow.has(row.id));
     return {
         providers: judged
             .flatMap((entry) => (entry.ready.length === 0 ? [] : [capacityProvider(entry.group, entry.ready)]))
@@ -302,7 +320,13 @@ export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number =
             reconnect: entry.reason !== NO_SEAT,
             labels: entry.rows.map((row) => row.label),
         })),
-        measuredAt: measured.length === 0 ? undefined : Math.min(...measured),
+        measuredAt: oldestMovableReading(dated),
+        unread: unreadGroups(dated).map((entry) => ({
+            reason: entry.reason,
+            count: entry.rows.length,
+            labels: entry.rows.map((row) => row.label),
+            lastReadAt: entry.lastReadAt,
+        })),
     };
 };
 

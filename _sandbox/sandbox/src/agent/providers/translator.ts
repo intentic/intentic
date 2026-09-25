@@ -274,7 +274,8 @@ export const createCliProxyClient = (params: {
     token: string;
     configPath: string;
     authDir: string;
-    usageStore: AccountUsageStore;
+    // Read only: readings are written by the headroom service, which is the one place a failed read is marked.
+    usageStore: Pick<AccountUsageStore, "read">;
     fetchFn?: typeof fetch;
     binaryPresent?: () => Promise<boolean>;
     spawnFn?: typeof spawn;
@@ -522,18 +523,10 @@ export const createCliProxyClient = (params: {
             readableFiles(await listFiles()).map((entry) => ({
                 key: entry.key,
                 provider: entry.provider,
-                read: async () => ({
-                    windows:
-                        (
-                            await fetchTranslatorUsage({
-                                fetchFn,
-                                managementUrl,
-                                managementToken: token,
-                                provider: entry.provider,
-                                file: entry.file,
-                            })
-                        )?.windows ?? [],
-                }),
+                read: async () => {
+                    const read = await fetchTranslatorUsage({ fetchFn, managementUrl, managementToken: token, provider: entry.provider, file: entry.file });
+                    return "usage" in read ? { windows: read.usage.windows } : { windows: [], failure: read.failure };
+                },
             })),
     };
 

@@ -346,6 +346,42 @@ describe(`how old the rail says its readings are`, () => {
         // account, so the claim is over and its age counts again.
         expect(chatCapacity([{ ...held[0]!, resumesAt: NOW / 1_000 - 1 }], NOW).measuredAt).toBe(NOW - 10 * 3_600_000);
     });
+
+    // The reproduction: 31 Google accounts, four of which Google started answering "Verify your account to continue."
+    // The daemon now marks such a snapshot (`unread`) whatever the refusal was, so the rail leaves it out of the age by
+    // that one fact instead of by a list of known reasons, and names it with the provider's words rather than silently.
+    it(`leaves out any reading whose re-read keeps failing, and says which and why`, () => {
+        const stuck = (index: number): TranslatorAccount => ({
+            ...google(index, 12),
+            usage: { ...usage(12), measuredAt: NOW - 87 * 60_000, unread: { since: NOW - 80 * 60_000, reason: `Verify your account to continue.` } },
+        });
+        translatorAccounts.value = {
+            ...NO_ROUTED,
+            gemini: [...Array.from({ length: 27 }, (_, index) => google(index, 25)), stuck(90), stuck(91), stuck(92), stuck(93)],
+        };
+
+        const capacity = chatCapacity([], NOW);
+        expect(capacity.measuredAt).toBe(NOW - 60_000);
+        expect(capacity.unread).toEqual([
+            {
+                reason: `Verify your account to continue.`,
+                count: 4,
+                labels: [`radarsuspam90@gmail.com`, `radarsuspam91@gmail.com`, `radarsuspam92@gmail.com`, `radarsuspam93@gmail.com`],
+                lastReadAt: NOW - 87 * 60_000,
+            },
+        ]);
+        // Nor does one head Google's list: its 12% is a floor from before it stopped, roomier only because it is old.
+        expect([capacity.providers[0]?.rows[0]?.id, capacity.providers[0]?.rows[0]?.percent]).toEqual([`gemini:gemini-0`, 25]);
+    });
+
+    // Every number stuck is still an age worth printing: leaving the control blank would claim nothing was ever read.
+    it(`falls back to the oldest reading when none of them can move`, () => {
+        providerAccounts.value = {
+            claude: [claude({ id: `a`, label: `only@example.com`, usage: { ...usage(40), measuredAt: NOW - 3_600_000, unread: { since: NOW, reason: `HTTP 500` } } })],
+        };
+
+        expect(chatCapacity([], NOW).measuredAt).toBe(NOW - 3_600_000);
+    });
 });
 
 describe(`what the rail says about what it is not offering`, () => {

@@ -306,7 +306,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // Every seat is live: the picker skips only an account no org will serve; an answered turn clears its hold.
         claudeSeats: { read: async () => ({}), refuse: async () => {}, clear: async () => {} },
         // No usage measured by default, as if the window just reset.
-        accountUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
+        accountUsage: { read: async () => ({}), record: async () => {}, markUnread: async () => undefined, clear: async () => {} },
         // Nothing to sweep: reading one needs a live OAuth endpoint; writes are swallowed like the store's.
         headroom: {
             refresh: async () => {},
