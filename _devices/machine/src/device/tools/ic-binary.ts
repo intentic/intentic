@@ -41,6 +41,7 @@ export const icNeedsFetch = (installed: string | undefined, agent: string): bool
 
 const installedVersion = async (): Promise<string | undefined> => {
     for (const candidate of icCandidates(process.platform, homeDir())) {
+        // allow(silent-catch): a candidate that is missing or will not say its version is not the installed ic, and the next is tried
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; the first that answers wins
         const answer = await exec(candidate, ["--version"], { timeout: 30_000, windowsHide: true }).catch(() => undefined);
         if (answer !== undefined) {
@@ -76,6 +77,7 @@ export const ensureCurrentIc = async (): Promise<void> => {
             throw error;
         }
     })();
+    // allow(silent-catch): a failed download leaves whatever is installed to answer for itself, and the next call tries again
     await checked.catch(() => undefined);
 };
 

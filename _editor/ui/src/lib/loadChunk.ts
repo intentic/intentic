@@ -20,6 +20,7 @@ export const recoverStaleChunk = (target: string = here()): boolean => {
         }
         sessionStorage.setItem(CHUNK_RELOADED_KEY, target);
     } catch {
+        // allow(silent-catch): storage access may be blocked in sandboxed contexts or private windows
         return false;
     }
     location.assign(target);
@@ -30,7 +31,7 @@ const clearStaleChunkReload = (): void => {
     try {
         sessionStorage.removeItem(CHUNK_RELOADED_KEY);
     } catch {
-        // No storage to clean.
+        // allow(silent-catch): no storage to clean in sandboxed contexts or private windows
     }
 };
 

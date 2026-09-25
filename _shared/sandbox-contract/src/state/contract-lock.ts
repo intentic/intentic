@@ -5,6 +5,8 @@
 // and the edge, and the front's control socket with Node), under `wire:` names no export can take.
 
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { z } from "zod";
 import * as contract from "../index.js";
 
@@ -46,7 +48,7 @@ export const currentLock = (): Record<string, unknown> => {
     }
     for (const manifest of WIRE_MANIFESTS) {
         // Read from src/ whether this runs from src/ or dist/: the manifests are data `cargo test` writes, never compiled.
-        const text = readFileSync(new URL(`../../src/front/generated/${manifest}.json`, import.meta.url), "utf8");
+        const text = readFileSync(join(packageRoot(import.meta.url), "src", "front", "generated", `${manifest}.json`), "utf8");
         lock[`wire:${manifest}`] = sorted(JSON.parse(text));
     }
     return lock;

@@ -9,5 +9,6 @@
     "_platform/prisma": 1,
     "_sandbox/sandbox": 5,
     "_search/iq-engine": 1,
+    "_shared/sandbox-contract": "src/front/browser-wire.ts is the ./browser-wire export; generated/browser-wire.ts is named by the browser-wire crate's ts-rs export_to and says do not edit",
     "_site/site": 2
 }
