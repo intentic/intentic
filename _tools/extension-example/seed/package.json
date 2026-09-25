@@ -7,7 +7,7 @@
     "type": "module",
     "packageManager": "pnpm@12.6.0",
     "scripts": {
-        "build": "vite build",
+        "build": "vite build && vite build --config vite.server.config.ts",
         "typecheck": "vue-tsc --noEmit -p tsconfig.json",
         "test": "node --test test/activate.test.mjs"
     },

@@ -14,6 +14,9 @@ intentic-example add "the flaky test in checkout.spec.ts fails only with a cold 
 intentic-example list
 ```
 
+The same two things are tools too, `mcp__example__add_note` and `mcp__example__list_notes`, for a turn without a
+shell.
+
 Keep a note to one sentence. It is a breadcrumb, not a report: the place for reasoning is your reply, and the
 place for durable knowledge is the repository's own documentation.
 

@@ -1,7 +1,7 @@
 // Pins what the form's effects panel and the grid's badges read: the contribution a config names through its kind's
 // discriminator, the live answers (a typed name, a cloned URL) the panel follows, and the three consequences badged.
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, contributionEntry } from "@intentic/capability-catalog";
-import type { CapabilityContribution } from "@intentic/extension-manifest";
+import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-manifest";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 import { contributionFor, formEffects, tileBadges } from "./effects";
 
@@ -47,6 +47,20 @@ describe(`the form's effects panel`, () => {
         ]);
         // Nothing typed yet names nothing; without its contribution a connector could promise no credential.
         expect(formEffects(postgres, {}, `  `, () => undefined)).toEqual([{ kind: `skill`, name: undefined }]);
+    });
+
+    // The card says nothing about tools; its extension's `tools.perCard` does, so the panel reads the manifest too.
+    it(`shows the MCP server a card gets from its extension's tools`, () => {
+        const manifestOf = (kind: CapabilityKind, id: string): ExtensionManifest | undefined =>
+            kind === `cli` && id === `postgres`
+                ? { publisher: `acme`, name: `db`, version: `1.0.0`, engines: { intentic: `^2.20.0` }, server: `dist/server.js`, contributes: { capabilities: [POSTGRES], tools: { perCard: `postgres` } } }
+                : undefined;
+        expect(formEffects(postgres, { url: `postgres://db` }, `shop-db`, contributionOf, manifestOf)).toEqual([
+            { kind: `skill`, name: `shop-db` },
+            { kind: `secret`, exposure: `agent-env` },
+            { kind: `image` },
+            { kind: `mcp` },
+        ]);
     });
 
     it(`tracks a clone URL as it is typed`, () => {

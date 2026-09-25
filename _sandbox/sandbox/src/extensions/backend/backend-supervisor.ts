@@ -1,8 +1,8 @@
 import { join } from "node:path";
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import type { ChildProcess } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -28,8 +28,13 @@ import {
 
 // Daemon-side supervisor for the backend host process; extension code runs there, never in the daemon, since loaded
 // code cannot be unloaded.
-// Every lifecycle change is a host restart (/x routes answer 503 meanwhile); the daemon spawns, waits for health,
-// forwards logs, and respawns with backoff.
+// Only a change to what the host runs restarts it: the set of backends, their code, and what each is handed at
+// activation (hostKeyOf). Everything else a converge learns (which tokens resolve, which /x paths are MCP endpoints, which
+// extension is absent or incompatible) is read at request time and lands without one. A restart leaves /x answering 503
+// and holds the MCP door's requests meanwhile (extension-mcp.ts); the daemon spawns, waits for health, forwards logs,
+// and respawns with backoff.
+// One host for every extension, not one each: a node process costs tens of megabytes resident before any extension
+// code loads, paid on every sandbox for every extension with a backend, most of which idle.
 // Owns the HOST token (proves a request came through the daemon's gate) and the per-extension tokens, one per enabled
 // extension, which its backend and its processes both carry and the extension grant verifies (auth/grants.ts).
 
@@ -48,7 +53,8 @@ export interface ExtensionBackend {
     // Converges immediately: enumerates enabled backends and respawns the host. Boot calls this once; everything else
     // uses restart().
     start(): Promise<void>;
-    // Debounced converge; safe to call in bursts (toggle, install, workspace-extension edit).
+    // Debounced converge; safe to call in bursts (toggle, install, workspace-extension edit). Restarts the host only when
+    // what it would run changed.
     restart(): void;
     stop(): void;
     status(): ExtensionBackendState;
@@ -106,7 +112,27 @@ interface SpawnedHost {
     readonly child: ChildProcess;
     readonly port: number;
     readonly hostToken: string;
+    // What it was started with (hostKeyOf): an unchanged key means a converge leaves it running.
+    readonly key: string;
 }
+
+// A server bundle's content digest: the code the host would load. A bundle it cannot read hashes as absent, which a
+// later converge that can read it tells apart.
+const bundleDigest = async (dir: string, server: string): Promise<string> =>
+    readFile(join(dir, server)).then(
+        (bytes) => createHash("sha256").update(bytes).digest("hex"),
+        () => "unreadable",
+    );
+
+// Everything the host process is handed that it cannot re-read at request time: which backends, from where, their code,
+// and what each is told at activation. Tokens are minted once per daemon and so never move it.
+const hostKeyOf = (workspaceRoot: string, runnable: readonly (BackendHostExtension & { readonly bundle: string })[]): string =>
+    JSON.stringify({
+        workspaceRoot,
+        extensions: runnable
+            .map(({ id, dir, server, daemonPermissions, bundle }) => ({ id, dir, server, daemonPermissions: [...daemonPermissions].toSorted(), bundle }))
+            .toSorted((a, b) => a.id.localeCompare(b.id)),
+    });
 
 export const createExtensionBackend = (services: () => ExtensionHost, daemonPort: number, logger: Logger): ExtensionBackend => {
     // Minted once per daemon lifetime so a restart doesn't invalidate an in-flight token; reach resolves separately.
@@ -166,12 +192,12 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
     // A backend's reach is enforced on the daemon side, by its token; the host is handed the same list only to refuse a
     // typed call before sending it.
     const collect = async (): Promise<{
-        runnable: BackendHostExtension[];
+        runnable: (BackendHostExtension & { readonly bundle: string })[];
         reported: BackendStatus[];
         tokenReach: Map<string, ExtensionGrant>;
         tools: Map<string, readonly string[]>;
     }> => {
-        const runnable: BackendHostExtension[] = [];
+        const runnable: (BackendHostExtension & { readonly bundle: string })[] = [];
         const reported: BackendStatus[] = [];
         const tokenReach = new Map<string, ExtensionGrant>();
         const tools = new Map<string, readonly string[]>();
@@ -198,7 +224,14 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
                 reported.push({ id: extension.id, state: "absent", detail: RUNTIME_ABSENT_DETAIL });
                 continue;
             }
-            runnable.push({ id: extension.id, dir: extension.dir, server, daemonToken: tokenFor(extension.id), daemonPermissions: grant.permissions });
+            runnable.push({
+                id: extension.id,
+                dir: extension.dir,
+                server,
+                daemonToken: tokenFor(extension.id),
+                daemonPermissions: grant.permissions,
+                bundle: await bundleDigest(extension.dir, server),
+            });
         }
         return { runnable, reported, tokenReach, tools };
     };
@@ -231,23 +264,38 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         return health;
     };
 
+    // The host's own rows from its last /health, kept so a converge that leaves it running can still report them.
+    let hostStatuses: readonly BackendExtensionStatus[] = [];
+
     const converge = async (): Promise<void> => {
         const run = ++generation;
         clearTimeout(retry);
-        kill();
         let collected: Awaited<ReturnType<typeof collect>>;
         try {
             collected = await collect();
         } catch (error) {
-            state = { state: "error", detail: errorMessage(error), extensions: [] };
+            // Nothing learnt, so nothing to change: a host already running keeps running on what it was given.
+            if (host === undefined) {
+                state = { state: "error", detail: errorMessage(error), extensions: [] };
+            }
             return;
         }
         if (run !== generation) {
             return;
         }
+        // Read at request time, so these land whether or not the host restarts.
         reach = collected.tokenReach;
         toolPaths = collected.tools;
+        const workspaceRoot = services().workspace.root;
+        const key = hostKeyOf(workspaceRoot, collected.runnable);
+        // The same backends, the same code, the same activation: the running host is already what this converge wants.
+        if (host !== undefined && host.key === key && state.state === "running") {
+            state = { state: "running", extensions: [...hostStatuses, ...collected.reported] };
+            return;
+        }
+        kill();
         if (collected.runnable.length === 0) {
+            hostStatuses = [];
             state = { state: "stopped", extensions: collected.reported };
             return;
         }
@@ -258,16 +306,16 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             port,
             hostToken,
             daemonUrl: `http://127.0.0.1:${daemonPort}`,
-            workspaceRoot: services().workspace.root,
+            workspaceRoot,
             apiVersion: extensionApiVersion,
-            extensions: collected.runnable,
+            extensions: collected.runnable.map(({ bundle: _bundle, ...extension }) => extension),
         };
         const command = hostCommand();
         const child = spawnAs({ class: "service" }, command.file, command.args, {
             env: { ...process.env, [BACKEND_CONFIG_ENV]: JSON.stringify(config) },
             stdio: ["ignore", "pipe", "pipe"],
         });
-        const spawned: SpawnedHost = { child, port, hostToken };
+        const spawned: SpawnedHost = { child, port, hostToken, key };
         host = spawned;
         // Both streams feed the daemon log; extension lines carry their own [id] prefix already.
         for (const stream of [child.stdout, child.stderr]) {
@@ -275,13 +323,15 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
                 createInterface({ input: stream }).on("line", (line) => logger.info(`extension-backend: ${line}`));
             }
         }
+        // Judged by which host this is, not by the converge that started it: a later converge that left it running
+        // still wants its death noticed.
         child.on("error", (error) => {
-            if (run === generation) {
+            if (host === spawned) {
                 state = { state: "error", detail: error.message, extensions: collected.reported };
             }
         });
         child.on("exit", (code, signal) => {
-            if (run !== generation || !desired) {
+            if (host !== spawned || !desired) {
                 return;
             }
             // Uninvited death: report it and respawn with backoff rather than leave /x dead forever.
@@ -298,6 +348,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             return;
         }
         ladder.reset();
+        hostStatuses = health.extensions;
         state = { state: "running", extensions: [...health.extensions, ...collected.reported] };
     };
 
@@ -307,8 +358,9 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             await converge();
         },
         restart: () => {
-            // Every caller is saying the extension set moved (an install, a toggle, a removal, an approval), which is
-            // what the contribution inventory is built from.
+            // Every caller is saying the extension set may have moved (an install, a toggle, a removal, an approval, a
+            // write under an extension's folder), which is what the contribution inventory is built from. Whether the
+            // host itself restarts is the converge's to decide, by what it would run.
             invalidateContributions();
             if (!desired) {
                 return;

@@ -6,7 +6,7 @@ import type { NoticeModel } from "@intentic/ui";
 import { computed, nextTick, reactive, type Ref, ref, watch } from "vue";
 import { auditOffered, replacedPin } from "./model/audit";
 import { rememberedSecrets } from "./model/devSecrets";
-import { type ContributionOf, formEffects } from "./model/effects";
+import { type ContributionOf, formEffects, type ManifestOf } from "./model/effects";
 import {
     cleanName,
     fieldRefusal,
@@ -43,11 +43,13 @@ export interface FormHost {
     readonly device: Readonly<Ref<string>>;
     readonly recommendationFor: (tile: string) => CapabilityRecommendation | undefined;
     readonly contributionOf: ContributionOf;
+    // The declaring extension's manifest, for what it does for a card beyond the card itself (its tools).
+    readonly manifestOf?: ManifestOf;
     // The page's notice, which a fresh form clears.
     readonly error: Ref<NoticeModel | null>;
 }
 
-export const useCapabilityForm = ({ selected, editing, instances, capabilities, device, recommendationFor, contributionOf, error }: FormHost) => {
+export const useCapabilityForm = ({ selected, editing, instances, capabilities, device, recommendationFor, contributionOf, manifestOf, error }: FormHost) => {
     const name = ref(``);
     // Whether the user (or a picked tile) chose the name; until then the field tracks the live suggestion.
     const nameEdited = ref(false);
@@ -214,7 +216,7 @@ export const useCapabilityForm = ({ selected, editing, instances, capabilities, 
         versionToken: computed(() => versionReadToken(values, keptSecrets.value)),
         // What the answers compose into (a spending policy, a RAM bill), kept current with what submit agrees to.
         formSummary: computed(() => answersSummary(selected.value?.kind, values)),
-        liveEffects: computed(() => (selected.value === undefined ? [] : formEffects(selected.value, values, name.value, contributionOf))),
+        liveEffects: computed(() => (selected.value === undefined ? [] : formEffects(selected.value, values, name.value, contributionOf, manifestOf))),
         hostPresetOptions,
         applyHostPreset: (key: string): void => {
             const preset = hostPresets().find((candidate) => candidate.key === key);

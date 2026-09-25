@@ -66,7 +66,7 @@ const route = useRoute();
 const router = useRouter();
 
 const { recommendationFor, capabilities, error: listError, add, remove, rename, refetch, dismissRecommendation } = useCapabilities();
-const { contributionOf, enabled: enabledExtensions, settled: extensionsSettled } = useExtensions();
+const { contributionOf, manifestOf, enabled: enabledExtensions, settled: extensionsSettled } = useExtensions();
 // A tunnel's live address for the Connected slice; the VPN tile reads the same query, so the two can't disagree.
 const { links: vpnLinks } = useLiveLinks(`vpn`);
 // Same for a disk's mount point and whether it takes writes; the disk tile reads the same query.
@@ -130,6 +130,7 @@ const form = useCapabilityForm({
     device: page.device,
     recommendationFor,
     contributionOf,
+    manifestOf,
     error,
 });
 const { name, nameEdited, savedName, namePreview, nameCollision, nameProblem, values, attempted, shaking, pasteNotes, advancedOpen } = form;

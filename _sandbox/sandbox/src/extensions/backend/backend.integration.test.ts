@@ -307,3 +307,27 @@ test("an extension's tools reach a turn through the MCP door, served by the host
     // The host's door onto the tools is not under /x, and /x is where a person's or a panel's bearer reaches.
     expect((await app.request("http://sandbox.test/x/acme.tooled/tools/acme.tooled", { method: "POST", body: "{}" })).status).toBe(404);
 });
+
+// A converge restarts the one shared host only when what it would run changed: a write that moves no backend's code
+// (a manifest's label, a file beside the bundle) leaves every extension's in-memory state standing.
+test("the host restarts when a backend's code changes, and a converge that changes nothing leaves it running", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-converge-"));
+    await writeExtension(root, "echo", echoServer);
+    const { backend } = harness(root);
+    await backend.start();
+    const first = backend.proxyTarget();
+    expect(first).toMatchObject({ port: expect.any(Number) });
+
+    const dir = join(workspaceExtensionsRoot(root), "echo");
+    await writeFile(join(dir, "README.md"), "notes beside the bundle");
+    await backend.start();
+    expect(backend.proxyTarget()).toEqual(first);
+    expect(backend.status().state).toBe("running");
+
+    await writeFile(join(dir, "server.js"), `${echoServer}\n// a new build\n`);
+    await backend.start();
+    const second = backend.proxyTarget();
+    expect(second?.port).not.toBe(first?.port);
+    expect(second?.hostToken).not.toBe(first?.hostToken);
+    expect(backend.statusOf("acme.echo")).toEqual({ id: "acme.echo", state: "running" });
+});

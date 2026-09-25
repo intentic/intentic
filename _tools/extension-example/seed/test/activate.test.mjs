@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 // Runs the built bundle's activate() against a host stub that enforces the manifest's registration rules, catching
@@ -133,4 +135,28 @@ test(`the badge re-reads when the file it derives from is written, rather than a
 test(`every route the extension can reach is one the manifest declared`, () => {
     // A reminder, not a runtime check: this list is the approval surface the owner sees at install.
     assert.deepEqual(declaredRoutes, [`GET /workspace/file`]);
+});
+
+// The server bundle's tools, as the host calls them: what `api.tools.serve` returns, called with arguments, writing the
+// same file the view watches.
+test(`the tools the backend serves write the file the view watches, and refuse an empty note`, async () => {
+    const { activateServer } = await import(`../dist/server.js`);
+    const root = await mkdtemp(join(tmpdir(), `example-tools-`));
+    let served;
+    activateServer({ workspaceRoot: root, tools: { serve: (tools) => (served = tools) } });
+    const tools = await served(undefined);
+    assert.deepEqual(
+        tools.map((tool) => tool.name),
+        [`list_notes`, `add_note`],
+    );
+    const call = (name, args) => tools.find((tool) => tool.name === name).call(args, { signal: new AbortController().signal });
+    assert.equal(await call(`add_note`, { text: `first` }), `noted`);
+    assert.equal(await call(`add_note`, { text: `second` }), `noted`);
+    assert.deepEqual(
+        (await call(`list_notes`, { limit: 1 })).map((note) => note.text),
+        [`second`],
+    );
+    await assert.rejects(call(`add_note`, { text: ` ` }), /needs some text/);
+    assert.equal(JSON.parse(await readFile(join(root, `.intentic`, `example-notes.json`), `utf8`)).notes.length, 2);
+    await rm(root, { recursive: true, force: true });
 });

@@ -1,5 +1,5 @@
 import { type CapabilityCatalogEntry, type CapabilityEffect, capabilityEffects } from "@intentic/capability-catalog";
-import { type CapabilityContribution, contributionDiscriminator } from "@intentic/extension-manifest";
+import { type CapabilityContribution, contributionDiscriminator, type ExtensionManifest } from "@intentic/extension-manifest";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 import { type FormValues, fieldConfig } from "./form";
 
@@ -8,6 +8,16 @@ import { type FormValues, fieldConfig } from "./form";
 
 // One card's contribution among the enabled extensions (useExtensions.contributionOf).
 export type ContributionOf = (kind: CapabilityKind, id: string) => CapabilityContribution | undefined;
+
+// The manifest of the extension declaring that card (useExtensions.manifestOf): what the extension does for its cards
+// beyond the card itself, such as serving them tools.
+export type ManifestOf = (kind: CapabilityKind, id: string) => ExtensionManifest | undefined;
+
+// The manifest behind a config, by the same discriminator as its contribution.
+const manifestFor = (manifestOf: ManifestOf | undefined, kind: CapabilityKind, config: Record<string, string | number | boolean | undefined>) => {
+    const key = contributionDiscriminator(kind);
+    return key === undefined || manifestOf === undefined ? undefined : manifestOf(kind, String(config[key] ?? ``));
+};
 
 // The contribution behind a config, via the kind's discriminator; undefined for a kind with no secret/image
 // declarations or a core-only kind.
@@ -30,6 +40,7 @@ export const formEffects = (
     values: Readonly<FormValues>,
     name: string,
     contributionOf: ContributionOf,
+    manifestOf?: ManifestOf,
 ): readonly CapabilityEffect[] => {
     const config = fieldConfig(entry, (field) => (values[field.key] ?? ``).trim());
     return capabilityEffects({
@@ -37,6 +48,7 @@ export const formEffects = (
         id: name.trim() || undefined,
         config,
         contribution: contributionFor(contributionOf, entry.kind, config),
+        manifest: manifestFor(manifestOf, entry.kind, config),
     });
 };
 

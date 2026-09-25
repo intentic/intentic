@@ -1,11 +1,12 @@
 # Example extension
 
-A working intentic extension with one contribution of every kind (rail view, watched file, setting, command, CLI, agent skill), built to be copied and reshaped into your own.
+A working intentic extension with one contribution of every kind (rail view, watched file, setting, command, CLI, agent tools, agent skill), built to be copied and reshaped into your own.
 
 ```mermaid
 flowchart LR
     skill["Agent<br/>example-notes skill"] --> cli["intentic-example add<br/>on the agent's PATH"]
     cli --> file[".intentic/example-notes.json"]
+    tools["mcp__example__add_note<br/>served by the backend"] --> file
     file -->|"daemon file watcher"| view(["Example rail view<br/>list and badge"])
     setting["limit setting"] --> view
     command["example.reload<br/>command palette"] --> view
@@ -20,6 +21,11 @@ flowchart LR
   without polling. The query key in [src/useNotes.ts](src/useNotes.ts) must keep that name.
 - `contributes.bin` puts [bin/intentic-example](bin/intentic-example) on the agent's PATH, and `contributes.agent`
   ships [plugin/](plugin), whose skill tells the agent when to use it.
+- `contributes.tools` gives the agent `list_notes` and `add_note` as an MCP server named `example`, in every turn on
+  every runtime. [src/server.ts](src/server.ts) is the `server` bundle: it only says what the tools are, with
+  `api.tools.serve`, and the host owns the transport and each call's deadline. Tools for one connected account at a
+  time would add `perCard`, naming a `cli` capability card, and read that card's settings from the argument `serve`
+  is called with.
 - The view uses the host's classes only: name a role (`text-muted`, `bg-card`), size against the container
   (`@lg:`), and skip one-off values like `w-[37px]`, which render as nothing.
 
@@ -27,7 +33,7 @@ flowchart LR
 
 - [src/extension.ts](src/extension.ts) — `activate`: every registration, each declared in the manifest.
 - [src/notes.ts](src/notes.ts) — reads the notes file through the typed sandbox client.
-- [src/badge.ts](src/badge.ts) — the unread count, refreshed when the file is written.
+- [src/server.ts](src/server.ts) — the backend: the agent's tools, handed to the host.
 - [src/ExampleView.vue](src/ExampleView.vue) — the rail view.
 - [test/activate.test.mjs](test/activate.test.mjs) — runs the built bundle against a host stub that enforces the manifest.
 
@@ -35,7 +41,7 @@ flowchart LR
 
 ```sh
 pnpm install
-pnpm build        # one ES module: dist/extension.js
+pnpm build        # two ES modules: dist/extension.js (the UI) and dist/server.js (the backend)
 pnpm typecheck
 pnpm test         # needs the build
 ```

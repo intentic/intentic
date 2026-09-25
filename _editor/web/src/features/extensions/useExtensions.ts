@@ -1,4 +1,4 @@
-import type { CapabilityContribution } from "@intentic/extension-manifest";
+import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-manifest";
 import type {
     CapabilityKind,
     ExtensionUpdatePolicy,
@@ -66,6 +66,12 @@ export function useExtensions() {
         enabledExtensions.value
             .flatMap((extension) => extension.manifest.contributes?.capabilities ?? [])
             .find((contribution) => contribution.kind === kind && contribution.id === id);
+    // The manifest of the enabled extension declaring that card: what else the extension does for it, such as serving
+    // its cards tools (`contributes.tools` with `perCard`), which the card itself does not say.
+    const manifestOf = (kind: CapabilityKind, id: string): ExtensionManifest | undefined =>
+        enabledExtensions.value.find((extension) =>
+            (extension.manifest.contributes?.capabilities ?? []).some((contribution) => contribution.kind === kind && contribution.id === id),
+        )?.manifest;
     // Update lifecycle verbs; each re-reads the list since each changes what a row says. Update and revert are
     // owner-gated daemon-side.
     const checkUpdates = async (): Promise<void> => {
@@ -96,6 +102,7 @@ export function useExtensions() {
         create,
         remove,
         contributionOf,
+        manifestOf,
         checkUpdates,
         previewUpdate,
         applyUpdate,
