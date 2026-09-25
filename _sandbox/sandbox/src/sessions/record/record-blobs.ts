@@ -3,6 +3,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { constants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import { mkdir, open, readdir, readFile, rename, rm, stat, utimes } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { syncParents, writeAll } from "./record-io.js";
 
 // Tool outputs too long to keep in a record's rows, stored once each under the hash of their text, zstd-compressed: a
 // fork shares its source's, and a page reads none of them. Named by content, so a write that finds the name taken is
@@ -24,6 +25,7 @@ const write = async (path: string, text: string): Promise<void> => {
     // Found, it is named again now: a sweep reads a blob's age as the last time anything named it.
     const now = new Date();
     if (await utimes(path, now, now).then(() => true, () => false)) {
+        await syncParents(path);
         return;
     }
     await mkdir(dirname(path), { recursive: true });
@@ -31,13 +33,14 @@ const write = async (path: string, text: string): Promise<void> => {
     const temporary = `${path}.${randomUUID()}.tmp`;
     const handle = await open(temporary, "w");
     try {
-        await handle.write(zstdCompressSync(Buffer.from(text, "utf8"), { params: { [constants.ZSTD_c_compressionLevel]: 6, [constants.ZSTD_c_checksumFlag]: 1 } }));
+        await writeAll(handle, zstdCompressSync(Buffer.from(text, "utf8"), { params: { [constants.ZSTD_c_compressionLevel]: 6, [constants.ZSTD_c_checksumFlag]: 1 } }));
         await handle.datasync();
     } finally {
         await handle.close();
     }
     // Content-addressed: whichever of two racing writers renames last leaves the same bytes behind.
     await rename(temporary, path);
+    await syncParents(path);
 };
 
 // Stores `text`, durable before this resolves, and answers its hash.
@@ -74,6 +77,7 @@ const sweepOne = async (path: string, hash: string, inUse: BlobInUse): Promise<b
     }
     if (inUse(hash)) {
         await rename(aside, path);
+        await syncParents(path);
         return false;
     }
     await rm(aside, { force: true });

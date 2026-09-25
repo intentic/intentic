@@ -4,6 +4,7 @@ import { keyedLock } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { isConversationId, type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract";
 import { conversationsRoot, conversationUnit } from "../store/conversation-units.js";
+import { syncParents } from "./record/record-io.js";
 import { getBlob, hashOf, putBlob, sweepBlobs } from "./record/record-blobs.js";
 import { type Converted, convertLegacy, framesByTurn, keptLines, type PutBlob } from "./record/record-convert.js";
 import { appendLog, current, frameOfRow, type LogIndex, openLog, readFrame, repairLog, writeLog } from "./record/record-log.js";
@@ -307,6 +308,7 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
             return;
         }
         await rm(legacy, { force: true });
+        await syncParents(legacy);
         forget(path);
     };
 
@@ -367,7 +369,9 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
                 }
                 const path = transcriptFile(historyRoot, conversationId);
                 await rename(prepared, path);
+                await syncParents(path);
                 await rm(legacy, { force: true });
+                await syncParents(legacy);
                 forget(path);
                 return (await stat(path)).size;
             }),

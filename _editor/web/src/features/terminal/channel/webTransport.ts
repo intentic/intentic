@@ -3,8 +3,8 @@ import { WEBTRANSPORT_PATH } from "@intentic/sandbox-contract/terminal-frames";
 import { storeValue, storedValue } from "../../../lib/browserStorage";
 
 // One WebTransport session per sandbox origin, which the edge answers and whose streams never queue behind each other.
-// A caller waits only where a session has opened before; anywhere else one is tried beside the WebSocket it opens now,
-// so an edge or a network that carries no UDP never delays a terminal.
+// Only a session already ready on this connection is reused. Handshakes run beside the WebSocket opened now,
+// so changing to a network that carries no UDP never delays a terminal.
 
 // A QUIC handshake is one round trip; past this the network is not carrying it.
 const READY_WITHIN_MS = 1500;
@@ -14,7 +14,7 @@ const OK = `ok`;
 
 interface Opening {
     readonly transport: WebTransport;
-    readonly ready: Promise<boolean>;
+    ready: boolean;
 }
 
 const opening = new Map<string, Opening>();
@@ -53,22 +53,25 @@ export const refuseTransport = (origin: string, transport: WebTransport, now = D
 
 const open = (origin: string): Opening => {
     const transport = new WebTransport(`${origin}${WEBTRANSPORT_PATH}`);
-    const ready = Promise.race([
+    const held: Opening = { transport, ready: false };
+    opening.set(origin, held);
+    void Promise.race([
         transport.ready.then(
             () => true,
             () => false,
         ),
         sleep(READY_WITHIN_MS).then(() => false),
     ]).then((opened) => {
+        if (opening.get(origin) !== held) {
+            return;
+        }
         if (opened) {
+            held.ready = true;
             remember(origin, OK);
         } else {
             refuseTransport(origin, transport);
         }
-        return opened;
     });
-    const held: Opening = { transport, ready };
-    opening.set(origin, held);
     void transport.closed
         // silent-catch: however the session ended, clean or not, its holder forgets it the same way.
         .catch(() => undefined)
@@ -91,10 +94,7 @@ export const transportFor = async (base: string, now = Date.now()): Promise<WebT
         return undefined;
     }
     const held = opening.get(origin) ?? open(origin);
-    if (outcome !== OK) {
-        return undefined;
-    }
-    return (await held.ready) ? held.transport : undefined;
+    return held.ready ? held.transport : undefined;
 };
 
 // Test seam: what a reload forgets, every session and this page's outcomes; what storage kept stays.

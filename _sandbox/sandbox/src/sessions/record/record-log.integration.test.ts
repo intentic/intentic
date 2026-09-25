@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { appendLog, frameBytes, frameOfRow, jsonlOf, openLog, readFrame, repairLog, writeLog } from "./record-log.js";
+import * as recordIo from "./record-io.js";
 
 // The record's file format against a real file: frames found without decompressing the ones before, a torn last frame
 // read past by any reader and cut away by the writer, and the whole log readable by the standard zstd tools as JSONL.
@@ -86,4 +87,17 @@ test("stray bytes after the last frame are not a frame", async () => {
     await appendLog(path, undefined, lines(0, 2));
     await appendFile(path, Buffer.from("not a frame"));
     expect((await openLog(path))?.rows).toBe(2);
+});
+
+test("does not acknowledge a new or replaced log when persisting its directory fails", async () => {
+    const path = join(dir, "transcript.jsonl.zst");
+    const failure = new Error("directory sync failed");
+    const sync = jest.spyOn(recordIo, "syncParents").mockRejectedValue(failure);
+    try {
+        await expect(appendLog(path, undefined, lines(0, 1))).rejects.toThrow("directory sync failed");
+        await expect(writeLog(path, [lines(1, 1)])).rejects.toThrow("directory sync failed");
+        expect(sync.mock.calls).toEqual([[path], [path]]);
+    } finally {
+        sync.mockRestore();
+    }
 });

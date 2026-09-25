@@ -3,6 +3,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { crc32, constants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import { type FileHandle, mkdir, open, rename, rm, stat } from "node:fs/promises";
 import { dirname } from "node:path";
+import { syncParents, writeAll } from "./record-io.js";
 
 // A conversation's record on disk: zstd frames of JSONL, one per append (a settled turn), each preceded by a skippable
 // frame naming its length, its row count and its checksum. zstd readers skip those, so `zstdcat` and `zstdgrep` read a
@@ -135,8 +136,11 @@ export const appendLog = async (path: string, known: LogIndex | undefined, lines
     const bytes = frameBytes(jsonlOf(lines), lines.length);
     const handle = await open(path, "a");
     try {
-        await handle.write(bytes);
+        await writeAll(handle, bytes);
         await handle.datasync();
+        if (known === undefined) {
+            await syncParents(path);
+        }
         const info = await handle.stat();
         const offset = info.size - bytes.length + PREFIX_BYTES;
         const frames = [...(known?.frames ?? []), { offset, length: bytes.length - PREFIX_BYTES, rows: lines.length }];
@@ -155,7 +159,7 @@ export const writeLog = async (path: string, frames: readonly (readonly string[]
     try {
         for (const lines of frames.filter((frame) => frame.length > 0)) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- frames go down in order.
-            await handle.write(frameBytes(jsonlOf(lines), lines.length));
+            await writeAll(handle, frameBytes(jsonlOf(lines), lines.length));
         }
         await handle.datasync();
     } finally {
@@ -165,6 +169,7 @@ export const writeLog = async (path: string, frames: readonly (readonly string[]
         await rm(temporary, { force: true });
         throw error;
     });
+    await syncParents(path);
 };
 
 // One frame's lines, newline-split, the last empty piece dropped.

@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { openLog, readFrame, writeLog } from "./record-log.js";
 import { keptLine } from "./record-rows.js";
+import { syncParents, writeAll } from "./record-io.js";
 
 // Turning a plain JSONL record into the log (record-log.ts): the one conversion this format asks of records written
 // before it, run once per record by the migration (record-migration.ts) and by the record itself when it must change
@@ -59,12 +60,13 @@ const writeCompressed = async (path: string, bytes: Buffer): Promise<void> => {
     const temporary = `${path}.${randomUUID()}.tmp`;
     const handle = await open(temporary, "w");
     try {
-        await handle.write(zstdCompressSync(bytes, { params: { [constants.ZSTD_c_compressionLevel]: 6, [constants.ZSTD_c_checksumFlag]: 1 } }));
+        await writeAll(handle, zstdCompressSync(bytes, { params: { [constants.ZSTD_c_compressionLevel]: 6, [constants.ZSTD_c_checksumFlag]: 1 } }));
         await handle.datasync();
     } finally {
         await handle.close();
     }
     await rename(temporary, path);
+    await syncParents(path);
 };
 
 export interface Conversion {

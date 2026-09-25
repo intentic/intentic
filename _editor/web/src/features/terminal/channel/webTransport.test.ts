@@ -48,13 +48,19 @@ describe(`transportFor`, () => {
         expect(opened).toHaveLength(1);
     });
 
-    it(`waits for the session where one opened on an earlier page`, async () => {
+    it(`opens a WebSocket immediately after a reload, even where WebTransport worked before`, async () => {
         await transportFor(BASE);
         await settled();
         resetTransports();
-        const reopened = await transportFor(BASE);
+        let connect: () => void = () => undefined;
+        ready = () => new Promise((resolve) => { connect = resolve; });
+        // The handshake cannot finish until after this call returns: awaiting it here would hang the test.
+        expect(await transportFor(BASE)).toBeUndefined();
+        expect(await transportFor(BASE)).toBeUndefined();
         expect(made).toHaveLength(2);
-        expect(reopened).toBe(made[1]);
+        connect();
+        await settled();
+        expect(await transportFor(BASE)).toBe(made[1]);
     });
 
     it(`sends an origin whose session never opened to WebSockets for a while, across reloads`, async () => {
