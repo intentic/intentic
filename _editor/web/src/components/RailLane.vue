@@ -8,7 +8,7 @@ defineProps<{
     // not one (the rail's "Not open" search hits).
     dot?: string;
     icon?: IconName;
-    count: string | number;
+    count?: string | number;
 }>();
 </script>
 
@@ -19,8 +19,7 @@ defineProps<{
             <span v-if="dot !== undefined" class="h-2 w-2 shrink-0 rounded-full" :class="dot"></span>
             <Icon v-else-if="icon !== undefined" :name="icon" class="shrink-0 text-2xs text-subtle" />
             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ label }}</span>
-<!-- THE NUMBER WITHOUT THE PILL. -->
-            <span data-lane-count class="text-2xs tabular-nums text-subtle">{{ count }}</span>
+            <span v-if="count !== undefined" data-lane-count class="text-2xs tabular-nums text-subtle">{{ count }}</span>
             <span class="flex-1"></span>
             <!-- The lane's own bulk act, where the lane is the target: "Clear". -->
             <slot name="actions" />

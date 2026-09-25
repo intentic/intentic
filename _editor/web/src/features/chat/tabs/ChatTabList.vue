@@ -218,19 +218,6 @@ const hiddenRuns = computed(
 );
 const hiddenFinished = computed(() => finishedWindow.value.hidden + hiddenRuns.value);
 
-// A run counts as its one row on both sides: `heldIn` and `cardsIn` must agree, or the lane header would
-// contradict the row drawn beneath it.
-const heldIn = (lane: FleetLane): number =>
-    lanes.value[lane].length +
-    runsInLane(
-        workflowRuns.value.filter((run) => run.archivedAt === undefined),
-        lane,
-        Number.POSITIVE_INFINITY,
-        runsNeedingYou(fleet.value),
-    ).length;
-const countIn = (lane: FleetLane): string =>
-    filtering.value ? `${cardsIn(lane).length + runsIn(lane).length} of ${heldIn(lane)}` : String(heldIn(lane));
-
 // The drawn cards of every lane, built once a pass rather than per `cardsIn` call.
 const laneCards = computed<Record<FleetLane, OpenChat[]>>(() => {
     const next: Record<FleetLane, OpenChat[]> = { attention: [], active: [], finished: [] };
@@ -240,8 +227,7 @@ const laneCards = computed<Record<FleetLane, OpenChat[]>>(() => {
     }
     return next;
 });
-// A lane's visible chats. The `n of m` denominator is the lane's total, not the windowed count; the row below
-// the cards explains the difference.
+// A lane's visible chats after the message filter and (for Finished) the browsing window.
 const cardsIn = (lane: FleetLane): OpenChat[] => laneCards.value[lane];
 
 // Matches outside this window: fleet agents, then archived agents, then agent-less conversations
@@ -341,7 +327,7 @@ const onPersonaSelect = (id: string): void => {
         <!-- LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity. -->
         <div v-else ref="scroller" class="flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto">
             <!-- An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header. -->
-            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot" :count="countIn(lane.key)">
+            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot">
                 <!-- Closing a chat is lossless in every lane. -->
                 <template #actions>
                     <Button
@@ -400,7 +386,7 @@ const onPersonaSelect = (id: string): void => {
             </RailLane>
 
             <!-- Query hits outside this window's open chats (fleet, archive, agent-less conversations); a row opens the conversation, same as History. -->
-            <RailLane v-if="filtering && notOpenCount > 0" :label="t(`chat.chatTabList.notOpen`)" icon="search" :count="notOpenCount">
+            <RailLane v-if="filtering && notOpenCount > 0" :label="t(`chat.chatTabList.notOpen`)" icon="search">
                 <div class="flex min-w-0 flex-col gap-2.5">
                     <!-- Same identity tile as the lanes above; the category tint still signals what kind of work this is. -->
                     <!-- The only place this list reads composer words, and it is inside `filtering`: a lane the reader
