@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
-import { basename, dirname } from "node:path";
+import { mkdir, readdir, readlink, rename, rm, writeFile } from "node:fs/promises";
+import { hostname } from "node:os";
+import { basename, dirname, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { BrowserConfig, Capability } from "@intentic/sandbox-contract";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
@@ -21,6 +22,34 @@ export const profileOwner = (capability: Capability): string =>
 
 // Chromium --user-data-dir for one profile owner (an identity id, or a standalone account's id).
 export const sessionDir = (root: string, owner: string): string => statePath(root, ".intentic/local/browser/", owner);
+
+// Chromium's hold on a profile: SingletonLock links to `<hostname>-<pid>` of the browser that has it open, beside the
+// socket and cookie links that browser answers on. A clean exit removes all three; a browser killed along with its
+// container leaves them behind.
+const SINGLETON_LINKS = ["SingletonLock", "SingletonSocket", "SingletonCookie"] as const;
+
+// The hostname a SingletonLock target names; undefined when the target isn't `<hostname>-<pid>`.
+export const singletonHost = (target: string): string | undefined => {
+    const dash = target.lastIndexOf("-");
+    return dash > 0 && /^\d+$/.test(target.slice(dash + 1)) ? target.slice(0, dash) : undefined;
+};
+
+// sessionDir for a browser about to launch on it, first removing a lock a previous container left. Chromium clears a
+// dead holder's lock only when the hostname matches, and a container's hostname is its id, new on every rebuild: a
+// leftover lock refused the profile for good ("in use by another computer", exit 21). Another hostname can only be a
+// container that is gone, since one container mounts /work at a time. A lock naming this host stays for Chromium, which
+// checks whether that pid is still a live browser.
+export const launchSessionDir = async (root: string, owner: string): Promise<string> => {
+    const dir = sessionDir(root, owner);
+    const target = await readlink(join(dir, "SingletonLock")).catch(undefinedIfMissing);
+    const host = target === undefined ? undefined : singletonHost(target);
+    if (host !== undefined && host !== hostname()) {
+        for (const name of SINGLETON_LINKS) {
+            await rm(join(dir, name), { force: true });
+        }
+    }
+    return dir;
+};
 
 // Completed-login marker, kept outside the profile dir: a bare dir exists before any login and can't mean connected.
 const markerPath = (root: string, id: string): string => statePath(root, ".intentic/local/browser/", `${id}.connected`);

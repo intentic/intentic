@@ -14,7 +14,7 @@ import { type BrowserBackendSpec, type BrowserRouterHub, createSchemaCache, type
 import { type ProfileExit, resolveProfileExit } from "../sessions/browser-exit.js";
 import { chromiumWindowArgs, type Display, ensureDisplay } from "../cast/display.js";
 import { acceptLanguage, browserFingerprint, type BrowserFingerprint } from "../sessions/fingerprint.js";
-import { isProfileOpen, passkeyPath, profileOwner, sessionDir } from "../sessions/session-store.js";
+import { isProfileOpen, launchSessionDir, passkeyPath, profileOwner } from "../sessions/session-store.js";
 import { ensureStealthScript } from "../sessions/stealth.js";
 
 // Pure wiring over Microsoft's @playwright/mcp; no browser tools of our own.
@@ -332,7 +332,7 @@ export const prepareBrowserOwner = async (
         browserServerSpec(
             runtime.cli,
             runtime.executablePath,
-            sessionDir(root, owner),
+            await launchSessionDir(root, owner),
             await ensureStealthScript(root, owner, fingerprint),
             display,
             await writeBrowserConfig(owner, port, fingerprint, display, exit),

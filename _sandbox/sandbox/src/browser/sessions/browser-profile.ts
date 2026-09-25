@@ -9,7 +9,7 @@ import { armPasskeys } from "../tools/passkeys.js";
 import type { ScreencastClientMessage } from "../cast/screencast.js";
 import { resolveProfileExit } from "./browser-exit.js";
 import { acceptLanguage, browserFingerprint } from "./fingerprint.js";
-import { acquireProfileLock, markConnected, passkeyPath, profileOwner, releaseProfileLock, sessionDir } from "./session-store.js";
+import { acquireProfileLock, launchSessionDir, markConnected, passkeyPath, profileOwner, releaseProfileLock } from "./session-store.js";
 import { stealthInit } from "./stealth.js";
 import type { Services } from "../../composition.js";
 import { redeemTicket } from "../../auth/ws-tickets.js";
@@ -165,7 +165,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                     // Same seed as the agent's browser fingerprint: a device change mid-session triggers a logout or
                     // captcha.
                     const fingerprint = await browserFingerprint(services.workspace.root, profile, boundExit?.place);
-                    context = await playwright.chromium.launchPersistentContext(sessionDir(services.workspace.root, profile), {
+                    context = await playwright.chromium.launchPersistentContext(await launchSessionDir(services.workspace.root, profile), {
                         headless: false,
                         env: { ...process.env, DISPLAY: display.name },
                         // null: page fills the window exactly, so picture coordinates map directly to XTEST clicks on

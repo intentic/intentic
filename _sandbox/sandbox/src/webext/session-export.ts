@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { errorMessage } from "@intentic/base/errors";
 import type { Capability, WebExtCookie } from "@intentic/sandbox-contract";
-import { acquireProfileLock, isProfileOpen, profileOwner, releaseProfileLock, sessionDir } from "../browser/sessions/session-store.js";
+import { acquireProfileLock, isProfileOpen, launchSessionDir, profileOwner, releaseProfileLock } from "../browser/sessions/session-store.js";
 
 // Where a session crosses from the sandbox's browser to the person's (mirrors session-import.ts): some sites (passkeys,
 // hardware 2FA, device-checked SSO) cannot be signed into remotely at all, so the session is lent back to the owner's
@@ -68,7 +68,7 @@ export const exportBrowserSession = async (
         if (chromium === undefined || !existsSync(chromium.executablePath())) {
             return { ok: false, message: `This sandbox has no browser installed yet, so there is no session in it to lend.` };
         }
-        const dir = sessionDir(context.workspaceRoot, owner);
+        const dir = await launchSessionDir(context.workspaceRoot, owner);
         if (!existsSync(dir)) {
             return { ok: false, message: `"${request.account}" has no browser profile yet: sign it in first.` };
         }

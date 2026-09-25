@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { lstat, mkdir, readlink, symlink, writeFile } from "node:fs/promises";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
@@ -10,12 +10,14 @@ import {
     clearSession,
     hasSession,
     isProfileOpen,
+    launchSessionDir,
     markConnected,
     moveSession,
     passkeyPath,
     profileOwner,
     releaseProfileLock,
     sessionDir,
+    singletonHost,
 } from "./session-store.js";
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "browser-sess-"));
@@ -129,4 +131,52 @@ test("clearMarker disconnects one entry without touching the shared profile", as
     expect(hasSession(root, "main")).toBe(true);
     expect(hasSession(root, "x-main")).toBe(true);
     expect(existsSync(passkeyPath(root, "main"))).toBe(true);
+});
+
+// Chromium's own three links, as a browser holding the profile leaves them.
+const lockProfile = async (dir: string, holder: string): Promise<void> => {
+    await mkdir(dir, { recursive: true });
+    await symlink(holder, join(dir, "SingletonLock"));
+    await symlink("/tmp/org.chromium.Chromium.p2KMp2/SingletonSocket", join(dir, "SingletonSocket"));
+    await symlink("11991777197380076790", join(dir, "SingletonCookie"));
+};
+
+const present = async (path: string): Promise<boolean> => (await lstat(path).catch(() => undefined)) !== undefined;
+
+test("singletonHost reads the hostname off a lock target, dashes in it included", () => {
+    expect(singletonHost("32d3b615cb2a-218466")).toBe("32d3b615cb2a");
+    expect(singletonHost("my-laptop-local-42")).toBe("my-laptop-local");
+    expect(singletonHost("no-pid-here")).toBeUndefined();
+    expect(singletonHost("-42")).toBeUndefined();
+});
+
+test("launchSessionDir clears a lock a previous container left, so Chromium doesn't refuse the profile", async () => {
+    const root = tempRoot();
+    const dir = sessionDir(root, "identity");
+    await lockProfile(dir, "32d3b615cb2a-218466");
+    await writeFile(join(dir, "Local State"), "{}");
+
+    expect(await launchSessionDir(root, "identity")).toBe(dir);
+    expect(await present(join(dir, "SingletonLock"))).toBe(false);
+    expect(await present(join(dir, "SingletonSocket"))).toBe(false);
+    expect(await present(join(dir, "SingletonCookie"))).toBe(false);
+    // Only the lock goes; the profile it guarded stays.
+    expect(existsSync(join(dir, "Local State"))).toBe(true);
+});
+
+test("launchSessionDir leaves a lock naming this host to Chromium, which can tell a live holder", async () => {
+    const root = tempRoot();
+    const dir = sessionDir(root, "identity");
+    await lockProfile(dir, `${hostname()}-${process.pid}`);
+
+    await launchSessionDir(root, "identity");
+    expect(await readlink(join(dir, "SingletonLock"))).toBe(`${hostname()}-${process.pid}`);
+    expect(await present(join(dir, "SingletonSocket"))).toBe(true);
+});
+
+test("launchSessionDir is a no-op on a profile never opened or not yet made", async () => {
+    const root = tempRoot();
+    expect(await launchSessionDir(root, "fresh")).toBe(sessionDir(root, "fresh"));
+    await mkdir(sessionDir(root, "unlocked"), { recursive: true });
+    expect(await launchSessionDir(root, "unlocked")).toBe(sessionDir(root, "unlocked"));
 });

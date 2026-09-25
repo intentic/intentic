@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { errorMessage } from "@intentic/base/errors";
 import type { Capability, WebExtSessionImport } from "@intentic/sandbox-contract";
-import { acquireProfileLock, isProfileOpen, markConnected, profileOwner, releaseProfileLock, sessionDir } from "../browser/sessions/session-store.js";
+import { acquireProfileLock, isProfileOpen, launchSessionDir, markConnected, profileOwner, releaseProfileLock } from "../browser/sessions/session-store.js";
 
 // Where a session crosses from the person's browser into the sandbox's: the extension POSTs cookies straight to this
 // daemon (never through the socket or as a tool result) and writes them into an existing browser capability's Chromium
@@ -61,7 +61,7 @@ export const importBrowserSession = async (
                 message: `This sandbox has no browser installed yet: add the browser feature pack and rebuild, then hand the session over again.`,
             };
         }
-        const dir = sessionDir(context.workspaceRoot, owner);
+        const dir = await launchSessionDir(context.workspaceRoot, owner);
         await mkdir(dir, { recursive: true });
         const cookies: ChromiumCookie[] = payload.cookies.map((cookie) => ({
             name: cookie.name,
