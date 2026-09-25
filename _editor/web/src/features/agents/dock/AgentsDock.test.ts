@@ -35,7 +35,7 @@ const GIB = 2 ** 30;
 
 let app: App | undefined;
 
-const freshState = (open: string[] = []): DockState => ({ open: ref(open), height: ref(240) });
+const freshState = (open?: string): DockState => ({ open: ref(open), height: ref(240) });
 
 interface Mounted {
     readonly element: HTMLElement;
@@ -231,7 +231,7 @@ describe(`the main line's panel`, () => {
         segment(element).click();
         await nextTick();
 
-        expect(state.open.value).toEqual([`mainline`]);
+        expect(state.open.value).toBe(`mainline`);
         expect(segment(element).getAttribute(`aria-expanded`)).toBe(`true`);
         const docked = panel(element)!;
         expect(segment(element).getAttribute(`aria-controls`)).toBe(docked.id);
@@ -245,7 +245,7 @@ describe(`the main line's panel`, () => {
     });
 
     it(`lists every land the running check measures`, () => {
-        const { element } = mount(runningStatus(), { state: freshState([`mainline`]) });
+        const { element } = mount(runningStatus(), { state: freshState(`mainline`) });
         const now = panel(element)!.querySelector(`[data-section="now"]`)!;
         expect(now.textContent).toContain(`Checking web now`);
         expect(now.textContent).toContain(`pnpm verify`);
@@ -255,7 +255,7 @@ describe(`the main line's panel`, () => {
 
     // Opened to be watched: nothing but the reader closes it.
     it(`stays open through a click elsewhere, a conversation opened from it, and a terminal watched from it`, async () => {
-        const { element, state } = mount(redStatus(), { state: freshState([`mainline`]) });
+        const { element, state } = mount(redStatus(), { state: freshState(`mainline`) });
 
         document.body.click();
         document.body.dispatchEvent(new PointerEvent(`pointerdown`, { bubbles: true }));
@@ -271,11 +271,11 @@ describe(`the main line's panel`, () => {
         await nextTick();
         expect(watched).toHaveBeenCalledWith(`panel-web--verify`);
         expect(panel(element)).not.toBeNull();
-        expect(state.open.value).toEqual([`mainline`]);
+        expect(state.open.value).toBe(`mainline`);
     });
 
     it(`closes on its segment, its ×, or Escape inside it, and hands focus back to the segment`, async () => {
-        const { element, state } = mount(redStatus(), { state: freshState([`mainline`]) });
+        const { element, state } = mount(redStatus(), { state: freshState(`mainline`) });
 
         segment(element).click();
         await nextTick();
@@ -287,7 +287,7 @@ describe(`the main line's panel`, () => {
         await nextTick();
         expect(panel(element)).toBeNull();
 
-        state.open.value = [`mainline`];
+        state.open.value = `mainline`;
         await nextTick();
         panel(element)!.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true }));
         await nextTick();
@@ -302,7 +302,7 @@ describe(`the board's dock`, () => {
         showLiveMetrics.value = false;
     });
 
-    it(`carries the geek metrics as a second segment at the bar's far end, and both panels side by side`, async () => {
+    it(`carries the geek metrics as a second segment at the bar's far end, and opens one panel at a time`, async () => {
         const { element, state } = mount(redStatus(), { metrics: metrics() });
         const segments = [...element.querySelectorAll<HTMLElement>(`[data-segment]`)].map((button) => button.dataset[`segment`]);
         expect(segments).toEqual([`mainline`, `metrics`]);
@@ -312,9 +312,10 @@ describe(`the board's dock`, () => {
         await nextTick();
         segment(element).click();
         await nextTick();
-        // In the bar's order, whichever was opened first.
-        expect([...element.querySelectorAll<HTMLElement>(`[data-panel]`)].map((section) => section.dataset[`panel`])).toEqual([`mainline`, `metrics`]);
-        expect(state.open.value).toEqual([`metrics`, `mainline`]);
+        // Tabs: the second press swaps the panel rather than adding one beside it.
+        expect([...element.querySelectorAll<HTMLElement>(`[data-panel]`)].map((section) => section.dataset[`panel`])).toEqual([`mainline`]);
+        expect(segment(element, `metrics`).getAttribute(`aria-expanded`)).toBe(`false`);
+        expect(state.open.value).toBe(`mainline`);
     });
 
     it(`draws metrics alone when main has never been checked`, () => {

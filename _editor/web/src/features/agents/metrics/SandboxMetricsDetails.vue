@@ -50,7 +50,7 @@ const readout = useSandboxReadout(() => props.metrics);
         <dl
             role="group"
             data-section="figures"
-            class="grid w-48 shrink-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-2xs"
+            class="grid w-72 shrink-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-2xs"
         >
             <template v-for="figure in readout.figures" :key="figure.key">
                 <dt v-tooltip.left="figure.hint" class="cursor-help text-muted">{{ figure.label }}</dt>

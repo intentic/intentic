@@ -32,10 +32,10 @@ const summary = computed(() => mainlineSummary(props.mainline));
 const segments = computed<DockSegment[]>(() => [
     ...(summary.value === undefined
         ? []
-        : [{ id: `mainline`, title: t(`agents.mainline.title`), icon: `list-check` as const, hint: t(`agents.mainline.explain`), weight: 3 }]),
+        : [{ id: `mainline`, title: t(`agents.mainline.title`), icon: `list-check` as const, hint: t(`agents.mainline.explain`) }]),
     ...(props.metrics === undefined
         ? []
-        : [{ id: `metrics`, title: t(`agents.liveMetrics.sandboxLabel`), icon: `server` as const, end: true, weight: 2 }]),
+        : [{ id: `metrics`, title: t(`agents.liveMetrics.sandboxLabel`), icon: `server` as const, end: true }]),
 ]);
 </script>
 

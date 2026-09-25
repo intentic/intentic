@@ -2,9 +2,9 @@ import type { IconName } from "@intentic/ui";
 import { definePreference } from "@intentic/ui/preference";
 import type { Ref } from "vue";
 
-// A STATUS DOCK'S MEMORY. Which of its panels a reader left open and how tall they made them, per host, so a panel
-// opened to watch something is still open after a reload, a trip to another view, or a click anywhere else. Nothing is
-// open until the reader opens it: the bar says enough at rest.
+// A STATUS DOCK'S MEMORY. Which panel a reader left open and how tall they made it, per host, so a panel opened to
+// watch something is still open after a reload, a trip to another view, or a click anywhere else. Nothing is open until
+// the reader opens it: the bar says enough at rest.
 
 export interface DockSegment {
     readonly id: string;
@@ -13,14 +13,13 @@ export interface DockSegment {
     readonly icon: IconName;
     // What the panel is about, one hover away from its heading rather than a paragraph under every reading.
     readonly hint?: string;
-    // Sits at the bar's far end, with its panel last.
+    // Sits at the bar's far end.
     readonly end?: boolean;
-    // Its panel's share of the width when several are open; 1 unless said.
-    readonly weight?: number;
 }
 
 export interface DockState {
-    readonly open: Ref<readonly string[]>;
+    // The one panel open, if any: the bar's segments work as tabs.
+    readonly open: Ref<string | undefined>;
     readonly height: Ref<number>;
 }
 
@@ -32,10 +31,11 @@ const clampHeight = (px: number): number => Math.min(DOCK_MAX_HEIGHT, Math.max(D
 
 // Called once per host at module scope: a preference is one ref per key for the life of the window.
 export const defineDockState = (key: string): DockState => ({
-    open: definePreference<readonly string[]>({
+    open: definePreference<string | undefined>({
         key: `${key}-open`,
-        read: (raw) => (raw === null ? [] : raw.split(`,`).filter((id) => id !== ``)),
-        write: (ids) => (ids.length === 0 ? null : ids.join(`,`)),
+        // Docks once kept several panels open, written as a list in the order they were opened: the latest one wins.
+        read: (raw) => raw?.split(`,`).findLast((id) => id !== ``),
+        write: (id) => id ?? null,
     }),
     height: definePreference<number>({
         key: `${key}-height`,
