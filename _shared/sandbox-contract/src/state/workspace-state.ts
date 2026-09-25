@@ -386,6 +386,12 @@ const STATE_FILES = [
         portability: "carry",
     },
     {
+        path: ".intentic/records/push-checks.json",
+        invalidates: [],
+        why: "What each push check found and let through, per project, and what became of every finding: still open, measured gone, or dismissed. Filed from the report the pre-push hook leaves in the repository's git dir; read through GET /workspace/mainline, which the daemon pushes itself (the `mainline` runtime domain).",
+        portability: "carry",
+    },
+    {
         path: ".intentic/local/verify/",
         invalidates: [],
         why: "A running check's wrapper artifacts (log + exit status), read once by the daemon when the panel finishes.",

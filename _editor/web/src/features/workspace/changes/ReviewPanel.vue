@@ -46,6 +46,8 @@ import ChangeRowName from "../../../components/ChangeRowName.vue";
 import OtherSandboxChanges from "./OtherSandboxChanges.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import { useVocabulary } from "../../../core-views/vocabulary";
+import { leftSince } from "../../agents/mainline/mainlineView";
+import { useMainline } from "../../agents/mainline/useMainline";
 import { useT } from "@intentic/ui/i18n";
 
 // VSCode's SCM pattern over the real repos: uncommitted work grouped by repo, then by git's staged/unstaged
@@ -773,13 +775,23 @@ const syncRepoSpread = computed(() => (syncRepos.value.length > 1 ? plural(syncR
 // Every push funnels through `pushFlow.askSync` (the bar and both row pills), the one place a refusal becomes a
 // question, which is also why useChanges exports no one-repo push.
 
+// What the push just sent left behind, as the Main line files it: the hook never refuses, so this note is the one place
+// the push itself is told its check let something through. Read only while the note is up, so the panel being mounted
+// costs no read; the daemon's `mainline` push brings the record in when it files it.
+const mainline = useMainline(() => pushFlow.pushed.value !== undefined);
+const leftByPush = computed<number>(() => (pushFlow.pushed.value === undefined ? 0 : leftSince(mainline.value, pushFlow.since.value)));
+
 // One line, the width this ~270px panel can spend on status.
 const stageLine = computed<string | undefined>(() => {
     if (pushFlow.running.value) {
         return `${pushFlow.pending.value?.verb ?? `Push`}ing · ${formatElapsed(pushFlow.since.value, now.value)}`;
     }
     const sent = pushFlow.pushed.value;
-    return sent === undefined ? undefined : `Pushed ${sent.what}`;
+    if (sent === undefined) {
+        return undefined;
+    }
+    const left = leftByPush.value;
+    return left === 0 ? `Pushed ${sent.what}` : `Pushed ${sent.what} · ${t(`workspace.reviewPanel.leftInMainLine`, { count: left }, left)}`;
 });
 
 // The one fact the line has no room for: what is going out. Undefined once nothing is in flight.

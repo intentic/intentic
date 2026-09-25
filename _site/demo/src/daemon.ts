@@ -30,7 +30,7 @@ import { demoDevices } from "./fixture/devices";
 import { demoMetrics } from "./fixture/metrics";
 import { demoStorageClean, demoStorageReport, demoStorageScan } from "./fixture/storage";
 import { demoLoops } from "./fixture/loops";
-import { type DemoMainline, demoMainline } from "./fixture/mainline";
+import { type DemoMainline, demoMainline, demoPushDismiss, demoPushRecheck } from "./fixture/mainline";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
@@ -485,6 +485,8 @@ export const procedures = {
         // A card that is not mid-turn reads its transcript instead of attaching.
         transcript: ({ id }) => transcriptFor(id),
         systemPrompt: () => DEMO_SYSTEM_PROMPT,
+        // Refused like commit and push: the findings name a tree the demo does not have, so no agent could work on them.
+        pushFix: () => refuse(`This is the demo workspace: there is no repository to hand these findings over in.`),
         fileDiff: ({ repo, path }) => fileDiff(repo, path),
         rename: ({ id, title }) => agentAnswer(patchAgent(id, { title })),
         seen: ({ id }) => agentAnswer(patchAgent(id, { seenAt: Date.now() })),
@@ -542,6 +544,9 @@ export const procedures = {
         // The main tree's check after work lands: red and handed to a fresh conversation in the whole recording, running
         // on the curated board, the all-clear in the minimal one the marketing shots are taken of, nothing on a desk.
         mainline: () => demoMainline(STARTED_AT, mainlineStory()),
+        // What a push left behind: dismissing holds until the tab reloads, and measuring again finds the same.
+        mainlinePushDismiss: (input) => demoPushDismiss(input),
+        mainlinePushRecheck: () => demoPushRecheck(),
     },
     git: {
         repos: () => ({ repos: [...REPOS] }),

@@ -44,6 +44,7 @@ export const wireDependencyCoordinator = (services: Services): void => {
         queue: queueWhole(services.heavyCommands.read),
         route: (breakage) => routeLandBreakage(services, breakage),
         settled: (project) => breakageSettled(services, project),
+        recheckPushes: (project) => services.pushChecks.recheckIfOpen(project),
         landCheck: async (dir) => adoptedLandCheck(services.workspace.root, dir, (await services.sandboxSettings.get()).adoptedChecks),
     };
     services.dependencies.subscribe(({ dir, origin }) => {

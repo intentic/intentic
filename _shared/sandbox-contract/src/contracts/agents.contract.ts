@@ -24,6 +24,7 @@ import {
     LandResultSchema,
 } from "../schemas/agents.js";
 import { AgentsListSchema } from "../schemas/automations.js";
+import { MainlinePushFixResultSchema, MainlinePushFixSchema } from "../schemas/workspace/mainline.js";
 import { AgentChangesSchema, AgentConflictsSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -270,6 +271,17 @@ export const agentsContract = {
         })
         .input(AgentScratchSchema)
         .output(OkSchema),
+    // The one way an agent is put on what a push left behind: only ever on a press, never by the sandbox itself.
+    pushFix: procedure
+        .route({
+            method: "POST",
+            path: "/agents/push-fix",
+            summary: "Put an agent on what a push left behind",
+            description:
+                "Opens an isolated conversation holding every open finding the project's push checks let through: what each check printed, the command that shows it again, and the commits that brought it. Pressed again while they stand, it continues that conversation.",
+        })
+        .input(MainlinePushFixSchema)
+        .output(MainlinePushFixResultSchema),
     land: procedure
         .route({
             method: "POST",

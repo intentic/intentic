@@ -569,6 +569,12 @@
       "since": "v1.188.0"
     }
   ],
+  "workspace:.intentic/records/push-checks.json": [
+    {
+      "type": "{ pushes?: ({ at: number; base?: string; branch?: string; commits: number; findings: ({ check?: string; command?: string; commit?: { sha: string; subject: string }; gate?: \"code\" | \"tidy\"; id: string; key: string; kind: \"check\" | \"lint\" | \"ratchet\" | \"lockstep\" | \"rustfmt\"; settledAt?: number; state: \"open\" | \"resolved\" | \"dismissed\"; text: string })[]; head: string; id: string; measuredAt?: number; project: string; remote?: string })[]; seen?: string[] }",
+      "since": "2026-09-25"
+    }
+  ],
   "workspace:.intentic/records/runtime-installs.json": [
     {
       "type": "{ drift?: { apt: string[]; at: number; bornAt: number; paths: string[] }; installs: ({ commands: string[]; count: number; declinedAt?: number; firstAt: number; kind: \"apt\" | \"pip\" | \"cargo\" | \"npm\" | \"rustup-target\" | \"playwright\" | \"gem\" | \"pipx\" | \"go\" | \"other\"; lastAt: number; sessions: string[]; tool: string })[] }",

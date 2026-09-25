@@ -7,7 +7,8 @@ import { startRefWatch, subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { ignoreFileMode } from "../git/remote/repo-git-dirs.js";
 import { stateRelPath } from "../state-paths.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import { startRepoWatch, subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
+import { watchPushReports } from "../workspace/deps/push-checks.js";
+import { currentRepos, startRepoWatch, subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { startWorkspaceWatch, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import type { BootPhase } from "./boot-phase.js";
 
@@ -38,6 +39,9 @@ export const startChangeReactions = ({ logger, services, shutdown, traits }: Boo
     );
     startRepoWatch(services.workspace.root, logger);
     startRefWatch(services.workspace.root, subscribeRepoChanges, logger);
+    // A push moves its remote-tracking ref: that is when the report the pre-push hook left is filed, and boot files what
+    // arrived while the daemon was down.
+    shutdown.push(watchPushReports(services.pushChecks, { refs: subscribeRefChanges, repos: () => currentRepos(services.workspace.root) }, logger));
     // A ref can move without a workspace byte changing, so only the ref feed can invalidate health.
     shutdown.push(subscribeRefChanges(() => services.iq.invalidateHealth()));
     // Everything a land standing is measured against outside the registry: refs (main's HEAD, agent tips) and the main

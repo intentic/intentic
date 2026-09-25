@@ -63,8 +63,8 @@ typecheck that follows). These show up in
 the main tree as ordinary uncommitted changes. Then it measures the whole repository, plus what the land itself
 added over the commit it landed on (`land-tiers.mjs`: lint on its files, tidy lines, rustfmt, weakened tests left
 undeclared), and logs a failure that passes when re-run alone as a flake (`flakes.mjs`). The verdict is recorded
-green or red with its failures, and the editor shows it: a main-line strip at the top of the chat rail and a status
-on each session card.
+green or red with its failures, and the editor shows it: the Main line segment of the board's status dock and a
+status on each session card.
 
 A red run goes to `agents/land/land-breakage.ts`, which decides the same way every time. It waits for the next check
 when more work landed while this one ran, and holds while a conversation still working has unlanded changes in a
@@ -91,7 +91,11 @@ never refuses the push. Cheapest first: every check the manifest lists, with a `
 pushed range added it; the assertion ratchet over the range's test files (weaker only with a `test!:` subject or a
 `Test-Note:` trailer); the manifest/lockfile lockstep; the linter; `cargo fmt --check` on crates the push touches.
 It never runs typecheck, build or test on the pusher's clock, and names the verdict `pnpm verify` recorded for the
-tree when there is one. By hand, `pnpm verify:push` exits non-zero on a finding, replays a suite verdict recorded for
+tree when there is one. The push goes either way, so what it found is not left in a terminal: it writes a report into the
+git dir (`_tools/scripts/verify/push-report.mjs`), and the sandbox files it once the push has reached the remote. The
+editor's Main line then shows it as "Left at push" until a later push, a recheck or the check after a land stops
+finding it, or the owner dismisses it. Only the findings the pushed range brought in are recorded. Nothing is sent to
+an agent unless the owner presses "Hand to an agent". By hand, `pnpm verify:push` exits non-zero on a finding, replays a suite verdict recorded for
 the same tree, and runs the suite itself only with `--suite`. The `commit-msg` hook prints what commitlint finds and
 lets the commit through. The push measures the working tree, and CI still runs everything on the commit.
 

@@ -432,7 +432,36 @@
             "shortFixing": "arreglando",
             "shortOnHold": "en pausa",
             "shortNeedsYou": "te necesita",
-            "shortFixed": "arreglado"
+            "shortFixed": "arreglado",
+            "push": {
+                "title": "Pendiente del push",
+                "explain": "El push se hizo; su comprobación dejó pasar esto. Cada hallazgo espera aquí hasta que una medición posterior ya no lo encuentre o lo descartes. Nadie se pone con ellos a menos que los entregues.",
+                "bar": "{count} pendiente del push | {count} pendientes del push",
+                "commits": "{count} commit | {count} commits",
+                "earlier": "+{count} push anterior | +{count} pushes anteriores",
+                "more": "+{count} más | +{count} más",
+                "fewer": "Mostrar menos",
+                "from": "de {sha} {subject}",
+                "endsWhenDismissed": "Ninguna medición posterior puede ver que ha desaparecido: termina cuando lo descartas.",
+                "recheck": "Medir de nuevo",
+                "rechecked": "{project} medido de nuevo: {resolved} resueltos, {open} aún abiertos",
+                "unmeasured": "No se pudo medir {project}; no ha cambiado nada",
+                "dismissHint": "Descartar: no se arreglará",
+                "dismissOne": "Descartar {source}",
+                "dismissAll": "Descartar todo",
+                "dismissed": "{count} hallazgo descartado | {count} hallazgos descartados",
+                "dismissFailed": "No se pudo descartar",
+                "handOver": "Entregar a un agente",
+                "continue": "Continuar",
+                "handHint": "Abre una conversación aislada con cada hallazgo abierto de aquí, el comando que lo vuelve a mostrar y los commits que lo trajeron.",
+                "handFailed": "No se pudieron entregar a un agente",
+                "attempt": "Intento {count}",
+                "row": "push {sha}",
+                "rowBranch": "push {sha} a {branch}",
+                "left": "{count} pendiente | {count} pendientes",
+                "clean": "limpio",
+                "handled": "atendido"
+            }
         },
         "landCheck": {
             "checking": "Comprobando main",
@@ -4473,7 +4502,8 @@
             "unfinishedOrigins": "{origins} no ha terminado; este commit registra los {files} integrados hasta ahora. | {origins} no han terminado; este commit registra los {files} integrados hasta ahora.",
             "unstaged": "Sin preparar",
             "untrackedLeave": "{count} archivo sin seguimiento sale del disco: nunca se le hizo commit, así que git no tiene copia: | {count} archivos sin seguimiento salen del disco: nunca se les hizo commit, así que git no tiene copia:",
-            "watchRun": "Verlo ejecutarse"
+            "watchRun": "Verlo ejecutarse",
+            "leftInMainLine": "{count} pendiente en la línea principal | {count} pendientes en la línea principal"
         },
         "rowActions": {
             "openManagementPanel": "Abrir el panel de gestión"

@@ -1,13 +1,15 @@
 import type { MainlineProject, MainlineStatus } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
+import { publicPushes } from "./push-checks-store.js";
 import { mainlineLandOf, verifyQueueSnapshot } from "./verify-deps.js";
 
 // The main-line check as the editor reads it (GET /workspace/mainline): what runs now and what waits, from the queue in
 // memory; the last run and the red streak per project, and the latest runs with what became of each red one, from the
-// verify store. The only verification the sandbox runs on work, so it is shown rather than hidden in a terminal.
+// verify store. The only verification the sandbox runs on work, so it is shown rather than hidden in a terminal. Beside
+// it, what each push check let through and what became of it, from the push-checks store.
 
-export const mainlineStatus = async (deps: Pick<Services, "verifyStore">): Promise<MainlineStatus> => {
-    const { projects, runs } = await deps.verifyStore.read();
+export const mainlineStatus = async (deps: Pick<Services, "verifyStore" | "pushChecks">): Promise<MainlineStatus> => {
+    const [{ projects, runs }, { pushes }] = await Promise.all([deps.verifyStore.read(), deps.pushChecks.store.read()]);
     const { current, pending } = verifyQueueSnapshot();
     const dirs = new Set([...Object.keys(projects), ...(current === undefined ? [] : [current.dir]), ...pending.flatMap(({ dirs: each }) => each)]);
     const projectOf = (dir: string): MainlineProject => {
@@ -23,7 +25,7 @@ export const mainlineStatus = async (deps: Pick<Services, "verifyStore">): Promi
             ...(outcome?.status === "red" ? { redSince: outcome.since ?? outcome.at } : {}),
         };
     };
-    return { projects: [...dirs].toSorted().map(projectOf), recent: [...runs] };
+    return { projects: [...dirs].toSorted().map(projectOf), recent: [...runs], pushes: publicPushes(pushes) };
 };
 
 // The projects red right now with what they fail on, for the note a turn is told (mainline-note.ts): the failures of

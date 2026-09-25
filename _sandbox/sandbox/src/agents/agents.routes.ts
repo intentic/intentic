@@ -43,6 +43,11 @@ import { syncBeforeLand } from "./land/sync.js";
 import { verifyLandedTree } from "./land/verify-landed.js";
 import { settleLandingInBackground } from "./land/version-landed.js";
 import { routeLandBreakage } from "./land/land-breakage.js";
+import { AttemptRefused } from "./fix/fix-attempts.js";
+import { startPushFix } from "./fix/push-fix.js";
+import { actorOf, areasOf, ownerOf } from "../auth/principal.js";
+import { callerFence } from "../areas/area-scope.js";
+import { refuseFenced } from "../workspace/layout/workspace-fence.js";
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
@@ -687,6 +692,35 @@ export const createAgentsRoutes = (services: Services) => {
                 named.map((entry) => entry.path.replace(/\/$/, "")),
             );
             return { ok: true } as const;
+        }),
+        // The only way an agent is put on what a push left behind: somebody pressed for it. Never `unattended`, like the
+        // CI fix it is modelled on (ci/ci.routes.ts); a fenced caller hands over its own projects only.
+        pushFix: i.pushFix.handler(async ({ input, context }) => {
+            refuseFenced(callerFence(await services.areas.list(), context.identity), input.project);
+            const outcome = await startPushFix(services, {
+                project: input.project,
+                // The pick's fields ARE the turn's, spread verbatim; whoever pressed, verified as POST /agent verifies it.
+                turn: {
+                    ...input.pick,
+                    ...opt("actor", actorOf(context.identity, context.principal)),
+                    ...opt("owner", ownerOf(context.identity)),
+                    ...opt("areas", areasOf(context.identity)),
+                },
+                picked: input.pick !== undefined,
+                resume: input.mode,
+            }).catch((error: unknown) => {
+                throw error instanceof AttemptRefused ? new ORPCError("CONFLICT", { message: error.message }) : error;
+            });
+            if (outcome === undefined) {
+                throw new ORPCError("NOT_FOUND", {
+                    message: `nothing a push check let through is open in ${input.project === "" ? "the workspace root" : input.project}`,
+                });
+            }
+            if (outcome.kind === "busy") {
+                // In words, not as a bug: the reader is sent to the attempt in play rather than handed a second one.
+                throw new ORPCError("CONFLICT", { message: outcome.reason });
+            }
+            return { conversationId: outcome.conversationId };
         }),
         // Manual land, the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input }) => {

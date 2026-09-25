@@ -428,7 +428,36 @@
             "shortFixing": "en correction",
             "shortOnHold": "en pause",
             "shortNeedsYou": "vous attend",
-            "shortFixed": "corrigé"
+            "shortFixed": "corrigé",
+            "push": {
+                "title": "Laissé au push",
+                "explain": "Le push est parti ; sa vérification a laissé passer ceci. Chaque constat attend ici jusqu'à ce qu'une mesure ultérieure ne le trouve plus ou que vous l'écartiez. Personne ne s'en occupe à moins que vous ne le confiiez.",
+                "bar": "{count} laissé au push | {count} laissés au push",
+                "commits": "{count} commit | {count} commits",
+                "earlier": "+{count} push antérieur | +{count} pushs antérieurs",
+                "more": "+{count} de plus | +{count} de plus",
+                "fewer": "Afficher moins",
+                "from": "de {sha} {subject}",
+                "endsWhenDismissed": "Aucune mesure ultérieure ne peut voir qu'il a disparu : il prend fin quand vous l'écartez.",
+                "recheck": "Mesurer à nouveau",
+                "rechecked": "{project} mesuré à nouveau : {resolved} disparus, {open} encore ouverts",
+                "unmeasured": "Impossible de mesurer {project} ; rien n'a changé",
+                "dismissHint": "Écarter : il ne sera pas corrigé",
+                "dismissOne": "Écarter {source}",
+                "dismissAll": "Tout écarter",
+                "dismissed": "{count} constat écarté | {count} constats écartés",
+                "dismissFailed": "Impossible d'écarter cela",
+                "handOver": "Confier à un agent",
+                "continue": "Continuer",
+                "handHint": "Ouvre une conversation isolée avec chaque constat ouvert d'ici, la commande qui le montre à nouveau et les commits qui l'ont apporté.",
+                "handFailed": "Impossible de les confier à un agent",
+                "attempt": "Tentative {count}",
+                "row": "push {sha}",
+                "rowBranch": "push {sha} vers {branch}",
+                "left": "{count} restant | {count} restants",
+                "clean": "propre",
+                "handled": "traité"
+            }
         },
         "landCheck": {
             "checking": "Vérification de main",
@@ -4433,7 +4462,8 @@
             "unfinishedOrigins": "{origins} n'a pas fini, ce commit enregistre les {files} intégrés jusqu'ici. | {origins} n'ont pas fini, ce commit enregistre les {files} intégrés jusqu'ici.",
             "unstaged": "Non indexé",
             "untrackedLeave": "{count} fichier non suivi quitte le disque : il n'a jamais été committé, git n'en a donc aucune copie : | {count} fichiers non suivis quittent le disque : ils n'ont jamais été committés, git n'en a donc aucune copie :",
-            "watchRun": "Le regarder tourner"
+            "watchRun": "Le regarder tourner",
+            "leftInMainLine": "{count} restant dans la ligne principale | {count} restants dans la ligne principale"
         },
         "rowActions": {
             "openManagementPanel": "Ouvrir le panneau de gestion"

@@ -1,20 +1,48 @@
 import "@intentic/testing/dom";
-import type { MainlineRun, MainlineStatus, SandboxMetrics } from "@intentic/sandbox-contract";
+import { type MainlinePush, type MainlineRun, type MainlineStatus, type PushFinding, pushFindingsFixBase, type SandboxMetrics } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
+import type { PushFixAttempt } from "../mainline/useMainline";
 import type { DockState } from "./dockState";
 
 const opened = jest.fn((_conversationId: string, _title?: string) => undefined);
 const watched = jest.fn((_session: string) => undefined);
+// The owner's hands on what a push left: each answers as the daemon would, and the suite reads what it was asked.
+const dismissed = jest.fn(async (_project: string, ids?: readonly string[], _restore?: boolean) => ids?.length ?? 0);
+const rechecked = jest.fn(async (_project: string) => ({ measured: true, resolved: 2, open: 5 }));
+const handed = jest.fn(async (_project: string, _pick?: unknown, _mode?: unknown) => `push-fix-intentic-0abc123`);
+// The hand-over's live attempt as the roster would report it; none unless a test puts one there.
+const attemptOnIt = ref<PushFixAttempt | undefined>(undefined);
 
-// The seam's dragging is the kit's own suite; here only what the dock draws and when.
+// The seam's dragging is the kit's own suite; here only what the dock draws and when. The run button is its own
+// suite's too: here it is a button that says its label and runs on a press.
 jest.mock("@intentic/ui", async () => {
     const vue = await import("vue");
     return {
         ResizeSeam: vue.defineComponent({ setup: () => () => vue.h(`div`, { role: `separator` }) }),
+        AgentRunButton: vue.defineComponent({
+            props: { label: { type: String, required: true } },
+            emits: [`run`],
+            setup: (props, { emit }) => () => vue.h(`button`, { type: `button`, "data-run": ``, onClick: () => emit(`run`) }, props.label),
+        }),
+        fixStanceLook: () => ({ icon: `spinner`, spin: true, ink: `text-info`, chip: `` }),
+        useAgentRunPick: () => ({
+            model: vue.computed(() => ({ provider: `claude`, model: `opus`, label: `Opus` })),
+            overridden: vue.computed(() => false),
+            resume: vue.computed(() => undefined),
+            choose: async () => false,
+            clear: () => undefined,
+        }),
         ui: { iconButton: (extra: string) => extra, linkButton: (extra: string) => extra, textAction: (extra: string) => extra },
     };
 });
+jest.mock("../mainline/useMainline", () => ({
+    dismissPushFindings: dismissed,
+    recheckPushFindings: rechecked,
+    handPushFindings: handed,
+    usePushFixAttempt: () => computed(() => attemptOnIt.value),
+}));
+jest.mock("../../chat/models/shellModelPicking", () => ({ shellModelPicking: () => ({}) }));
 jest.mock("../fleet/useAgents", () => ({
     useAgents: () => ({ agentById: (id: string) => (id === `land-fix-web-abc` ? { title: `Fix main after "Release notes"` } : undefined) }),
 }));
@@ -28,6 +56,8 @@ jest.mock("../../terminal/useWorkTerminals", () => ({ openWorkTerminal: watched 
 const { default: AgentsDock } = await import("./AgentsDock.vue");
 const { sinceWhen } = await import("../mainline/mainlineView");
 const { showLiveMetrics } = await import("../metrics/liveMetrics");
+const { useNotifications } = await import("../../../shell/notifications/notifications");
+const { SandboxHttpError } = await import("../../sandbox/client/sandboxHttpError");
 
 const NOW = 10_000_000_000;
 const MINUTE = 60_000;
@@ -138,11 +168,57 @@ const metrics = (): SandboxMetrics => ({
     roles: {},
 });
 
+// What the real case left: two commits pushed to main, seven findings, the tree's own breakage among them.
+const leftFinding = (id: string, check: string, gate: `code` | `tidy`, text: string): PushFinding => ({
+    id,
+    kind: `check`,
+    check,
+    gate,
+    text,
+    command: `node _tools/checks/run.mjs --only ${check}`,
+    state: `open`,
+});
+
+const LEFT: PushFinding[] = [
+    leftFinding(`paths-1`, `paths`, `tidy`, `_sandbox/sandbox/src/workspace/files/workspace-trash.integration.test.ts:8  spells the state dir`),
+    leftFinding(`silent-1`, `silent-catch`, `tidy`, `_sandbox/sandbox/src/workspace/files/workspace-trash.ts:127  .catch discards the error`),
+    leftFinding(`silent-2`, `silent-catch`, `code`, `_sandbox/sandbox/src/workspace/files/workspace-trash.ts: 3 silent catch(es), the baseline allows 0`),
+    leftFinding(`layout-1`, `layout`, `code`, `_editor/web/src/features/workspace/explorer: 36 files, the baseline allows 33`),
+    leftFinding(`layout-2`, `layout`, `code`, `_sandbox/sandbox/src/workspace/files: 32 files`),
+    leftFinding(`daemon-1`, `daemon-boundaries`, `code`, `portability -> settings closes a cycle`),
+    leftFinding(`buttons-1`, `buttons`, `tidy`, `_editor/web/src/features/agents/metrics/SandboxMetricsDetails.vue:29  a bare <button>`),
+];
+
+const PUSHED: MainlinePush = {
+    project: `intentic`,
+    id: `push-725e054`,
+    at: NOW - 20 * MINUTE,
+    remote: `origin`,
+    branch: `main`,
+    base: `6c6a13a392`,
+    head: `725e054fb6`,
+    commits: 2,
+    findings: LEFT,
+};
+
+const CLEAN_PUSH: MainlinePush = { ...PUSHED, id: `push-6c6a13a`, at: NOW - 300 * MINUTE, head: `6c6a13a392`, commits: 1, findings: [] };
+
+const pushedStatus = (): MainlineStatus => ({
+    projects: [{ project: `web`, queued: [], last: green() }],
+    recent: [green()],
+    pushes: [PUSHED, CLEAN_PUSH],
+});
+
 beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(NOW);
     opened.mockClear();
     watched.mockClear();
+    dismissed.mockClear();
+    rechecked.mockClear();
+    handed.mockClear();
+    attemptOnIt.value = undefined;
+    useNotifications().dismissReceipt();
 });
 
 afterEach(() => {
@@ -236,6 +312,12 @@ describe(`the main line, at rest`, () => {
             recent: [green()],
         });
         expect(wordsOf(segment(element))).toBe(`Main passing 2 queued`);
+    });
+
+    it(`counts what pushes left in amber beside main passing, which it never takes off the bar`, () => {
+        const { element } = mount(pushedStatus());
+        expect(wordsOf(segment(element))).toBe(`Main passing 7 left at push`);
+        expect(segment(element).querySelector(`[data-item="push"]`)?.className).toBe(`flex shrink-0 items-center gap-1.5 text-warning`);
     });
 });
 
@@ -384,6 +466,128 @@ describe(`the main line's panel`, () => {
         await nextTick();
         expect(panel(element)).toBeNull();
         expect(document.activeElement).toBe(segment(element));
+    });
+    it(`lays out what a push left, the tree's own breakage first, six at a time`, async () => {
+        const { element } = mount(pushedStatus(), { state: freshState(`mainline`) });
+        const block = panel(element)!.querySelector<HTMLElement>(`[data-section="push-intentic"]`)!;
+        const rows = (): string[] => [...block.querySelectorAll(`[data-finding]`)].map((row) => wordsOf(row));
+
+        // Under the road, one band for every project, and in it each project's line read like a Result row.
+        expect(wordsOf(panel(element)!.querySelector(`[data-section="pushed"] h4`))).toBe(`Left at push 7`);
+        expect(wordsOf(block.querySelector(`.h-6`))).toBe(`intentic 7 left`);
+        expect(wordsOf(block.querySelector(`p`))).toBe(`725e054 · ${sinceWhen(PUSHED.at)} · main · 2 commits`);
+        // Each row names the file or folder, not the five folders above it every row shares.
+        expect(rows()).toEqual([
+            `daemon-boundaries portability -> settings closes a cycle`,
+            `layout workspace/explorer: 36 files, the baseline allows 33`,
+            `layout workspace/files: 32 files`,
+            `silent-catch workspace-trash.ts: 3 silent catch(es), the baseline allows 0`,
+            `buttons SandboxMetricsDetails.vue:29  a bare <button>`,
+            `paths workspace-trash.integration.test.ts:8  spells the state dir`,
+        ]);
+
+        const more = [...block.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === `+1 more`)!;
+        more.click();
+        await nextTick();
+        expect(rows()).toHaveLength(7);
+        expect(rows()[6]).toBe(`silent-catch workspace-trash.ts:127  .catch discards the error`);
+        expect(more.textContent?.trim()).toBe(`Show fewer`);
+    });
+
+    it(`dismisses one finding or all of them, with an Undo that opens exactly those again`, async () => {
+        const { element } = mount(pushedStatus(), { state: freshState(`mainline`) });
+        const block = panel(element)!.querySelector<HTMLElement>(`[data-section="push-intentic"]`)!;
+
+        block.querySelector<HTMLButtonElement>(`button[aria-label="Dismiss layout"]`)!.click();
+        await nextTick();
+        expect(dismissed).toHaveBeenCalledWith(`intentic`, [`layout-1`]);
+        // Gone from the column the moment it is pressed, before the status comes back without it.
+        expect(block.querySelectorAll(`[data-finding]`)).toHaveLength(6);
+        await Promise.resolve();
+        await nextTick();
+        const receipt = useNotifications().receipt.value!;
+        expect(receipt.title).toBe(`Dismissed 1 finding`);
+        await receipt.actions![0]!.run();
+        expect(dismissed).toHaveBeenLastCalledWith(`intentic`, [`layout-1`], true);
+
+        const all = [...block.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === `Dismiss all`)!;
+        all.click();
+        await nextTick();
+        expect(dismissed).toHaveBeenLastCalledWith(`intentic`, [`daemon-1`, `layout-1`, `layout-2`, `silent-2`, `buttons-1`, `paths-1`, `silent-1`]);
+    });
+
+    it(`measures the project again on a press and says what the measurement found`, async () => {
+        const { element } = mount(pushedStatus(), { state: freshState(`mainline`) });
+        panel(element)!.querySelector<HTMLButtonElement>(`[data-section="push-intentic"] button[aria-label="Measure again"]`)!.click();
+        await nextTick();
+        await Promise.resolve();
+        expect(rechecked).toHaveBeenCalledWith(`intentic`);
+        expect(useNotifications().receipt.value?.title).toBe(`Measured intentic again: 2 gone, 5 still open`);
+    });
+
+    it(`hands the findings to an agent only on a press, and opens the conversation it answers with`, async () => {
+        const onOpened = jest.fn((_id: string) => undefined);
+        const { element } = mount(pushedStatus(), { state: freshState(`mainline`), onOpened });
+        expect(handed).not.toHaveBeenCalled();
+
+        panel(element)!.querySelector<HTMLButtonElement>(`[data-section="push-intentic"] [data-run]`)!.click();
+        await nextTick();
+        await Promise.resolve();
+        expect(handed).toHaveBeenCalledWith(`intentic`, undefined, undefined);
+        expect(opened).toHaveBeenCalledWith(`push-fix-intentic-0abc123`);
+        expect(onOpened).toHaveBeenCalledWith(`push-fix-intentic-0abc123`);
+    });
+
+    it(`opens the attempt already running when the daemon refuses a second one`, async () => {
+        handed.mockRejectedValueOnce(new SandboxHttpError(409, `An agent is already on these findings.`));
+        const { element } = mount(pushedStatus(), { state: freshState(`mainline`) });
+        panel(element)!.querySelector<HTMLButtonElement>(`[data-section="push-intentic"] [data-run]`)!.click();
+        await nextTick();
+        await Promise.resolve();
+        await Promise.resolve();
+        // Not in this roster yet, so it opens by the id every attempt 1 at these findings wears.
+        expect(opened).toHaveBeenCalledWith(pushFindingsFixBase([PUSHED, CLEAN_PUSH], `intentic`));
+        expect(useNotifications().receipt.value).toBeUndefined();
+    });
+
+    it(`shows the agent already on them in place of a second press, with the way to its conversation`, async () => {
+        const onOpened = jest.fn((_id: string) => undefined);
+        attemptOnIt.value = {
+            agent: {
+                id: `push-fix-intentic-0abc123`,
+                title: `Fix what the push left in intentic`,
+                status: `running`,
+                provider: `claude`,
+                harness: `native`,
+                updatedAt: NOW,
+                attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+            },
+            attempt: 1,
+            stance: { kind: `working`, ongoing: true, retry: false, label: `Agent working`, hint: `An agent is already working on this failure.` },
+        };
+        const { element } = mount(pushedStatus(), { state: freshState(`mainline`), onOpened });
+        const block = panel(element)!.querySelector<HTMLElement>(`[data-section="push-intentic"]`)!;
+
+        expect(block.querySelector(`[data-run]`)).toBeNull();
+        expect(wordsOf(block.querySelector(`[data-attempt]`))).toBe(`Agent working Fix what the push left in intentic`);
+        block.querySelector<HTMLButtonElement>(`[data-attempt] button`)!.click();
+        await nextTick();
+        expect(opened).toHaveBeenCalledWith(`push-fix-intentic-0abc123`);
+        expect(onOpened).toHaveBeenCalledWith(`push-fix-intentic-0abc123`);
+    });
+
+    it(`keeps pushes in the record beside the lands' checks, by what each left`, () => {
+        const status = pushedStatus();
+        const { element } = mount({ ...status, pushes: [PUSHED, { ...CLEAN_PUSH, branch: `docs/verify-push` }] }, { state: freshState(`mainline`) });
+        const events = [...panel(element)!.querySelectorAll<HTMLElement>(`[data-section="history"] [data-event]`)];
+        // Aged from the minute the panel reads, 40s before NOW: 12m reads as 11, 20m as 19, 300m as 4h. Two projects
+        // between the lands and the pushes, so every row names its own. A push row says "push" to a screen reader and
+        // shows only the commit (and a branch that is not main) beside its arrow.
+        expect(events.map((event) => [event.dataset[`event`], wordsOf(event)])).toEqual([
+            [`land`, `passed Add Stripe checkout web 11m ago`],
+            [`push`, `push 725e054 725e054 7 left intentic 19m ago`],
+            [`push`, `push 6c6a13a to docs/verify-push 6c6a13a clean → docs/verify-push intentic 4h ago`],
+        ]);
     });
 });
 

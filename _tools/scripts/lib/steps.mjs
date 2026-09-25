@@ -75,8 +75,10 @@ export const createSteps = (name, root, { advisory = false } = {}) => {
 
     // Whether any step so far failed.
     const failing = () => results.some((result) => result.status === "failed");
-    // The steps that failed, with why, for a caller that reports them as data.
-    const failedSteps = () => results.filter((result) => result.status === "failed").map(({ label, why }) => ({ label, why }));
+    // The steps that failed, with why and the command that shows it again where there is one, for a caller that reports
+    // them as data.
+    const failedSteps = () =>
+        results.filter((result) => result.status === "failed").map(({ label, why, spelling }) => ({ label, why, ...(spelling === undefined ? {} : { spelling }) }));
 
     // Records a step skipped because a real dependency already failed, so the digest can say that part of the tree is
     // unmeasured.
@@ -84,18 +86,19 @@ export const createSteps = (name, root, { advisory = false } = {}) => {
         results.push({ label, status: "skipped", why });
     };
 
-    // Records a failure found by reading rather than spawning (no command to spell); goes in the same digest as the
-    // rest.
-    const fail = (label, why, details = []) => {
+    // Records a failure found by reading rather than spawning, or by a spawn the caller ran itself (then `spelling` names
+    // it); goes in the same digest as the rest.
+    const fail = (label, why, details = [], { spelling } = {}) => {
         say(`${label} failed`);
-        results.push({ label, status: "failed", why, details });
+        results.push({ label, spelling, status: "failed", why, details });
     };
 
 
     // Prints every step's verdict once at the end and, unless advisory, exits 1 if anything failed. `summarize` runs
     // only on a clean tree, so recording a passing verdict is not a caller's side effect on a failed run; failed steps
-    // print before skipped ones.
-    const finish = (summarize) => {
+    // print before skipped ones. `closing` is a failed run's last line, from a caller that knows what becomes of the
+    // failures after it (verify-push keeps them for later); advisory, it replaces the plain "reported, not refused".
+    const finish = (summarize, { closing } = {}) => {
         const failed = results.filter((result) => result.status === "failed");
         const skipped = results.filter((result) => result.status === "skipped");
         const seconds = Math.round((Date.now() - started) / 1000);
@@ -130,8 +133,11 @@ export const createSteps = (name, root, { advisory = false } = {}) => {
                 ? "every step that could still say something about this tree ran; fix these together, and the skipped ones are unmeasured until they do"
                 : "every step ran; fix these together rather than one per run",
         );
+        const last = closing ?? (advisory ? "reported, not refused: nothing a check finds holds this back" : undefined);
+        if (last !== undefined) {
+            say(last);
+        }
         if (advisory) {
-            say("reported, not refused: nothing a check finds holds this back");
             return;
         }
         process.exit(1);

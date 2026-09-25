@@ -49,6 +49,9 @@ export interface VerifyDeps {
     readonly route?: (breakage: LandBreakage) => Promise<MainlineRouting | undefined>;
     // Told when a project comes back green, so whatever `route` counted or held for it starts over.
     readonly settled?: (project: string) => void;
+    // Measures again what the project's pushes left open (push-checks.ts), once a land check has moved its main tree: a
+    // landed fix clears its findings minutes later. Absent where nothing records pushes.
+    readonly recheckPushes?: (project: string) => Promise<unknown>;
     // The land check the project's repository declares and the owner adopted; undefined runs the package's own script.
     readonly landCheck?: (dir: string) => Promise<{ readonly run: string; readonly timeoutMs?: number | undefined } | undefined>;
     // Test dials; the daemon uses the defaults.
@@ -302,6 +305,10 @@ const settleVerdict = async (
             attempt: verdict.attempt,
         })
         .catch((error: unknown) => deps.logger.warn({ err: error, project: dir }, "dependency verify: the run could not be filed"));
+    // Not awaited: the verdict and its routing never wait on a push's findings.
+    void deps
+        .recheckPushes?.(dir)
+        .catch((error: unknown) => deps.logger.warn({ err: error, project: dir }, "dependency verify: the push findings could not be measured again"));
     if (exitCode === 0) {
         deps.settled?.(dir);
         activity(deps, "deps.verify_green", `Checks green for ${whereOf(dir)} (${command}).`, "ok", origin);

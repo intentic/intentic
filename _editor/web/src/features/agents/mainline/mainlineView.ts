@@ -1,4 +1,13 @@
-import type { MainlineLand, MainlineRouting, MainlineRoutingKind, MainlineRun, MainlineStatus } from "@intentic/sandbox-contract";
+import type {
+    MainlineLand,
+    MainlinePush,
+    MainlineRouting,
+    MainlineRoutingKind,
+    MainlineRun,
+    MainlineStatus,
+    PushFinding,
+    PushFindingKind,
+} from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { formatClock, formatDate, formatDayMonthTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
@@ -56,9 +65,79 @@ export interface MainlineRunning {
     readonly lands: readonly MainlineLand[];
 }
 
-// WHAT THE STATUS BAR SAYS AT REST: health (every red, or passing once anything was checked) and activity (the check
-// running now, how many lands queue behind it). Undefined while nothing was ever checked, run or queued, so a sandbox
-// that never landed anything carries no main line at all.
+// WHAT A PUSH LEFT BEHIND, per project: every finding still open, once each, and the pushes that brought them. The
+// pre-push hook never refuses, so this is the only place what it let through is still said after its terminal is gone.
+// Nobody is sent after any of it; it waits for the owner, which is why nothing here is ever drawn as failing.
+export interface PushDebt {
+    readonly project: string;
+    // The tree's own breakage first (a `code` gate fails whoever caused it), then by what measured it, in the daemon's
+    // order within each.
+    readonly open: readonly PushFinding[];
+    // Newest first, only those still holding an open finding.
+    readonly pushes: readonly MainlinePush[];
+    readonly newest: MainlinePush;
+}
+
+const isOpen = (finding: PushFinding): boolean => finding.state === `open`;
+
+// Absent from a daemon that records no pushes, which reads the same as one that recorded none.
+const pushesOf = (status: MainlineStatus | undefined): readonly MainlinePush[] => status?.pushes ?? [];
+
+// A check's own id names it; the other four measure one thing each, so their kind is their name.
+export const findingSource = (finding: PushFinding): string => finding.check ?? finding.kind;
+
+// A finding as a dock row can hold it. Checks print the path a finding is about whole from the repository root, and in a
+// column sixteen rem wide that prefix is all a reader would see, the same five folders on every row. The row keeps the
+// file (or, for a folder, its parent and itself), and the tooltip keeps the whole line. A check that reports through a
+// bulleted list prints `- ` before each finding, which the row, already one item of a list, has no use for.
+export const findingGist = (line: string): string => {
+    const text = line.replace(/^-\s+/, ``);
+    const path = /^[^\s:]+/.exec(text)?.[0] ?? ``;
+    const segments = path.split(`/`).filter((segment) => segment !== ``);
+    if (segments.length < 2) {
+        return text;
+    }
+    const last = segments.at(-1)!;
+    const kept = last.includes(`.`) ? last : segments.slice(-2).join(`/`);
+    return `${kept}${text.slice(path.length)}`;
+};
+
+// Only a check's or the linter's finding can be measured again; the other three are about the pushed commits
+// themselves (contract, PushFindingKindSchema), so they end only when somebody dismisses them.
+const RECHECKABLE: ReadonlySet<PushFindingKind> = new Set([`check`, `lint`]);
+export const recheckable = (finding: PushFinding): boolean => RECHECKABLE.has(finding.kind);
+
+const findingOrder = (left: PushFinding, right: PushFinding): number =>
+    Number(left.gate !== `code`) - Number(right.gate !== `code`) || findingSource(left).localeCompare(findingSource(right));
+
+// Most left behind first. The same problem found by two pushes is one finding (its id is stable across pushes), and
+// the newer push's copy speaks for it, since that is the measurement that last printed it.
+export const pushDebtOf = (status: MainlineStatus | undefined): PushDebt[] => {
+    const byProject = new Map<string, { open: Map<string, PushFinding>; pushes: MainlinePush[] }>();
+    for (const push of pushesOf(status)) {
+        const standing = push.findings.filter(isOpen);
+        if (standing.length === 0) {
+            continue;
+        }
+        const entry = byProject.get(push.project) ?? { open: new Map<string, PushFinding>(), pushes: [] };
+        byProject.set(push.project, entry);
+        entry.pushes.push(push);
+        for (const finding of standing) {
+            if (!entry.open.has(finding.id)) {
+                entry.open.set(finding.id, finding);
+            }
+        }
+    }
+    return [...byProject]
+        .map(([project, { open, pushes }]) => ({ project, open: [...open.values()].toSorted(findingOrder), pushes, newest: pushes[0]! }))
+        .toSorted((left, right) => right.open.length - left.open.length);
+};
+
+// WHAT THE STATUS BAR SAYS AT REST: health (every red, or passing once anything was checked), activity (the check
+// running now, how many lands queue behind it), and what pushes left behind. What a push left is the owner's to pick up
+// whenever they choose, so it never takes "passing" off the bar: the two are about different trees (the one landed on,
+// and the one that left). Undefined while nothing was ever checked, run, queued or pushed, so a sandbox that never
+// landed or pushed anything carries no main line at all.
 export interface MainlineSummary {
     readonly running: MainlineRunning | undefined;
     // Longest red first (redsOf).
@@ -66,22 +145,54 @@ export interface MainlineSummary {
     readonly queued: number;
     // Some project has a settled check, so "passing" is said about something that was measured.
     readonly checked: boolean;
+    // Open push findings across every project, each once (pushDebtOf).
+    readonly leftAtPush: number;
 }
 
 export const mainlineSummary = (status: MainlineStatus | undefined): MainlineSummary | undefined => {
-    if (status === undefined || status.projects.length === 0) {
+    if (status === undefined) {
         return undefined;
     }
+    const leftAtPush = pushDebtOf(status).reduce((total, debt) => total + debt.open.length, 0);
     const project = status.projects.find((candidate) => candidate.running !== undefined);
     const running = project?.running === undefined ? undefined : { project: project.project, ...project.running };
     const reds = redsOf(status);
     const queued = queuedLands(status).length;
     const checked = status.projects.some((candidate) => candidate.last !== undefined);
-    if (running === undefined && reds.length === 0 && queued === 0 && !checked) {
+    if (running === undefined && reds.length === 0 && queued === 0 && !checked && leftAtPush === 0) {
         return undefined;
     }
-    return { running, reds, queued, checked };
+    return { running, reds, queued, checked, leftAtPush };
 };
+
+// THE RECORD, lands' checks and pushes' measurements in one list, newest first. A push reads as what it left: how many
+// findings still stand, or that every one it had was since resolved or dismissed (`handled`), or clean.
+export type MainlineEvent =
+    | { readonly kind: `land`; readonly run: MainlineRun }
+    | { readonly kind: `push`; readonly push: MainlinePush; readonly open: number; readonly handled: boolean };
+
+const eventAt = (event: MainlineEvent): number => (event.kind === `land` ? event.run.at : event.push.at);
+
+export const timelineOf = (status: MainlineStatus, limit: number): MainlineEvent[] =>
+    [
+        ...status.recent.map((run): MainlineEvent => ({ kind: `land`, run })),
+        ...pushesOf(status).map((push): MainlineEvent => {
+            const open = push.findings.filter(isOpen).length;
+            return { kind: `push`, push, open, handled: open === 0 && push.findings.length > 0 };
+        }),
+    ]
+        .toSorted((left, right) => eventAt(right) - eventAt(left))
+        .slice(0, limit);
+
+// What the pushes measured since `since` left open: the review's "Pushed" note reads it for the push it just made. By
+// time rather than by repository, since the daemon files a push under its project and the note is about one moment.
+export const leftSince = (status: MainlineStatus | undefined, since: number): number =>
+    pushesOf(status)
+        .filter((push) => push.at >= since)
+        .reduce((total, push) => total + push.findings.filter(isOpen).length, 0);
+
+// A pushed commit as git abbreviates it.
+export const shortSha = (sha: string): string => sha.slice(0, 7);
 
 // One project's line in the panel's Result column: its last settled check, and the red streak when it is in one.
 export interface MainlineResult {

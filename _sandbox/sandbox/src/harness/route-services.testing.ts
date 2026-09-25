@@ -278,6 +278,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // The main line's verdicts: nothing checked yet. Every planned turn that owes the checks-after-landing note reads
         // them, and GET /workspace/mainline serves them.
         verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects: {}, runs: [] }) }),
+        // Nothing pushed yet: GET /workspace/mainline serves the pushes beside the verdicts.
+        pushChecks: unstubbed<Services["pushChecks"]>("pushChecks", {
+            store: unstubbed<Services["pushChecks"]["store"]>("pushChecks.store", { read: async () => ({ pushes: [], seen: [] }) }),
+        }),
         usage: unstubbed("usage", { record: async () => {}, rollup: async () => [], turns: async () => [], ...usage }),
         // Schema's own defaults: parsing an empty object is exactly what an unwritten settings file reads as.
         sandboxSettings: unstubbed("sandboxSettings", {

@@ -26,7 +26,8 @@ flowchart LR
   fails. What it prints returns with the edit and never stops the turn. After each land, `pnpm verify` applies each
   failing check's `fix` in the main tree, then runs them all and counts the tidy lines the land added as failures
   (`land-tiers.mjs`). At push `.githooks/pre-push` runs them all through `verify-push.mjs`, which reports and never
-  refuses. CI runs `--tidy=warn`, the nightly `--gate=tidy`.
+  refuses, and keeps what the push added for later in the editor's Main line (`push-report.mjs`). CI runs
+  `--tidy=warn`, the nightly `--gate=tidy`.
 - Ratcheted checks keep their standing backlog in `baselines/` (`lib/ratchet.mjs`), which may shrink and never
   grow; `--write-baseline` adopts the current findings.
 

@@ -443,7 +443,36 @@
             "shortFixing": "fixing",
             "shortOnHold": "on hold",
             "shortNeedsYou": "needs you",
-            "shortFixed": "fixed"
+            "shortFixed": "fixed",
+            "push": {
+                "title": "Left at push",
+                "explain": "The push went; its check let these through. Each waits here until a later measurement no longer finds it or you dismiss it. Nobody is sent after them unless you hand them over.",
+                "bar": "{count} left at push | {count} left at push",
+                "commits": "{count} commit | {count} commits",
+                "earlier": "+{count} earlier push | +{count} earlier pushes",
+                "more": "+{count} more | +{count} more",
+                "fewer": "Show fewer",
+                "from": "from {sha} {subject}",
+                "endsWhenDismissed": "No later measurement can see this one gone: it ends when you dismiss it.",
+                "recheck": "Measure again",
+                "rechecked": "Measured {project} again: {resolved} gone, {open} still open",
+                "unmeasured": "Couldn't measure {project}; nothing changed",
+                "dismissHint": "Dismiss: it will not be fixed",
+                "dismissOne": "Dismiss {source}",
+                "dismissAll": "Dismiss all",
+                "dismissed": "Dismissed {count} finding | Dismissed {count} findings",
+                "dismissFailed": "Couldn't dismiss that",
+                "handOver": "Hand to an agent",
+                "continue": "Continue",
+                "handHint": "Opens an isolated conversation with every open finding here, the command that shows each again and the commits that brought it.",
+                "handFailed": "Couldn't hand these to an agent",
+                "attempt": "Attempt {count}",
+                "row": "push {sha}",
+                "rowBranch": "push {sha} to {branch}",
+                "left": "{count} left | {count} left",
+                "clean": "clean",
+                "handled": "handled"
+            }
         },
         "landCheck": {
             "checking": "Checking main",
@@ -4713,7 +4742,8 @@
             "unfinishedOrigins": "{origins} hasn't finished, this commit records the {files} landed so far. | {origins} haven't finished, this commit records the {files} landed so far.",
             "unstaged": "Unstaged",
             "untrackedLeave": "{count} untracked file leaves the disk: it was never committed, so git has no copy: | {count} untracked files leave the disk: they were never committed, so git has no copy:",
-            "watchRun": "Watch it run"
+            "watchRun": "Watch it run",
+            "leftInMainLine": "{count} left in Main line | {count} left in Main line"
         },
         "rowActions": {
             "openManagementPanel": "Open management panel"

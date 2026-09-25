@@ -1,5 +1,7 @@
 // main-line checks: the whole-tree check the daemon runs after work lands, and what became of what it found
 import { z } from "zod";
+import { pushFixConversationId } from "../../ids/conversation-ids.js";
+import { AgentRunPickSchema } from "../agent.js";
 
 // Nothing is verified inside a conversation any more: a turn ends when the model says it is done, its work lands, and
 // the main tree's own check runs afterwards, off everyone's clock, one project at a time. This is that check as the
@@ -79,8 +81,120 @@ export const MainlineProjectSchema = z.object({
 });
 export type MainlineProject = z.infer<typeof MainlineProjectSchema>;
 
+
+// WHAT A PUSH LEFT BEHIND. The pre-push hook never refuses (verify-push.mjs, `--advisory`): it measures, reports, and the
+// push goes. What it found used to vanish with the terminal it printed to. It now leaves a report in the repository's
+// git dir, the daemon files it here once the push has actually reached the remote, and each finding waits until a later
+// measurement no longer prints it or somebody dismisses it. Nobody is sent after one: acting on it is the owner's call.
+
+// What measured a finding: one of the repository's checks (by id), the linter, the assertion ratchet, the
+// manifest/lockfile lockstep, or rustfmt. Only a check's or the linter's finding can be measured again; the other three
+// are about the pushed commits themselves, so they end only when dismissed.
+export const PushFindingKindSchema = z.enum(["check", "lint", "ratchet", "lockstep", "rustfmt"]);
+export type PushFindingKind = z.infer<typeof PushFindingKindSchema>;
+
+export const PushFindingStateSchema = z.enum([
+    // Still printed at the last measurement, and nobody has dismissed it.
+    "open",
+    // A later push, recheck or land check measured it and it was gone.
+    "resolved",
+    // Somebody decided it will not be fixed.
+    "dismissed",
+]);
+export type PushFindingState = z.infer<typeof PushFindingStateSchema>;
+
+export const PushFindingSchema = z.object({
+    id: z.string().describe("Stable across pushes: the same problem found again is the same id."),
+    kind: PushFindingKindSchema.describe("What measured it."),
+    check: z.string().optional().describe("The check's own id, for a check's finding."),
+    gate: z
+        .enum(["code", "tidy"])
+        .optional()
+        .describe("For a check's finding: `code` means the tree fails the check whoever caused it; `tidy` means the push added this line."),
+    text: z.string().describe("The finding as the check printed it."),
+    command: z.string().optional().describe("The command that shows it again."),
+    commit: z
+        .object({ sha: z.string(), subject: z.string() })
+        .optional()
+        .describe("The newest pushed commit that touched the path the finding names, when it names one."),
+    state: PushFindingStateSchema,
+    settledAt: z.number().optional().describe("When it was resolved or dismissed, in milliseconds."),
+});
+export type PushFinding = z.infer<typeof PushFindingSchema>;
+
+export const MainlinePushSchema = z.object({
+    project: z.string().describe("Which project, by folder relative to the workspace. Empty is the workspace root."),
+    id: z.string().describe("The report's own id."),
+    at: z.number().describe("When the push check ran, in milliseconds."),
+    remote: z.string().optional().describe("The remote it was pushed to."),
+    branch: z.string().optional().describe("The branch it was pushed to."),
+    base: z.string().optional().describe("The commit the pushed range starts from; absent when the remote had nothing to compare with."),
+    head: z.string().describe("The commit that was pushed."),
+    commits: z.number().describe("How many commits the push carried."),
+    findings: z.array(PushFindingSchema).describe("What it found that this push brought in, open or not. Empty for a clean push."),
+    measuredAt: z.number().optional().describe("When its findings were last measured again, in milliseconds."),
+});
+export type MainlinePush = z.infer<typeof MainlinePushSchema>;
+
 export const MainlineStatusSchema = z.object({
     projects: z.array(MainlineProjectSchema).describe("Every project a land has been checked in, or is waiting to be."),
     recent: z.array(MainlineRunSchema).describe("The latest settled checks across every project, newest first."),
+    pushes: z
+        .array(MainlinePushSchema)
+        .optional()
+        .describe("The latest push checks across every project, newest first, with what each left behind. Absent from a daemon that records none."),
 });
 export type MainlineStatus = z.infer<typeof MainlineStatusSchema>;
+
+export const MainlinePushDismissSchema = z.object({
+    project: z.string().describe("Which project, by folder relative to the workspace."),
+    ids: z.array(z.string()).optional().describe("Which findings. Leave it out for every open one in the project."),
+    restore: z.boolean().optional().describe("Undo: open the named dismissed findings again."),
+});
+export type MainlinePushDismiss = z.infer<typeof MainlinePushDismissSchema>;
+
+export const MainlinePushDismissResultSchema = z.object({
+    changed: z.number().describe("How many findings changed state."),
+});
+
+export const MainlinePushRecheckSchema = z.object({
+    project: z.string().describe("Which project, by folder relative to the workspace."),
+});
+
+export const MainlinePushRecheckResultSchema = z.object({
+    measured: z.boolean().describe("Whether the project could be measured at all; false leaves every finding as it was."),
+    resolved: z.number().describe("How many findings the measurement no longer saw."),
+    open: z.number().describe("How many are still open."),
+});
+export type MainlinePushRecheckResult = z.infer<typeof MainlinePushRecheckResultSchema>;
+
+export const MainlinePushFixSchema = z.object({
+    project: z.string().describe("Which project's open push findings to hand over, by folder relative to the workspace."),
+    pick: AgentRunPickSchema.describe(
+        "Which model to open the conversation on, when somebody chose one. Leave it out for the sandbox's own choice.",
+    ),
+    mode: z
+        .enum(["continue", "start-over"])
+        .optional()
+        .describe(
+            "What to do about an attempt already made at these findings: `continue` carries on in it, `start-over` files it away and opens the next attempt. Leave it out for the plain press.",
+        ),
+});
+export type MainlinePushFix = z.infer<typeof MainlinePushFixSchema>;
+
+export const MainlinePushFixResultSchema = z.object({
+    conversationId: z.string().describe("The conversation holding the findings. Open it to watch."),
+});
+
+// The oldest push in `project` that still has an open finding: what a hand-over is keyed by, so pressing again while
+// any of its findings stand continues the same attempt, and a backlog that starts after everything was handled starts
+// a fresh one.
+export const oldestOpenPush = (pushes: readonly MainlinePush[], project: string): MainlinePush | undefined =>
+    pushes.findLast((push) => push.project === project && push.findings.some((finding) => finding.state === "open"));
+
+// The conversation id a hand-over of `project`'s open push findings wears (attempt 1), derived so the editor and the
+// daemon agree on whether an agent is already on them; undefined when nothing is open.
+export const pushFindingsFixBase = (pushes: readonly MainlinePush[], project: string): string | undefined => {
+    const oldest = oldestOpenPush(pushes, project);
+    return oldest === undefined ? undefined : pushFixConversationId(project === "" ? "workspace" : project, `left:${oldest.head}`);
+};

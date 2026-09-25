@@ -37,7 +37,7 @@ flowchart LR
 
 - Landing applies a conversation's changes to the main tree as **uncommitted changes**. `HEAD` never moves; the owner's commit is the review boundary ([`land.ts`](../../_sandbox/sandbox/src/agents/land/land.ts), `landAgent`).
 - It rebases the branch onto main ([`sync.ts`](../../_sandbox/sandbox/src/agents/land/sync.ts)), reconciles the lockfile, and checks every repository's patch before writing any: one conflict and nothing is written. The `merge` mode writes conflict markers instead, and `measure` is a dry run.
-- After a land, [`verify-deps.ts`](../../_sandbox/sandbox/src/workspace/deps/verify-deps.ts) runs the repository's `land` check, else its `verify` script, else `test`, on the main tree in the background. It is the one check work gets, and nothing waits on it. One project is checked at a time, and lands that arrive during a run wait and are measured together in the next. `GET /workspace/mainline` ([`mainline-status.ts`](../../_sandbox/sandbox/src/workspace/deps/mainline-status.ts)) is what the editor shows of it: the Main line in the Agents board's status bar (what waits, what is being checked, each project's last verdict and who is working on a red one) and a status on each session card.
+- After a land, [`verify-deps.ts`](../../_sandbox/sandbox/src/workspace/deps/verify-deps.ts) runs the repository's `land` check, else its `verify` script, else `test`, on the main tree in the background. It is the one check work gets, and nothing waits on it. One project is checked at a time, and lands that arrive during a run wait and are measured together in the next. `GET /workspace/mainline` ([`mainline-status.ts`](../../_sandbox/sandbox/src/workspace/deps/mainline-status.ts)) is what the editor shows of it: the Main line in the Agents board's status bar (what waits, what is being checked, each project's last verdict, who is working on a red one, and what pushes left behind) and a status on each session card.
 
 ## After a red land check
 
@@ -51,6 +51,14 @@ flowchart LR
 6. Past those limits the red waits for a person.
 
 Every decision is filed on the run and shown in the editor. With the owner's "Repair what breaks after landing" switch (`autoRepair`) off, all of it is only reported. A red streak's end logs `mainline: red streak ended` with how long it lasted.
+
+## What a push left behind
+
+The pre-push hook reports and never refuses, so what it finds has to outlive the terminal it printed to. The hook leaves a report in the repository's git common dir (`intentic-push-report.json`, written by [`push-report.mjs`](../../_tools/scripts/verify/push-report.mjs) in this repository). The report holds the findings the push itself brought in, a measurement of every check and the linter, and the command that measures them again. [`push-checks.ts`](../../_sandbox/sandbox/src/workspace/deps/push-checks.ts) files the report into `.intentic/records/push-checks.json` when the push moves a remote-tracking ref, and only once the pushed head is on that ref, so a refused push leaves nothing behind. `GET /workspace/mainline` serves the report as `pushes`, and the editor shows the open findings amber as "Left at push".
+
+- A finding stays open until a measurement no longer prints it or the owner dismisses it. Three measurements count: every later push, a recheck on the owner's press, and a recheck after each land check in a project that still has open findings. A landed fix therefore clears its findings minutes later.
+- Nothing is sent anywhere by itself. This is unlike a red land check: the push already went and the tree still works, so the owner chooses when to act. "Hand to an agent" (`POST /agents/push-fix`, [`push-fix.ts`](../../_sandbox/sandbox/src/agents/fix/push-fix.ts)) opens one isolated conversation with every open finding in the project. The oldest push that still has an open finding sets its id, so pressing again continues the same attempt.
+- Some findings are not recorded: the ones the hook calls already failing before the push, and the ones the base could not be asked about. Findings from the assertion ratchet, the lockstep and rustfmt are about commits that are already pushed, so no recheck can clear them. They end only when dismissed.
 
 ## Checks
 

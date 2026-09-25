@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MainlineRun, MainlineStatus } from "@intentic/sandbox-contract";
+import type { MainlinePush, MainlineRun, MainlineStatus } from "@intentic/sandbox-contract";
 import { ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
@@ -7,23 +7,30 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { openWorkTerminal } from "../../terminal/useWorkTerminals";
 import { formatElapsed } from "../fleet/agentStatus";
+import MainlinePushSection from "./MainlinePushSection.vue";
 import {
     causeOf,
     failureParts,
     fixTone,
+    type MainlineEvent,
     type MainlineSummary,
     projectName,
+    pushDebtOf,
     queuedLands,
     resultsOf,
     routingMeta,
+    shortSha,
     sinceWhen,
+    timelineOf,
     verifySession,
 } from "./mainlineView";
 import { openLandConversation, useLandTitle } from "./openLanded";
 
 // THE MAIN LINE, OPENED, drawn as the road a land travels: Queued → Checking → Result, left to right, with the record
 // beside it. Every column is drawn in every state, an empty one as one muted line, so each thing has one place to be
-// looked for and nothing moves when main changes. It explains nothing on hover: a title opens its conversation, "Logs"
+// looked for and nothing moves when main changes. Under the road's columns, only while a push left something, what it let
+// through: past the road because it is past a land (the owner's push), and never a column of it, since none of it is
+// main failing and all of it waits for whenever the owner gets to it. It explains nothing on hover: a title opens its conversation, "Logs"
 // opens the check's terminal, and a red says in one line who has it.
 // Nothing here closes the panel: opening a conversation or a terminal from it leaves it standing, to go on watching.
 
@@ -49,9 +56,12 @@ const LAND = `-mx-1.5 flex min-w-0 items-center gap-2 rounded-md px-1.5 py-0.5 t
 
 const running = computed(() => props.summary.running);
 const queued = computed(() => queuedLands(props.status));
-const recent = computed(() => props.status.recent.slice(0, RECENT_SHOWN));
-// A land's project is worth naming only when there is more than one it could be.
-const manyProjects = computed(() => props.status.projects.length > 1);
+// The record holds pushes beside lands' checks, newest first, since both are how the main tree was last measured.
+const recent = computed(() => timelineOf(props.status, RECENT_SHOWN));
+const debts = computed(() => pushDebtOf(props.status));
+const pushes = computed(() => props.status.pushes ?? []);
+// A row's project is worth naming only when there is more than one it could be, counting the ones only pushes came from.
+const manyProjects = computed(() => new Set([...props.status.projects, ...(props.status.pushes ?? [])].map(({ project }) => project)).size > 1);
 
 // Each project's standing, a red one with the work it is laid at and the one line on who has it.
 const results = computed(() =>
@@ -90,6 +100,26 @@ const measured = (run: MainlineRun): string => {
     const title = landTitle(first.conversationId, first.title);
     return run.lands.length === 1 ? title : t(`agents.mainline.andMore`, { title, count: run.lands.length - 1 });
 };
+
+// A push by its commit, and by its branch only when that is not the one every push goes to.
+const pushName = (push: MainlinePush): string =>
+    push.branch === undefined || push.branch === `main` || push.branch === `master`
+        ? t(`agents.mainline.push.row`, { sha: shortSha(push.head) })
+        : t(`agents.mainline.push.rowBranch`, { sha: shortSha(push.head), branch: push.branch });
+
+// The branch a push went to, as the record's narrow row shows it beside the commit: only when it is not main.
+const pushBranch = (push: MainlinePush): string =>
+    push.branch === undefined || push.branch === `main` || push.branch === `master` ? `` : `→ ${push.branch}`;
+
+// What a push left, as the record says it: still standing, all of it since settled, or nothing at all.
+const pushOutcome = (event: Extract<MainlineEvent, { kind: `push` }>): { readonly words: string; readonly tone: string } =>
+    event.open > 0
+        ? { words: t(`agents.mainline.push.left`, { count: event.open }, event.open), tone: `text-warning` }
+        : event.handled
+          ? { words: t(`agents.mainline.push.handled`), tone: `text-muted` }
+          : { words: t(`agents.mainline.push.clean`), tone: `text-success` };
+
+const eventKey = (event: MainlineEvent): string => (event.kind === `land` ? `land-${event.run.project}-${event.run.at}` : `push-${event.push.id}`);
 </script>
 
 <template>
@@ -240,23 +270,63 @@ const measured = (run: MainlineRun): string => {
                 </template>
             </section>
 
+            <!-- What pushes let through, one block per project, most first, and only while something waits: under the road's
+                 three columns (the record beside them runs down past it), so it sits right below a road that is short. -->
+            <section
+                v-if="debts.length > 0"
+                data-section="pushed"
+                class="flex min-w-0 flex-col gap-1 border-t border-line-subtle pt-4 @xl:col-span-2 @4xl:col-span-3"
+            >
+                <h4 :class="HEADING">
+                    <Icon name="arrow-up-right" class="shrink-0 text-2xs text-warning" />
+                    {{ t(`agents.mainline.push.title`) }}
+                    <span class="tabular-nums text-muted">{{ summary.leftAtPush }}</span>
+                </h4>
+                <!-- Side by side only when two projects left something: one project's findings read better the band's full width. -->
+                <div class="grid grid-cols-1 gap-x-8 gap-y-4" :class="debts.length > 1 ? `@4xl:grid-cols-2` : ``">
+                    <MainlinePushSection
+                        v-for="debt in debts"
+                        :key="`push-${debt.project}`"
+                        :debt="debt"
+                        :pushes="pushes"
+                        :minute="minute"
+                        @opened="(id: string) => emit(`opened`, id)"
+                    />
+                </div>
+            </section>
+
             <!-- The record, newest first across every project: outside the road, so set apart from it. -->
             <section
                 v-if="recent.length > 0"
                 data-section="history"
-                class="flex min-w-0 flex-col gap-1 @xl:col-span-2 @4xl:col-span-1 @4xl:border-l @4xl:border-line-subtle @4xl:pl-8"
+                class="flex min-w-0 flex-col gap-1 @xl:col-span-2 @4xl:col-span-1 @4xl:col-start-4 @4xl:row-span-2 @4xl:row-start-1 @4xl:border-l @4xl:border-line-subtle @4xl:pl-8"
             >
                 <h4 :class="HEADING">{{ t(`agents.mainline.columnHistory`) }}</h4>
-                <div v-for="run in recent" :key="`${run.project}-${run.at}`" class="flex h-6 min-w-0 items-center gap-2 text-xs">
-                    <Icon
-                        :name="run.status === `green` ? `check` : `times`"
-                        class="shrink-0 text-2xs"
-                        :class="run.status === `green` ? `text-success` : `text-danger`"
-                    />
-                    <span class="sr-only">{{ run.status === `green` ? t(`agents.mainline.passed`) : t(`agents.mainline.failed`) }}</span>
-                    <span class="min-w-0 flex-1 truncate text-muted">{{ measured(run) }}</span>
-                    <span v-if="manyProjects" class="max-w-[35%] shrink-0 truncate text-2xs text-subtle">{{ projectName(run.project) }}</span>
-                    <span class="shrink-0 tabular-nums text-2xs text-subtle">{{ timeAgo(run.at, { now: minute, days: true }) }}</span>
+                <div v-for="event in recent" :key="eventKey(event)" :data-event="event.kind" class="flex h-6 min-w-0 items-center gap-2 text-xs">
+                    <template v-if="event.kind === `land`">
+                        <Icon
+                            :name="event.run.status === `green` ? `check` : `times`"
+                            class="shrink-0 text-2xs"
+                            :class="event.run.status === `green` ? `text-success` : `text-danger`"
+                        />
+                        <span class="sr-only">{{ event.run.status === `green` ? t(`agents.mainline.passed`) : t(`agents.mainline.failed`) }}</span>
+                        <span class="min-w-0 flex-1 truncate text-muted">{{ measured(event.run) }}</span>
+                        <span v-if="manyProjects" class="max-w-[35%] shrink-0 truncate text-2xs text-subtle">{{
+                            projectName(event.run.project)
+                        }}</span>
+                        <span class="shrink-0 tabular-nums text-2xs text-subtle">{{ timeAgo(event.run.at, { now: minute, days: true }) }}</span>
+                    </template>
+                    <template v-else>
+                        <Icon name="arrow-up-right" class="shrink-0 text-2xs" :class="pushOutcome(event).tone" />
+                        <!-- The arrow already says it was a push, so the row spends its width on the commit; the words stay for a reader. -->
+                        <span class="sr-only">{{ pushName(event.push) }}</span>
+                        <span aria-hidden="true" class="shrink-0 font-mono text-muted">{{ shortSha(event.push.head) }}</span>
+                        <span class="shrink-0" :class="pushOutcome(event).tone">{{ pushOutcome(event).words }}</span>
+                        <!-- In a column this narrow the commit and what it left stay whole; a branch and the project give way. -->
+                        <span aria-hidden="true" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ pushBranch(event.push) }}</span>
+                        <span v-if="manyProjects" class="min-w-0 max-w-[35%] truncate text-2xs text-subtle">{{ projectName(event.push.project) }}</span>
+                        <span class="shrink-0 tabular-nums text-2xs text-subtle">{{ timeAgo(event.push.at, { now: minute, days: true }) }}</span>
+                    </template>
                 </div>
             </section>
         </div>

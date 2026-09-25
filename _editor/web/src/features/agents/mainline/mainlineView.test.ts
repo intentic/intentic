@@ -1,5 +1,26 @@
-import type { MainlineLand, MainlineProject, MainlineRoutingKind, MainlineRun, MainlineStatus } from "@intentic/sandbox-contract";
-import { causeOf, failureParts, fixTone, mainlineSummary, redsOf, resultsOf, routingMeta } from "./mainlineView";
+import type {
+    MainlineLand,
+    MainlineProject,
+    MainlinePush,
+    MainlineRoutingKind,
+    MainlineRun,
+    MainlineStatus,
+    PushFinding,
+} from "@intentic/sandbox-contract";
+import {
+    causeOf,
+    failureParts,
+    findingGist,
+    fixTone,
+    leftSince,
+    mainlineSummary,
+    pushDebtOf,
+    recheckable,
+    redsOf,
+    resultsOf,
+    routingMeta,
+    timelineOf,
+} from "./mainlineView";
 
 // No mocks: the main line's readout is a pure projection over the status the daemon serves, like landCheck beside it.
 const NOW = 1_700_000_000_000;
@@ -51,12 +72,13 @@ describe(`mainlineSummary`, () => {
             // One land queued in two projects is one land.
             queued: 1,
             checked: true,
+            leftAtPush: 0,
         });
     });
 
     it(`says nothing about health while the first check of all is still running`, () => {
         const running = { command: `pnpm verify`, startedAt: NOW - 5_000, lands: [] };
-        expect(mainlineSummary(status([project({ running })]))).toEqual({ running: { project: `web`, ...running }, reds: [], queued: 0, checked: false });
+        expect(mainlineSummary(status([project({ running })]))).toEqual({ running: { project: `web`, ...running }, reds: [], queued: 0, checked: false, leftAtPush: 0 });
     });
 });
 
@@ -159,5 +181,198 @@ describe(`routingMeta`, () => {
         expect(said(`reported`)).toEqual([`needs-you`, `needs you`, `Nobody is fixing it`, undefined, `text-warning`]);
         expect(said(`spent`)).toEqual([`needs-you`, `needs you`, `Out of fix attempts`, undefined, `text-warning`]);
         expect(said(`resolved`)).toEqual([`fixed`, `fixed`, `Fixed by the next check`, undefined, `text-success`]);
+    });
+});
+
+// WHAT A PUSH LEFT BEHIND: the same projection, over the pushes the daemon files beside the lands' checks.
+const finding = (id: string, over: Partial<PushFinding> = {}): PushFinding => ({ id, kind: `check`, check: id, text: `${id} says so`, state: `open`, ...over });
+
+const push = (id: string, at: number, findings: PushFinding[], over: Partial<MainlinePush> = {}): MainlinePush => ({
+    project: `intentic`,
+    id,
+    at,
+    branch: `main`,
+    head: `${id}0000000000`,
+    commits: 1,
+    findings,
+    ...over,
+});
+
+// A status for what pushes left: the pushes, the lands' record, and one project checked at `lastAt` when given.
+const pushStatus = (pushes: MainlinePush[] | undefined, recent: MainlineRun[] = [], lastAt?: number): MainlineStatus => ({
+    projects: lastAt === undefined ? [] : [{ project: `web`, queued: [], last: run({ at: lastAt }) }],
+    recent,
+    ...(pushes === undefined ? {} : { pushes }),
+});
+
+describe(`pushDebtOf`, () => {
+    it(`reads nothing from a daemon that records no pushes, or pushes that left nothing open`, () => {
+        expect(pushDebtOf(undefined)).toEqual([]);
+        expect(pushDebtOf(pushStatus(undefined))).toEqual([]);
+        expect(pushDebtOf(pushStatus([push(`a`, NOW, []), push(`b`, NOW - MINUTE, [finding(`paths`, { state: `resolved`, settledAt: NOW })])]))).toEqual([]);
+    });
+
+    it(`puts the tree's own breakage first, then orders by what measured it, keeping the daemon's order within one check`, () => {
+        const [debt] = pushDebtOf(
+            pushStatus([
+                push(`a`, NOW, [
+                    finding(`paths-1`, { check: `paths`, gate: `tidy` }),
+                    finding(`silent-2`, { check: `silent-catch`, gate: `tidy` }),
+                    finding(`layout-1`, { check: `layout`, gate: `code` }),
+                    finding(`lint-1`, { kind: `lint`, check: undefined }),
+                    finding(`silent-1`, { check: `silent-catch`, gate: `code` }),
+                    finding(`daemon-1`, { check: `daemon-boundaries`, gate: `code` }),
+                    finding(`layout-2`, { check: `layout`, gate: `code` }),
+                ]),
+            ]),
+        );
+        expect(debt!.open.map((each) => each.id)).toEqual([`daemon-1`, `layout-1`, `layout-2`, `silent-1`, `lint-1`, `paths-1`, `silent-2`]);
+    });
+
+    it(`counts a problem two pushes found once, as the newer push printed it, and keeps only the pushes still holding one`, () => {
+        const newer = push(`b`, NOW, [finding(`paths`, { text: `newer words` }), finding(`gone`, { state: `dismissed`, settledAt: NOW })]);
+        const clean = push(`c`, NOW - MINUTE, []);
+        const older = push(`a`, NOW - 2 * MINUTE, [finding(`paths`, { text: `older words` }), finding(`layout`)]);
+        expect(pushDebtOf(pushStatus([newer, clean, older]))).toEqual([
+            {
+                project: `intentic`,
+                open: [finding(`layout`), finding(`paths`, { text: `newer words` })],
+                pushes: [newer, older],
+                newest: newer,
+            },
+        ]);
+    });
+
+    it(`orders projects by how much each left, most first`, () => {
+        const debts = pushDebtOf(
+            pushStatus([
+                push(`w`, NOW, [finding(`paths`)], { project: `web` }),
+                push(`i`, NOW - MINUTE, [finding(`paths`), finding(`layout`)]),
+                push(`r`, NOW - 2 * MINUTE, [finding(`lint`)], { project: `` }),
+            ]),
+        );
+        expect(debts.map((debt) => [debt.project, debt.open.length])).toEqual([
+            [`intentic`, 2],
+            [`web`, 1],
+            [``, 1],
+        ]);
+    });
+});
+
+describe(`findingGist`, () => {
+    it(`keeps the file a finding names, or a folder with its parent, and the rest of the line as printed`, () => {
+        expect(
+            [
+                `_sandbox/sandbox/src/workspace/files/workspace-trash.integration.test.ts:8  spells the state dir`,
+                `_editor/web/src/features/workspace/explorer: 36 files, the baseline allows 33`,
+                `_sandbox/sandbox/src/workspace/files: 32 files`,
+                `web/a.ts`,
+                `portability -> settings closes a cycle: imported at portability/definition.ts:18`,
+                `lockfile: pnpm-lock.yaml is behind package.json`,
+                `- _sandbox/sandbox/src/workspace/files/workspace-trash.ts:127  .catch discards the error`,
+                `- portability -> settings closes a cycle`,
+                ``,
+            ].map(findingGist),
+        ).toEqual([
+            `workspace-trash.integration.test.ts:8  spells the state dir`,
+            `workspace/explorer: 36 files, the baseline allows 33`,
+            `workspace/files: 32 files`,
+            `a.ts`,
+            `portability -> settings closes a cycle: imported at portability/definition.ts:18`,
+            `lockfile: pnpm-lock.yaml is behind package.json`,
+            `workspace-trash.ts:127  .catch discards the error`,
+            `portability -> settings closes a cycle`,
+            ``,
+        ]);
+    });
+});
+
+describe(`recheckable`, () => {
+    it(`is a check's or the linter's finding, never one about the pushed commits themselves`, () => {
+        expect(
+            ([`check`, `lint`, `ratchet`, `lockstep`, `rustfmt`] as const).map((kind) => [kind, recheckable(finding(`x`, { kind }))]),
+        ).toEqual([
+            [`check`, true],
+            [`lint`, true],
+            [`ratchet`, false],
+            [`lockstep`, false],
+            [`rustfmt`, false],
+        ]);
+    });
+});
+
+describe(`mainlineSummary with pushes`, () => {
+    it(`counts every open finding across projects, each once`, () => {
+        const summary = mainlineSummary(
+            pushStatus(
+                [
+                    push(`b`, NOW, [finding(`paths`), finding(`layout`, { state: `resolved`, settledAt: NOW })]),
+                    push(`a`, NOW - MINUTE, [finding(`paths`), finding(`lint`)]),
+                    push(`w`, NOW - 2 * MINUTE, [finding(`paths`)], { project: `web` }),
+                ],
+                [],
+                NOW - 5 * MINUTE,
+            ),
+        );
+        expect(summary).toEqual({ running: undefined, reds: [], queued: 0, checked: true, leftAtPush: 3 });
+    });
+
+    it(`keeps main passing on the bar when what pushes left is the only other news`, () => {
+        expect(mainlineSummary(pushStatus([push(`a`, NOW, [finding(`paths`)])], [], NOW - MINUTE))).toEqual({
+            running: undefined,
+            reds: [],
+            queued: 0,
+            checked: true,
+            leftAtPush: 1,
+        });
+        expect(mainlineSummary(pushStatus([], [], NOW - MINUTE))).toEqual({ running: undefined, reds: [], queued: 0, checked: true, leftAtPush: 0 });
+    });
+
+    it(`stands for a sandbox that pushed with findings but never landed, and not for one whose pushes left nothing`, () => {
+        expect(mainlineSummary(pushStatus([push(`a`, NOW, [finding(`paths`)])]))).toEqual({
+            running: undefined,
+            reds: [],
+            queued: 0,
+            checked: false,
+            leftAtPush: 1,
+        });
+        expect(mainlineSummary(pushStatus([push(`a`, NOW, [])]))).toBeUndefined();
+        expect(mainlineSummary(pushStatus(undefined))).toBeUndefined();
+    });
+});
+
+describe(`timelineOf`, () => {
+    it(`merges lands' checks and pushes newest first, and cuts at the limit`, () => {
+        const landNew = run({ at: NOW - MINUTE });
+        const landOld = run({ at: NOW - 10 * MINUTE, status: `red` });
+        const left = push(`left`, NOW - 2 * MINUTE, [finding(`paths`), finding(`lint`, { state: `dismissed`, settledAt: NOW })]);
+        const handled = push(`handled`, NOW - 5 * MINUTE, [finding(`paths`, { state: `resolved`, settledAt: NOW })]);
+        const clean = push(`clean`, NOW - 20 * MINUTE, []);
+        const merged = pushStatus([left, handled, clean], [landNew, landOld]);
+
+        expect(timelineOf(merged, 8)).toEqual([
+            { kind: `land`, run: landNew },
+            { kind: `push`, push: left, open: 1, handled: false },
+            { kind: `push`, push: handled, open: 0, handled: true },
+            { kind: `land`, run: landOld },
+            { kind: `push`, push: clean, open: 0, handled: false },
+        ]);
+        expect(timelineOf(merged, 2).map((event) => (event.kind === `land` ? event.run.at : event.push.id))).toEqual([NOW - MINUTE, `left`]);
+    });
+
+    it(`is the lands' record alone for a daemon that records no pushes`, () => {
+        const checked = run();
+        expect(timelineOf(pushStatus(undefined, [checked]), 8)).toEqual([{ kind: `land`, run: checked }]);
+    });
+});
+
+describe(`leftSince`, () => {
+    it(`counts what the pushes measured from the moment on left open, and nothing from before it`, () => {
+        const pushed = pushStatus([
+            push(`b`, NOW, [finding(`paths`), finding(`lint`, { state: `dismissed`, settledAt: NOW })]),
+            push(`w`, NOW - 1, [finding(`layout`), finding(`buttons`)], { project: `web` }),
+            push(`a`, NOW - MINUTE, [finding(`silent-catch`)]),
+        ]);
+        expect([leftSince(pushed, NOW - 1), leftSince(pushed, NOW), leftSince(pushed, NOW + 1), leftSince(undefined, 0)]).toEqual([3, 1, 0, 0]);
     });
 });

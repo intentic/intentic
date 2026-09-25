@@ -176,6 +176,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
             diff: { id: fleet.REVIEW_AGENT_ID },
             transcript: { id: fleet.REVIEW_AGENT_ID },
             systemPrompt: { id: fleet.FEATURED_AGENT_ID },
+            pushFix: { project: `intentic` },
             fileDiff: { id: fleet.REVIEW_AGENT_ID, repo: `api`, path: `src/db/schema.ts` },
             rename: { id: fleet.AWAITING_AGENT_ID, title: `Renamed by the smoke run` },
             seen: { id: fleet.AWAITING_AGENT_ID },
@@ -212,6 +213,8 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
             repos: undefined,
             search: { query: `checkout` },
             mainline: undefined,
+            mainlinePushDismiss: { project: `intentic`, ids: [`buttons:SandboxMetricsDetails.vue:29`] },
+            mainlinePushRecheck: { project: `intentic` },
         },
         git: {
             repos: undefined,

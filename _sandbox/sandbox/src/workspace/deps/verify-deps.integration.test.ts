@@ -539,6 +539,27 @@ test("a green run tells the router the project is settled, and is not routed", a
     expect(routed).toEqual([]);
 });
 
+// A landed fix for what a push let through clears it minutes later: every settled run measures the project's push
+// findings again (push-checks.ts decides whether any are open), and never waits on it or fails for it.
+test("every settled run, red or green, has the project's push findings measured again without waiting on them", async () => {
+    const { queueVerify } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const feed: string[] = [];
+    const rechecked: string[] = [];
+    const recheckPushes = async (project: string): Promise<never> => {
+        rechecked.push(project);
+        throw new Error("no report");
+    };
+    queueVerify({ ...deps(root, fakeProcesses(root, 1, []), [], feed), recheckPushes }, { kind: "startup" }, ["app"]);
+    await settle(() => feed.length > 0);
+    queueVerify({ ...deps(root, fakeProcesses(root, 0, []), [], feed), recheckPushes }, { kind: "startup" }, ["app"]);
+    await settle(() => feed.length > 1);
+
+    expect(feed).toEqual(["deps.verify_red", "deps.verify_green"]);
+    expect(rechecked).toEqual(["app", "app"]);
+});
+
 // A land that arrives while the check runs waits, and is measured by the next run with every land queued beside it; the
 // red found meanwhile is told that more is coming, so the router can wait for that check before sending anybody.
 test("lands queued behind a running check wait for the next run, which the running one's red is told about", async () => {

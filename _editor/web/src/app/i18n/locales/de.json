@@ -427,7 +427,36 @@
             "shortFixing": "wird behoben",
             "shortOnHold": "angehalten",
             "shortNeedsYou": "braucht Sie",
-            "shortFixed": "behoben"
+            "shortFixed": "behoben",
+            "push": {
+                "title": "Vom Push übrig",
+                "explain": "Der Push ist durch; seine Prüfung hat diese Befunde durchgelassen. Jeder wartet hier, bis eine spätere Messung ihn nicht mehr findet oder du ihn verwirfst. Niemand wird darauf angesetzt, außer du übergibst sie.",
+                "bar": "{count} vom Push übrig | {count} vom Push übrig",
+                "commits": "{count} Commit | {count} Commits",
+                "earlier": "+{count} früherer Push | +{count} frühere Pushes",
+                "more": "+{count} weitere | +{count} weitere",
+                "fewer": "Weniger zeigen",
+                "from": "aus {sha} {subject}",
+                "endsWhenDismissed": "Keine spätere Messung kann sehen, dass dieser Befund weg ist: Er endet, wenn du ihn verwirfst.",
+                "recheck": "Erneut messen",
+                "rechecked": "{project} erneut gemessen: {resolved} weg, {open} noch offen",
+                "unmeasured": "{project} konnte nicht gemessen werden; nichts hat sich geändert",
+                "dismissHint": "Verwerfen: wird nicht behoben",
+                "dismissOne": "{source} verwerfen",
+                "dismissAll": "Alle verwerfen",
+                "dismissed": "{count} Befund verworfen | {count} Befunde verworfen",
+                "dismissFailed": "Das konnte nicht verworfen werden",
+                "handOver": "An einen Agenten übergeben",
+                "continue": "Fortsetzen",
+                "handHint": "Öffnet eine isolierte Unterhaltung mit jedem offenen Befund von hier, dem Befehl, der ihn wieder zeigt, und den Commits, die ihn gebracht haben.",
+                "handFailed": "Die Befunde konnten keinem Agenten übergeben werden",
+                "attempt": "Versuch {count}",
+                "row": "Push {sha}",
+                "rowBranch": "Push {sha} nach {branch}",
+                "left": "{count} übrig | {count} übrig",
+                "clean": "sauber",
+                "handled": "erledigt"
+            }
         },
         "landCheck": {
             "checking": "Prüfe main",
@@ -4442,7 +4471,8 @@
             "unfinishedOrigins": "{origins} ist noch nicht fertig, dieser Commit zeichnet die {files} auf, die bisher gelandet sind. | {origins} sind noch nicht fertig, dieser Commit zeichnet die {files} auf, die bisher gelandet sind.",
             "unstaged": "Nicht gestaged",
             "untrackedLeave": "{count} nicht verfolgte Datei verlässt die Platte: sie wurde nie committet, git hat also keine Kopie: | {count} nicht verfolgte Dateien verlassen die Platte: sie wurden nie committet, git hat also keine Kopie:",
-            "watchRun": "Ihm zusehen"
+            "watchRun": "Ihm zusehen",
+            "leftInMainLine": "{count} in der Hauptlinie übrig | {count} in der Hauptlinie übrig"
         },
         "rowActions": {
             "openManagementPanel": "Verwaltungsbereich öffnen"

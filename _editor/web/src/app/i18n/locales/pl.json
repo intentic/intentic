@@ -432,7 +432,36 @@
             "shortFixing": "w naprawie",
             "shortOnHold": "wstrzymane",
             "shortNeedsYou": "czeka na ciebie",
-            "shortFixed": "naprawione"
+            "shortFixed": "naprawione",
+            "push": {
+                "title": "Zostało po pushu",
+                "explain": "Push poszedł; jego sprawdzenie przepuściło to, co tu widać. Każde znalezisko czeka tu, aż późniejszy pomiar go nie znajdzie albo je odrzucisz. Nikt się tym nie zajmie, dopóki go nie przekażesz.",
+                "bar": "{count} zostało po pushu | {count} zostały po pushu | {count} zostało po pushu",
+                "commits": "{count} commit | {count} commity | {count} commitów",
+                "earlier": "+{count} wcześniejszy push | +{count} wcześniejsze pushe | +{count} wcześniejszych pushy",
+                "more": "+{count} więcej | +{count} więcej | +{count} więcej",
+                "fewer": "Pokaż mniej",
+                "from": "z {sha} {subject}",
+                "endsWhenDismissed": "Żaden późniejszy pomiar nie zobaczy, że zniknęło: kończy się, gdy je odrzucisz.",
+                "recheck": "Zmierz ponownie",
+                "rechecked": "Ponownie zmierzono {project}: zniknęło {resolved}, otwartych {open}",
+                "unmeasured": "Nie udało się zmierzyć {project}; nic się nie zmieniło",
+                "dismissHint": "Odrzuć: nie zostanie naprawione",
+                "dismissOne": "Odrzuć {source}",
+                "dismissAll": "Odrzuć wszystkie",
+                "dismissed": "Odrzucono {count} znalezisko | Odrzucono {count} znaleziska | Odrzucono {count} znalezisk",
+                "dismissFailed": "Nie udało się tego odrzucić",
+                "handOver": "Przekaż agentowi",
+                "continue": "Kontynuuj",
+                "handHint": "Otwiera odizolowaną rozmowę z każdym otwartym znaleziskiem stąd, poleceniem, które pokazuje je ponownie, i commitami, które je wniosły.",
+                "handFailed": "Nie udało się przekazać ich agentowi",
+                "attempt": "Próba {count}",
+                "row": "push {sha}",
+                "rowBranch": "push {sha} do {branch}",
+                "left": "zostało {count} | zostały {count} | zostało {count}",
+                "clean": "czysto",
+                "handled": "załatwione"
+            }
         },
         "landCheck": {
             "checking": "Sprawdzanie main",
@@ -4478,7 +4507,8 @@
             "unfinishedOrigins": "{origins} jeszcze nie skończył, ten commit zapisuje {files} scalone do tej pory. | {origins} jeszcze nie skończyły, ten commit zapisuje {files} scalone do tej pory.",
             "unstaged": "Poza indeksem",
             "untrackedLeave": "{count} nieśledzony plik znika z dysku: nigdy nie był zacommitowany, więc git nie ma kopii: | {count} nieśledzone pliki znikają z dysku: nigdy nie były zacommitowane, więc git nie ma kopii: | {count} nieśledzonych plików znika z dysku: nigdy nie były zacommitowane, więc git nie ma kopii:",
-            "watchRun": "Obejrzyj, jak działa"
+            "watchRun": "Obejrzyj, jak działa",
+            "leftInMainLine": "{count} zostało w głównej linii | {count} zostały w głównej linii | {count} zostało w głównej linii"
         },
         "rowActions": {
             "openManagementPanel": "Otwórz panel zarządzania"

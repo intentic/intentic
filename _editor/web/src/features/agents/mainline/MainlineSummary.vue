@@ -8,7 +8,8 @@ import { fixTone, type MainlineSummary, projectName, routingMeta } from "./mainl
 // THE MAIN LINE AT REST, inside its status-bar segment: two short answers side by side and nothing else. Health first
 // (the red project and who has it, how many are red, or that main passes), then activity (the check running and for
 // how long, and how many lands queue behind it). What a check runs, whose work it measures and why a red waits are the
-// panel's to say; the bar is read at a glance, so it never carries a sentence.
+// panel's to say; the bar is read at a glance, so it never carries a sentence. Last, in amber, how many findings pushes
+// left behind: a count, since none of it is urgent and it waits for the owner whenever they get to it.
 
 const t = useT();
 
@@ -49,5 +50,9 @@ const now = useNow(() => running.value !== undefined);
         <span v-if="summary.queued > 0" data-item="queued" class="shrink-0 text-muted">{{
             t(`agents.mainline.queued`, { count: summary.queued })
         }}</span>
+        <span v-if="summary.leftAtPush > 0" data-item="push" class="flex shrink-0 items-center gap-1.5 text-warning">
+            <Icon name="arrow-up-right" class="shrink-0 text-2xs" />
+            <span>{{ t(`agents.mainline.push.bar`, { count: summary.leftAtPush }, summary.leftAtPush) }}</span>
+        </span>
     </span>
 </template>

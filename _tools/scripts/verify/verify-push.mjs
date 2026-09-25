@@ -14,6 +14,14 @@
 // sees the main tree one land at a time, `pnpm verify:turn` sees one worktree against its own base, and a nightly
 // measures main a day later with nobody attached. That is why tidiness is judged here against the range (the
 // checkout-gates block below).
+//
+// WHAT IT LEAVES BEHIND. The push goes either way, so what the hook found cannot live only in the terminal git printed it
+// to, which nobody reads once the push is through. Before the digest it writes a report into the git common dir
+// (push-report.mjs): the findings the pushed range brought in, each with the pushed commit that touched the path it names
+// where it names one, and a measurement of every check and the linter. The sandbox files it once the push has reached the remote, and the
+// editor's Main line shows each finding as "Left at push" until a later measurement stops printing it or somebody
+// dismisses it. Written for a clean push too, whose measurement is what clears the findings of earlier ones; a run by hand
+// pushes nothing, so it writes the measurement alone.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -24,6 +32,7 @@ import { createSteps } from "../lib/steps.mjs";
 import { ago, commitTree, freshVerdicts, treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
 import { rustfmtAvailable, touchedCrates } from "./fixers.mjs";
+import { brokenFindings, lintOutcome, measureEntry, pushEntry, stepFindings, tidyFindings, writeReport } from "./push-report.mjs";
 import { judgeAgainstBase } from "./turn-findings.mjs";
 import { testConcurrency, testWorkers } from "./test-workers.mjs";
 
@@ -33,6 +42,8 @@ const hook = process.argv.includes("--hook");
 const advisory = process.argv.includes("--advisory");
 // Runs typecheck, build and test here when no verdict covers the tree; without it that is CI's to measure.
 const suiteForced = process.argv.includes("--suite");
+// Git hands the hook `<remote name> <url>` after the flags; the name is what the report says the push went to.
+const remoteName = process.argv.slice(2).find((arg) => !arg.startsWith("--"));
 
 // Clears inherited GIT_* vars (e.g. GIT_DIR in a worktree), overriding `cwd: root` toward the wrong repo.
 for (const variable of [
@@ -58,7 +69,7 @@ const ZERO_SHA = /^0+$/;
 const TAG_REF = /^refs\/tags\//;
 
 // Reports to stderr, which git shows the pusher; a tier collects its findings, but the run stops between tiers.
-const { say, step, fail, finish } = createSteps("verify-push", root, { advisory });
+const { say, step, fail, failing, failedSteps, finish } = createSteps("verify-push", root, { advisory });
 // Ends the run immediately, for refusals about the push itself, not the tree (e.g. an unmeasurable range); advisory, it
 // is said and the push goes on.
 const refuse = (line) => {
@@ -70,7 +81,9 @@ const refuse = (line) => {
 const git = (...args) => gitIn(root, ...args);
 
 // Git's stdin line is `<local ref> <local sha> <remote ref> <remote sha>`; zero sha means deletion or new branch, tag
-// refs are dropped. No stdin asks the branch's upstream; an unresolvable range widens tier 2, never narrows it.
+// refs are dropped. No stdin asks the branch's upstream; an unresolvable range widens tier 2, never narrows it. Each push
+// is `{ ref, local, remote, base }`: the ref it updates on the remote, the two shas, and their merge-base when this clone
+// can tell.
 const pushes = [];
 if (hook) {
     let stdin = "";
@@ -81,15 +94,15 @@ if (hook) {
     }
     const pointers = [];
     for (const line of stdin.split("\n")) {
-        const [ref, local, , remote] = line.trim().split(/\s+/);
+        const [localRef, local, remoteRef, remote] = line.trim().split(/\s+/);
         if (local === undefined || ZERO_SHA.test(local)) {
             continue;
         }
-        if (TAG_REF.test(ref)) {
-            pointers.push(ref.slice("refs/tags/".length));
+        if (TAG_REF.test(localRef)) {
+            pointers.push(localRef.slice("refs/tags/".length));
             continue;
         }
-        pushes.push({ local, remote: remote !== undefined && !ZERO_SHA.test(remote) ? remote : undefined });
+        pushes.push({ ref: remoteRef ?? localRef, local, remote: remote !== undefined && !ZERO_SHA.test(remote) ? remote : undefined });
     }
     if (stdin.trim() !== "" && pushes.length === 0) {
         say(
@@ -105,8 +118,18 @@ if (hook) {
 } else {
     const head = git("rev-parse", "-q", "--verify", "HEAD")?.trim();
     if (head !== undefined) {
-        pushes.push({ local: head, remote: git("rev-parse", "-q", "--verify", "@{u}")?.trim() });
+        // Where a plain `git push` would send it: the upstream's own name for the branch, else the branch's.
+        const branch = git("symbolic-ref", "-q", "HEAD")?.trim();
+        const upstream = branch === undefined ? undefined : git("for-each-ref", "--format=%(upstream:remoteref)", branch)?.trim();
+        pushes.push({
+            ref: upstream !== undefined && upstream !== "" ? upstream : (branch ?? "HEAD"),
+            local: head,
+            remote: git("rev-parse", "-q", "--verify", "@{u}")?.trim(),
+        });
     }
+}
+for (const push of pushes) {
+    push.base = push.remote === undefined ? undefined : git("merge-base", push.remote, push.local)?.trim();
 }
 
 // The paths the push changes, or undefined when that cannot be known (no remote sha, a base this clone lacks).
@@ -115,8 +138,7 @@ const changedPaths = () => {
         return undefined;
     }
     const paths = new Set();
-    for (const { local, remote } of pushes) {
-        const base = remote === undefined ? undefined : git("merge-base", remote, local)?.trim();
+    for (const { local, base } of pushes) {
         const listing = base === undefined ? undefined : git("diff", "--name-only", base, local);
         if (listing === undefined) {
             return undefined;
@@ -130,11 +152,7 @@ const changedPaths = () => {
 
 // Commit ranges the push carries as `[base, head]`; omitted where a base can't be resolved, since the ratchet has
 // nothing to say about an unresolvable range.
-const ranges = () =>
-    pushes.flatMap(({ local, remote }) => {
-        const base = remote === undefined ? undefined : git("merge-base", remote, local)?.trim();
-        return base === undefined || base === local ? [] : [[base, local]];
-    });
+const ranges = () => pushes.flatMap(({ local, base }) => (base === undefined || base === local ? [] : [[base, local]]));
 
 // Line span of pnpm-lock.yaml's `packageManagerDependencies:` block. Judged by which lines a diff touches, never by
 // their text, since the block's own shape matches every importer entry elsewhere in the file.
@@ -199,8 +217,13 @@ const lockfileRewriteOnly = () => {
 // Judged against the merge-base rather than refused wholesale, for the reason the tidy job's own comment gives: a gate
 // that refuses a pusher for state nobody in this push produced teaches everyone that red means nothing. What refuses is
 // the lines the range ADDED (turn-findings.mjs); what was already standing is named and charged to no one.
+//
+// What is KEPT for later (push-report.mjs) is the same share: every line a broken check prints, and of the tidy ones
+// only what this push added. Already failing at the base, or not askable there, is shown here and recorded nowhere.
+const verdicts = checkVerdicts(root);
+// The findings this push is answerable for, as the report records them; the steps' own join them before it is written.
+const findings = [];
 {
-    const verdicts = checkVerdicts(root);
     if (verdicts === undefined) {
         fail("checkout gates", "could not be measured · node _tools/checks/run.mjs");
     } else {
@@ -215,6 +238,7 @@ const lockfileRewriteOnly = () => {
         const broken = failed.filter((verdict) => verdict.gate === "code");
         for (const verdict of broken) {
             show("✗", verdict, `${verdict.stderr}${verdict.stdout}`.trimEnd());
+            findings.push(...brokenFindings(verdict));
         }
         if (broken.length > 0) {
             const ids = broken.map(({ id }) => id);
@@ -257,6 +281,7 @@ const lockfileRewriteOnly = () => {
             for (const { verdict, added } of mine) {
                 show("✗", verdict, `${added.length} problem(s) this push introduces\n${added.join("\n")}`);
             }
+            findings.push(...tidyFindings(mine));
             if (mine.length > 0) {
                 const ids = mine.map(({ verdict }) => verdict.id);
                 fail(
@@ -303,13 +328,13 @@ const changed = changedPaths();
         );
     }
 }
-{
-    const lint = spawnSync("pnpm", ["lint"], { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
-    if (lint.error !== undefined) {
-        say(`lint skipped: ${lint.error.message} (CI does not lint; each edit's own lint and the check after each land do)`);
-    } else if (lint.status !== 0) {
-        fail("lint", `exit ${lint.status ?? "signal"} · pnpm lint`);
-    }
+// Streamed to the pusher as it runs; only its exit is kept, as the report's measurement of the linter.
+const linted = spawnSync("pnpm", ["lint"], { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
+const lint = lintOutcome(linted);
+if (linted.error !== undefined) {
+    say(`lint skipped: ${linted.error.message} (CI does not lint; each edit's own lint and the check after each land do)`);
+} else if (linted.status !== 0) {
+    fail("lint", `exit ${linted.status ?? "signal"}`, [], { spelling: "pnpm lint" });
 }
 
 const touched = touchedCrates(root, changed === undefined ? undefined : [...changed]);
@@ -323,8 +348,52 @@ if (touched.length > 0) {
     }
 }
 
+// KEPT FOR LATER, before the digest: finish() may end the process when run by hand. Only the hook keeps findings, since
+// only there did something go: a run by hand pushed nothing, so it keeps its measurement alone, which still clears what
+// earlier pushes left and is fixed since. A hook run naming no push (tags, deletions) has left already.
+const kept = (() => {
+    if (!hook) {
+        const written = writeReport(root, measureEntry(verdicts, lint));
+        return written.ok ? undefined : { ...written, findings: 0 };
+    }
+    if (pushes.length === 0) {
+        return undefined;
+    }
+    try {
+        const entry = pushEntry(root, {
+            remote: remoteName,
+            pushes: pushes.map(({ ref, local, base }) => ({ ref, head: local, base })),
+            findings: [...findings, ...stepFindings(failedSteps())],
+            verdicts,
+            lint,
+        });
+        return { ...writeReport(root, entry), findings: entry.findings.length };
+    } catch (error) {
+        // Handled by saying it: a push is never held back, nor its exit changed, by its own bookkeeping going wrong.
+        return { ok: false, why: error instanceof Error ? error.message : String(error), findings: 0 };
+    }
+})();
+if (kept?.ok === false && !failing()) {
+    say(`this measurement could not be kept for later: ${kept.why}`);
+}
+// The digest's last line, where the pusher looks: where the findings went, or that they went nowhere. Undefined leaves
+// the default, for a run that kept nothing (no push named) or failed without a finding of its own to keep.
+const closing = () => {
+    if (kept === undefined) {
+        return undefined;
+    }
+    if (!kept.ok) {
+        return `${advisory ? "reported, not refused, and " : ""}could not be kept for later: ${kept.why}`;
+    }
+    const one = kept.findings === 1;
+    return kept.findings === 0
+        ? undefined
+        : `${kept.findings} finding${one ? "" : "s"} left for later: ${one ? "it waits" : "they wait"} in the Main line (Left at push) until a later ` +
+              `check stops finding ${one ? "it" : "them"} or ${one ? "it is" : "they are"} dismissed`;
+};
+
 // Prints everything both tiers found; a tree already refused cheaply doesn't go on to the ten-minute suite.
-finish(() => "the checkout gates, the assertion ratchet, the manifest/lockfile lockstep, the linter and rustfmt");
+finish(() => "the checkout gates, the assertion ratchet, the manifest/lockfile lockstep, the linter and rustfmt", { closing: closing() });
 
 // The hook stops here, whatever was found: the suite is the land check's and CI's to run, never the pusher's to wait on.
 if (advisory) {

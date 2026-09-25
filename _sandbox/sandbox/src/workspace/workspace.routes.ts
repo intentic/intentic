@@ -373,7 +373,17 @@ export const createWorkspaceRoutes = (services: Services) => {
             return {
                 projects: status.projects.filter((project) => inFence(project.project)),
                 recent: status.recent.filter((run) => inFence(run.project)),
+                pushes: (status.pushes ?? []).filter((push) => inFence(push.project)),
             };
+        }),
+        // What a push check let through waits until measured gone or set aside; a fenced caller acts on its own projects.
+        mainlinePushDismiss: i.mainlinePushDismiss.handler(async ({ input, context }) => {
+            refuseFenced(await fenceFor(context), input.project);
+            return { changed: await services.pushChecks.dismiss(input.project, input.ids, input.restore === true) };
+        }),
+        mainlinePushRecheck: i.mainlinePushRecheck.handler(async ({ input, context }) => {
+            refuseFenced(await fenceFor(context), input.project);
+            return services.pushChecks.recheck(input.project);
         }),
         // Queues the named projects on the coordinator an agent's install also uses, so two package managers never run
         // over one tree; an already-ready project is a no-op.

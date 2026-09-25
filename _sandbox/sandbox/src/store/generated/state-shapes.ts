@@ -70,6 +70,7 @@ import type { walletLedgerDocument } from "../../wallet/wallet-ledger.js";
 import type { webchatOutboxDocument } from "../../webchat/webchat-outbox.js";
 import type { workflowRunsDocument } from "../../workflows/workflows-store.js";
 import type { workflowsDocument } from "../../workflows/workflows-store.js";
+import type { pushChecksDocument } from "../../workspace/deps/push-checks-store.js";
 import type { dependencyRequestsDocument } from "../../workspace/deps/reconcile-deps.js";
 import type { verifyDocument } from "../../workspace/deps/verify-store.js";
 
@@ -415,6 +416,10 @@ type IssuesDocument1 = { automationId: string; count: number; culprit?: string; 
 // since v1.188.0
 type LoopsDocument0 = { account?: string; actsAs?: string; agent?: string; autoLand?: boolean; checks: ({ command: string; kind: "command" } | { kind: "judge"; model?: string; rubric: string })[]; context: "fresh" | "continue"; conversationId: string; detail?: string; endedAt?: number; goal: string; harness?: "native" | "claude-code"; isolated: boolean; iterations: ({ at: number; changed: boolean; costUsd?: number; detail?: string; n: number; outcome: "continue" | "done" | "error"; sessionId?: string })[]; maxIterations: number; maxSpendUsd?: number; model?: string; output: { kind: "none" } | { kind: "claim" } | { fields: ({ description: string; name: string; required: boolean; type: "string" | "number" | "boolean" | "string[]" })[]; kind: "json" }; prompt: string; resumed: number; stallLimit: number; startedAt: number; state: "running" | "done" | "exhausted" | "stalled" | "overspent" | "stopped" | "error"; worktreeBase?: { base: string; repo: string }[] };
 
+// workspace:.intentic/records/push-checks.json
+// since 2026-09-25
+type PushChecksDocument0 = { pushes?: ({ at: number; base?: string; branch?: string; commits: number; findings: ({ check?: string; command?: string; commit?: { sha: string; subject: string }; gate?: "code" | "tidy"; id: string; key: string; kind: "check" | "lint" | "ratchet" | "lockstep" | "rustfmt"; settledAt?: number; state: "open" | "resolved" | "dismissed"; text: string })[]; head: string; id: string; measuredAt?: number; project: string; remote?: string })[]; seen?: string[] };
+
 // workspace:.intentic/records/runtime-installs.json
 // since v1.232.0
 type RuntimeInstallsDocument0 = { drift?: { apt: string[]; at: number; bornAt: number; paths: string[] }; installs: ({ commands: string[]; count: number; declinedAt?: number; firstAt: number; kind: "apt" | "pip" | "cargo" | "npm" | "rustup-target" | "playwright" | "gem" | "pipx" | "go" | "other"; lastAt: number; sessions: string[]; tool: string })[] };
@@ -734,6 +739,8 @@ export type StateShapeChecks = [
     Fits<never, ReusedKeys<typeof issuesDocument>>,
     Fits<Accepted<typeof loopsDocument>, Converted<LoopsDocument0, typeof loopsDocument>>,
     Fits<never, ReusedKeys<typeof loopsDocument>>,
+    Fits<Accepted<typeof pushChecksDocument>, Converted<PushChecksDocument0, typeof pushChecksDocument>>,
+    Fits<never, ReusedKeys<typeof pushChecksDocument>>,
     Fits<Accepted<typeof runtimeInstallsDocument>, Converted<RuntimeInstallsDocument0, typeof runtimeInstallsDocument>>,
     Fits<never, ReusedKeys<typeof runtimeInstallsDocument>>,
     Fits<Accepted<typeof secretUsesDocument>, Converted<SecretUsesDocument0, typeof secretUsesDocument>>,

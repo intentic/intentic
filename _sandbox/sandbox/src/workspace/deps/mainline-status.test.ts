@@ -4,6 +4,7 @@ import type { Services } from "../../composition.js";
 import type { DependencyLandOrigin } from "./dependency-origin.js";
 import * as verifyDeps from "./verify-deps.js";
 import type { VerifyQueueSnapshot } from "./verify-deps.js";
+import type { StoredPush } from "./push-checks-store.js";
 import type { VerifyOutcome } from "./verify-store.js";
 
 // The main-line check as the editor reads it: what the verify store remembers, and what the queue holds right now. The
@@ -17,8 +18,15 @@ afterEach(() => {
     snapshot = { current: undefined, pending: [] };
 });
 
-const storeOf = (projects: Record<string, VerifyOutcome>, runs: readonly MainlineRun[]): Pick<Services, "verifyStore"> => ({
+const storeOf = (
+    projects: Record<string, VerifyOutcome>,
+    runs: readonly MainlineRun[],
+    pushes: readonly StoredPush[] = [],
+): Pick<Services, "verifyStore" | "pushChecks"> => ({
     verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects, runs }) }),
+    pushChecks: unstubbed<Services["pushChecks"]>("pushChecks", {
+        store: unstubbed<Services["pushChecks"]["store"]>("pushChecks.store", { read: async () => ({ pushes: [...pushes], seen: [] }) }),
+    }),
 });
 
 const land = (agentId: string, title?: string): DependencyLandOrigin => ({
@@ -42,7 +50,7 @@ const run = (over: Partial<MainlineRun> & Pick<MainlineRun, "project" | "at">): 
 
 describe("the main line's status", () => {
     test("is empty before anything was checked or queued", async () => {
-        expect(await mainlineStatus(storeOf({}, []))).toEqual({ projects: [], recent: [] });
+        expect(await mainlineStatus(storeOf({}, []))).toEqual({ projects: [], recent: [], pushes: [] });
     });
 
     test("joins what the store remembers to what runs and waits now, one row per project in folder order", async () => {
@@ -73,7 +81,52 @@ describe("the main line's status", () => {
                 },
             ],
             recent: [appRed, libGreen, appEarlier],
+            pushes: [],
         });
+    });
+
+    // The key a later measurement names a finding by is the store's own; the editor reads the finding without it.
+    test("serves what each push check let through, newest first, without the keys the store files findings by", async () => {
+        const push = (id: string, at: number): StoredPush => ({
+            project: "app",
+            id,
+            at,
+            remote: "origin",
+            branch: "main",
+            base: "b0",
+            head: `h${at}`,
+            commits: 1,
+            findings: [
+                { id: `check:paths:${id}`, kind: "check", check: "paths", gate: "code", text: `a.ts: ${id}`, state: "open", key: `a.ts:${id}` },
+            ],
+        });
+
+        const status = await mainlineStatus(storeOf({}, [], [push("r2", 20), push("r1", 10)]));
+
+        expect(status.pushes).toEqual([
+            {
+                project: "app",
+                id: "r2",
+                at: 20,
+                remote: "origin",
+                branch: "main",
+                base: "b0",
+                head: "h20",
+                commits: 1,
+                findings: [{ id: "check:paths:r2", kind: "check", check: "paths", gate: "code", text: "a.ts: r2", state: "open" }],
+            },
+            {
+                project: "app",
+                id: "r1",
+                at: 10,
+                remote: "origin",
+                branch: "main",
+                base: "b0",
+                head: "h10",
+                commits: 1,
+                findings: [{ id: "check:paths:r1", kind: "check", check: "paths", gate: "code", text: "a.ts: r1", state: "open" }],
+            },
+        ]);
     });
 
     // A red recorded before streaks were kept names no start; the red it has is the earliest the store can vouch for.

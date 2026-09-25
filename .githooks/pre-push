@@ -10,5 +10,10 @@
 # files, the manifest/lockfile lockstep, the linter, and rustfmt on any Rust crate the push touches. It prints what it
 # finds and exits 0. `pnpm verify:push` by hand still answers with an exit code, and `--suite` runs the full suite.
 #
+# KEPT FOR LATER: the push goes either way, so what it found is also written to a report in the git dir
+# (_tools/scripts/verify/push-report.mjs), and the editor's Main line shows it as "Left at push" until a later check
+# stops finding it or it is dismissed. Git's two arguments (the remote's name and URL) are passed on so the report can
+# say where the push went.
+#
 # No dependency guard: this needs node, which is the thing running the repo.
-exec node _tools/scripts/verify/verify-push.mjs --hook --advisory
+exec node _tools/scripts/verify/verify-push.mjs --hook --advisory "$@"
