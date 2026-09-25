@@ -1,7 +1,8 @@
 import { type WebExtGrant, type WebExtScopes, WebExtScopesSchema } from "@intentic/sandbox-contract/webext";
 
 // Everything this extension remembers, in chrome.storage.local: the sandbox's url+token (the only secret), cached
-// scopes, per-site read/act modes, paused (must survive the worker's death), and the activity log. Not here:
+// scopes, per-site read/act modes, paused (must survive the worker's death), the activity log, recent declines and
+// the person's own settings. Not here:
 // which sites are allowed — that's Chrome's live permission store, never mirrored, so a browser revoke is honored
 // immediately.
 
@@ -12,6 +13,9 @@ const KEY_PAUSED = "paused";
 const KEY_LOG = "log";
 const KEY_PENDING = "pending";
 const KEY_INBOX = "inbox";
+const KEY_DECLINED = "declined";
+const KEY_SETTINGS = "settings";
+const KEY_PROMPTED = "prompted";
 
 export interface PairedSandbox {
     readonly url: string;
@@ -19,13 +23,27 @@ export interface PairedSandbox {
 }
 
 // One line in the popup's activity list; `detail` is already redacted by the caller (audit.ts), so nothing typed
-// into a page reaches this file.
+// into a page reaches this file. `detail` is a sentence a person reads ("Typed 86 characters"), `note` the reason a
+// call failed. Entries written before that split hold the call's JSON in `detail` and no note.
 export interface ActivityEntry {
     readonly at: number;
     readonly tool: string;
     readonly detail: string;
     readonly ok: boolean;
+    readonly note?: string;
 }
+
+// The person's own preferences for this extension, as opposed to anything a sandbox decides.
+export interface Settings {
+    // Open the popup by itself when the agent asks for a site, instead of leaving only a badge.
+    readonly openOnAsk: boolean;
+}
+
+const DEFAULT_SETTINGS: Settings = { openOnAsk: true };
+
+// How long a "no" holds: long enough that an agent can't re-ask in a loop, short enough that a new task on the same
+// site is not refused by a decision about an old one.
+export const DECLINE_HOLD_MS = 15 * 60_000;
 
 // A site the agent asked for, unanswered; one at a time on purpose, since a request queue is one nobody reads and
 // the agent is blocked on the first anyway.
@@ -115,4 +133,32 @@ export const store = {
         }),
     setInbox: async (pairing: PairedSandbox | undefined): Promise<void> =>
         pairing === undefined ? await chrome.storage.local.remove([KEY_INBOX]) : await chrome.storage.local.set({ [KEY_INBOX]: pairing }),
+
+    // Sites the person declined, with when; entries past DECLINE_HOLD_MS are dropped on every write.
+    declined: async (): Promise<Record<string, number>> =>
+        await read<Record<string, number>>(KEY_DECLINED, {}, (raw) =>
+            typeof raw === "object" && raw !== null ? (raw as Record<string, number>) : undefined,
+        ),
+    decline: async (origin: string, at: number): Promise<void> => {
+        const kept = Object.entries(await store.declined()).filter(([, when]) => at - when < DECLINE_HOLD_MS);
+        await chrome.storage.local.set({ [KEY_DECLINED]: { ...Object.fromEntries(kept), [origin]: at } });
+    },
+    forgetDecline: async (origin: string): Promise<void> => {
+        const declined = await store.declined();
+        if (origin in declined) {
+            delete declined[origin];
+            await chrome.storage.local.set({ [KEY_DECLINED]: declined });
+        }
+    },
+
+    settings: async (): Promise<Settings> =>
+        await read<Settings>(KEY_SETTINGS, DEFAULT_SETTINGS, (raw) => {
+            const value = raw as Partial<Settings> | undefined;
+            return typeof value === "object" && value !== null ? { ...DEFAULT_SETTINGS, ...value } : undefined;
+        }),
+    setSettings: async (settings: Settings): Promise<void> => await chrome.storage.local.set({ [KEY_SETTINGS]: settings }),
+
+    // When the popup last opened itself; kept in storage because the worker that opened it may not live to the next ask.
+    promptedAt: async (): Promise<number> => await read(KEY_PROMPTED, 0, (raw) => (typeof raw === "number" ? raw : undefined)),
+    setPromptedAt: async (at: number): Promise<void> => await chrome.storage.local.set({ [KEY_PROMPTED]: at }),
 };

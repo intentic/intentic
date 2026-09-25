@@ -42,7 +42,7 @@ export const ensureLink = async (): Promise<void> => {
         // The sandbox revoked this browser: forgetting the pairing is honest, since a stored token that can't be used
         // would look connected in the popup and never be. Logged so the person knows why.
         revoked: () => {
-            void store.append({ at: Date.now(), tool: "connection", detail: "the sandbox revoked this browser", ok: false });
+            void store.append({ at: Date.now(), tool: "connection", detail: "The sandbox disconnected this browser", ok: false });
             void store.forgetSandbox();
         },
     });

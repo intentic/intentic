@@ -1,6 +1,6 @@
 import type { WebExtGrant } from "@intentic/sandbox-contract/webext";
 import { decide, originPattern, RefusedError, sandboxOwnOrigin } from "../policy.js";
-import { store } from "../store.js";
+import { DECLINE_HOLD_MS, store } from "../store.js";
 
 // Single checkpoint every page tool passes through before touching a tab: which tab, is this extension allowed on
 // it at all (Chrome), and may it do this here (ours). Defaults to the active tab in the current window; an
@@ -24,7 +24,13 @@ export const targetTab = async (need: "read" | "act", tabId?: number): Promise<T
             tabId === undefined ? `This browser has no active tab right now.` : `There is no tab ${tabId} in this browser any more.`,
         );
     }
-    const [scopes, paused, modes, sandbox] = await Promise.all([store.scopes(), store.paused(), store.modes(), store.sandbox()]);
+    const [scopes, paused, modes, sandbox, declined] = await Promise.all([
+        store.scopes(),
+        store.paused(),
+        store.modes(),
+        store.sandbox(),
+        store.declined(),
+    ]);
     const pattern = originPattern(tab.url);
     // tab.url is undefined when permission is missing (Chrome's design); treat that as ungranted, not a bug.
     const granted = pattern === undefined ? false : await chrome.permissions.contains({ origins: [pattern] });
@@ -36,6 +42,7 @@ export const targetTab = async (need: "read" | "act", tabId?: number): Promise<T
         scopes,
         paused,
         own: sandboxOwnOrigin(sandbox?.url),
+        declined: pattern !== undefined && Date.now() - (declined[pattern] ?? -Infinity) < DECLINE_HOLD_MS,
     });
     if (!verdict.allowed) {
         throw new RefusedError(verdict.message);
@@ -44,8 +51,13 @@ export const targetTab = async (need: "read" | "act", tabId?: number): Promise<T
 };
 
 // Every site the person allowed, read live from Chrome (not cached) with this extension's read/act mode beside it,
-// so a permission revoked in browser settings is reflected immediately.
+// so a permission revoked in browser settings is reflected immediately. The paired sandbox's own origin is held for
+// the connection, not as a site to work on (policy.ts refuses it), so it is not listed as one: shown as a site, it
+// invited a "remove" that cut the link.
 export const currentGrants = async (): Promise<WebExtGrant[]> => {
-    const [permissions, modes] = await Promise.all([chrome.permissions.getAll(), store.modes()]);
-    return (permissions.origins ?? []).filter((origin) => origin.startsWith("http")).map((origin) => ({ origin, mode: modes[origin] ?? "read" }));
+    const [permissions, modes, sandbox] = await Promise.all([chrome.permissions.getAll(), store.modes(), store.sandbox()]);
+    const own = sandboxOwnOrigin(sandbox?.url);
+    return (permissions.origins ?? [])
+        .filter((origin) => origin.startsWith("http") && origin !== own)
+        .map((origin) => ({ origin, mode: modes[origin] ?? "read" }));
 };

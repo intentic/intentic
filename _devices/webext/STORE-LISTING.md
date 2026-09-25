@@ -84,6 +84,8 @@ explicitly allows, so an AI agent can carry out tasks the user asked for while t
 | `storage` | Stores the sandbox pairing the user made, which sites they allowed and whether each is read-only, whether they have paused the agent, and a local log of recent actions shown in the popup. Nothing is stored remotely. |
 | `alarms` | Reconnects the extension's single WebSocket after Chrome evicts the MV3 service worker. It runs no periodic task otherwise. |
 | `cookies` | One user-initiated action: "hand this site's sign-in to my sandbox", so a long-running job continues after the browser closes. It requires a confirmation on the page every time, a switch that is off by default, and it sends the cookies only to the user's own sandbox. |
+| `activeTab` | Lets the popup name the site the user is on when they click the toolbar icon, so they can allow that one site with a click. It never reaches a page by itself: the agent's tools still run only on sites the user granted. |
+| `favicon` | Shows each allowed site's icon in the popup's list, from the browser's own favicon cache. No page is fetched for it. |
 | `host permissions` (`*://*/*`, optional) | Requested per site at runtime, never at install. The user chooses each site in the extension's popup and revokes it in Chrome's settings. |
 | Content script on `*://*.intentic.dev/*` | Receives a pairing code the user's own sandbox page offers, so the user does not have to copy and paste it. It reads nothing else on those pages. |
 

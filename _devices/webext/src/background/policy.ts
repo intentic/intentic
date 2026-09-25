@@ -36,6 +36,10 @@ export const originPattern = (url: string | undefined): string | undefined => {
 // A readable site name for a message, from a pattern or a URL. "github.com", not "https://github.com/*".
 export const siteOf = (urlOrPattern: string): string => urlOrPattern.replace(/^https?:\/\//, "").replace(/\/\*?$/, "");
 
+// What the agent hears about a site the person said no to: a decision, not a missing permission to ask for again.
+export const declinedMessage = (site: string): string =>
+    `The person declined access to ${site}. Do not ask again: carry on without it, or say in the conversation what you needed it for so they can allow it themselves.`;
+
 // What this browser lets the agent do on one page. `granted` is Chrome's answer, `mode` is ours; kept separate
 // since each is revoked in a different place (browser settings vs. this extension's popup).
 export const decide = (options: {
@@ -47,6 +51,9 @@ export const decide = (options: {
     readonly paused: boolean;
     // The sandbox's own origin, when paired with one; never a site to work on.
     readonly own?: string | undefined;
+    // The person declined this site's request recently (store.ts DECLINE_HOLD_MS), which changes what "not allowed"
+    // should tell the agent to do next.
+    readonly declined?: boolean;
 }): { readonly allowed: true } | { readonly allowed: false; readonly message: string } => {
     if (options.paused) {
         return { allowed: false, message: `This browser is paused: its owner stopped the agent in the extension. Ask them to resume it.` };
@@ -64,6 +71,9 @@ export const decide = (options: {
             allowed: false,
             message: `That tab is the sandbox's own app. This connection exists to work on OTHER sites; use your ordinary tools for anything here.`,
         };
+    }
+    if (!options.granted && options.declined === true) {
+        return { allowed: false, message: declinedMessage(site) };
     }
     if (!options.granted) {
         return {

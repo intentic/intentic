@@ -24,6 +24,8 @@ declare namespace chrome {
         }
         const local: Area;
         const session: Area;
+        // Lets an open popup follow what the worker writes (a new request, the agent's next call) without polling.
+        const onChanged: { addListener: (callback: (changes: Record<string, unknown>, area: string) => void) => void };
     }
 
     namespace alarms {
@@ -39,6 +41,7 @@ declare namespace chrome {
         function request(request: { origins?: string[]; permissions?: string[] }): Promise<boolean>;
         function remove(request: { origins?: string[]; permissions?: string[] }): Promise<boolean>;
         const onRemoved: { addListener: (callback: (removed: { origins?: string[] }) => void) => void };
+        const onAdded: { addListener: (callback: (added: { origins?: string[] }) => void) => void };
     }
 
     namespace tabs {
@@ -110,7 +113,12 @@ declare namespace chrome {
     namespace action {
         function setBadgeText(details: { text: string }): Promise<void>;
         function setBadgeBackgroundColor(details: { color: string }): Promise<void>;
+        // Chrome 110; optional so a fake without it (the tests) still type-checks.
+        const setBadgeTextColor: ((details: { color: string }) => Promise<void>) | undefined;
         function setTitle(details: { title: string }): Promise<void>;
+        // Without a user gesture from Chrome 127 (policy-installed only before that, where it rejects); absent in
+        // browsers that never shipped it. Opens in the window in front, and rejects when there is none.
+        const openPopup: ((options?: { windowId?: number }) => Promise<void>) | undefined;
     }
 }
 

@@ -10,8 +10,9 @@ const here = import.meta.dirname;
 const dist = join(here, "..", "dist");
 
 // The state a listing screenshot should show: connected, working, and something waiting for the person, all
-// visible at once.
-const STATE = {
+// visible at once. The other states are for design work: preview.html#paused, #offline, #quiet, #offered, #welcome.
+const now = Date.now();
+const working = {
     sandbox: { url: "https://sandbox-4f2a91c7b8e0.intentic.dev", token: "" },
     link: "open",
     scopes: { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" },
@@ -20,25 +21,58 @@ const STATE = {
         { origin: "https://acme.atlassian.net/*", mode: "act" },
         { origin: "https://docs.stripe.com/*", mode: "read" },
     ],
-    pending: { origin: "https://mail.google.com/*", reason: "To read the invoice thread you asked me to summarise.", at: Date.now() - 24_000 },
+    pending: { origin: "https://mail.google.com/*", reason: "To read the invoice thread you asked me to summarise.", at: now - 24_000 },
     offered: undefined,
     paused: false,
+    settings: { openOnAsk: true },
     log: [
-        { at: Date.now() - 8_000, tool: "click", detail: `{"ref":"e14"} — clicked "Create pull request"`, ok: true },
-        { at: Date.now() - 21_000, tool: "fill", detail: `{"ref":"e9","text":"<86 characters>","submit":false}`, ok: true },
-        { at: Date.now() - 44_000, tool: "snapshot", detail: `{}`, ok: true },
-        { at: Date.now() - 51_000, tool: "tabs", detail: `{}`, ok: true },
-        { at: Date.now() - 92_000, tool: "snapshot", detail: `{} — refused: not allowed on mail.google.com`, ok: false },
+        { at: now - 8_000, tool: "click", detail: "Clicked e14", ok: true },
+        { at: now - 21_000, tool: "fill", detail: "Typed 86 characters into e9", ok: true },
+        { at: now - 44_000, tool: "snapshot", detail: "Looked over the page", ok: true },
+        { at: now - 51_000, tool: "open", detail: "Opened github.com/intentic/intentic/pulls", ok: true },
+        { at: now - 70_000, tool: "owner", detail: "Allowed github.com to read and act", ok: true },
+        {
+            at: now - 92_000,
+            tool: "snapshot",
+            detail: "Looked over the page",
+            ok: false,
+            note: "Not allowed on mail.google.com. Call ask_access with a plain reason and stop: the person allows it in their browser, or does not.",
+        },
+        { at: now - 95_000, tool: "tabs", detail: "Listed your tabs", ok: true },
+        { at: now - 180_000, tool: "describe", detail: "Checked what it may do here", ok: true },
+        { at: now - 3_600_000, tool: "connection", detail: "Connected to sandbox-4f2a91c7b8e0.intentic.dev", ok: true },
     ],
+};
+const STATES = {
+    working,
+    quiet: { ...working, pending: undefined },
+    paused: { ...working, pending: undefined, paused: true },
+    offline: { ...working, pending: undefined, link: "closed", scopes: { ...working.scopes, act: "off" } },
+    offered: {
+        ...working,
+        sandbox: undefined,
+        pending: undefined,
+        grants: [],
+        log: [],
+        offered: { url: "https://sandbox-4f2a91c7b8e0.intentic.dev", token: "t" },
+    },
+    welcome: { ...working, sandbox: undefined, pending: undefined, grants: [], log: [] },
 };
 
 const stub = `<script>
 // The stub. Everything the popup reaches for, and nothing else — which is also a readable list of what a
 // popup is allowed to touch.
+const STATES = ${JSON.stringify(STATES)};
+const state = STATES[location.hash.slice(1)] ?? STATES.working;
 window.chrome = {
-    runtime: { sendMessage: async (message) => (message.type === "state" ? ${JSON.stringify(STATE)} : { ok: true }) },
+    runtime: {
+        sendMessage: async (message) => (message.type === "state" ? state : { ok: true }),
+        // No favicon cache outside the extension: each site keeps its lettered stand-in.
+        getURL: (path) => "about:blank#" + path,
+    },
     tabs: { query: async () => [{ id: 1, url: "https://news.ycombinator.com/item?id=1", title: "Hacker News" }] },
     permissions: { request: async () => true, remove: async () => true },
+    storage: { onChanged: { addListener: () => undefined } },
 };
 </script>`;
 
@@ -68,7 +102,7 @@ const shot = `<!doctype html>
             b { color: #efe3cd; font-weight: 600; }
             .accent { color: #f59b3f; }
             .mark { width: 64px; height: 64px; margin: 0 0 26px; display: block; }
-            iframe { width: 368px; height: 640px; border: 0; border-radius: 14px; background: #fff; box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+            iframe { width: 360px; height: 600px; border: 0; border-radius: 14px; background: #fff; box-shadow: 0 30px 80px rgba(0,0,0,.55); }
         </style>
     </head>
     <body>
@@ -83,5 +117,5 @@ const shot = `<!doctype html>
     </body>
 </html>`;
 writeFileSync(join(dist, "store-shot.html"), shot);
-console.log("dist/preview.html: the popup at its real 340px width.");
+console.log("dist/preview.html: the popup at its real 360px width.");
 console.log("dist/store-shot.html: the listing screenshot, at 1280x800.");

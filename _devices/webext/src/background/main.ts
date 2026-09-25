@@ -4,7 +4,8 @@ import { closeLink, ensureLink, linkState } from "./link.js";
 import type { PopupCommand, PopupState } from "./messages.js";
 import { store } from "./store.js";
 import { currentGrants } from "./tools/tab-access.js";
-import { refreshBadge } from "./tools/access.js";
+import { openPanel, refreshBadge } from "./tools/access.js";
+import { siteOf } from "./policy.js";
 
 // The service worker's entry point: keeps the socket up and answers the popup. Deliberately holds no state,
 // since Chrome rebuilds this module from scratch on every run; only storage and these listeners survive. A
@@ -37,8 +38,23 @@ chrome.permissions.onRemoved.addListener((removed) => {
     }
 });
 
+// A site allowed outside the popup (Chrome's own site-access menu): if it is the one the agent asked for, the request
+// is answered, and the badge should stop saying otherwise.
+chrome.permissions.onAdded.addListener((added) => {
+    void (async () => {
+        const pending = await store.pending();
+        for (const origin of added.origins ?? []) {
+            await store.forgetDecline(origin);
+            if (pending?.origin === origin) {
+                await store.setPending(undefined);
+            }
+        }
+        await refreshBadge();
+    })();
+});
+
 const readState = async (): Promise<PopupState> => {
-    const [sandbox, scopes, grants, pending, offered, paused, log] = await Promise.all([
+    const [sandbox, scopes, grants, pending, offered, paused, log, settings] = await Promise.all([
         store.sandbox(),
         store.scopes(),
         currentGrants(),
@@ -46,8 +62,9 @@ const readState = async (): Promise<PopupState> => {
         store.inbox(),
         store.paused(),
         store.log(),
+        store.settings(),
     ]);
-    return { sandbox, link: linkState(), scopes, grants, pending, offered, paused, log };
+    return { sandbox, link: linkState(), scopes, grants, pending, offered, paused, log, settings };
 };
 
 // Redeems a pairing and dials; the popup already obtained the host permission, since only a click-backed page
@@ -73,11 +90,15 @@ const pair = async (code: string): Promise<{ ok: boolean; message: string }> => 
     }
     await store.setSandbox({ url: pairing.url, token: enrolled.token });
     await store.setInbox(undefined);
-    await store.append({ at: Date.now(), tool: "connection", detail: `paired with ${pairing.url}`, ok: true });
+    await store.append({ at: Date.now(), tool: "connection", detail: `Connected to ${siteOf(pairing.url)}`, ok: true });
     await ensureLink();
     await refreshBadge();
     return { ok: true, message: `Connected.` };
 };
+
+// Something the person did in the popup, in the same activity list as the agent's calls, so "why can it act on
+// github.com" has its answer beside what it did there.
+const owner = async (detail: string): Promise<void> => await store.append({ at: Date.now(), tool: "owner", detail, ok: true });
 
 const handle = async (command: PopupCommand): Promise<unknown> => {
     switch (command.type) {
@@ -85,34 +106,53 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
             return await readState();
         case "pair":
             return await pair(command.code);
-        case "allow":
+        case "allow": {
             // The browser already granted this (the popup asked, click behind it); this only files the read/act
-            // narrowing
-            // Chrome has no concept of.
+            // narrowing Chrome has no concept of.
             await store.setMode(command.origin, command.mode);
-            await store.setPending(undefined);
+            await store.forgetDecline(command.origin);
+            const pending = await store.pending();
+            if (pending === undefined || pending.origin === command.origin) {
+                await store.setPending(undefined);
+            }
+            await owner(`Allowed ${siteOf(command.origin)} to ${command.mode === "act" ? "read and act" : "read only"}`);
             await refreshBadge();
             return { ok: true };
+        }
         case "mode":
             await store.setMode(command.origin, command.mode);
+            await owner(`Set ${siteOf(command.origin)} to ${command.mode === "act" ? "read and act" : "read only"}`);
             return { ok: true };
         case "revoke":
             await chrome.permissions.remove({ origins: [command.origin] });
             await store.forgetMode(command.origin);
+            await owner(`Removed ${siteOf(command.origin)}`);
+            return { ok: true };
+        case "decline": {
+            const pending = await store.pending();
+            if (pending !== undefined) {
+                await store.decline(pending.origin, Date.now());
+                await store.setPending(undefined);
+                await owner(`Declined ${siteOf(pending.origin)}`);
+            }
+            await refreshBadge();
+            return { ok: true };
+        }
+        case "settings":
+            await store.setSettings(command.settings);
             return { ok: true };
         case "pause":
             await store.setPaused(command.value);
-            await store.append({
-                at: Date.now(),
-                tool: "connection",
-                detail: command.value ? "paused by its owner" : "resumed by its owner",
-                ok: true,
-            });
+            await owner(command.value ? "Paused the agent" : "Resumed the agent");
             await refreshBadge();
             return { ok: true };
         case "unpair":
             closeLink();
             await store.forgetSandbox();
+            await refreshBadge();
+            return { ok: true };
+        case "dismiss-offer":
+            await store.setInbox(undefined);
             await refreshBadge();
             return { ok: true };
         case "offer": {
@@ -125,6 +165,8 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
             }
             await store.setInbox({ url: pairing.url, token: pairing.token });
             await refreshBadge();
+            // The person just clicked Connect in their sandbox; the popup is the next step, so it comes to them.
+            await openPanel(true);
             return { ok: true };
         }
     }

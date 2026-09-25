@@ -17,7 +17,8 @@ flowchart LR
   to the worker, and the person finishes it with a click in the popup, which redeems it at `/system/webext/enroll`.
   The token it gets back is the only secret the extension stores.
 - `policy.ts` decides every call. Chrome's own permission for the site comes first, and only a click in the popup
-  grants one, so the agent can only ask (`ask_access`). Then the switches on the sandbox's capability card, then the
+  grants one, so the agent can only ask (`ask_access`), which opens the popup with its reason (Chrome 127+, else the
+  badge alone); a decline holds for 15 minutes. Then the switches on the sandbox's capability card, then the
   site's read-only or read-and-act mode. The sandbox's own origin is never a target, and the popup's pause stops everything.
 - `connect_site` hands a site's session to the sandbox and `lend_site` borrows one back; both need the sessions
   switch and a confirmation in the page every time.
@@ -32,7 +33,7 @@ flowchart LR
 - [src/background/policy.ts](src/background/policy.ts) — every allow or refuse decision, with its message.
 - [src/background/mcp.ts](src/background/mcp.ts) — the tool surface the sandbox calls.
 - [src/page/driver.ts](src/page/driver.ts) — what runs inside a tab: snapshot, click, fill, banner.
-- [src/popup/popup.ts](src/popup/popup.ts) — the popup, where every permission is granted.
+- [src/popup/popup.ts](src/popup/popup.ts) — the popup, where every permission is granted; `preview` renders its states.
 - [static/manifest.json](static/manifest.json) — permissions, the content script, the minimum Chrome.
 
 ## Commands
