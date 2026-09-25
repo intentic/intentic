@@ -476,28 +476,27 @@
             "checkingOn": "Checking {project} on {machine}"
         },
         "landCheck": {
-            "checking": "Checking main",
-            "checkingHint": "Main's check of {project} is running on what this landed.",
-            "waiting": "Waiting for main's check",
-            "waitingHint": "Landed; main's check of {project} measures it next, with whatever else lands meanwhile.",
-            "passed": "Passed main's check",
-            "passedHint": "Main's check of {project} passed after this landed, at {time}.",
             "broke": "Broke {count}",
             "brokeMain": "Broke main",
             "brokeHint": "Its land turned main's check of {project} red with {failures}. {routing}.",
             "brokeHintBare": "Its land turned main's check of {project} red. {routing}.",
-            "checkedRed": "Main still red",
-            "checkedRedHint": "Main's check of {project} was red after this landed, on failures laid at other work.",
             "openFixUp": "Open the conversation working on it",
-            "unverified": "Unverified",
-            "unverifiedHint": "Its last turn changed code and ran nothing that checked it after the last edit.",
             "lastCheckFailed": "Last check failed",
             "lastCheckFailedHint": "The last check its turn ran failed: {check}",
             "lastCheckFailedHintBare": "The last check its turn ran failed.",
-            "verified": "Verified",
-            "verifiedHint": "{check} passed after its last edit.",
-            "verifiedHintBare": "A check it ran passed after its last edit.",
-            "unviewed": "Changed {count} interface file without looking | Changed {count} interface files without looking"
+            "unviewed": "Changed {count} interface file without looking | Changed {count} interface files without looking",
+            "seal": {
+                "checking": "Main's check of {project}: running since {time}",
+                "waiting": "Main's check of {project}: queued since {time}",
+                "passed": "Main's check of {project}: passed at {time}",
+                "checkedRed": "Main's check of {project}: still red, from other work",
+                "broke": "Main's check of {project}: {broke}",
+                "verified": "Its own check: {check} passed",
+                "verifiedBare": "Its own check: passed after the last edit",
+                "failed": "Its own check: {check} failed",
+                "failedBare": "Its own check: failed",
+                "unproven": "Its own check: none since the last edit"
+            }
         }
     },
     "app": {

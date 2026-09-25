@@ -459,28 +459,27 @@
             }
         },
         "landCheck": {
-            "checking": "Prüfe main",
-            "checkingHint": "Die Prüfung von main in {project} läuft auf dem, was hier gelandet wurde.",
-            "waiting": "Wartet auf die Prüfung von main",
-            "waitingHint": "Gelandet; die Prüfung von main in {project} misst es als Nächstes, zusammen mit allem, was inzwischen landet.",
-            "passed": "Prüfung von main bestanden",
-            "passedHint": "Die Prüfung von main in {project} lief nach dieser Landung durch, um {time}.",
             "broke": "{count} kaputt",
             "brokeMain": "main kaputt",
             "brokeHint": "Seine Landung hat die Prüfung von main in {project} rot gemacht, mit {failures}. {routing}.",
             "brokeHintBare": "Seine Landung hat die Prüfung von main in {project} rot gemacht. {routing}.",
-            "checkedRed": "main noch rot",
-            "checkedRedHint": "Die Prüfung von main in {project} war nach dieser Landung rot, wegen Fehlern, die anderer Arbeit zugeschrieben werden.",
             "openFixUp": "Die Unterhaltung öffnen, die daran arbeitet",
-            "unverified": "Ungeprüft",
-            "unverifiedHint": "Sein letzter Zug hat Code geändert und nach der letzten Änderung nichts ausgeführt, was ihn prüft.",
             "lastCheckFailed": "Letzte Prüfung fehlgeschlagen",
             "lastCheckFailedHint": "Die letzte Prüfung seines Zugs ist fehlgeschlagen: {check}",
             "lastCheckFailedHintBare": "Die letzte Prüfung seines Zugs ist fehlgeschlagen.",
-            "verified": "Geprüft",
-            "verifiedHint": "{check} lief nach seiner letzten Änderung durch.",
-            "verifiedHintBare": "Eine Prüfung lief nach seiner letzten Änderung durch.",
-            "unviewed": "{count} Oberflächendatei geändert, ohne hinzusehen | {count} Oberflächendateien geändert, ohne hinzusehen"
+            "unviewed": "{count} Oberflächendatei geändert, ohne hinzusehen | {count} Oberflächendateien geändert, ohne hinzusehen",
+            "seal": {
+                "checking": "Prüfung von main in {project}: läuft seit {time}",
+                "waiting": "Prüfung von main in {project}: wartet seit {time}",
+                "passed": "Prüfung von main in {project}: bestanden um {time}",
+                "checkedRed": "Prüfung von main in {project}: noch rot, wegen anderer Arbeit",
+                "broke": "Prüfung von main in {project}: {broke}",
+                "verified": "Eigene Prüfung: {check} bestanden",
+                "verifiedBare": "Eigene Prüfung: nach der letzten Änderung bestanden",
+                "failed": "Eigene Prüfung: {check} fehlgeschlagen",
+                "failedBare": "Eigene Prüfung: fehlgeschlagen",
+                "unproven": "Eigene Prüfung: keine seit der letzten Änderung"
+            }
         }
     },
     "app": {

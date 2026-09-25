@@ -1,5 +1,5 @@
 import type { MainlineLand, MainlineProject, MainlineRun, MainlineStatus } from "@intentic/sandbox-contract";
-import { cardChecks, landCheck, proofMark } from "./landCheck";
+import { cardChecks, landCheck, proofMark, sealOf } from "./landCheck";
 
 // No mocks: landCheck is a pure projection over the status the daemon serves, like agentStatus beside it.
 const NOW = 1_700_000_000_000;
@@ -134,5 +134,35 @@ describe(`cardChecks`, () => {
         expect(cardChecks(agent, measured, false)).toEqual({ land: expect.objectContaining({ kind: `broke` }), proof: { verification: `unproven` } });
         expect(cardChecks(agent, measured, true)).toEqual({ land: expect.objectContaining({ kind: `broke` }) });
         expect(cardChecks({ id: `elsewhere`, proof: agent.proof }, undefined, true)).toBeUndefined();
+    });
+});
+
+describe(`sealOf`, () => {
+    const at = (kind: `checking` | `waiting` | `passed` | `broke` | `checked-red`) => ({ kind, project: `web`, since: NOW });
+
+    it(`lets the worst reading win: a red, then a check under way, then anything unproven`, () => {
+        expect(sealOf({ land: at(`passed`), proof: { verification: `failing` } })).toBe(`broke`);
+        expect(sealOf({ land: at(`broke`), proof: { verification: `verified` } })).toBe(`broke`);
+        expect(sealOf({ land: at(`checking`), proof: { verification: `unproven`, unviewed: 2 } })).toBe(`checking`);
+        expect(sealOf({ land: at(`waiting`), proof: { verification: `unproven` } })).toBe(`queued`);
+        expect(sealOf({ proof: { verification: `unproven` } })).toBe(`open`);
+        expect(sealOf({ proof: { unviewed: 1 } })).toBe(`open`);
+    });
+
+    it(`closes only when nothing left it open`, () => {
+        expect(sealOf({ land: at(`passed`) })).toBe(`closed`);
+        expect(sealOf({ proof: { verification: `verified`, check: `pnpm test` } })).toBe(`closed`);
+        expect(sealOf({ land: at(`passed`), proof: { verification: `verified` } })).toBe(`closed`);
+    });
+
+    // Main's suite passing says nothing about an interface nobody looked at, or about code it never reaches.
+    it(`keeps it open when main passed but the turn proved nothing of its own`, () => {
+        expect(sealOf({ land: at(`passed`), proof: { verification: `unproven` } })).toBe(`open`);
+        expect(sealOf({ land: at(`passed`), proof: { verification: `verified`, unviewed: 2 } })).toBe(`open`);
+    });
+
+    // Main still red from other work: no fault of this card's, and no pass it can wear either.
+    it(`keeps it open when main could not vouch for the land`, () => {
+        expect(sealOf({ land: at(`checked-red`), proof: { verification: `verified` } })).toBe(`open`);
     });
 });

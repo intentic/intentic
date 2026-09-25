@@ -328,5 +328,13 @@ export const routingMeta = (kind: MainlineRoutingKind | undefined): RoutingMeta 
     return kind === undefined ? deciding : (routingTable()[kind] ?? deciding);
 };
 
+// What a card calls a land that broke main: how many failures its run named, then who has them once the sandbox has
+// decided. The board's red line and the rail's seal both say it, in these same words.
+export const brokeLabel = (failures: number, routing: MainlineRoutingKind | undefined): string => {
+    const broke = failures > 0 ? t(`agents.landCheck.broke`, { count: failures }) : t(`agents.landCheck.brokeMain`);
+    const short = routingMeta(routing).short;
+    return routing === undefined || short === undefined ? broke : `${broke} · ${short}`;
+};
+
 // The ink a decision is said in: only one that waits for the reader asks for their eye.
 export const fixTone = (state: FixState): string => (state === `needs-you` ? `text-warning` : state === `fixed` ? `text-success` : `text-muted`);

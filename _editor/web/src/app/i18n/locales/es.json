@@ -464,28 +464,27 @@
             }
         },
         "landCheck": {
-            "checking": "Comprobando main",
-            "checkingHint": "La comprobación de main en {project} se está ejecutando sobre lo que esto integró.",
-            "waiting": "Esperando la comprobación de main",
-            "waitingHint": "Integrado; la comprobación de main en {project} lo mide a continuación, junto con lo que se integre mientras tanto.",
-            "passed": "Superó la comprobación de main",
-            "passedHint": "La comprobación de main en {project} se superó después de esta integración, a las {time}.",
             "broke": "Rompió {count}",
             "brokeMain": "Rompió main",
             "brokeHint": "Su integración dejó en rojo la comprobación de main en {project} con {failures}. {routing}.",
             "brokeHintBare": "Su integración dejó en rojo la comprobación de main en {project}. {routing}.",
-            "checkedRed": "main sigue en rojo",
-            "checkedRedHint": "La comprobación de main en {project} estaba en rojo tras esta integración, por fallos atribuidos a otro trabajo.",
             "openFixUp": "Abrir la conversación que trabaja en ello",
-            "unverified": "Sin verificar",
-            "unverifiedHint": "Su último turno cambió código y no ejecutó nada que lo comprobara después de la última edición.",
             "lastCheckFailed": "Falló la última comprobación",
             "lastCheckFailedHint": "La última comprobación de su turno falló: {check}",
             "lastCheckFailedHintBare": "La última comprobación de su turno falló.",
-            "verified": "Verificado",
-            "verifiedHint": "{check} se superó después de su última edición.",
-            "verifiedHintBare": "Una comprobación se superó después de su última edición.",
-            "unviewed": "Cambió {count} archivo de interfaz sin mirarlo | Cambió {count} archivos de interfaz sin mirarlos"
+            "unviewed": "Cambió {count} archivo de interfaz sin mirarlo | Cambió {count} archivos de interfaz sin mirarlos",
+            "seal": {
+                "checking": "Comprobación de main en {project}: en marcha desde las {time}",
+                "waiting": "Comprobación de main en {project}: en cola desde las {time}",
+                "passed": "Comprobación de main en {project}: superada a las {time}",
+                "checkedRed": "Comprobación de main en {project}: sigue en rojo, por otro trabajo",
+                "broke": "Comprobación de main en {project}: {broke}",
+                "verified": "Su propia comprobación: {check} superada",
+                "verifiedBare": "Su propia comprobación: superada tras la última edición",
+                "failed": "Su propia comprobación: {check} falló",
+                "failedBare": "Su propia comprobación: falló",
+                "unproven": "Su propia comprobación: ninguna desde la última edición"
+            }
         }
     },
     "app": {

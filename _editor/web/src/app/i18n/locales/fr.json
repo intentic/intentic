@@ -460,28 +460,27 @@
             }
         },
         "landCheck": {
-            "checking": "Vérification de main",
-            "checkingHint": "La vérification de main dans {project} tourne sur ce que ceci a intégré.",
-            "waiting": "En attente de la vérification de main",
-            "waitingHint": "Intégré ; la vérification de main dans {project} le mesure ensuite, avec tout ce qui est intégré entre-temps.",
-            "passed": "Vérification de main réussie",
-            "passedHint": "La vérification de main dans {project} a réussi après cette intégration, à {time}.",
             "broke": "A cassé {count}",
             "brokeMain": "A cassé main",
             "brokeHint": "Son intégration a fait passer au rouge la vérification de main dans {project}, avec {failures}. {routing}.",
             "brokeHintBare": "Son intégration a fait passer au rouge la vérification de main dans {project}. {routing}.",
-            "checkedRed": "main toujours rouge",
-            "checkedRedHint": "La vérification de main dans {project} était rouge après cette intégration, sur des échecs imputés à un autre travail.",
             "openFixUp": "Ouvrir la conversation qui y travaille",
-            "unverified": "Non vérifié",
-            "unverifiedHint": "Son dernier tour a modifié du code et n'a rien lancé qui le vérifie après la dernière modification.",
             "lastCheckFailed": "Dernière vérification échouée",
             "lastCheckFailedHint": "La dernière vérification lancée par son tour a échoué : {check}",
             "lastCheckFailedHintBare": "La dernière vérification lancée par son tour a échoué.",
-            "verified": "Vérifié",
-            "verifiedHint": "{check} a réussi après sa dernière modification.",
-            "verifiedHintBare": "Une vérification a réussi après sa dernière modification.",
-            "unviewed": "{count} fichier d'interface modifié sans le regarder | {count} fichiers d'interface modifiés sans les regarder"
+            "unviewed": "{count} fichier d'interface modifié sans le regarder | {count} fichiers d'interface modifiés sans les regarder",
+            "seal": {
+                "checking": "Vérification de main dans {project} : en cours depuis {time}",
+                "waiting": "Vérification de main dans {project} : en file depuis {time}",
+                "passed": "Vérification de main dans {project} : réussie à {time}",
+                "checkedRed": "Vérification de main dans {project} : toujours rouge, à cause d'un autre travail",
+                "broke": "Vérification de main dans {project} : {broke}",
+                "verified": "Sa propre vérification : {check} réussie",
+                "verifiedBare": "Sa propre vérification : réussie après la dernière modification",
+                "failed": "Sa propre vérification : {check} en échec",
+                "failedBare": "Sa propre vérification : en échec",
+                "unproven": "Sa propre vérification : aucune depuis la dernière modification"
+            }
         }
     },
     "app": {

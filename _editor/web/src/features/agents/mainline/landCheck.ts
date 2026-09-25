@@ -113,6 +113,32 @@ export interface CardChecks {
     readonly proof?: ProofMark;
 }
 
+// ONE MARK FOR BOTH READINGS: the card's seal (CardSeal.vue), where the worst of them wins. A reader learns four shapes
+// instead of reading up to three phrases on every finished card, and only a red, the one answer that asks for anything,
+// also keeps its words on the card (CardChecks.vue).
+// `checked-red` is not this card's red, since the failures were laid at other work, but it is no pass either: main could
+// not vouch for the land, so the seal stays open.
+// Main passing does NOT close a seal the turn left open. Main's check is the project's suite, and it says nothing about
+// an interface nobody looked at, or about code the suite never reaches.
+// A land queued for a check it has not had is its own kind: nothing is happening to it yet, so nothing on it moves.
+export type SealKind = `broke` | `checking` | `queued` | `open` | `closed`;
+
+export const sealOf = ({ land, proof }: CardChecks): SealKind => {
+    if (land?.kind === `broke` || proof?.verification === `failing`) {
+        return `broke`;
+    }
+    if (land?.kind === `checking`) {
+        return `checking`;
+    }
+    if (land?.kind === `waiting`) {
+        return `queued`;
+    }
+    if (land?.kind === `checked-red` || proof?.verification === `unproven` || proof?.unviewed !== undefined) {
+        return `open`;
+    }
+    return `closed`;
+};
+
 // Both readings for one card. Main's check only for this sandbox's own agents, the only lands its record holds. The
 // proof is the LAST turn's, so a turn under way hides it rather than wear an answer about work it is already redoing.
 export const cardChecks = (

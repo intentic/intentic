@@ -464,28 +464,27 @@
             }
         },
         "landCheck": {
-            "checking": "Sprawdzanie main",
-            "checkingHint": "Sprawdzenie main w {project} działa na tym, co to scaliło.",
-            "waiting": "Czeka na sprawdzenie main",
-            "waitingHint": "Scalone; sprawdzenie main w {project} zmierzy to jako następne, razem z tym, co zostanie scalone w międzyczasie.",
-            "passed": "Przeszło sprawdzenie main",
-            "passedHint": "Sprawdzenie main w {project} przeszło po tym scaleniu, o {time}.",
             "broke": "Zepsuło {count}",
             "brokeMain": "Zepsuło main",
             "brokeHint": "Jego scalenie wywróciło sprawdzenie main w {project}: {failures}. {routing}.",
             "brokeHintBare": "Jego scalenie wywróciło sprawdzenie main w {project}. {routing}.",
-            "checkedRed": "main wciąż czerwony",
-            "checkedRedHint": "Sprawdzenie main w {project} było czerwone po tym scaleniu, przez błędy przypisane innej pracy.",
             "openFixUp": "Otwórz rozmowę, która nad tym pracuje",
-            "unverified": "Niezweryfikowane",
-            "unverifiedHint": "Jego ostatnia tura zmieniła kod i po ostatniej zmianie nie uruchomiła niczego, co by go sprawdziło.",
             "lastCheckFailed": "Ostatnie sprawdzenie nie przeszło",
             "lastCheckFailedHint": "Ostatnie sprawdzenie uruchomione przez jego turę nie przeszło: {check}",
             "lastCheckFailedHintBare": "Ostatnie sprawdzenie uruchomione przez jego turę nie przeszło.",
-            "verified": "Zweryfikowane",
-            "verifiedHint": "{check} przeszło po jego ostatniej zmianie.",
-            "verifiedHintBare": "Sprawdzenie przeszło po jego ostatniej zmianie.",
-            "unviewed": "Zmienił {count} plik interfejsu bez patrzenia | Zmienił {count} pliki interfejsu bez patrzenia | Zmienił {count} plików interfejsu bez patrzenia"
+            "unviewed": "Zmienił {count} plik interfejsu bez patrzenia | Zmienił {count} pliki interfejsu bez patrzenia | Zmienił {count} plików interfejsu bez patrzenia",
+            "seal": {
+                "checking": "Sprawdzenie main w {project}: trwa od {time}",
+                "waiting": "Sprawdzenie main w {project}: w kolejce od {time}",
+                "passed": "Sprawdzenie main w {project}: przeszło o {time}",
+                "checkedRed": "Sprawdzenie main w {project}: nadal czerwone, przez inną pracę",
+                "broke": "Sprawdzenie main w {project}: {broke}",
+                "verified": "Własne sprawdzenie: {check} przeszło",
+                "verifiedBare": "Własne sprawdzenie: przeszło po ostatniej zmianie",
+                "failed": "Własne sprawdzenie: {check} nie przeszło",
+                "failedBare": "Własne sprawdzenie: nie przeszło",
+                "unproven": "Własne sprawdzenie: brak od ostatniej zmiany"
+            }
         }
     },
     "app": {

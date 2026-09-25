@@ -7,13 +7,15 @@ const GAP = 6; // px between the anchor and the box: leaves room for the arrow
 const EDGE = 8; // px of viewport kept clear on every side
 const ARROW = 4; // px: half the arrow's width, mirrored by the border-width in tooltip.css
 
-type Modifier = Side | "overflow";
+type Modifier = Side | "overflow" | "lines";
 
 interface TooltipState {
     label: string | undefined;
     side: Side;
     // `.overflow`: the anchor's text is the label, so it only earns a box while that text is actually cut off.
     overflowOnly: boolean;
+    // `.lines`: the label is a short list, one reading per line, so its line breaks are kept rather than folded to spaces.
+    lines: boolean;
     box: HTMLElement | undefined;
     show: () => void;
     hide: () => void;
@@ -23,11 +25,12 @@ interface TooltipState {
 
 const states = new WeakMap<HTMLElement, TooltipState>();
 
-const read = (binding: DirectiveBinding<string | undefined, Modifier>): Pick<TooltipState, "label" | "side" | "overflowOnly"> => ({
+const read = (binding: DirectiveBinding<string | undefined, Modifier>): Pick<TooltipState, "label" | "side" | "overflowOnly" | "lines"> => ({
     label: typeof binding.value === `string` && binding.value.trim() !== `` ? binding.value : undefined,
     side:
         binding.modifiers.bottom === true ? `bottom` : binding.modifiers.left === true ? `left` : binding.modifiers.right === true ? `right` : `top`,
     overflowOnly: binding.modifiers.overflow === true,
+    lines: binding.modifiers.lines === true,
 });
 
 // Rounding hides sub-pixel differences that would otherwise read as "clipped" on every zoom level.
@@ -79,6 +82,9 @@ export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
                 const body = doc.createElement(`div`);
                 body.className = `ui-tooltip-body`;
                 body.textContent = state.label; // a text node, so a label can never inject markup
+                if (state.lines) {
+                    body.style.whiteSpace = `pre-line`;
+                }
                 box.appendChild(body);
                 doc.body.appendChild(box);
                 box.classList.add(`ui-tooltip-${place(box, el.getBoundingClientRect(), state.side, view)}`);
@@ -129,7 +135,8 @@ export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
         // `updated` fires on every re-render of the owning component, not just when the label changes, and a
         // chat mid-stream re-renders constantly. Rebuild the box only when it would actually say something
         // different, or a tooltip held open over a streaming panel would restart its fade on every frame.
-        const changed = next.label !== state.label || next.side !== state.side || next.overflowOnly !== state.overflowOnly;
+        const changed =
+            next.label !== state.label || next.side !== state.side || next.overflowOnly !== state.overflowOnly || next.lines !== state.lines;
         Object.assign(state, next);
         if (changed && state.box !== undefined) {
             state.show();

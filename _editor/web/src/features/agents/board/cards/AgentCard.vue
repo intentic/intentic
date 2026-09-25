@@ -38,7 +38,8 @@ import {
     unregistered,
 } from "../../fleet/agentStatus";
 import CardChecks from "../../mainline/CardChecks.vue";
-import { type CardChecks as CardChecksView, cardChecks } from "../../mainline/landCheck";
+import CardSeal from "../../mainline/CardSeal.vue";
+import { type CardChecks as CardChecksView, cardChecks, sealOf } from "../../mainline/landCheck";
 import { injectMainline } from "../../mainline/useMainline";
 import KeepWarmPanel from "../../fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
@@ -301,6 +302,15 @@ const checks = computed(() => {
     }
     return heldChecks.value;
 });
+// THE SEAL IS THE CORNER'S LAST MARK, beside the chip or the status glyph, never under either: a card that just landed is
+// almost always unread, so a seal that gave way to "Updated" would hide exactly when its check is being answered.
+// It STANDS IN for a resting glyph (landed's octagon, which it is when closed, and idle's dot), since those say only that
+// nothing is going on and the seal says that and more; its hover leads with the word the glyph wore. A status that
+// says something of its own (running, ready, an error) keeps its glyph and gets the seal beside it.
+const SEAL_STANDS_IN: ReadonlySet<string> = new Set([`landed`, `idle`]);
+const sealStandsIn = computed(() => checks.value !== undefined && SEAL_STANDS_IN.has(props.agent.status));
+// Only a red earns words in the card's body (CardChecks); every other reading is the seal's hover.
+const red = computed(() => checks.value !== undefined && sealOf(checks.value) === `broke`);
 // Either mark opens the same question the chat's status bar asks, answered for this card.
 const warmOpen = ref(false);
 const warmAnchor = ref<HTMLElement>();
@@ -573,7 +583,7 @@ const grab = (event: PointerEvent): void => {
             <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
             <!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
             <Icon
-                v-else
+                v-else-if="!sealStandsIn"
                 :name="statusMeta.icon"
                 :spin="statusMeta.spin"
                 v-tooltip.top="statusMeta.label"
@@ -581,6 +591,15 @@ const grab = (event: PointerEvent): void => {
                 role="img"
                 class="shrink-0 text-sm"
                 :class="statusMeta.class"
+            />
+            <!-- How far its work got: main's check of its land and its last turn's own proof, one glyph, their words in its hover (CardSeal). -->
+            <CardSeal
+                v-if="checks !== undefined"
+                :checks="checks"
+                :quiet="receipt"
+                :status="sealStandsIn ? statusMeta.label : undefined"
+                :still="statusMeta.spin === true"
+                class="text-sm"
             />
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
@@ -663,8 +682,8 @@ const grab = (event: PointerEvent): void => {
                 <span class="truncate">{{ loopLine?.text }}</span>
             </p>
 
-            <!-- Checks happen after landing now, never inside the turn, so the card says what they found: main's verdict on its land (and who has a red it caused), and whether its last turn proved or looked at its own work. -->
-            <CardChecks v-if="checks !== undefined" :checks="checks" :quiet="receipt" :class="dense ? 'w-full' : ''" />
+            <!-- A red is the one reading spelled out, since it asks somebody to act: the land that broke main (and who has it, a press away), or a last check that failed. The rest is the corner seal's. -->
+            <CardChecks v-if="red && checks !== undefined" :checks="checks" :class="dense ? 'w-full' : ''" />
 
             <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
