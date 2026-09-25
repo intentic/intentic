@@ -750,8 +750,7 @@ const syncVerb = computed<"push" | "pull" | "sync" | "publish" | undefined>(() =
     return `push`;
 });
 // Icons match the row pills (↑ push, ↓ pull), so the bar and the rows read as one language.
-// No hover hint on this one, deliberately: the label is already Push/Pull/etc, and `syncSummary` beside it
-// already states what will move — a tooltip repeating the label would fire on every pointer pass in a narrow sidebar.
+// The button's hint (`syncHint`) adds what the label can't: which repos, and the replay caveat when pulling.
 const SYNC_VERB = computed<
     Record<
         "push" | "pull" | "sync" | "publish",
@@ -819,6 +818,11 @@ const syncHint = computed(() => {
     const named = `${syncMeta.value?.label ?? `Sync`} ${syncRepos.value.map((repo) => repo.repo).join(`, `)}`;
     return behindTotal.value > 0 ? `${named}. Unpushed commits are replayed onto upstream, never merged; a conflict changes nothing` : named;
 });
+// What each pill counts, in words; the glyph and number alone don't say which way or where.
+const countWhere = (counted: readonly { readonly repo: string }[]): string =>
+    counted.length === 1 ? ` in ${counted[0]!.repo}` : counted.length > 1 ? ` across ${plural(counted.length, `repo`)}` : ``;
+const aheadHint = computed(() => `${plural(aheadTotal.value, `commit`)} not pushed yet${countWhere(syncRepos.value.filter((repo) => ahead(repo) > 0))}`);
+const behindHint = computed(() => `${plural(behindTotal.value, `commit`)} to pull${countWhere(syncRepos.value.filter((repo) => behind(repo) > 0))}`);
 // Every repo with a remote — the honest scope for a verb whose whole job is proving a stale zero wrong.
 const fetchable = computed(() => scannable.value.filter((repo) => syncable(repo)).map((repo) => repo.repo));
 
@@ -1108,11 +1112,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     v-if="showCounts"
                     class="flex items-center gap-1.5 truncate"
                     :class="outgoing === `held` ? `shrink-0` : `min-w-0 flex-1`"
-                    v-tooltip.right="syncHint"
                     :aria-label="syncSummary"
                 >
+                    <!-- The hint hangs off the pills it explains, not the row, which stretches to the button's edge. -->
                     <span
                         v-if="behindTotal > 0"
+                        v-tooltip.bottom="behindHint"
                         class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
                     >
                         <Icon name="arrow-down-left" class="text-2xs text-link" aria-hidden="true" />
@@ -1120,6 +1125,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </span>
                     <span
                         v-if="aheadTotal > 0"
+                        v-tooltip.bottom="aheadHint"
                         class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
                     >
                         <Icon name="arrow-up-right" class="text-2xs text-link" aria-hidden="true" />
@@ -1150,7 +1156,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     :severity="syncSeverity"
                     class="shrink-0 whitespace-nowrap"
                     :disabled="changes.actionBusy.value"
-                    v-tooltip.top="showCounts ? undefined : syncHint"
+                    v-tooltip.bottom="syncHint"
                     @click="doSync"
                 >
                     <Icon :name="syncMeta.icon" />{{ syncMeta.label }}
