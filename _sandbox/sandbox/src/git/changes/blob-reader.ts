@@ -56,7 +56,7 @@ class BatchReader {
                 this.idle.unref();
             }
         });
-        // silent-catch: this read's caller has its rejection from `next`; the chain only orders the reads after it.
+        // allow(silent-catch): this read's caller has its rejection from `next`; the chain only orders the reads after it.
         this.chain = next.catch(() => undefined);
         return next;
     }
@@ -112,7 +112,7 @@ const readers = new Map<string, BatchReader>();
 // The object at `spec` in the repository at `dir`, or undefined when it is missing or larger than `maxBytes`.
 export const readObject = async (dir: string, spec: string, maxBytes: number): Promise<Buffer | undefined> => {
     if (!IMMUTABLE.test(spec)) {
-        // silent-catch: an object git cannot produce reads as missing, which is this reader's contract.
+        // allow(silent-catch): an object git cannot produce reads as missing, which is this reader's contract.
         return gitBytes(dir, ["cat-file", "-p", spec], maxBytes).catch(() => undefined);
     }
     let reader = readers.get(dir);
@@ -120,6 +120,6 @@ export const readObject = async (dir: string, spec: string, maxBytes: number): P
         reader = new BatchReader(dir);
         readers.set(dir, reader);
     }
-    // silent-catch: an object git cannot produce reads as missing, which is this reader's contract.
+    // allow(silent-catch): an object git cannot produce reads as missing, which is this reader's contract.
     return reader.read(spec, maxBytes).catch(() => undefined);
 };

@@ -31,6 +31,7 @@ const readSource = (): ScriptSource => {
 // somewhere the checkout isn't (a VM, a second machine), where only the fetched one-liner runs. One module-level,
 // persisted ref (like useOsPreference) since the choice is about the developer, not the screen; inert in
 // production, which has only one delivery.
+// allow(module-state): how this developer runs scripts: a choice about the person
 export const scriptSource = ref<ScriptSource>(readSource());
 
 watch(scriptSource, (value) => {

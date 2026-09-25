@@ -125,7 +125,7 @@ export const createWorkspaceTrash = (trashDir: string): WorkspaceTrash => {
                 const slot = join(trashDir, id);
                 const stats = await stat(slot).catch(undefinedIfMissing);
                 if (stats !== undefined && now - stats.mtimeMs > TRASH_RETENTION_MS) {
-                    // silent-catch: a slot that cannot be removed now is swept again on the next pass.
+                    // allow(silent-catch): a slot that cannot be removed now is swept again on the next pass.
                     await rm(slot, { recursive: true, force: true }).catch(() => undefined);
                 }
             }),

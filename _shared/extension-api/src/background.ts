@@ -204,7 +204,7 @@ export const sandboxLedger = (host: () => IntenticApi, path: string): SandboxLed
         try {
             return marksOf(JSON.parse(answer.content));
         } catch {
-            // silent-catch: an unparseable ledger holds nothing acknowledged, the contract `read` states.
+            // allow(silent-catch): an unparseable ledger holds nothing acknowledged, the contract `read` states.
             return {};
         }
     };
@@ -276,7 +276,7 @@ export const sandboxDocument = <T>(host: () => IntenticApi, path: string, option
             const raw = await readRaw();
             return (raw === undefined ? undefined : options.parse(raw)) ?? options.fallback();
         } catch {
-            // silent-catch: a file this version cannot read reads as the fallback, the contract `read` states.
+            // allow(silent-catch): a file this version cannot read reads as the fallback, the contract `read` states.
             return options.fallback();
         }
     };
@@ -302,7 +302,7 @@ export const sandboxDocument = <T>(host: () => IntenticApi, path: string, option
             return true;
         };
         const next = queue.then(run, run);
-        // silent-catch: the queue only orders the next update behind this one; this one's caller still gets its rejection
+        // allow(silent-catch): the queue only orders the next update behind this one; this one's caller still gets its rejection
         queue = next.catch(() => undefined);
         return next;
     };

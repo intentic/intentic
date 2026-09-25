@@ -25,7 +25,9 @@ export interface BoxChanges extends AcrossRecord {
 
 // One push in flight at a time; a per-row press, not a bulk action. Both name their row (ledgerKey), since the
 // ledger's rows are other boxes' and a switch changes which of them it lists.
+// allow(module-state): the cross-sandbox ledger's one push, keyed by the box it runs on
 const pushing = ref<string | undefined>(undefined);
+// allow(module-state): why a ledger push was refused, keyed by its row like the push itself
 const pushError = ref<{ readonly key: string; readonly reason: string } | undefined>(undefined);
 
 const store = createAcrossStore<BoxChanges>({

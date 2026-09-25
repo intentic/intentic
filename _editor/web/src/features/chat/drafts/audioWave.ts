@@ -58,6 +58,7 @@ const decode = async (url: string): Promise<AudioWave> => {
 };
 
 // shallowRef: waves are replaced wholesale, and deep reactivity over 56 numbers per attachment buys nothing.
+// allow(module-state): a decode cache keyed by uuid-scoped attachment paths, which no two sandboxes share
 const waves = shallowRef<Record<string, AudioWave>>({});
 // Every path a decode was started for, whatever came of it. A path is one uuid-scoped file forever, so a finished
 // attempt is never worth repeating — including a failed one, whose container will not become decodable.

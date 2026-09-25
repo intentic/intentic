@@ -22,7 +22,7 @@ export const rename = async (id: string, title: string): Promise<void> => {
     }
     const post = (): Promise<AgentSummary> => sandboxRpc.agents.rename({ id, title: trimmed });
     if (!registry.value.some((agent) => agent.id === id)) {
-        // silent-catch: an unfiled conversation has no entry to rename yet; the title stays on its tab.
+        // allow(silent-catch): an unfiled conversation has no entry to rename yet; the title stays on its tab.
         void post().catch(() => undefined);
         return;
     }

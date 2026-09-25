@@ -99,6 +99,7 @@ const readInstallPreference = (): boolean => {
         return true;
     }
 };
+// allow(module-state): a preference persisted per browser, the same whichever sandbox is open
 const installAfterUpload = ref(readInstallPreference());
 const setInstallAfterUpload = (enabled: boolean): void => {
     installAfterUpload.value = enabled;

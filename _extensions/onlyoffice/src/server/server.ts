@@ -34,7 +34,7 @@ const json = (status: number, body: unknown): Response =>
 
 // A request's JSON body, or undefined for one that does not parse.
 const bodyOf = (request: Request): Promise<unknown> =>
-    // silent-catch: a body that does not parse is the caller's mistake, which the route answers with a 400 or 404.
+    // allow(silent-catch): a body that does not parse is the caller's mistake, which the route answers with a 400 or 404.
     request.json().catch(() => undefined);
 
 // The path, or a directory on the way to it, is not there; any other failure is not "missing".

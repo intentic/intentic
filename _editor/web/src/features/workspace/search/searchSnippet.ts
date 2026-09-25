@@ -80,6 +80,7 @@ const cache = new Map<string, readonly CodeToken[]>();
 const inFlight = new Set<string>();
 
 // Bumped when tokens land; read on every call so a row that rendered uncoloured re-runs once ready.
+// allow(module-state): bumped when the highlighter's tokens load, a fact about this page
 const tokenVersion = ref(0);
 // Whether anything in the current batch produced colour worth re-rendering for.
 let landed = false;

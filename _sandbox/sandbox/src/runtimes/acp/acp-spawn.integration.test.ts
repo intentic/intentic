@@ -1,6 +1,7 @@
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { requires } from "@intentic/testing/requires";
 import { classifyProcess } from "../../platform/resources/process-scan.js";
 import { OOM_SCORE } from "../../workload/workload-class.js";
 import { type AcpProcess, spawnAcpProcess } from "./acp-spawn.js";
@@ -11,7 +12,11 @@ import { type AcpProcess, spawnAcpProcess } from "./acp-spawn.js";
 
 // A class never lowers a score, so the runtime reads as the higher of its class and what this runner inherited.
 const INHERITED = process.platform === "linux" ? Number(readFileSync("/proc/self/oom_score_adj", "utf8").trim()) : 0;
-const describeLinux = process.platform === "linux" && INHERITED < OOM_SCORE.heavy ? describe : describe.skip;
+// Only a rank above what this process inherited can be seen to land, and procfs is Linux's.
+const kernel = requires(
+    process.platform === "linux" && INHERITED < OOM_SCORE.heavy,
+    `Linux, with this process ranked below the toolchain class (it inherited oom_score_adj ${String(INHERITED)})`,
+);
 
 let dir: string | undefined;
 let agent: AcpProcess | undefined;
@@ -25,7 +30,7 @@ afterEach(() => {
     }
 });
 
-describeLinux("an ACP runtime's OOM rank", () => {
+describe.skipIf(!kernel.runs)(kernel.title("an ACP runtime's OOM rank"), () => {
     test("an agent started via npx ranks as a turn's runtime, not as a build", () => {
         dir = mkdtempSync(join(tmpdir(), "acp-npx-"));
         // Stands in for npx, so the test neither reaches the registry nor depends on npm being installed.

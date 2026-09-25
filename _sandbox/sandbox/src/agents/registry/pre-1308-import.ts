@@ -191,7 +191,7 @@ const parsed = <T>(schema: z.ZodType<T>, text: string | undefined): T | undefine
     try {
         return schema.safeParse(JSON.parse(text)).data;
     } catch {
-        // silent-catch: a file that is not JSON was unreadable to ≤1.307 as well, so there is nothing in it to import
+        // allow(silent-catch): a file that is not JSON was unreadable to ≤1.307 as well, so there is nothing in it to import
         return undefined;
     }
 };
@@ -400,7 +400,7 @@ const heldIn = async (context: StepContext, path: string): Promise<Held> => {
         db = new DatabaseSync(location, { readOnly: true });
         return { conversations: idsIn(db, "SELECT id FROM conversation"), fires: idsIn(db, "SELECT automation_id AS id FROM fire_journal") };
     } catch {
-        // silent-catch: a read-only mount cannot open a live WAL database; counting it as holding nothing plans the
+        // allow(silent-catch): a read-only mount cannot open a live WAL database; counting it as holding nothing plans the
         // import, and the effect checks each row against the database itself
         return NOTHING_HELD;
     } finally {

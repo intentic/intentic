@@ -56,7 +56,7 @@ const jsonOf = async (response: Response): Promise<Record<string, unknown>> => {
     try {
         return JSON.parse(text) as Record<string, unknown>;
     } catch {
-        // silent-catch: a body that is not JSON has no fields to read; the response's status decides.
+        // allow(silent-catch): a body that is not JSON has no fields to read; the response's status decides.
         return {};
     }
 };
@@ -234,7 +234,7 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
         for (const recordName of published) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- cleanup is sequential and off the critical path
             await options.removeChallenge(recordName).catch(() => {
-                // silent-catch: a leftover TXT record must never turn a successful issuance into a failure.
+                // allow(silent-catch): a leftover TXT record must never turn a successful issuance into a failure.
             });
         }
     }

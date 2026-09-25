@@ -89,6 +89,7 @@ const readStoredCase = (): boolean => {
         return false;
     }
 };
+// allow(module-state): a preference persisted per browser, the same whichever sandbox is open
 const matchCase = ref(readStoredCase());
 watch(matchCase, (value) => {
     try {

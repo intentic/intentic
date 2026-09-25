@@ -88,7 +88,7 @@ const move = (target: Element, frame: HTMLIFrameElement): boolean => {
         (target as Movable).moveBefore(frame, null);
         return true;
     } catch {
-        // silent-catch: a frame that cannot be moved whole is one to let go; the caller removes it or never kept it.
+        // allow(silent-catch): a frame that cannot be moved whole is one to let go; the caller removes it or never kept it.
         return false;
     }
 };

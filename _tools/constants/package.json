@@ -25,7 +25,9 @@
         "src/ci-infra-steps.mjs",
         "src/ci-infra-steps.d.mts",
         "src/memory-room.mjs",
-        "src/memory-room.d.mts"
+        "src/memory-room.d.mts",
+        "src/allow.mjs",
+        "src/allow.d.mts"
     ],
     "exports": {
         ".": {
@@ -70,6 +72,10 @@
         "./memory-room": {
             "types": "./src/memory-room.d.mts",
             "default": "./src/memory-room.mjs"
+        },
+        "./allow": {
+            "types": "./src/allow.d.mts",
+            "default": "./src/allow.mjs"
         }
     },
     "scripts": {

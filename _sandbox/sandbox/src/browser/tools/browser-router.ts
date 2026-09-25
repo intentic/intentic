@@ -71,7 +71,7 @@ const parsed = (line: string): RpcMessage | undefined => {
         const message: unknown = JSON.parse(line);
         return typeof message === "object" && message !== null ? (message as RpcMessage) : undefined;
     } catch {
-        // silent-catch: a backend's stray non-JSON line (a warning printed to stdout) carries nothing to route.
+        // allow(silent-catch): a backend's stray non-JSON line (a warning printed to stdout) carries nothing to route.
         return undefined;
     }
 };
@@ -139,7 +139,7 @@ export const createSchemaCache = (timeoutMs = 30_000) => {
             await mkdir(dirname(cachePath), { recursive: true })
                 .then(() => writeFile(temp, JSON.stringify(tools)))
                 .then(() => rename(temp, cachePath))
-                // silent-catch: a cache that could not be written costs the next boot one more probe; this answer is in hand.
+                // allow(silent-catch): a cache that could not be written costs the next boot one more probe; this answer is in hand.
                 .catch(() => undefined);
             return tools;
         })();
@@ -214,7 +214,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         try {
             backend.child.stdin?.write(`${JSON.stringify(message)}\n`);
         } catch {
-            // silent-catch: the backend went away mid-write; its exit handler answers everything it still owed.
+            // allow(silent-catch): the backend went away mid-write; its exit handler answers everything it still owed.
         }
     };
 

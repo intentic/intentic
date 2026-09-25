@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Checks that every relative link in tracked Markdown resolves on disk. Skips fenced code and inline code spans, links
 // with a scheme or `#` anchor, `<placeholder>`/`${...}` templated paths, and the seeds copied into other projects
-// (scaffold, extension-example, registry-scan).
+// (scaffold, extension-example, registry-scan). Also that a `docs/….md` path a code or config COMMENT names resolves,
+// from the repository root or from the file: a comment citing a deleted page sends its reader nowhere, and five
+// workflows and three migrations did exactly that after the design docs and audits were dropped.
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, normalize, relative } from "node:path";
+import { allowedAt } from "./lib/allow.mjs";
 import { finish } from "./lib/report.mjs";
 import { root, trackedFiles } from "./lib/repo.mjs";
 
@@ -65,6 +68,41 @@ for (const path of markdown) {
     }
 }
 
+// A comment naming a docs page, in the files that carry comments. Suites are skipped (their comments describe the temp
+// trees they build), and so are applied migrations, which check-migrations.sh keeps byte-identical forever, so a
+// citation in one cannot be corrected. An example path is marked `// allow(md-links): <why>` in its comment.
+const COMMENTED = /\.(ts|tsx|mts|cts|js|mjs|cjs|vue|astro|ya?ml|sql|sh|toml|rs|py|css)$|(^|\/)Dockerfile[^/]*$/;
+const NOT_COMMENTS = [/\.(test|spec)\.[cm]?[jt]sx?$/, /^_platform\/prisma\/migrations\//, /^_tools\/nav\/baselines\//];
+const COMMENT = /(?:^|\s)(?:\/\/|#|\*|\/\*|--|<!--)(.*)$/;
+const DOC_MENTION = /(?<![\w/.@-])((?:\.\.?\/)*(?:[\w.-]+\/)*docs\/[\w./-]*?\.md)\b/g;
+const commented = trackedFiles().filter((path) => COMMENTED.test(path) && !NOT_COMMENTS.some((pattern) => pattern.test(path)) && !COPIED_OUT.some((prefix) => path.startsWith(prefix)));
+const mentions = [];
+let cited = 0;
+for (const path of commented) {
+    let text;
+    try {
+        text = readFileSync(join(root, path), "utf8");
+    } catch {
+        continue; // a symlink to nowhere, or a path removed since `ls-files` answered
+    }
+    if (!text.includes("docs/")) {
+        continue;
+    }
+    const lines = text.split("\n");
+    for (const [at, line] of lines.entries()) {
+        const comment = COMMENT.exec(line)?.[1];
+        if (comment === undefined || allowedAt(lines, at + 1, "md-links")) {
+            continue;
+        }
+        for (const [, target] of comment.matchAll(DOC_MENTION)) {
+            cited++;
+            if (!existsSync(join(root, target)) && !existsSync(normalize(join(root, dirname(path), target)))) {
+                mentions.push(`${path}:${at + 1}  → ${target}`);
+            }
+        }
+    }
+}
+
 // Closes the other direction: every page under docs/architecture/ must be named by the index, not just every link in it
 // resolving. repo.json's generated index.json is exempt.
 const architecture = trackedFiles().filter((path) => /^docs\/architecture\/[^/]+\.md$/.test(path));
@@ -78,6 +116,11 @@ finish(
             findings,
         ],
         [
+            "these comments cite a docs page that does not exist: point at what documents it now, or say the reason in the\n" +
+                "  comment itself if the page is gone (mark an example path // allow(md-links): <why>)",
+            mentions,
+        ],
+        [
             "these architecture pages are named by nothing: add them to the index in ARCHITECTURE.md, or a reader\n" +
                 "  arriving from it never learns they exist (and the next person to tidy the directory deletes them)",
             orphans,
@@ -85,6 +128,7 @@ finish(
     ],
     [
         `${markdown.length} tracked markdown files, ${checked} relative links: every one resolves`,
+        `${commented.length} commented files, ${cited} docs pages cited in comments: every one resolves`,
         `${architecture.length} architecture pages: every one is reachable from the index`,
     ],
 );

@@ -205,7 +205,7 @@ const planConversion = async (spec: DocumentSpec, path: string, draft: PlanDraft
     try {
         raw = JSON.parse(text);
     } catch {
-        // silent-catch: the store reports a file that is not JSON on its first read; there is nothing to convert
+        // allow(silent-catch): the store reports a file that is not JSON on its first read; there is nothing to convert
         return;
     }
     try {
@@ -314,7 +314,7 @@ const applyWrite = async (path: string, content: string | undefined): Promise<vo
 // A directory emptied by removing an earlier address goes too; one still holding anything stays.
 const pruneEmptied = async (deleted: readonly string[]): Promise<void> => {
     for (const dir of new Set(deleted.map((path) => dirname(path)))) {
-        // silent-catch: a directory still holding something (or already gone) is exactly the one to leave alone
+        // allow(silent-catch): a directory still holding something (or already gone) is exactly the one to leave alone
         await rmdir(dir).catch(() => undefined);
     }
 };

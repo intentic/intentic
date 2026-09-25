@@ -100,7 +100,7 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
             commonDirs.set(dir, common);
             return common;
         } catch {
-            // silent-catch: not a repository (yet), or one mid-removal, has no report; the next ref move asks again
+            // allow(silent-catch): not a repository (yet), or one mid-removal, has no report; the next ref move asks again
             return undefined;
         }
     };
@@ -125,14 +125,14 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
         try {
             await git(dir, ["rev-parse", "--verify", "--quiet", `${tracking}^{commit}`]);
         } catch {
-            // silent-catch: `--verify --quiet` exits non-zero exactly when the ref is absent, which is the answer asked for
+            // allow(silent-catch): `--verify --quiet` exits non-zero exactly when the ref is absent, which is the answer asked for
             return true;
         }
         try {
             await git(dir, ["merge-base", "--is-ancestor", first.head, tracking]);
             return true;
         } catch {
-            // silent-catch: `--is-ancestor` exits 1 for "not on it"; the push is looked at again on the next ref move
+            // allow(silent-catch): `--is-ancestor` exits 1 for "not on it"; the push is looked at again on the next ref move
             return false;
         }
     };

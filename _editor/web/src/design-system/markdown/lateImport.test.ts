@@ -1,4 +1,3 @@
-import { afterEach, describe, expect, it } from "bun:test";
 import { lateImport, setLateImportFailure } from "@intentic/ui";
 
 describe(`lateImport`, () => {

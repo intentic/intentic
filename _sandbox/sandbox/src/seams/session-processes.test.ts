@@ -1,4 +1,3 @@
-import { describe, expect, test } from "bun:test";
 import { sessionOf } from "./session-processes.js";
 
 describe("the session a /proc stat line names", () => {

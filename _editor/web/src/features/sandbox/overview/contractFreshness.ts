@@ -13,6 +13,7 @@ import { computed, ref } from "vue";
 const ENDPOINT = `/contract-freshness.json`;
 
 // Undefined until the dev server has answered; an empty array is a positive "the compiled contract matches source".
+// allow(module-state): the dev server's compiled contract against source, a fact about this build
 const uncompiled = ref<readonly string[] | undefined>(undefined);
 
 export const uncompiledRoutes = computed<readonly string[]>(() => uncompiled.value ?? []);

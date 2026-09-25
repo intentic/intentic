@@ -39,8 +39,11 @@ never reaches you.
 
 **After each file you write**: the `edit` checks in `.intentic/checks.json`: every check that can judge one file
 on its own (`node _tools/checks/run.mjs --paths {file}`), and the linter (`node _tools/oxlint/lint-edit.mjs {file}`,
-`.oxlintrc.json`, `.astro` included), which fixes what it can silently and reports only what the edit added over
-the file at `HEAD`. What they print rides back with the edit and never stops the turn. Fix it there.
+`.oxlintrc.json` plus the anti-slop and complexity rules of `.oxlintrc.plugins.json`, `.astro` included), which fixes
+what it can silently and reports only what the edit added over the file at `HEAD`. What they print rides back with the
+edit and never stops the turn. Fix it there. A finding that is right where it stands says why with
+`// allow(<check>): <reason>` at the site, or an `Allow: <check> — <reason>` commit trailer for a whole change
+(`_tools/checks/README.md`); `Test-Note:` and `Breaking-Note:` below are declarations, not check exceptions.
 
 **When the turn ends**: nothing runs. Your conversation's card records what the turn showed of its own work
 (`proof`: verified, unproven, failing or no-code, read off the checks you chose to run after your last edit, and how
@@ -64,8 +67,8 @@ ratcheted baseline lowered where the land's own paths beat it (no check run writ
 current shape, recorded `unreleased` until a release tag holds it, and the list of documents and boot steps the boot
 step and the update pre-flight read). These show up in
 the main tree as ordinary uncommitted changes. Then it measures the whole repository, plus what the land itself
-added over the commit it landed on (`land-tiers.mjs`: lint on its files, tidy lines, rustfmt, weakened tests left
-undeclared), and logs a failure that passes when re-run alone as a flake (`flakes.mjs`). The verdict is recorded
+added over the commit it landed on (`land-tiers.mjs`: lint on its files, the plugin rules' additions to them, tidy
+lines, rustfmt, weakened tests left undeclared), and logs a failure that passes when re-run alone as a flake (`flakes.mjs`). The verdict is recorded
 green or red with its failures, and the editor shows it: the Main line segment of the board's status dock and a
 status on each session card.
 
@@ -160,6 +163,9 @@ rules are about what a test stands the code up with, not about how it asserts.
   both come from `suites` (`@intentic/testing`), and the `test-programs` check every gate runs fails a
   machine-touching suite that is misnamed: including one that reaches the machine only through a fixture
   module it imports. Nothing to tune per file: the ceiling follows the kind of suite.
+- A test that needs something of the machine (a binary, a kernel setting, a built `dist`) asks with
+  `requires(condition, why)` from `@intentic/testing/requires`, never a bare `skipIf`: it stands down locally with
+  the reason in its title, `suites` counts it, and CI fails it, since CI provides the condition on purpose.
 - A timeout is a hang bound, never a latency measurement – if a suite needs more than its budget, set it far
   above the slow case and say so in a comment. A budget tuned close to observed timings fails on contention
   instead of on regressions, and a timed-out test keeps running: its in-flight work lands on the next test's

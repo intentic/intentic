@@ -15,6 +15,7 @@ export type SignInPrompt =
 
 // Shallow: the prompt is replaced whole, and its target must stay the very object the session module raised it
 // with, so the offer that lands later can tell it is for the same sign-in.
+// allow(module-state): the one sign-in question, naming the daemon it is for
 const prompt = shallowRef<SignInPrompt | undefined>(undefined);
 
 // Settles the establish that raised the prompt: a session it may store, or undefined for a dismissal.

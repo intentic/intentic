@@ -24,11 +24,17 @@ const { say } = useNotifications();
 
 // An id and its box: agent ids are minted per daemon, so the same id can be on two cards from two sandboxes, and
 // resolving by id alone could act on the wrong one's card.
+// allow(module-state): one pointer gesture, which its own pointerup ends; nothing of it outlives the drag
 const draggedId = ref<string | undefined>(undefined);
+// allow(module-state): one pointer gesture, which its own pointerup ends; nothing of it outlives the drag
 const draggedBox = ref<string | undefined>(undefined);
+// allow(module-state): one pointer gesture, which its own pointerup ends; nothing of it outlives the drag
 const dragging = ref(false);
+// allow(module-state): one pointer gesture, which its own pointerup ends; nothing of it outlives the drag
 const pointer = ref({ x: 0, y: 0 });
+// allow(module-state): one pointer gesture, which its own pointerup ends; nothing of it outlives the drag
 const over = ref<DropTarget | undefined>(undefined);
+// allow(module-state): one pointer gesture, which its own pointerup ends; nothing of it outlives the drag
 const ghostWidth = ref(0);
 
 // Resolved live against the roster, not snapshotted at grab time, so a turn ending mid-drag retracts its Stop action.

@@ -104,7 +104,7 @@ interface Reservation {
 export const readMemoryReading = async (
     readText: (path: string) => Promise<string | undefined> = (path) =>
         readFile(path, "utf8")
-            // silent-catch: a file this kernel or platform does not have is the absent reading the formula handles
+            // allow(silent-catch): a file this kernel or platform does not have is the absent reading the formula handles
             .catch(() => undefined),
 ): Promise<MemoryReading> => {
     const texts = new Map(await Promise.all(READING_FILES.map(async (path) => [path, await readText(path)] as const)));
@@ -290,7 +290,7 @@ export const createResourceBudget = ({
             ? setInterval(
                   () =>
                       void reading()
-                          // silent-catch: the files are read with their own failures absorbed; a tick that still fails takes the next
+                          // allow(silent-catch): the files are read with their own failures absorbed; a tick that still fails takes the next
                           .catch(() => undefined),
                   sampleMs,
               )

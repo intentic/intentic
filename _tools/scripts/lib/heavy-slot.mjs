@@ -33,7 +33,7 @@ export const heldHeavySlot = (env = process.env, fd9 = "/proc/self/fd/9") => {
         const target = readlinkSync(fd9);
         return target.startsWith(`${pool}/slot.`) ? target : undefined;
     } catch {
-        // silent-catch: no fd 9 (or no /proc) is the ordinary answer for a process no queue started
+        // allow(silent-catch): no fd 9 (or no /proc) is the ordinary answer for a process no queue started
         return undefined;
     }
 };

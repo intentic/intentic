@@ -13,7 +13,8 @@
 # wiring to a Swift package, so the App.xcworkspace both workflows opened stopped being written at all. With
 # only the path filter, nothing looks until someone touches a shell — this workflow had run four times in its
 # life, and was broken from its first run to its fourth, a full day, on a push that changed neither shell
-# (docs/ci-failure-audit.md, class F). A schedule is what makes drift arrive on nobody's push.
+# (the CI failure audit's class F, in history before 2fed33289). A schedule is what makes drift arrive on
+# nobody's push.
 #
 # What each job actually proves, since neither shell has tests of its own:
 #   android  the Play manifest still generates a project Bubblewrap can assemble and sign end-to-end —

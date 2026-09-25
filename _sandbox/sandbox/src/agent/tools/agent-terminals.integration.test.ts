@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { requires } from "@intentic/testing/requires";
 import { agentShellBusy, PIPESTATUS_TRAP } from "./agent-terminals.js";
 import { guardSelfMatch } from "./self-kill-guard.js";
 
@@ -12,8 +13,8 @@ import { guardSelfMatch } from "./self-kill-guard.js";
 // A `tmux` shim on PATH redirects to a private socket; TMUX_TMPDIR is ignored by tmux 3.3a.
 
 const execFileAsync = promisify(execFile);
-// A CI image gains procps only once its ci-base change lands (.github/workflows/ci.yml, the ci-base job).
-const PGREP = spawnSync("sh", ["-c", "command -v pgrep"]).status === 0;
+// ci-base carries procps (_tools/ci-base/Dockerfile), so CI always runs the pgrep case; a machine without it stands down.
+const pgrep = requires(spawnSync("sh", ["-c", "command -v pgrep"]).status === 0, "procps (pgrep) on PATH");
 
 let dir: string | undefined;
 let path: string | undefined;
@@ -118,7 +119,7 @@ test("the pipeline trap leaves the last pipeline's statuses and the command's ow
 });
 
 // pgrep, never pkill: the same full-line match, without killing anything on a shared machine.
-test.skipIf(!PGREP)("a bracketed pattern still finds its process, and no longer finds the shell that names it", async () => {
+test.skipIf(!pgrep.runs)(pgrep.title("a bracketed pattern still finds its process, and no longer finds the shell that names it"), async () => {
     const marker = `zz-self-match-${String(process.pid)}`;
     const target = spawn("bash", ["-c", `exec -a ${marker} sleep 30`], { stdio: "ignore" });
     const pid = String(target.pid);

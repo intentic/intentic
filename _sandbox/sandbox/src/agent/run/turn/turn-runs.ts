@@ -329,7 +329,7 @@ export function startTurnRun(
     // Told to the actor in order, which writes them in order; a failed write costs the journal, never the turn.
     const journal = (event: { readonly kind: "journalled"; readonly entry: JournalledTurn } | { readonly kind: "unjournalled" }): void => {
         if (journalled) {
-            // silent-catch: a failed journal write costs the journal, never the turn.
+            // allow(silent-catch): a failed journal write costs the journal, never the turn.
             void deps.conversations.send(input.conversationId, event).settled.catch(() => undefined);
         }
     };
@@ -357,7 +357,7 @@ export function startTurnRun(
         try {
             report(observer);
         } catch {
-            // silent-catch: an observer's own throw is its problem; the run it watches carries on.
+            // allow(silent-catch): an observer's own throw is its problem; the run it watches carries on.
         }
     };
     // Held before it is folded, so the fold keeps the message a refusal at the door would otherwise take back.
@@ -438,7 +438,7 @@ export function startTurnRun(
                 try {
                     await transcript(run.rows, run.steerRows);
                 } catch {
-                    // silent-catch: a transcript that fails to write must not hold the journal open; the turn has settled.
+                    // allow(silent-catch): a transcript that fails to write must not hold the journal open; the turn has settled.
                 }
             }
             // No longer in flight, however it ended; only an unseen turn deserves resuming.

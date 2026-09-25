@@ -45,6 +45,7 @@ const strip = sandboxRef<EditorStrip>(restoredStrip);
 // Which pane the keyboard and untargeted opens act on; not persisted, a reload always comes back on main.
 const focused = sandboxRef<EditorPane>(() => `main`);
 // Whether a split may open at all; false on a phone or a pane too narrow, set by the layout surface.
+// allow(module-state): whether the layout has room for two panes, set by the surface
 const splitAllowed = ref(false);
 // Line to scroll to from a search match, cleared on a plain open; seq++ makes a repeat click re-trigger too.
 const openLine = sandboxRef<LineJump | undefined>(() => undefined);

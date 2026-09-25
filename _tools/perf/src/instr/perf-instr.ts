@@ -3,16 +3,16 @@ import { availableParallelism, cpus } from "node:os";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { conclude, publish, recordingRefusal, rerecordOf, type Reading } from "../baseline.js";
-import { INSTR_BUDGETS } from "./budgets.js";
+import { INSTR_BUDGETS } from "./instr-budgets.js";
 import { countInstructions, NODE_FLAGS, valgrindVersion } from "./cachegrind.js";
 import { spread } from "./spread.js";
 
 const USAGE = `perf:instr [--update] [--only a,b] [--runs N] [--jobs N]
 
   Counts the instructions each scenario's work executes, under Valgrind with node --predictable. Fails only on a budget
-  (src/instr/budgets.ts); the diff against baselines/instr.json is a report, compared only on the CPU it was recorded
-  on. --update re-records it, in the record workflow only; --runs N measures each scenario N times and reports the
-  spread.
+  (src/instr/instr-budgets.ts); the diff against baselines/instr.json is a report, compared only on the CPU it was
+  recorded on. --update re-records it, in the record workflow only; --runs N measures each scenario N times and reports
+  the spread.
 `;
 
 const here = import.meta.dirname;

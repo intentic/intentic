@@ -13,6 +13,7 @@ const client = createAuthClient({ baseURL: environment.api.url });
 const { clearCredential } = useGoogleIdentity();
 const { clearSessions, retireAccountAccess } = useSandboxSession();
 
+// allow(module-state): the signed-in account, above every sandbox
 const user = ref<User | null>(null);
 let refreshing: Promise<User | null> | undefined;
 

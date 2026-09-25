@@ -74,7 +74,7 @@ export const startRoomSocket = async (budget: ResourceBudget, logger: Pick<Logge
     const server = createRoomServer(budget);
     // A previous daemon's socket file outlives it and would refuse the bind.
     await unlink(path)
-        // silent-catch: no socket file left behind is the ordinary case, and anything else the bind below reports
+        // allow(silent-catch): no socket file left behind is the ordinary case, and anything else the bind below reports
         .catch(() => undefined);
     const listening = await new Promise<boolean>((resolve) => {
         server.once("error", (error) => {

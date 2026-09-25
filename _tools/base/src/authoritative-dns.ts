@@ -22,7 +22,7 @@ const nameserversFor = async (recordName: string): Promise<string[]> => {
     // Stops before the last label: a TLD's nameservers know the delegation, not what's inside it.
     for (let index = 0; index < labels.length - 1; index += 1) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Each answer decides whether the next query runs.
-        // silent-catch: nothing visible yet, since the caller is a poll with a deadline.
+        // allow(silent-catch): nothing visible yet, since the caller is a poll with a deadline.
         const nameservers = await resolver.resolveNs(labels.slice(index).join(".")).catch(() => []);
         if (nameservers.length > 0) {
             return nameservers;
@@ -39,14 +39,14 @@ export const resolveTxtAuthoritatively = async (recordName: string): Promise<str
         nameservers.map(async (nameserver) => {
             const addresses = await resolverFor()
                 .resolve4(nameserver)
-                // silent-catch: nothing visible yet, since the caller is a poll with a deadline.
+                // allow(silent-catch): nothing visible yet, since the caller is a poll with a deadline.
                 .catch(() => []);
             if (addresses.length === 0) {
                 return [];
             }
             const records = await resolverFor(addresses)
                 .resolveTxt(recordName)
-                // silent-catch: nothing visible yet, since the caller is a poll with a deadline.
+                // allow(silent-catch): nothing visible yet, since the caller is a poll with a deadline.
                 .catch(() => []);
             // A TXT record arrives as 255-byte strings; the value is their concatenation.
             return records.map((chunks) => chunks.join(""));

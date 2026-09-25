@@ -96,7 +96,7 @@ export const writeVerdict = (root, tree, status, suite, details = {}) => {
         try {
             writeFileSync(out, `${JSON.stringify(entry)}\n`);
         } catch {
-            // silent-catch: the verdict still lands in this tree's own record below; only the copy is lost
+            // allow(silent-catch): the verdict still lands in this tree's own record below; only the copy is lost
         }
     }
     return recordVerdict(root, entry);

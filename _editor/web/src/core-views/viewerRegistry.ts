@@ -21,6 +21,7 @@ export interface RegisteredViewer {
     readonly compare?: () => Promise<Component>;
 }
 
+// allow(module-state): registrations an extension or a surface made, retired by whoever registered them
 const viewers = shallowRef<readonly RegisteredViewer[]>([]);
 
 // Keyed by owner + viewer id, like the view registry: re-registering the same identity replaces its

@@ -80,7 +80,7 @@ export const clientFrame = (opcode: number, payload: Uint8Array): Uint8Array => 
 
 // A stream torn down already rejects its writes, closes and cancels; the socket's end is reported once, by its close event.
 const settled = (step: Promise<unknown> | undefined): void => {
-    // silent-catch: see above; the end is reported by the close event, never by one stream step.
+    // allow(silent-catch): see above; the end is reported by the close event, never by one stream step.
     void step?.catch(() => undefined);
 };
 

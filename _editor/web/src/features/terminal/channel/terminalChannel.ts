@@ -26,7 +26,7 @@ const parse = (text: string): TerminalServerMessage | undefined => {
     try {
         return JSON.parse(text) as TerminalServerMessage;
     } catch {
-        // silent-catch: a message that is not JSON is no message; the channel reads on.
+        // allow(silent-catch): a message that is not JSON is no message; the channel reads on.
         return undefined;
     }
 };

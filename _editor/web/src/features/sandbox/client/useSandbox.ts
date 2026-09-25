@@ -34,6 +34,7 @@ const sandboxListQuery = {
 // A QueryCache subscription, not a QueryObserver (which detaches on queryClient.clear() at logout): mirrors the
 // entry into a ref so callers outside a component setup can read it synchronously.
 const SANDBOX_LIST_HASH = hashKey(SANDBOX_LIST_KEY);
+// allow(module-state): the account's sandbox list, which a switch chooses from
 const sandboxes = ref<SandboxSummary[]>([]);
 queryClient.getQueryCache().subscribe((event) => {
     if (event.query.queryHash === SANDBOX_LIST_HASH) {
@@ -43,6 +44,7 @@ queryClient.getQueryCache().subscribe((event) => {
 
 // Browser-owned connection state machine (see connection.ts); starts idle so a not-yet-ready sandbox never
 // renders as live.
+// allow(module-state): the connection machine, which crosses a switch through its own `switched` signal
 const connection = ref<ConnectionState>(initialConnection);
 
 // Single writer: every transition goes through the pure reducer so the sequencing rules live in one place.
@@ -136,6 +138,7 @@ const WAKE_THROTTLE_MS = 60_000;
 const wokeAt = new Map<string, number>();
 export type WakeRefusalKind = "hours" | "suspended";
 // The sandbox whose last wake the platform refused, why, and in the platform's own words.
+// allow(module-state): a refused wake, stamped with the sandbox it names
 const wakeRefused = ref<{ readonly sandboxId: string; readonly kind: WakeRefusalKind; readonly message: string } | undefined>(undefined);
 const refusalKind = (outcome: unknown): WakeRefusalKind | undefined => {
     if (!(outcome instanceof ORPCError)) {

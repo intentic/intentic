@@ -4,6 +4,7 @@ import { mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { requires } from "@intentic/testing/requires";
 import { defaultGit, gitSpawnStats, observeGitCommands, politeGit, settleIndex } from "./exec.js";
 
 // Pins defaultGit's two additions over execFile against a real repo: a larger output buffer and a retry on index.lock
@@ -152,10 +153,11 @@ test("the daemon's git in a checkout waits out a settle running there", async ()
     expect(add!.end - add!.ms).toBeGreaterThanOrEqual(settle!.end - 1);
 });
 
-// Exercises the built dist/exec.js fallback path, the daemon's actual runtime; skipped when this package has no dist
-// yet.
+// Exercises the built dist/exec.js fallback path, the daemon's actual runtime. CI builds this package before its suite
+// (this package's turbo.json); a checkout with no dist yet stands down.
 const built = new URL("../dist/exec.js", import.meta.url);
-test.skipIf(!existsSync(built))("the forker passes git's output, env and failures through unchanged", async () => {
+const dist = requires(existsSync(built), "this package's built dist/exec.js (pnpm --filter @intentic/scaffold build)");
+test.skipIf(!dist.runs)(dist.title("the forker passes git's output, env and failures through unchanged"), async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "a.txt"), "x\n");
     await defaultGit(dir, ["add", "a.txt"]);
@@ -215,7 +217,7 @@ test.skipIf(!existsSync(built))("the forker passes git's output, env and failure
 
 // A tmux poll or a status probe from the daemon must fork from the resident child as git does, carrying its directory,
 // environment and time limit, or the daemon's own page tables are copied on every call.
-test.skipIf(!existsSync(built))("forkedExec runs any command from the forker, with its directory, env and time limit", async () => {
+test.skipIf(!dist.runs)(dist.title("forkedExec runs any command from the forker, with its directory, env and time limit"), async () => {
     const dir = await tempRepo();
     const probe = `
         const { forkedExec } = await import(${JSON.stringify(built.href)});

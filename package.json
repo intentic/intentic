@@ -24,7 +24,6 @@
         "lint": "oxlint --deny-warnings",
         "lint:fix": "oxlint --fix",
         "lint:plugins": "oxlint --deny-warnings -c .oxlintrc.plugins.json",
-        "lint:types": "oxlint --type-aware --deny-warnings",
         "knip": "knip",
         "format": "prettier --write .",
         "format:check": "prettier --check .",

@@ -24,7 +24,9 @@ export type AppUpdate =
        rather than a pick-up, but the same one click fixes it. */
     | { readonly kind: "incomplete" };
 
+// allow(module-state): a newer build of this app
 const available = ref<AppUpdate | undefined>(undefined);
+// allow(module-state): which newer build the reader waved away
 const dismissed = ref<string | undefined>(undefined);
 
 /** What identifies "this offer", so a dismissal covers exactly it and not the next one. */

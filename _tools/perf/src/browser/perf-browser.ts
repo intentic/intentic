@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { chromium, type Browser } from "playwright";
 import { conclude, publish, recordingRefusal, rerecordOf, type Reading } from "../baseline.js";
-import { BROWSER_BUDGETS } from "./budgets.js";
+import { BROWSER_BUDGETS } from "./browser-budgets.js";
 import { startDemo, type DemoServer } from "./demo.js";
 import { describeDisagreements, disagreements } from "./determinism.js";
 import type { ProbeOptions } from "./page-probe.js";
@@ -17,9 +17,9 @@ const USAGE = `perf:browser [--update] [--only a,b] [--runs N]
 
   Counts what each scenario costs the editor in a real Chromium against the demo (_site/demo): Vue renders and mounts,
   V8 function calls, layouts and style recalcs, DOM mutations. The clock is fake and every count is exact. Fails only
-  on a budget (src/browser/budgets.ts); the diff against baselines/browser.json is a report. --update re-records it, in
-  the record workflow only; --runs N measures each scenario N times in fresh contexts and fails if any count differs
-  between them.
+  on a budget (src/browser/browser-budgets.ts); the diff against baselines/browser.json is a report. --update
+  re-records it, in the record workflow only; --runs N measures each scenario N times in fresh contexts and fails if any
+  count differs between them.
 
   scenarios:
 ${SCENARIOS.map((scenario) => `    ${scenario.name.padEnd(20)} ${scenario.about}`).join("\n")}

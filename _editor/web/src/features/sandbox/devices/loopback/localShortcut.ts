@@ -13,11 +13,14 @@ const ALLOWED_KEY = `intentic.localShortcut`;
 // One key per refused sandbox; a prefix keeps each refusal an independent write.
 const DECLINED_PREFIX = `intentic.localShortcut.declined.`;
 
+// allow(module-state): this browser's yes to local-network access, kept per browser like the permission
 const allowed = ref(storedValue(ALLOWED_KEY) === `yes`);
+// allow(module-state): the sandboxes that said no, keyed by sandbox id
 const declined = ref<ReadonlySet<string>>(new Set(storedKeys(DECLINED_PREFIX).map((key) => key.slice(DECLINED_PREFIX.length))));
 
 // The sandbox the question was raised for, if any. One at a time: the question is as much about this browser
 // as about the sandbox, so a second one queued behind would repeat it.
+// allow(module-state): the one open local-network question, naming its sandbox
 const asking = ref<string | undefined>(undefined);
 
 // Askable only while that sandbox is still active; a switch away drops the question rather than re-pointing

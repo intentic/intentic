@@ -3,10 +3,10 @@
 // two kinds cannot share it: unit suites get a hang detector, `*.integration.test.*` and `*.e2e.test.*` get the
 // machine's time. Both read the package's own bunfig.toml (preload, ignore patterns) from the working directory.
 import { spawn } from "node:child_process";
-import { existsSync, globSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, globSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { INTEGRATION_MARKERS, INTEGRATION_NAME, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
+import { INTEGRATION_MARKERS, INTEGRATION_NAME, STOOD_DOWN_FILE, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
 import { junitFile, SOURCE_CONDITION } from "../../scripts/verify/failure-units.mjs";
 import { ceilingBytes, formatGiB, processTree, watchMemory } from "../../scripts/lib/memory-ceiling.mjs";
 import { standaloneWorkers } from "../../scripts/verify/test-workers.mjs";
@@ -65,6 +65,27 @@ const throwawayHome = () => {
     return home;
 };
 
+// Where requires() (@intentic/testing/requires) records each test that stood down for a missing machine condition; read
+// once both runs end, so a skip that no title scrolled past is still counted.
+const stoodDownDir = mkdtempSync(join(tmpdir(), "suites-stood-down-"));
+const stoodDown = join(stoodDownDir, "stood-down");
+writeFileSync(stoodDown, "");
+
+const reportStoodDown = () => {
+    const lines = readFileSync(stoodDown, "utf8").split("\n").filter((line) => line !== "");
+    rmSync(stoodDownDir, { recursive: true, force: true });
+    if (lines.length === 0) {
+        return;
+    }
+    const byWhy = new Map();
+    for (const line of lines) {
+        const why = line.slice(0, line.indexOf("\t"));
+        byWhy.set(why, (byWhy.get(why) ?? 0) + 1);
+    }
+    const counted = [...byWhy].map(([why, count]) => `${count} for want of ${why}`).join(", ");
+    process.stderr.write(`\nsuites: ${lines.length} stood down on this machine (${counted}); CI runs them, and fails where it cannot\n`);
+};
+
 // `--isolate`: a fresh module registry per file, so a `jest.mock` one suite installs never reaches the next.
 // Every bun process of the run is held under a memory ceiling (memory-ceiling.mjs): one that passes it is a test
 // holding memory it never gives back, and the run is killed there rather than left to swap the machine to a halt.
@@ -73,7 +94,7 @@ const run = async (extra, selection) => {
     try {
         const child = spawn("bun", ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...flags, ...extra, ...selection], {
             stdio: "inherit",
-            env: { ...process.env, HOME: home, USERPROFILE: home },
+            env: { ...process.env, HOME: home, USERPROFILE: home, [STOOD_DOWN_FILE]: stoodDown },
         });
         const ceiling = ceilingBytes();
         const stop = watchMemory(child, {
@@ -92,7 +113,7 @@ const run = async (extra, selection) => {
                 try {
                     process.kill(pid, signal);
                 } catch {
-                    // silent-catch: a process already gone is what the signal was for
+                    // allow(silent-catch): a process already gone is what the signal was for
                 }
             }
             process.exit(128 + (signal === "SIGINT" ? 2 : 15));
@@ -114,7 +135,9 @@ const run = async (extra, selection) => {
 
 if (watch) {
     // One run: a watch never exits, so the second run would never start; the larger budget keeps a slow suite alive.
-    process.exit(await run(["--watch", `--timeout=${INTEGRATION_TIMEOUT_MS}`], filters));
+    const status = await run(["--watch", `--timeout=${INTEGRATION_TIMEOUT_MS}`], filters);
+    reportStoodDown();
+    process.exit(status);
 }
 
 // A kind the filters chose no file of is not run at all: an empty explicit list would mean "everything" to bun.
@@ -124,4 +147,5 @@ const unit =
         : await run([parallel, `--timeout=${UNIT_TIMEOUT_MS}`, ...report("unit"), ...INTEGRATION_GLOBS.flatMap((glob) => ["--path-ignore-patterns", glob])], chosen?.unit ?? []);
 const integration =
     chosen?.integration.length === 0 ? 0 : await run([parallel, `--timeout=${INTEGRATION_TIMEOUT_MS}`, ...report("integration")], chosen?.integration ?? INTEGRATION_FILTERS);
+reportStoodDown();
 process.exit(unit === 0 && integration === 0 ? 0 : 1);

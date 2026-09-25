@@ -31,6 +31,7 @@ export interface RegisteredCommand extends CommandRegistration {
     readonly gate: WhenExpression | undefined;
 }
 
+// allow(module-state): registrations an extension or a surface made, retired by whoever registered them
 export const commands = shallowRef<readonly RegisteredCommand[]>([]);
 
 // One spelling of a command for every surface that names it (palette row, keybindings row, search text), so a

@@ -94,7 +94,9 @@ interface Claim {
 
 // Records from before this page load, whose producer went down with the tab. They can explain a silence but never
 // claim work is running: nothing here is watching them, and a spinner nobody can end is worse than no spinner.
+// allow(module-state): the restart ledger, each record naming its sandbox; it outlives the page on purpose
 const carried = shallowRef<readonly RestartWork[]>([]);
+// allow(module-state): the restart ledger, each record naming its sandbox; it outlives the page on purpose
 const claims = shallowRef<readonly Claim[]>([]);
 
 const hydrate = (): void => {

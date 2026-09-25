@@ -17,7 +17,7 @@ const quietly = (transport: WebTransport): void => {
     try {
         transport.close();
     } catch {
-        // silent-catch: closing a session that already closed throws, and closed is what was asked.
+        // allow(silent-catch): closing a session that already closed throws, and closed is what was asked.
     }
 };
 
@@ -29,11 +29,11 @@ const open = (origin: string): Held => {
         () => {
             held.ready = true;
         },
-        // silent-catch: a session that never opened is forgotten below, when it reports closed.
+        // allow(silent-catch): a session that never opened is forgotten below, when it reports closed.
         () => undefined,
     );
     void transport.closed
-        // silent-catch: however the session ended, clean or not, its holder forgets it the same way.
+        // allow(silent-catch): however the session ended, clean or not, its holder forgets it the same way.
         .catch(() => undefined)
         .then(() => {
             if (sessions.get(origin) === held) {

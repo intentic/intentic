@@ -22,6 +22,7 @@ const storedRailWidth = (): number => {
 };
 
 /** The live width, shared by every rail in this window: a drag on one moves the other in the same frame. */
+// allow(module-state): a column width, layout
 export const railWidth: Ref<number> = ref(storedRailWidth());
 
 export const setRailWidth = (px: number): void => {

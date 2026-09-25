@@ -4,6 +4,7 @@ import { computed, type ComputedRef, ref } from "vue";
 // reporting to the sandbox; each window answers for itself. An occluded but not minimized window still counts as
 // visible, since the browser only reports hidden for a minimized window or a background tab.
 
+// allow(module-state): this window's own visibility
 const visible = ref(true);
 
 export const onScreen: ComputedRef<boolean> = computed(() => visible.value);

@@ -263,6 +263,7 @@ watch(
 export const TIDY_AFTER_MS = 12 * 60 * 60 * 1000;
 
 // Minutes are the tidy's resolution: a twelve-hour rule gains nothing from a finer clock.
+// allow(module-state): the wall clock the rail's tidy reads, the same in every sandbox
 const tidyClock = ref(Date.now());
 setInterval(() => {
     tidyClock.value = Date.now();

@@ -73,8 +73,8 @@ rules:
     #
     # WHAT THAT COST. The pin does not move when the step does. It was 349, then 358, then 385, and each move
     # was discovered the same way: a red `preflight` on a push that changed nothing about the checkout — twice
-    # in the two days docs/ci-failure-audit.md covers (class C), the second time because twenty-seven lines of
-    # Windows signing config landed above it.
+    # in the two days the CI failure audit covered (class C; in history before 2fed33289), the second time
+    # because twenty-seven lines of Windows signing config landed above it.
     #
     # An inline comment keeps the whole guarantee and drops the bookkeeping: it travels with the step, so
     # unrelated edits above it cost nothing, and a NEW credential-persisting checkout carries no comment and

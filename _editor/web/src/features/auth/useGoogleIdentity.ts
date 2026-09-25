@@ -53,8 +53,10 @@ const storageKey = (clientId: string): string => `intentic.gid.${clientId}`;
 // only hydrates the persisted fast path; `prompt()` shows UI and is reserved for a caller actually waiting.
 
 // True when a token is needed; the workspace shell shows the sign-in gate and flips back once a credential arrives.
+// allow(module-state): the Google credential, which the platform and every daemon accept alike
 const needsSignIn = ref(false);
 // Email in the current credential; set when a token materializes, cleared with it, so a denial names the account.
+// allow(module-state): the Google credential, which the platform and every daemon accept alike
 const signedInEmail = ref<string | undefined>();
 
 let token: string | undefined;

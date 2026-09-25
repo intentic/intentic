@@ -1,19 +1,18 @@
 {
-    // THE STANDARD PLUS anti-slop, COGNITIVE COMPLEXITY AND THE ONE-LINE COMMENT RULE, kept out of the root config
-    // by their backlog.
+    // THE STANDARD PLUS anti-slop AND COGNITIVE COMPLEXITY, kept out of the root config by their backlog (about
+    // 13,700 findings on main when this became a tier).
     //
-    // Run by `pnpm lint:plugins` only; _tools/oxlint/lint-edit.mjs reads .oxlintrc.json, not this file.
-    // `@oxlint/plugins` must equal the `oxlint` version exactly: the JS plugin ABI is not semver-stable.
+    // A TIDY TIER THAT JUDGES ONLY WHAT A CHANGE ADDS: _tools/oxlint/lint-edit.mjs reports what an edit adds over
+    // HEAD under this file, and the check after a land counts what the land added over the commit it left
+    // (_tools/scripts/verify/land-tiers.mjs, through _tools/oxlint/added.mjs). `pnpm lint:plugins` lists the whole
+    // backlog. `@oxlint/plugins` must equal the `oxlint` version exactly: the JS plugin ABI is not semver-stable.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
     "extends": ["./.oxlintrc.json"],
     "jsPlugins": [
         { "name": "anti-slop", "specifier": "./_tools/oxlint/anti-slop/index.ts" },
-        "oxlint-plugin-complexity",
-        { "name": "comments", "specifier": "./_tools/oxlint/comments/index.ts" }
+        "oxlint-plugin-complexity"
     ],
     "rules": {
-        // AGENTS.md's comment rule.
-        "comments/one-line": "error",
         // COGNITIVE complexity, which is the metric that actually matches how hard a function is to read.
         // Cyclomatic counts every branch equally, so a flat 30-case dispatch scores the same as five levels of
         // nested ifs; cognitive charges nothing for flat structure and compounds for depth. It also names the
@@ -74,6 +73,29 @@
         // filed as a lint rule.
         "anti-slop/no-module-mocking": "off"
     },
+    // `extends` does not carry ignorePatterns, so the root's are repeated here: without them this config reads the
+    // generated and vendored files the root skips. A test in land-tiers.test.mjs holds the two lists equal.
+    "ignorePatterns": [
+        "**/node_modules",
+        "**/.cache",
+        "**/.turbo",
+        "**/.astro",
+        "**/dist",
+        "**/dist-*",
+        "**/deploy",
+        "**/generated",
+        "**/out-tsc",
+        "**/tmp",
+        "**/assets/js/env.js",
+        "_editor/web/public/ext-shims",
+        // The listed extensions at the registry's pinned commits, copied in by the demo's sync (vendor/README.md):
+        // built bundles that must stay byte-identical to an install, and an engine copy diffable against its origin.
+        "_site/demo/vendor/extensions",
+        "_site/demo/vendor/knowledge",
+        "_sandbox/sandbox/operator-templates",
+        // Vendored upstream source — kept byte-identical so it stays diffable against dmmulroy/anti-slop.
+        "_tools/oxlint/anti-slop"
+    ],
     "overrides": [
         {
             // anti-slop's type rules are about production contracts. A test signature that takes `unknown` is

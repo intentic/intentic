@@ -38,7 +38,7 @@ const callsOf = (t) => {
     try {
         return JSON.parse(zstdDecompressSync(fs.readFileSync(blob)).toString("utf8"));
     } catch {
-        // silent-catch: a blob swept with the conversation that alone named it reads as no rows.
+        // allow(silent-catch): a blob swept with the conversation that alone named it reads as no rows.
         return [];
     }
 };

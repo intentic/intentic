@@ -113,7 +113,7 @@ const readSync = (path) => {
     try {
         return readFileSync(path, "utf8");
     } catch {
-        // silent-catch: a file this kernel or platform does not have is the absent reading every caller handles
+        // allow(silent-catch): a file this kernel or platform does not have is the absent reading every caller handles
         return undefined;
     }
 };
@@ -188,7 +188,7 @@ const askSocket = (workload, waitSeconds, label, socketPath) =>
                 try {
                     resolve(response.statusCode === 200 ? JSON.parse(body) : undefined);
                 } catch {
-                    // silent-catch: an answer that does not parse is no answer; the formula below decides instead
+                    // allow(silent-catch): an answer that does not parse is no answer; the formula below decides instead
                     resolve(undefined);
                 }
             });
@@ -209,7 +209,7 @@ const askSnapshot = (socketPath) =>
                 try {
                     resolve(response.statusCode === 200 ? JSON.parse(body) : undefined);
                 } catch {
-                    // silent-catch: an answer that does not parse is no answer; the formula below decides instead
+                    // allow(silent-catch): an answer that does not parse is no answer; the formula below decides instead
                     resolve(undefined);
                 }
             });
@@ -238,7 +238,7 @@ export const askFreeSync = ({ socketPath = ROOM_SOCKET } = {}) => {
                 return answer.freeBytes;
             }
         } catch {
-            // silent-catch: a daemon that did not answer leaves the formula to decide, below
+            // allow(silent-catch): a daemon that did not answer leaves the formula to decide, below
         }
     }
     return freeBytesOf(readReadingSync());
@@ -297,7 +297,7 @@ const invokedAs = process.argv[1] === undefined ? undefined : (() => {
     try {
         return pathToFileURL(realpathSync(process.argv[1])).href;
     } catch {
-        // silent-catch: an argv[1] that is not a file is not this module being run as a command
+        // allow(silent-catch): an argv[1] that is not a file is not this module being run as a command
         return undefined;
     }
 })();

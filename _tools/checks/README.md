@@ -24,8 +24,8 @@ flowchart LR
   tree. `fix` names the arguments that let it repair the tree itself.
 - After each edit, `.intentic/checks.json` runs `run.mjs --paths {file}`: scoped checks only, silent unless one
   fails. What it prints returns with the edit and never stops the turn. After each land, `pnpm verify` applies each
-  failing check's `fix` and each ratchet's `--tighten` in the main tree, then runs them all and counts the tidy lines the land added as failures
-  (`land-tiers.mjs`). At push `.githooks/pre-push` runs them all through `verify-push.mjs`, which reports and never
+  failing check's `fix` and each ratchet's `--tighten` in the main tree, then runs them all and counts the tidy lines
+  the land added as failures (`land-tiers.mjs`). At push `.githooks/pre-push` runs them all through `verify-push.mjs`, which reports and never
   refuses, and keeps what the push added for later in the editor's Main line (`push-report.mjs`). CI runs
   `--tidy=warn`, the nightly `--gate=tidy`.
 - Ratcheted checks (`ratchet: true`) keep their standing backlog in `baselines/` (`lib/ratchet.mjs`), which may
@@ -34,6 +34,22 @@ flowchart LR
   the entries those paths touch. Growth is declared with a reason, which the baseline records:
   `layout.mjs --allow <dir> --reason "<why>"` for one entry, from any checkout, or
   `<check>.mjs --write-baseline --reason "<why>"` to adopt every finding, which runs only in the primary checkout.
+
+## Exceptions
+
+A finding that is right where it stands is excused in one of two forms, each read by `lib/allow.mjs` (parsed in
+`@intentic/constants/allow`, so a guard suite such as `_editor/web/src/moduleState.guard.test.ts` reads it the same way):
+
+- `// allow(<check>): <reason>` at the site, on its line or in the comment block right above it. It sits on the
+  declaration it excuses, so a rename carries it and a deletion takes it away. `silent-catch` and the editor's
+  `module-state` guard read it; `silent-catch` still reads its older `// silent-catch: <reason>` for one release.
+- `Allow: <check> — <reason>` as a commit trailer, for a whole change: the check after a land (`land-tiers.mjs`) and the
+  push (`verify-push.mjs`) accept what that range adds to a tidy check with that manifest id.
+
+A reason is required in both. `Test-Note:` and `Breaking-Note:` are not check exceptions: they are declarations the
+land writes into its commit and the push, the release notes and the assertion ratchet read (a weakened test, a removed
+behaviour), and they keep their own names. A standing backlog lives in `baselines/` instead, with a reason on each entry
+that grew.
 
 ## Commands
 

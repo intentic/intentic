@@ -47,7 +47,7 @@ const untrackedLineStats = async (dir: string, path: string): Promise<{ addition
     if (size === undefined || size > MAX_FILE_DIFF_BYTES) {
         return undefined;
     }
-    // silent-catch: a count is display only; one unreadable file shows none rather than failing the repo's whole list.
+    // allow(silent-catch): a count is display only; one unreadable file shows none rather than failing the repo's whole list.
     const content = await readWorkspaceFile(abs).catch(() => undefined);
     if (content === undefined || content.includes("\0")) {
         return undefined;

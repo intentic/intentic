@@ -16,6 +16,7 @@ export interface RegisteredDocumentProvider {
     readonly component: () => Promise<Component>;
 }
 
+// allow(module-state): registrations an extension or a surface made, retired by whoever registered them
 const providers = shallowRef<readonly RegisteredDocumentProvider[]>([]);
 
 // Keyed by owner + provider id, like the view and viewer registries: re-registering the same identity

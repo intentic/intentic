@@ -34,7 +34,7 @@ afterEach(() => {
         try {
             process.kill(-pid, "SIGKILL");
         } catch {
-            // silent-catch: the session already ended, which is what most tests here make happen.
+            // allow(silent-catch): the session already ended, which is what most tests here make happen.
         }
     }
     for (const dir of dirs.splice(0)) {

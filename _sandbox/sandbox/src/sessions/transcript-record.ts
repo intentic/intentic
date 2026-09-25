@@ -504,7 +504,7 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
         },
         sweep: (gone) => {
             const run = sweeps.then(() => sweepOnce(gone));
-            // silent-catch: this sweep's caller has its rejection from `run`; the chain only orders the next sweep.
+            // allow(silent-catch): this sweep's caller has its rejection from `run`; the chain only orders the next sweep.
             sweeps = run.catch(() => undefined);
             return run;
         },

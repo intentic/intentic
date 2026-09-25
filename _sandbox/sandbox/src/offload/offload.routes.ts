@@ -68,7 +68,7 @@ export const createOffloadRoutes = (deps: OffloadDeps) => {
             });
             live.set(command.runId, runner);
             // A caller that goes away (the command stopped, its terminal closed) stops the line on the runner too.
-            // silent-catch: best-effort cancel; a runner already disconnected or finished needs no recovery
+            // allow(silent-catch): best-effort cancel; a runner already disconnected or finished needs no recovery
             const cancel = (): void => void client.cancelCommand({ runId: command.runId }).catch(() => undefined);
             signal?.addEventListener("abort", cancel, { once: true });
             let started = false;
@@ -100,7 +100,7 @@ export const createOffloadRoutes = (deps: OffloadDeps) => {
         cancel: i.cancel.handler(async ({ input }) => {
             const runner = live.get(input.runId);
             const client = runner === undefined ? undefined : deps.runnerHub.client(runner);
-            // silent-catch: best-effort cancel; a runner already disconnected or finished needs no recovery
+            // allow(silent-catch): best-effort cancel; a runner already disconnected or finished needs no recovery
             await client?.cancelCommand({ runId: input.runId }).catch(() => undefined);
             return { ok: true } as const;
         }),

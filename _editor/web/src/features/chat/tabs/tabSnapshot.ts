@@ -172,7 +172,7 @@ const readStrip = (raw: string): z.infer<typeof StoredStripSchema> | undefined =
     try {
         return StoredStripSchema.safeParse(JSON.parse(raw)).data;
     } catch {
-        // silent-catch: an unparseable stored strip reads as none, and the window opens on a fresh tab.
+        // allow(silent-catch): an unparseable stored strip reads as none, and the window opens on a fresh tab.
         return undefined;
     }
 };

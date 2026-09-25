@@ -33,7 +33,7 @@ const parsedJson = (text: string | undefined): unknown => {
     try {
         return text === undefined ? undefined : JSON.parse(text);
     } catch {
-        // silent-catch: an unreadable file has nothing to move; its own store reports it
+        // allow(silent-catch): an unreadable file has nothing to move; its own store reports it
         return undefined;
     }
 };

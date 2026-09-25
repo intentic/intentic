@@ -8,7 +8,8 @@
     // Enumerating also pins the rule set across oxlint upgrades, so a bump cannot silently change what an agent
     // is being told to do mid-task.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    // A suite uses the globals `bun test` defines; importing a value from "bun:test" removes them and hides it from `jest/`.
+    // A suite uses the globals `bun test` defines; importing a value from "bun:test" removes them and hides it from `jest/`,
+    // which `no-restricted-imports` in the test override below refuses (type imports stay allowed).
     "plugins": ["typescript", "unicorn", "oxc", "import", "vue", "promise", "node", "jest"],
     "categories": {
         "correctness": "error",
@@ -291,76 +292,12 @@
         "node/no-exports-assign": "error",
         "node/no-new-require": "error",
 
-        // Type-aware
-        // These need a checker and only run under `pnpm lint:types` (oxlint --type-aware, backed by
-        // oxlint-tsgolint). Plain `pnpm lint` ignores them at no cost, so they are declared here — one place
-        // where the standard lives — rather than in a separate file.
-        //
-        // This is the half of the linter that catches what a language model actually gets wrong: a dropped
-        // await, an `any` crossing a boundary, a cast the checker cannot justify, a union that grew a member
-        // while a switch did not. None of it is visible without types.
-        "typescript/no-floating-promises": "error",
-        "typescript/no-misused-promises": "error",
-        "typescript/await-thenable": "error",
-        "typescript/require-await": "error",
-        "typescript/return-await": "error",
-        "typescript/no-unnecessary-condition": "error",
-        // Directly counters model staleness: an agent writes against the API it remembers from training, and
-        // this is what says the memory is out of date.
-        "typescript/no-deprecated": "error",
-        "typescript/no-unsafe-argument": "error",
-        "typescript/no-unsafe-assignment": "error",
-        "typescript/no-unsafe-call": "error",
-        "typescript/no-unsafe-member-access": "error",
-        "typescript/no-unsafe-return": "error",
-        "typescript/no-unsafe-enum-comparison": "error",
-        "typescript/no-unsafe-unary-minus": "error",
-        "typescript/switch-exhaustiveness-check": "error",
-        "typescript/use-unknown-in-catch-callback-variable": "error",
-        "typescript/restrict-template-expressions": "error",
-        "typescript/restrict-plus-operands": "error",
-        "typescript/no-base-to-string": "error",
-        "typescript/no-confusing-void-expression": "error",
-        "typescript/no-misused-spread": "error",
-        "typescript/no-array-delete": "error",
-        "typescript/no-for-in-array": "error",
-        "typescript/no-meaningless-void-operator": "error",
-        "typescript/no-mixed-enums": "error",
-        "typescript/no-duplicate-type-constituents": "error",
-        "typescript/no-redundant-type-constituents": "error",
-        "typescript/no-unnecessary-boolean-literal-compare": "error",
-        "typescript/no-unnecessary-type-assertion": "error",
-        "typescript/no-unnecessary-type-arguments": "error",
-        "typescript/no-unnecessary-type-conversion": "error",
-        "typescript/no-unnecessary-type-parameters": "error",
-        "typescript/no-unnecessary-template-expression": "error",
-        "typescript/no-useless-default-assignment": "error",
-        "typescript/non-nullable-type-assertion-style": "error",
-        "typescript/related-getter-setter-pairs": "error",
-        "typescript/require-array-sort-compare": "error",
-        "typescript/unbound-method": "error",
-        "typescript/prefer-nullish-coalescing": "error",
-        "typescript/prefer-optional-chain": "error",
-        "typescript/prefer-find": "error",
-        "typescript/prefer-includes": "error",
-        "typescript/prefer-readonly": "error",
-        "typescript/prefer-reduce-type-parameter": "error",
-        "typescript/prefer-return-this-type": "error",
-
-        // Type-aware rules deliberately NOT enabled
-        // Duplicates of cheaper rules above. Two diagnostics on one line with two different remedies is how a
-        // fix loop starts oscillating, so in each pair the always-on rule wins and the type-aware twin is off.
-        "typescript/only-throw-error": "off", // duplicate of no-throw-literal
-        "typescript/prefer-promise-reject-errors": "off", // duplicate of the eslint rule
-        "typescript/no-implied-eval": "off", // duplicate of the eslint rule
-        "typescript/prefer-string-starts-ends-with": "off", // duplicate of the unicorn rule
-        // Type assertions are owned by anti-slop in .oxlintrc.plugins.json, which offers a way through (justify
-        // it with a SAFETY comment) instead of a demand that cannot always be met.
-        "typescript/no-unsafe-type-assertion": "off",
-        // Noise without a matching gain: strict-boolean-expressions rejects every truthiness check, and
-        // prefer-readonly-parameter-types wants deep-readonly signatures across the whole codebase.
-        "typescript/strict-boolean-expressions": "off",
-        "typescript/prefer-readonly-parameter-types": "off",
+        // No type-aware tier. About forty `typescript/*` rules that need a checker (no-floating-promises,
+        // no-unsafe-*, switch-exhaustiveness-check, …) were declared here for `pnpm lint:types`, which nothing ran:
+        // no gate or workflow called it, and oxlint-tsgolint was never installed, so it could not start. Removed
+        // rather than wired in, because each run is a second whole-program type check beside `pnpm typecheck` on
+        // a machine many conversations share. To bring them back: add oxlint-tsgolint, measure the backlog, and run
+        // it through _tools/oxlint/added.mjs on a land's own files, as the plugin tier is.
         // Was the backlog, now simply the standard
         // These 21 rules were listed here as violated-by-main, with counts, and enforced only on files an
         // agent touched. The count reached zero, so they are ordinary rules now and the second config that
@@ -488,24 +425,32 @@
                 "import/first": "off",
                 // A test may hold a deliberately wrong shape to assert the code rejects it.
                 "typescript/no-explicit-any": "off",
-                "typescript/no-unsafe-assignment": "off",
-                "typescript/no-unsafe-argument": "off",
-                "typescript/no-unsafe-member-access": "off",
-                "typescript/no-unsafe-call": "off",
-                "typescript/no-unsafe-return": "off",
-                "typescript/unbound-method": "off",
                 // A test may construct the degenerate input on purpose: `new Error("")` is the argument under
                 // test, and `new Function(src)` is being used as a parser to assert generated code is valid.
                 "unicorn/error-message": "off",
-                "no-new-func": "off"
+                "no-new-func": "off",
+                "no-restricted-imports": ["error", { "paths": [{
+                            "name": "bun:test",
+                            "allowTypeImports": true,
+                            "message": "A suite uses the globals `bun test` defines (describe, it, expect, jest, …). A value imported from \"bun:test\" shadows them and hides the file from the jest/* rules; import types only (`import type { Mock } from \"bun:test\"`)."
+                        }] }]
             }
         },
         {
             "files": ["_extensions/**"],
             "rules": {
+                // An override replaces a rule's options rather than merging them, so the suites' bun:test entry is
+                // repeated here for the extensions' own suites.
                 "no-restricted-imports": [
                     "error",
                     {
+                        "paths": [
+                            {
+                                "name": "bun:test",
+                                "allowTypeImports": true,
+                                "message": "A suite uses the globals `bun test` defines (describe, it, expect, jest, …). A value imported from \"bun:test\" shadows them and hides the file from the jest/* rules; import types only (`import type { Mock } from \"bun:test\"`)."
+                            }
+                        ],
                         "patterns": [
                             {
                                 "group": [

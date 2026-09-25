@@ -10,7 +10,7 @@ flowchart LR
     unit --> testing(["@intentic/testing"])
     slow --> testing
     testing --> fakes["Fly · Stripe<br/>HTTP fakes"]
-    testing --> helpers["unstubbed · e2eTier<br/>waitFor · jsdom · .vue"]
+    testing --> helpers["unstubbed · e2eTier · requires<br/>waitFor · jsdom · .vue"]
 ```
 
 - `suites` runs two `bun test` passes because the two kinds need different budgets: unit files get a short hang-detector timeout, `*.integration.test.*` and `*.e2e.test.*` files get room for real work. Positional arguments filter by path; `SUITES_JUNIT_DIR` adds JUnit reports, from which the verify scripts read each failing test.
@@ -18,6 +18,7 @@ flowchart LR
 - Each package's `bunfig.toml` preloads `src/bun-preload.ts`, so a file run with plain `bun test` gets the same budget.
 - `unstubbed` stands in for a wide interface: any member the test did not provide throws when called, naming its full path.
 - `e2eTier` gates a costly suite behind an opt-in switch plus its credentials. With the switch on and a secret missing it skips and names the secret, so a nightly run with partial credentials stays green.
+- `requires(condition, why)` (`@intentic/testing/requires`) is for a test that needs something of the machine: a binary, a kernel setting, a built `dist`. Locally it stands down with the missing thing in its title, and `suites` counts what stood down once the run ends. On CI (`CI` set) it registers a failing test naming the requirement instead, because CI provides the condition on purpose and a skip there is a test that stopped running unseen. Use it with `test.skipIf(!needs.runs)(needs.title("…"), …)`.
 - The fakes hold state and refuse what the real service refuses: `fly-fake` models exactly the Fly Machines calls the platform makes, `stripe-fake` runs a Stripe server that signs its webhooks.
 - Consumed from source as a devDependency; nothing here ships.
 
@@ -26,6 +27,7 @@ flowchart LR
 - [bin/suites.mjs](bin/suites.mjs) — the two-pass test runner every package's `test` script calls.
 - [src/index.ts](src/index.ts) — `unstubbed`, the self-naming stand-in.
 - [src/e2e.ts](src/e2e.ts) — `e2eTier`: whether a gated suite runs, and what it is missing.
+- [src/requires.ts](src/requires.ts) — `requires`: a machine condition that stands a test down locally and fails it on CI.
 - [src/bun.ts](src/bun.ts) — `waitFor` on the real clock, async timer advance, env and global stubs that restore.
 - [src/fly-fake.ts](src/fly-fake.ts) — the stateful Fly Machines API over `fetch`.
 

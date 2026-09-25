@@ -209,7 +209,11 @@ export const decide = (baseline: Baseline, run: Run): Decision => {
     if (run.update) {
         const rows = judge(baseline, run.measured, () => 0, run.complete);
         const changed = rows.filter((row) => row.verdict !== "same").length;
-        return finish(table(rows, true), `\n\nrecorded ${run.path} (${changed} of ${rows.length} counts moved)`, updated(baseline, run.measured, run.host, run.complete));
+        return finish(
+            table(rows, true),
+            `\n\nrecorded ${run.path} (${changed} of ${rows.length} counts moved)`,
+            updated(baseline, run.measured, run.host, run.complete),
+        );
     }
     const rows = judge(baseline, run.measured, run.tolerance, run.complete);
     if (Object.keys(baseline.scenarios).length === 0) {

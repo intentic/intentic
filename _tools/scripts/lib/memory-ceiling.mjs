@@ -26,7 +26,7 @@ const readOr = (path) => {
     try {
         return readFileSync(path, "utf8");
     } catch {
-        // silent-catch: a process that exited between the listing and the read has nothing left to count
+        // allow(silent-catch): a process that exited between the listing and the read has nothing left to count
         return "";
     }
 };
@@ -37,7 +37,7 @@ export const processTree = (root, procRoot = "/proc") => {
     try {
         entries = readdirSync(procRoot);
     } catch {
-        // silent-catch: no /proc (macOS, Windows) is no tree to watch
+        // allow(silent-catch): no /proc (macOS, Windows) is no tree to watch
         return [];
     }
     const children = new Map();
@@ -95,7 +95,7 @@ export const watchMemory = (child, { ceiling = ceilingBytes(), intervalMs = 2_00
             try {
                 process.kill(pid, "SIGKILL");
             } catch {
-                // silent-catch: a process already gone is the outcome the kill was for
+                // allow(silent-catch): a process already gone is the outcome the kill was for
             }
         }
         onExceed?.(found);

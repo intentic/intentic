@@ -26,6 +26,7 @@ export const chatParked = computed(() => floating.shows.value && chatOnRail.valu
 // The strip's transcript, while a pointer is asking to read it (ChatQuickBar's handle). A module ref for the same
 // reason the dock slots are: the pill that asks and the panel that answers sit on opposite sides of the teleport.
 // What it turns on is the pane's own turns — never a second transcript.
+// allow(module-state): a pointer asking to read the strip's turns, layout
 export const chatBarPeek = ref(false);
 
 // Last in-shell route before the chat, to return to; not router.back(), since history can start on /chat. It names one

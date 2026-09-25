@@ -16,6 +16,7 @@ interface HubRun {
     readonly sandboxId: string | undefined;
 }
 
+// allow(module-state): work in flight behind a hub row, each run stamped with the sandbox it began on and retired by its own end
 const runs = shallowRef<readonly HubRun[]>([]);
 let last = 0;
 

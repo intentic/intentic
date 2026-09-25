@@ -709,8 +709,8 @@ jobs:
   # Bubblewrap that began requiring a manifest key wrote `splashScreenFadeOutDuration: ,` into build.gradle,
   # and a Capacitor that moved to Swift-package wiring stopped writing the App.xcworkspace both mobile
   # workflows opened. Under the path filter alone nothing looks until someone touches a shell, so the shells
-  # sat broken for a day across three red runs on pushes that changed neither (docs/ci-failure-audit.md,
-  # class F). Here it costs nobody's push.
+  # sat broken for a day across three red runs on pushes that changed neither (the CI failure
+  # audit's class F, in history before 2fed33289). Here it costs nobody's push.
   #
   # A CALL, not a copy: mobile.yml owns the two jobs and gained `workflow_call` for this. It runs on
   # GitHub-hosted runners and touches no secret, so it needs nothing from this file's env or credentials —
@@ -789,7 +789,7 @@ jobs:
       - run: node _tools/checks/run.mjs --gate=tidy
 
   # WHICH GATE TO BUILD NEXT. The failing steps of the last hundred pipelines on main, grouped and counted, as
-  # this job's summary: the extraction docs/ci-failure-audit.md was written from (runs → jobs → failed step →
+  # this job's summary: the extraction the CI failure audit was written from (runs → jobs → failed step →
   # first error line), run every night instead of reconstructed in a two-week retrospective. Reads the Actions
   # API with the token's read scope and nothing else, so a GitHub-hosted runner is the right place for it and
   # the self-hosted fleet is never in its path. A red week is a table here, never a failure of this job.

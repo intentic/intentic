@@ -26,6 +26,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
+import { allowedInRange } from "../../checks/lib/allow.mjs";
 import { isLinkedWorktree } from "../../checks/lib/repo.mjs";
 import { changedPaths as treeChangedPaths, git as gitIn } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
@@ -263,7 +264,13 @@ const findings = [];
                     untidy.map(({ id }) => id),
                 ),
             );
-            const mine = judged.filter(({ added }) => added.length > 0);
+            // An `Allow: <check> — <reason>` trailer in the range accepts what it adds to that check (lib/allow.mjs).
+            const allowed = allowedInRange(root, base);
+            const excused = judged.filter(({ verdict, added }) => added.length > 0 && allowed.has(verdict.id));
+            if (excused.length > 0) {
+                say(`${excused.map(({ verdict }) => `${verdict.id} (${allowed.get(verdict.id).join("; ")})`).join(", ")}: declared by an Allow: trailer in the range`);
+            }
+            const mine = judged.filter(({ verdict, added }) => added.length > 0 && !allowed.has(verdict.id));
             const unsure = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length > 0);
             const theirs = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length === 0);
             if (theirs.length > 0) {

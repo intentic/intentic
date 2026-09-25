@@ -37,6 +37,7 @@ export const undoable = sandboxRef<readonly string[]>(() => []);
 
 // Bumped by every archive that moved something; the archive counter pulses on the event, not a flag, since two archives
 // owe two pulses.
+// allow(module-state): an event counter a mounted surface watches; setting it back would itself be an event
 export const archivedFlash = ref(0);
 
 // A counter per id, not a list: a user archives card by card as fast as they can click, so calls overlap constantly,

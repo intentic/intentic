@@ -56,6 +56,7 @@ interface Sighting {
 }
 
 const sightings = new Map<string, Sighting>();
+// allow(module-state): which window draws which panel: identity of this window, not of a sandbox
 const elsewhere = shallowRef<ReadonlyMap<FloatingPanel, string>>(new Map());
 
 const publish = (): void => {
@@ -167,6 +168,7 @@ interface OwnClaim {
     readonly handBack: () => void;
 }
 
+// allow(module-state): which window draws which panel: identity of this window, not of a sandbox
 const own = shallowRef<OwnClaim | undefined>(undefined);
 
 // A replacement realm has a different owner even when the panel never stops floating.

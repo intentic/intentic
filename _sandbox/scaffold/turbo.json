@@ -1,0 +1,11 @@
+{
+    "$schema": "https://turborepo.com/schema.json",
+    "extends": ["//"],
+    "tasks": {
+        // exec.integration.test.ts runs this package's own built dist/exec.js (the daemon's runtime path), and requires
+        // it on CI, so the suite waits for this package's build as well as its dependencies'.
+        "test": {
+            "dependsOn": ["^build", "build"]
+        }
+    }
+}

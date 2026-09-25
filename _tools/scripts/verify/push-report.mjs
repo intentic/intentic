@@ -238,7 +238,7 @@ const readAt = (path) => {
     try {
         parsed = JSON.parse(text);
     } catch {
-        // silent-catch: a report this cannot parse, the daemon cannot either, so its entries are lost to both already;
+        // allow(silent-catch): a report this cannot parse, the daemon cannot either, so its entries are lost to both already;
         // starting the file over is what lets the next push be read at all.
         return [];
     }

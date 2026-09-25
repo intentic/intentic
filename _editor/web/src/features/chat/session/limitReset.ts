@@ -8,6 +8,7 @@ import { t } from "@intentic/ui/i18n";
 // without touching the weekly allowance. Asked once per account, never on a timer — the endpoint rate-limits hard.
 // A failed ask is not cached, so the next strip for that account tries again.
 
+// allow(module-state): the provider's answer per account id, a uuid no two sandboxes share; asked once per page, since the endpoint rate-limits hard
 const answers = ref(new Map<string, LimitResetStatus>());
 // One in-flight request per account; cleared on settle so a retry after a failure isn't joined to a dead one.
 const asking = new Map<string, Promise<void>>();

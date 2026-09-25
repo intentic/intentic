@@ -67,10 +67,13 @@
         // variable not named here. On the TASK, not in `globalPassThroughEnv`, which mirrors the Dockerfile's ENV
         // blocks and is diffed against them; passThrough keeps the VALUE out of the cache key. INTENTIC_TURN_OWNER
         // is the stamp the sandbox's reaper finds a stopped conversation's leftovers by (platform/boot/reaper.ts):
-        // stripped here, a test run whose conversation had stopped was invisible to it.
+        // stripped here, a test run whose conversation had stopped was invisible to it. `CI` is in the HASH instead:
+        // a test that needs something of the machine stands down without it and fails on CI (@intentic/testing's
+        // requires), so a run that stood down locally must never be replayed as a CI result.
         "test": {
             "dependsOn": ["^build"],
             "outputs": [],
+            "env": ["CI"],
             "passThroughEnv": ["TEST_WORKERS", "TEST_MEMORY_CEILING_MB", "CI_HOST_JOBS", "SUITES_JUNIT_DIR", "INTENTIC_TURN_OWNER", "INTENTIC_AGENT_SESSION"]
         },
         // Type-checks each package INCLUDING its test files, which `build` cannot: an emitting package excludes

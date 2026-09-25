@@ -52,9 +52,11 @@ export interface Notification extends NotificationInput {
 }
 
 // id to getter, called on every read; shallowReactive tracks membership, not the (plain) getters themselves.
+// allow(module-state): the app's one notification lane
 const sources = shallowReactive(new Map<string, () => NotificationInput | undefined>());
 
 // A counter, not a timestamp: two receipts in the same millisecond still need distinct ids.
+// allow(module-state): the app's one notification lane
 const receipt = ref<Notification | undefined>(undefined);
 let raised = 0;
 

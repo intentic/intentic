@@ -110,14 +110,14 @@ const endLine = async (pid: number): Promise<void> => {
     try {
         process.kill(pid, "SIGTERM");
     } catch {
-        // silent-catch: a leader already gone is what the signal was for
+        // allow(silent-catch): a leader already gone is what the signal was for
     }
-    // silent-catch: a leader already gone or session ended needs no further cleanup
+    // allow(silent-catch): a leader already gone or session ended needs no further cleanup
     await endSession(pid).catch(() => false);
     try {
         process.kill(pid, "SIGKILL");
     } catch {
-        // silent-catch: likewise; it usually left on the TERM
+        // allow(silent-catch): likewise; it usually left on the TERM
     }
 };
 
@@ -259,7 +259,7 @@ export const createRunnerCommands = (deps: RunnerCommandDeps): RunningCommands =
                 controller.signal.removeEventListener("abort", stop);
                 // The line is back, so nothing it started should outlive it here either.
                 if (child.pid !== undefined) {
-                    // silent-catch: a process already exited needs no further session cleanup
+                    // allow(silent-catch): a process already exited needs no further session cleanup
                     await endSession(child.pid).catch(() => false);
                 }
                 const patch = await changesOf(deps, tree, scratch);

@@ -19,6 +19,10 @@
             "types": "./src/e2e.ts",
             "default": "./src/e2e.ts"
         },
+        "./requires": {
+            "types": "./src/requires.ts",
+            "default": "./src/requires.ts"
+        },
         "./fly-fake": {
             "types": "./src/fly-fake.ts",
             "default": "./src/fly-fake.ts"

@@ -120,7 +120,7 @@ export class EditorSlot {
             return;
         }
         if (leaving.mode === `edit`) {
-            // silent-catch: a forced save that did not happen is the one the server makes when the editor closes.
+            // allow(silent-catch): a forced save that did not happen is the one the server makes when the editor closes.
             this.deps.forceSave(leaving.session).catch(() => undefined);
         }
     }

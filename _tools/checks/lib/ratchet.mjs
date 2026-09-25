@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isLinkedWorktree, root, subjectScope } from "./repo.mjs";
 
@@ -45,6 +45,16 @@ const readBaseline = (name) => {
 };
 
 const sorted = (entries) => `${JSON.stringify(Object.fromEntries([...entries].sort(([a], [b]) => a.localeCompare(b))), null, 4)}\n`;
+
+// A baseline with no entries is no file: a missing baseline reads as empty, so an empty one is only a file to keep.
+const writeBaseline = (name, entries) => {
+    const list = [...entries];
+    if (list.length === 0) {
+        rmSync(fileOf(name), { force: true });
+        return;
+    }
+    writeFileSync(fileOf(name), sorted(list));
+};
 
 // An entry's allowance: a count; a reason alone, which allows one; or `{ count, why }`, a count raised on purpose.
 export const allowanceOf = (value) => {
@@ -111,7 +121,7 @@ const adopt = (check, name, found) => {
     }
     const before = readBaseline(name);
     const entries = adoptedOf(before, found, reason);
-    writeFileSync(fileOf(name), sorted(entries));
+    writeBaseline(name, entries);
     const raised = entries.filter(([key, value]) => allowanceOf(value) > allowanceOf(before[key])).length;
     console.log(`${check}: baseline ${name}.json adopts ${found.size} entries, ${raised} of them raised because: ${reason}`);
 };
@@ -123,7 +133,7 @@ const tighten = (check, name, found, paths, touchedBy) => {
     const baseline = readBaseline(name);
     const { next, lowered } = tightenedOf(baseline, found, (key) => paths.some((path) => touchedBy(key, path)));
     if (lowered.length > 0) {
-        writeFileSync(fileOf(name), sorted(Object.entries(next)));
+        writeBaseline(name, Object.entries(next));
         console.log(`${check}: lowered baselines/${name}.json where the named paths beat it (${lowered.join(", ")})`);
     }
 };
@@ -161,5 +171,5 @@ export const allowOne = (check, name, key, count) => {
         refuse(`${check}: recording ${key} raises baselines/${name}.json, so it needs --reason "<why this growth is right>"`);
     }
     const baseline = readBaseline(name);
-    writeFileSync(fileOf(name), sorted(Object.entries({ ...baseline, [key]: entryOf(baseline[key], count, reason) })));
+    writeBaseline(name, Object.entries({ ...baseline, [key]: entryOf(baseline[key], count, reason) }));
 };

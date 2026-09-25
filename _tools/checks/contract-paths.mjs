@@ -226,7 +226,7 @@ finish(
             "a contract route spelled as a path where a typed client reaches it: call it through sandboxRpc (or rpcQuery) in the app, api.sandbox.rpc or api.daemon.rpc in an extension",
             held.map(({ at, route }) => `${at}  spells ${route}`),
         ],
-        ["an extension spelling more contract routes than _tools/checks/baselines/contract-paths.json allows", grown],
+        ["an extension spelling more contract routes than its baseline allows (_tools/checks/baselines/contract-paths.json; none where there is no file)", grown],
     ],
     [`${routes.length} contract routes, ${subjects.length} files read: none spelled in the app, the extension seed or the site's samples, extensions within their baseline`],
 );

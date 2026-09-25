@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { getPriority } from "node:os";
 import { type ChildProcess, spawn } from "node:child_process";
+import { requires } from "@intentic/testing/requires";
 import { applyToStampedChild, OOM_SCORE, SPAWN_STAMP_ENV, spawnAs } from "./workload-class.js";
 
 /* The half the unit tests cannot reach: real children of this process, classed through procfs. A score that parses and
@@ -39,9 +40,13 @@ const kept = <T extends ChildProcess>(child: T): T => {
 // Children inherit this process's score and a class never lowers one, so only a class above it can be seen to land.
 const INHERITED = process.platform === "linux" ? Number(readFileSync("/proc/self/oom_score_adj", "utf8").trim()) : 0;
 
-const describeLinux = process.platform === "linux" && INHERITED < OOM_SCORE.heavy ? describe : describe.skip;
+// Only a rank above what this process inherited can be seen to land, and procfs is Linux's.
+const kernel = requires(
+    process.platform === "linux" && INHERITED < OOM_SCORE.heavy,
+    `Linux, with this process ranked below the toolchain class (it inherited oom_score_adj ${String(INHERITED)})`,
+);
 
-describeLinux("spawnAs puts a child in its class as it starts", () => {
+describe.skipIf(!kernel.runs)(kernel.title("spawnAs puts a child in its class as it starts"), () => {
     test("the rank and niceness are on the child when spawn returns", async () => {
         // The toolchain class, the highest rank: whatever this runner inherited, a write that landed reads above it.
         const child = kept(spawnAs({ class: "toolchain" }, "sleep", ["31"], { stdio: "ignore" }));

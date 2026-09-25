@@ -40,7 +40,7 @@ export const workspaceIdentity = async (services: IdentitySeams): Promise<string
     try {
         parsed = WorkspaceIdentitySchema.safeParse(convertDocument(workspaceIdentityDocument.history, "object", JSON.parse(text)).value).data;
     } catch {
-        // silent-catch: not JSON is reported below, like a schema reject, and the file is left as it stands
+        // allow(silent-catch): not JSON is reported below, like a schema reject, and the file is left as it stands
         detail = "the file is not valid JSON";
     }
     if (parsed === undefined) {

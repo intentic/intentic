@@ -6,7 +6,7 @@ Performance checks that count work instead of timing it, failing only on a few d
 flowchart LR
     instr["perf:instr<br/>Valgrind instruction counts"] --> perf(["perf"])
     browser["perf:browser<br/>renders · calls · layouts · mutations"] --> perf
-    perf --> budgets["budgets.ts<br/>fails the run"]
+    perf --> budgets["*-budgets.ts<br/>fails the run"]
     perf --> judge["baseline.ts<br/>diff as a report"]
     judge --> files["baselines/<br/>instr.json · browser.json"]
     ci["ci.yml<br/>perf-instr · perf-browser jobs"] --> perf
@@ -18,10 +18,10 @@ flowchart LR
   difference. `node --predictable`, fixed heap sizes and seeded fixtures make the count repeat.
 - `perf:browser` starts `_site/demo` with its own Vite and counts Vue renders, V8 calls, layouts, style recalcs and
   DOM mutations per interaction, under a paused Playwright clock and a forced flush after every step.
-- A run fails only on a budget (`src/instr/budgets.ts`, `src/browser/budgets.ts`): a one-directional claim about what
-  an event costs, set well above today's reading, with the claim and the reason for its limit beside it. Today they
-  are renders per idle clock tick, renders per keystroke in the composer, a repeat ignore walk at most a tenth of the
-  first, and incremental quick-open ranking at most 60% of re-ranking from scratch. A new budget encodes a property
+- A run fails only on a budget (`src/instr/instr-budgets.ts`, `src/browser/browser-budgets.ts`): a one-directional
+  claim about what an event costs, set well above today's reading, with the claim and the reason for its limit beside
+  it. Today they are renders per idle clock tick, renders per keystroke in the composer, a repeat ignore walk at most a
+  tenth of the first, and incremental quick-open ranking at most 60% of re-ranking from scratch. A new budget encodes a property
   someone would defend, not a number that happened to be measured.
 - Every other count is a report: the diff against `baselines/` goes to stdout and, in CI, to the job summary, and
   never fails the job. A baseline that failed on every move was re-recorded four times in its first 28 hours by
@@ -37,7 +37,7 @@ flowchart LR
 ## Key files
 
 - [src/baseline.ts](src/baseline.ts) — judges a run's budgets and reports its diff against a baseline, for both tracks.
-- [src/browser/budgets.ts](src/browser/budgets.ts) — the browser track's budgets, each with its claim.
+- [src/browser/browser-budgets.ts](src/browser/browser-budgets.ts) — the browser track's budgets, each with its claim.
 - [src/instr/counted-process.ts](src/instr/counted-process.ts) — the process Valgrind counts, in its two phases.
 - [src/instr/scenarios](src/instr/scenarios) — one file per instruction scenario, found by name.
 - [src/browser/session.ts](src/browser/session.ts) — the fresh context, paused clock and flush that make counts exact.

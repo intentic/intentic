@@ -453,7 +453,8 @@ jobs:
       # hour of commits has landed on main and semantic-release declines with "the local branch main is behind
       # the remote one". It exits 0. At this commit rate that is the ORDINARY outcome, and every step below
       # publishes a tag that in that case was never pushed — which is how three of the ten most recent red
-      # pipelines died at the end of a 90-minute build with nothing wrong (docs/ci-failure-audit.md, class D).
+      # pipelines died at the end of a 90-minute build with nothing wrong (the CI failure audit's class D, in
+      # history before 2fed33289).
       #
       # `.release-cut` is written by the `successCmd` in .releaserc.json, which semantic-release runs only
       # after a publish it actually performed. Removed FIRST because `clean: false` keeps this workspace

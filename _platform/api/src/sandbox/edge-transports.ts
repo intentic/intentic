@@ -50,7 +50,7 @@ export const edgeTransportReader = (ask: Ask = fetch, now: () => number = Date.n
                 const response = await ask(`${url}/health`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
                 return response.ok ? declaredTransports(await response.json()) : [];
             } catch {
-                // silent-catch: an edge that does not answer declares nothing, and nothing is what the row then says.
+                // allow(silent-catch): an edge that does not answer declares nothing, and nothing is what the row then says.
                 return [];
             }
         })().then((transports) => {

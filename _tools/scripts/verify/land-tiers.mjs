@@ -3,6 +3,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { allowedInRange } from "../../checks/lib/allow.mjs";
+import { addedPluginFindings } from "../../oxlint/added.mjs";
 import { changedSince } from "../lib/git.mjs";
 import { weakenings } from "./assertion-ratchet.mjs";
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
@@ -51,7 +53,11 @@ const tidy = (root, from) => {
             untidy.map(({ id }) => id),
         ),
     );
-    return judged.flatMap(({ verdict, added }) => added.map((line) => `tidy ${verdict.id}: ${line.trim().replace(/:\d+/g, ":#")}`));
+    // An `Allow: <check> — <reason>` trailer in the range accepts what the land adds to that check (lib/allow.mjs).
+    const allowed = allowedInRange(root, from);
+    return judged
+        .filter(({ verdict }) => !allowed.has(verdict.id))
+        .flatMap(({ verdict, added }) => added.map((line) => `tidy ${verdict.id}: ${line.trim().replace(/:\d+/g, ":#")}`));
 };
 
 const rustfmt = (root, changed) =>
@@ -63,15 +69,16 @@ const rustfmt = (root, changed) =>
           )
         : [];
 
-// Every finding the tree added since `from`, lint and rustfmt over the files it touched, tidy and the ratchet over the range.
+// Every finding the tree added since `from`: lint (the root rules whole, the plugin tier by what was added) and rustfmt
+// over the files it touched, tidy and the ratchet over the range.
 export const landTiers = (root, from) => {
     const changed = changedSince(root, from) ?? [];
     const measured = weakenings(root, from);
+    const lintable = changed.filter((path) => LINTABLE.test(path) && existsSync(join(root, path)));
     return [
-        ...lint(
-            root,
-            changed.filter((path) => LINTABLE.test(path) && existsSync(join(root, path))),
-        ),
+        ...lint(root, lintable),
+        // The plugin rules have a backlog, so only what the land added to its files counts (_tools/oxlint/added.mjs).
+        ...addedPluginFindings(root, from, lintable),
         ...tidy(root, from),
         ...rustfmt(root, changed),
         ...(measured === undefined

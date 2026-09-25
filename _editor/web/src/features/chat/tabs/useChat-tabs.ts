@@ -365,12 +365,14 @@ watch(drawsChat, (draws) => {
 });
 
 // A signal since the caret belongs to whichever surface is mounted; a counter so repeat requests each land.
+// allow(module-state): an event counter a mounted surface watches; setting it back would itself be an event
 export const composerFocus = ref(0);
 export const focusComposer = (): void => {
     composerFocus.value++;
 };
 
 // Scroll counterpart of composerFocus; a counter since re-focusing the same tab is still a distinct request.
+// allow(module-state): an event counter a mounted surface watches; setting it back would itself be an event
 export const tabReveal = ref(0);
 
 // Focuses a tab through the one writer, so an untouched draft leaves in the same write. An id naming no open

@@ -2,9 +2,12 @@
 // No new handler that throws the error away: `.catch(() => undefined)`, an empty `catch {}`, a `catch` that only returns
 // a literal. Each turns every failure (EACCES, a timeout, a bug's TypeError) into the same quiet "absent", so the one it
 // was written for and the ones nobody foresaw read alike. Narrow instead (`undefinedIfMissing` from @intentic/base/errors,
-// a status check) or log what failed. A discard that is right says why: `// silent-catch: <reason>` in it or above it.
+// a status check) or log what failed. A discard that is right says why: `// allow(silent-catch): <reason>` in it, on its
+// line, or in the comment above it (lib/allow.mjs). The older `// silent-catch: <reason>` is still read, for branches
+// cut before the pragma; nothing new should spell it.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { allowedAt, pragmaReason } from "./lib/allow.mjs";
 import { finish } from "./lib/report.mjs";
 import { ADOPTING, ratchet } from "./lib/ratchet.mjs";
 import { root, subjectFiles } from "./lib/repo.mjs";
@@ -31,8 +34,10 @@ const SHAPES = [
     },
 ];
 
-// A reason inside the handler, on its line, or on the one above it; an empty reason is no reason.
-const PRAGMA = /silent-catch:\s*\S/;
+// The marker before `allow(silent-catch)`; an empty reason is no reason. Delete once no site spells it.
+const LEGACY = /(?:\/\/|\/\*|\*)\s*silent-catch:\s*\S/;
+const excused = (handler, lines, line) =>
+    pragmaReason(handler, `silent-catch`) !== undefined || LEGACY.test(handler) || allowedAt(lines, line, `silent-catch`, LEGACY);
 
 const lineOf = (text, index) => text.slice(0, index).split(`\n`).length;
 
@@ -48,7 +53,7 @@ for (const path of files) {
     for (const { why, pattern } of SHAPES) {
         for (const match of text.matchAll(pattern)) {
             const line = lineOf(text, match.index);
-            if (PRAGMA.test(match[0]) || PRAGMA.test(lines[line - 1]) || (line > 1 && PRAGMA.test(lines[line - 2]))) {
+            if (excused(match[0], lines, line)) {
                 continue;
             }
             findings.push({ line, why });
@@ -72,6 +77,6 @@ const problems = grown.flatMap(({ key, count, allowed }) => [
 ]);
 
 finish(
-    [[`a new silent catch: narrow it (undefinedIfMissing, a status check), log it, or say why with // silent-catch: <reason>`, problems]],
+    [[`a new silent catch: narrow it (undefinedIfMissing, a status check), log it, or say why with // allow(silent-catch): <reason>`, problems]],
     [`${files.length} source files read: no new silent catch (${[...found.values()].reduce((sum, list) => sum + list.length, 0)} standing, held by the baseline)`],
 );

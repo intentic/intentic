@@ -9,6 +9,7 @@ import { useSandbox } from "../client/useSandbox";
 // probe swaps callers' base once a local address qualifies.
 
 // Resolved endpoint per sandbox id, kept in memory only; a reload re-probes cheaply (LNA grant persists).
+// allow(module-state): the resolved endpoint per sandbox id, one entry per sandbox
 const endpoints = ref<Record<string, Endpoint>>({});
 // A demotion expires on a backoff that doubles per consecutive failure and caps at `DEMOTION_MAX_MS`; expiry
 // permits the next reconnect's probe, it does not trigger one itself.

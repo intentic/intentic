@@ -35,7 +35,7 @@ const git = (...args: string[]): string | undefined => {
     try {
         return execFileSync("git", ["-C", REPO, ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
     } catch {
-        // silent-catch: a path absent at a tag, or no git at all, is simply nothing to seed from
+        // allow(silent-catch): a path absent at a tag, or no git at all, is simply nothing to seed from
         return undefined;
     }
 };
@@ -119,7 +119,7 @@ const shapeOf = (schema: unknown): string => {
     try {
         return typeFromSchema(z.toJSONSchema(schema as z.ZodType, { io: "input", unrepresentable: "any", override: markAnything }));
     } catch {
-        // silent-catch: a schema JSON Schema cannot spell freezes as unknown, which every later shape fits
+        // allow(silent-catch): a schema JSON Schema cannot spell freezes as unknown, which every later shape fits
         return "unknown";
     }
 };
@@ -206,7 +206,7 @@ const readShapes = async (): Promise<Shapes> => {
     try {
         return JSON.parse(await readFile(SHAPES_FILE, "utf8")) as Shapes;
     } catch {
-        // silent-catch: the first run starts from nothing
+        // allow(silent-catch): the first run starts from nothing
         return {};
     }
 };

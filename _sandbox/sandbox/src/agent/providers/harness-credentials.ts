@@ -154,7 +154,7 @@ const pickModel = async (services: Pick<Services, "providerCatalogs">, model: st
     if (model !== undefined && model !== "") {
         return { id: model };
     }
-    // silent-catch: an unreadable catalog only leaves the pick asking whether SOME turn can run, never fails the turn.
+    // allow(silent-catch): an unreadable catalog only leaves the pick asking whether SOME turn can run, never fails the turn.
     const fallback = await services.providerCatalogs.claude.models().then(
         (catalog) => catalog.default,
         () => undefined,

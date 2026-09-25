@@ -20,7 +20,7 @@ const findImageBinary = (): string | undefined => {
         try {
             return fromSdk.resolve(name);
         } catch {
-            // silent-catch: a variant this install does not carry does not resolve, and the next one is tried.
+            // allow(silent-catch): a variant this install does not carry does not resolve, and the next one is tried.
         }
     }
     return undefined;

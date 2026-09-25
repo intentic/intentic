@@ -26,6 +26,7 @@ const readPins = (sandboxId: string | undefined): ReadonlySet<string> => {
 };
 
 // Bumped on every write and read by `pinned` purely to invalidate it, since localStorage isn't reactive.
+// allow(module-state): a counter invalidating reads of the stored pins
 const writes = shallowRef(0);
 
 export interface RailPins {

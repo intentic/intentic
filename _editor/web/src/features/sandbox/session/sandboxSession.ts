@@ -41,6 +41,7 @@ const { getIdToken, signedInEmail, clearCredential, cancelSignIn } = useGoogleId
 const { activeSandboxId } = useSandbox();
 
 // In-memory mirror of persisted sessions, hydrated lazily, so presentedEmail reacts without re-reading storage.
+// allow(module-state): daemon sessions keyed by sandbox id
 const sessions = ref<Record<string, StoredSession>>({});
 // One in-flight establish per sandbox: shared both ways, but background can't satisfy a waiting caller.
 const inflight = new Map<string, { readonly pending: Promise<SandboxBearer | undefined>; readonly background: boolean }>();

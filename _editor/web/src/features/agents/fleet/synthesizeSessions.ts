@@ -131,6 +131,7 @@ export const synthesisPrompt = (sources: readonly SourceRef[]): string =>
     ].join(`\n\n`);
 
 // The synthesis being prepared right now; the button's busy state and the reentrancy guard against a double press.
+// allow(module-state): the reentrancy guard of one press, cleared by that press's own finally
 export const synthesizing = ref(false);
 
 // Whether the preparation went, and if not, the one sentence to say so.

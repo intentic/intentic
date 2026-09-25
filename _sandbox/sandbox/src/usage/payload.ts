@@ -38,7 +38,7 @@ export const readFailure = (status: number, body: string | undefined): string =>
         try {
             return JSON.parse(body ?? "") as unknown;
         } catch {
-            // silent-catch: a body that is not JSON has no sentence to lift, and the status below still says what failed.
+            // allow(silent-catch): a body that is not JSON has no sentence to lift, and the status below still says what failed.
             return undefined;
         }
     })();

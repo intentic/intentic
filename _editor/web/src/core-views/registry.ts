@@ -21,6 +21,7 @@ export interface RegisteredView {
 // module-level seed would run — no message catalog is registered yet, so every label taken then would be a dotted
 // key for the life of the tab. Extension registrations are the ref; the core list is recomputed beside it, which
 // also means a language change reaches the rail.
+// allow(module-state): registrations an extension or a surface made, retired by whoever registered them
 const contributed = shallowRef<readonly RegisteredView[]>([]);
 const views = computed<readonly RegisteredView[]>(() => [
     ...coreViews().map((registration) => ({ owner: `builtin`, registration })),

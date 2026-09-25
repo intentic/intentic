@@ -80,7 +80,7 @@ export const parsePushReport = (text: string): PushReportEntry[] => {
     try {
         raw = JSON.parse(text);
     } catch {
-        // silent-catch: a file the hook is still writing, or one somebody broke, files nothing; the next ref move reads it again
+        // allow(silent-catch): a file the hook is still writing, or one somebody broke, files nothing; the next ref move reads it again
         return [];
     }
     return (Array.isArray(raw) ? lenientArray(PushReportEntrySchema).parse(raw) : []).toSorted((left, right) => left.at - right.at);

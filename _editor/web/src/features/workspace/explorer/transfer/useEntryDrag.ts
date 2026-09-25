@@ -20,6 +20,7 @@ export interface EntryDragSpec {
     readonly onDrop: (dir: string) => void;
 }
 
+// allow(module-state): one pointer gesture, ended by its release, its Escape, or a switch (its paths are the sandbox's, and scoped)
 const dragging = ref(false);
 // One sandbox's paths: a switch mid-drag (the keyboard's, the pointer still down) ends it, or the release would move
 // the same paths in the sandbox switched to.
@@ -27,8 +28,10 @@ const paths = sandboxRef<readonly string[]>(
     () => [],
     () => endDrag(),
 );
+// allow(module-state): one pointer gesture, ended by its release, its Escape, or a switch (its paths are the sandbox's, and scoped)
 const pointer = ref({ x: 0, y: 0 });
 // The folder under the pointer, when it can take the paths; undefined over nothing, or over one that can't.
+// allow(module-state): one pointer gesture, ended by its release, its Escape, or a switch (its paths are the sandbox's, and scoped)
 const over = ref<string | undefined>(undefined);
 // What the ghost says: the one name, or a count.
 const label = computed(() => {

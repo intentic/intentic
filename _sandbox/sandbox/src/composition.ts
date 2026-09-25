@@ -1607,7 +1607,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
                     },
                     signal,
                 );
-                // silent-catch: this pass's caller has its rejection from `await pass`; `migrating` only lets a later one wait it out.
+                // allow(silent-catch): this pass's caller has its rejection from `await pass`; `migrating` only lets a later one wait it out.
                 migrating = pass.catch(() => undefined);
                 await pass;
             },

@@ -46,10 +46,10 @@ One component per kind of control, so a skin restyles everything at once: `Butto
 
 ## Failures
 
-A catch names the one failure it expects and lets the rest through: `isMissing` / `undefinedIfMissing` from [`@intentic/base/errors`](../../_tools/base/src/errors.ts) for "not created yet", a status check for "not found". A read that failed is never written back as a default: the daemon's files go through `jsonFile` / `textFile` ([`json-file.ts`](../../_sandbox/sandbox/src/store/json-file.ts)), and a guard fails closed. [`silent-catch.mjs`](../../_tools/checks/silent-catch.mjs) ratchets handlers that throw an error away; a discard that is right says why with `// silent-catch: <reason>`.
+A catch names the one failure it expects and lets the rest through: `isMissing` / `undefinedIfMissing` from [`@intentic/base/errors`](../../_tools/base/src/errors.ts) for "not created yet", a status check for "not found". A read that failed is never written back as a default: the daemon's files go through `jsonFile` / `textFile` ([`json-file.ts`](../../_sandbox/sandbox/src/store/json-file.ts)), and a guard fails closed. [`silent-catch.mjs`](../../_tools/checks/silent-catch.mjs) ratchets handlers that throw an error away; a discard that is right says why with `// allow(silent-catch): <reason>`.
 
 ## Code style
 
 - oxlint ([`.oxlintrc.json`](../../.oxlintrc.json)) runs on every edit through [`lint-edit.mjs`](../../_tools/oxlint/lint-edit.mjs), which fixes what it can and reports only what the edit added.
-- `pnpm lint:plugins` ([`.oxlintrc.plugins.json`](../../.oxlintrc.plugins.json)) adds the vendored [`anti-slop`](../../_tools/oxlint/anti-slop) type rules, cognitive complexity, and [`comments/one-line`](../../_tools/oxlint/comments/index.ts): a comment is one line stating what the code cannot.
-- The rest of the house rules, such as no re-exports, `undefined` over `null`, and early returns, are in [`AGENTS.md`](../../AGENTS.md). Test conventions are in [testing.md](testing.md).
+- [`.oxlintrc.plugins.json`](../../.oxlintrc.plugins.json) adds the vendored [`anti-slop`](../../_tools/oxlint/anti-slop) type rules and cognitive complexity. Main carries a backlog of them, so [`added.mjs`](../../_tools/oxlint/added.mjs) holds them to what a change adds: per edit, and over a land's own files after it lands. `pnpm lint:plugins` lists the backlog.
+- A check's finding that is right where it stands says so with `// allow(<check>): <reason>` at the site or an `Allow: <check> — <reason>` commit trailer ([`_tools/checks`](../../_tools/checks/README.md#exceptions)). Test conventions are in [testing.md](testing.md).

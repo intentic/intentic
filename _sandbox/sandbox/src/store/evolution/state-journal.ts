@@ -77,7 +77,7 @@ export const readJournal = async (historyRoot: string, logger?: JournalLogger): 
     try {
         raw = JSON.parse(text);
     } catch {
-        // silent-catch: not JSON is reported just below, with a file that is JSON but not a journal
+        // allow(silent-catch): not JSON is reported just below, with a file that is JSON but not a journal
         raw = undefined;
     }
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
@@ -119,7 +119,7 @@ const isJournalObject = async (path: string): Promise<boolean> => {
         const raw: unknown = JSON.parse(text);
         return typeof raw === "object" && raw !== null && !Array.isArray(raw);
     } catch {
-        // silent-catch: not JSON is exactly the damaged file this asks about; the answer is the report
+        // allow(silent-catch): not JSON is exactly the damaged file this asks about; the answer is the report
         return false;
     }
 };

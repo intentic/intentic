@@ -8,6 +8,7 @@ import { storedValue } from "../../../lib/browserStorage";
 // The key the active sandbox id is persisted under, so a reload keeps the same one selected.
 export const ACTIVE_KEY = `intentic.activeSandboxId`;
 
+// allow(module-state): the scope's own key: what a switch changes
 export const activeSandboxId = ref<string | undefined>(storedValue(ACTIVE_KEY));
 
 // Appends the sandbox id to a query key so cached state is per-sandbox; appended, not prepended, so a bare prefix

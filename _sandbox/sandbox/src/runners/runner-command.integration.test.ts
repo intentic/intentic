@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { offloadRef, type RunnerCommand, type RunnerCommandFrame } from "@intentic/sandbox-contract";
 import { createRunnerCommands, offloadTreeOf } from "./runner-command.js";
 

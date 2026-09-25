@@ -21,6 +21,7 @@ const audience: Ref<Audience> = definePreference<Audience>({
 });
 
 // Whether this browser has answered the question; the arrival card asks once and never again.
+// allow(module-state): whether this browser answered the audience question, asked once per browser
 const chosen = ref(isAudience(storedValue(STORAGE_KEY)));
 
 const maker: ComputedRef<boolean> = computed(() => audience.value === `maker`);

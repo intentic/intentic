@@ -35,12 +35,15 @@ export interface ExtensionHostStatus {
     readonly detail?: string | undefined;
 }
 
+// allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
 export const extensionStatuses = shallowRef<readonly ExtensionHostStatus[]>([]);
 
 // Commit each extension loaded at, per handle; divergence from the current commit triggers the reload prompt.
+// allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
 export const loadedCommits = shallowRef<ReadonlyMap<string, string>>(new Map());
 
 // Whether the load pass finished; a missing tile may simply not have activated yet, not be gone.
+// allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
 export const extensionsLoaded = shallowRef(false);
 
 // Generation counter for the active sandbox, bumped on switch; a stale pass must not finalize anything.

@@ -101,7 +101,7 @@ export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIE
     // One directory as the walk lists it: its own .gitignore layered on first, then every entry followed and sorted.
     const list = async (abs: string, real: string, rel: string, parentScope: IgnoreScope): Promise<Listing> => {
         const scope = await parentScope.descend(abs, rel);
-        // silent-catch: a directory that cannot be read lists as unknown, which is not empty.
+        // allow(silent-catch): a directory that cannot be read lists as unknown, which is not empty.
         const dirents = await readdir(abs, { withFileTypes: true }).catch(() => undefined);
         if (dirents === undefined) {
             return { abs, real, scope, nodes: undefined };
@@ -156,7 +156,7 @@ export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIE
         if (old === undefined) {
             return;
         }
-        // silent-catch: a directory that cannot be read becomes unknown, which is not empty.
+        // allow(silent-catch): a directory that cannot be read becomes unknown, which is not empty.
         const dirents = await readdir(old.abs, { withFileTypes: true }).catch(() => undefined);
         const kept = new Map((old.nodes ?? []).map((node) => [node.name, node]));
         const fresh = (dirents ?? []).filter((dirent) => names.has(dirent.name) || !kept.has(dirent.name));

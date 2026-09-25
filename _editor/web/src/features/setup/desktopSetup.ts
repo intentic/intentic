@@ -2,7 +2,9 @@ import { readonly, ref, type Ref } from "vue";
 import { DESKTOP_SETUP_EVENT, readDesktopSetupReport, type DesktopSetupReport } from "../../app/environments/desktop";
 
 /* The setup page remains available while setup runs in the background. */
+// allow(module-state): the desktop app's own setup report
 const report = ref<DesktopSetupReport | undefined>(undefined);
+// allow(module-state): when that report was last heard
 const heardAt = ref<number | undefined>(undefined);
 let listening = false;
 

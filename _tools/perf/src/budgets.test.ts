@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { judgeBudgets, type Baseline, type Budget } from "./baseline.js";
-import { BROWSER_BUDGETS } from "./browser/budgets.js";
+import { BROWSER_BUDGETS } from "./browser/browser-budgets.js";
 import { SCENARIOS } from "./browser/scenarios.js";
-import { INSTR_BUDGETS } from "./instr/budgets.js";
+import { INSTR_BUDGETS } from "./instr/instr-budgets.js";
 
 const recorded = (name: string): Baseline => JSON.parse(readFileSync(join(import.meta.dir, "..", "baselines", `${name}.json`), "utf8")) as Baseline;
 

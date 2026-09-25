@@ -94,7 +94,7 @@ const raiseOomScore = (pid: number, wanted: number): void => {
             writeFileSync(path, String(next));
         }
     } catch {
-        // silent-catch: gone already, or procfs is hidden by a hardened runtime; the kernel then weighs size alone.
+        // allow(silent-catch): gone already, or procfs is hidden by a hardened runtime; the kernel then weighs size alone.
     }
 };
 
@@ -104,7 +104,7 @@ const raiseNice = (pid: number, wanted: number): void => {
             setPriority(pid, wanted);
         }
     } catch {
-        // silent-catch: gone already, so nothing forked from it is left to cover.
+        // allow(silent-catch): gone already, so nothing forked from it is left to cover.
     }
 };
 
@@ -122,7 +122,7 @@ export const applyWorkload = async (pid: number, workload: Workload): Promise<vo
     raiseNice(pid, priority.nice);
     if (priority.lowIo) {
         await forkedExec("ionice", ["-c", "2", "-n", "7", "-p", String(pid)])
-            // silent-catch: no ionice on this machine, or the process is gone; it then shares the disk like the rest.
+            // allow(silent-catch): no ionice on this machine, or the process is gone; it then shares the disk like the rest.
             .catch(() => undefined);
     }
 };
@@ -171,7 +171,7 @@ const ownChildren = (): number[] => {
             readFileSync(`/proc/self/task/${task}/children`, "utf8").trim().split(/\s+/u).filter(Boolean).map(Number),
         );
     } catch {
-        // silent-catch: no procfs (a laptop's dev daemon), so no child to find and nothing to class
+        // allow(silent-catch): no procfs (a laptop's dev daemon), so no child to find and nothing to class
         return [];
     }
 };
@@ -192,7 +192,7 @@ export const applyToStampedChild = (stamp: string, workload: Workload): number |
                 return pid;
             }
         } catch {
-            // silent-catch: a child that exited between the listing and the read is not the one just spawned
+            // allow(silent-catch): a child that exited between the listing and the read is not the one just spawned
         }
     }
     return undefined;

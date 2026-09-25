@@ -31,7 +31,7 @@ const socketInode = (fd: string): string | undefined => {
     try {
         return readlinkSync(`/proc/self/fd/${fd}`).match(/^socket:\[(\d+)]$/)?.[1];
     } catch {
-        // silent-catch: an fd that closed between the listing and this read has no socket to count.
+        // allow(silent-catch): an fd that closed between the listing and this read has no socket to count.
         return undefined;
     }
 };
@@ -52,7 +52,7 @@ const dnsQueriesInFlight = (): number | undefined => {
             return inode !== undefined && inodes.has(inode);
         }).length;
     } catch {
-        // silent-catch: a /proc this process cannot list leaves the count unknown, which the stall report omits.
+        // allow(silent-catch): a /proc this process cannot list leaves the count unknown, which the stall report omits.
         return undefined;
     }
 };
