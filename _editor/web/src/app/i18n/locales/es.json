@@ -396,7 +396,6 @@
         "mainline": {
             "title": "Línea principal",
             "root": "espacio de trabajo",
-            "failures": "{count} fallo | {count} fallos",
             "mainPassing": "main sin fallos",
             "projectFailing": "{project} con fallos",
             "projectsFailing": "{count} proyecto con fallos | {count} proyectos con fallos",
@@ -466,12 +465,7 @@
         "landCheck": {
             "broke": "Rompió {count}",
             "brokeMain": "Rompió main",
-            "brokeHint": "Su integración dejó en rojo la comprobación de main en {project} con {failures}. {routing}.",
-            "brokeHintBare": "Su integración dejó en rojo la comprobación de main en {project}. {routing}.",
             "openFixUp": "Abrir la conversación que trabaja en ello",
-            "lastCheckFailed": "Falló la última comprobación",
-            "lastCheckFailedHint": "La última comprobación de su turno falló: {check}",
-            "lastCheckFailedHintBare": "La última comprobación de su turno falló.",
             "unviewed": "Cambió {count} archivo de interfaz sin mirarlo | Cambió {count} archivos de interfaz sin mirarlos",
             "seal": {
                 "checking": "Comprobación de main en {project}: en marcha desde las {time}",

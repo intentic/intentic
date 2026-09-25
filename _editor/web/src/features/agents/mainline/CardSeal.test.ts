@@ -46,9 +46,14 @@ it(`holds still beside a card's own spinner, and still says the check is running
     expect(seal.querySelector(`svg`)?.getAttribute(`aria-label`)).toMatch(/^Main's check of web: running since /);
 });
 
-it(`says a red land's words beside the glyph only on the rail's row`, async () => {
-    const broke: CardChecks = { land: { kind: `broke`, project: `web`, since: NOW, failures: 2 } };
-    expect((await mount({ checks: broke, compact: true })).textContent?.trim()).toBe(`Broke 2`);
+// The rail's row is a button, so only the board's seal may be one.
+it(`is the press to a red's fix-up only on the board`, async () => {
+    const broke: CardChecks = { land: { kind: `broke`, project: `web`, since: NOW, failures: 2, fixUp: `cnv_fix` } };
+    expect((await mount({ checks: broke })).tagName).toBe(`BUTTON`);
     app?.unmount();
-    expect((await mount({ checks: broke })).textContent?.trim()).toBe(``);
+    expect((await mount({ checks: broke, compact: true })).tagName).toBe(`SPAN`);
+    app?.unmount();
+    const unhanded: CardChecks = { land: { kind: `broke`, project: `web`, since: NOW, failures: 2 } };
+    const seal = await mount({ checks: unhanded });
+    expect([seal.tagName, seal.textContent?.trim()]).toEqual([`SPAN`, ``]);
 });

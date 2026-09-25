@@ -391,7 +391,6 @@
         "mainline": {
             "title": "Hauptlinie",
             "root": "Arbeitsbereich",
-            "failures": "{count} Fehler | {count} Fehler",
             "mainPassing": "main besteht",
             "projectFailing": "{project} schlägt fehl",
             "projectsFailing": "{count} Projekt schlägt fehl | {count} Projekte schlagen fehl",
@@ -461,12 +460,7 @@
         "landCheck": {
             "broke": "{count} kaputt",
             "brokeMain": "main kaputt",
-            "brokeHint": "Seine Landung hat die Prüfung von main in {project} rot gemacht, mit {failures}. {routing}.",
-            "brokeHintBare": "Seine Landung hat die Prüfung von main in {project} rot gemacht. {routing}.",
             "openFixUp": "Die Unterhaltung öffnen, die daran arbeitet",
-            "lastCheckFailed": "Letzte Prüfung fehlgeschlagen",
-            "lastCheckFailedHint": "Die letzte Prüfung seines Zugs ist fehlgeschlagen: {check}",
-            "lastCheckFailedHintBare": "Die letzte Prüfung seines Zugs ist fehlgeschlagen.",
             "unviewed": "{count} Oberflächendatei geändert, ohne hinzusehen | {count} Oberflächendateien geändert, ohne hinzusehen",
             "seal": {
                 "checking": "Prüfung von main in {project}: läuft seit {time}",

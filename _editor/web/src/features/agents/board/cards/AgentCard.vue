@@ -37,9 +37,8 @@ import {
     unreadHint,
     unregistered,
 } from "../../fleet/agentStatus";
-import CardChecks from "../../mainline/CardChecks.vue";
 import CardSeal from "../../mainline/CardSeal.vue";
-import { type CardChecks as CardChecksView, cardChecks, sealOf } from "../../mainline/landCheck";
+import { type CardChecks as CardChecksView, cardChecks } from "../../mainline/landCheck";
 import { injectMainline } from "../../mainline/useMainline";
 import KeepWarmPanel from "../../fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
@@ -309,8 +308,6 @@ const checks = computed(() => {
 // says something of its own (running, ready, an error) keeps its glyph and gets the seal beside it.
 const SEAL_STANDS_IN: ReadonlySet<string> = new Set([`landed`, `idle`]);
 const sealStandsIn = computed(() => checks.value !== undefined && SEAL_STANDS_IN.has(props.agent.status));
-// Only a red earns words in the card's body (CardChecks); every other reading is the seal's hover.
-const red = computed(() => checks.value !== undefined && sealOf(checks.value) === `broke`);
 // Either mark opens the same question the chat's status bar asks, answered for this card.
 const warmOpen = ref(false);
 const warmAnchor = ref<HTMLElement>();
@@ -682,8 +679,6 @@ const grab = (event: PointerEvent): void => {
                 <span class="truncate">{{ loopLine?.text }}</span>
             </p>
 
-            <!-- A red is the one reading spelled out, since it asks somebody to act: the land that broke main (and who has it, a press away), or a last check that failed. The rest is the corner seal's. -->
-            <CardChecks v-if="red && checks !== undefined" :checks="checks" :class="dense ? 'w-full' : ''" />
 
             <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">

@@ -1,7 +1,7 @@
 // A CARD SAYS WHAT CHECKED ITS WORK, NOW THAT NOTHING DOES INSIDE THE TURN. Its land's verdict on the main line, and
 // what its last turn showed of its own work, drawn as one seal on the rail's row and the board's card from the one read
-// their list makes, never as the corner's word: the word is the standing's (chatTabsStanding.test.ts). Only a red is
-// spelled out on the card; every other reading is the seal's hover.
+// their list makes, never as the corner's word: the word is the standing's (chatTabsStanding.test.ts). Nothing is spelled
+// out on the card, a red included: every reading is the seal's hover.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary, MainlineRun, MainlineStatus } from "@intentic/sandbox-contract";
@@ -128,11 +128,13 @@ const sealOf = (root: HTMLElement): HTMLElement | null => root.querySelector<HTM
 // The seal's hover, one reading per line; its accessible name is the same words.
 const readings = (seal: HTMLElement | null): string[] => seal?.querySelector(`svg`)?.getAttribute(`aria-label`)?.split(`\n`) ?? [];
 
-it(`seals a card whose land broke main in red, and says how badly and who has it in words beside the seal`, async () => {
+it(`seals a card whose land broke main in red, how badly and who has it in the hover alone`, async () => {
     const row = rowOf(await mountRail(), `breaker`);
     const seal = sealOf(row)!;
     expect(seal.dataset[`sealKind`]).toBe(`broke`);
-    expect(seal.textContent?.trim()).toBe(`Broke 3 · fixing`);
+    expect(seal.textContent?.trim()).toBe(``);
+    // The row is a button of its own, so the seal is no press there.
+    expect(seal.tagName).toBe(`SPAN`);
     expect(readings(seal)).toEqual([
         `Main's check of web: Broke 3 · fixing`,
         `Its own check: none since the last edit`,
@@ -147,8 +149,6 @@ it(`draws what the last turn showed of its own work as the seal alone, its words
     const failing = sealOf(rowOf(el, `failing`))!;
     expect(failing.dataset[`sealKind`]).toBe(`broke`);
     expect(readings(failing)).toEqual([`Its own check: pnpm -C web e2e signup.spec.ts failed`]);
-    // A red of its own turn's, not main's: nobody else has it, so there is nobody to name beside the glyph.
-    expect(failing.textContent?.trim()).toBe(``);
 
     const proven = sealOf(rowOf(el, `proven`))!;
     expect(proven.dataset[`sealKind`]).toBe(`closed`);
@@ -185,15 +185,20 @@ const mountCard = async (agent: FleetAgent): Promise<HTMLElement> => {
 
 const cardOf = (key: Seed): FleetAgent => ({ ...summary(key), open: false, unread: false, unsent: false });
 
-// The board spells a red out and can open the conversation it was handed to, which the rail's row (a button) cannot.
-it(`spells only the red out on the board's card, with the fix-up one press away`, async () => {
+// On the board the red seal is the press to the conversation the red was handed to, which the rail's row (a button)
+// cannot offer; the card spends no line on any of it.
+it(`makes a red seal on the board the press to its fix-up, with no words line`, async () => {
     const el = await mountCard(cardOf(`breaker`));
-    const land = el.querySelector<HTMLElement>(`[data-check="land"]`)!;
-    expect(land.textContent).toContain(`Broke 3 · fixing`);
-    expect(land.querySelector(`button[aria-label="Open the conversation working on it"]`)).not.toBeNull();
-    // Unverified and the unseen interface are no red: the seal's hover says them, and the body says nothing.
-    expect(el.querySelector(`[data-check="verification"]`)).toBeNull();
-    expect(el.textContent).not.toContain(`Unverified`);
+    const seal = sealOf(el)!;
+    expect([seal.tagName, seal.dataset[`sealKind`]]).toEqual([`BUTTON`, `broke`]);
+    expect(readings(seal)).toEqual([
+        `Landed`,
+        `Main's check of web: Broke 3 · fixing`,
+        `Its own check: none since the last edit`,
+        `Changed 2 interface files without looking`,
+        `Open the conversation working on it`,
+    ]);
+    expect(el.textContent).not.toContain(`Broke 3`);
     expect(el.textContent).not.toContain(`interface files`);
 });
 

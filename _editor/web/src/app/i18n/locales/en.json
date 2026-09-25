@@ -407,7 +407,6 @@
         "mainline": {
             "title": "Main line",
             "root": "workspace",
-            "failures": "{count} failure | {count} failures",
             "mainPassing": "Main passing",
             "projectFailing": "{project} failing",
             "projectsFailing": "{count} project failing | {count} projects failing",
@@ -478,12 +477,7 @@
         "landCheck": {
             "broke": "Broke {count}",
             "brokeMain": "Broke main",
-            "brokeHint": "Its land turned main's check of {project} red with {failures}. {routing}.",
-            "brokeHintBare": "Its land turned main's check of {project} red. {routing}.",
             "openFixUp": "Open the conversation working on it",
-            "lastCheckFailed": "Last check failed",
-            "lastCheckFailedHint": "The last check its turn ran failed: {check}",
-            "lastCheckFailedHintBare": "The last check its turn ran failed.",
             "unviewed": "Changed {count} interface file without looking | Changed {count} interface files without looking",
             "seal": {
                 "checking": "Main's check of {project}: running since {time}",

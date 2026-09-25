@@ -392,7 +392,6 @@
         "mainline": {
             "title": "Ligne principale",
             "root": "espace de travail",
-            "failures": "{count} échec | {count} échecs",
             "mainPassing": "main au vert",
             "projectFailing": "{project} en échec",
             "projectsFailing": "{count} projet en échec | {count} projets en échec",
@@ -462,12 +461,7 @@
         "landCheck": {
             "broke": "A cassé {count}",
             "brokeMain": "A cassé main",
-            "brokeHint": "Son intégration a fait passer au rouge la vérification de main dans {project}, avec {failures}. {routing}.",
-            "brokeHintBare": "Son intégration a fait passer au rouge la vérification de main dans {project}. {routing}.",
             "openFixUp": "Ouvrir la conversation qui y travaille",
-            "lastCheckFailed": "Dernière vérification échouée",
-            "lastCheckFailedHint": "La dernière vérification lancée par son tour a échoué : {check}",
-            "lastCheckFailedHintBare": "La dernière vérification lancée par son tour a échoué.",
             "unviewed": "{count} fichier d'interface modifié sans le regarder | {count} fichiers d'interface modifiés sans les regarder",
             "seal": {
                 "checking": "Vérification de main dans {project} : en cours depuis {time}",
