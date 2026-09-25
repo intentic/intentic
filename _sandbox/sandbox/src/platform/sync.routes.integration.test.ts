@@ -14,11 +14,12 @@ import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
 // enrollment, which no screen lists once its capability card is gone. Revoking a machine's access has to end both, or
 // the removal the owner just pressed leaves a live credential behind that nothing can withdraw.
 
-// Enrollment state as the peer store keeps it, narrowed to the two verbs this route reaches for.
+// Enrollment state as the peer store keeps it, narrowed to the verbs this route reaches for.
 const hostDoor = (enrolled: string[]) => ({
     ids: enrolled,
     store: unstubbed<Services["hosts"]>("hosts", {
         enrolled: async (id: string) => enrolled.includes(id),
+        list: async () => enrolled.map((id) => ({ id }) as never),
         revoke: async (id: string) => {
             const at = enrolled.indexOf(id);
             if (at !== -1) {
@@ -54,14 +55,14 @@ const revoke = async (built: ReturnType<typeof app>, machine: string): Promise<R
     built.app.request(`/system/authorized-key/${machine}`, { method: "DELETE" });
 
 test("a device enrollment no card holds is dropped with the machine, socket cut, even with no ssh key to revoke", async () => {
-    const enrolled = ["ghost"];
+    const enrolled = ["ghost", "ghost::wsl:archlinux"];
     const built = app(enrolled, []);
 
     const response = await revoke(built, "ghost");
 
     expect(response.status).toBe(200);
     expect(enrolled).toEqual([]);
-    expect(built.cut).toEqual(["ghost"]);
+    expect(built.cut).toEqual(["ghost", "ghost::wsl:archlinux"]);
 });
 
 test("a device its card still grants keeps its enrollment: that grant is the card's to withdraw", async () => {

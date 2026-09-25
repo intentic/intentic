@@ -622,6 +622,11 @@
                                             "url"
                                         ],
                                         "additionalProperties": false
+                                    },
+                                    "mcp": {
+                                        "description": "A path in this extension's backend (`server`) answering MCP over Streamable HTTP. Every turn granted a card of this kind gets it as a server named by the card's id; each request arrives at `<path>/<card id>`, so the backend reads that card's config through the daemon rather than the turn's environment.",
+                                        "type": "string",
+                                        "pattern": "^[a-z0-9][a-z0-9/-]*$"
                                     }
                                 },
                                 "required": [
