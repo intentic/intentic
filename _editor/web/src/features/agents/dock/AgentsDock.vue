@@ -13,9 +13,8 @@ import SandboxMetricsSummary from "../metrics/SandboxMetricsSummary.vue";
 import type { DockSegment, DockState } from "./dockState";
 import StatusDock from "./StatusDock.vue";
 
-// The agents surfaces' status dock: the main tree's own check, and on the board the sandbox's geek metrics, as two
-// segments of one bar at the host's foot rather than a strip under its header and a popover each. The board passes
-// both; the chat column the main line alone. Absent while neither has anything to say.
+// The board's status dock: the main tree's own check and the sandbox's geek metrics, as two segments of one bar at the
+// board's foot rather than a strip under its header and a popover each. Absent while neither has anything to say.
 
 const t = useT();
 

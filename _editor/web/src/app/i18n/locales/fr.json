@@ -390,7 +390,6 @@
         },
         "dock": {
             "boardLabel": "État du tableau",
-            "railLabel": "État de la ligne principale",
             "show": "Garder {title} ouvert",
             "hide": "Fermer {title}",
             "close": "Fermer {title}"

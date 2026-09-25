@@ -47,7 +47,6 @@ export const defineDockState = (key: string): DockState => ({
     }),
 });
 
-// The board's dock (main line and geek metrics) and the chat column's (main line alone) remember separately: the column
-// is narrow and often beside the board, where a panel opened in one would otherwise open twice.
+// The board's dock: the one place the main line and the geek metrics are drawn. The chat column carries neither; the
+// board is where the sandbox as a whole is watched.
 export const boardDock: DockState = defineDockState(`ui-board-dock`);
-export const railDock: DockState = defineDockState(`ui-rail-dock`);

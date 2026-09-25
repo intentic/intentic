@@ -394,7 +394,6 @@
         },
         "dock": {
             "boardLabel": "Estado del tablero",
-            "railLabel": "Estado de la línea principal",
             "show": "Mantener {title} abierto",
             "hide": "Cerrar {title}",
             "close": "Cerrar {title}"

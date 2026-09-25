@@ -389,7 +389,6 @@
         },
         "dock": {
             "boardLabel": "Board-Status",
-            "railLabel": "Status der Hauptlinie",
             "show": "{title} offen halten",
             "hide": "{title} schließen",
             "close": "{title} schließen"

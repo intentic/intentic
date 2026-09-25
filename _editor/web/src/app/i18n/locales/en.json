@@ -405,7 +405,6 @@
         },
         "dock": {
             "boardLabel": "Board status",
-            "railLabel": "Main line status",
             "show": "Keep {title} open",
             "hide": "Close {title}",
             "close": "Close {title}"

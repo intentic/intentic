@@ -7,8 +7,6 @@ import { agentDisplayTitle, type FleetLane } from "../../agents/fleet/agentStatu
 import { useAgentFilter } from "../../agents/board/useAgentFilter";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { FINISHED_WINDOW, type FleetAgent, finishedLaneOrder, windowFinished } from "../../agents/fleet/useAgents-fleet";
-import AgentsDock from "../../agents/dock/AgentsDock.vue";
-import { railDock } from "../../agents/dock/dockState";
 import { provideMainline } from "../../agents/mainline/useMainline";
 import HoverCard from "../../../components/HoverCard.vue";
 import RailCard from "../../../components/RailCard.vue";
@@ -427,9 +425,6 @@ const onPersonaSelect = (id: string): void => {
                 </div>
             </RailLane>
         </div>
-        <!-- Sandbox-wide, so at the column's foot under either cut rather than above the header that decides what it lists.
-             A press on a conversation it names is a pick like a row's, so the docked sheet steps aside. -->
-        <AgentsDock :mainline="mainline" :state="railDock" :label="t(`agents.dock.railLabel`)" @opened="(id: string) => emit('select', id)" />
         <!-- A failed rename leaves the card's field open with the typed name in it; this says why, and is cleared by
              the next attempt. -->
         <span v-if="edit.error !== undefined" class="shrink-0 truncate px-1 text-2xs text-danger" v-tooltip.bottom.overflow="edit.error">{{

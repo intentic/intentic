@@ -394,7 +394,6 @@
         },
         "dock": {
             "boardLabel": "Stan tablicy",
-            "railLabel": "Stan głównej linii",
             "show": "Zostaw {title} otwarte",
             "hide": "Zamknij {title}",
             "close": "Zamknij {title}"

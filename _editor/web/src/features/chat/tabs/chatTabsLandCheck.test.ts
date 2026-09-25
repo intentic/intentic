@@ -150,14 +150,11 @@ it(`badges what the last turn showed of its own work`, async () => {
     expect(markOf(rowOf(el, `proven`), `land`)).toBeNull();
 });
 
-// At the column's foot, not over the header that decides what it lists: the top of the rail is the rail's own.
-it(`carries the main line itself at the rail's foot`, async () => {
+// The sandbox-wide main line is the board's alone: the chat column keeps each row's own mark and draws no bar of it.
+it(`leaves the main line's bar to the board`, async () => {
     const el = await mountRail();
-    const dock = el.querySelector<HTMLElement>(`[role="region"][aria-label="Main line status"]`)!;
-    expect(dock.querySelector(`[data-item="red"]`)?.textContent).toContain(`3 failures`);
-    expect(dock.querySelector(`[data-item="red"]`)?.textContent).toContain(`web red since`);
-    expect(dock.textContent).toContain(`A fresh conversation is fixing it`);
-    expect(rowOf(el, `breaker`).compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(el.querySelector(`[role="region"]`)).toBeNull();
+    expect(el.textContent).not.toContain(`A fresh conversation is fixing it`);
 });
 
 // The board spells it out and can open the conversation the red was handed to, which the rail's row (a button) cannot.
