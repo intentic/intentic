@@ -54,12 +54,20 @@
         "entry": {
             "description": "Repo-relative path of your prebuilt single-file ESM bundle, built with `vue` and `@intentic/extension-api` as externals. Absent ⇒ an extension with no UI.",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "power": {
+                "key": "entry",
+                "sentence": "runs a UI bundle in your browser"
+            }
         },
         "server": {
             "description": "Repo-relative path of your prebuilt single-file node ESM server bundle, exporting `activateServer`. Served under your own route namespace, which the daemon proxies. Nothing is provided at runtime but node builtins, so bundle everything else in. Absent ⇒ no backend.",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "power": {
+                "key": "server",
+                "sentence": "runs a backend bundle inside the daemon's extension host"
+            }
         },
         "permissions": {
             "description": "How far this extension may reach into the daemon, as \"<METHOD> <path-glob>\" entries where `*` matches one path segment: e.g. \"GET /panels\", \"POST /panels/*/start\". The install dialog shows these, the host refuses anything undeclared, and the usage ledger records which were actually earned.",
@@ -69,14 +77,22 @@
                     "description": "Daemon routes your UI half may call. Your own backend namespace needs no entry: its backend is your own code.",
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "type": "string",
+                        "power": {
+                            "key": "sandbox:${value}",
+                            "sentence": "its UI calls the sandbox route ${value}"
+                        }
                     }
                 },
                 "daemon": {
                     "description": "Daemon routes your SERVER half may call. Separate from `sandbox` because the two halves run as different principals: the UI as the owner's session, the backend as a minted per-extension token, so a grant to one must never quietly widen the other.",
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "type": "string",
+                        "power": {
+                            "key": "daemon:${value}",
+                            "sentence": "its backend calls the daemon route ${value}"
+                        }
                     }
                 }
             },
@@ -110,6 +126,10 @@
                             },
                             "badge": {
                                 "description": "Allow this view to say something on its tile: a count, a glyph, or that work is running there. Declared because a badge interrupts from every other screen in the app; leave it out and any badge the extension registers is dropped.",
+                                "power": {
+                                    "key": "view-badge:${id}",
+                                    "sentence": "may badge the \"${label}\" tile from any screen"
+                                },
                                 "type": "boolean"
                             }
                         },
@@ -118,6 +138,10 @@
                             "label",
                             "surface"
                         ],
+                        "power": {
+                            "key": "view:${id}",
+                            "sentence": "a ${surface} view \"${label}\""
+                        },
                         "additionalProperties": false
                     },
                     "description": "Sidebar elements this extension may register at runtime. Each entry reserves an id and a surface; the extension supplies the component with api.views.register, and the host refuses any registration this list does not cover."
@@ -146,6 +170,10 @@
                             "path",
                             "invalidates"
                         ],
+                        "power": {
+                            "key": "files:${path}",
+                            "sentence": "is told when ${path} changes"
+                        },
                         "additionalProperties": false
                     },
                     "description": "Which workspace files back your views, so the daemon's file watcher can tell the browser they went stale instead of you polling for it. The agent edits the workspace out of band from every HTTP route, and this push is the only thing that can notice."
@@ -192,6 +220,10 @@
                             "extensions",
                             "fetch"
                         ],
+                        "power": {
+                            "key": "viewer:${id}",
+                            "sentence": "${edit?opens and edits:opens}${compare? and compares:} .${extensions|, .} files (${fetch})"
+                        },
                         "additionalProperties": false
                     },
                     "description": "File formats this extension can render. The host resolves an opened file to your viewer by its extension, fetches the content, and renders your component with it: you keep none of the fetch lifecycle and none of the daemon credentials."
@@ -215,6 +247,10 @@
                             "id",
                             "label"
                         ],
+                        "power": {
+                            "key": "document:${id}",
+                            "sentence": "marks workspace directories (\"${label}\")"
+                        },
                         "additionalProperties": false
                     },
                     "description": "Per-directory documents this extension can offer. Your provider marks the rows in the Workspace tree it has something to say about, and the host opens your component as a tab."
@@ -244,6 +280,10 @@
                             },
                             "keybinding": {
                                 "description": "A global keyboard shortcut, e.g. \"Mod+Shift+K\" — `Mod` is ⌘ on Apple and Ctrl elsewhere. Declared here because a global shortcut is consequential: the owner approves it at install, and the host binds only what was approved.",
+                                "power": {
+                                    "key": "keybinding:${command}",
+                                    "sentence": "the global shortcut ${keybinding} (\"${title}\")"
+                                },
                                 "type": "string",
                                 "pattern": "^\\S+$"
                             },
@@ -256,6 +296,10 @@
                             "command",
                             "title"
                         ],
+                        "power": {
+                            "key": "command:${command}",
+                            "sentence": "a palette command \"${title}\""
+                        },
                         "additionalProperties": false
                     },
                     "description": "Commands this extension may register handlers for, surfaced in the command palette. Title, icon and shortcut all come from here rather than from the registration call, because this is what the owner approved at install."
@@ -307,6 +351,10 @@
                             },
                             "env": {
                                 "description": "Inject the stored value into the agent's shell environment under this name, every turn. How a credential you hold reaches the agent's command-line tools.",
+                                "power": {
+                                    "key": "setting-env:${key}",
+                                    "sentence": "puts the \"${key}\" setting into the agent's environment as ${env}"
+                                },
                                 "type": "string",
                                 "pattern": "^[A-Z][A-Z0-9_]*$"
                             }
@@ -355,6 +403,11 @@
                             "name",
                             "command"
                         ],
+                        "effect": "process",
+                        "power": {
+                            "key": "process:${name}",
+                            "sentence": "a background process \"${name}\"${autoStart? (starts on boot):}"
+                        },
                         "additionalProperties": false
                     },
                     "description": "Long-lived background processes the daemon runs for this extension: a gateway holding a connection the daemon must not, a dev server. Managed the same way panel dev servers are, and startable and stoppable from the Extensions tab."
@@ -367,7 +420,11 @@
                             "type": "string"
                         }
                     },
-                    "description": "Declare that this checkout is also a Claude Code plugin, so the agent picks up its skills, agents, hooks, commands and MCP servers each turn. The daemon hands the directory to the plugin loader and never parses what is in it.",
+                    "power": {
+                        "key": "agent",
+                        "sentence": "contributes skills, agents and hooks to the agent's turns"
+                    },
+                    "description": "Declare that this checkout is also a Claude Code plugin, so Claude Code turns pick up its skills, agents, hooks and commands. Only Claude Code reads it: give the agent tools with `contributes.tools`, which every runtime gets, and put a skill every runtime should read in a capability card's `skill`. MCP servers in the plugin's `.mcp.json` are deprecated, reach Claude Code alone, and are warned about at load.",
                     "additionalProperties": false
                 },
                 "environment": {
@@ -382,6 +439,11 @@
                     "required": [
                         "fragment"
                     ],
+                    "effect": "image",
+                    "power": {
+                        "key": "environment",
+                        "sentence": "bakes an environment fragment into the sandbox image"
+                    },
                     "description": "A Dockerfile fragment baked into the sandbox image so your tools are actually installed at runtime: a whisper binary, a psql client. The owner approves the composed overlay and rebuilds out of band, so this does not take effect immediately.",
                     "additionalProperties": false
                 },
@@ -573,11 +635,13 @@
                                     },
                                     "fragment": {
                                         "description": "A Dockerfile fragment holding the client binary this tool needs (psql, mysql, whisper).",
+                                        "effect": "image",
                                         "type": "string",
                                         "minLength": 1
                                     },
                                     "pack": {
                                         "description": "A sandbox feature pack name (whisper, llamacpp, browser, …) supplying this tool. Preferred over `fragment`: an image that already bakes the pack needs no rebuild, and there is no copy to drift.",
+                                        "effect": "image",
                                         "type": "string",
                                         "minLength": 1
                                     },
@@ -624,9 +688,15 @@
                                         "additionalProperties": false
                                     },
                                     "mcp": {
-                                        "description": "A path in this extension's backend (`server`) answering MCP over Streamable HTTP. Every turn granted a card of this kind gets it as a server named by the card's id; each request arrives at `<path>/<card id>`, so the backend reads that card's config through the daemon rather than the turn's environment.",
+                                        "description": "Deprecated: declare `contributes.tools` with `perCard` naming this card instead, and serve the tools with `api.tools.serve`. A path in this extension's backend (`server`) answering MCP over Streamable HTTP; every turn granted a card of this kind gets it as a server named by the card's id, each request arriving at `<path>/<card id>`.",
+                                        "effect": "mcp",
+                                        "mintsServer": true,
+                                        "power": {
+                                            "key": "capability-tools:${id}",
+                                            "sentence": "serves MCP tools to the agent for each \"${catalog.name}\" card"
+                                        },
                                         "type": "string",
-                                        "pattern": "^[a-z0-9][a-z0-9/-]*$"
+                                        "pattern": "^[a-z0-9][a-z0-9-]*(?:\\/[a-z0-9][a-z0-9-]*)*$"
                                     }
                                 },
                                 "required": [
@@ -1007,6 +1077,7 @@
                                     "kind",
                                     "skill"
                                 ],
+                                "mintsServer": true,
                                 "additionalProperties": false
                             },
                             {
@@ -1192,6 +1263,7 @@
                                     "kind",
                                     "skill"
                                 ],
+                                "mintsServer": true,
                                 "additionalProperties": false
                             },
                             {
@@ -1368,7 +1440,11 @@
                                 ],
                                 "additionalProperties": false
                             }
-                        ]
+                        ],
+                        "power": {
+                            "key": "capability:${id}",
+                            "sentence": "a ${kind} capability card \"${catalog.name}\""
+                        }
                     },
                     "description": "Capability cards this pack adds to the \"+\" grid: a connected CLI tool, a site the agent acts on as the owner through the shared browser, an operating system pack, a browser family the owner connects their own copy of, or a preset over a core kind. The card and its form are data here; the machinery that acts on them is core, which is why a card may only name one of these five kinds."
                 },
@@ -1531,6 +1607,10 @@
                         "events",
                         "automation"
                     ],
+                    "power": {
+                        "key": "listener:${provider}",
+                        "sentence": "a realtime listener provider \"${provider}\""
+                    },
                     "description": "A realtime event source this extension supplies, so automations can trigger on it. One declaration feeds both halves: the daemon accepts these event types and serves this provider's control surface, and the automation editor derives its source picker, filters and starter prompt from it, so a newly installed listener is configurable without a matching app release.",
                     "additionalProperties": false
                 },
@@ -1656,7 +1736,39 @@
                 "bin": {
                     "type": "string",
                     "minLength": 1,
+                    "power": {
+                        "key": "bin",
+                        "sentence": "puts its shipped tools on the agent's PATH"
+                    },
                     "description": "A checkout-relative directory of executables the daemon puts on the agent's PATH every turn, how you ship the agent a command-line tool. The files are the approved code themselves: they ride the pinned checkout, and the daemon only adds the directory to PATH."
+                },
+                "tools": {
+                    "type": "object",
+                    "properties": {
+                        "perCard": {
+                            "description": "The id of one of this extension's `cli` capability cards. Every turn granted a card of that kind gets one server named by the card's id, handed that card's settings (secrets included) with each call. Absent ⇒ one server for the extension, named by its `name`, in every turn while the extension is enabled.",
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "process": {
+                            "description": "A process from `contributes.processes`, declared with `port: \"auto\"`, that answers MCP over Streamable HTTP at `path` on its port. Absent ⇒ your `server` bundle serves the tools.",
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "path": {
+                            "description": "Where the MCP endpoint answers, without a leading or trailing slash: on the process's port, or in your backend's own namespace when your `server` bundle speaks MCP itself. Absent with no `process` ⇒ the host serves what `api.tools.serve` returns, which is what you want: the host owns the transport, the deadlines and the card lookup. With `perCard`, a request arrives at `<path>/<card id>`.",
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]*(?:\\/[a-z0-9][a-z0-9-]*)*$"
+                        }
+                    },
+                    "effect": "mcp",
+                    "mintsServer": true,
+                    "power": {
+                        "key": "tools${perCard?-${perCard}:}",
+                        "sentence": "gives the agent MCP tools${perCard?, one server for each \"${perCard}\" card:}"
+                    },
+                    "description": "Tools for the agent, as an MCP server the daemon mounts into every turn and every runtime (Claude Code, Codex, Cursor, ACP agents). Serve them from your `server` bundle with `api.tools.serve((card) => [...])`, or from a declared process's port. Replaces an agent plugin's `.mcp.json`, which only Claude Code read.",
+                    "additionalProperties": false
                 }
             },
             "additionalProperties": false

@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { access } from "node:fs/promises";
 import type { ChildProcess } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
 import { randomBytes } from "node:crypto";
@@ -7,8 +9,10 @@ import { fileURLToPath } from "node:url";
 import { createBackoff, pollUntil } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
+import { backendToolPathsOf } from "@intentic/extension-manifest";
 import type { Logger } from "pino";
 import { tokenEquals } from "../../auth/auth.js";
+import { invalidateContributions } from "../../capabilities/contributions.js";
 import type { ExtensionGrant } from "../../auth/grants.js";
 import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../extension-readiness.js";
 import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../installed-extensions.js";
@@ -51,7 +55,7 @@ export interface ExtensionBackend {
     statusOf(id: string): BackendStatus | undefined;
     // Where the /x proxy forwards while the host is up; undefined means answer 503 with the current state's detail.
     proxyTarget(): { readonly port: number; readonly hostToken: string } | undefined;
-    // Whether an /x path lands in an extension's declared MCP endpoint (a cli contribution's `mcp`), as of the last
+    // Whether an /x path lands in an MCP endpoint an extension's backend answers itself (toolServersOf), as of the last
     // converge: only the daemon's MCP door, which checks the turn's lease, may forward there, so /x/* refuses it.
     isToolPath(pathname: string): boolean;
     // Extension grant resolver (auth/grants.ts): maps a minted per-extension token to the extension and its declared
@@ -63,9 +67,8 @@ export interface ExtensionBackend {
     grantFor(extension: InstalledExtension): string;
 }
 
-// The MCP endpoint paths an extension's cli contributions declare, relative to its /x/<id> namespace.
-const declaredToolPaths = (extension: InstalledExtension): readonly string[] =>
-    (extension.manifest.contributes?.capabilities ?? []).flatMap((spec) => (spec.kind === "cli" && spec.mcp !== undefined ? [spec.mcp] : []));
+// The /x paths an extension's backend answers MCP at itself (`contributes.tools` with a `path`, or a cli card's `mcp`).
+const declaredToolPaths = (extension: InstalledExtension): readonly string[] => backendToolPathsOf(extension.manifest);
 
 // An /x path as the backend host routes it: segments decoded and empty ones dropped, so neither `%6Dcp` nor `//mcp`
 // reads as a different path here than it does there.
@@ -127,6 +130,23 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         ...(extension.manifest.contributes?.listener === undefined ? {} : { listener: extension.manifest.contributes.listener.provider }),
     });
 
+    // A plugin's `.mcp.json` is deprecated for `contributes.tools`; said once per extension per daemon, at load.
+    const warnedPluginMcp = new Set<string>();
+    const warnPluginMcp = async (extension: InstalledExtension): Promise<void> => {
+        const agent = extension.manifest.contributes?.agent;
+        if (agent === undefined || warnedPluginMcp.has(extension.id)) {
+            return;
+        }
+        const declared = join(agent.path === undefined ? extension.dir : join(extension.dir, agent.path), ".mcp.json");
+        if (await access(declared).then(() => true, () => false)) {
+            warnedPluginMcp.add(extension.id);
+            logger.warn(
+                { extension: extension.id, file: declared },
+                "extension ships MCP servers in its agent plugin's .mcp.json, which only Claude Code turns read and is deprecated: declare contributes.tools instead",
+            );
+        }
+    };
+
     let generation = 0;
     let desired = false;
     let host: SpawnedHost | undefined;
@@ -158,6 +178,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         for (const extension of await enabledExtensions(services())) {
             // Every enabled extension resolves, not just a backend's: its processes carry the same token.
             const grant = grantOf(extension);
+            await warnPluginMcp(extension);
             tokenReach.set(tokenFor(extension.id), grant);
             const server = extension.manifest.server;
             if (server === undefined) {
@@ -286,6 +307,9 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             await converge();
         },
         restart: () => {
+            // Every caller is saying the extension set moved (an install, a toggle, a removal, an approval), which is
+            // what the contribution inventory is built from.
+            invalidateContributions();
             if (!desired) {
                 return;
             }

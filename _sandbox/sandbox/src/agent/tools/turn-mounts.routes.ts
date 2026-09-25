@@ -5,8 +5,8 @@ import type { MountTarget, RpcMessage, TurnMounts } from "./turn-mounts.js";
 
 // The one door every daemon-hosted MCP server is reached through, `ALL /mcp/<name>`: the bearer names the conversation,
 // its current lease maps the name to a target, and the target's endpoint answers. Streamable HTTP, answered as plain
-// JSON: nothing a daemon-hosted server says is server-initiated, so there is no stream to open. An extension card's
-// endpoint is the exception, forwarded whole, since its backend speaks the transport itself.
+// JSON: nothing a daemon-hosted server says is server-initiated, so there is no stream to open. An extension endpoint that
+// speaks the transport itself (a backend path, a process's port) is the exception, forwarded whole.
 
 // Who a request is for, handed to the endpoint along with the target: the conversation comes from the bearer, never from
 // anything the request says about itself.
@@ -26,7 +26,8 @@ export interface MountEndpoints {
     readonly browser: RpcEndpoint<TargetOf<"browser">>;
     readonly device: RpcEndpoint<TargetOf<"device">>;
     readonly webext: RpcEndpoint<TargetOf<"webext">>;
-    // The whole exchange, forwarded to the backend host (extension-mcp.ts).
+    readonly tools: RpcEndpoint<TargetOf<"tools">>;
+    // The whole exchange, forwarded to the backend host or the process (extension-mcp.ts).
     readonly extension: (target: TargetOf<"extension">, c: Context<AppEnv>, call: MountCall) => Promise<Response>;
 }
 
@@ -39,6 +40,8 @@ const rpcOf = (endpoints: MountEndpoints, target: Exclude<MountTarget, TargetOf<
             return (message: RpcMessage) => endpoints.device(target, message, call);
         case "webext":
             return (message: RpcMessage) => endpoints.webext(target, message, call);
+        case "tools":
+            return (message: RpcMessage) => endpoints.tools(target, message, call);
     }
 };
 

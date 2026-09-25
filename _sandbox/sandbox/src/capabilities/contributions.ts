@@ -39,21 +39,72 @@ const buildRegistry = async (host: ExtensionHost): Promise<ReadonlyMap<string, R
     return registry;
 };
 
-// Builds in flight, by workspace: every caller asking while one runs shares it, which is how one capabilities list stops
-// reading every extension manifest once per connection. Nothing is kept once a build settles, so an install is never
-// answered from before it.
-const building = new Map<string, Promise<ReadonlyMap<string, ResolvedContribution>>>();
+// One inventory per capability store and workspace, kept until something it was read from changes: every turn, every
+// door request and every capabilities list reads it, and each build reads and parses every installed manifest. The
+// daemon calls invalidateContributions when an extension's source, the enablement file or the capability manifest is
+// written (bootstrap/change-reactions.ts, composition.ts) and whenever the extension set moves, which is every call of
+// the backend supervisor's restart (an install, a toggle, a removal, an approval). Keyed by
+// the store object too, so two stores over one root (a test's, the daemon's raw and vaulted ones) never share.
+interface Cached {
+    readonly generation: number;
+    readonly value: Promise<unknown>;
+}
+const inventories = new WeakMap<object, Map<string, Cached>>();
+let generation = 0;
 
-export const contributionRegistry = (host: ExtensionHost): Promise<ReadonlyMap<string, ResolvedContribution>> => {
-    const key = `${host.workspace.root}\u0000${host.config.extensionsDir}`;
-    const running = building.get(key);
-    if (running !== undefined) {
-        return running;
-    }
-    const build = buildRegistry(host).finally(() => building.delete(key));
-    building.set(key, build);
-    return build;
+// Whatever an inventory was built from may have changed: the next read builds afresh.
+export const invalidateContributions = (): void => {
+    generation += 1;
 };
+
+// A capability store whose every write invalidates the inventory.
+export const invalidatingContributions = <S extends { readonly upsert: (value: never) => Promise<void>; readonly remove: (id: string) => Promise<boolean> }>(
+    store: S,
+): S => ({
+    ...store,
+    upsert: async (value: Parameters<S["upsert"]>[0]) => {
+        try {
+            await store.upsert(value);
+        } finally {
+            invalidateContributions();
+        }
+    },
+    remove: async (id: string) => {
+        try {
+            return await store.remove(id);
+        } finally {
+            invalidateContributions();
+        }
+    },
+});
+
+// One cached build per store, workspace and slot, rebuilt once anything moved since.
+const cachedFor = <T>(host: ExtensionHost, slot: string, build: () => Promise<T>): Promise<T> => {
+    const byStore = inventories.get(host.capabilities) ?? new Map<string, Cached>();
+    inventories.set(host.capabilities, byStore);
+    const key = `${slot}\u0000${host.workspace.root}\u0000${host.config.extensionsDir}`;
+    const cached = byStore.get(key);
+    if (cached !== undefined && cached.generation === generation) {
+        return cached.value as Promise<T>;
+    }
+    const built: Cached = { generation, value: build() };
+    byStore.set(key, built);
+    // A failed build is forgotten, so the next read tries again rather than inheriting the failure.
+    built.value.catch(() => {
+        if (byStore.get(key) === built) {
+            byStore.delete(key);
+        }
+    });
+    return built.value as Promise<T>;
+};
+
+export const contributionRegistry = (host: ExtensionHost): Promise<ReadonlyMap<string, ResolvedContribution>> =>
+    cachedFor(host, "contributions", () => buildRegistry(host));
+
+// The enabled extensions themselves, from the same cache: what serves extension-level tools, and what the /x refusal
+// and the door read a manifest from.
+export const cachedEnabledExtensions = (host: ExtensionHost): Promise<readonly InstalledExtension[]> =>
+    cachedFor(host, "enabled", () => enabledExtensions(host));
 
 // Looks up the entry by the kind's discriminator field (a cli `provider`, a browser `platform`); undefined if the kind
 // has none, or the declaring extension is missing or disabled.

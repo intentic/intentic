@@ -1,14 +1,16 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import * as sdkModule from "@intentic/extension-api";
 import { extensionApiVersion } from "@intentic/extension-api";
-import { CONTRIBUTION_POINTS, ExtensionManifestSchema, ListenerContributionSchema } from "@intentic/extension-manifest";
+import { CONTRIBUTION_POINTS, ExtensionManifestSchema, ListenerContributionSchema, manifestJsonSchema, serializeManifestJsonSchema } from "@intentic/extension-manifest";
 
 // extensionApiVersion is an author's only signal for host compatibility; the snapshot in surface.json fails when the
 // live surface changes without a new versioned entry.
-// Grain is top-level keys on purpose: an unknown key inside a contribution entry fails the parse loudly, but an unknown
-// key at the top level is silently dropped.
+// The key grains name what was added; from 2.20.0 a digest of the whole generated manifest schema stands behind them,
+// since the runtime parse drops a key it does not know at ANY depth, so a field added inside an entry is as silent to
+// an older host as one at the top level.
 // Lives in the web app, where the extension-contract conformance tests already run, since extension-api itself ships no
 // test harness.
 
@@ -27,6 +29,10 @@ interface RecordedSurface {
     readonly chatApi?: readonly string[];
     // The backend api's `daemon` members (server.ts), recorded from 2.17.0 on: `rpc` was added there.
     readonly daemonApi?: readonly string[];
+    // The backend api's own members (server.ts), recorded from 2.20.0 on: `tools` was added there.
+    readonly serverApi?: readonly string[];
+    // sha256 of the generated authoring schema, recorded from 2.20.0 on: any change to the manifest at any depth.
+    readonly manifestSchema?: string;
     /* What the PACKAGE exports, recorded from 2.6.0 on: the third grain, and the last one that was still unrecorded. */
     readonly moduleExports?: readonly string[];
 }
@@ -36,9 +42,9 @@ const recorded: Record<string, RecordedSurface> = JSON.parse(readFileSync(resolv
 // IntenticApi is a type, so its members are parsed from source text, not enumerated at runtime.
 // Depth is inferred from indent: prettier holds this file at four spaces, so a top-level member is the only `readonly`
 // at column 4.
-const apiMembers = (): string[] => {
-    const text = readFileSync(resolve(sdkRoot, `src/api.ts`), `utf8`);
-    const start = text.indexOf(`export interface IntenticApi {`);
+const apiMembers = (file = `src/api.ts`, anchor = `export interface IntenticApi {`): string[] => {
+    const text = readFileSync(resolve(sdkRoot, file), `utf8`);
+    const start = text.indexOf(anchor);
     const open = text.indexOf(`{`, start);
     let depth = 0;
     let end = text.length;
@@ -82,6 +88,8 @@ const liveSurface = (): RecordedSurface => ({
     workspaceApi: nestedMembers(`workspace`),
     chatApi: nestedMembers(`chat`),
     daemonApi: nestedMembers(`daemon`, `src/server.ts`),
+    serverApi: apiMembers(`src/server.ts`, `export interface ExtensionServerApi {`),
+    manifestSchema: createHash(`sha256`).update(serializeManifestJsonSchema(manifestJsonSchema())).digest(`hex`),
     // The runtime exports only. Types are the api object's business (recorded above) and a package that
     // re-exports thirty interfaces would drown the one line that says a new FUNCTION arrived. A namespace of functions
     // (`conversions`, 2.19.0) is a set of functions arriving under one name, so an object counts too.

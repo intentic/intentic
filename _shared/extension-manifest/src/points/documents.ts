@@ -13,7 +13,8 @@ export const DocumentContributionSchema = z.object({
         .describe(
             "The family's name, shown in the install dialog beside your other contributions. Per-row wording stays with the provider, which is the only thing that knows what it found.",
         ),
-});
+})
+    .meta({ power: { key: "document:${id}", sentence: 'marks workspace directories ("${label}")' } });
 export type DocumentContribution = z.infer<typeof DocumentContributionSchema>;
 
 export const documentsPoint = {

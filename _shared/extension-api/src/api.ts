@@ -154,6 +154,12 @@ export interface ProcessStatus {
 export interface IntenticApi {
     // The host's @intentic/extension-api version, checked against `engines.intentic`.
     readonly apiVersion: string;
+    // This extension's own backend (`server`), by a path relative to its namespace: the host adds the routing prefix,
+    // which is the extension's install id and not always `publisher.name`, so no extension spells `/x/<id>` itself.
+    readonly backend: {
+        request(path: string, init?: RequestInit): Promise<Response>;
+        json<T>(path: string, init?: RequestInit): Promise<T>;
+    };
     readonly views: {
         register(view: ViewRegistration): Disposable;
     };

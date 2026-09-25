@@ -197,36 +197,6 @@ test("a native (account) turn carries no provider config: Codex uses its own cre
     expect(calls[0]!.env["CODEX_API_KEY"]).toBeUndefined();
 });
 
-test("process-backed browser MCP servers ride Codex's per-thread config", async () => {
-    const { runner, calls } = fakeCodexRunner([]);
-    await collect(createTestAgent(runner), {
-        ...request,
-        tools: {
-            ...request.tools,
-            sdkServers: {
-                identity: {
-                    type: "stdio",
-                    command: "/usr/bin/socat",
-                    args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"],
-                    env: { PATH: process.env["PATH"] ?? "", DISPLAY: ":99" },
-                    timeout: 120_000,
-                    alwaysLoad: true,
-                },
-            },
-        },
-    });
-
-    expect(calls[0]!.config).toEqual({
-        "mcp_servers.identity": {
-            command: "/usr/bin/socat",
-            args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"],
-            env: { DISPLAY: ":99" },
-            tool_timeout_sec: 120,
-        },
-        "tools.experimental_request_user_input.enabled": true,
-    });
-});
-
 // Every runtime projects the same remote list, so a granted machine, extension card or browser reaches Codex too.
 test("the turn's remote MCP servers ride Codex's per-thread config as http servers with their bearer and bound", async () => {
     const { runner, calls } = fakeCodexRunner([]);

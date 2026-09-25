@@ -6,7 +6,7 @@ import { contributesSchema } from "./points/index.js";
 // dialog renders, and the host refuses any runtime registration whose id it didn't declare here. This file is the
 // envelope only; contributions are assembled from points/.
 
-export const ExtensionManifestSchema = z.object({
+const ManifestShape = z.object({
     // Declared so it survives the parse instead of being silently stripped; nothing at runtime reads it.
     $schema: z.string().optional().describe("The authoring schema, for editor completion and validation. Nothing at runtime reads it."),
     publisher: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
@@ -32,6 +32,7 @@ export const ExtensionManifestSchema = z.object({
         .string()
         .min(1)
         .refine((value) => !value.split("/").includes(".."), { message: "entry must stay inside the checkout" })
+        .meta({ power: { key: "entry", sentence: "runs a UI bundle in your browser" } })
         .optional()
         .describe(
             "Repo-relative path of your prebuilt single-file ESM bundle, built with `vue` and `@intentic/extension-api` as externals. Absent ⇒ an extension with no UI.",
@@ -41,6 +42,7 @@ export const ExtensionManifestSchema = z.object({
         .string()
         .min(1)
         .refine((value) => !value.split("/").includes(".."), { message: "server must stay inside the checkout" })
+        .meta({ power: { key: "server", sentence: "runs a backend bundle inside the daemon's extension host" } })
         .optional()
         .describe(
             "Repo-relative path of your prebuilt single-file node ESM server bundle, exporting `activateServer`. Served under your own route namespace, which the daemon proxies. Nothing is provided at runtime but node builtins, so bundle everything else in. Absent ⇒ no backend.",
@@ -52,11 +54,11 @@ export const ExtensionManifestSchema = z.object({
     permissions: z
         .object({
             sandbox: z
-                .array(z.string())
+                .array(z.string().meta({ power: { key: "sandbox:${value}", sentence: "its UI calls the sandbox route ${value}" } }))
                 .optional()
                 .describe("Daemon routes your UI half may call. Your own backend namespace needs no entry: its backend is your own code."),
             daemon: z
-                .array(z.string())
+                .array(z.string().meta({ power: { key: "daemon:${value}", sentence: "its backend calls the daemon route ${value}" } }))
                 .optional()
                 .describe(
                     "Daemon routes your SERVER half may call. Separate from `sandbox` because the two halves run as different principals: the UI as the owner's session, the backend as a minted per-extension token, so a grant to one must never quietly widen the other.",
@@ -68,6 +70,41 @@ export const ExtensionManifestSchema = z.object({
         ),
     contributes: contributesSchema.optional(),
 });
+
+// What each field means taken together, which no one field's schema can say: tools need something to serve them.
+const servedTools = (manifest: z.infer<typeof ManifestShape>, ctx: z.RefinementCtx): void => {
+    const contributes = manifest.contributes;
+    const tools = contributes?.tools;
+    const cards = contributes?.capabilities ?? [];
+    for (const card of cards) {
+        if (card.kind === "cli" && card.mcp !== undefined && manifest.server === undefined) {
+            ctx.addIssue({ code: "custom", path: ["contributes", "capabilities"], message: `card "${card.id}" declares \`mcp\`, which only a \`server\` bundle can answer` });
+        }
+    }
+    if (tools === undefined) {
+        return;
+    }
+    if (tools.process !== undefined) {
+        const process = contributes?.processes?.find((entry) => entry.name === tools.process);
+        if (process?.port !== "auto") {
+            ctx.addIssue({
+                code: "custom",
+                path: ["contributes", "tools", "process"],
+                message: `tools.process must name a process in contributes.processes declared with port: "auto"`,
+            });
+        }
+        if (tools.path === undefined) {
+            ctx.addIssue({ code: "custom", path: ["contributes", "tools", "path"], message: "tools served by a process need the path its MCP endpoint answers at" });
+        }
+    } else if (manifest.server === undefined) {
+        ctx.addIssue({ code: "custom", path: ["contributes", "tools"], message: "tools need a `server` bundle to serve them, or a `process` that does" });
+    }
+    if (tools.perCard !== undefined && !cards.some((card) => card.kind === "cli" && card.id === tools.perCard)) {
+        ctx.addIssue({ code: "custom", path: ["contributes", "tools", "perCard"], message: `tools.perCard must name one of this extension's cli cards` });
+    }
+};
+
+export const ExtensionManifestSchema = ManifestShape.superRefine(servedTools);
 export type ExtensionManifest = z.infer<typeof ExtensionManifestSchema>;
 
 // The extension's identity everywhere (capability entries, /ext routes, settings namespaces); derived, never declared,

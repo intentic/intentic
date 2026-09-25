@@ -37,7 +37,7 @@ import { createDefinitionRoutes } from "./portability/definition.routes.js";
 import { createArrivalRoutes } from "./portability/arrival.routes.js";
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createBackendProxyRoute } from "./extensions/backend/backend-proxy.routes.js";
-import { createExtensionMcpEndpoint } from "./extensions/backend/extension-mcp.js";
+import { createExtensionMcpEndpoint, createExtensionToolsEndpoint } from "./extensions/backend/extension-mcp.js";
 import { createTurnMountRoute } from "./agent/tools/turn-mounts.routes.js";
 import { createExtensionBundleRoute } from "./extensions/extension-bundle.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
@@ -445,6 +445,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             browser: (target, message, call) => target.router.handle(message, call.signal),
             device: hostRoutes.mcp,
             webext: webextRoutes.mcp,
+            tools: createExtensionToolsEndpoint(services),
             extension: createExtensionMcpEndpoint(services),
         }),
     );

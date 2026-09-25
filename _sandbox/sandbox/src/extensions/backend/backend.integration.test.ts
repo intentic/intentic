@@ -3,14 +3,17 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
+import type { Capability } from "@intentic/sandbox-contract";
 import { createApp } from "../../app.js";
 import type { Services } from "../../composition.js";
 import { services } from "../../harness/route-services.testing.js";
+import { memoryCapabilitiesStore } from "../../harness/route-stores.testing.js";
 import { testConfig } from "../../testing.js";
 import { workspaceExtensionsRoot } from "../../capabilities/extension-dirs.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { approveExtension } from "../extension-approvals.js";
 import { createExtensionBackend, type ExtensionBackend } from "./backend-supervisor.js";
+import { extensionMcpToolsOf } from "./extension-mcp.js";
 
 // Extension backend system end-to-end against a real spawned host process (supervisor, /x proxy, containment rules).
 // Slow (node spawn + health poll); it catches seams the unit tests fake.
@@ -71,7 +74,7 @@ const writeExtension = async (root: string, name: string, server: string, approv
 
 // Wires the real supervisor into the route harness's services through a holder, resolving their circular construction.
 // extensionsDir is emptied so the repo's own first-party extensions stay out of the host under test.
-const harness = (root: string): { svc: Services; backend: ExtensionBackend } => {
+const harness = (root: string, capabilities: readonly Capability[] = []): { svc: Services; backend: ExtensionBackend } => {
     const holder: { current?: Services } = {};
     const backend = createExtensionBackend(
         () => holder.current!,
@@ -82,6 +85,7 @@ const harness = (root: string): { svc: Services; backend: ExtensionBackend } => 
     const svc = services({
         workspace: workspacePaths(root),
         config: { ...testConfig, extensionsDir: "", historyRoot: historyOf(root) },
+        capabilities: memoryCapabilitiesStore([...capabilities]),
         extensionBackend: backend,
     });
     holder.current = svc;
@@ -244,4 +248,62 @@ test("an extension's declared MCP endpoint is refused under /x, beside its ordin
     // A sibling path that merely begins the same is the extension's own route, not its MCP endpoint.
     expect(backend.isToolPath("/x/acme.echo/tools/mcpx")).toBe(false);
     expect((await app.request("http://sandbox.test/x/acme.echo/ping")).status).toBe(200);
+});
+
+// An extension that hands the host its tools: the card it was mounted for, the card's settings as the daemon holds them,
+// the calling conversation, all given to the call; the transport and the handshake are the host's.
+const toolsServer = `export const activateServer = (api) => {
+    api.tools.serve((card) => card === undefined ? [] : [{
+        name: "whoami",
+        description: "Says which card it was handed.",
+        inputSchema: { type: "object", properties: { x: { type: "string" } } },
+        call: async (args, context) => card.id + ":" + card.config.token + ":" + args.x + ":" + context.conversationId,
+    }]);
+};
+`;
+
+test("an extension's tools reach a turn through the MCP door, served by the host with the card handed to them", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-served-"));
+    const card = {
+        id: "ledger",
+        kind: "cli",
+        catalog: { name: "Ledger", icon: "plug", description: "Ledger", category: "business" },
+        fields: [{ key: "token", label: "Token", secret: true }],
+        env: { LEDGER_TOKEN: "${token}" },
+        skill: "SKILL.md",
+    };
+    await writeExtension(root, "tooled", toolsServer, true, { capabilities: [card], tools: { perCard: "ledger" } });
+    const books: Capability = { id: "books", kind: "cli", config: { provider: "ledger", token: "s3cret" } };
+    const { svc, backend } = harness(root, [books]);
+    await backend.start();
+    expect(backend.statusOf("acme.tooled")).toEqual({ id: "acme.tooled", state: "running" });
+
+    const [tool] = await extensionMcpToolsOf(svc, [books], svc.turnMounts.lease("conv-1"));
+    expect(tool).toEqual({ name: "books", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/books`, token: tool?.token });
+    const app = createApp(svc);
+    const rpc = async (body: unknown): Promise<unknown> =>
+        (
+            await app.request("http://sandbox.test/mcp/books", {
+                method: "POST",
+                headers: { authorization: `Bearer ${tool?.token ?? ""}`, "content-type": "application/json" },
+                body: JSON.stringify(body),
+            })
+        ).json();
+
+    expect(await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } })).toMatchObject({
+        id: 1,
+        result: { capabilities: { tools: {} }, serverInfo: { name: "books" } },
+    });
+    expect(await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" })).toEqual({
+        jsonrpc: "2.0",
+        id: 2,
+        result: { tools: [{ name: "whoami", description: "Says which card it was handed.", inputSchema: { type: "object", properties: { x: { type: "string" } } } }] },
+    });
+    expect(await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "whoami", arguments: { x: "hi" } } })).toEqual({
+        jsonrpc: "2.0",
+        id: 3,
+        result: { content: [{ type: "text", text: "books:s3cret:hi:conv-1" }] },
+    });
+    // The host's door onto the tools is not under /x, and /x is where a person's or a panel's bearer reaches.
+    expect((await app.request("http://sandbox.test/x/acme.tooled/tools/acme.tooled", { method: "POST", body: "{}" })).status).toBe(404);
 });

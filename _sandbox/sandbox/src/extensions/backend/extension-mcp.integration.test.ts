@@ -14,9 +14,10 @@ import type { ExtensionHost } from "../installed-extensions.js";
 import type { ExtensionBackend } from "./backend-supervisor.js";
 import { createExtensionMcpEndpoint, extensionMcpToolsOf } from "./extension-mcp.js";
 
-// A card whose extension declares `mcp` gets one server per granted card, mounted on the turn's lease, and the daemon's
-// MCP door forwards to that card's path in the backend with the conversation's bearer swapped for the host token;
-// everything else gets nothing.
+// A card whose extension serves it tools gets one server per granted card, mounted on the turn's lease. Here through the
+// cli card's `mcp`, the alias kept one release: the daemon's MCP door forwards to that card's path in the backend with
+// the conversation's bearer swapped for the host token and the card's settings attached; everything else gets nothing.
+// Host-served tools (`api.tools.serve`) run against a real backend host in backend.integration.test.ts.
 
 const HOST_TOKEN = "host-token";
 
@@ -63,13 +64,16 @@ const plain: Capability = { id: "other", kind: "cli", config: { provider: "plain
 // A card named after a daemon server would shadow it, so it mounts nothing.
 const reserved: Capability = { id: "ui", kind: "cli", config: { provider: "acme", token: "t" } };
 
-test("mounts one server per granted card whose contribution declares mcp, on the turn's lease", async () => {
+test("mounts one server per granted card whose extension serves its kind tools, on the turn's lease", async () => {
     const host = hostFor([acme, plain, reserved]);
     const mounts = mountsAt();
     const tools = await extensionMcpToolsOf(host, [acme, plain, reserved], mounts.lease("conv-a"));
     const token = tools[0]?.token ?? "";
     expect(tools).toEqual([{ name: "billing", url: "http://127.0.0.1:8787/mcp/billing", token }]);
-    expect(mounts.resolve(token, "billing")).toEqual({ target: { kind: "extension", card: "billing" }, conversationId: "conv-a" });
+    expect(mounts.resolve(token, "billing")).toEqual({
+        target: { kind: "extension", extension: "test.acme", card: "billing", path: "mcp" },
+        conversationId: "conv-a",
+    });
     // The plain card serves no MCP, and the reserved one would shadow a daemon server: neither is on the lease.
     expect(mounts.resolve(token, "other")).toEqual({ refused: "unleased" });
     expect(mounts.resolve(token, "ui")).toEqual({ refused: "unleased" });
@@ -94,7 +98,7 @@ test("the door checks the bearer's lease, resolves the card and forwards onto th
         const capabilities = [acme, plain];
         const host = hostFor(capabilities);
         const mounts = mountsAt();
-        const card = (id: string) => ({ name: id, target: { kind: "extension", card: id } as const });
+        const card = (id: string) => ({ name: id, target: { kind: "extension", extension: "test.acme", card: id, path: "mcp" } as const });
         // Turn A is granted billing (and the plain card, which serves no MCP); turn B, another conversation, is granted
         // nothing that serves MCP but holds a bearer of its own through a card of the same kind.
         const turnA = mounts.lease("conv-a");
@@ -129,6 +133,9 @@ test("the door checks the bearer's lease, resolves the card and forwards onto th
         expect(upstream.seen[0]?.url).toBe("/x/test.acme/mcp/billing?probe=1");
         expect(upstream.seen[0]?.headers?.["x-intentic-backend"]).toBe(HOST_TOKEN);
         expect(upstream.seen[0]?.headers?.["authorization"]).toBeUndefined();
+        // The card's settings as the daemon holds them now, so the backend need not read them back.
+        const handed = String(upstream.seen[0]?.headers?.["x-intentic-card"] ?? "");
+        expect(JSON.parse(Buffer.from(handed, "base64url").toString("utf8"))).toEqual({ id: "billing", config: { provider: "acme", token: "t" } });
 
         // Once turn A ends, its bearer stops opening the card it was granted.
         turnA.release();

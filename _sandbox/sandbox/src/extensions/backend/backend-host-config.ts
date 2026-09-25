@@ -5,6 +5,11 @@ export const BACKEND_CONFIG_ENV = "INTENTIC_BACKEND_CONFIG";
 // Marks a request as daemon-proxied; the host rejects all else, loopback is shared in the container.
 export const BACKEND_HOST_HEADER = "x-intentic-backend";
 
+// Carries the card a door request is for, `{ id, config }` as base64url JSON: the settings the daemon resolved (secrets
+// included), so an endpoint serving a card's tools need not read them back. Only the daemon's MCP door sets it; every
+// other way in has it stripped.
+export const BACKEND_CARD_HEADER = "x-intentic-card";
+
 // Header carrying an extension's minted token, checked against permissions.daemon (auth/grants.ts).
 export const EXTENSION_TOKEN_HEADER = "x-intentic-extension";
 

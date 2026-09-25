@@ -24,6 +24,12 @@ describe("reserved MCP server names", () => {
 });
 
 describe("collidesWithReservedServer", () => {
+    // Derived from the manifest schema's meanings: a cli card mints a server when it serves tools, a device and a
+    // connected browser always do, and `mcp` is the core kind that is its own endpoint.
+    test("the minting kinds are exactly the ones whose id becomes a server name", () => {
+        expect([...MCP_SERVER_MINTING_KINDS].toSorted()).toEqual(["cli", "device", "mcp", "webext"]);
+    });
+
     test("a kind whose id becomes a server name may not reuse a reserved one", () => {
         for (const kind of MCP_SERVER_MINTING_KINDS) {
             for (const name of RESERVED_MCP_SERVER_NAMES) {

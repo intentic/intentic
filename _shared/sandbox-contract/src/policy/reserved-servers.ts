@@ -1,3 +1,4 @@
+import { contributedServerMintingKinds } from "@intentic/extension-manifest";
 // The MCP servers the daemon mounts under its own names, and whether each carries content from outside this container.
 // One source of truth: the outside-content guard's exemption list is the `control` subset of this, and a capability
 // whose id would become `mcp__<id>__…` is refused when the id is one of these, so nothing the owner configures can
@@ -37,10 +38,12 @@ export const CONTROL_MCP_SERVERS: ReadonlySet<string> = new Set(
         .map(([name]) => name),
 );
 
-// Capability kinds whose id becomes an MCP server name for the turn (`mcp` → its own endpoint; `device`/`webext` → the
-// peer bridge, mounted at the daemon's MCP door), and so whose id must not collide with a daemon server. Other kinds mint accounts, providers or
-// infrastructure, never a `mcp__<id>__` server keyed by the id.
-export const MCP_SERVER_MINTING_KINDS: ReadonlySet<string> = new Set(["mcp", "device", "webext"]);
+// Capability kinds whose id becomes an MCP server name for the turn, and so whose id must not collide with a daemon
+// server: `mcp`, a core kind that is its own endpoint, and every contributable kind the manifest schema says mints one
+// (a device's and a connected browser's peer bridge, a cli card that serves tools), read off the schema's own meaning
+// (`contributedServerMintingKinds`), so a kind that starts minting is refused here without a second list. Other kinds
+// mint accounts, providers or infrastructure, never a `mcp__<id>__` server keyed by the id.
+export const MCP_SERVER_MINTING_KINDS: ReadonlySet<string> = new Set(["mcp", ...contributedServerMintingKinds()]);
 
 // Whether adding or renaming a capability of this kind to this id would shadow a daemon server. The one predicate the
 // capability routes consult, so the refusal and this list can't drift.

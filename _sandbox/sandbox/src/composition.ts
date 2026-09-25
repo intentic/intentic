@@ -89,7 +89,7 @@ import { fileWorkflowRunsStore, fileWorkflowsStore, type WorkflowRunsStore, type
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities/capabilities-store.js";
-import { contributionRegistry } from "./capabilities/contributions.js";
+import { contributionRegistry, invalidatingContributions } from "./capabilities/contributions.js";
 import { fileSecretVault, type SecretVault } from "./capabilities/credentials/secret-vault.js";
 import { type NamedSecret, secretRegistryOf } from "./secrets/secret-registry.js";
 import { fileSecretUses, type SecretUsesStore } from "./secrets/secret-uses.js";
@@ -1029,8 +1029,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const trial = createTrialService(config);
     // The bundled translator opens the trial's connection and verifies its cert; a self-signed platform fails this.
     const platformTunnel = startPlatformTunnel(config.platform.url, logger);
-    const capabilityManifest = fileCapabilitiesStore(statePath(workspace.root, ".intentic/config/capabilities.json"), (id, reason) =>
-        logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}), the rest of the manifest is unaffected`),
+    // Every write moves the contribution inventory (contributions.ts), which enumerates installed extensions from here;
+    // the file watcher would too, but only after a turn planned in between had read the old one.
+    const capabilityManifest = invalidatingContributions(
+        fileCapabilitiesStore(statePath(workspace.root, ".intentic/config/capabilities.json"), (id, reason) =>
+            logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}), the rest of the manifest is unaffected`),
+        ),
     );
     // Credential values, off /work, sited beside the AI-provider logins outside the file routes and search index.
     const secretVault = fileSecretVault(join(authRoot, "capability-secrets.json"));

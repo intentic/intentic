@@ -118,6 +118,22 @@ describe("capabilityEffects", () => {
         expect(discord).toContainEqual({ kind: "image" });
     });
 
+    // A card that serves the agent tools says so before it is added, whichever way its extension declares them.
+    it("discloses the MCP server a cli card registers, through its own `mcp` or its extension's `tools`", () => {
+        const aliased = capabilityEffects({ kind: "cli", id: "books", config: { provider: "ledger" }, contribution: connector({ id: "ledger", mcp: "mcp" }) });
+        expect(aliased).toEqual([{ kind: "skill", name: "books" }, { kind: "secret", exposure: "agent-env" }, { kind: "mcp" }]);
+        const served = capabilityEffects({
+            kind: "cli",
+            id: "books",
+            config: { provider: "ledger" },
+            contribution: connector({ id: "ledger" }),
+            manifest: manifest({ tools: { perCard: "ledger" } }),
+        });
+        expect(served).toEqual([{ kind: "skill", name: "books" }, { kind: "secret", exposure: "agent-env" }, { kind: "mcp" }]);
+        const other = capabilityEffects({ kind: "cli", id: "gh", config: { provider: "github" }, contribution: connector(), manifest: manifest({ tools: { perCard: "ledger" } }) });
+        expect(other).toEqual([{ kind: "skill", name: "gh" }, { kind: "secret", exposure: "agent-env" }]);
+    });
+
     it("falls back to the echoed hasSecret when no connector spec is at hand", () => {
         expect(capabilityEffects({ kind: "cli", id: "github", config: { provider: "github", hasSecret: true } })).toContainEqual({
             kind: "secret",

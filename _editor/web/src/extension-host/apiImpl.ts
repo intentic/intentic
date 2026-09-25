@@ -152,6 +152,10 @@ export const createExtensionApi = (
     // The extension's own namespace (`/x/<id>/`) passes ungated, since that is its own code; every other extension's
     // namespace still needs a declaration.
     const ownNamespace = `/x/${summary.id}/`;
+    // A path relative to the extension's own backend, onto its namespace: `sessions` and `/sessions` alike. The routing
+    // id is the install id (`summary.id`), which for an extension installed by a card is the card's id, not
+    // `publisher.name`, so a bundle that spelled the prefix itself addressed a namespace that was not its own.
+    const backendPath = (path: string): string => `${ownNamespace}${path.replace(/^\/+/u, ``)}`;
     const guardSandbox = (path: string, init?: RequestInit): void => {
         if (path.startsWith(ownNamespace) || path.split(`?`)[0] === ownNamespace.slice(0, -1)) {
             return;
@@ -298,6 +302,11 @@ export const createExtensionApi = (
                 });
                 return track({ dispose: () => stop() });
             },
+        },
+        // The extension's own namespace, which needs no declaration; built here so no bundle spells the routing id.
+        backend: {
+            request: (path, init) => sandboxRequest(backendPath(path), init),
+            json: (path, init) => sandboxJson(backendPath(path), init),
         },
         sandbox: {
             rpc,

@@ -1,7 +1,9 @@
 import { evaluateWhen, isWhenExpression, parseWhen } from "@intentic/base/when";
 import { z } from "zod";
 import type { ContributionPoint } from "../contribution-point.js";
+import { TOOL_PATH } from "./tools.js";
 import { MARK_FIELDS } from "../mark.js";
+import { type EffectMeaning, fieldMeanings, unwrapMeaning } from "../meaning.js";
 
 // A field the install dialog's config form renders (key, label, secret/optional flags, a select, a `when` gate);
 // mirrors the platform catalog's own field shape.
@@ -167,7 +169,8 @@ export const CapabilityContributionSchema = z
                 .string()
                 .min(1)
                 .optional()
-                .describe("A Dockerfile fragment holding the client binary this tool needs (psql, mysql, whisper)."),
+                .describe("A Dockerfile fragment holding the client binary this tool needs (psql, mysql, whisper).")
+                .meta({ effect: "image" }),
             // Prefer over `fragment` whenever the sandbox already ships a pack for the tool: an image that bakes the
             // pack needs no rebuild, and the overlay can't drift from it.
             pack: z
@@ -176,20 +179,25 @@ export const CapabilityContributionSchema = z
                 .optional()
                 .describe(
                     "A sandbox feature pack name (whisper, llamacpp, browser, …) supplying this tool. Preferred over `fragment`: an image that already bakes the pack needs no rebuild, and there is no copy to drift.",
-                ),
+                )
+                .meta({ effect: "image" }),
             probe: ProbeSchema.optional().describe(
                 "One authenticated request that tests this card's settings before they are saved, so a wrong token or an unreachable host is answered on the form rather than by a card that says 'not connected' afterwards.",
             ),
-            // A stdio server in the extension's agent plugin is spawned once per session; this is served by the one
-            // backend host the sandbox already runs, so N sessions cost N requests rather than N processes.
+            // The first way a card served tools, kept one release as an alias of `contributes.tools` with this card as
+            // `perCard` and this value as `path` (points/tools.ts); a manifest declaring both is served by `tools`.
             mcp: z
                 .string()
-                .regex(/^[a-z0-9][a-z0-9/-]*$/)
-                .refine((value) => !value.endsWith("/"), { message: "mcp must not end in a slash" })
+                .regex(TOOL_PATH)
                 .optional()
                 .describe(
-                    "A path in this extension's backend (`server`) answering MCP over Streamable HTTP. Every turn granted a card of this kind gets it as a server named by the card's id; each request arrives at `<path>/<card id>`, so the backend reads that card's config through the daemon rather than the turn's environment.",
-                ),
+                    "Deprecated: declare `contributes.tools` with `perCard` naming this card instead, and serve the tools with `api.tools.serve`. A path in this extension's backend (`server`) answering MCP over Streamable HTTP; every turn granted a card of this kind gets it as a server named by the card's id, each request arriving at `<path>/<card id>`.",
+                )
+                .meta({
+                    effect: "mcp",
+                    mintsServer: true,
+                    power: { key: "capability-tools:${id}", sentence: 'serves MCP tools to the agent for each "${catalog.name}" card' },
+                }),
         }),
         // A site the agent acts on as the owner through the shared browser; `loginUrl`/`homeUrl` are both optional so a
         // card can be the generic one that asks for them on its form instead.
@@ -217,20 +225,24 @@ export const CapabilityContributionSchema = z
         }),
         // An operating system a connected computer can run; enrollment, socket and scope enforcement are core, only the
         // skill pack varies.
-        z.object({
-            ...contributionBase,
-            kind: z.literal("device"),
-            skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent that machine's shell."),
-        }),
+        z
+            .object({
+                ...contributionBase,
+                kind: z.literal("device"),
+                skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent that machine's shell."),
+            })
+            .meta({ mintsServer: true }),
         // A browser family the user connects their own copy of; `install` is a URL since each family has its own store
         // or none at all. Omitted until that family's listing exists: the connect dialog then shows no link, which is
         // better than a store URL that quietly lands on the store's front page.
-        z.object({
-            ...contributionBase,
-            kind: z.literal("webext"),
-            install: z.url().optional().describe("Where this browser's extension is installed from: its store listing, or a page offering the build."),
-            skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent to drive this browser."),
-        }),
+        z
+            .object({
+                ...contributionBase,
+                kind: z.literal("webext"),
+                install: z.url().optional().describe("Where this browser's extension is installed from: its store listing, or a page offering the build."),
+                skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent to drive this browser."),
+            })
+            .meta({ mintsServer: true }),
         // A preset over a core kind: no payload, just a name, a logo and a filled-in form.
         z.object({ ...contributionBase, kind: z.literal("agent") }),
     ])
@@ -248,7 +260,8 @@ export const CapabilityContributionSchema = z
                 });
             }
         }
-    });
+    })
+    .meta({ power: { key: "capability:${id}", sentence: 'a ${kind} capability card "${catalog.name}"' } });
 export type CapabilityContribution = z.infer<typeof CapabilityContributionSchema>;
 // Arms carrying a per-instance SKILL.md, templated and installed identically by the daemon.
 export type SkillContribution = Extract<CapabilityContribution, { skill: string }>;
@@ -281,3 +294,38 @@ export const capabilitiesPoint = {
         'Capability cards this pack adds to the "+" grid: a connected CLI tool, a site the agent acts on as the owner through the shared browser, an operating system pack, a browser family the owner connects their own copy of, or a preset over a core kind. The card and its form are data here; the machinery that acts on them is core, which is why a card may only name one of these five kinds.',
     schema: z.array(CapabilityContributionSchema),
 } as const satisfies ContributionPoint;
+
+// Every contributable kind a card of which registers an `mcp__<card id>__` server: the arm itself says so (a device, a
+// connected browser), or one of its fields may (a cli card's `mcp`; `contributes.tools` can name only a cli card as
+// `perCard`). Read off the schema's meanings, so a kind that starts minting names itself here.
+export const contributedServerMintingKinds = (): ReadonlySet<CapabilityContribution["kind"]> => {
+    const kinds = new Set<CapabilityContribution["kind"]>();
+    for (const option of CapabilityContributionSchema.options) {
+        const shape = option.shape as Record<string, z.ZodType>;
+        const kind = (shape["kind"]?._zod.def as { values?: readonly string[] } | undefined)?.values?.[0] as CapabilityContribution["kind"] | undefined;
+        if (kind === undefined) {
+            continue;
+        }
+        if (unwrapMeaning(option).meaning.mintsServer === true || [...fieldMeanings(option).values()].some((meaning) => meaning.mintsServer === true)) {
+            kinds.add(kind);
+        }
+    }
+    return kinds;
+};
+
+// What the fields a card sets add to the sandbox, as effect kinds: an image rebuild for a fragment or a pack, an MCP
+// server for a card that serves tools.
+export const contributionEffectsOf = (contribution: CapabilityContribution): ReadonlySet<EffectMeaning> => {
+    const effects = new Set<EffectMeaning>();
+    const option = CapabilityContributionSchema.options.find((candidate) => candidate.shape.kind.value === contribution.kind);
+    if (option === undefined) {
+        return effects;
+    }
+    for (const [key, meaning] of fieldMeanings(option)) {
+        const value = (contribution as Record<string, unknown>)[key];
+        if (meaning.effect !== undefined && value !== undefined && value !== false) {
+            effects.add(meaning.effect);
+        }
+    }
+    return effects;
+};

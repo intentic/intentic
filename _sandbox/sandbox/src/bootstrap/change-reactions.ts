@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { startVanishedRepoSweep } from "../agents/registry/vanished-repos.js";
 import { startSidecarService } from "../derived/sidecar-service.js";
+import { invalidateContributions } from "../capabilities/contributions.js";
 import { stopPendingExtensionProcesses } from "../extensions/extension-processes.js";
 import { onListenerStatusMoved } from "../extensions/listener-status.js";
 import { startRefWatch, subscribeRefChanges } from "../git/remote/ref-watch.js";
@@ -20,6 +21,9 @@ const extensionSource = (path: string): boolean =>
     path.startsWith(`${stateRelPath(".intentic/local/extensions/")}/`) ||
     path === stateRelPath(".intentic/config/extension-enablement.json");
 
+// The capability manifest names the installed extensions, so a hand edit to it moves the contribution inventory too.
+const capabilityManifest = stateRelPath(".intentic/config/capabilities.json");
+
 export const startChangeReactions = ({ logger, services, shutdown, traits }: BootPhase): void => {
     startWorkspaceWatch(services.workspace.root, logger);
     subscribeWorkspaceChanges(() => services.iq.markDirty());
@@ -28,6 +32,9 @@ export const startChangeReactions = ({ logger, services, shutdown, traits }: Boo
     // Loaded code can't be unloaded, so a debounced restart is the reload; one that declares new powers waits for approval
     // again, and keeps none of its processes meanwhile.
     subscribeWorkspaceChanges((paths) => {
+        if (paths.some((path) => extensionSource(path) || path === capabilityManifest)) {
+            invalidateContributions();
+        }
         if (paths.some(extensionSource)) {
             services.extensionBackend.restart();
             void stopPendingExtensionProcesses(services);

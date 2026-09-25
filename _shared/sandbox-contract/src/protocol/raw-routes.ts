@@ -81,10 +81,6 @@ export const RAW_ROUTES = {
     "GET /extensions/{id}/bundle": { lane: "bulk" },
     // An extension backend's own namespace, proxied verbatim.
     "ALL /x/*": {},
-    // Every MCP server the daemon hosts for a turn (its browser routers, the machines and browsers it was granted, its
-    // extension cards' endpoints), by server name: the handler checks the conversation's mount bearer the turn's tool
-    // config carries, and that the running turn mounted that name.
-    "ALL /mcp/{mount}": { auth: "door", control: "never" },
     // The `capabilities` CLI: discovery by name, and the ask that parks on an owner-decided card.
     "GET /capabilities/connectable": { floor: "maintainer", agent: true, control: "never" },
     "POST /capabilities/ask": { floor: "maintainer", agent: true, control: "never" },
@@ -133,6 +129,10 @@ export const RAW_ROUTES = {
     "GET /system/runners": { control: "never" },
     "DELETE /system/runners/{id}": { control: "never" },
     "GET /system/runners/connect": { auth: "door", beforeBoot: true, control: "never" },
+    // Every MCP server the daemon hosts for a turn (its browser routers, the machines and browsers it was granted, its
+    // extension cards' endpoints), by server name: the handler checks the conversation's mount bearer the turn's tool
+    // config carries, and that the running turn mounted that name.
+    "ALL /mcp/{mount}": { auth: "door", control: "never" },
     // A connected browser's credential doors, on its durable token: a sign-in moves in (`session`) or out (`lend`).
     "POST /system/webext/session": { auth: "door", control: "never" },
     "POST /system/webext/lend": { auth: "door", control: "never" },

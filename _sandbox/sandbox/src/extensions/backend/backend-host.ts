@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { errorMessage } from "@intentic/base/errors";
 import type { BackendRouteHandler, ExtensionServerApi, ExtensionServerModule } from "@intentic/extension-api";
 import { createDaemonApi } from "./backend-daemon.js";
+import { answerToolMessage, type ToolRequest, type ToolSource } from "./backend-tools.js";
 import { BACKEND_HOST_HEADER, type BackendExtensionStatus, type BackendDeviceConfig, type BackendHostExtension } from "./backend-host-config.js";
 
 // The backend host's whole runtime as a pure function of its config; testable without a spawn.
@@ -14,6 +15,7 @@ import { BACKEND_HOST_HEADER, type BackendExtensionStatus, type BackendDeviceCon
 interface LoadedExtension {
     readonly status: BackendExtensionStatus;
     readonly handler?: BackendRouteHandler;
+    readonly tools?: ToolSource;
 }
 
 // Resolves activateServer from a default export or named exports, matching the web loader's tolerance for UI bundles.
@@ -28,6 +30,8 @@ const resolveModule = (imported: Partial<ExtensionServerModule> & { default?: Ex
 const loadOne = async (config: BackendDeviceConfig, extension: BackendHostExtension): Promise<LoadedExtension> => {
     // Mount slot; a second call to mount replaces the first, per the API contract.
     let mounted: BackendRouteHandler | undefined;
+    // Tools slot, the same contract: a second serve replaces the first.
+    let tools: ToolSource | undefined;
     const api: ExtensionServerApi = {
         apiVersion: config.apiVersion,
         workspaceRoot: config.workspaceRoot,
@@ -37,6 +41,11 @@ const loadOne = async (config: BackendDeviceConfig, extension: BackendHostExtens
         routes: {
             mount: (handler) => {
                 mounted = handler;
+            },
+        },
+        tools: {
+            serve: (source) => {
+                tools = source;
             },
         },
         daemon: createDaemonApi(config.daemonUrl, extension),
@@ -53,6 +62,7 @@ const loadOne = async (config: BackendDeviceConfig, extension: BackendHostExtens
         status: { id: extension.id, state: "running" },
         // Activating without mounting a route is legal (timers only); unmounted requests answer 404.
         ...(mounted !== undefined ? { handler: mounted } : {}),
+        ...(tools !== undefined ? { tools } : {}),
     };
 };
 
@@ -90,6 +100,22 @@ export const createBackendHostApp = async (config: BackendDeviceConfig): Promise
             const url = new URL(request.url);
             if (request.method === "GET" && url.pathname === "/health") {
                 return json({ ok: true, extensions: statuses }, 200);
+            }
+            // An extension's tools, reached only from the daemon's MCP door with the card it resolved: one JSON-RPC message
+            // in, its answer out. Never under /x, which is reachable with a person's or a panel's bearer.
+            const toolsOf = /^\/tools\/([^/]+)$/.exec(url.pathname);
+            if (request.method === "POST" && toolsOf?.[1] !== undefined) {
+                const id = decodeURIComponent(toolsOf[1]);
+                const extension = loaded.get(id);
+                if (extension === undefined) {
+                    return json({ error: `no backend for extension "${id}"` }, 404);
+                }
+                const body = (await request.json().catch(() => undefined)) as ToolRequest | undefined;
+                if (body?.message === undefined) {
+                    return json({ error: "a tools request carries { card?, conversationId?, message }" }, 400);
+                }
+                const answer = await answerToolMessage({ id, source: extension.tools }, body, request.signal);
+                return json({ answer: answer ?? null }, 200);
             }
             const target = splitNamespace(url.pathname);
             if (target === undefined) {

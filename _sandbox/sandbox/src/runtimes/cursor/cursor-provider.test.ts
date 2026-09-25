@@ -32,6 +32,8 @@ const services = (overrides: Partial<Services> = {}): Services =>
         tools: [],
         config: testConfig,
         ...testTurnMounts(),
+        // Every turn looks for extensions serving tools of their own; none are installed here.
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: ROOT }),
         cursorStore: unstubbed<Services["cursorStore"]>("cursorStore", {
             credentials: async () => [{ id: "cursor-one", apiKey: "key", connectedAt: 0 }],

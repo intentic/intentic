@@ -1,4 +1,5 @@
-import type { ExtensionManifest } from "./manifest.js";
+import { type ExtensionManifest, ExtensionManifestSchema } from "./manifest.js";
+import { fillTemplate, walkMeaning } from "./meaning.js";
 
 // What an update asks for, mechanically. Each manifest folds to a set of POWERS, the consequential facts an owner
 // approved, under a stable key (compared) with a plain sentence (shown). The diff is set arithmetic over the keys.
@@ -12,68 +13,16 @@ export interface PowersDiff {
     readonly unchanged: string[];
 }
 
-const viewerPower = (viewer: { edit?: boolean | undefined; compare?: boolean | undefined; extensions: readonly string[]; fetch: string }): string =>
-    `${viewer.edit === true ? "opens and edits" : "opens"}${viewer.compare === true ? " and compares" : ""} .${viewer.extensions.join(", .")} files (${viewer.fetch})`;
-
-// The fold itself: every power a manifest declares, its stable key to the sentence shown for it.
+// The fold itself: every power a manifest declares, its stable key to the sentence shown for it. Read off the schema:
+// each field that grants a power says so in its `.meta({ power })` (meaning.ts), so a field added to the manifest is
+// either declared a power where it is defined or is not one.
 export const powersOf = (manifest: ExtensionManifest): Map<string, string> => {
     const powers = new Map<string, string>();
-    if (manifest.entry !== undefined) {
-        powers.set("entry", "runs a UI bundle in your browser");
-    }
-    if (manifest.server !== undefined) {
-        powers.set("server", "runs a backend bundle inside the daemon's extension host");
-    }
-    for (const route of manifest.permissions?.sandbox ?? []) {
-        powers.set(`sandbox:${route}`, `its UI calls the sandbox route ${route}`);
-    }
-    for (const route of manifest.permissions?.daemon ?? []) {
-        powers.set(`daemon:${route}`, `its backend calls the daemon route ${route}`);
-    }
-    for (const view of manifest.contributes?.views ?? []) {
-        powers.set(`view:${view.id}`, `a ${view.surface} view "${view.label}"`);
-        if (view.badge === true) {
-            powers.set(`view-badge:${view.id}`, `may badge the "${view.label}" tile from any screen`);
+    walkMeaning(ExtensionManifestSchema, manifest, (meaning, context) => {
+        if (meaning.power !== undefined) {
+            powers.set(fillTemplate(meaning.power.key, context), fillTemplate(meaning.power.sentence, context));
         }
-    }
-    for (const viewer of manifest.contributes?.viewers ?? []) {
-        powers.set(`viewer:${viewer.id}`, viewerPower(viewer));
-    }
-    for (const document of manifest.contributes?.documents ?? []) {
-        powers.set(`document:${document.id}`, `marks workspace directories ("${document.label}")`);
-    }
-    for (const command of manifest.contributes?.commands ?? []) {
-        powers.set(`command:${command.command}`, `a palette command "${command.title}"`);
-        if (command.keybinding !== undefined) {
-            powers.set(`keybinding:${command.command}`, `the global shortcut ${command.keybinding} ("${command.title}")`);
-        }
-    }
-    for (const setting of manifest.contributes?.settings ?? []) {
-        if (setting.env !== undefined) {
-            powers.set(`setting-env:${setting.key}`, `puts the "${setting.key}" setting into the agent's environment as ${setting.env}`);
-        }
-    }
-    for (const process of manifest.contributes?.processes ?? []) {
-        powers.set(`process:${process.name}`, `a background process "${process.name}"${process.autoStart === true ? " (starts on boot)" : ""}`);
-    }
-    for (const file of manifest.contributes?.files ?? []) {
-        powers.set(`files:${file.path}`, `is told when ${file.path} changes`);
-    }
-    if (manifest.contributes?.agent !== undefined) {
-        powers.set("agent", "contributes skills, agents and hooks to the agent's turns");
-    }
-    if (manifest.contributes?.environment !== undefined) {
-        powers.set("environment", "bakes an environment fragment into the sandbox image");
-    }
-    for (const capability of manifest.contributes?.capabilities ?? []) {
-        powers.set(`capability:${capability.id}`, `a ${capability.kind} capability card "${capability.catalog.name}"`);
-    }
-    if (manifest.contributes?.listener !== undefined) {
-        powers.set(`listener:${manifest.contributes.listener.provider}`, `a realtime listener provider "${manifest.contributes.listener.provider}"`);
-    }
-    if (manifest.contributes?.bin !== undefined) {
-        powers.set("bin", "puts its shipped tools on the agent's PATH");
-    }
+    });
     return powers;
 };
 

@@ -37,8 +37,11 @@ flowchart LR
   extension cards' endpoints) is a mount at one door, `ALL /mcp/<name>` (`agent/tools/turn-mounts.ts`). A
   conversation holds one bearer; each turn leases it the names it mounted, and the door refuses any name the current
   lease does not hold, so between turns the bearer reaches nothing. `agent/tools/turn-tools.ts` composes these mounts
-  with the mcp-kind cards into one `remote` list, which every runtime projects the same way. `/x/*` refuses an
-  extension's declared MCP path, so a backend's tools are reached only through that door.
+  with the mcp-kind cards into one `remote` list, which every runtime projects the same way. An extension's tools are
+  answered by the backend host from `api.tools.serve` on a route of its own (`extensions/backend/backend-tools.ts`),
+  handed the card's settings by the door; `/x/*` refuses a backend's own MCP path, so tools are reached only through
+  the door. The contribution inventory is built once and kept until an extension, the enablement file or the
+  capability manifest changes (`capabilities/contributions.ts`).
 - A process the daemon starts is put in a workload class by whoever starts it (`workload/workload-class.ts`,
   `spawnAs`): its niceness, IO class and rank for the kernel's OOM killer, inherited by everything it forks. Builds
   go first, agent runtimes last, children before their parents. Nothing ranks a process by its command line.

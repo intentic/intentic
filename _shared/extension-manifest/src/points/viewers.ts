@@ -39,7 +39,8 @@ export const ViewerContributionSchema = z.object({
         .describe(
             "Whether this viewer also draws two versions of a file as one, with what changed marked in place: its registration then carries a `compare` component the host renders with `before` and `after` blobs. Only for `fetch: \"blob\"`.",
         ),
-});
+})
+    .meta({ power: { key: "viewer:${id}", sentence: '${edit?opens and edits:opens}${compare? and compares:} .${extensions|, .} files (${fetch})' } });
 export type ViewerContribution = z.infer<typeof ViewerContributionSchema>;
 
 export const viewersPoint = {

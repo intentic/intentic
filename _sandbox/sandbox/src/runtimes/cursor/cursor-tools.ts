@@ -318,37 +318,15 @@ export const cursorCustomTools = (request: AgentRequest, guard: CursorGuard, pus
         : {}),
 });
 
-// Every remote mount as an http server, the same list every runtime projects. stdio specs among sdkServers pass whole,
-// environment and all, not a delta, since Cursor spawns them itself rather than merging over an inherited one;
-// in-process SDK instances are skipped: the gap behind mcp:"tools", not "full".
-export const cursorMcpServers = (request: AgentRequest): Record<string, CursorMcpServer> => {
-    const servers: Record<string, CursorMcpServer> = {};
-    for (const tool of request.tools.remote ?? []) {
-        servers[tool.name] = {
-            type: "http",
-            url: tool.url,
-            ...(tool.token !== undefined ? { headers: { Authorization: `Bearer ${tool.token}` } } : {}),
-        };
-    }
-    for (const [name, server] of Object.entries(request.tools.sdkServers ?? {})) {
-        if (server.type !== undefined && server.type !== "stdio") {
-            continue;
-        }
-        // An instance, not a process spec, has no command; tested directly since the type narrowing above misses it.
-        const spec = server as { command?: unknown; args?: unknown; env?: unknown; cwd?: unknown };
-        if (typeof spec.command !== "string") {
-            continue;
-        }
-        servers[name] = {
-            type: "stdio",
-            command: spec.command,
-            ...(Array.isArray(spec.args) ? { args: spec.args as string[] } : {}),
-            ...(typeof spec.env === "object" && spec.env !== null ? { env: spec.env as Record<string, string> } : {}),
-            ...(typeof spec.cwd === "string" ? { cwd: spec.cwd } : {}),
-        };
-    }
-    return servers;
-};
+// Every remote mount as an http server, the same list every runtime projects. The daemon's in-process SDK servers have
+// no Cursor projection: the gap behind mcp:"tools", not "full".
+export const cursorMcpServers = (request: AgentRequest): Record<string, CursorMcpServer> =>
+    Object.fromEntries(
+        (request.tools.remote ?? []).map((tool) => [
+            tool.name,
+            { type: "http", url: tool.url, ...(tool.token !== undefined ? { headers: { Authorization: `Bearer ${tool.token}` } } : {}) } satisfies CursorMcpServer,
+        ]),
+    );
 
 // Cursor's custom-tool results are JSON values; nothing here needs the richer content shape.
 export type CursorToolResult = SDKJsonValue;

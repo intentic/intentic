@@ -11,6 +11,7 @@ import { filesPoint } from "./files.js";
 import { listenerPoint } from "./listener.js";
 import { processesPoint } from "./processes.js";
 import { settingsPoint } from "./settings.js";
+import { toolsPoint } from "./tools.js";
 import { viewersPoint } from "./viewers.js";
 import { viewsPoint } from "./views.js";
 
@@ -25,6 +26,7 @@ export * from "./files.js";
 export * from "./listener.js";
 export * from "./processes.js";
 export * from "./settings.js";
+export * from "./tools.js";
 export * from "./viewers.js";
 export * from "./views.js";
 
@@ -45,6 +47,7 @@ export const CONTRIBUTION_POINTS = [
     listenerPoint,
     automationTemplatesPoint,
     binPoint,
+    toolsPoint,
 ] as const satisfies readonly ContributionPoint[];
 
 // The `contributes` shape those points assemble to. A mapped type rather than a widened record, so

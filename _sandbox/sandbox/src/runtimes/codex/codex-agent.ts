@@ -68,31 +68,14 @@ const withRuntimeConfig = (
 type CodexTurnBase = Pick<CodexTurn, "env" | "modelProvider" | "config" | "namespace" | "spawnDepth">;
 
 // Projects the turn's MCP servers into Codex's per-thread config: every remote mount (the daemon's MCP door's browsers,
-// machines and extension cards, and the mcp-kind cards) as a Streamable HTTP server, and anything stdio as a process.
-// SDK-instance servers are skipped, since app-server can't reach a live object. Only env deltas from the inherited turn
-// environment ride the config, to avoid re-serializing every credential.
-const codexMcpConfig = (tools: Pick<TurnTools, "remote" | "sdkServers">, inheritedEnv: Readonly<Record<string, string>>): Record<string, JsonValue> => {
+// machines and extension tools, and the mcp-kind cards) as a Streamable HTTP server, the one list every runtime reads.
+const codexMcpConfig = (tools: Pick<TurnTools, "remote">): Record<string, JsonValue> => {
     const config: Record<string, JsonValue> = {};
     for (const tool of tools.remote ?? []) {
         config[`mcp_servers.${tool.name}`] = {
             url: tool.url,
             ...(tool.token === undefined ? {} : { http_headers: { Authorization: `Bearer ${tool.token}` } }),
             ...(tool.timeoutMs === undefined ? {} : { tool_timeout_sec: Math.ceil(tool.timeoutMs / 1_000) }),
-        };
-    }
-    for (const [name, server] of Object.entries(tools.sdkServers ?? {})) {
-        if (server.type !== undefined && server.type !== "stdio") {
-            continue;
-        }
-        const env =
-            server.env === undefined
-                ? undefined
-                : Object.fromEntries(Object.entries(server.env).filter(([key, value]) => inheritedEnv[key] !== value));
-        config[`mcp_servers.${name}`] = {
-            command: server.command,
-            ...(server.args === undefined ? {} : { args: server.args }),
-            ...(env === undefined || Object.keys(env).length === 0 ? {} : { env }),
-            ...(server.timeout === undefined ? {} : { tool_timeout_sec: Math.ceil(server.timeout / 1_000) }),
         };
     }
     return config;
@@ -671,7 +654,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
         // Owner's system prompt and the daemon's additions, as the two config keys Codex reads them from. Merged under
         // the translator provider block, not over, so a future key added to either side can't silently win.
         const instructions = await codexInstructionConfig(request.spec, activeCodexHome);
-        const runtimeConfig = { ...instructions, ...questionToolConfig(request), ...codexMcpConfig(request.tools, env) };
+        const runtimeConfig = { ...instructions, ...questionToolConfig(request), ...codexMcpConfig(request.tools) };
         const credential = request.credential;
         const turnBase: CodexTurnBase = {
             ...(credential.kind === "codex-endpoint"

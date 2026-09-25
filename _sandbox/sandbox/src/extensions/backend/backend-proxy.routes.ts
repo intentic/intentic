@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
+import { BACKEND_CARD_HEADER, BACKEND_HOST_HEADER } from "./backend-host-config.js";
 
 // HTTP/1.1 host headers (Connection, Keep-Alive) abort an HTTP/2 response if forwarded untouched; strip both
 // directions.
@@ -65,19 +66,26 @@ const stalledCount = (calls: ReadonlySet<WaitingCall>, now: number): number => {
     return stalled;
 };
 
-// Also the MCP door's way in to an extension card (extension-mcp.ts), with `url` rewritten onto the card's /x path.
+// Also the MCP door's way in to an extension (extension-mcp.ts), with `url` rewritten onto the card's path and a
+// deadline of its own. Whatever credential or daemon-only header the caller sent is dropped; only `target.headers`
+// (the host token, a door's card) go on.
 export const forwardToBackend = async (
     c: Context<AppEnv>,
-    target: { port: number; hostToken: string },
+    target: { readonly port: number; readonly headers: Readonly<Record<string, string>> },
     url: URL,
     extension: string,
+    headersDeadlineMs = HEADERS_DEADLINE_MS,
 ): Promise<Response> => {
     const headers = endToEndHeaders(c.req.raw.headers);
-    headers.delete("authorization");
-    headers.set("x-intentic-backend", target.hostToken);
+    for (const name of ["authorization", BACKEND_HOST_HEADER, BACKEND_CARD_HEADER]) {
+        headers.delete(name);
+    }
+    for (const [name, value] of Object.entries(target.headers)) {
+        headers.set(name, value);
+    }
     const body = c.req.method === "GET" || c.req.method === "HEAD" ? undefined : c.req.raw.body;
     const stalled = new AbortController();
-    const deadline = setTimeout(() => stalled.abort(), HEADERS_DEADLINE_MS);
+    const deadline = setTimeout(() => stalled.abort(), headersDeadlineMs);
     try {
         const upstream = await fetch(`http://127.0.0.1:${target.port}${url.pathname}${url.search}`, {
             method: c.req.method,
@@ -90,7 +98,7 @@ export const forwardToBackend = async (
         if (!stalled.signal.aborted) {
             throw error;
         }
-        return c.json(stall(extension, url.pathname, `${extension} did not answer ${url.pathname} within ${HEADERS_DEADLINE_MS / 1000}s`), 504);
+        return c.json(stall(extension, url.pathname, `${extension} did not answer ${url.pathname} within ${headersDeadlineMs / 1000}s`), 504);
     } finally {
         // Cleared on the way out either way: past headers the deadline would cut a legitimate stream mid-body.
         clearTimeout(deadline);
@@ -125,7 +133,7 @@ export const createBackendProxyRoute = (services: Pick<Services, "extensionBacke
         calls.add(call);
         waiting.set(extension, calls);
         try {
-            return await forwardToBackend(c, target, url, extension);
+            return await forwardToBackend(c, { port: target.port, headers: { [BACKEND_HOST_HEADER]: target.hostToken } }, url, extension);
         } finally {
             calls.delete(call);
             if (calls.size === 0) {

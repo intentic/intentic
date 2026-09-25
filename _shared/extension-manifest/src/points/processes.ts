@@ -9,7 +9,8 @@ export const ProcessContributionSchema = z.object({
     port: z.literal("auto").optional().describe("Assign a free port and inject it as PORT."),
     preview: z.boolean().optional().describe("Expose the port on a tunnelled preview hostname."),
     autoStart: z.boolean().optional().describe("Launch it on install and on daemon boot, rather than waiting to be started."),
-});
+})
+    .meta({ effect: "process", power: { key: "process:${name}", sentence: 'a background process "${name}"${autoStart? (starts on boot):}' } });
 export type ProcessContribution = z.infer<typeof ProcessContributionSchema>;
 
 export const processesPoint = {

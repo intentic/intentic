@@ -19,7 +19,8 @@ export const SettingContributionSchema = z.object({
         .optional()
         .describe(
             "Inject the stored value into the agent's shell environment under this name, every turn. How a credential you hold reaches the agent's command-line tools.",
-        ),
+        )
+        .meta({ power: { key: "setting-env:${key}", sentence: 'puts the "${key}" setting into the agent\'s environment as ${env}' } }),
 });
 export type SettingContribution = z.infer<typeof SettingContributionSchema>;
 

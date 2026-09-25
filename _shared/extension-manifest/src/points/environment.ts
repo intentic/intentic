@@ -14,7 +14,8 @@ export const EnvironmentContributionSchema = z.object({
         .describe(
             "Checkout-relative path to a file holding ONLY RUN and ENV instructions. FROM and privileged directives are rejected: those stay daemon-owned.",
         ),
-});
+})
+    .meta({ effect: "image", power: { key: "environment", sentence: "bakes an environment fragment into the sandbox image" } });
 export type EnvironmentContribution = z.infer<typeof EnvironmentContributionSchema>;
 
 export const environmentPoint = {

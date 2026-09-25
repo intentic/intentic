@@ -18,7 +18,14 @@ flowchart LR
   editor's `manifest-schema.test.ts` fails when either copy is stale.
 - `sandboxRouteAllowed` is the permission rule: an entry is `"<METHOD> <path-glob>"`, and each `*` matches one path
   segment.
-- `diffPowers` folds two manifests into the powers an owner approved, so an update re-asks only when it adds one.
+- What a field MEANS to the host is declared on the field, with `.meta({ power, effect, mintsServer })`
+  (`meaning.ts`), and read from there: the powers `diffPowers` folds a manifest into (so an update re-asks only
+  when it adds one), the effects a card discloses in the capability catalog, and the capability kinds whose ids
+  become `mcp__<id>__` servers in the contract's reserved-name check. A new field is either given a meaning where it
+  is defined or has none.
+- `toolServersOf` is the one reading of which MCP servers a manifest serves the agent: `contributes.tools`, or a cli
+  card's `mcp`, its alias for one release. A `superRefine` on the envelope says what no single field can: tools need
+  a `server` bundle or a declared process to serve them.
 - `HOST_PUBLISHED_SPECIFIERS` lists the only bare imports a published bundle may use: the modules the shell's import
   map provides.
 
@@ -27,8 +34,8 @@ flowchart LR
 - [src/manifest.ts](src/manifest.ts) — `ExtensionManifestSchema`, the envelope.
 - [src/points/index.ts](src/points/index.ts) — every contribution point, assembled into `contributes`.
 - [src/permissions.ts](src/permissions.ts) — the sandbox-route allowlist rule.
+- [src/meaning.ts](src/meaning.ts) — the meaning a field declares, and the walk that reads it off a manifest.
 - [src/powers-diff.ts](src/powers-diff.ts) — what an update asks for, as set arithmetic over powers.
-- [src/bundle.ts](src/bundle.ts) — which imports a published bundle may name.
 - [intentic-extension.schema.json](intentic-extension.schema.json) — the generated authoring schema.
 
 ## Commands

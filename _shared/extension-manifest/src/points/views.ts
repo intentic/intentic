@@ -22,8 +22,10 @@ export const ViewContributionSchema = z.object({
         .optional()
         .describe(
             "Allow this view to say something on its tile: a count, a glyph, or that work is running there. Declared because a badge interrupts from every other screen in the app; leave it out and any badge the extension registers is dropped.",
-        ),
-});
+        )
+        .meta({ power: { key: "view-badge:${id}", sentence: 'may badge the "${label}" tile from any screen' } }),
+})
+    .meta({ power: { key: "view:${id}", sentence: 'a ${surface} view "${label}"' } });
 export type ViewContribution = z.infer<typeof ViewContributionSchema>;
 
 export const viewsPoint = {

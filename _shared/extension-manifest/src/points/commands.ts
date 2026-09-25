@@ -22,7 +22,8 @@ export const CommandContributionSchema = z.object({
         .optional()
         .describe(
             'A global keyboard shortcut, e.g. "Mod+Shift+K" — `Mod` is ⌘ on Apple and Ctrl elsewhere. Declared here because a global shortcut is consequential: the owner approves it at install, and the host binds only what was approved.',
-        ),
+        )
+        .meta({ power: { key: "keybinding:${command}", sentence: 'the global shortcut ${keybinding} ("${title}")' } }),
     // When the keybinding applies, as a condition over the shell's context keys; the palette ignores it since a command
     // is always runnable by name. Without one the chord is claimed everywhere, including inside a terminal.
     when: z
@@ -32,7 +33,8 @@ export const CommandContributionSchema = z.object({
         .describe(
             "When the shortcut applies, as a condition over the shell's context keys, `tabSurface == 'chat'`, `!editableTarget`. Without one the chord is claimed everywhere, including inside a terminal where a bare key belongs to the program running in it. The command palette ignores this: a command is always runnable by name.",
         ),
-});
+})
+    .meta({ power: { key: "command:${command}", sentence: 'a palette command "${title}"' } });
 export type CommandContribution = z.infer<typeof CommandContributionSchema>;
 
 export const commandsPoint = {

@@ -11,5 +11,6 @@ export const binPoint = {
     schema: z
         .string()
         .min(1)
-        .refine((value) => !value.split("/").includes(".."), { message: "bin must stay inside the checkout" }),
+        .refine((value) => !value.split("/").includes(".."), { message: "bin must stay inside the checkout" })
+        .meta({ power: { key: "bin", sentence: "puts its shipped tools on the agent's PATH" } }),
 } as const satisfies ContributionPoint;

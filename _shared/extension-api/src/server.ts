@@ -5,6 +5,43 @@ import type { ContractRouterClient } from "@orpc/contract";
 // shared by every enabled extension, separate from the daemon. Mediates only the extension's route namespace (mount)
 // and its reach into daemon routes (`daemon.*`, gated by `permissions.daemon`).
 
+// The card a tool server was mounted for (`contributes.tools.perCard`): its id, which names the server the agent sees,
+// and its settings as the daemon holds them now, secrets included, every value a string. Handed with every call, so a
+// switch flipped on the card applies to the next call without anything to invalidate.
+export interface ToolCard {
+    readonly id: string;
+    readonly config: Readonly<Record<string, string>>;
+}
+
+// One piece of what a tool answers, as MCP carries it.
+export type ToolContent =
+    | { readonly type: "text"; readonly text: string }
+    | { readonly type: "image"; readonly data: string; readonly mimeType: string };
+
+// A tool's whole answer. `isError` marks a refusal or a failure the model should read rather than a transport error.
+export interface ToolResult {
+    readonly content: readonly ToolContent[];
+    readonly isError?: boolean;
+}
+
+// What one call is handed beside its arguments.
+export interface ToolCallContext {
+    // Aborted when the agent's client gives up on the call, or the host's deadline for it passes.
+    readonly signal: AbortSignal;
+    // The conversation the calling turn belongs to, when it has one.
+    readonly conversationId?: string;
+}
+
+export interface ToolDefinition {
+    // The name the model calls it by, under the server's own `mcp__<server>__` prefix.
+    readonly name: string;
+    readonly description: string;
+    // A JSON Schema object for the arguments (`z.toJSONSchema(schema)` produces one).
+    readonly inputSchema: Readonly<Record<string, unknown>>;
+    // A string answers as text, a ToolResult as itself, anything else as its JSON; a throw answers as a tool error.
+    readonly call: (args: Readonly<Record<string, unknown>>, context: ToolCallContext) => Promise<ToolResult | string | unknown> | ToolResult | string | unknown;
+}
+
 // One request into this extension's `/x/<id>` namespace, prefix already stripped. Return `undefined` for "not mine":
 // the host answers 404.
 export type BackendRouteHandler = (request: Request) => Promise<Response | undefined>;
@@ -22,6 +59,13 @@ export interface ExtensionServerApi {
         // Serves this extension's route namespace; the daemon proxies /x/<id>/* here through its ordinary auth. A
         // second mount replaces the first.
         mount(handler: BackendRouteHandler): void;
+    };
+    // The agent's tools (`contributes.tools`). The host owns the MCP transport, its deadlines and the card lookup: it
+    // answers the handshake, lists what `tools` returns for the card a server was mounted for (undefined for an
+    // extension-level server), and runs a call with its arguments. `tools` runs per request, so what it returns may
+    // follow the card's switches. A second serve replaces the first.
+    readonly tools: {
+        serve(tools: (card: ToolCard | undefined) => readonly ToolDefinition[] | Promise<readonly ToolDefinition[]>): void;
     };
     // Authenticated transport to the daemon's own routes; every call is checked against the manifest's
     // `permissions.daemon` allowlist.

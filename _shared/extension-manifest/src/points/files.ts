@@ -24,7 +24,8 @@ export const FileContributionSchema = z.object({
         .describe(
             "The query keys this path makes stale, the first element of your own api.sandbox.key(...) keys. Keep both this and the path as narrow as the view actually needs: a broad prefix costs every connected browser a refetch on every matching write.",
         ),
-});
+})
+    .meta({ power: { key: "files:${path}", sentence: 'is told when ${path} changes' } });
 export type FileContribution = z.infer<typeof FileContributionSchema>;
 
 export const filesPoint = {

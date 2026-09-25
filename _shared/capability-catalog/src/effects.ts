@@ -1,4 +1,12 @@
-import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-manifest";
+import {
+    type CapabilityContribution,
+    contributionEffectsOf,
+    type EffectMeaning,
+    type ExtensionManifest,
+    ExtensionManifestSchema,
+    toolServersOf,
+    walkMeaning,
+} from "@intentic/extension-manifest";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 
 // Structured, computed side effects of adding a capability: pre-add disclosure and post-add strips, derived from the
@@ -99,11 +107,19 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         if (secret) {
             effects.push({ kind: "secret", exposure: "agent-env" });
         }
-        // A connector touches the image via a fragment or a named pack; the pack case is disclosed even when it may
-        // cost nothing, since only the daemon can tell if it's already baked, and over-disclosing is the safe
-        // direction.
-        if (input.contribution?.kind === "cli" && (input.contribution.fragment !== undefined || input.contribution.pack !== undefined)) {
+        // What the card's own fields add, read off their meaning in the manifest schema: an image rebuild for a fragment or
+        // a named pack (disclosed even when the pack may cost nothing, since only the daemon can tell if it's already
+        // baked, and over-disclosing is the safe direction), an MCP server for a card that serves tools, whether through
+        // its own `mcp` or its extension's `contributes.tools` naming it.
+        const meant = new Set(input.contribution === undefined ? [] : contributionEffectsOf(input.contribution));
+        if (input.contribution !== undefined && input.manifest !== undefined && toolServersOf(input.manifest).some((server) => server.perCard === input.contribution?.id)) {
+            meant.add("mcp");
+        }
+        if (meant.has("image")) {
             effects.push({ kind: "image" });
+        }
+        if (meant.has("mcp")) {
+            effects.push({ kind: "mcp" });
         }
         return effects;
     },
@@ -119,12 +135,24 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         if (hasToken(input.config)) {
             effects.push({ kind: "secret", exposure: "disk" });
         }
-        const contributes = input.manifest?.contributes;
-        if (contributes?.environment !== undefined) {
+        // What its contributions add, read off their meaning in the manifest schema: an image for an environment fragment,
+        // its processes, an MCP server for its tools.
+        const meant = new Set<EffectMeaning>();
+        if (input.manifest !== undefined) {
+            walkMeaning(ExtensionManifestSchema, { ...input.manifest, contributes: { ...input.manifest.contributes, capabilities: undefined } }, (meaning) => {
+                if (meaning.effect !== undefined) {
+                    meant.add(meaning.effect);
+                }
+            });
+        }
+        if (meant.has("image")) {
             effects.push({ kind: "image" });
         }
-        if (contributes?.processes !== undefined && contributes.processes.length > 0) {
-            effects.push({ kind: "process", names: contributes.processes.map((process) => process.name) });
+        if (meant.has("process")) {
+            effects.push({ kind: "process", names: (input.manifest?.contributes?.processes ?? []).map((process) => process.name) });
+        }
+        if (meant.has("mcp")) {
+            effects.push({ kind: "mcp" });
         }
         return effects;
     },

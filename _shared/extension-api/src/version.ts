@@ -113,4 +113,13 @@
 // conversions its shape has had and written with what a newer version of the extension put in it kept in place, the
 // evolution the daemon's own stores got (the daemon's store/evolution/conversions.ts). Until now an extension that changed the
 // shape of its own file had two choices, a hand-written tolerant reader or a reset for everyone who updated. Additive.
-export const extensionApiVersion = "2.19.0";
+// 2.20.0 gives an extension one way to hand the agent tools: `contributes.tools`, served by the backend's new
+// `api.tools.serve((card) => [...])` with the host owning the MCP transport, its deadlines and the card lookup, or by a
+// declared process's port. The daemon mounts it into every turn at its one MCP door, so every runtime gets it, where a
+// plugin's `.mcp.json` reached Claude Code alone. The UI half gains `api.backend`, its own backend by a namespace-relative
+// path, since the routing id is the install id and not always `publisher.name`. A cli card's `mcp` stays one release as
+// an alias. The recorded surface grows two grains here: the backend api's own members (`serverApi`), where `tools`
+// arrived unseen by any grain, and a digest of the whole generated manifest schema (`manifestSchema`), so a field added
+// anywhere in the manifest, not only at the top level, needs a new version: an older host's parse drops what it does not
+// know without a word.
+export const extensionApiVersion = "2.20.0";

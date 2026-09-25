@@ -37,8 +37,12 @@ export type MountTarget =
     // A connected machine (device card) or one of the owner's own browsers (webext card), through its peer socket.
     | { readonly kind: "device"; readonly id: string }
     | { readonly kind: "webext"; readonly id: string }
-    // An extension card's endpoint on the backend host.
-    | { readonly kind: "extension"; readonly card: string };
+    // An extension's tools (`contributes.tools`), answered by its backend host from `api.tools.serve`; `card` names the
+    // card a per-card server was mounted for, whose settings the door hands over with each message.
+    | { readonly kind: "tools"; readonly extension: string; readonly card?: string }
+    // An extension's MCP endpoint that speaks Streamable HTTP itself: at `path` in its backend namespace, or on a declared
+    // process's port; with a card, at `<path>/<card>`.
+    | { readonly kind: "extension"; readonly extension: string; readonly card?: string; readonly path: string; readonly process?: string };
 
 export interface MountSpec {
     // The MCP server name: what the model sees as `mcp__<name>__…`, and the path segment the door is reached at.

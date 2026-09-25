@@ -66,7 +66,8 @@ export const ListenerContributionSchema = z.object({
                 ),
         })
         .describe("How the generic automation editor presents this source: its name, its filters, and the prompt it starts people on."),
-});
+})
+    .meta({ power: { key: "listener:${provider}", sentence: 'a realtime listener provider "${provider}"' } });
 export type ListenerContribution = z.infer<typeof ListenerContributionSchema>;
 
 export const listenerPoint = {

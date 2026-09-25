@@ -26,9 +26,9 @@ const mountsAt = (now?: () => number) => createTurnMounts({ baseUrl: () => "http
 test("a conversation keeps one bearer across its turns, and each turn's lease reaches only what that turn mounted", () => {
     const mounts = mountsAt();
     const first = mounts.lease("conv-a");
-    const billing = first.open({ name: "billing", target: { kind: "extension", card: "billing" } });
+    const billing = first.open({ name: "billing", target: { kind: "extension", extension: "acme", card: "billing", path: "mcp" } });
     expect(billing).toEqual({ name: "billing", url: "http://127.0.0.1:8787/mcp/billing", token: billing.token });
-    expect(mounts.resolve(billing.token, "billing")).toEqual({ target: { kind: "extension", card: "billing" }, conversationId: "conv-a" });
+    expect(mounts.resolve(billing.token, "billing")).toEqual({ target: { kind: "extension", extension: "acme", card: "billing", path: "mcp" }, conversationId: "conv-a" });
     expect(mounts.resolve(billing.token, "payroll")).toEqual({ refused: "unleased" });
 
     first.release();
@@ -49,8 +49,8 @@ test("a conversation keeps one bearer across its turns, and each turn's lease re
 
 test("a bearer reaches nothing another conversation mounted, and a forged or absent one is unknown", () => {
     const mounts = mountsAt();
-    const a = mounts.lease("conv-a").open({ name: "billing", target: { kind: "extension", card: "billing" } });
-    const b = mounts.lease("conv-b").open({ name: "payroll", target: { kind: "extension", card: "payroll" } });
+    const a = mounts.lease("conv-a").open({ name: "billing", target: { kind: "extension", extension: "acme", card: "billing", path: "mcp" } });
+    const b = mounts.lease("conv-b").open({ name: "payroll", target: { kind: "extension", extension: "acme", card: "payroll", path: "mcp" } });
     expect(a.token).not.toBe(b.token);
     expect(mounts.resolve(b.token, "billing")).toEqual({ refused: "unleased" });
     expect(mounts.resolve(a.token, "payroll")).toEqual({ refused: "unleased" });
@@ -62,8 +62,8 @@ test("a bearer reaches nothing another conversation mounted, and a forged or abs
 test("a turn with no conversation has a bearer of its own, forgotten when it ends; a turn that mounts nothing mints none", () => {
     const mounts = mountsAt();
     const loose = mounts.lease();
-    const { token } = loose.open({ name: "billing", target: { kind: "extension", card: "billing" } });
-    const other = mounts.lease().open({ name: "billing", target: { kind: "extension", card: "billing" } });
+    const { token } = loose.open({ name: "billing", target: { kind: "extension", extension: "acme", card: "billing", path: "mcp" } });
+    const other = mounts.lease().open({ name: "billing", target: { kind: "extension", extension: "acme", card: "billing", path: "mcp" } });
     expect(other.token).not.toBe(token);
     loose.release();
     expect(mounts.resolve(token, "billing")).toEqual({ refused: "unknown" });
@@ -113,11 +113,17 @@ const doorFor = () => {
     const mounts = mountsAt();
     const extension = jest.fn(async () => new Response("forwarded", { status: 200 }));
     const device = jest.fn(async (_target: { readonly id: string }, message: RpcMessage) => ({ jsonrpc: "2.0" as const, id: message.id ?? null, result: { device: true } }));
+    const tools = jest.fn(async (_target: { readonly extension: string; readonly card?: string }, message: RpcMessage) => ({
+        jsonrpc: "2.0" as const,
+        id: message.id ?? null,
+        result: { tools: [] },
+    }));
     const route = createTurnMountRoute(
         mounts,
         unstubbed<MountEndpoints>("endpoints", {
             browser: (target, message, call) => target.router.handle(message, call.signal),
             device,
+            tools,
             extension,
         }),
     );
@@ -128,7 +134,7 @@ const doorFor = () => {
             headers: { ...(token === undefined ? {} : { authorization: `Bearer ${token}` }), "content-type": "application/json" },
             ...(init.body === undefined ? {} : { body: typeof init.body === "string" ? init.body : JSON.stringify(init.body) }),
         });
-    return { mounts, send, extension, device };
+    return { mounts, send, extension, device, tools };
 };
 
 test("the door answers a mounted server's messages as JSON, a notification with 202 and a batch as a batch", async () => {
@@ -171,11 +177,24 @@ test("the door hands a peer its message with the conversation the bearer belongs
     );
 });
 
+test("an extension's host-served tools are answered message by message, with the card the turn mounted", async () => {
+    const { mounts, send, tools } = doorFor();
+    const { token } = mounts.lease("conv-a").open({ name: "billing", target: { kind: "tools", extension: "acme", card: "billing" } });
+    const listed = await send("billing", token, { body: { jsonrpc: "2.0", id: 5, method: "tools/list" } });
+    expect(await listed.json()).toEqual({ jsonrpc: "2.0", id: 5, result: { tools: [] } });
+    expect((await send("billing", token, { method: "GET" })).status).toBe(405);
+    expect(tools).toHaveBeenCalledWith(
+        { kind: "tools", extension: "acme", card: "billing" },
+        { jsonrpc: "2.0", id: 5, method: "tools/list" },
+        expect.objectContaining({ name: "billing", conversationId: "conv-a" }),
+    );
+});
+
 test("a bearer cannot reach another conversation's mount, a card its turn was not granted, or anything once its turn ends", async () => {
     const { mounts, send, extension } = doorFor();
     const turnA = mounts.lease("conv-a");
-    const a = turnA.open({ name: "billing", target: { kind: "extension", card: "billing" } });
-    const b = mounts.lease("conv-b").open({ name: "payroll", target: { kind: "extension", card: "payroll" } });
+    const a = turnA.open({ name: "billing", target: { kind: "extension", extension: "acme", card: "billing", path: "mcp" } });
+    const b = mounts.lease("conv-b").open({ name: "payroll", target: { kind: "extension", extension: "acme", card: "payroll", path: "mcp" } });
     const ping = { body: { jsonrpc: "2.0", id: 1, method: "ping" } };
 
     expect((await send("billing", "forged", ping)).status).toBe(401);
