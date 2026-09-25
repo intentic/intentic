@@ -95,7 +95,6 @@ const act = async (services: Services, repo: string, branch: string, fetchFn: Fe
             project,
             runId: red.firstRunId,
             evidence,
-            byPerson: false,
             preface: `Nobody pressed Fix: ${branch} has stayed red on this failure for ${red.count} run(s) and nothing newer is running, so this is the failure ${branch} stands on. The logs are from its newest run, ${red.runId}.`,
         },
         fetchFn,

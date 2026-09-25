@@ -1,7 +1,7 @@
 // Pins that access.ts treats an endpoint as ready by existing, the trial's readiness as a spendable measurement,
 // and accessKnown as gating both reads landing before either is trusted.
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { accessKnown, firstReadyProvider, providerReady, providerReadyOn } from "./access";
+import { accessKnown, firstReadyProvider, providerReady, providerReadyOn, trialExhausted, trialPhase } from "./access";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, perProvider, trialStatus } from "../accounts/providerCatalog";
 
@@ -75,4 +75,18 @@ it(`falls to a connected account first, and to the trial only as the floor under
     // A real account outranks it: the trial is a floor, never a substitute for a subscription someone is paying for.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, label: `ada@acme.dev`, connectedAt: 0 }] };
     expect(firstReadyProvider()).toBe(`claude`);
+});
+
+// One reading of the day's allowance for every surface (the empty pane's offer, the trial strip, the spent row): the
+// boundary is half the allowance, by value.
+it(`reads the trial's day as one phase: fresh up to half spent, low past it, spent at nothing left`, () => {
+    expect(trialPhase(TRIAL_PROVIDER)).toBe(`none`);
+    const at = (remaining: number): string => {
+        trialStatus.value = { available: true, allowance: 12, used: 12 - remaining, remaining, health: `healthy` };
+        return trialPhase(TRIAL_PROVIDER);
+    };
+    expect([at(12), at(7), at(6), at(1), at(0)]).toEqual([`fresh`, `fresh`, `low`, `low`, `spent`]);
+    expect(trialExhausted(TRIAL_PROVIDER)).toBe(true);
+    // Another provider is never on the trial.
+    expect(trialPhase(`claude`)).toBe(`none`);
 });

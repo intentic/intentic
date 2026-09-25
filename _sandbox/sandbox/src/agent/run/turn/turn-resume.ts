@@ -16,6 +16,7 @@ import {
     type TurnBreakPolicy,
     withoutResumeNote,
     withResumeNote,
+    withRuntimeDefaults,
 } from "@intentic/sandbox-contract";
 import { replaceRejectedToken } from "../../../runtimes/claude/claude-credentials.js";
 import type { Services } from "../../../composition.js";
@@ -26,7 +27,7 @@ import { personaRunModel, runRoleModel } from "../../models/run-role-model.js";
 import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
 import { type Routing, routingFor } from "../../providers/accounts/routing.js";
 import { consumeEntry, type JournalEntry, type JournalledTurn, resumeBars, spendAttempt } from "./turn-journal.js";
-import type { SentTurn, StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
+import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { refusedBegin } from "../placement/turn-placement.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
@@ -72,13 +73,17 @@ export interface HeldTurn {
 // Where a press sends the held turn, by the one routing rule (agent/providers/accounts/routing.ts), with the held turn's own
 // routing as the profile: naming no account keeps the held turn's on its provider, since only a person's explicit pick
 // (switchAccount, or an older editor's `account`) moves a conversation to another account.
-const pressed = (input: AgentTurn, routing: ResumeRouting): Routing =>
-    routingFor({ provider: input.agent ?? "claude", harness: input.harness ?? "native", account: input.account }, routing);
+// A held turn is a stored copy, which a turn written before the port routed it may have left unnamed.
+const pressed = (held: AgentTurn, routing: ResumeRouting): Routing => {
+    const { agent: provider, harness, account } = withRuntimeDefaults(held);
+    return routingFor({ provider, harness, account }, routing);
+};
 
 // Whether the press keeps the held turn's runtime (provider and loop), whatever it does to the account.
 const sameRuntime = (input: AgentTurn, routing: ResumeRouting): boolean => {
     const where = pressed(input, routing);
-    return where.provider === (input.agent ?? "claude") && where.harness === (input.harness ?? "native");
+    const held = withRuntimeDefaults(input);
+    return where.provider === held.agent && where.harness === held.harness;
 };
 
 // The turn's own fields come from the held copy; routing (agent/harness/account/model) comes from the press when named.
@@ -144,24 +149,23 @@ const rerunNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNot
 
 // A held turn sent again where `routing` points, by whoever sends it now; a door refusal's run joins those whose rows the
 // model never saw.
-const rerunOf = (held: HeldTurn, byPerson: boolean, routing?: ResumeRouting): SentTurn & { conversationId: string } => {
-    const turn = { ...resumedTurn({ input: reroutedInput(held.input, routing), sessionId: held.sessionId }, rerunNote(held, routing)), byPerson };
+const rerunOf = (held: HeldTurn, routing?: ResumeRouting): TurnInput & { conversationId: string } => {
+    const turn = resumedTurn({ input: reroutedInput(held.input, routing), sessionId: held.sessionId }, rerunNote(held, routing));
     return held.run === undefined ? turn : { ...turn, unseenRuns: [...(held.input.unseenRuns ?? []), held.run] };
 };
 
 // Undefined when nothing a press answers for is held (an outage or a refused credential is the pass's), a turn runs, or
-// the conversation is archived and no person pressed.
+// the conversation is archived (a person's press reopens it at its route first).
 export const fireHeldResume = async (
     services: Pick<Services, "conversations" | "turns">,
     conversationId: string,
-    byPerson: boolean,
     routing?: ResumeRouting,
 ): Promise<StartedRun | undefined> => {
     const held = services.conversations.state(conversationId)?.resume.held;
     if (held === undefined || held.reason === "auth" || held.reason === "outage") {
         return undefined;
     }
-    const started = await services.turns.start(rerunOf(held, byPerson, routing));
+    const started = await services.turns.start(rerunOf(held, routing));
     return typeof started === "string" ? undefined : started;
 };
 
@@ -235,10 +239,12 @@ const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): 
 export const startConversationTurn = async (
     services: Services,
     body: TurnStarter["stream"],
-    started: SentTurn & { readonly conversationId: string },
+    sent: TurnInput & { readonly conversationId: string },
     { attempts = 0, senderKeeps = false }: StartOptions = {},
 ): Promise<TurnRun | BeginRefusal> => {
-    const turn = await withRoleModel(services, started);
+    // Routed on the way in (idempotent): the one path every detached turn starts through names its provider and loop,
+    // after the run role or persona pin had the chance to, since a pin fills only what the turn left unnamed.
+    const turn = withRuntimeDefaults(await withRoleModel(services, sent));
     const { conversationId, prompt } = turn;
     // The record is copied now; the pump waits for it before invoking the provider.
     const transcriptOpen = openTurnTranscript(services, turn);
@@ -299,7 +305,7 @@ const stopRungAt = (recordedAt: number, tries: number): number | undefined => {
 export const stopResumeAt = (tries: number, now: number = Date.now()): number | undefined => stopRungAt(now, tries);
 
 // The breaker's key is the provider that served the turn: a Claude outage never gates a Codex conversation's resume.
-const providerOf = (held: HeldTurn): string => held.input.agent ?? "claude";
+const providerOf = (held: HeldTurn): string => withRuntimeDefaults(held.input).agent;
 
 // Fire it (re-pointed by a booked move) or give up with the card's words, once `armedBy`'s policy is armed; undefined waits.
 type Verdict = { readonly armedBy?: TurnBreak; readonly gaveUp?: string; readonly routing?: ResumeRouting } | undefined;
@@ -313,7 +319,7 @@ interface Rung {
 
 // A held turn's re-run, the sandbox's own, logged once it starts; a refusal names why it did not.
 const rerun = async (services: Services, held: HeldTurn, routing?: ResumeRouting): Promise<StartedRun | BeginRefusal> => {
-    const started = await services.turns.start(rerunOf(held, false, routing));
+    const started = await services.turns.start(rerunOf(held, routing));
     if (typeof started !== "string") {
         const { conversationId } = held.input;
         services.logger.info({ conversationId, reason: held.reason, ...opt("account", routing?.account) }, "held turn re-run fired");
@@ -412,7 +418,8 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
         verdict: (held, now) => {
             if (held.move !== undefined) {
                 const { input, move } = held;
-                return { routing: { agent: input.agent ?? "claude", harness: input.harness ?? "native", account: move.account, carry: move.carry } };
+                const { agent, harness } = withRuntimeDefaults(input);
+                return { routing: { agent, harness, account: move.account, carry: move.carry } };
             }
             const reopensAt = held.reopensAt === undefined ? undefined : held.reopensAt * 1000;
             return reopensAt !== undefined && reopensAt <= now && reopensAt > held.recordedAt ? { armedBy: "limit" } : undefined;
@@ -546,7 +553,6 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
                 isolated: record?.placement.kind === "worktree",
                 prompt: input.prompt,
                 profile: profileOf(input),
-                byPerson: input.byPerson,
                 ...(input.title !== undefined ? { title: input.title } : {}),
                 ...(input.origin !== undefined ? { origin: input.origin } : {}),
             },
@@ -600,7 +606,7 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
         }
     };
     // Rehydration spends nothing, and is the sandbox's own; attempts pass through so the journal stays honest about what ran.
-    const run = await startConversationTurn(services, placeholder, { ...entry.turn, byPerson: false }, { attempts: entry.attempts });
+    const run = await startConversationTurn(services, placeholder, withRuntimeDefaults(entry.turn), { attempts: entry.attempts });
     if (typeof run === "string") {
         // A live turn already owns the conversation, superseding the park as a hand retry would; or nobody reopened it.
         return;
@@ -612,8 +618,9 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
         if (followUp === undefined) {
             return;
         }
-        // The answer to a restored card is a person's.
-        if (typeof (await services.turns.start({ ...followUp, byPerson: true })) !== "string") {
+        // The answer to a restored card is a person's, which reopens the conversation should it have been archived since.
+        await services.agents.clearArchived([conversationId]);
+        if (typeof (await services.turns.start(followUp)) !== "string") {
             services.logger.info({ conversationId }, "parked turn resumed: the user's answer continues its session");
         }
     })().catch((error: unknown) => services.logger.error({ err: error, conversationId }, "parked turn's answer failed to resume it"));
@@ -672,7 +679,5 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
 };
 
 // Uses resumedTurn's own rules for the prompt and session; the journal just renames the fields a failure record uses.
-const restartTurnOf = (entry: JournalledTurn): SentTurn & { conversationId: string } => ({
-    ...resumedTurn({ input: entry.turn, sessionId: entry.sessionId }, { reason: "restart" }),
-    byPerson: false,
-});
+const restartTurnOf = (entry: JournalledTurn): TurnInput & { conversationId: string } =>
+    resumedTurn({ input: entry.turn, sessionId: entry.sessionId }, { reason: "restart" });

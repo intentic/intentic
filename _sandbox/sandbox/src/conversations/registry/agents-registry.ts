@@ -322,7 +322,8 @@ const freshEntry = (turn: BeginTurn, now: number): PersistedAgent => ({
 // onto a provider that did not mint it.
 const settingsOf = (existing: StoredProfile, profile: TurnProfile): StoredProfile => {
     const { provider, harness, account } = routingFor(existing, profile);
-    const { account: _held, ...kept } = existing;
+    // The persona is the turn's own, never the last turn's: a turn naming none is an ordinary chat.
+    const { account: _held, actsAs: _lastPersona, ...kept } = existing;
     return {
         ...kept,
         provider,
@@ -332,17 +333,18 @@ const settingsOf = (existing: StoredProfile, profile: TurnProfile): StoredProfil
         ...opt("thinking", profile.thinking),
         ...opt("fast", profile.fast),
         ...opt("account", account),
+        ...opt("actsAs", profile.actsAs),
     };
 };
 
 // The entry a turn opens: every record carried whole, since each outlives the turn that wrote it, except what a turn
 // restates (identity it may still fill in, settings, title and owner). Its ending is the resting state for a turn that
-// never reports back: only a daemon killed mid-turn ever sees it. Only a person's turn un-archives it.
+// never reports back: only a daemon killed mid-turn ever sees it. Never archived: an archived conversation refuses the
+// turn before this (refusesArchived), and a person reopens one at the door that carries their words (clearArchived).
 const openedEntry = (existing: PersistedAgent | undefined, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined, now: number): PersistedAgent => {
-    const { archivedAt, ...held } = existing ?? freshEntry(turn, now);
+    const held = existing ?? freshEntry(turn, now);
     return {
         ...held,
-        ...(turn.byPerson ? {} : opt("archivedAt", archivedAt)),
         identity: identityOf(held.identity, turn, entryOf),
         profile: settingsOf(held.profile, turn.profile),
         ending: { kind: "interrupted" },
@@ -393,6 +395,7 @@ const describedBy = ({ placement, identity, profile, social, sessionId, archived
     ...(placement.kind === "worktree" ? { branch: placement.branch, ...opt("runner", placement.runner) } : {}),
     ...opt("startIn", identity.startIn),
     ...opt("actsAs", identity.actsAs),
+    ...opt("lastActsAs", profile.actsAs),
     ...opt("sessionId", sessionId),
     ...opt("origin", identity.origin),
     ...opt("startedBy", identity.startedBy),

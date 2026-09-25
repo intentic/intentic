@@ -34,7 +34,7 @@ describe("the domain events bus", () => {
         });
         events.subscribe("run.settled", (event) => void heard.push(event.conversationId));
 
-        events.publish("run.settled", { conversationId: "c1", actor: undefined, failure: undefined, closing: "" });
+        events.publish("run.settled", { conversationId: "c1", actor: undefined, speaker: undefined, failure: undefined, closing: "" });
         await Promise.resolve();
 
         expect(heard).toEqual(["c1"]);

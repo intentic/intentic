@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
-import type { SentTurn } from "../../../seams/turn-starter.js";
+import type { TurnInput } from "../../../seams/turn-starter.js";
 import { conversationIdentity, mainTreePlacement, type Placement, placedTurn, refusedBegin } from "./turn-placement.js";
 
 // The two events a placed turn sends its conversation, and every step of the placement, in one running order.
@@ -148,19 +148,17 @@ describe("the main tree", () => {
 describe("what a conversation's turn begins as", () => {
     // The registry defaults a runtime the turn never named; the identity itself says only what the turn said.
     test("carries only what the turn named, and a profile naming nothing when it named nothing", () => {
-        expect(conversationIdentity({ prompt: "ship it", byPerson: false }, "c", { isolated: false, runner: undefined })).toStrictEqual({
+        expect(conversationIdentity({ prompt: "ship it" }, "c", { isolated: false, runner: undefined })).toStrictEqual({
             conversationId: "c",
             isolated: false,
             prompt: "ship it",
             profile: {},
-            byPerson: false,
         });
     });
 
     test("carries everything a turn can name, the actor as who started it and a fork as its source's cut", () => {
-        const input: SentTurn = {
+        const input: TurnInput = {
             prompt: "ship it",
-            byPerson: true,
             agent: "codex",
             harness: "claude-code",
             title: "Parser",
@@ -192,7 +190,6 @@ describe("what a conversation's turn begins as", () => {
                 account: "acct",
                 actsAs: "reviewer",
             },
-            byPerson: true,
             title: "Parser",
             origin: { automationId: "nightly", provider: "schedule" },
             startedBy: "ada@example.com",

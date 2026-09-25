@@ -88,6 +88,9 @@ const ProfileSchema = z.object({
     thinking: z.boolean().optional(),
     fast: z.boolean().optional(),
     account: z.string().optional(),
+    // The persona the last turn ran as: the turn's own, never carried from the one before, since the daemon runs each turn
+    // under the persona it names (turn-premise.ts). Absent for an ordinary chat, and in rows written before it existed.
+    actsAs: z.string().optional(),
 });
 export type StoredProfile = z.infer<typeof ProfileSchema>;
 

@@ -97,7 +97,7 @@ const titleOf = (ask: LandFixAsk): string => {
 
 // Starts, continues or declines the attempt at this red streak; `busy` names the attempt already working on it.
 export const startLandFix = (services: Services, ask: LandFixAsk): Promise<FixAttemptOutcome> =>
-    startFixAttempt(daemonFixAttemptDeps(services, { byPerson: false, picked: false }), {
+    startFixAttempt(daemonFixAttemptDeps(services, { pressed: false, picked: false }), {
         base: landFixConversationId(ask.breakage.project, ask.breakage.redSince),
         prompt: landFixBrief(ask, services.agentWorktrees.mainDir(ask.breakage.project === "" ? "root" : ask.breakage.project)),
         nudge: nudgeOf(ask.breakage),

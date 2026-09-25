@@ -1,5 +1,7 @@
 import type {
     AgentEvent,
+    AgentHarness,
+    AgentProvider,
     AgentReply,
     AgentTurn,
     EditorContext,
@@ -14,6 +16,7 @@ import type {
     SessionOwner,
     StopResult,
     StopTurn,
+    TurnSpeaker,
 } from "@intentic/sandbox-contract";
 import type { BeginRefusal } from "../conversations/actor/conversation-decide.js";
 import type { QueueChange } from "../conversations/actor/conversation-queue.js";
@@ -23,6 +26,8 @@ import type { QueueChange } from "../conversations/actor/conversation-queue.js";
 
 /* WHO ASKED FOR THIS TURN, as the daemon verified it, never as the client said it. */
 export type TurnInput = AgentTurn & {
+    // Who is speaking (seams/turn-speaker.ts); `actor` and `owner` are derived from it at the door that built it.
+    readonly speaker?: TurnSpeaker;
     readonly actor?: string;
     // The member the conversation belongs to if this turn is its first; `since` is the registry's to stamp.
     readonly owner?: Pick<SessionOwner, "email" | "name">;
@@ -36,9 +41,9 @@ export type TurnInput = AgentTurn & {
     readonly resume?: ResumeReason | undefined;
 };
 
-// A turn as a door starts it: `byPerson` is the say-so that opens an archived conversation. Off TurnInput, so a held,
-// journalled or queued copy of a turn never replays a person's say-so: whoever sends it again decides.
-export type SentTurn = TurnInput & { readonly byPerson: boolean };
+// A turn as the engine takes it: provider and loop named, by the port it came in through (withRuntimeDefaults), so
+// nothing past the door defaults them again.
+export type RoutedTurn<T extends TurnInput = TurnInput> = T & { readonly agent: AgentProvider; readonly harness: AgentHarness };
 
 // Who is speaking into a live turn; only a person proves somebody is at the composer.
 export type SteerVoice = "person" | "sandbox" | "agent";
@@ -90,20 +95,21 @@ export interface StartOptions {
 
 export interface TurnStarter {
     // The detached start every daemon-started turn takes: journalled, recorded, announced; the refusal instead while a
-    // turn already runs on the conversation, or while it is archived and no person sent this one.
-    readonly start: (turn: SentTurn & { readonly conversationId: string }, options?: StartOptions) => Promise<StartedRun | BeginRefusal>;
+    // turn already runs on the conversation, or while it is archived. Whoever starts a turn on a person's say-so reopens
+    // an archived conversation first (`agents.clearArchived`), at the door that carries their words.
+    readonly start: (turn: TurnInput & { readonly conversationId: string }, options?: StartOptions) => Promise<StartedRun | BeginRefusal>;
     // Re-runs the turn a wall holds for the conversation, re-routed where `routing` names it; undefined when none is held
     // or its start was refused.
-    readonly resume: (conversationId: string, byPerson: boolean, routing?: ResumeRouting) => Promise<StartedRun | undefined>;
+    readonly resume: (conversationId: string, routing?: ResumeRouting) => Promise<StartedRun | undefined>;
     // A detached run its starter reads, recorded to the conversation but neither journalled, pinned nor announced: a
     // loop keeps those books itself.
-    readonly run: (turn: SentTurn & { readonly conversationId: string }) => StartedRun | BeginRefusal;
+    readonly run: (turn: TurnInput & { readonly conversationId: string }) => StartedRun | BeginRefusal;
     // The turn itself, for a caller folding its own frames (an automation's fire, a runner's dispatched turn).
-    readonly stream: (turn: SentTurn, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
+    readonly stream: (turn: TurnInput, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
     // Words into the live turn: `invalid` names a reference escaping the workspace, false means no steerable turn.
     readonly steer: (conversationId: string, steer: Steer) => Promise<boolean | { readonly invalid: string }>;
     // Words said into the live turn, a turn of their own, or queued for the next; one message id twice gets the first
-    // answer back, and only a person's words reach an archived conversation.
+    // answer back, and nobody's words reach an archived conversation (a person's door reopens it first).
     readonly say: (said: Said) => Promise<MessageReceipt | Unsaid>;
     // A person's message into the live turn and nowhere else, drawn as their row and answered the same way.
     readonly steerIn: (conversationId: string, steer: Omit<Steer, "voice" | "outside">) => Promise<MessageReceipt | Unsteered>;

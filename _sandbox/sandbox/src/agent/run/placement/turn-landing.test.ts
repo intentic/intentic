@@ -106,7 +106,7 @@ describe("a turn that may not land", () => {
     // Only the registry is real: any other store the land reached for would name itself.
     const registered = async (isolated: boolean): Promise<LandingDeps> => {
         const { agents, conversations } = services();
-        await beginTurn(conversations, { conversationId: "c", isolated, prompt: "p", profile: { agent: "claude", harness: "native" }, byPerson: true }, 1);
+        await beginTurn(conversations, { conversationId: "c", isolated, prompt: "p", profile: { agent: "claude", harness: "native" } }, 1);
         return unstubbed<LandingDeps>("deps", { agents, conversations });
     };
     const hooks = unstubbed<LandingHooks>("hooks", {});

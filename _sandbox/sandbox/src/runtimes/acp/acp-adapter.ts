@@ -1,4 +1,4 @@
-import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
+import type { Capability,RoutedAgentTurn} from "@intentic/sandbox-contract";
 import {
     type AgentAdapter,
     armPlan,
@@ -25,7 +25,7 @@ export type AcpAdapterDeps = TurnToolsDeps & Pick<Services, "acpAgent" | "capabi
 // servers, browsers included, pass through when the agent advertises http MCP.
 export const planAcpTurn = async (
     services: AcpAdapterDeps,
-    input: AgentTurn,
+    input: RoutedAgentTurn,
     context: TurnContext,
     granted: readonly Capability[],
     provider: string,
@@ -60,7 +60,7 @@ export const planAcpTurn = async (
 
 export const ACP_ADAPTER: AgentAdapter<"acp", AcpAdapterDeps> = {
     runtime: "acp",
-    preflight: (services, input, context, installed) => planAcpTurn(services, input, context, installed, input.agent ?? "claude"),
+    preflight: (services, input, context, installed) => planAcpTurn(services, input, context, installed, input.agent),
     // Installed is runnable, since an ACP agent carries its own credentials; the only failure here is nothing
     // installed. Liveness per agent isn't probed; a spawn failure surfaces as the turn's own refusal instead.
     health: async (services) => {

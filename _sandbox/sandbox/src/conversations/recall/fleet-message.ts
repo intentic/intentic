@@ -110,7 +110,6 @@ export const messageConversation = async (services: Services, from: string | und
         prompt: steer.text,
         // Who asked, in the same vocabulary the registry already uses for a spawned child's starter.
         actor: peer,
-        byPerson: false,
         // What makes the sandbox treat the turn as carrying somebody else's words rather than the owner's.
         outsideWake: peer,
     });

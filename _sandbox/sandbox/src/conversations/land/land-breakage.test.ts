@@ -13,7 +13,7 @@ import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync, realSleep, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";
-import type { Said, SentTurn } from "../../seams/turn-starter.js";
+import type { Said, TurnInput } from "../../seams/turn-starter.js";
 import { isolatedAgent, memoryVerifyStore } from "../../testing.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import { type LandBreakage, mainlineLandOf } from "../../workspace/deps/verify-deps.js";
@@ -238,7 +238,7 @@ const fleet = (conversations: readonly Conversation[], options: { readonly autoR
                 status: conversation.running === true ? "running" : "idle",
                 provider: "claude",
                 harness: "native",
-                attention: { ...NO_ATTENTION },
+                attention: NO_ATTENTION,
                 updatedAt: now,
                 promptCache: conversation.warm === false ? { at: now - 7_200_000, ttlMs: 3_600_000 } : { at: now, ttlMs: 3_600_000 },
                 ...(conversation.archived === true ? { archivedAt: now } : {}),
@@ -246,7 +246,7 @@ const fleet = (conversations: readonly Conversation[], options: { readonly autoR
         ]),
     );
     const said: Said[] = [];
-    const started: SentTurn[] = [];
+    const started: TurnInput[] = [];
     const filed: {
         readonly project: string;
         readonly at: number;
@@ -455,7 +455,6 @@ describe("the conversation that landed it", () => {
                 prompt: expect.stringContaining(passedOver),
                 title: 'Fix main after "Work one"',
                 conversationId: landFixConversationId("", 1_000),
-                byPerson: false,
             },
         ]);
         expect(world.started[0]?.prompt.startsWith(LAND_FIX_OPENING)).toBe(true);

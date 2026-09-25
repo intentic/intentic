@@ -3,7 +3,7 @@ import { Button, Icon } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { isTrialProvider, TRIAL_NOTICE, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { trialExhausted } from "../session/access";
+import { trialExhausted, trialPhase } from "../session/access";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { modelLabelFor, trialStatus } from "../accounts/providerCatalog";
 import { loadTrialStatus } from "../models/useChat-catalog";
@@ -77,10 +77,9 @@ const trialNotice = computed(() => {
         return `Free trial isn't answering right now. Failed messages are not counted.`;
     }
     const remaining = trialStatus.value.remaining;
-    // Not a warning until it is one: shown once more than half the day's allowance is gone (or the pool is
-    // straining), not from the first message, since a fresh count read as an imminent limit.
-    const allowance = trialStatus.value.allowance;
-    if (allowance > 0 && remaining > allowance / 2 && trialStatus.value.health !== `degraded`) {
+    // Not a warning until it is one: shown once the trial is past fresh (trialPhase) or the pool is straining, not from
+    // the first message, since a fresh count read as an imminent limit.
+    if (trialPhase(provider.value) === `fresh` && trialStatus.value.health !== `degraded`) {
         return undefined;
     }
     const left = `${remaining} free ${remaining === 1 ? `message` : `messages`} left today`;

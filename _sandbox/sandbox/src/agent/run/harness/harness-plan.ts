@@ -1,4 +1,4 @@
-import { type AgentTurn, type Capability, profileOf, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type Capability, profileOf, type SandboxSettings, SandboxSettingsSchema, type RoutedAgentTurn } from "@intentic/sandbox-contract";
 import { browserFields } from "../../../browser/tools/browser-fields.js";
 import type { Services } from "../../../composition.js";
 import { withSettingsHookGate } from "./settings-hook-gate.js";
@@ -39,9 +39,9 @@ const SETTINGS_DEFAULTS = SandboxSettingsSchema.parse({});
 
 // Credential resolution, the settings read and the safety policy, run together rather than chained, so a turn later
 // refused for its credential doesn't also pay for an unused settings read first.
-const harnessReads = (deps: HarnessPlanDeps, input: AgentTurn, context: TurnContext) =>
+const harnessReads = (deps: HarnessPlanDeps, input: RoutedAgentTurn, context: TurnContext) =>
     Promise.all([
-        deps.perf.track("turn.plan.credentials", { provider: input.agent ?? "claude" }, () =>
+        deps.perf.track("turn.plan.credentials", { provider: input.agent }, () =>
             resolveHarnessCredentials(deps, { agent: input.agent, ...opt("account", input.account), ...opt("model", input.model) }),
         ),
         // Per-sandbox agent toggles; stableSystemPrompt keeps the preset prompt byte-stable so the provider prompt cache
@@ -56,7 +56,7 @@ const harnessReads = (deps: HarnessPlanDeps, input: AgentTurn, context: TurnCont
 
 // The last planning I/O, run together rather than chained: the plugin dirs the Skills list also derives from, and the
 // turn's MCP mounts (the browsers filtered to this persona's accounts, each call bound to its account's persisted profile).
-const harnessMounts = (deps: HarnessPlanDeps, input: AgentTurn, granted: readonly Capability[], persona: TurnPersona, iqLoaded: boolean) =>
+const harnessMounts = (deps: HarnessPlanDeps, input: RoutedAgentTurn, granted: readonly Capability[], persona: TurnPersona, iqLoaded: boolean) =>
     Promise.all([
         deps.perf.track("turn.plan.extensions", {}, () =>
             agentMounts(deps, { iqLoaded, capabilities: granted, personas: persona.persona === undefined ? [] : [persona.persona] }),
@@ -68,10 +68,10 @@ const harnessMounts = (deps: HarnessPlanDeps, input: AgentTurn, granted: readonl
 
 // The user's message with the attachment note folded in. A leading `/` naming no real command would otherwise be
 // silently discarded by the CLI, so a note keeps the user's words in front of the model, last so `/` still leads.
-const wordsOf = (input: AgentTurn, context: TurnContext): Pick<TurnSpec, "prompt" | "notes"> => {
+const wordsOf = (input: RoutedAgentTurn, context: TurnContext): Pick<TurnSpec, "prompt" | "notes"> => {
     const { prompt: typed, notes } = context.base.spec;
     const prompt = context.attachmentPaths.length > 0 ? withAttachmentNote(typed, [...context.attachmentPaths]) : typed;
-    const literalSlash = isUnknownSlashCommand(input.agent ?? "claude", prompt);
+    const literalSlash = isUnknownSlashCommand(input.agent, prompt);
     return { prompt, ...opt("notes", literalSlash ? [...(notes ?? []), LITERAL_SLASH_NOTE] : notes) };
 };
 
@@ -79,7 +79,7 @@ const wordsOf = (input: AgentTurn, context: TurnContext): Pick<TurnSpec, "prompt
 // default model when the turn pinned none. The harness refuses fast mode on a non-first-party endpoint.
 const modelOf = (
     credentials: HarnessCredentials,
-    input: AgentTurn,
+    input: RoutedAgentTurn,
     fast: boolean | undefined,
     defaultModel: string,
 ): Pick<TurnSpec, "model" | "fast"> =>
@@ -87,7 +87,7 @@ const modelOf = (
         ? { model: credentials.endpoint.model }
         : { ...(input.model === undefined && defaultModel !== "" ? { model: defaultModel } : {}), ...(fast === true ? { fast } : {}) };
 
-const harnessSpec = (deps: HarnessPlanDeps, input: AgentTurn, context: TurnContext, credentials: HarnessCredentials): TurnSpec => {
+const harnessSpec = (deps: HarnessPlanDeps, input: RoutedAgentTurn, context: TurnContext, credentials: HarnessCredentials): TurnSpec => {
     // Split off since the field's absence, not `fast: undefined`, is the meaning; modelOf puts it back where it applies.
     const { fast, ...spec } = context.base.spec;
     return {
@@ -110,7 +110,7 @@ const delegationCaps = (settings: SandboxSettings): Pick<TurnPolicy, "subagentsA
 
 const harnessPolicy = (
     base: TurnPolicy,
-    input: AgentTurn,
+    input: RoutedAgentTurn,
     settings: SandboxSettings,
     safetyPolicy: string,
 ): TurnPolicy => ({
@@ -143,7 +143,7 @@ const shellTools = (deps: HarnessPlanDeps, settings: SandboxSettings): Pick<Turn
 // routed provider rides. Credentials resolve through harness-credentials.ts; its refusals become the connect-gate's error.
 export const planHarnessTurn = async (
     deps: HarnessPlanDeps,
-    input: AgentTurn,
+    input: RoutedAgentTurn,
     context: TurnContext,
     granted: readonly Capability[],
 ): Promise<TurnArmPlan> => {

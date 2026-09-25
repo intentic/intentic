@@ -9,6 +9,7 @@ import type {
     SandboxSettings,
     SystemPromptMode,
     TurnNote,
+    RoutedAgentTurn,
 } from "@intentic/sandbox-contract";
 import { mayDelegate, personaCapabilities, personaPrompt, type TurnPersona } from "../../../personas/personas.js";
 import { withRepoChecks } from "../../../rules/repo-checks.js";
@@ -52,7 +53,7 @@ export interface TurnDecision extends DecidedEffects {
     readonly provider: AgentProvider;
     readonly harness: AgentHarness;
     // As its arm is called with it: the conversation's latched account filled in where the turn named none.
-    readonly input: AgentTurn;
+    readonly input: RoutedAgentTurn;
     // What every arm builds on, the composed request as its base.
     readonly context: TurnContext;
     // The manifest after the persona's shelves and the owner's gates: the only list an arm may mount from.
@@ -72,7 +73,7 @@ const underRepoChecks = (settings: SandboxSettings, declared: readonly Rule[]): 
 // The account the arm is called with, by the one routing rule (agent/providers/accounts/routing.ts): the one the turn names, else
 // the one its conversation runs on for this provider, else none, which the credential resolver answers by serviceability.
 // A session resumes only under the account that minted it, so a turn naming none must not wander.
-const routedInput = (input: AgentTurn, entry: ConversationEntry | undefined): AgentTurn => {
+const routedInput = (input: RoutedAgentTurn, entry: ConversationEntry | undefined): RoutedAgentTurn => {
     const { account } = routingFor(entry?.profile, input);
     return account === undefined || account === input.account ? input : { ...input, account };
 };
@@ -159,7 +160,7 @@ const personaWarnings = (persona: TurnPersona, input: AgentTurn): TurnWarning[] 
         ? [{ fields: { actsAs: input.actsAs }, message: "persona: no such card, this turn reaches no account and no tools" }]
         : [];
 
-export const decideTurn = (facts: TurnFacts, input: AgentTurn, context: TurnContext): TurnDecision | DecidedRefusal => {
+export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: TurnContext): TurnDecision | DecidedRefusal => {
     if ("held" in facts) {
         // Spread whole: the reading rides through to the composer's notice, which can only size a raise it was told.
         return { ok: false, code: "sandbox-memory-low", ...facts.held, warnings: [], spawn: false };

@@ -14,7 +14,7 @@ import { type IqSearchTeaching, iqSearchInstruction } from "../../prompt/iq-sear
 import { type DeclaredWindow, declaredWindow } from "../../prompt/window/context-budget.js";
 import { workspaceMapNote } from "../../prompt/workspace-map.js";
 import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
-import type { TurnInput } from "../../../seams/turn-starter.js";
+import type { RoutedTurn, TurnInput } from "../../../seams/turn-starter.js";
 import { retrieveTurnContext, type TurnContextOutcome } from "../turn/turn-context.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { EXPERIMENTS } from "./experiments.js";
@@ -176,7 +176,7 @@ export type TurnFactsDeps = Pick<
     | "workspace"
 >;
 
-export const gatherTurnFacts = async (services: TurnFactsDeps, input: TurnInput, context: TurnContext): Promise<TurnFacts> => {
+export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn, context: TurnContext): Promise<TurnFacts> => {
     // First, so a held turn costs no settings read, capability list, dependency probe or persona load.
     // Work nobody is waiting on is held here until there is room; a child the budget already admitted is not judged again.
     const admission = await services.resources.admit({

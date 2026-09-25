@@ -140,7 +140,7 @@ export const startPushFix = async (services: Services, request: PushFixRequest):
     if (brief === undefined) {
         return undefined;
     }
-    return startFixAttempt(daemonFixAttemptDeps(services, { byPerson: true, picked: request.picked }), {
+    return startFixAttempt(daemonFixAttemptDeps(services, { pressed: true, picked: request.picked }), {
         ...brief,
         // `runRole` alone pins the model (turn-resume.ts) when nobody picked one: the pre-push fix's own list, which the
         // Main line's caret reads too, so the model it shows is the model that runs. The pick and who pressed ride in `turn`.

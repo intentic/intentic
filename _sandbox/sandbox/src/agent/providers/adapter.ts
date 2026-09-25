@@ -1,4 +1,4 @@
-import type { AgentCapabilities, AgentEvent, AgentProvider, AgentTurn, Capability, SandboxSettings } from "@intentic/sandbox-contract";
+import type { AgentCapabilities, AgentEvent, AgentProvider, Capability, RoutedAgentTurn, SandboxSettings } from "@intentic/sandbox-contract";
 import type { TurnPersona } from "../../personas/personas.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { TurnTrim } from "../prompt/window/context-trim.js";
@@ -107,7 +107,8 @@ export interface AgentAdapter<R extends AgentCapabilities["runtime"], D> {
     readonly runtime: R;
     // Gate the credential, resolve the model, and assemble the request, or refuse. `granted` is the persona's narrowed
     // capability manifest; shared so an arm cannot mount what the persona did not grant.
-    readonly preflight: (deps: D, input: AgentTurn, context: TurnContext, granted: readonly Capability[]) => Promise<TurnArmPlan>;
+    // `input` has its provider and loop named: routed at the door it came in through (withRuntimeDefaults).
+    readonly preflight: (deps: D, input: RoutedAgentTurn, context: TurnContext, granted: readonly Capability[]) => Promise<TurnArmPlan>;
     // Cheap and cached; never on the turn's path.
     readonly health: (deps: D) => Promise<AdapterHealth>;
     // Whether this runtime still holds `sessionId` under `cwd`, from the store rather than the id's existence: a

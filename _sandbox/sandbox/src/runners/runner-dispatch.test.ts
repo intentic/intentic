@@ -12,7 +12,7 @@ test("an offline runner is a readable error frame and a closed turn, not a hang"
     const frames: AgentEvent[] = [];
     for await (const event of dispatchRemoteTurn(
         services,
-        { conversationId: "c1", prompt: "do the thing", placement: { kind: "runner", id: "rog" } },
+        { conversationId: "c1", prompt: "do the thing", agent: "claude", harness: "native", placement: { kind: "runner", id: "rog" } },
         "rog",
         worktree,
         undefined,

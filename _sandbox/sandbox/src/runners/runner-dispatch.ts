@@ -1,6 +1,7 @@
+import { opt } from "../opt.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentEvent, AgentTurn, RunnerSync, RunnerSyncLine, RunnerTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentTurn, RoutedAgentTurn, RunnerSync, RunnerSyncLine, RunnerTurn } from "@intentic/sandbox-contract";
 import { runnerIncomingRef } from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/scaffold";
 import { whenAborted } from "@intentic/base/async";
@@ -85,7 +86,7 @@ const advanceMirror = async (services: Services, conversationId: string, worktre
 
 export async function* dispatchRemoteTurn(
     services: Services,
-    input: AgentTurn & { conversationId: string },
+    input: RoutedAgentTurn & { conversationId: string },
     runnerId: string,
     worktree: ConversationWorktree,
     signal: AbortSignal | undefined,
@@ -121,14 +122,14 @@ export async function* dispatchRemoteTurn(
             conversationId: input.conversationId,
             branch,
             prompt: input.prompt,
-            provider: input.agent ?? "claude",
-            harness: input.harness ?? "native",
-            ...(input.model !== undefined ? { model: input.model } : {}),
-            ...(input.effort !== undefined ? { effort: input.effort } : {}),
-            ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
-            ...(input.fast !== undefined ? { fast: input.fast } : {}),
-            ...(input.account !== undefined ? { account: input.account } : {}),
-            ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
+            provider: input.agent,
+            harness: input.harness,
+            ...opt("model", input.model),
+            ...opt("effort", input.effort),
+            ...opt("thinking", input.thinking),
+            ...opt("fast", input.fast),
+            ...opt("account", input.account),
+            ...opt("sessionId", input.sessionId),
         };
         const attachments = await inlineAttachments(services, input);
         for await (const event of await client.runTurn(

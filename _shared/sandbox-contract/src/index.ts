@@ -174,6 +174,7 @@ export * from "./schemas/areas.js";
 export * from "./policy/fence-paths.js";
 export * from "./policy/persona-home.js";
 export * from "./schemas/agents.js";
+export * from "./schemas/speaker.js";
 export * from "./schemas/approvals.js";
 export * from "./schemas/automations.js";
 export * from "./schemas/capabilities.js";

@@ -475,7 +475,7 @@ const runFire = async (
         // Opened before the provider runs, like every other conversation turn (a fork's copy; nothing else opens).
         await openTurnTranscript(services, turn);
         try {
-            for await (const event of services.turns.stream({ ...turn, byPerson: false }, undefined)) {
+            for await (const event of services.turns.stream(turn, undefined)) {
                 fold.apply(event);
                 if (event.kind === "session") {
                     runtimeSessionId = event.sessionId;

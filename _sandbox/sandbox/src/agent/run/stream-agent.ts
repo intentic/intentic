@@ -10,6 +10,7 @@ import {
     type TranscriptRow,
     type TurnNote,
     mentionPaths,
+    withRuntimeDefaults,
 } from "@intentic/sandbox-contract";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import type { Logger } from "pino";
@@ -31,7 +32,7 @@ import { applyTrim, trimFrame, type TurnTrimState } from "../prompt/window/conte
 import { promptDisclosure } from "../prompt/prompt-disclosure.js";
 import type { TurnBriefing } from "../prompt/turn-briefing.js";
 import { limitReopensAt } from "../models/limit-reset.js";
-import type { SentTurn, TurnInput } from "../../seams/turn-starter.js";
+import type { RoutedTurn, TurnInput } from "../../seams/turn-starter.js";
 import { type LiveRun } from "../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../opt.js";
 import { SteeringQueue } from "../checkpoints/agent-steering.js";
@@ -59,20 +60,20 @@ import { resolveTurnJobs } from "../tools/jobs/job-fates.js";
 
 // Whether this turn enters the namespace, asked in one place so three callers can't disagree. A property of the
 // runtime: only the Claude Code loop enters it.
-const entersNamespace = (input: AgentTurn): boolean => capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").isolation === "namespace";
+const entersNamespace = (input: RoutedTurn): boolean => capabilitiesOf(input.agent, input.harness).isolation === "namespace";
 
 // What the turn was told before the user's own words, filed for the chat to show. The preamble's notes ride the
 // message and land in the transcript; the system prompt reaches the model and nothing else, so this file is the only
 // place it can be read back. Composed from the request the adapter is about to be handed, and never awaited: a reader
 // opens it minutes later, and a turn must not wait on a file to start.
-const recordSystemPrompt = (services: Services, input: AgentTurn, request: AgentRequest): void => {
+const recordSystemPrompt = (services: Services, input: RoutedTurn, request: AgentRequest): void => {
     const conversationId = input.conversationId;
     // A spawned child files nothing: no chat draws its opening, and the conversation purge only names registry
     // entries, so its record would be written and never reclaimed.
     if (conversationId === undefined || isSpawnedChild(services.conversations, conversationId)) {
         return;
     }
-    const capabilities = capabilitiesOf(input.agent ?? "claude", input.harness ?? "native");
+    const capabilities = capabilitiesOf(input.agent, input.harness);
     void services.promptRecord
         .record(conversationId, promptDisclosure({ capabilities, request, at: Date.now() }))
         .catch((error: unknown) => services.logger.warn({ err: error }, "prompt: recording what this turn was told failed"));
@@ -80,7 +81,9 @@ const recordSystemPrompt = (services: Services, input: AgentTurn, request: Agent
 
 // Runs one agent turn, streaming AgentEvents; `input.agent` picks the provider adapter. Owns the turn's control
 // surface: the AbortController /agent/stop cancels, and the SteeringQueue /agent/steer injects into.
-export async function* streamAgent(services: Services, input: SentTurn, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
+export async function* streamAgent(services: Services, sent: TurnInput, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
+    // Routed as it comes in, for a caller that reached the body without the port (a suite, a runner's mirror).
+    const input = withRuntimeDefaults(sent);
     const controller = new AbortController();
     if (signal?.aborted === true) {
         controller.abort();
@@ -91,7 +94,7 @@ export async function* streamAgent(services: Services, input: SentTurn, signal: 
     let unregister: (() => void) | undefined;
     try {
         // Steering exists only where the runtime declares it; others register abort alone.
-        steering = capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").steering ? new SteeringQueue() : undefined;
+        steering = capabilitiesOf(input.agent, input.harness).steering ? new SteeringQueue() : undefined;
         unregister =
             input.conversationId !== undefined
                 ? services.conversations.registerTurn(input.conversationId, {
@@ -107,7 +110,7 @@ export async function* streamAgent(services: Services, input: SentTurn, signal: 
 }
 
 // The runner a conversation runs on: the first request picks it, and later turns follow the registry.
-const runnerOf = (existing: PersistedAgent | undefined, input: TurnInput): string | undefined => {
+const runnerOf = (existing: PersistedAgent | undefined, input: RoutedTurn): string | undefined => {
     if (existing !== undefined) {
         return worktreeOf(existing)?.runner;
     }
@@ -116,7 +119,7 @@ const runnerOf = (existing: PersistedAgent | undefined, input: TurnInput): strin
 
 // A runner is isolated by construction; otherwise a fresh conversation takes the request's placement and later turns
 // follow the registry. The persona no longer chooses: every caller already asks for isolation now.
-const isolatedOf = (existing: PersistedAgent | undefined, input: TurnInput, runner: string | undefined): boolean => {
+const isolatedOf = (existing: PersistedAgent | undefined, input: RoutedTurn, runner: string | undefined): boolean => {
     if (runner !== undefined) {
         return true;
     }
@@ -127,7 +130,7 @@ const isolatedOf = (existing: PersistedAgent | undefined, input: TurnInput, runn
 // a local placement runs the turn's body here.
 const placementOf = (
     services: Services,
-    input: TurnInput,
+    input: RoutedTurn,
     signal: AbortSignal | undefined,
     steering: SteeringQueue | undefined,
     conversation: { readonly id: string; readonly snapshot: SnapshotTurn; readonly runner: string | undefined; readonly isolated: boolean },
@@ -162,7 +165,7 @@ const placementOf = (
 // the conversation is placed decides what runs around the turn's own body.
 async function* runConversationTurn(
     services: Services,
-    input: SentTurn,
+    input: RoutedTurn,
     signal: AbortSignal | undefined,
     steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
@@ -257,7 +260,7 @@ const supersedeHeld = (services: Pick<Services, "conversations">, conversationId
 // the record.
 const handoffNoteFor = async (
     services: Services,
-    input: TurnInput,
+    input: RoutedTurn,
     history: readonly unknown[],
     held: HeldTurn | undefined,
 ): Promise<TurnNote | undefined> =>
@@ -272,12 +275,12 @@ const handoffNoteFor = async (
 
 // The session to resume, or none if the runtime no longer holds it, which opens a fresh session seeded from the record
 // instead. A store that can't be probed is trusted, not doubted.
-const sessionToResume = async (services: Services, input: AgentTurn, effectiveCwd: string): Promise<string | undefined> => {
+const sessionToResume = async (services: Services, input: RoutedTurn, effectiveCwd: string): Promise<string | undefined> => {
     const { sessionId } = input;
     if (sessionId === undefined) {
         return undefined;
     }
-    const adapter = services.adapters.for(input.agent ?? "claude", input.harness ?? "native");
+    const adapter = services.adapters.for(input.agent, input.harness);
     const held = await services.perf
         .track("turn.preflight.session", {}, () => adapter.holdsSession(services, sessionId, effectiveCwd))
         .catch((error: unknown) => {
@@ -289,7 +292,7 @@ const sessionToResume = async (services: Services, input: AgentTurn, effectiveCw
 
 // Resuming no session is a runtime handoff, seeded from the record read before this turn appends its own, less the
 // runs the door turned away before this turn sent their words again: the model never saw those rows.
-const handoffOf = async (services: Services, input: TurnInput, resumed: string | undefined): Promise<readonly TranscriptRow[]> => {
+const handoffOf = async (services: Services, input: RoutedTurn, resumed: string | undefined): Promise<readonly TranscriptRow[]> => {
     if (resumed !== undefined || input.conversationId === undefined) {
         return [];
     }
@@ -302,7 +305,7 @@ const handoffOf = async (services: Services, input: TurnInput, resumed: string |
 // refuses these at the door, so reaching a refusal is a turn replayed from a record (resume, fork, a runner). Mentions
 // are a tokenizer's reading of the message, not files the user picked: one that escapes or names nothing is dropped,
 // since a `@path` pasted inside terminal output must not be able to kill the turn.
-const attachmentsOf = async (root: string, input: TurnInput): Promise<{ readonly paths: string[] } | { readonly refused: string }> => {
+const attachmentsOf = async (root: string, input: RoutedTurn): Promise<{ readonly paths: string[] } | { readonly refused: string }> => {
     const paths: string[] = [];
     for (const rel of input.attachments ?? []) {
         const abs = resolveWithin(root, rel);
@@ -323,7 +326,7 @@ const attachmentsOf = async (root: string, input: TurnInput): Promise<{ readonly
 // Built only for the runtime that enters the namespace; others stay cwd'd, told so in the prompt instead.
 const isolationOf = async (
     services: Services,
-    input: TurnInput,
+    input: RoutedTurn,
     worktree: WorktreeRun | undefined,
     localCwd: string,
 ): Promise<TurnPlacement | undefined> => {
@@ -351,7 +354,7 @@ const actorAsks = (
 // what its conversation's actor answers live.
 const baseRequestOf = (
     services: Pick<Services, "conversations" | "cards">,
-    input: TurnInput,
+    input: RoutedTurn,
     turn: {
         readonly history: readonly TranscriptRow[];
         readonly cwd: string;
@@ -385,7 +388,7 @@ const baseRequestOf = (
 };
 
 // The children this turn may spawn. None for a turn with no conversation, or one an outside wake started.
-const childrenOf = (services: Services, input: TurnInput, cwd: string): ChildSupervisor | undefined =>
+const childrenOf = (services: Services, input: RoutedTurn, cwd: string): ChildSupervisor | undefined =>
     input.conversationId === undefined || input.outsideWake !== undefined
         ? undefined
         : childSupervisor(services, { conversationId: input.conversationId, cwd });
@@ -403,7 +406,7 @@ interface Preflight {
 
 const preflight = async (
     services: Services,
-    input: TurnInput,
+    input: RoutedTurn,
     signal: AbortSignal | undefined,
     worktree: WorktreeRun | undefined,
     steering: SteeringQueue | undefined,
@@ -556,7 +559,7 @@ interface PreparedTurn {
 // gate ends the turn here with its frame and `done`.
 async function* prepareTurn(
     services: Services,
-    input: TurnInput,
+    input: RoutedTurn,
     signal: AbortSignal | undefined,
     worktree: WorktreeRun | undefined,
     steering: SteeringQueue | undefined,
@@ -594,7 +597,7 @@ async function* prepareTurn(
 }
 
 // Only a stored Claude account's credential is re-minted, never on the re-mint itself: refused again, it is dead.
-const remintFor = (input: TurnInput, account: string | undefined, request: AgentRequest): FailureContext["remint"] =>
+const remintFor = (input: RoutedTurn, account: string | undefined, request: AgentRequest): FailureContext["remint"] =>
     input.conversationId !== undefined && account !== undefined && request.credential.kind === "claude-oauth" && input.resume !== "auth"
         ? { account, refusedToken: request.credential.token }
         : undefined;
@@ -621,7 +624,7 @@ const keptWarmOf = (services: Pick<Services, "conversations">, conversationId: s
 
 // What a running turn knows about itself, which each failure it classifies reads.
 interface TurnState {
-    readonly input: TurnInput;
+    readonly input: RoutedTurn;
     readonly turnId: string;
     readonly provider: NonNullable<AgentTurn["agent"]>;
     // The account serving this turn; undefined for a container-env credential or an untracked translator subscription.
@@ -683,7 +686,7 @@ const holdTurn = (account: string | undefined, isolation: TurnPlacement | undefi
 // settled from the readings.
 async function* runTurn(
     services: Services,
-    input: TurnInput,
+    input: RoutedTurn,
     signal: AbortSignal | undefined,
     worktree: WorktreeRun | undefined,
     steering: SteeringQueue | undefined,
@@ -695,7 +698,7 @@ async function* runTurn(
         return;
     }
     const { plan, request, isolation, frames } = prepared;
-    const provider = input.agent ?? "claude";
+    const provider = input.agent;
     const account = plan.account;
     const attribution = { ...opt("account", account), ...opt("actor", input.actor) };
     // This turn's identity in the activity log, minted here so its events join as one row.

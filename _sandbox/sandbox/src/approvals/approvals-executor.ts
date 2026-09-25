@@ -83,7 +83,7 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
     // `approved` would be redone by the next pass.
     const startTurn = async (items: readonly ApprovalSummary[], turn: AgentTurn & { conversationId: string }): Promise<void> => {
         await Promise.all(items.map((item) => mark(item, { status: `running`, startedAt: Date.now() })));
-        void services.turns.start({ ...turn, byPerson: false }).catch((error: unknown) => services.logger.error({ err: error }, `approval turn failed to start`));
+        void services.turns.start(turn).catch((error: unknown) => services.logger.error({ err: error }, `approval turn failed to start`));
     };
 
     // A name that resolves to nobody fails every kind: turnPersona denies an unknown card entirely, same as an unpinned

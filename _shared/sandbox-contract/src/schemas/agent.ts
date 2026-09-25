@@ -323,6 +323,19 @@ export const AgentTurnSchema = AgentTurnFieldsSchema
         message: 'forkOf.files "then" requires isolated',
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
+// What a turn naming no provider or loop runs on, stated once. Applied where a request comes in (the daemon's turn port),
+// so nothing downstream defaults them again: the engine takes a turn with both named (withRuntimeDefaults).
+/** A turn with its provider and loop named, as the engine takes it past the door. */
+export type RoutedAgentTurn = AgentTurn & { readonly agent: AgentProvider; readonly harness: AgentHarness };
+export const DEFAULT_PROVIDER: AgentProvider = "claude";
+export const DEFAULT_HARNESS: AgentHarness = "native";
+export const withRuntimeDefaults = <T extends { readonly agent?: AgentProvider | undefined; readonly harness?: AgentHarness | undefined }>(
+    turn: T,
+): T & { readonly agent: AgentProvider; readonly harness: AgentHarness } => ({
+    ...turn,
+    agent: turn.agent ?? DEFAULT_PROVIDER,
+    harness: turn.harness ?? DEFAULT_HARNESS,
+});
 // Which turn this is, as opposed to what it says: who serves it and how (agent, harness, account, model and its knobs),
 // as whom (actsAs), where (isolated), whether anyone watches (unattended) and for which job (runRole). A turn that
 // continues another (a resume, a wake, a nudge, a child's follow-up) carries this whole, never a hand-picked part.

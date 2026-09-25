@@ -26,7 +26,8 @@ import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
 import { AttemptRefused } from "./fix/fix-attempts.js";
 import { startPushFix } from "./fix/push-fix.js";
-import { actorOf, areasOf, ownerOf } from "../auth/principal.js";
+import { areasOf } from "../auth/principal.js";
+import { speakerOf, spokenBy } from "../seams/turn-speaker.js";
 import { callerFence } from "../areas/area-scope.js";
 import { refuseFenced } from "../workspace/layout/workspace-fence.js";
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
@@ -472,8 +473,7 @@ export const createAgentsRoutes = (services: Services) => {
                 // The pick's fields ARE the turn's, spread verbatim; whoever pressed, verified as POST /agent verifies it.
                 turn: {
                     ...input.pick,
-                    ...opt("actor", actorOf(context.identity, context.principal)),
-                    ...opt("owner", ownerOf(context.identity)),
+                    ...spokenBy(speakerOf(context.identity, context.principal)),
                     ...opt("areas", areasOf(context.identity)),
                 },
                 picked: input.pick !== undefined,

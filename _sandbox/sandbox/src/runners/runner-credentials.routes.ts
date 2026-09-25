@@ -5,6 +5,7 @@ import {
     RunnerCredentialRefreshRequestSchema,
     RunnerCredentialRequestSchema,
     runnerTranslatorPath,
+    DEFAULT_PROVIDER,
 } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { replaceRejectedToken } from "../runtimes/claude/claude-credentials.js";
@@ -78,7 +79,7 @@ export const createRunnerCredentialsRoute =
             ...(body.data.account !== undefined ? { account: body.data.account } : {}),
             ...(body.data.model !== undefined ? { model: body.data.model } : {}),
         });
-        services.logger.info({ runner, agent: body.data.agent ?? "claude", ok: resolved.ok }, "runner: credential resolved for a remote turn");
+        services.logger.info({ runner, agent: body.data.agent ?? DEFAULT_PROVIDER, ok: resolved.ok }, "runner: credential resolved for a remote turn");
         return c.json(toRunnerCredential(resolved, services.config.translator.url, services.config.claudeCodeOauthToken));
     };
 

@@ -11,7 +11,7 @@ import { recordingTurnStores, services } from "../../harness/route-services.test
 import { beginTurn } from "../../testing.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { AgentRequest } from "../providers/agent-request.js";
-import type { SentTurn } from "../../seams/turn-starter.js";
+import type { TurnInput } from "../../seams/turn-starter.js";
 import { streamAgent } from "./stream-agent.js";
 
 // Pins where a conversation's turn runs and what happens after it: the runner, the main tree and the worktree, each
@@ -84,7 +84,7 @@ const lands = (writes: ReturnType<typeof recordingTurnStores>["writes"]): unknow
 test("a runner turn without a conversation is refused before anything starts", async () => {
     const { services: s } = placedServices(scripted([{ kind: "done" }]));
 
-    expect(await collect(streamAgent(s, { prompt: "go", placement: { kind: "runner", id: "r-1" }, byPerson: true }, undefined))).toStrictEqual([
+    expect(await collect(streamAgent(s, { prompt: "go", placement: { kind: "runner", id: "r-1" } }, undefined))).toStrictEqual([
         { kind: "error", message: "Running on a runner needs a conversation id — the conversation's branch is what travels." },
         { kind: "done" },
     ]);
@@ -96,7 +96,7 @@ test("a runner nobody paired is refused before the conversation exists", async (
     });
 
     const frames = await collect(
-        streamAgent(s, { prompt: "go", conversationId: "placed-unpaired", placement: { kind: "runner", id: "r-1" }, byPerson: true }, undefined),
+        streamAgent(s, { prompt: "go", conversationId: "placed-unpaired", placement: { kind: "runner", id: "r-1" } }, undefined),
     );
 
     expect(frames).toStrictEqual([
@@ -111,12 +111,12 @@ test("a conversation already running a turn refuses a second one as busy", async
     expect(
         await beginTurn(
             s.conversations,
-            { conversationId: "placed-busy", isolated: false, prompt: "first", profile: { agent: "claude", harness: "native" }, byPerson: true },
+            { conversationId: "placed-busy", isolated: false, prompt: "first", profile: { agent: "claude", harness: "native" } },
             Date.now(),
         ),
     ).toBe("begun");
 
-    expect(await collect(streamAgent(s, { prompt: "second", conversationId: "placed-busy", byPerson: true }, undefined))).toStrictEqual([
+    expect(await collect(streamAgent(s, { prompt: "second", conversationId: "placed-busy" }, undefined))).toStrictEqual([
         { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish." },
         { kind: "done" },
     ]);
@@ -129,12 +129,12 @@ test("an archived conversation refuses a turn nobody sent, and stays archived", 
         ran = true;
         yield { kind: "done" };
     });
-    const turn = { conversationId: "placed-filed", isolated: false, prompt: "first", profile: { agent: "claude", harness: "native" }, byPerson: true } as const;
+    const turn = { conversationId: "placed-filed", isolated: false, prompt: "first", profile: { agent: "claude", harness: "native" } } as const;
     await beginTurn(s.conversations, turn, 1_000);
     await s.conversations.send("placed-filed", { kind: "settle" }, 2_000).settled;
     await s.agents.setArchived(["placed-filed"], 3_000);
 
-    expect(await collect(streamAgent(s, { prompt: "picking this back up", conversationId: "placed-filed", byPerson: false }, undefined))).toStrictEqual([
+    expect(await collect(streamAgent(s, { prompt: "picking this back up", conversationId: "placed-filed" }, undefined))).toStrictEqual([
         { kind: "error", message: "This conversation is archived: only a person's message reopens it." },
         { kind: "done" },
     ]);
@@ -154,7 +154,7 @@ test("a runner turn mirrors the branch, runs remotely, and settles its books eve
     });
 
     const frames = await collect(
-        streamAgent(s, { prompt: "go", conversationId: "placed-runner", placement: { kind: "runner", id: "r-1" }, byPerson: true }, undefined),
+        streamAgent(s, { prompt: "go", conversationId: "placed-runner", placement: { kind: "runner", id: "r-1" } }, undefined),
     );
 
     expect(frames).toStrictEqual([
@@ -185,7 +185,7 @@ test("a runner turn mirrors the branch, runs remotely, and settles its books eve
 test("a main-tree turn checkpoints before it runs, snapshots after, and raises no land or settled event", async () => {
     const { services: s, writes } = placedServices(scripted([{ kind: "delta", text: "done" }, { kind: "done" }]), {}, "snap-1");
 
-    const frames = await collect(streamAgent(s, { prompt: "tidy the readme", conversationId: "placed-main", byPerson: true }, undefined));
+    const frames = await collect(streamAgent(s, { prompt: "tidy the readme", conversationId: "placed-main" }, undefined));
 
     expect(frames).toStrictEqual([
         OPENING_CHECKS_PREAMBLE,
@@ -203,7 +203,7 @@ test("a main-tree turn checkpoints before it runs, snapshots after, and raises n
 test("a main-tree turn with no conversation keeps its checkpoint unindexed and files it nowhere", async () => {
     const { services: s, writes } = placedServices(scripted([{ kind: "delta", text: "done" }, { kind: "done" }]), {}, "snap-2");
 
-    const frames = await collect(streamAgent(s, { prompt: "tidy the readme", byPerson: true }, undefined));
+    const frames = await collect(streamAgent(s, { prompt: "tidy the readme" }, undefined));
 
     expect(frames).toStrictEqual([OPENING_CHECKS_PREAMBLE, { kind: "checkpoint", id: "snap-2" }, { kind: "delta", text: "done" }, { kind: "done" }]);
     expect(writes.checkpoints).toStrictEqual([]);
@@ -217,7 +217,7 @@ test("a runtime that throws is observed as the turn's failure, and the throw rea
 
     const frames: AgentEvent[] = [];
     const run = (async () => {
-        for await (const frame of streamAgent(s, { prompt: "go", conversationId: "placed-throws", byPerson: true }, undefined)) {
+        for await (const frame of streamAgent(s, { prompt: "go", conversationId: "placed-throws" }, undefined)) {
             frames.push(frame);
         }
     })();
@@ -238,7 +238,7 @@ test("a clean isolated turn rebases onto the main line, lands into the main tree
         agentWorktrees: worktrees,
     });
 
-    const input: SentTurn = { prompt: "ship the parser", conversationId: "placed-lands", isolated: true, autoLand: true, byPerson: true };
+    const input: TurnInput = { prompt: "ship the parser", conversationId: "placed-lands", isolated: true, autoLand: true };
     const frames = await collect(streamAgent(s, input, undefined));
 
     expect(frames).toStrictEqual([
@@ -271,7 +271,7 @@ test("a clean isolated turn with auto-land off is measured and held on its branc
         agentWorktrees: worktrees,
     });
 
-    const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-held", isolated: true, autoLand: false, byPerson: true }, undefined));
+    const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-held", isolated: true, autoLand: false }, undefined));
 
     expect(frames.at(-1)).toStrictEqual({ kind: "landed", landed: false, held: true });
     expect(lands(writes)).toStrictEqual([{ name: "agent.land", attrs: { id: "placed-held", mode: "measure", span: "outstanding" } }]);
@@ -305,7 +305,7 @@ test("a rule that holds work narrowed by path is read against the turn's own cha
         sandboxSettings: { get: async () => SandboxSettingsSchema.parse({ rules: [hold] }) },
     });
 
-    const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-rule", isolated: true, byPerson: true }, undefined));
+    const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-rule", isolated: true }, undefined));
 
     expect(frames.at(-1)).toStrictEqual({ kind: "landed", landed: false, held: true });
     expect(writes.ruleFirings).toStrictEqual([{ rule: "hold-app", at: expect.any(Number) }]);
@@ -343,7 +343,7 @@ test("a turn whose own check failed still lands, and its card records the check 
     );
 
     const frames = await collect(
-        streamAgent(s, { prompt: "ship it", conversationId: "placed-checks", isolated: true, autoLand: true, byPerson: true }, undefined),
+        streamAgent(s, { prompt: "ship it", conversationId: "placed-checks", isolated: true, autoLand: true }, undefined),
     );
 
     expect(frames.at(-1)).toMatchObject({ kind: "landed", landed: true });
@@ -361,7 +361,7 @@ test("a failed isolated turn lands nothing, leaves its books alone, and settles 
         { agentWorktrees: worktrees },
     );
 
-    const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-fails", isolated: true, autoLand: true, byPerson: true }, undefined));
+    const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-fails", isolated: true, autoLand: true }, undefined));
 
     expect(frames.slice(2)).toStrictEqual([
         OPENING_CHECKS_PREAMBLE,
@@ -390,7 +390,7 @@ test("a stopped isolated turn lands nothing but settles its books on the branch"
     );
 
     const frames = await collect(
-        streamAgent(s, { prompt: "ship it", conversationId: "placed-stopped", isolated: true, autoLand: true, byPerson: true }, controller.signal),
+        streamAgent(s, { prompt: "ship it", conversationId: "placed-stopped", isolated: true, autoLand: true }, controller.signal),
     );
 
     expect(frames.slice(2)).toStrictEqual([OPENING_CHECKS_PREAMBLE, { kind: "delta", text: "working" }, { kind: "done" }]);
@@ -423,7 +423,7 @@ test("a card settling mid-turn rebases the branch again, restates where it stand
         { agentWorktrees: worktrees },
     );
 
-    const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-resync", isolated: true, autoLand: false, byPerson: true }, undefined));
+    const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-resync", isolated: true, autoLand: false }, undefined));
 
     expect(frames).toStrictEqual([
         { kind: "worktree", branch: "agent/placed-resync", base: base.slice(0, 7), unenforced: true },

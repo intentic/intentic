@@ -2,7 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { WorkPlace } from "../../workload/resource-budget.js";
 import { worktreeOf } from "../../conversations/registry/agents-store.js";
 import type { AgentEvent, AgentHarness, AgentProvider, AskQuestion, TurnProfile } from "@intentic/sandbox-contract";
-import { capabilitiesOf, newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
+import { capabilitiesOf, DEFAULT_HARNESS, newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
 import { cardDeps, raiseRequest } from "../../conversations/actor/card-offers.js";
 import type { Holding } from "../../conversations/actor/conversation-holdings.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
@@ -16,7 +16,7 @@ import { noteChildWork } from "./child-verification.js";
 import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
 import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTurn, type SubagentWaitOptions } from "./subagents.js";
 import { waitForWork, type WorkWaitOutcome } from "./work-wait.js";
-import { childActor } from "../../auth/principal.js";
+import { spokenBy } from "../../seams/turn-speaker.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
@@ -228,7 +228,7 @@ const runChildTurn = (
                 kid.oomKillsAtStart = (await services.resources.snapshot(0)).reading.oomKills;
             }
             // The parent's agent asked for it, never a person.
-            const run = services.turns.run({ ...turn, byPerson: false });
+            const run = services.turns.run(turn);
             if (run === "busy") {
                 failure = "A turn is already running on that conversation.";
                 return;
@@ -441,7 +441,7 @@ const admitChildTurn = async (
 // own loop), which spends no extra allowance and needs no account.
 const childRouting = (spec: ChildSpawnSpec): { readonly provider: AgentProvider; readonly harness: AgentHarness; readonly model: string } => ({
     provider: spec.provider,
-    harness: spec.harness ?? "native",
+    harness: spec.harness ?? DEFAULT_HARNESS,
     model: spec.model,
 });
 
@@ -513,7 +513,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
             conversationId: id,
             title: description.slice(0, 80),
             // Its starter is the parent, which is also how it inherits the parent's owner (agents-registry.ts).
-            actor: childActor(parent.conversationId),
+            ...spokenBy({ kind: "agent", conversationId: parent.conversationId }),
             ...(placement !== undefined ? { placement: { kind: "runner" as const, id: placement } } : {}),
             ...profile,
         };
@@ -579,7 +579,7 @@ export const sendToChild = async (services: Services, parent: ChildParent, child
     if (!allowed.ok) {
         return allowed;
     }
-    composeRuntimeFloor(parent.conversationId, kid.spec.provider, kid.spec.harness ?? "native");
+    composeRuntimeFloor(parent.conversationId, kid.spec.provider, childRouting(kid.spec).harness);
     if (kid.queued) {
         return { ok: false, message: "It is waiting for memory and has not started: wait for it, then send again." };
     }
@@ -601,7 +601,7 @@ export const sendToChild = async (services: Services, parent: ChildParent, child
             prompt: message,
             conversationId: childId,
             // Its parent asked, as for the spawn: the settled turn reports back to that parent (child-report.ts).
-            actor: childActor(parent.conversationId),
+            ...spokenBy({ kind: "agent", conversationId: parent.conversationId }),
             ...kid.profile,
             // Session from the last turn's report; absent falls back to the ordinary reopened-conversation seed.
             ...(kid.sessionId !== undefined ? { sessionId: kid.sessionId } : {}),
@@ -619,7 +619,7 @@ export const sendToChild = async (services: Services, parent: ChildParent, child
             description: message.replaceAll(/\s+/gu, " ").trim().slice(0, 200),
             agentType: labelOf(spec.provider),
             provider: spec.provider,
-            harness: spec.harness ?? "native",
+            harness: childRouting(spec).harness,
             spawnDepth: kid.depth,
             ...(spec.model !== undefined ? { model: spec.model } : {}),
         });

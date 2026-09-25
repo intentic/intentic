@@ -2,7 +2,7 @@ import { type AgentSummary, isLandFix, LAND_FIX_OPENING, landFixConversationId }
 import type { GitRunner } from "@intentic/scaffold";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import type { SentTurn } from "../../seams/turn-starter.js";
+import type { TurnInput } from "../../seams/turn-starter.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { LandBreakage } from "../../workspace/deps/verify-deps.js";
 import { landChange, landFixBrief, type LandSuspect, startLandFix } from "./land-fix.js";
@@ -141,7 +141,7 @@ describe("the brief a fresh fix-up opens on", () => {
 
 describe("the attempt it starts", () => {
     const fleet = (roster: AgentSummary[] = []) => {
-        const started: SentTurn[] = [];
+        const started: TurnInput[] = [];
         const services = unstubbed<Services>("services", {
             agents: unstubbed<Services["agents"]>("agents", { list: () => roster, listArchived: () => [] }),
             agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
@@ -173,7 +173,6 @@ describe("the attempt it starts", () => {
                 prompt: landFixBrief(ask, MAIN),
                 title: 'Fix main after "Fix the parser"',
                 conversationId: id,
-                byPerson: false,
             },
         ]);
     });

@@ -5,7 +5,7 @@ import type { BeginRefusal } from "../../../conversations/actor/conversation-dec
 import type { JournalledTurn } from "./turn-journal.js";
 import { type AttachEntry, type AttachHead, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { createDomainEvents, type DomainEventMap } from "../../../seams/domain-events.js";
-import type { SentTurn, TurnStarter } from "../../../seams/turn-starter.js";
+import type { TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { openConversationsDb } from "../../../store/conversations-db.js";
 import { beginTurn, fleetStoreOver, memoryFleet } from "../../../testing.js";
 import { commandsOf, resetCommands } from "../../providers/agent-commands.js";
@@ -51,7 +51,7 @@ const crankedTurn = (): { turnFn: TurnStarter["stream"]; push: (event: AgentEven
     };
 };
 
-const turn = (conversationId: string): SentTurn & { conversationId: string } => ({ prompt: `do the thing`, conversationId, byPerson: true });
+const turn = (conversationId: string): TurnInput & { conversationId: string } => ({ prompt: `do the thing`, conversationId });
 
 // The run a start made, for a case whose start must not be refused.
 const started = (run: TurnRun | BeginRefusal): TurnRun => {
@@ -463,7 +463,7 @@ describe(`turn runs`, () => {
                 const conversationId = input.conversationId ?? ``;
                 await fleet.conversations.send(conversationId, {
                     kind: `begin`,
-                    turn: { conversationId, isolated: false, prompt: input.prompt, profile: {}, byPerson: input.byPerson },
+                    turn: { conversationId, isolated: false, prompt: input.prompt, profile: {} },
                 }).settled;
                 yield* body(input, signal);
                 await fleet.conversations.send(conversationId, { kind: `settle` }).settled;
@@ -563,7 +563,7 @@ describe(`turn runs`, () => {
         close();
         await waitFor(() => expect(turnRunOf(conversations, `c-never`)!.done).toBe(true));
 
-        await conversations.send(`c-never`, { kind: `begin`, turn: { conversationId: `c-never`, isolated: false, prompt: `later`, profile: {}, byPerson: true } })
+        await conversations.send(`c-never`, { kind: `begin`, turn: { conversationId: `c-never`, isolated: false, prompt: `later`, profile: {} } })
             .settled;
         expect(writes).toEqual([]);
     });
@@ -588,11 +588,12 @@ describe(`turn runs`, () => {
 });
 
 describe(`a run on an archived conversation`, () => {
-    // Only a person reopens one, so a run nobody sent is refused before it exists: no row, record or transcript is left.
-    it(`is refused before it exists when nobody sent it, and starts when a person did`, async () => {
+    // Every run is refused before it exists, so no row, record or transcript is left; a person's door reopens the
+    // conversation first (clearArchived), and then it starts.
+    it(`is refused before it exists, and starts once a person's door has reopened it`, async () => {
         const fleet = memoryFleet();
         const filedDeps = { conversations: fleet.conversations, events: createDomainEvents(() => {}) };
-        await beginTurn(fleet.conversations, { conversationId: `c-filed`, isolated: false, prompt: `go`, profile: {}, byPerson: true }, 1_000);
+        await beginTurn(fleet.conversations, { conversationId: `c-filed`, isolated: false, prompt: `go`, profile: {} }, 1_000);
         await fleet.conversations.send(`c-filed`, { kind: `settle` }, 2_000).settled;
         await fleet.agents.setArchived([`c-filed`], 3_000);
         const transcript = jest.fn(async () => true);
@@ -602,9 +603,10 @@ describe(`a run on an archived conversation`, () => {
             yield { kind: `done` };
         };
 
-        expect(startTurnRun(filedDeps, body, { ...turn(`c-filed`), byPerson: false }, { opening, transcript })).toBe(`archived`);
+        expect(startTurnRun(filedDeps, body, { ...turn(`c-filed`) }, { opening, transcript })).toBe(`archived`);
         expect(turnRunOf(fleet.conversations, `c-filed`)).toBeUndefined();
 
+        await fleet.agents.clearArchived([`c-filed`]);
         const run = started(startTurnRun(filedDeps, body, turn(`c-filed`), { opening, transcript }));
         await waitFor(() => expect(run.done).toBe(true));
         expect(invoked).toBe(1);
@@ -617,7 +619,7 @@ describe(`the settle notice`, () => {
         const heard: DomainEventMap["run.settled"][] = [];
         const stop = deps.events.subscribe("run.settled", (settled) => heard.push(settled));
         const { turnFn, push, close } = crankedTurn();
-        startTurnRun(deps, turnFn, { ...turn(`c-settle`), actor: `agent:parent-1` }, { opening });
+        startTurnRun(deps, turnFn, { ...turn(`c-settle`), actor: `agent:parent-1`, speaker: { kind: `agent`, conversationId: `parent-1` } }, { opening });
         push({ kind: `delta`, text: `first thought` });
         push({ kind: `text_end` });
         push({ kind: `delta`, text: `Ported all 12 tests.` });
@@ -628,6 +630,7 @@ describe(`the settle notice`, () => {
         expect(heard[0]).toEqual({
             conversationId: `c-settle`,
             actor: `agent:parent-1`,
+            speaker: { kind: `agent`, conversationId: `parent-1` },
             failure: `usage limit reached`,
             closing: `Ported all 12 tests.`,
         });

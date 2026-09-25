@@ -18,7 +18,7 @@ const standing = { state: "no-code", paths: [], check: undefined } as const;
 
 // A conversation's turn on a Claude account, as it stood when the frame arrived; each case changes what it is about.
 const context = (change: Partial<FailureContext> = {}): FailureContext => ({
-    turn: { prompt: "ship it", conversationId: "c-1" },
+    turn: { agent: "claude", harness: "native", prompt: "ship it", conversationId: "c-1" },
     turnId: "t-1",
     provider: "claude",
     model: "opus",
@@ -71,7 +71,7 @@ const answering = (
 const way: LimitWay = { standing, contextTokens: 9_000, handoffTokens: 1_200 };
 const limit: ErrorFrame = { kind: "error", code: "rate_limit", message: "Claude usage limit reached." };
 const died: ErrorFrame = { kind: "error", message: "the harness crashed" };
-const input = { prompt: "ship it", conversationId: "c-1" };
+const input = { agent: "claude", harness: "native", prompt: "ship it", conversationId: "c-1" } as const;
 
 const refused = (kind: "limit" | "auth" | "entitlement", message: string): FailureWrite[] => [
     { kind: "provider-refusal", provider: "claude", refusal: { at: NOW, kind, message, ...attribution, model: "opus" } },
@@ -115,7 +115,7 @@ describe("a spent allowance", () => {
             [
                 "limitWay",
                 {
-                    turn: { prompt: "ship it", conversationId: "c-1" },
+                    turn: { agent: "claude", harness: "native", prompt: "ship it", conversationId: "c-1" },
                     provider: "claude",
                     model: "opus",
                     account: "acct",
@@ -159,7 +159,7 @@ describe("a spent allowance", () => {
     });
 
     test("with no reset and no conversation it goes out bare, and says it held nothing", async () => {
-        const turn = { prompt: "ship it" };
+        const turn = { agent: "claude", harness: "native", prompt: "ship it" } as const;
         const plan = await classifyFailure(limit, context({ turn }), answering({ way }));
         expect(plan.frame).toBe(limit);
         expect(plan.held).toBeUndefined();
@@ -388,7 +388,7 @@ describe("an uncoded death", () => {
     });
 
     test.each([
-        ["without a conversation", { turn: { prompt: "ship it" } }],
+        ["without a conversation", { turn: { agent: "claude", harness: "native", prompt: "ship it" } }],
         ["on a stopped resume the provider never answered", { answered: false, turn: { ...input, resume: "stopped" } }],
     ] as const)("goes out bare %s", async (_case, change) => {
         const plan = await classifyFailure(died, context(change), answering());
@@ -476,7 +476,7 @@ describe("a session past its window", () => {
     });
 
     test("without a conversation goes out bare, in the provider's words", async () => {
-        const plan = await classifyFailure(overflow, context({ turn: { prompt: "ship it" } }), answering());
+        const plan = await classifyFailure(overflow, context({ turn: { agent: "claude", harness: "native", prompt: "ship it" } }), answering());
         expect(plan.frame).toBe(overflow);
         expect(plan.held).toBeUndefined();
     });
@@ -506,7 +506,7 @@ test("a coded failure with a remedy of its own is logged as a failure and goes o
 
 test("the log keeps a failure's sentence to its first stretch", async () => {
     const long: ErrorFrame = { kind: "error", message: "x".repeat(ERROR_MESSAGE_CHARS + 50) };
-    expect((await classifyFailure(long, context({ turn: { prompt: "p" } }), answering())).log.fields["reason"]).toBe("x".repeat(ERROR_MESSAGE_CHARS));
+    expect((await classifyFailure(long, context({ turn: { agent: "claude", harness: "native", prompt: "p" } }), answering())).log.fields["reason"]).toBe("x".repeat(ERROR_MESSAGE_CHARS));
 });
 
 // The one decision the frame dresses and the settle records: whether a failure holds the turn, and for which wall.
@@ -529,7 +529,7 @@ test.each([
     ["a carried re-run refused unanswered", "limit", died, { answered: false, turn: { ...input, account: "sibling", resume: "carried" } }],
     ["a carried re-run that answered first", "stopped", died, { turn: { ...input, account: "sibling", resume: "carried" } }],
     ["a coded failure with a remedy of its own", undefined, { kind: "error", code: "context-window-too-small", message: "too small" }, {}],
-    ["an uncoded death with no conversation", undefined, died, { turn: { prompt: "ship it" } }],
+    ["an uncoded death with no conversation", undefined, died, { turn: { agent: "claude", harness: "native", prompt: "ship it" } }],
 ] as const)("%s is held as %s", async (_case, reason, event, change) => {
     expect((await classifyFailure(event, context(change), answering({ way }))).held?.reason).toBe(reason);
 });

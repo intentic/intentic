@@ -114,9 +114,24 @@ export const trialBadge = (provider: AgentProvider): string | undefined => {
     return remaining > 0 ? `Free trial · ${remaining} left today` : `Free trial · used up today`;
 };
 
+// Where the day's free trial stands, the one reading of its allowance every surface takes: `none` (not the trial, or
+// the daemon has not confirmed it), `fresh` (no more than half the day's messages spent, so nothing needs saying),
+// `low` (past half: the strip counts down) and `spent` (nothing left: the row points at the free, uncapped options).
+export type TrialPhase = "none" | "fresh" | "low" | "spent";
+
+export const trialPhase = (provider: AgentProvider): TrialPhase => {
+    if (!isTrialProvider(provider) || !trialStatus.value.available) {
+        return `none`;
+    }
+    const { remaining, allowance } = trialStatus.value;
+    if (remaining <= 0) {
+        return `spent`;
+    }
+    return allowance > 0 && remaining > allowance / 2 ? `fresh` : `low`;
+};
+
 // Whether the trial is spent: the row stops being an offer and points to the free, uncapped Google sign-in instead.
-export const trialExhausted = (provider: AgentProvider): boolean =>
-    isTrialProvider(provider) && trialStatus.value.available && trialStatus.value.remaining <= 0;
+export const trialExhausted = (provider: AgentProvider): boolean => trialPhase(provider) === `spent`;
 
 // Both accountsLoaded and endpointsLoaded must be true before a surface says "nothing to send with": the
 // account half lands first and, alone, showed a connect wall a beat before the free trial arrived to contradict it.

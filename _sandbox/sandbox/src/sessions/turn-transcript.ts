@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { type AgentTurn, capabilitiesOf, type TranscriptRow, unspokenPromptRow } from "@intentic/sandbox-contract";
+import { type AgentTurn, capabilitiesOf, type TranscriptRow, unspokenPromptRow, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { parseQueuedPrompt } from "../agent/prompt/turn-preamble.js";
 import type { Services } from "../composition.js";
@@ -155,7 +155,9 @@ const interruptedTurnRows = async (
     sentAt: number,
 ): Promise<readonly TranscriptRow[]> => {
     // What streamAgent actually ran the turn as; absent means claude/native.
-    if (sessionId === undefined || capabilitiesOf(turn.agent ?? "claude", turn.harness ?? "native").runtime !== "claude-code") {
+    // A journalled copy, which a turn written before the port routed it may have left unnamed.
+    const { agent, harness } = withRuntimeDefaults(turn);
+    if (sessionId === undefined || capabilitiesOf(agent, harness).runtime !== "claude-code") {
         return [];
     }
     const rows = await services.sessions.readTail(services.workspace.root, sessionId, sentAt).catch((error: unknown) => {

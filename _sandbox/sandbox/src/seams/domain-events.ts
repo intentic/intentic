@@ -1,4 +1,4 @@
-import type { ParkKind, WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { ParkKind, TurnSpeaker, WorkspaceEvent } from "@intentic/sandbox-contract";
 
 // What a turn and the fleet announce, delivered in-process to whatever reacts to it: a publisher names only the event,
 // and each reacting subsystem is subscribed in composition, so neither imports the other.
@@ -12,6 +12,8 @@ export interface DomainEventMap {
         readonly conversationId: string;
         // Who asked for the turn (seams/turn-starter.ts); undefined for one the daemon started itself.
         readonly actor: string | undefined;
+        // The same, typed: what tells a person at the keyboard from a program holding a token they minted.
+        readonly speaker: TurnSpeaker | undefined;
         // Undefined for a run that ended well or was stopped.
         readonly failure: string | undefined;
         // Its last top-level prose; empty when it said nothing.

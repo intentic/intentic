@@ -28,7 +28,7 @@ import { useChat } from "../run/useChat";
 import type { OpenChat } from "../tabs/cardView";
 import ChatRowList from "../tabs/ChatRowList.vue";
 import { untouchedDraft } from "../tabs/tabFacts";
-import { laneOfTab, personaOfTab, tabsOfPersona } from "../tabs/tabs";
+import { laneOfTab, personaOfAgent, personaOfTab, tabsOfPersona } from "../tabs/tabs";
 import { injectChatRowActions } from "../tabs/useChatRowActions";
 import { ANYONE, usePersonaExpanded } from "./personaExpanded";
 
@@ -84,16 +84,11 @@ const openIds = computed(() => new Set(conversations.value.map((conversation) =>
 const backgroundBy = computed(() => {
     const groups = new Map<string, FleetAgent[]>();
     for (const agent of fleet.value) {
-        if (
-            agent.actsAs === undefined ||
-            !known.value.has(agent.actsAs) ||
-            openIds.value.has(agent.id) ||
-            agent.sandboxId !== undefined ||
-            unregistered(agent.status)
-        ) {
+        const persona = personaOfAgent(agent);
+        if (persona === undefined || !known.value.has(persona) || openIds.value.has(agent.id) || agent.sandboxId !== undefined || unregistered(agent.status)) {
             continue;
         }
-        groups.set(agent.actsAs, [...(groups.get(agent.actsAs) ?? []), agent]);
+        groups.set(persona, [...(groups.get(persona) ?? []), agent]);
     }
     for (const [key, agents] of groups) {
         groups.set(key, agents.toSorted((a, b) => LANE_RANK[laneOf(a)] - LANE_RANK[laneOf(b)] || b.updatedAt - a.updatedAt));

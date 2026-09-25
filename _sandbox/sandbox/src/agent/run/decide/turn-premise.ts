@@ -1,13 +1,4 @@
-import {
-    type AgentCapabilities,
-    type AgentHarness,
-    type AgentProvider,
-    type AgentTurn,
-    type Area,
-    type Persona,
-    type SandboxSettings,
-    capabilitiesOf,
-} from "@intentic/sandbox-contract";
+import { type AgentCapabilities, type AgentHarness, type AgentProvider, type AgentTurn, type Area, type Persona, type SandboxSettings, capabilitiesOf, type RoutedAgentTurn } from "@intentic/sandbox-contract";
 import { conversationFence } from "../../../areas/area-scope.js";
 import { compactedSinceLastTurn, type PersistedAgent } from "../../../conversations/registry/agents-store.js";
 import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
@@ -33,9 +24,8 @@ export interface TurnRuntime {
 
 // Harness is orthogonal to provider: "native" runs each provider on its own runtime, "claude-code" forces the Claude
 // Code loop for any of them.
-export const turnRuntime = (input: AgentTurn, entry: ConversationEntry | undefined): TurnRuntime => {
-    const provider = input.agent ?? "claude";
-    const harness = input.harness ?? "native";
+export const turnRuntime = (input: RoutedAgentTurn, entry: ConversationEntry | undefined): TurnRuntime => {
+    const { agent: provider, harness } = input;
     return { provider, harness, capabilities: capabilitiesOf(provider, harness), conversationTurns: entry?.totals.turns ?? 0 };
 };
 

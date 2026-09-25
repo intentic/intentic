@@ -114,8 +114,9 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
         const controller = new AbortController();
         running.set(input.conversationId, controller);
         try {
-            // The parent's own `begin` already judged who sent it; this mirror opens for whatever the parent dispatched.
-            yield* services.turns.stream({ ...turn, byPerson: true }, controller.signal);
+            // The parent's own `begin` already judged who sent it; this mirror reopens for whatever the parent dispatched.
+            await services.agents.clearArchived([input.conversationId]);
+            yield* services.turns.stream(turn, controller.signal);
         } finally {
             if (running.get(input.conversationId) === controller) {
                 running.delete(input.conversationId);

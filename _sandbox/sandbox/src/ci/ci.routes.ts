@@ -1,7 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
 import { ciContract, type CiRepo } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { actorOf, areasOf, ownerOf } from "../auth/principal.js";
+import { areasOf } from "../auth/principal.js";
+import { speakerOf, spokenBy } from "../seams/turn-speaker.js";
 import { opt } from "../opt.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
@@ -106,12 +107,11 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                     turn: {
                         ...input.pick,
                         // Whoever pressed Fix, verified as POST /agent verifies it: the conversation is theirs.
-                        ...opt("actor", actorOf(context.identity, context.principal)),
-                        ...opt("owner", ownerOf(context.identity)),
+                        ...spokenBy(speakerOf(context.identity, context.principal)),
                         ...opt("areas", areasOf(context.identity)),
                     },
                     picked: input.pick !== undefined,
-                    byPerson: true,
+                    pressed: true,
                     resume: input.mode,
                 },
                 fetchFn,

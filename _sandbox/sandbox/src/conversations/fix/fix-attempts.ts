@@ -80,12 +80,20 @@ export const startFixAttempt = async (deps: FixAttemptDeps, ask: FixAttemptAsk):
     return { kind: "started", conversationId: plan.conversationId, attempt: plan.attempt, continued };
 };
 
+const reopened = async (services: Services, pressed: boolean, conversationId: string): Promise<void> => {
+    if (pressed) {
+        await services.agents.clearArchived([conversationId]);
+    }
+};
+
 // The earlier attempt would not be filed away, so no new one was started; carries the registry's reason.
 export class AttemptRefused extends Error {}
 
 // How the daemon's own fix attempts reach the fleet, for every failure it starts one on: a failed CI run here, a red
 // main-line check in conversations/land/land-fix.ts.
-export const daemonFixAttemptDeps = (services: Services, request: { readonly byPerson: boolean; readonly picked: boolean }): FixAttemptDeps => ({
+// `pressed`: somebody pressed for this attempt, the door a person's words come through, so an archived conversation it
+// continues reopens first (clearArchived) exactly as a person's message would reopen it.
+export const daemonFixAttemptDeps = (services: Services, request: { readonly pressed: boolean; readonly picked: boolean }): FixAttemptDeps => ({
     roster: () => services.agents.list(),
     archivedIds: () => services.agents.listArchived().map((agent) => agent.id),
     // Whatever runs on the earlier attempt goes: it is being set aside, whichever turn it is on.
@@ -102,12 +110,15 @@ export const daemonFixAttemptDeps = (services: Services, request: { readonly byP
     // Same detached-run boundary as POST /agent, so the run map, journal, transcript and observer stay wired; no composer
     // holds these words, so a refusal at the door leaves the sandbox keeping the turn.
     start: async (turn) => {
-        const started = await services.turns.start({ ...turn, byPerson: request.byPerson });
+        if (request.pressed) {
+            await services.agents.clearArchived([turn.conversationId]);
+        }
+        const started = await services.turns.start(turn);
         return typeof started === "string" ? undefined : started;
     },
     // A pick is a choice made now, so it outranks the kept turn's routing: the whole prompt goes on it.
     rerun: async (conversationId) =>
         !request.picked && services.conversations.state(conversationId)?.resume.held?.reason === "door"
-            ? services.turns.resume(conversationId, request.byPerson)
+            ? reopened(services, request.pressed, conversationId).then(() => services.turns.resume(conversationId))
             : undefined,
 });

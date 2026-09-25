@@ -10,9 +10,10 @@ import { type ConversationState, freshRuntime, idleConversation, NO_USAGE, type 
 // effects in the order they must run, and the answer. Pure, so each row is the whole story of one event.
 
 const NOW = 5_000;
-// A person's message; the sandbox's own turns (a resume, a follow-up, a wake) begin the same way with `byPerson: false`.
-const OPENING: BeginTurn = { conversationId: "c1", isolated: true, prompt: "Fix the login bug", profile: { agent: "claude", harness: "native" }, byPerson: true };
-const UNATTENDED: BeginTurn = { ...OPENING, prompt: "Picking this back up.", byPerson: false };
+// A person's message; the sandbox's own turns (a resume, a follow-up, a wake) begin the same way: who sent a turn is
+// never the engine's question, since a person's door reopens an archived conversation before the turn begins.
+const OPENING: BeginTurn = { conversationId: "c1", isolated: true, prompt: "Fix the login bug", profile: { agent: "claude", harness: "native" } };
+const UNATTENDED: BeginTurn = { ...OPENING, prompt: "Picking this back up." };
 const ENTRY: PersistedAgent = isolatedAgent([]);
 const ARCHIVED: PersistedAgent = { ...ENTRY, archivedAt: 2_000 };
 const SESSIONED: PersistedAgent = { ...ENTRY, sessionId: "s-0" };
@@ -195,22 +196,14 @@ const rows: readonly Row[] = [
         reply: "archived",
     },
     {
-        name: "a person's begin opens an archived conversation, the entry it opens coming back onto the board",
+        // A person reopens one at the door that carries their words (clearArchived), before their turn begins.
+        name: "a person's begin is turned away from an archived conversation too: the engine refuses every archived one",
         from: idleConversation(),
         event: { kind: "begin", turn: OPENING },
         entry: ARCHIVED,
-        to: {
-            ...idleConversation(),
-            phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
-            turn: { ...freshRuntime(), lastAt: NOW, promptToFile: OPENING.prompt },
-        },
-        effects: [
-            { kind: "entry-opened", turn: OPENING },
-            { kind: "conversation-prompt", prompt: OPENING.prompt },
-            { kind: "broadcast" },
-            { kind: "persist" },
-        ],
-        reply: "begun",
+        to: idleConversation(),
+        effects: [],
+        reply: "archived",
     },
     {
         name: "a begin nobody sent claims a conversation that is not archived",
@@ -229,41 +222,6 @@ const rows: readonly Row[] = [
             { kind: "persist" },
         ],
         reply: "begun",
-    },
-    {
-        name: "asked ahead of a run, an archived conversation says it would turn away a turn nobody sent",
-        from: idle(),
-        event: { kind: "open-asked", byPerson: false },
-        entry: ARCHIVED,
-        to: idle(),
-        effects: [],
-        reply: false,
-    },
-    {
-        name: "asked ahead of a run, an archived conversation would open for a person",
-        from: idle(),
-        event: { kind: "open-asked", byPerson: true },
-        entry: ARCHIVED,
-        to: idle(),
-        effects: [],
-        reply: true,
-    },
-    {
-        name: "asked ahead of a run, a conversation on the board would open for anyone, whatever holds it now",
-        from: running(),
-        event: { kind: "open-asked", byPerson: false },
-        entry: ENTRY,
-        to: running(),
-        effects: [],
-        reply: true,
-    },
-    {
-        name: "asked ahead of a run, a conversation with no entry yet would open for anyone",
-        from: idleConversation(),
-        event: { kind: "open-asked", byPerson: false },
-        to: idleConversation(),
-        effects: [],
-        reply: true,
     },
     {
         name: "a card raised on a live turn parks it",

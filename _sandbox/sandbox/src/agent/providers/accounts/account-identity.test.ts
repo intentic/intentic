@@ -45,7 +45,7 @@ const T0 = 1_700_000_000_000;
 
 // The conversation this suite is about: it last ran on `old`, the row a pre-reuse reconnect left revoked beside `new`.
 const pinnedTo = async (deps: Services, conversationId: string, account: string): Promise<void> => {
-    await beginTurn(deps.conversations, { conversationId, prompt: "go", isolated: false, profile: { agent: "claude", harness: "native", account }, byPerson: true }, T0);
+    await beginTurn(deps.conversations, { conversationId, prompt: "go", isolated: false, profile: { agent: "claude", harness: "native", account } }, T0);
     const frame: AgentEvent = { kind: "session", sessionId: "s-1", account };
     deps.conversations.send(conversationId, { kind: "frame", frame }, T0);
     await deps.conversations.send(conversationId, { kind: "settle" }, T0).settled;

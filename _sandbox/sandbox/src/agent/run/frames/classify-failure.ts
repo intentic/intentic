@@ -19,7 +19,7 @@ import type { StoredCooldown } from "../../../usage/model-cooldowns.js";
 import type { StoredModelRefusal } from "../../../usage/model-refusals.js";
 import type { ObservedLimit } from "../../../usage/observed-limits.js";
 import { opt } from "../../../opt.js";
-import type { TurnInput } from "../../../seams/turn-starter.js";
+import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
 import type { Attribution } from "./frame-decorators.js";
 
@@ -45,7 +45,7 @@ const REFUSING_CODES: ReadonlySet<string> = new Set(["rate_limit", "claude-token
 
 // Everything classifying one failure frame reads, as it stood when the frame arrived.
 export interface FailureContext {
-    readonly turn: TurnInput;
+    readonly turn: RoutedTurn;
     readonly turnId: string;
     readonly provider: AgentProvider;
     // The model the request resolved to, which is what a refusal is filed against.
@@ -166,7 +166,7 @@ const logOf = (event: ErrorFrame, context: FailureContext): FailurePlan["log"] =
         fields: {
             turnId: context.turnId,
             provider: context.provider,
-            harness: context.turn.harness ?? "native",
+            harness: context.turn.harness,
             ...opt("code", event.code),
             ...opt("model", context.model),
             ...context.attribution,

@@ -222,7 +222,7 @@ export const createAdmission = (
     // refusal at the door hands its words back to the queue rather than the sandbox holding the turn.
     const startWith = async (batch: readonly Omit<QueuedItem, "revision">[], turn: Turn): Promise<string | BeginRefusal> => {
         const person = batch[0]?.voice === "person";
-        const started = await start({ ...turn, byPerson: person }, { senderKeeps: person });
+        const started = await start(turn, { senderKeeps: person });
         if (typeof started === "string") {
             return started;
         }
@@ -333,7 +333,7 @@ export const createAdmission = (
     // can, this message among it or not. The sandbox's words for an archived conversation join nothing.
     const admit = async (item: Omit<QueuedItem, "revision">): Promise<MessageReceipt | Unsaid> => {
         const { conversationId } = item.turn;
-        if (!services().conversations.send(conversationId, { kind: "open-asked", byPerson: item.voice === "person" }).reply) {
+        if (services().conversations.archived(conversationId)) {
             services().logger.info({ conversationId, voice: item.voice }, "admission: the conversation is archived, the sandbox's words go nowhere");
             return ARCHIVED;
         }

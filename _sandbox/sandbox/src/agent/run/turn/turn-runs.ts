@@ -7,13 +7,14 @@ import {
     type TranscriptPatch,
     type TranscriptRow,
     type TurnFact,
+    withRuntimeDefaults,
 } from "@intentic/sandbox-contract";
 import { TranscriptFold, type TurnEnding } from "@intentic/sandbox-contract/transcript-fold";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { type AttachedRun, type AttachEntry, type AttachHead, type LiveRun, RUN_RETAINED_MS, RUNS } from "../../../conversations/actor/conversation-holdings.js";
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
 import type { DomainEvents } from "../../../seams/domain-events.js";
-import type { SentTurn, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
+import type { RoutedTurn, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import type { JournalledTurn } from "./turn-journal.js";
 import { recordCommands } from "../../providers/agent-commands.js";
 import { type FrameBacklog, frameBacklog } from "../../../seams/frame-backlog.js";
@@ -312,19 +313,21 @@ export interface RunOptions {
 
 // Where a run is filed and announced: its conversation's actor holds it, and its settle is told to whoever reacts.
 export interface RunDeps {
-    readonly conversations: Pick<ConversationActors, "holdings" | "send">;
+    readonly conversations: Pick<ConversationActors, "archived" | "holdings" | "send">;
     readonly events: Pick<DomainEvents, "publish">;
 }
 
-// Starts a detached run for the conversation's turn, or names why not: one is live, or it is archived and no person sent
-// this turn, which leaves no run behind. A thrown turn folds into the transcript as an error, so followers see it settle.
+// Starts a detached run for the conversation's turn, or names why not: one is live, or it is archived, which leaves no
+// run behind. A thrown turn folds into the transcript as an error, so followers see it settle.
 export function startTurnRun(
     deps: RunDeps,
     turnFn: TurnStarter["stream"],
-    input: SentTurn & { readonly conversationId: string },
+    sent: TurnInput & { readonly conversationId: string },
     { observer, journalled = false, opening, transcript, before, attempts = 0, holdTurnedAway }: RunOptions = {},
 ): TurnRun | BeginRefusal {
-    if (!deps.conversations.send(input.conversationId, { kind: "open-asked", byPerson: input.byPerson }).reply) {
+    // Routed on the way in (idempotent), for a caller that starts a run without the port.
+    const input: RoutedTurn & { readonly conversationId: string } = withRuntimeDefaults(sent);
+    if (deps.conversations.archived(input.conversationId)) {
         return "archived";
     }
     const runs = deps.conversations.holdings(RUNS);
@@ -334,7 +337,7 @@ export function startTurnRun(
     const startedAt = Date.now();
     const run = new TurnRun(opening?.(startedAt) ?? [], startedAt);
     runs.hold(input.conversationId, input.conversationId, run);
-    const provider = input.agent ?? "claude";
+    const provider = input.agent;
     // Told to the actor in order, which writes them in order; a failed write costs the journal, never the turn.
     const journal = (event: { readonly kind: "journalled"; readonly entry: JournalledTurn } | { readonly kind: "unjournalled" }): void => {
         if (journalled) {
@@ -451,6 +454,7 @@ export function startTurnRun(
             deps.events.publish("run.settled", {
                 conversationId: input.conversationId,
                 actor: input.actor,
+                speaker: input.speaker,
                 failure,
                 closing: closingOf(run.rows),
             });

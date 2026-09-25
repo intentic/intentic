@@ -1,4 +1,4 @@
-import { agentContract, type ConversationQueue } from "@intentic/sandbox-contract";
+import { agentContract, type ConversationQueue, DEFAULT_PROVIDER, speakerVoice } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { routeChat } from "../prompt/chat-router.js";
 import type { Services } from "../../composition.js";
@@ -8,7 +8,8 @@ import { type QueueChange, queueView } from "../../conversations/actor/conversat
 import { rewindConversation } from "../checkpoints/rewind.js";
 import { commandsOf } from "../providers/agent-commands.js";
 import { switchAccount } from "../providers/accounts/switch-account.js";
-import { actorOf, areasOf, ownerOf } from "../../auth/principal.js";
+import { areasOf } from "../../auth/principal.js";
+import { speakerOf, spokenBy } from "../../seams/turn-speaker.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import { refuseUnlessReachable } from "../../personas/persona-reach.js";
@@ -60,15 +61,16 @@ export const createAgentRoutes = (services: Services) => {
             await refuseUnlessReachable(services, context.identity, input.actsAs);
             own(context, conversationId);
             // Who is asking, from what the middleware verified on this request, never from the body.
-            const actor = actorOf(context.identity, context.principal);
+            const speaker = speakerOf(context.identity, context.principal);
+            // A person's words reopen an archived conversation, here at their door; the engine refuses every archived one.
+            await services.agents.clearArchived([conversationId]);
             // Push rides the run's own lifecycle, not this request, since a tab may be asleep.
             const receipt = await services.turns.say({
-                voice: "person",
+                voice: speaker === undefined ? "person" : speakerVoice(speaker),
                 turn: {
                     ...input,
                     conversationId,
-                    ...opt("actor", actor),
-                    ...opt("owner", ownerOf(context.identity)),
+                    ...spokenBy(speaker),
                     ...opt("areas", areasOf(context.identity)),
                 },
             });
@@ -85,7 +87,9 @@ export const createAgentRoutes = (services: Services) => {
         // the entry.
         resume: i.resume.handler(async ({ input, context }) => {
             own(context, input.conversationId);
-            const run = await services.turns.resume(input.conversationId, true, input.routing);
+            // A person's press, which reopens an archived conversation at this door: the engine refuses every archived one.
+            await services.agents.clearArchived([input.conversationId]);
+            const run = await services.turns.resume(input.conversationId, input.routing);
             // A live turn already owns it (the resume pass's re-run, another window): the caller follows it, not re-sends.
             if (run === undefined && services.conversations.state(input.conversationId)?.phase.kind === "running") {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running in that conversation" });
@@ -210,6 +214,8 @@ export const createAgentRoutes = (services: Services) => {
         }),
         queueResume: i.queueResume.handler(async ({ input, context }) => {
             own(context, input.conversationId);
+            // A press on a held queue is a person's say-so, as their message would be.
+            await services.agents.clearArchived([input.conversationId]);
             return services.turns.release(input);
         }),
         // Rewinds a message, its files, transcript and session together. CONFLICT rather than queuing behind a running
@@ -231,7 +237,7 @@ export const createAgentRoutes = (services: Services) => {
             return outcome;
         }),
         // The provider's slash commands from its most recent turn; empty (not an error) if never run.
-        commands: i.commands.handler(({ input }) => ({ commands: [...commandsOf(input.agent ?? "claude")] })),
+        commands: i.commands.handler(({ input }) => ({ commands: [...commandsOf(input.agent ?? DEFAULT_PROVIDER)] })),
         // What each provider last refused a turn with; empty is the common, healthy case.
         refusals: i.refusals.handler(async () => ({ refusals: await services.providerRefusals.read() })),
         // Never throws: no offer, no personas, no model, or a deadline are all "nothing chosen" with a reason; the

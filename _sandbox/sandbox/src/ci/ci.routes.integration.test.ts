@@ -58,7 +58,7 @@ const harness = async () => {
         capabilities,
         ciRuns,
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
-        agents: unstubbed<Services["agents"]>("agents", { list: () => [], listArchived: () => [] }),
+        agents: unstubbed<Services["agents"]>("agents", { list: () => [], listArchived: () => [], clearArchived: async () => {} }),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),

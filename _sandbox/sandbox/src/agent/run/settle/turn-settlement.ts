@@ -8,7 +8,7 @@ import type { Attribution } from "../frames/frame-decorators.js";
 import type { TurnActivity } from "../frames/frame-effects.js";
 import type { TurnFailure, TurnFrames } from "../frames/frame-reducers.js";
 import { opt } from "../../../opt.js";
-import type { TurnInput } from "../../../seams/turn-starter.js";
+import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { TurnPlan } from "../turn/turn-plan.js";
 import type { UsageFrame } from "../turn/turn-usage.js";
 import type { HeldTurn } from "../turn/turn-resume.js";
@@ -54,7 +54,7 @@ export interface SettlementPlan {
 
 // How the turn ended, as far as settling it goes.
 export interface TurnEnd {
-    readonly input: TurnInput;
+    readonly input: RoutedTurn;
     readonly provider: AgentProvider;
     readonly attribution: Attribution;
     // The request the runtime was handed: its resolved model.
@@ -158,7 +158,7 @@ const usageOf = (end: TurnEnd, outcome: TurnOutcome): UsageRow => {
         provider: end.provider,
         ...end.attribution,
         ...modelsOf(end),
-        harness: input.harness ?? "native",
+        harness: input.harness,
         outcome,
         ...failureOf(failure),
         ...opt("conversationId", input.conversationId),

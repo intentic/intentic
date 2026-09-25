@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../../providers/agent-request.js";
 import { createTurnFrames } from "../frames/frame-reducers.js";
-import type { TurnInput } from "../../../seams/turn-starter.js";
+import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { HeldTurn } from "../turn/turn-resume.js";
 import { settleTurn, type TurnEnd } from "./turn-settlement.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
@@ -19,7 +19,7 @@ const request: AgentRequest = {
     hooks: { cards },
     signal: new AbortController().signal,
 };
-const input: TurnInput & { conversationId: string } = { prompt: "ship the parser", conversationId: "c-1" };
+const input: RoutedTurn & { conversationId: string } = { agent: "claude", harness: "native", prompt: "ship the parser", conversationId: "c-1" };
 const noCode = { state: "no-code", paths: [], check: undefined } as const;
 
 // A turn that walked `stream`, held as classification left it; each case names what it is about.
@@ -193,7 +193,7 @@ describe("the resume record", () => {
 
     test("is proof the run got somewhere when nothing is held, and nothing at all without a conversation", () => {
         expect(settleTurn(ended([{ kind: "delta", text: "done" }])).hold).toStrictEqual({ kind: "got-somewhere", conversationId: "c-1" });
-        expect(settleTurn(ended([{ kind: "error", message: "died" }], { input: { prompt: "p" } })).hold).toBeUndefined();
+        expect(settleTurn(ended([{ kind: "error", message: "died" }], { input: { agent: "claude", harness: "native", prompt: "p" } })).hold).toBeUndefined();
     });
 });
 
@@ -262,6 +262,6 @@ describe("the proof it records", () => {
     });
 
     test("is nothing without a conversation to record it on", () => {
-        expect(settleTurn(ended([edit], { input: { prompt: "p" } })).proof).toBeUndefined();
+        expect(settleTurn(ended([edit], { input: { agent: "claude", harness: "native", prompt: "p" } })).proof).toBeUndefined();
     });
 });

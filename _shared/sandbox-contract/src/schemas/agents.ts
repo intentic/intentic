@@ -264,6 +264,12 @@ export const AgentSummarySchema = z.object({
     // Both latched at the first turn, so a board scoped to one project can say which conversations are its own.
     startIn: z.string().optional().describe("Which folder it opened in, relative to the workspace root. Absent means the root."),
     actsAs: z.string().optional().describe("Which persona its first turn acted as. Absent for an ordinary chat."),
+    lastActsAs: z
+        .string()
+        .optional()
+        .describe(
+            "Which persona its last turn acted as: each turn runs as the persona it names, so this is who the conversation speaks as now, and what a view groups it under. Absent for an ordinary chat.",
+        ),
     // Per-conversation, so opening it restores its own choices rather than another tab's; `fast` here is what was asked
     // for, not what was served.
     model: z

@@ -63,7 +63,7 @@ const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { 
     let usage: UsageFrame | undefined;
     let sessionId: string | undefined;
     let failure: string | undefined;
-    const run = services.turns.run({ ...turn, byPerson: false });
+    const run = services.turns.run(turn);
     if (run === "archived") {
         return run;
     }

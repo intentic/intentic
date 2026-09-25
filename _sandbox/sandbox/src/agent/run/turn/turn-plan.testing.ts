@@ -1,4 +1,4 @@
-import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentTurn, DEFAULT_SAFETY_POLICY, type RoutedAgentTurn, SandboxSettingsSchema, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { claudeStoreOf } from "../../../sessions/session-store.js";
@@ -125,7 +125,8 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         ...overrides,
     });
 
-export const turn = (overrides?: Partial<AgentTurn>): AgentTurn => ({ prompt: "do the thing", ...overrides }) as AgentTurn;
+// Routed as the port routes every turn it takes in: provider and loop named, the wire's defaults where none is given.
+export const turn = (overrides?: Partial<AgentTurn>): RoutedAgentTurn => withRuntimeDefaults({ prompt: "do the thing", ...overrides } as AgentTurn);
 
 // What the model actually reads: the plan's notes serialized in front of the prompt (composeWirePrompt), so assertions
 // about "what the turn is told" stay meaningful.

@@ -7,7 +7,7 @@ import type { ConversationWorktree } from "../../../conversations/worktrees/work
 import type { Services } from "../../../composition.js";
 import { checkpointWorktree } from "../../checkpoints/checkpoint-worktree.js";
 import { opt } from "../../../opt.js";
-import type { SentTurn } from "../../../seams/turn-starter.js";
+import type { TurnInput } from "../../../seams/turn-starter.js";
 
 // Where a conversation's turn runs, as the one value its lifecycle is parameterized by: the runner, the main tree, or a
 // worktree. Each announces itself, hands over the turn's body, and has its own after-turn and its own books; the
@@ -65,7 +65,7 @@ export async function* placedTurn(
 // What a conversation's turn begins as: its profile whole, and what an opening turn decides. Placement is the
 // conversation's: a fresh one takes the request's, later turns follow the registry's own record.
 export const conversationIdentity = (
-    input: SentTurn,
+    input: TurnInput,
     conversationId: string,
     placement: { readonly isolated: boolean; readonly runner: string | undefined },
 ): BeginTurn => ({
@@ -74,7 +74,6 @@ export const conversationIdentity = (
     ...opt("runner", placement.runner),
     prompt: input.prompt,
     profile: profileOf(input),
-    byPerson: input.byPerson,
     ...opt("title", input.title),
     ...opt("origin", input.origin),
     ...opt("startedBy", input.actor),

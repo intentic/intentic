@@ -1,7 +1,7 @@
 import type { AgentOrigin } from "@intentic/sandbox-contract";
 import { useAgents } from "../../agents/fleet/useAgents";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import { type FleetLane, laneOf, NO_ATTENTION } from "../../agents/fleet/agentStatus";
+import { type FleetLane, laneOf, NO_ATTENTION, unregistered } from "../../agents/fleet/agentStatus";
 import type { Conversation } from "../session/conversation";
 import { draftPreview } from "../drafts/draftPreview";
 import { useChat } from "../run/useChat";
@@ -67,11 +67,17 @@ export const tabsInLane = (lane: FleetLane): ReadonlySet<string> => {
     );
 };
 
-// The persona a chat sits under in the Personas cut; a pick naming no card on file sits with Anyone, so the cut
+// Who a conversation speaks as, by the daemon's one field: the persona its last turn ran as (each turn runs as its own).
+// FALLBACK for a daemon older than `lastActsAs`: the first turn's persona, the only one it published.
+export const personaOfAgent = (agent: Pick<FleetAgent, "actsAs" | "lastActsAs">): string | undefined => agent.lastActsAs ?? agent.actsAs;
+
+// The persona a chat sits under in the Personas cut: the daemon's word for a conversation it holds, and only for a draft
+// it has never seen, the pick its first turn will run as. A persona naming no card on file sits with Anyone, so the cut
 // always holds every open chat exactly once.
 export const personaOfTab = (conversation: Conversation, known: ReadonlySet<string>): string | undefined => {
-    const pick = conversation.selection.actsAs.value;
-    return pick !== undefined && known.has(pick) ? pick : undefined;
+    const agent = useAgents().agentById(conversation.conversationId);
+    const persona = agent !== undefined && !unregistered(agent.status) ? personaOfAgent(agent) : conversation.selection.actsAs.value;
+    return persona !== undefined && known.has(persona) ? persona : undefined;
 };
 
 // One persona's sweepable chats, optionally one lane of them: the persona header's own Close verbs.

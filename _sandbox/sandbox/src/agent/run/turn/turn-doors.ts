@@ -1,4 +1,4 @@
-import type { StopResult, StopTurn } from "@intentic/sandbox-contract";
+import { type StopResult, type StopTurn, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { type LiveRun, liveRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import type { Services } from "../../../composition.js";
@@ -40,14 +40,17 @@ const stopTurn = async (conversations: Pick<ConversationActors, "holdings" | "ab
     return { stopped: true };
 };
 
-// `services` is read per call, since the port is composed into the very object it reads.
+// `services` is read per call, since the port is composed into the very object it reads. Every turn is routed as it comes
+// in (withRuntimeDefaults): provider and loop named once, never defaulted again downstream. A started turn is routed by
+// startConversationTurn, after its run role or persona has had the chance to name them.
 export const turnDoors = (services: () => Services, body: TurnStarter["stream"]): TurnStarter => {
     const start: TurnStarter["start"] = (turn, options) => startConversationTurn(services(), body, turn, options);
     return {
         start,
-        resume: (conversationId, byPerson, routing) => fireHeldResume(services(), conversationId, byPerson, routing),
-        run: (turn) => {
+        resume: (conversationId, routing) => fireHeldResume(services(), conversationId, routing),
+        run: (sent) => {
             const daemon = services();
+            const turn = withRuntimeDefaults(sent);
             // Opened before the provider runs, matching the send path's own order.
             const opened = openTurnTranscript(daemon, turn);
             const run = startTurnRun(daemon, body, turn, {
@@ -60,7 +63,7 @@ export const turnDoors = (services: () => Services, body: TurnStarter["stream"])
             }
             return run;
         },
-        stream: body,
+        stream: (turn, signal) => body(withRuntimeDefaults(turn), signal),
         steer: async (conversationId, steer) => {
             const daemon = services();
             const composed = await composeSteerText(daemon.workspace.root, steer);

@@ -322,14 +322,19 @@ const walk = async (seed: number, steps: number): Promise<number> => {
         return delivered.reply as unknown;
     };
 
-    // Only a person's turn opens an archived conversation; any other is turned away before the mutex is even asked.
+    // Every turn meets an archived conversation turned away before the mutex is even asked; a person's door reopens it
+    // first (clearArchived), which is the only way their turn gets in.
     const begin = async (id: Id, isolated: boolean, byPerson: boolean): Promise<void> => {
         const model = modelOf(id);
+        if (byPerson && model.archived) {
+            await fleet.agents.clearArchived([id]);
+            model.archived = false;
+        }
         const began = await send(id, {
             kind: "begin",
-            turn: { conversationId: id, isolated, prompt: "go", profile: { agent: "claude", harness: "native" }, byPerson },
+            turn: { conversationId: id, isolated, prompt: "go", profile: { agent: "claude", harness: "native" } },
         });
-        const expected = model.archived && !byPerson ? "archived" : model.running || model.rewinds > 0 ? "busy" : "begun";
+        const expected = model.archived ? "archived" : model.running || model.rewinds > 0 ? "busy" : "begun";
         expect(began).toBe(expected);
         if (expected !== "begun") {
             return;
@@ -857,10 +862,15 @@ const walk = async (seed: number, steps: number): Promise<number> => {
             run: async (id) => {
                 const model = modelOf(id);
                 const byPerson = random() < 0.5;
-                const run = daemon.turns.run({ conversationId: id, prompt: "go", byPerson });
+                // A person's door reopens an archived conversation before its run; the engine refuses every archived one.
+                if (byPerson && model.archived) {
+                    await fleet.agents.clearArchived([id]);
+                    model.archived = false;
+                }
+                const run = daemon.turns.run({ conversationId: id, prompt: "go" });
                 // One run per conversation: refused while one is live, and a finished one is replaced; none at all on an
-                // archived conversation nobody sent it to.
-                const expected = model.archived && !byPerson ? "archived" : model.run === "live" ? "busy" : "run";
+                // archived conversation.
+                const expected = model.archived ? "archived" : model.run === "live" ? "busy" : "run";
                 expect(typeof run === "string" ? run : "run", `a run over a ${String(model.run)} one`).toBe(expected);
                 if (typeof run === "string") {
                     return;
@@ -1087,7 +1097,7 @@ describe("disposal", () => {
         const fleet = createFleet(fleetStoreOver(db), standingsOf(new Map()), PRESENCES);
         await fleet.agents.init();
         const input = { prompt: "go", conversationId: "c1" };
-        await fleet.conversations.send("c1", { kind: "begin", turn: { conversationId: "c1", isolated: true, prompt: "go", profile: {}, byPerson: true } }, 1).settled;
+        await fleet.conversations.send("c1", { kind: "begin", turn: { conversationId: "c1", isolated: true, prompt: "go", profile: {} } }, 1).settled;
         fleet.conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "s-c1" } }, 2);
         const unregister = fleet.conversations.registerTurn("c1", { abort: () => {} });
         await fleet.conversations.send("c1", { kind: "settle" }, 3).settled;

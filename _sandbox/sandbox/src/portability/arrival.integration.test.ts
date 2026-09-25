@@ -130,7 +130,7 @@ test("a document that is TOML but not a definition is refused by what it says, n
 // The registry takes in what the database adopted, so a moved conversation needs no restart to be on the board.
 test("a bundle's conversations are on the target's board the moment it lands", async () => {
     const from = servicesFor(await makeRoots());
-    await beginTurn(from.conversations, { conversationId: "moved-1", isolated: false, prompt: "carry me over", profile: {}, byPerson: true }, 1_000);
+    await beginTurn(from.conversations, { conversationId: "moved-1", isolated: false, prompt: "carry me over", profile: {} }, 1_000);
     await from.conversations.send("moved-1", { kind: "settle" }, 2_000).settled;
     const to = servicesFor(await makeRoots());
     const arrivals = createArrivals(to);

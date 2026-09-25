@@ -3,7 +3,7 @@ import type { ActiveTurn } from "../../agent/checkpoints/agent-steering.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import { recordConversationPrompt, recordPrompt } from "../../sessions/transcript-search.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
-import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, type ReplyOf, type SettleFlush } from "./conversation-decide.js";
+import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, refusesArchived, type ReplyOf, type SettleFlush } from "./conversation-decide.js";
 import { createHoldingsIndex, type Holding, type Holdings, type Share } from "./conversation-holdings.js";
 import { NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
 import { type ConversationState, type HeldRecord, idleConversation, writing } from "./conversation-state.js";
@@ -52,6 +52,8 @@ export interface ConversationActors {
     // What waits for the conversation's next turn, read back from its entry by the first ask after a restart.
     readonly queued: (conversationId: string) => TurnQueue;
     readonly running: (conversationId: string) => boolean;
+    // Whether a turn would be refused as archived (refusesArchived), asked before a run is made for it.
+    readonly archived: (conversationId: string) => boolean;
     // Narrower than `running`: a park or a chosen ending already counts as quiet enough to rebase under.
     readonly writing: (conversationId: string) => boolean;
     // Whether a land lease is shown right now; what a second land press is refused against.
@@ -127,6 +129,12 @@ const effectsOn = (books: ConversationBooks): { readonly [K in ConversationEffec
     "queue-written": (id, effect) => books.queue(id, effect.queue),
 });
 
+// Whether a turn on the conversation would be refused as archived, read off the same entry `begin` reads.
+const archivedIn =
+    (books: Pick<ConversationBooks, "entry">) =>
+    (id: string): boolean =>
+        refusesArchived(books.entry(id));
+
 export const createConversationActors = (books: ConversationBooks): ConversationActors => {
     const actors = new Map<string, Actor>();
     // Lands queued per conversation, each behind the last however it ended.
@@ -193,6 +201,7 @@ export const createConversationActors = (books: ConversationBooks): Conversation
             );
         },
         running,
+        archived: archivedIn(books),
         writing: (id) => {
             const actor = actors.get(id);
             return actor !== undefined && writing(actor.state);

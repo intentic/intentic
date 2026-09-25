@@ -3,6 +3,8 @@ import {
     capabilitiesOf,
     changedParts,
     type KeepWarmEnd,
+    spokenByPerson,
+    type TurnSpeaker,
     keepWarmCap,
     keepWarmDueAt,
     type PromptFingerprint,
@@ -14,7 +16,7 @@ import { type IsolationAnchor, startAnchor } from "../../../conversations/worktr
 import { ensureFreshToken, holdAccount } from "../../../runtimes/claude/claude-credentials.js";
 import { opt } from "../../../opt.js";
 import { serviceability, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
-import type { TurnInput } from "../../../seams/turn-starter.js";
+import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import { SteeringQueue } from "../../checkpoints/agent-steering.js";
 import type { AgentRequest, HarnessCredential } from "../../providers/agent-request.js";
 import type { HarnessRequest } from "../agent.js";
@@ -53,7 +55,7 @@ const HOUR_MS = 3_600_000;
 
 /** The recipe a settled turn leaves, or undefined when it cannot be replayed: another runtime or credential, or a spawned child. */
 export const replayOf = (turn: {
-    readonly input: TurnInput;
+    readonly input: RoutedTurn;
     readonly request: AgentRequest;
     readonly account: string | undefined;
     readonly sessionId: string | undefined;
@@ -61,8 +63,8 @@ export const replayOf = (turn: {
     readonly spawned: boolean;
 }): WarmRecipe | undefined => {
     const { input, request, account, sessionId } = turn;
-    const provider = input.agent ?? "claude";
-    const runtime = capabilitiesOf(provider, input.harness ?? "native").runtime;
+    const provider = input.agent;
+    const runtime = capabilitiesOf(provider, input.harness).runtime;
     if (provider !== "claude" || runtime !== "claude-code" || turn.spawned || account === undefined || sessionId === undefined) {
         return undefined;
     }
@@ -135,10 +137,11 @@ export const dropKeepWarm = (deps: Pick<KeepWarmDeps, "conversations">, conversa
 /** After a turn a person asked for: arms the sandbox-wide hold where the setting and the conversation allow it. */
 export const autoKeepWarm = async (
     deps: KeepWarmDeps,
-    settled: { readonly conversationId: string; readonly actor: string | undefined; readonly failure: string | undefined },
+    settled: { readonly conversationId: string; readonly speaker: TurnSpeaker | undefined; readonly failure: string | undefined },
     now: number = Date.now(),
 ): Promise<void> => {
-    if (settled.actor === undefined || settled.failure !== undefined) {
+    // A person at the keyboard, not a program holding a token a person minted: only they come back to a warm cache.
+    if (!spokenByPerson(settled.speaker) || settled.failure !== undefined) {
         return;
     }
     const settings = await deps.sandboxSettings.get();

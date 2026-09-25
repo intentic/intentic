@@ -3,8 +3,9 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { CONNECT_LANES } from "../../../connect/connectLanes";
-import { endpointProviders, trialStatus } from "../../accounts/providerCatalog";
-import { accessKnown, providerReady } from "../../session/access";
+import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
+import { endpointProviders } from "../../accounts/providerCatalog";
+import { accessKnown, providerReady, trialPhase } from "../../session/access";
 
 const t = useT();
 
@@ -15,13 +16,13 @@ const props = defineProps<{
     providerName: string;
 }>();
 
-// Only a sandbox with nothing but the trial is offered a way off it; past half the allowance the trial strip says it instead.
+// Only a sandbox with nothing but the trial is offered a way off it, while the trial is fresh; past that the trial strip
+// says it instead (trialPhase, the one reading of the allowance).
 const offerUncapped = computed(
     () =>
         props.onTrial &&
         accessKnown.value &&
-        trialStatus.value.available &&
-        trialStatus.value.remaining > trialStatus.value.allowance / 2 &&
+        trialPhase(TRIAL_PROVIDER) === `fresh` &&
         !endpointProviders.value.some((endpoint) => endpoint.kind === `localmodel`) &&
         !CONNECT_LANES.some((lane) => lane.providers.some(providerReady)),
 );

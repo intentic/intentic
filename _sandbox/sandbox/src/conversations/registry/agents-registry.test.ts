@@ -61,7 +61,6 @@ const turn = (overrides: Partial<BeginTurn> = {}): BeginTurn => ({
     isolated: true,
     prompt: "Fix the login bug",
     profile: { agent: "claude", harness: "native" },
-    byPerson: true,
     ...overrides,
 });
 
@@ -1861,13 +1860,17 @@ describe("agents registry", () => {
         expect(store.saved()[0]?.archivedAt).toBeUndefined();
     });
 
-    it("a person's turn un-archives the agent it runs on", async () => {
+    // A person's door reopens it first (clearArchived, at the route that carries their words); the engine refuses every
+    // archived conversation, whoever sent the turn.
+    it("a person's door un-archives the agent, and then their turn runs on it", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         await beginTurn(conversations, turn(), 1_000);
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         await registry.setArchived(["c1"], 5_000);
 
+        expect(await beginTurn(conversations, turn(), 5_500)).toBe("archived");
+        await registry.clearArchived(["c1"]);
         expect(await beginTurn(conversations, turn(), 6_000)).toBe("begun");
         expect(registry.get("c1")?.archivedAt).toBeUndefined();
         expect(registry.list().map((agent) => agent.id)).toEqual(["c1"]);
@@ -1884,7 +1887,7 @@ describe("agents registry", () => {
         await registry.setArchived(["c1"], 5_000);
         const filed = store.saved()[0];
 
-        expect(await beginTurn(conversations, turn({ prompt: "Picking this back up.", byPerson: false }), 6_000)).toBe("archived");
+        expect(await beginTurn(conversations, turn({ prompt: "Picking this back up." }), 6_000)).toBe("archived");
         expect(conversations.running("c1")).toBe(false);
         expect(registry.list()).toEqual([]);
         expect(registry.listArchived().map((agent) => [agent.id, agent.archivedAt])).toEqual([["c1", 5_000]]);
@@ -2323,4 +2326,22 @@ it("a restarted fleet reads a spent allowance back without the hold, the booking
         summary?.limitScheduled,
         summary?.limitMoving,
     ]).toEqual(["error", "rate_limit", 9_000, undefined, undefined, undefined]);
+});
+
+// Each turn runs as the persona it names (turn-premise.ts), so the conversation speaks as its last turn's: one daemon
+// field every view groups by. The first turn's stays on `actsAs`, which never moves.
+describe("the persona a conversation speaks as", () => {
+    it("is the last turn's own, never carried to a turn naming none", async () => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        await registry.init();
+        const ran = async (actsAs: string | undefined, at: number): Promise<void> => {
+            await beginTurn(conversations, turn({ profile: { agent: "claude", harness: "native", ...(actsAs === undefined ? {} : { actsAs }) } }), at);
+            await conversations.send("c1", { kind: "settle" }, at + 1).settled;
+        };
+        await ran("support", 1_000);
+        await ran("sales", 2_000);
+        expect([registry.get("c1")?.actsAs, registry.get("c1")?.lastActsAs]).toEqual(["support", "sales"]);
+        await ran(undefined, 3_000);
+        expect([registry.get("c1")?.actsAs, registry.get("c1")?.lastActsAs]).toEqual(["support", undefined]);
+    });
 });

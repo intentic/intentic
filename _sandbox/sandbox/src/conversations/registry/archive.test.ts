@@ -26,7 +26,6 @@ const turn = (overrides: Partial<BeginTurn> = {}): BeginTurn => ({
     isolated: true,
     prompt: "Fix the login bug",
     profile: { agent: "claude", harness: "native" },
-    byPerson: true,
     ...overrides,
 });
 
@@ -241,7 +240,8 @@ describe("purgeArchived", () => {
         await conversations.send("filed", { kind: "settle" }, 2_000).settled;
         const { worktrees, remove } = stubWorktrees();
         await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["filed"], 9_000);
-        // A new turn un-archives via `begin`, taking the card out of this purge's scope.
+        // A person's door un-archives it before their turn begins, taking the card out of this purge's scope.
+        await agents.clearArchived(["filed"]);
         await beginTurn(conversations, turn({ conversationId: "filed" }), 10_000);
 
         expect(await purgeArchived({ agents, conversations, agentWorktrees: worktrees, logger })).toEqual([]);

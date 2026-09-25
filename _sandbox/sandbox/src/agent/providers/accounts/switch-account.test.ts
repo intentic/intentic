@@ -13,7 +13,7 @@ const T0 = 1_700_000_000_000;
 
 // A conversation that ran one turn on `acct-a`, its session `s-1` minted there.
 const ranOnce = async (deps: Services): Promise<void> => {
-    await beginTurn(deps.conversations, { conversationId: ID, prompt: "go", isolated: false, profile: { agent: "claude", harness: "native", account: "acct-a" }, byPerson: true }, T0);
+    await beginTurn(deps.conversations, { conversationId: ID, prompt: "go", isolated: false, profile: { agent: "claude", harness: "native", account: "acct-a" } }, T0);
     const frame: AgentEvent = { kind: "session", sessionId: "s-1", account: "acct-a" };
     deps.conversations.send(ID, { kind: "frame", frame }, T0);
     await deps.conversations.send(ID, { kind: "settle" }, T0).settled;
@@ -43,25 +43,32 @@ test("keeps the session when asked to carry it, and when the account does not ch
 test("refuses a conversation it does not know, and one whose turn is running", async () => {
     const deps = services();
     expect(await switchAccount(deps, { conversationId: "nobody", account: "acct-b" })).toEqual({ kind: "unknown" });
-    await beginTurn(deps.conversations, { conversationId: ID, prompt: "go", isolated: false, profile: { agent: "claude", harness: "native", account: "acct-a" }, byPerson: true }, T0);
+    await beginTurn(deps.conversations, { conversationId: ID, prompt: "go", isolated: false, profile: { agent: "claude", harness: "native", account: "acct-a" } }, T0);
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" })).toEqual({ kind: "busy" });
     expect(deps.agents.entry(ID)?.profile.account).toBe("acct-a");
 });
 
 test("a held turn runs again at once on the account named, carried when asked", async () => {
     const pressed: unknown[] = [];
+    const reopened: string[] = [];
     const deps = {
-        agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationEntry({ id: ID }) }),
+        agents: unstubbed<Services["agents"]>("agents", {
+            entry: () => conversationEntry({ id: ID }),
+            clearArchived: async (ids) => void reopened.push(...ids),
+        }),
         conversations: unstubbed<Services["conversations"]>("conversations", {
             state: () => ({ resume: { held: { input: { conversationId: ID, prompt: "go", agent: "claude", harness: "native", account: "acct-a" }, reason: "limit", ran: true } } }) as never,
         }),
         turns: unstubbed<Services["turns"]>("turns", {
-            resume: async (_id, byPerson, routing) => {
-                pressed.push({ byPerson, routing });
+            resume: async (_id, routing) => {
+                pressed.push({ routing });
                 return { id: "run-2" } as never;
             },
         }),
     };
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b", carry: true })).toEqual({ kind: "moved", run: "run-2" });
-    expect(pressed).toEqual([{ byPerson: true, routing: { agent: "claude", harness: "native", account: "acct-b", carry: true } }]);
+    expect(pressed).toEqual([{ routing: { agent: "claude", harness: "native", account: "acct-b", carry: true } }]);
+    // A person's press reopens a conversation archived since the turn was held, at this door: the engine refuses every
+    // archived one.
+    expect(reopened).toEqual([ID]);
 });

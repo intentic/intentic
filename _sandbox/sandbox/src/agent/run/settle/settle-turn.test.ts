@@ -119,7 +119,7 @@ describe("a settlement", () => {
         const { deps } = traced();
         await beginTurn(
             deps.conversations,
-            { conversationId: "settle-2", isolated: true, prompt: "go", profile: { agent: "codex" }, byPerson: true },
+            { conversationId: "settle-2", isolated: true, prompt: "go", profile: { agent: "codex" } },
             1_000,
         );
         performSettlement(deps, plan({ proof: { conversationId: "settle-2", proof: RED } }), turn);

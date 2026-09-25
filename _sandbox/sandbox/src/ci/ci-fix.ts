@@ -68,8 +68,9 @@ export interface CiFixRequest {
     readonly evidence: CiFailureEvidence;
     // What the turn carries besides its words: the pick, who pressed, the resume verb.
     readonly turn?: Omit<TurnInput, "prompt" | "conversationId" | "title" | "isolated" | "runRole">;
-    // Somebody pressed Fix, rather than the repair gate starting it.
-    readonly byPerson: boolean;
+    // Somebody pressed Fix, rather than the repair gate starting it: the door a person's words come through, so an archived
+    // attempt it continues reopens.
+    readonly pressed?: boolean;
     // Whether a model was picked for this press, which outranks re-running a turn the door kept.
     readonly picked?: boolean;
     readonly resume?: Parameters<typeof startFixAttempt>[1]["resume"];
@@ -109,7 +110,7 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
         `Carry on from where you left off; the failed job logs earlier in this conversation are still the evidence. You are in an isolated worktree: commit your fix and it goes through review.`,
     ].join("\n\n");
     return startFixAttempt(
-        daemonFixAttemptDeps(services, { byPerson: request.byPerson, picked: request.picked === true }),
+        daemonFixAttemptDeps(services, { pressed: request.pressed === true, picked: request.picked === true }),
         {
             base: ciFixConversationId(project.repo, runId),
             prompt: promptOf(request, where),

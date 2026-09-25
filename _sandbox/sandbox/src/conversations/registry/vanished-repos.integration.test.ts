@@ -78,7 +78,7 @@ const setup = async (): Promise<{
     for (const id of ["c1", "c2"]) {
         await beginTurn(
             conversations,
-            { conversationId: id, isolated: true, prompt: "work", profile: { agent: "claude", harness: "native" }, byPerson: true },
+            { conversationId: id, isolated: true, prompt: "work", profile: { agent: "claude", harness: "native" } },
             1_000,
         );
         const conversation = await worktrees.ensure(id, []);

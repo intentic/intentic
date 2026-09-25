@@ -1,4 +1,4 @@
-import type { UsageTurn } from "@intentic/sandbox-contract";
+import { type UsageTurn, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import type { TurnArmPlan, TurnContext, TurnRefusal } from "../../providers/adapter.js";
 import type { TurnBriefing } from "../../prompt/turn-briefing.js";
@@ -53,7 +53,9 @@ export type TurnPlan =
 
 // Facts, then a decision with no I/O, then the arm: dispatched through the adapter table composition wires rather than an
 // if/else chain, so the set of runtimes has one declaration and the picker's health probe sits beside the arm it predicts.
-export const planTurn = async (services: Services, input: TurnInput, context: TurnContext): Promise<TurnPlan> => {
+export const planTurn = async (services: Services, sent: TurnInput, context: TurnContext): Promise<TurnPlan> => {
+    // Routed on the way in (idempotent), for a caller that plans without the port: its provider and loop are named once.
+    const input = withRuntimeDefaults(sent);
     const decision = decideTurn(await gatherTurnFacts(services, input, context), input, context);
     for (const { fields, message } of decision.warnings) {
         services.logger.warn(fields, message);

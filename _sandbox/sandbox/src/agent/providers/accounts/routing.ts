@@ -1,4 +1,4 @@
-import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, DEFAULT_HARNESS, DEFAULT_PROVIDER } from "@intentic/sandbox-contract";
 
 // Which account a conversation's turn runs on, in one place. The conversation's profile (`provider`, `harness`,
 // `account`, and the session minted on them) is the one truth; a turn, a press, a wake or a queued batch only states
@@ -38,8 +38,8 @@ export interface Routing {
  * the provider, not to the loop.
  */
 export const routingFor = (profile: RoutingProfile | undefined, intent: RoutingIntent): Routing => {
-    const provider = intent.agent ?? "claude";
-    const harness = intent.harness ?? "native";
+    const provider = intent.agent ?? DEFAULT_PROVIDER;
+    const harness = intent.harness ?? DEFAULT_HARNESS;
     const held = profile?.provider === provider ? profile.account : undefined;
     const account = intent.account ?? held;
     return {

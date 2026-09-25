@@ -1,4 +1,4 @@
-import type { SwitchAccount } from "@intentic/sandbox-contract";
+import { type SwitchAccount, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 
 // The one command that moves a conversation to another account (routing.ts reads where it points from then on). A turn
@@ -23,8 +23,11 @@ export const switchAccount = async (services: Pick<Services, "agents" | "convers
     const state = services.conversations.state(conversationId);
     const held = state?.resume.held;
     if (held !== undefined) {
-        const routing = { agent: held.input.agent ?? "claude", harness: held.input.harness ?? "native", account, ...(carry === true ? { carry } : {}) };
-        const run = await services.turns.resume(conversationId, true, routing);
+        const { agent, harness } = withRuntimeDefaults(held.input);
+        const routing = { agent, harness, account, ...(carry === true ? { carry } : {}) };
+        // A person's press: a conversation archived since the turn was held reopens, as their words would reopen it.
+        await services.agents.clearArchived([conversationId]);
+        const run = await services.turns.resume(conversationId, routing);
         if (run !== undefined) {
             return { kind: "moved", run: run.id };
         }

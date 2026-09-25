@@ -74,7 +74,7 @@ const harness = (frames: readonly AgentEvent[], opts: { usage?: AccountUsage; ke
 
 // Opens, binds and settles one turn whose last request touched the cache at `cachedAt`.
 const settled = async (deps: Services, cachedAt: number = T0): Promise<void> => {
-    await beginTurn(deps.conversations, { conversationId: ID, prompt: "go", isolated: false, profile: { agent: "claude", harness: "native", account: "acct" }, byPerson: true }, cachedAt - MINUTE);
+    await beginTurn(deps.conversations, { conversationId: ID, prompt: "go", isolated: false, profile: { agent: "claude", harness: "native", account: "acct" } }, cachedAt - MINUTE);
     deps.conversations.send(ID, { kind: "frame", frame: { kind: "session", sessionId: "s-1", account: "acct" } }, cachedAt);
     deps.conversations.send(ID, { kind: "frame", frame: { kind: "context_usage", tokens: 200_000, contextWindow: 1_000_000, cachedAt, cacheTtlMs: HOUR } }, cachedAt);
     await deps.conversations.send(ID, { kind: "settle" }, cachedAt).settled;
@@ -245,7 +245,7 @@ describe("the sandbox-wide setting", () => {
         const { deps } = harness([], { keepWarm: true });
         await settled(deps);
         noteReplay(deps.conversations, ID, recipe());
-        await autoKeepWarm(deps, { conversationId: ID, actor: "me@example.com", failure: undefined }, T0 + MINUTE);
+        await autoKeepWarm(deps, { conversationId: ID, speaker: { kind: "person", email: "me@example.com" }, failure: undefined }, T0 + MINUTE);
         expect(hold(deps)?.auto).toBe(true);
     });
 
@@ -253,7 +253,16 @@ describe("the sandbox-wide setting", () => {
         const { deps } = harness([], { keepWarm: true });
         await settled(deps);
         noteReplay(deps.conversations, ID, recipe());
-        await autoKeepWarm(deps, { conversationId: ID, actor: undefined, failure: undefined }, T0 + MINUTE);
+        await autoKeepWarm(deps, { conversationId: ID, speaker: undefined, failure: undefined }, T0 + MINUTE);
+        expect(hold(deps)).toBeUndefined();
+    });
+
+    // A control token is a person's grant to a program: nobody sits at a composer to come back to the warm cache.
+    test("leaves a turn a program asked for alone, however a person minted its token", async () => {
+        const { deps } = harness([], { keepWarm: true });
+        await settled(deps);
+        noteReplay(deps.conversations, ID, recipe());
+        await autoKeepWarm(deps, { conversationId: ID, speaker: { kind: "program", token: "ci bot" }, failure: undefined }, T0 + MINUTE);
         expect(hold(deps)).toBeUndefined();
     });
 
@@ -261,7 +270,7 @@ describe("the sandbox-wide setting", () => {
         const { deps } = harness([]);
         await settled(deps);
         noteReplay(deps.conversations, ID, recipe());
-        await autoKeepWarm(deps, { conversationId: ID, actor: "me@example.com", failure: undefined }, T0 + MINUTE);
+        await autoKeepWarm(deps, { conversationId: ID, speaker: { kind: "person", email: "me@example.com" }, failure: undefined }, T0 + MINUTE);
         expect(hold(deps)).toBeUndefined();
     });
 });
