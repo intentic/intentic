@@ -109,11 +109,17 @@ watch([providerAccounts, translatorAccounts, accessKnown, endpointProviders, tri
     }
 });
 
-// Add a freshly-connected account to its provider's list.
+// Add a freshly-connected account to its provider's list. A reconnect lands on the same account id (the daemon's one
+// connect rule, account-identity.ts), so every chat pinned to it carries on without being moved here; what a connect does
+// for them is let the queues it was holding go.
 export const addAccount = (target: AgentProvider, added: OauthAccount): void => {
     const existing = accountsOf(target).filter((a) => a.id !== added.id);
     providerAccounts.value = { ...providerAccounts.value, [target]: [...existing, added] };
-    adoptStranded(target, added);
+    for (const conversation of conversations.value) {
+        if (conversation.selection.provider.value === target) {
+            void conversation.turn.resume();
+        }
+    }
 };
 
 // Whether a conversation has run anywhere: the daemon has it on record, or this window holds its session. A chat that
@@ -121,30 +127,7 @@ export const addAccount = (target: AgentProvider, added: OauthAccount): void => 
 const hasRun = (conversation: (typeof conversations.value)[number]): boolean =>
     conversation.registered.value || conversation.session.value !== undefined;
 
-// The same person signing in again, which is the one move a reconnect may make for them: both rows say whose they are,
-// and it is the same identity. An unnamed identity, or a row the list no longer holds, proves nothing.
-const samePerson = (stranded: OauthAccount | undefined, added: OauthAccount): boolean =>
-    stranded?.email !== undefined && stranded.email === added.email;
-
-// A reconnect mints a new account id, so chats pinned to the old one move across. Only chats whose account is missing
-// or flagged for reauth move, and a chat that has run only when the new sign-in is the same person's: connecting a
-// second account while one needs reauth is not a decision to run every stranded conversation on it.
-const adoptStranded = (target: AgentProvider, added: OauthAccount): void => {
-    const live = accountsOf(target);
-    for (const conversation of conversations.value) {
-        if (conversation.selection.provider.value !== target) {
-            continue;
-        }
-        const current = conversation.selection.account.value;
-        const stranded = current !== undefined && current !== added.id && !live.some((entry) => entry.id === current && entry.needsReauth !== true);
-        if (stranded && (!hasRun(conversation) || samePerson(live.find((entry) => entry.id === current), added))) {
-            conversation.selection.apply({ kind: `rebindAccount`, account: added.id });
-        }
-        void conversation.turn.resume();
-    }
-};
-
-// adoptStranded's mirror, for chats that have not run: pinned to an account the list no longer has, they go back to
+// For chats that have not run: pinned to an account the list no longer has, they go back to
 // auto, for the daemon to place by serviceability. No "switched to…" divider: nothing ran on the pick. A chat that has
 // run keeps its pin: which account it goes on is its person's call, and its next turn is refused saying so rather than
 // landing on whichever account happens to be left (harness-credentials.ts).

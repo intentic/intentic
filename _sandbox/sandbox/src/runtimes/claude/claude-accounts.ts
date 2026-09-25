@@ -1,7 +1,8 @@
 import type { AccountUsage, OauthAccount } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
-import { buildAuthorizeUrl, exchangeCode, newAccount, reconnectAccount, renameAccount, sameIdentity, toAccount } from "./claude-credentials.js";
+import { forgetAccountState, sameAccount, signInIdentity } from "../../agent/providers/account-identity.js";
+import { buildAuthorizeUrl, exchangeCode, newAccount, reconnectAccount, renameAccount, toAccount } from "./claude-credentials.js";
 import type { SeatRefusal } from "./claude-seats.js";
 
 // Claude's account door (agent/provider-module.ts): subscription OAuth the sandbox owns, never the platform.
@@ -16,7 +17,7 @@ const withUsage = (account: OauthAccount, usage: AccountUsage | undefined): Oaut
 const withSeat = (account: OauthAccount, seat: SeatRefusal | undefined): OauthAccount =>
     seat === undefined ? account : { ...account, seatRefusal: seat.reason };
 
-export type ClaudeAccountDeps = Pick<Services, "accountUsage" | "claudeSeats" | "claudeStore" | "headroom">;
+export type ClaudeAccountDeps = Pick<Services, "accountUsage" | "claudeSeats" | "claudeStore" | "headroom" | "observedLimits" | "providerRefusals">;
 
 // How long list waits for a fresh plan-limit reading before falling back to what's on file.
 const USAGE_WAIT_MS = 1_500;
@@ -30,7 +31,7 @@ const LOGIN_WINDOW_MS = 15 * 60_000;
 export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
     const pending = new Map<string, { readonly verifier: string; readonly expiresAt: number }>();
     const forget = async (id: string): Promise<void> => {
-        await Promise.all([services.claudeStore.clear(id), services.headroom.clear("claude", id), services.claudeSeats.clear(id)]);
+        await Promise.all([services.claudeStore.clear(id), services.claudeSeats.clear(id), forgetAccountState(services, "claude", id)]);
     };
     return {
         start: async () => {
@@ -55,10 +56,10 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
             }
             const tokens = await exchangeCode(code, attempt.verifier, handshake);
             pending.delete(handshake);
-            // Reconnect and "add another" are the same sign-in; which one it was is decided by whose account came back.
-            // A revoked match is preferred, since that is the row the person pressed Reconnect on.
-            const matches = (await services.claudeStore.list()).filter((entry) => sameIdentity(entry, tokens));
-            const match = matches.find((entry) => entry.needsReauth === true) ?? matches[0];
+            // Reconnect and "add another" are the same sign-in; which one it was is decided by whose account came back
+            // (the one connect rule, account-identity.ts): the same identity lands on the same id, so its row, usage
+            // history and every chat or automation pinned to it carry on.
+            const match = sameAccount(await services.claudeStore.list(), tokens);
             const stored = match === undefined ? undefined : await services.claudeStore.read(match.id);
             const account = stored === undefined ? newAccount(tokens, label ?? "") : reconnectAccount(stored, tokens, label ?? "");
             await services.claudeStore.write(account);
@@ -78,12 +79,9 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
                 ...(force ? { maxAgeMs: 0, watched: true } : {}),
                 withinMs: force ? FORCED_USAGE_WAIT_MS : USAGE_WAIT_MS,
             });
-            const [stored, usage, seats] = await Promise.all([services.claudeStore.list(), services.accountUsage.read(), services.claudeSeats.read()]);
-            // A revoked row whose person is also connected on a working row is a leftover from before reconnects landed
-            // in place (it only ever showed up as a duplicate), so it goes the way a disconnect would.
-            const superseded = stored.filter((account) => account.needsReauth === true && stored.some((live) => live.needsReauth !== true && sameIdentity(account, live)));
-            await Promise.all(superseded.map((account) => forget(account.id)));
-            const accounts = stored.filter((account) => !superseded.includes(account));
+            // A duplicate left from before reconnects landed in place is the boot merge's (account-identity.ts), which
+            // moves its pins to the survivor first; reading a list never deletes anything.
+            const [accounts, usage, seats] = await Promise.all([services.claudeStore.list(), services.accountUsage.read(), services.claudeSeats.read()]);
             return accounts.map((account) => withUsage(withSeat(account, seats[account.id]), usage[account.id]));
         },
         rename: async (id, label) => {
@@ -96,7 +94,8 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
             // Rename must carry the seat note too; it replaces the whole row on the card.
             return withSeat(toAccount(renamed), (await services.claudeSeats.read())[id]);
         },
-        // Clears the credential, usage, and seat state; the next sign-in as this identity mints a new id, so anything left behind orphans.
-        disconnect: forget,
+        identityOf: signInIdentity,
+        // Clears the credential, usage, observed ledger, refusals and seat state together, so nothing is left to orphan.
+        forget,
     };
 };

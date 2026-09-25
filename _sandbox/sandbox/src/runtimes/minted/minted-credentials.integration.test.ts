@@ -47,6 +47,20 @@ test("a sign-in that named nobody falls back to the provider's name", async () =
     expect((await store.connect({ apiKey: "k2", variant: "meta", email: "   " })).label).toBe("Meta");
 });
 
+// The one connect rule (account-identity.ts): signing in again as the same person on the same estate lands on the same
+// id, keeping its name and place, so every conversation pinned to it carries on; another estate is another account.
+test("signing in again as the same person on the same estate lands on the same account, with the new key", async () => {
+    const { store } = await storeIn();
+    const first = await store.connect({ apiKey: "old-key", variant: "meta", email: "me@example.com" });
+    await store.rename(first.id, "Work");
+    const again = await store.connect({ apiKey: "new-key", variant: "meta", email: "ME@example.com" });
+    expect(again).toEqual({ ...first, label: "Work", email: "ME@example.com" });
+    expect((await store.credentials()).map((account) => [account.id, account.apiKey])).toEqual([[first.id, "new-key"]]);
+    const elsewhere = await store.connect({ apiKey: "cn-key", variant: "bigmodel", email: "me@example.com" });
+    expect(elsewhere.id).not.toBe(first.id);
+    expect(await store.list()).toHaveLength(2);
+});
+
 // Clock pinned so the millisecond collision between two connects is the every-run case, not a rare flake; with equal
 // stamps, "oldest first" falls back to readdir's arbitrary order.
 test("several keys live side by side, oldest first, and one disconnect leaves the rest", async () => {

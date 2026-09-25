@@ -186,19 +186,6 @@ describe(`ComposerSelection`, () => {
         expect(selectionOf().selection.auto.value).toBe(false);
     });
 
-    it(`moves the held session onto a reconnected credential without calling it a switch`, () => {
-        const { selection, host, notices } = selectionOf();
-        host.session.value = CLAUDE_SESSION;
-        selection.apply({ kind: `selectAccount`, account: `a2` });
-        expect(notices()).toEqual([FRESH(providerName(`claude`))]);
-
-        selection.apply({ kind: `rebindAccount`, account: `a3` });
-
-        expect(selection.account.value).toBe(`a3`);
-        expect(host.session.value).toEqual({ ...CLAUDE_SESSION, account: `a3` });
-        expect(notices()).toEqual([]);
-    });
-
     it(`spends the Auto mark on the one turn it decided, and asks for fast speed only where it is offered`, () => {
         const { selection } = selectionOf();
         selection.apply({ kind: `set`, picks: { autoPicked: true, actsAs: `backend`, startIn: `api` } });

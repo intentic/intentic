@@ -137,7 +137,7 @@ export const seedModelsOf = (provider: MintedProvider): readonly Model[] => SEED
 // No adapter (see the header), no boot (nothing to start), no pack (these providers add nothing to the image). What's
 // left is what every provider owes: a catalog, a readiness rung, and its secrets-inventory rows.
 // What a minted module reads: its own slice, and the logger its sign-in reports through.
-export type MintedProviderDeps = Pick<Services, "logger" | "minted">;
+export type MintedProviderDeps = Pick<Services, "logger" | "minted" | "headroom" | "observedLimits" | "providerRefusals">;
 
 export const mintedProviderModule = (provider: MintedProvider): ProviderModule<MintedProviderDeps> => ({
     id: provider,

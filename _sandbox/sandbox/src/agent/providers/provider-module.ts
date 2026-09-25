@@ -53,7 +53,13 @@ export interface AccountDoor {
     readonly list: (force: boolean) => Promise<OauthAccount[]>;
     // Undefined means no such account (404): the row may have just been disconnected by another device.
     readonly rename: (id: string, label: string) => Promise<OauthAccount | undefined>;
-    readonly disconnect: (id: string) => Promise<void>;
+    // Who a stored row signs in as (account-identity.ts `signInIdentity`, unless the provider holds only one account):
+    // two rows with one identity are one seat, which a connect reuses and the boot merge collapses. Undefined matches
+    // nothing.
+    readonly identityOf: (stored: OauthAccount) => string | undefined;
+    // Clears everything this provider keeps for the account: its credential, usage snapshot, observed-limit ledger, the
+    // refusals naming it, and any seat mark. What a disconnect does, and what the boot merge does to a superseded row.
+    readonly forget: (id: string) => Promise<void>;
 }
 
 // `D` is what the module and its adapters read of the daemon, named by the provider; the caller hands in more.

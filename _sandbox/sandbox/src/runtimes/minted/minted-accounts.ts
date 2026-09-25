@@ -1,5 +1,6 @@
 import type { MintedProvider } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
+import { forgetAccountState, signInIdentity } from "../../agent/providers/account-identity.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
 import { cancelMintedLogin, cancelMintedLoginsFor, completeMintedLogin, startMintedLogin } from "./minted-login.js";
 
@@ -9,7 +10,7 @@ import { cancelMintedLogin, cancelMintedLoginsFor, completeMintedLogin, startMin
 // and a turn could resolve against it, for the rest of the TTL.
 export const mintedAccountDoor =
     (provider: MintedProvider) =>
-    (services: Pick<Services, "minted" | "logger">): AccountDoor => {
+    (services: Pick<Services, "minted" | "logger" | "headroom" | "observedLimits" | "providerRefusals">): AccountDoor => {
         const slice = services.minted[provider];
         return {
             start: (variant) =>
@@ -33,11 +34,12 @@ export const mintedAccountDoor =
             cancel: (handshake) => cancelMintedLogin(provider, handshake),
             list: () => slice.store.list(),
             rename: (id, label) => slice.store.rename(id, label),
+            identityOf: signInIdentity,
             // A sign-in still in flight dies with the disconnect, or its poll would land a fresh credential into a
             // store the user just cleared minutes later (same reasoning as the translator's codex disconnect).
-            disconnect: async (id) => {
+            forget: async (id) => {
                 cancelMintedLoginsFor(provider);
-                await slice.store.disconnect(id);
+                await Promise.all([slice.store.disconnect(id), forgetAccountState(services, provider, id)]);
                 slice.catalog.forget();
             },
         };

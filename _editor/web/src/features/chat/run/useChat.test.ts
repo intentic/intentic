@@ -642,9 +642,9 @@ describe(`the remembered account`, () => {
         expect(chat.account.value).toBe(`second`);
     });
 
-    // A reconnect mints a new id for the same person, and a chat stranded on the old one follows it. A different person's
-    // sign-in, connected while one account waits for reauth, is not a decision to run every stranded chat on it.
-    it(`moves a chat that has run onto a reconnect only when the same person signed in again`, async () => {
+    // A reconnect lands on the same account id (the daemon's one connect rule, account-identity.ts), so a chat on that
+    // account needs no moving; a different person's sign-in, connected while one account waits for reauth, moves nothing.
+    it(`keeps a chat that has run on its account through a reconnect, and through someone else's sign-in`, async () => {
         mockConnections({
             accounts: (provider) =>
                 provider === `claude` ? [{ id: `first`, label: `Work`, email: `me@work.test`, connectedAt: 1, needsReauth: true }] : [],
@@ -659,8 +659,9 @@ describe(`the remembered account`, () => {
         addAccount(`claude`, { id: `someone-else`, label: `Home`, email: `me@home.test`, connectedAt: 2 });
         expect(chat.account.value).toBe(`first`);
 
-        addAccount(`claude`, { id: `first-again`, label: `Work`, email: `me@work.test`, connectedAt: 3 });
-        expect(chat.account.value).toBe(`first-again`);
+        addAccount(`claude`, { id: `first`, label: `Work`, email: `me@work.test`, connectedAt: 1 });
+        expect(chat.account.value).toBe(`first`);
+        expect(daemon.mock.calls.filter(([procedure]) => procedure === `agent.queueResume`)).toHaveLength(2);
     });
 
     it(`keeps each sandbox's pick to itself: an account id names a credential in one sandbox's store`, async () => {

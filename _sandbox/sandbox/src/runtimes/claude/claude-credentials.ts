@@ -212,13 +212,8 @@ export const newAccount = (tokens: TokenSet, label: string): StoredAccount => ({
     ...tokens,
 });
 
-// A sign-in for an identity already on file lands on that account: same id, so its row, usage history, and every chat
-// or automation pinned to it carry on, and the revoke mark goes with the dead tokens. A label typed now renames it;
-// none keeps the old name. Only an exchange that named its email can match, and a different organization is a
-// different seat, so it stays a separate account.
-export const sameIdentity = (stored: Pick<OauthAccount, "email" | "organization">, tokens: Pick<TokenSet, "email" | "organization">): boolean =>
-    tokens.email !== undefined && stored.email === tokens.email && stored.organization === tokens.organization;
-
+// A sign-in for an identity already on file (account-identity.ts `sameAccount`) lands on that account: same id, and the
+// revoke mark goes with the dead tokens. A label typed now renames it; none keeps the old name.
 export const reconnectAccount = (stored: StoredAccount, tokens: TokenSet, label: string): StoredAccount => {
     const { revokedAt: _revokedAt, revokedReason: _revokedReason, accessToken: _a, refreshToken: _r, expiresAt: _e, scope: _s, ...kept } = stored;
     return { ...kept, ...tokens, ...(label.trim() !== "" ? { label: label.trim() } : {}) };

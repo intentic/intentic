@@ -722,6 +722,7 @@ export const recordingTurnStores = (options: { readonly snapshot?: string } = {}
             observedLimits: {
                 spent: async () => ({}),
                 record: async (provider, account, model, limit) => void writes.observedLimits.push({ provider, account, model, limit }),
+                clear: async () => {},
             },
             history: fakeHistory({
                 snapshot: async (trigger, label) => {

@@ -62,7 +62,7 @@ export const createAccountsRoutes = (services: Services, doors: AccountDoors = a
             return renamed;
         }),
         disconnect: i.disconnect.handler(async ({ input }) => {
-            await doorOf(input.provider).disconnect(input.id);
+            await doorOf(input.provider).forget(input.id);
             return { ok: true } as const;
         }),
     };

@@ -487,6 +487,10 @@ export interface AgentsRegistry {
     // Points the conversation at another account of the provider it runs on: the one write that moves who pays
     // (switchAccount). The session goes with the caller's say, separately (`session-cleared`). Leaves `updatedAt` alone.
     readonly switchAccount: (id: string, account: string) => Promise<AgentSummary | undefined>;
+    // Moves every conversation running on account `from` to `to`, the survivor a superseded account merged into
+    // (account-identity.ts). One write; answers how many moved. Leaves `updatedAt` and every session alone: it is the same
+    // person's seat.
+    readonly repointAccount: (from: string, to: string) => Promise<number>;
     // Stamps a collaborator's ask to land; leaves `updatedAt` alone. Re-asking re-stamps rather than queuing; the land
     // or discard that answers it clears the ask.
     readonly requestLand: (id: string, by: { email: string; name?: string }, at: number) => Promise<AgentSummary | undefined>;
@@ -1026,6 +1030,17 @@ export const createFleet = (
             });
         },
         switchAccount: (id, account) => amend(id, (entry) => ({ ...entry, profile: { ...entry.profile, account } })),
+        repointAccount: async (from, to) => {
+            const moving = entries.filter((entry) => entry.profile.account === from);
+            for (const entry of moving) {
+                replace({ ...entry, profile: { ...entry.profile, account: to } });
+            }
+            if (moving.length > 0) {
+                await persist();
+                broadcast();
+            }
+            return moving.length;
+        },
         requestLand: (id, by, at) =>
             amend(id, (entry) => ({ ...entry, social: { ...entry.social, landRequested: { email: by.email, ...opt("name", by.name), at } } })),
         assign: (id, to, at) => amend(id, (entry) => ({ ...entry, social: { ...entry.social, owner: { email: to.email, ...opt("name", to.name), since: at } } })),

@@ -219,13 +219,6 @@ describe(`a live turn`, () => {
 });
 
 describe(`the session`, () => {
-    it(`moves the held session onto a reconnected credential, retracting the divider rather than drawing one`, () => {
-        expect(reduceSelection(SEEDED, { kind: `rebindAccount`, account: `renewed` }, { ...WORLD, session: CLAUDE_SESSION })).toEqual({
-            selection: { ...SEEDED, account: `renewed` },
-            effects: { session: { ...CLAUDE_SESSION, account: `renewed` }, divider: `drop` },
-        });
-    });
-
     it(`binds the daemon's session, taking its account on a local chat of the same provider`, () => {
         const unpinned = { ...SEEDED, account: undefined };
         const bound = { ...CLAUDE_SESSION, account: `served` };

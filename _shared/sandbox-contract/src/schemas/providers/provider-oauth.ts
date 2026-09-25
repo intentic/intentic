@@ -15,6 +15,12 @@ export const OauthAccountSchema = z.object({
             "Who it signs in as, in the provider's own words. Kept beside the label rather than folded into it, so a renamed account can still say whose it is. Absent when the provider says nothing, which is exactly when renaming is the only answer.",
         ),
     organization: z.string().optional().describe("Which organisation it belongs to, where the provider says."),
+    variant: z
+        .string()
+        .optional()
+        .describe(
+            "Which of the provider's estates it signs in to, for a provider selling more than one (Z.ai's international or mainland plan). With the email and organisation, it is who the account is: a sign-in matching all three lands on this account again, same id.",
+        ),
     scope: z.string().optional().describe("What the credential is permitted to do, in the provider's terms."),
     connectedAt: z.number().describe("When it was connected, in milliseconds."),
     needsReauth: z

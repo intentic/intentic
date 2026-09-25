@@ -13,7 +13,8 @@ const fakeDoor = (over: Partial<AccountDoor> = {}): AccountDoor => ({
     cancel: () => {},
     list: async () => [],
     rename: async () => undefined,
-    disconnect: async () => {},
+    identityOf: () => undefined,
+    forget: async () => {},
     ...over,
 });
 

@@ -44,6 +44,8 @@ export interface ObservedLimitStore {
     readonly spent: (provider: string, account: string) => Promise<ObservedSpend>;
     // Instant is the caller's, like the other refusal stores, so a test can place it without faking the clock.
     readonly record: (provider: string, account: string, model: string, limit: ObservedLimit) => Promise<void>;
+    // Drops one account's ledger whole: a forgotten account's refusals describe nothing any more.
+    readonly clear: (provider: string, account: string) => Promise<void>;
 }
 
 export const fileObservedLimitStore = (path: string): ObservedLimitStore => {
@@ -61,6 +63,16 @@ export const fileObservedLimitStore = (path: string): ObservedLimitStore => {
         record: async (provider, account, model, limit) => {
             const key = keyOf(provider, account);
             await file.update((current) => ({ ...current, [key]: { ...current[key], [model]: limit } }));
+        },
+        clear: async (provider, account) => {
+            const key = keyOf(provider, account);
+            await file.update((current) => {
+                if (!(key in current)) {
+                    return current;
+                }
+                const { [key]: _dropped, ...rest } = current;
+                return rest;
+            });
         },
     };
 };

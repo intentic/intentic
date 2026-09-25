@@ -93,8 +93,6 @@ export type PickAction =
     | { readonly kind: `selectAccount`; readonly account: string }
     | { readonly kind: `accountMoved`; readonly account: string }
     | { readonly kind: `selectHarness`; readonly harness: AgentHarness }
-    // A reconnected credential for the same human account: not a switch, so the session moves with it.
-    | { readonly kind: `rebindAccount`; readonly account: string }
     // The session as the daemon has it, bound to this chat.
     | { readonly kind: `bindSession`; readonly session: SessionRef }
     // A fork's selection: the source's picks ride across, no session does.
@@ -125,9 +123,9 @@ export interface PickEffects {
     readonly fastStale?: true;
     // The session the next turn resumes, as this pick leaves it.
     readonly session?: SessionRef;
-    // The one pending "switched" divider: follow the picks, go, stay in the record as it is, or be owed by a settle
+    // The one pending "switched" divider: follow the picks, stay in the record as it is, or be owed by a settle
     // (`settle` says whether a segment switch was made while the turn ran).
-    readonly divider?: `refresh` | `drop` | `freeze` | { readonly settle: boolean };
+    readonly divider?: `refresh` | `freeze` | { readonly settle: boolean };
 }
 
 export interface PickOutcome {
@@ -316,12 +314,6 @@ const REDUCERS: Reducers = {
                   selection: { ...selection, harness, sentModel: undefined },
                   effects: { kept: true, defaults: { harness }, segmentCut: true, divider: `refresh` },
               },
-    // Not a user switch: no "switched to…" divider, and any pending one retracts. Still asked of the daemon, whose record
-    // holds the credential this one replaces.
-    rebindAccount: (selection, { account }, world) => ({
-        selection: { ...selection, account },
-        effects: { ...(world.session === undefined ? {} : { session: { ...world.session, account } }), divider: `drop` },
-    }),
     // The daemon's word on where the conversation runs: the selection shows it. A remote box's foreign id and another
     // provider's session are never taken, and a session naming no account says nothing about one.
     bindSession: (selection, { session }, world) =>

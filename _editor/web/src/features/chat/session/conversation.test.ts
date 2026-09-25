@@ -3052,13 +3052,14 @@ describe(`Conversation`, () => {
             account: `acct-dead`,
         });
 
-        // The reconnect: a new credential id, and the daemon's hold on the words released on it.
+        // The reconnect lands on the same account id (the daemon's one connect rule), so releasing the held words names
+        // no account: they run where the conversation already runs.
         daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `Landed.` }], { head: () => ({ prompt: `land the branch` }) }));
-        conversation.selection.apply({ kind: `rebindAccount`, account: `acct-new` });
         await conversation.turn.resume();
 
         const released = daemon.mock.calls.find(([procedure]) => procedure === `agent.queueResume`);
-        expect(wire(released?.[1])).toMatchObject({ conversationId: `c1`, routing: { agent: `claude`, account: `acct-new` } });
+        expect(wire(released?.[1])).toMatchObject({ conversationId: `c1`, routing: { agent: `claude` } });
+        expect(wire(released?.[1])[`routing`]).not.toHaveProperty(`account`);
         expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `notice`, text: expect.stringContaining(`revoked`) as unknown as string },
             { role: `user`, text: `land the branch` },
@@ -3066,8 +3067,8 @@ describe(`Conversation`, () => {
         ]);
     });
 
-    // A reconnect mints a new account id; leaving the old one on the session ref would read as a deliberate switch
-    // and retire a session that still resumes fine.
+    // A reconnect keeps the account id (the daemon's one connect rule), so nothing about the session ref changes and the
+    // next send resumes it.
     it(`keeps the session resumable across a reconnect`, async () => {
         const conversation = new Conversation(`c1`);
         daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
@@ -3083,7 +3084,6 @@ describe(`Conversation`, () => {
             account: `acct-dead`,
         });
 
-        conversation.selection.apply({ kind: `rebindAccount`, account: `acct-new` });
         await conversation.turn.send(`again`, {
             agent: `claude`,
             harness: `native`,
@@ -3093,7 +3093,7 @@ describe(`Conversation`, () => {
             effort: `medium`,
             thinking: false,
             fast: false,
-            account: `acct-new`,
+            account: `acct-dead`,
         });
 
         const body = wire(daemon.mock.calls.at(-2)![1]);

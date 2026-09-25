@@ -1,4 +1,5 @@
 import type { Services } from "../../composition.js";
+import { forgetAccountState, signInIdentity } from "../../agent/providers/account-identity.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
 import { cancelCursorLogin, startCursorLogin, toAccount } from "./cursor-credentials.js";
 
@@ -11,8 +12,12 @@ import { cancelCursorLogin, startCursorLogin, toAccount } from "./cursor-credent
 // the right key doesn't require guessing.
 const keyName = (): string => `intentic sandbox (${process.env["INTENTIC_WORKSPACE_NAME"] ?? "workspace"})`;
 
-// What the door reads: the account store, the headroom it refreshes a list against, and the overlay it recomposes.
-export type CursorAccountDeps = Pick<Services, "accountUsage" | "composeEnvironment" | "cursorStore" | "headroom">;
+// What the door reads: the account store, the headroom it refreshes a list against, the overlay it recomposes, and the
+// stores a forgotten account is cleared from.
+export type CursorAccountDeps = Pick<
+    Services,
+    "accountUsage" | "composeEnvironment" | "cursorStore" | "headroom" | "observedLimits" | "providerRefusals"
+>;
 
 export const cursorAccountDoor = (services: CursorAccountDeps): AccountDoor => ({
     start: async () => {
@@ -41,10 +46,11 @@ export const cursorAccountDoor = (services: CursorAccountDeps): AccountDoor => (
         await services.cursorStore.write(renamed);
         return toAccount(renamed);
     },
-    // Recomposes after the credential is gone: what makes the SDK bootstrap follow current accounts on a published
-    // image.
-    disconnect: async (id) => {
-        await services.cursorStore.clear(id);
+    identityOf: signInIdentity,
+    // Clears the credential and everything read about it (its refusal ledger is what Cursor's rings are), then recomposes:
+    // what makes the SDK bootstrap follow current accounts on a published image.
+    forget: async (id) => {
+        await Promise.all([services.cursorStore.clear(id), forgetAccountState(services, "cursor", id)]);
         await services.composeEnvironment();
     },
 });

@@ -1,3 +1,4 @@
+import { sameAccount } from "../../agent/providers/account-identity.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -35,6 +36,8 @@ export const toMintedAccount = (stored: StoredKeyAccount, providerName: string):
     id: stored.id,
     label: mintedDisplayLabel(stored, providerName),
     ...(stored.email !== undefined ? { email: stored.email } : {}),
+    // Part of who the account is: the same email on two estates is two accounts.
+    variant: stored.variant,
     connectedAt: stored.connectedAt,
 });
 
@@ -119,16 +122,26 @@ export const fileMintedStore = (input: {
                 // A mint takes no time, so two connects can land in the same millisecond; equal stamps would leave
                 // order to readdir's arbitrary filename sort. Each new credential is stamped at least one tick past the
                 // newest stored one, keeping connect order recoverable from the files alone.
-                const newest = (await readMintedCredentials(dir)).at(-1)?.connectedAt ?? 0;
+                const stored = await readMintedCredentials(dir);
+                const newest = stored.at(-1)?.connectedAt ?? 0;
+                // The one connect rule (account-identity.ts): the same person on the same estate lands on their account
+                // again, same id, name and place in the order, so every conversation pinned to it carries on.
+                const arriving = { ...(email !== undefined && email.trim() !== "" ? { email: email.trim() } : {}), variant };
+                const match = sameAccount(
+                    stored.map((account) => toMintedAccount(account, providerName)),
+                    arriving,
+                );
+                const kept = stored.find((account) => account.id === match?.id);
                 const account: StoredKeyAccount = {
-                    id: randomUUID(),
+                    id: kept?.id ?? randomUUID(),
                     apiKey: apiKey.trim(),
                     variant,
-                    connectedAt: Math.max(Date.now(), newest + 1),
-                    ...(email !== undefined && email.trim() !== "" ? { email: email.trim() } : {}),
+                    connectedAt: kept?.connectedAt ?? Math.max(Date.now(), newest + 1),
+                    ...(kept?.label !== undefined ? { label: kept.label } : {}),
+                    ...(arriving.email !== undefined ? { email: arriving.email } : {}),
                 };
                 await write(account);
-                input.logger.info({ provider: input.provider, account: account.id, variant }, "minted provider connected");
+                input.logger.info({ provider: input.provider, account: account.id, variant, reconnected: kept !== undefined }, "minted provider connected");
                 return toMintedAccount(account, providerName);
             }),
         rename: async (id, label) => {

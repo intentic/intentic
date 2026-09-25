@@ -2,6 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { OpencodeClient } from "@opencode-ai/sdk";
 import type { OauthAccount } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
+import { forgetAccountState } from "../../agent/providers/account-identity.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
 
 // xAI subscription OAuth relayed through OpenCode, which owns the protocol and token storage. Uses the headless
@@ -39,7 +40,7 @@ const pollDeviceApproval = async (client: OpencodeClient, method: number, signal
     }
 };
 
-export type GrokAccountDeps = Pick<Services, "openCode">;
+export type GrokAccountDeps = Pick<Services, "openCode" | "headroom" | "observedLimits" | "providerRefusals">;
 
 export const grokAccountDoor = (services: GrokAccountDeps): AccountDoor => {
     // A superseding sign-in aborts the previous device poll to stop it hammering the expired code.
@@ -78,8 +79,10 @@ export const grokAccountDoor = (services: GrokAccountDeps): AccountDoor => {
         rename: async () => {
             throw new Error("The Grok account is OpenCode's to name: it holds the credential, and there is only ever one.");
         },
-        disconnect: async () => {
-            await services.openCode.disconnect(XAI);
+        // OpenCode holds the one credential there is, so every row is the same seat: nothing to match or merge.
+        identityOf: () => undefined,
+        forget: async (id) => {
+            await Promise.all([services.openCode.disconnect(XAI), forgetAccountState(services, "grok", id)]);
         },
     };
 };

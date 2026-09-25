@@ -1,3 +1,4 @@
+import { sameAccount } from "../../agent/providers/account-identity.js";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -172,15 +173,21 @@ export const startCursorLogin = async (deps: CursorLoginDeps): Promise<StartedLo
                 apiKeyName: deps.keyName,
             })
             .then(async (result) => {
+                // The one connect rule (account-identity.ts): the same person signing in again lands on their account's
+                // id and keeps its name and place, so every conversation pinned to it carries on; anyone else is new.
+                const match = sameAccount(await deps.store.list(), (result.email !== undefined ? { email: result.email } : {}));
+                const kept = match === undefined ? undefined : await deps.store.read(match.id);
+                const id = kept?.id ?? handshake;
                 await deps.store.write({
-                    id: handshake,
+                    id,
+                    ...(kept?.label !== undefined ? { label: kept.label } : {}),
                     ...(result.email !== undefined ? { email: result.email } : {}),
                     apiKey: result.apiKey,
                     apiKeyExpiresAtMs: result.apiKeyExpiresAtMs,
-                    connectedAt: Date.now(),
+                    connectedAt: kept?.connectedAt ?? Date.now(),
                 });
                 await deps.connected();
-                deps.store.logger.info({ account: handshake }, "cursor: account connected");
+                deps.store.logger.info({ account: id, reconnected: kept !== undefined }, "cursor: account connected");
             })
             .catch((error: unknown) => {
                 if (abort.signal.aborted) {

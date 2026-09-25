@@ -192,8 +192,6 @@ export class ComposerSelection {
     private divide(divider: PickEffects["divider"]): void {
         if (divider === `refresh`) {
             this.refreshSwitchNotice();
-        } else if (divider === `drop`) {
-            this.dropSwitchNotice();
         } else if (divider === `freeze`) {
             this.pendingSwitchNoticeId = undefined;
         } else if (divider !== undefined) {

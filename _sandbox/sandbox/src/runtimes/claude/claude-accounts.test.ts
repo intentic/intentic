@@ -1,4 +1,6 @@
 import { unstubbed } from "@intentic/testing";
+import { mergeSupersededAccounts } from "../../agent/providers/account-identity.js";
+import type { Services } from "../../composition.js";
 import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
 import { displayLabel, type StoredAccount } from "./claude-credentials.js";
 import type { SeatRefusal } from "./claude-seats.js";
@@ -8,6 +10,10 @@ import type { SeatRefusal } from "./claude-seats.js";
 
 // accountUsage is real state, not a stub: list folds it into every row, and disconnect clears it with the credential.
 // Empty by default, matching a sandbox before any turn runs.
+// What forgetting an account also clears, empty here: this suite is about the credential and the seat.
+const NO_REFUSALS: ClaudeAccountDeps["providerRefusals"] = { read: async () => ({}), record: async () => {}, clear: async () => {}, onChange: () => () => {} };
+const NO_OBSERVED: ClaudeAccountDeps["observedLimits"] = { spent: async () => ({}), record: async () => {}, clear: async () => {} };
+
 const door = (
     claudeStore: ClaudeAccountDeps["claudeStore"],
     sweeps: { withinMs: number | undefined; maxAgeMs: number | undefined; watched: boolean | undefined }[] = [],
@@ -41,6 +47,8 @@ const door = (
                 onChange: () => () => {},
                 start: () => () => {},
             },
+            providerRefusals: NO_REFUSALS,
+            observedLimits: NO_OBSERVED,
         }),
     );
 
@@ -81,7 +89,7 @@ test("Claude: the list reflects the store, a start keeps its proof here, disconn
         { id: "a", label: "work", connectedAt: 1, scope: "user:inference" },
         { id: "b", label: "personal", connectedAt: 2 },
     ]);
-    await claude.disconnect("a");
+    await claude.forget("a");
     expect(accounts.has("a")).toBe(false);
     expect(accounts.has("b")).toBe(true);
 });
@@ -124,8 +132,8 @@ test("Claude: an account its organization turned away says so without asking for
     ]);
     // Rename replaces the whole row; the seat refusal must survive it too.
     expect(await claude.rename("a", "Job")).toEqual({ id: "a", label: "Job", connectedAt: 1, seatRefusal: refusal });
-    // Disconnect clears the seat entry; a later sign-in as this identity mints a new account id, so a leftover entry is orphaned.
-    await claude.disconnect("a");
+    // Forgetting clears the seat entry with the credential, so nothing is left to orphan.
+    await claude.forget("a");
     expect(seats.has("a")).toBe(false);
 });
 
@@ -197,15 +205,31 @@ test("Claude: signing in as an account already on file reconnects it in place in
     expect(accounts.size).toBe(3);
 });
 
-// Before reconnects landed in place, a reconnect left the revoked row behind next to the new one. The list retires such
-// a leftover; a revoked row nobody replaced still asks for its reconnect.
-test("Claude: a revoked account the same person has since reconnected under a new row is retired", async () => {
+// Before reconnects landed in place, a reconnect left the revoked row behind next to the new one. Reading the list never
+// deletes it: the boot merge does (account-identity.ts), after moving every conversation and automation pinned to it
+// onto the row that goes on. A revoked row nobody replaced still asks for its reconnect.
+test("Claude: a revoked account the same person has since reconnected under a new row is merged into it, never by a read", async () => {
     const accounts = new Map<string, StoredAccount>([
         ["old", { id: "old", connectedAt: 1, accessToken: "dead", email: "me@example.com", organization: "Org", revokedAt: 5 }],
-        ["new", { id: "new", connectedAt: 2, accessToken: "tok", email: "me@example.com", organization: "Org" }],
+        ["new", { id: "new", connectedAt: 2, accessToken: "tok", email: "Me@Example.com", organization: "Org" }],
         ["lone", { id: "lone", connectedAt: 3, accessToken: "dead", email: "you@example.com", organization: "Org", revokedAt: 5 }],
     ]);
     const claude = door(memoryStore(accounts));
-    expect((await claude.list(false)).map((account) => account.id)).toEqual(["new", "lone"]);
+    expect((await claude.list(false)).map((account) => account.id)).toEqual(["old", "new", "lone"]);
+    const moved: string[] = [];
+    const merged = await mergeSupersededAccounts(
+        {
+            agents: unstubbed<Services["agents"]>("agents", {
+                repointAccount: async (from, to) => {
+                    moved.push(`${from}->${to}`);
+                    return 1;
+                },
+            }),
+            automations: unstubbed<Services["automations"]>("automations", { list: async () => [] }),
+        },
+        { claude },
+    );
+    expect(merged).toEqual([{ provider: "claude", from: "old", to: "new" }]);
+    expect(moved).toEqual(["old->new"]);
     expect([...accounts.keys()]).toEqual(["new", "lone"]);
 });

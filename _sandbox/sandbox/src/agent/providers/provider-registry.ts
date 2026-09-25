@@ -2,6 +2,7 @@ import type { Model, NativeProvider, OauthAccount, SecretInventoryEntry } from "
 import type { Logger } from "pino";
 import type { Services } from "../../composition.js";
 import type { ProviderDeps } from "../../runtimes/runtime-table.js";
+import { mergeSupersededAccounts } from "./account-identity.js";
 import type { BootRole, ProviderCatalog, ProviderModule, SharedProviderReads } from "./provider-module.js";
 
 export type { ProviderCatalog } from "./provider-module.js";
@@ -63,14 +64,26 @@ export const providerReadiness = async (services: ProviderRegistry): Promise<Rec
     return Object.fromEntries(entries) as Record<NativeProvider, boolean>;
 };
 
-// Starts every module's boot tasks; fire-and-forget and best-effort, so a throw is only that module's log line.
-export const startProviderBoot = (services: ProviderRegistry, role: BootRole, logger: Logger): void => {
+// Starts every module's boot tasks; fire-and-forget and best-effort, so a throw is only that module's log line. The
+// daemon owning the workspace roots also merges superseded account rows into their survivors (account-identity.ts), the
+// conversion that moves pins before a duplicate is forgotten; no other writer touches those stores at boot.
+export const startProviderBoot = (services: ProviderRegistry & Pick<Services, "agents" | "automations">, role: BootRole, logger: Logger): void => {
     for (const module of services.providerModules) {
         try {
             module.boot?.(services, role, logger);
         } catch (error) {
             logger.warn({ err: error, provider: module.id }, "provider boot failed");
         }
+    }
+    if (role.roots) {
+        const doors = Object.fromEntries(services.providerModules.flatMap((module) => (module.accounts === undefined ? [] : [[module.id, module.accounts(services)]])));
+        void mergeSupersededAccounts(services, doors)
+            .then((merged) => {
+                if (merged.length > 0) {
+                    logger.info({ merged }, "accounts: merged superseded sign-ins into the accounts that go on");
+                }
+            })
+            .catch((error: unknown) => logger.warn({ err: error }, "accounts: merging superseded sign-ins failed"));
     }
 };
 
