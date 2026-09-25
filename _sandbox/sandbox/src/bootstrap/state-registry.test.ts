@@ -1,16 +1,16 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { packageRoot } from "@intentic/constants/node";
-import { enginePolicyDocument } from "./engines/engine-policy.js";
-import { extensionUpdatesDocument } from "./extensions/extension-updates.js";
-import { extensionUsageDocument } from "./extensions/extension-usage.js";
-import { hostSetupSeededDocument } from "./hosts/host-seed.js";
-import { bundleManifestDocument } from "./portability/bundle-arrival.js";
-import { runnerIdentityDocument } from "./runners/runner-identity.js";
-import { stateModules } from "./store/shapes/state-modules.js";
-import { conversionDigest, type DocumentSpec, documentKey } from "./store/evolution/documents.js";
+import { enginePolicyDocument } from "../engines/engine-policy.js";
+import { extensionUpdatesDocument } from "../extensions/extension-updates.js";
+import { extensionUsageDocument } from "../extensions/extension-usage.js";
+import { hostSetupSeededDocument } from "../hosts/host-seed.js";
+import { bundleManifestDocument } from "../portability/bundle-arrival.js";
+import { runnerIdentityDocument } from "../runners/runner-identity.js";
+import { stateModules } from "../store/shapes/state-modules.js";
+import { conversionDigest, type DocumentSpec, documentKey } from "../store/evolution/documents.js";
 import { stateDocuments, stateSteps } from "./state-registry.js";
-import type { StructuralStep } from "./store/evolution/state-steps.js";
+import type { StructuralStep } from "../store/evolution/state-steps.js";
 
 // The registry the boot step converges with and the pre-flight plans with is every definition the source holds: a
 // document or step left out of it is one an update would neither convert at boot nor show on its card. Regenerate it

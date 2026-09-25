@@ -60,9 +60,9 @@ wait and are measured together in the next run (`workspace/deps/verify-deps.ts`)
 decides: rustfmt on the crates the land touched, each failing check's own `fix` (`_tools/checks/manifest.mjs`), each
 ratcheted baseline lowered where the land's own paths beat it (no check run writes one),
 `contract.lock.json` regenerated after the declarations emit when the land changed the contract, and
-`state-shapes.json` and `state-registry.ts` when it changed a daemon or contract source (a new shape of a stored
-document, frozen for the typecheck that follows, and the list of documents and boot steps the boot step and the
-update pre-flight read). These show up in
+`state-shapes.json` and `state-registry.ts` when it changed a daemon or contract source (each stored document's
+current shape, recorded `unreleased` until a release tag holds it, and the list of documents and boot steps the boot
+step and the update pre-flight read). These show up in
 the main tree as ordinary uncommitted changes. Then it measures the whole repository, plus what the land itself
 added over the commit it landed on (`land-tiers.mjs`: lint on its files, tidy lines, rustfmt, weakened tests left
 undeclared), and logs a failure that passes when re-run alone as a flake (`flakes.mjs`). The verdict is recorded
@@ -112,13 +112,17 @@ turns this and the routing of a red land check into reporting only.
 Anything a store writes and reads back (`.intentic/`, the daemon's `/history` files, `conversations.db`, a
 `sandbox.toml`, a bundle) is read by every later release, from sandboxes that skipped any number of them. A change to
 its shape ships with its conversion, in the `history` of the document's `defineDocument`
-(`_sandbox/sandbox/src/store/evolution/conversions.ts` has the vocabulary). You do not have to find out when one is needed: the
-typecheck of `src/store/generated/state-shapes.ts` fails at the document and property an old file would break on. Define
-a document or a boot step as `export const name = defineDocument(…)` (or `defineStep`) at the top of its module, and
-list it by running the shape generator (`node --import tsx src/store/shapes/write-state-shapes.ts` in
-`_sandbox/sandbox`): the boot step and the update pre-flight read only `src/state-registry.ts`, and its
-test fails on a definition missing from it. Never
-read an existing key a new way (rename it), and never reuse a retired name. [COMPATIBILITY.md](COMPATIBILITY.md#stored-data)
+(`_sandbox/sandbox/src/store/evolution/conversions.ts` has the vocabulary). The daemon's typecheck finds most missing
+ones for you: before it runs, `src/store/generated/state-shapes.ts` is generated from the released shapes in
+`state-shapes.json`, and it fails at the document when a released shape no longer fits today's schema after the
+document's conversions (a property of the wrong type, a new required one), when a key a released shape held is gone
+from today's schema at any depth with no `drop` or `rename` for it (named by its dotted path), and when a retired name
+is reused. It does not see a key read a new way under the same name and type, a field a released shape spelled `any`,
+a refinement (a length, a pattern), or a store with no `defineDocument`. Define a document or a boot step as
+`export const name = defineDocument(…)` (or `defineStep`) at the top of its module, and list it by running the shape
+generator (`node --import tsx src/store/shapes/write-state-shapes.ts --freeze` in `_sandbox/sandbox`): the boot step
+and the update pre-flight read only `src/bootstrap/state-registry.ts`, and its test fails on a definition missing from
+it. Never read an existing key a new way (rename it), and never reuse a retired name. [COMPATIBILITY.md](COMPATIBILITY.md#stored-data)
 has the rest and the reasons.
 
 ## Tests

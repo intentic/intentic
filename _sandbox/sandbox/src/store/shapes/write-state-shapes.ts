@@ -1,39 +1,34 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { packageRoot, repoRoot } from "@intentic/constants/node";
-import { isNewer } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { type DocumentSpec, documentKey } from "../evolution/documents.js";
-import { typeFromSchema } from "./json-schema-type.js";
+import { ANYTHING, typeFromSchema } from "./json-schema-type.js";
+import { beforeHorizon, freeze, type FrozenShape, isRelease, type Release, type Shapes } from "./shape-releases.js";
 import { type Definition, stateModules } from "./state-modules.js";
 
-// The shape generator: writes the state registry (src/state-registry.ts, every document and boot step the
-// source defines, which the boot step and the pre-flight read), freezes every shape each stored document has had, and
-// writes the type-level checks that each frozen shape still converts to what today's schema accepts
-// (store/evolution/conversion-types.ts), so a change that would strand an old file fails `tsc` at the document until a
-// conversion covers it. Run by verify-turn's fixer beside the contract
-// lock (`node --import tsx src/store/shapes/write-state-shapes.ts`); `--seed` backfills, once, the shapes every release
-// since the contract lock existed recorded for contract-exported schemas. Never shipped: excluded from the build.
-
-interface FrozenShape {
-    readonly type: string;
-    // Where the shape was first seen: a release tag for a seeded one, the UTC day it was frozen otherwise.
-    readonly since: string;
-}
-
-type Shapes = Record<string, FrozenShape[]>;
+// The shape generator, two modes. `--freeze` (the land check's fixer, after every land that touched daemon or contract
+// source) writes the state registry (src/bootstrap/state-registry.ts, every document and boot step the source defines,
+// which the boot step and the pre-flight read) and records each document's current shape in state-shapes.json, the
+// only one of its outputs that is committed. `--checks` (the package's `pretypecheck`) writes state-shapes.ts from that
+// record: the type-level checks that each frozen shape still converts to what today's schema accepts and loses no key
+// on the way (store/evolution/conversion-types.ts), so a change that would strand an old file fails `tsc` at the
+// document until a conversion covers it. `--seed` backfills, once, the shapes every release since the contract lock
+// existed recorded for contract-exported schemas. Never shipped: excluded from the build.
+//
+// Which release first shipped each shape, and which shapes never shipped at all, is shape-releases.ts.
 
 const PACKAGE = packageRoot(import.meta.url);
 const SOURCE = join(PACKAGE, "src");
 const GENERATED = join(SOURCE, "store", "generated");
 const SHAPES_FILE = join(GENERATED, "state-shapes.json");
 const CHECKS_FILE = join(GENERATED, "state-shapes.ts");
-// Above every subsystem, beside main.ts: it imports each one's documents, so a registry inside `store/` would close an
-// import cycle through every subsystem that stores anything.
-const REGISTRY_FILE = join(SOURCE, "state-registry.ts");
+// In the boot wiring, which sits above every subsystem (nothing under one imports bootstrap/): it imports each one's
+// documents, so a registry inside `store/` would close an import cycle through every subsystem that stores anything.
+const REGISTRY_FILE = join(SOURCE, "bootstrap", "state-registry.ts");
 const REPO = repoRoot(import.meta.url);
 
 const git = (...args: string[]): string | undefined => {
@@ -62,8 +57,8 @@ interface Located {
 // read when called, so a module that reaches the registry back through an import cycle never meets an unfilled binding.
 const registrySource = (documents: readonly Definition[], steps: readonly Definition[]): string => {
     const from = (module: string): string => {
-        const path = module.replace(/\.ts$/, ".js");
-        return path.startsWith(".") ? path : `./${path}`;
+        const path = `../${module.replace(/\.ts$/, ".js")}`;
+        return path.startsWith("../bootstrap/") ? `./${path.slice("../bootstrap/".length)}` : path;
     };
     const names = new Map<string, string[]>();
     for (const { module, name } of [...documents, ...steps]) {
@@ -77,9 +72,9 @@ const registrySource = (documents: readonly Definition[], steps: readonly Defini
         "// `defineStep(…)` in src/. Do not edit; run the generator. The one list of every stored document and structural boot",
         "// step this build knows: main.ts hands it to the boot step and state-plan.ts plans with it, so the two agree whatever",
         "// else either process loads. state-registry.test.ts fails when a definition is missing from it. Above every",
-        "// subsystem on purpose: nothing under one imports it.",
-        'import type { DocumentSpec } from "./store/evolution/documents.js";',
-        'import type { StructuralStep } from "./store/evolution/state-steps.js";',
+        "// subsystem, in the boot wiring, on purpose: nothing under a subsystem imports bootstrap/.",
+        'import type { DocumentSpec } from "../store/evolution/documents.js";',
+        'import type { StructuralStep } from "../store/evolution/state-steps.js";',
         ...imports,
         "",
         "export const stateDocuments = (): readonly DocumentSpec[] => [",
@@ -111,9 +106,18 @@ const locate = async (documents: readonly Definition[]): Promise<Located[]> => {
     return located;
 };
 
+// A field whose schema accepts anything (`z.unknown()`, `z.any()`) says so, so it freezes as `unknown`, which a later
+// narrowing fails, rather than as the `any` an unrepresentable type (a transform, a custom check) freezes as.
+const markAnything = (context: { zodSchema: unknown; jsonSchema: Record<string, unknown> }): void => {
+    const kind = (context.zodSchema as { _zod?: { def?: { type?: unknown } } })._zod?.def?.type;
+    if (kind === "unknown" || kind === "any") {
+        context.jsonSchema[ANYTHING] = true;
+    }
+};
+
 const shapeOf = (schema: unknown): string => {
     try {
-        return typeFromSchema(z.toJSONSchema(schema as z.ZodType, { io: "input", unrepresentable: "any" }));
+        return typeFromSchema(z.toJSONSchema(schema as z.ZodType, { io: "input", unrepresentable: "any", override: markAnything }));
     } catch {
         // silent-catch: a schema JSON Schema cannot spell freezes as unknown, which every later shape fits
         return "unknown";
@@ -151,10 +155,6 @@ const seed = async (shapes: Shapes, located: readonly Located[]): Promise<void> 
 
 const aliasOf = (name: string, index: number): string => `${name.charAt(0).toUpperCase()}${name.slice(1)}${index}`;
 
-// A shape frozen from a release older than the document's horizon is past what this build converts on purpose.
-const beforeHorizon = (shape: FrozenShape, horizon: string | undefined): boolean =>
-    horizon !== undefined && shape.since.startsWith("v") && isNewer(horizon.replace(/^v/, ""), shape.since.replace(/^v/, ""));
-
 const checksSource = (shapes: Shapes, located: readonly Located[]): string => {
     const byKey = new Map(located.map((entry) => [documentKey(entry.spec), entry]));
     const keys = Object.keys(shapes)
@@ -173,23 +173,25 @@ const checksSource = (shapes: Shapes, located: readonly Located[]): string => {
             continue;
         }
         blocks.push(`// ${key}`);
-        (shapes[key] ?? []).forEach((shape, index) => {
-            if (beforeHorizon(shape, entry.spec.horizon)) {
+        (shapes[key] ?? []).forEach((shape, index, list) => {
+            if (beforeHorizon(list[index + 1], entry.spec.horizon)) {
                 blocks.push(`// since ${shape.since}: before the horizon (${entry.spec.horizon ?? ""}), not converted`);
                 return;
             }
             const alias = aliasOf(entry.name, index);
             blocks.push(`// since ${shape.since}`, `type ${alias} = ${shape.type};`);
             checks.push(`Fits<Accepted<typeof ${entry.name}>, Converted<${alias}, typeof ${entry.name}>>`);
+            checks.push(`Fits<never, VanishedKeys<${alias}, typeof ${entry.name}>>`);
         });
         checks.push(`Fits<never, ReusedKeys<typeof ${entry.name}>>`);
         blocks.push("");
     }
     return [
-        "// Generated by src/store/shapes/write-state-shapes.ts from state-shapes.json: every shape each stored document has",
-        "// had, and the checks that each still converts to what today's schema accepts. Do not edit; run the generator. A",
-        "// failure below names the document and property that would strand an old file: add a conversion to its history.",
-        'import type { Accepted, Converted, Fits, ReusedKeys } from "../evolution/conversion-types.js";',
+        "// Generated by src/store/shapes/write-state-shapes.ts --checks from state-shapes.json before every typecheck, and not",
+        "// committed: every shape each stored document has had, and the checks that each still converts to what today's schema",
+        "// accepts and loses no key it held. A failure below names the document and the property (or the vanished key's path)",
+        "// that would strand an old file: add a conversion to its history (a `drop` or a `rename` for a key that left).",
+        'import type { Accepted, Converted, Fits, ReusedKeys, VanishedKeys } from "../evolution/conversion-types.js";',
         ...imports,
         "",
         ...blocks,
@@ -209,24 +211,50 @@ const readShapes = async (): Promise<Shapes> => {
     }
 };
 
-const { values } = parseArgs({ options: { seed: { type: "boolean", default: false } } });
+// The record as a release tag holds it, undefined for a tag from before the record existed.
+const SHAPES_PATH = relative(REPO, SHAPES_FILE).split("\\").join("/");
+const releasedRecords = new Map<string, Shapes | undefined>();
+const recordAt = (tag: string): Shapes | undefined => {
+    if (!releasedRecords.has(tag)) {
+        const text = git("show", `${tag}:${SHAPES_PATH}`);
+        releasedRecords.set(tag, text === undefined ? undefined : (JSON.parse(text) as Shapes));
+    }
+    return releasedRecords.get(tag);
+};
+
+// Release tags, oldest release first, with the UTC day each was cut.
+const releases = (): Release[] =>
+    (git("for-each-ref", "--sort=creatordate", "--format=%(refname:short) %(creatordate:iso-strict)", "refs/tags") ?? "")
+        .split("\n")
+        .map((line) => line.split(" "))
+        .filter((parts): parts is [string, string] => parts.length === 2 && isRelease(parts[0] ?? ""))
+        .map(([tag, date]) => ({ tag, day: new Date(date).toISOString().slice(0, 10) }));
+
+const { values } = parseArgs({
+    options: { seed: { type: "boolean", default: false }, freeze: { type: "boolean", default: false }, checks: { type: "boolean", default: false } },
+});
+// The fixer's run, when no mode is named: it is the one that records.
+const freezing = values.freeze || !values.checks;
 
 const modules = await stateModules(SOURCE);
-await writeFile(REGISTRY_FILE, registrySource(modules.documents, modules.steps));
-const located = await locate(modules.documents);
-const shapes = await readShapes();
-if (values.seed) {
-    await seed(shapes, located);
+if (freezing) {
+    await writeFile(REGISTRY_FILE, registrySource(modules.documents, modules.steps));
 }
-const utcDay = new Date().toISOString().slice(0, 10);
-for (const { spec } of located) {
-    append(shapes, documentKey(spec), { type: shapeOf(spec.schema), since: utcDay });
+const located = await locate(modules.documents);
+let shapes = await readShapes();
+if (freezing) {
+    if (values.seed) {
+        await seed(shapes, located);
+    }
+    shapes = freeze(shapes, new Map(located.map(({ spec }) => [documentKey(spec), shapeOf(spec.schema)])), releases(), recordAt);
 }
 const sorted: Shapes = Object.fromEntries(Object.entries(shapes).toSorted(([a], [b]) => a.localeCompare(b)));
 await mkdir(dirname(SHAPES_FILE), { recursive: true });
-await writeFile(SHAPES_FILE, `${JSON.stringify(sorted, undefined, 2)}\n`);
+if (freezing) {
+    await writeFile(SHAPES_FILE, `${JSON.stringify(sorted, undefined, 2)}\n`);
+}
 await writeFile(CHECKS_FILE, checksSource(sorted, located));
 process.stdout.write(
-    `${Object.values(sorted).reduce((sum, list) => sum + list.length, 0)} shapes across ${Object.keys(sorted).length} documents; ` +
-        `${modules.documents.length} documents and ${modules.steps.length} steps in the registry\n`,
+    `${Object.values(sorted).reduce((sum, list) => sum + list.length, 0)} shapes across ${Object.keys(sorted).length} documents` +
+        (freezing ? `; ${modules.documents.length} documents and ${modules.steps.length} steps in the registry\n` : "\n"),
 );

@@ -92,8 +92,9 @@ export const InfoSchema = z.object({
     ),
 });
 export type Info = z.infer<typeof InfoSchema>;
-// What the daemon could not read in its own `.intentic/` state files. Reported per file, only for files listed in
-// REPORTED_MANIFEST_PATHS (workspace-state.ts). `kind`:
+// What the daemon could not read in its own `.intentic/` state files, and in the files on its volume that
+// REPORTED_VOLUME_FILES names. Reported per file, only for files listed in REPORTED_MANIFEST_PATHS or
+// REPORTED_VOLUME_FILES (workspace-state.ts). `kind`:
 // unreadable: whole file ignored, everything in it at default.
 // unknownKey: only that key ignored; `suggestion` may name what it should be.
 // invalidEntry: one list entry skipped, rest of the file stands.
@@ -115,7 +116,11 @@ export type ManifestProblem = z.infer<typeof ManifestProblemSchema>;
 // Workspace-relative path and everything currently wrong with that file; a clean file is absent from the list, not
 // present and empty.
 export const ManifestProblemReportSchema = z.object({
-    path: z.string().describe("The file, as a workspace path. The file is the unit somebody fixes, which is why problems are grouped by it."),
+    path: z
+        .string()
+        .describe(
+            "The file, as a workspace path, or as its absolute path on the daemon's own history volume for one kept there (the conversation registry). The file is the unit somebody fixes, which is why problems are grouped by it.",
+        ),
     problems: z
         .array(ManifestProblemSchema)
         .describe("Everything currently wrong with it. A file with nothing wrong is absent rather than present and empty."),

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { fakeFiles } from "../harness/route-fakes.testing.js";
 import { clearManifestProblems, recordedProblems } from "../store/manifest-problems.js";
 import { type IdentitySeams, workspaceIdentity, workspaceIdentityDocument } from "./workspace-identity.js";
@@ -6,7 +7,7 @@ import { type IdentitySeams, workspaceIdentity, workspaceIdentityDocument } from
 // The id is minted once, for an absent file; a file this build cannot read keeps its bytes and costs nothing but a
 // report, because a new id would tell every browser the workspace had been wiped.
 
-const ROOT = "/work";
+const ROOT = WORKSPACE_ROOT;
 const PATH = join(ROOT, workspaceIdentityDocument.path);
 
 const over = (disk: Map<string, string>): IdentitySeams => ({

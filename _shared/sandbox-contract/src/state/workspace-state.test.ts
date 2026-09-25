@@ -1,4 +1,4 @@
-import { STATE_DIR } from "@intentic/constants";
+import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import type { FileContribution } from "@intentic/extension-manifest";
 import {
     BACKED_UP_STATE_PATHS,
@@ -128,6 +128,12 @@ describe(`isReportedManifest`, () => {
     it(`does not report a file outside the workspace`, () => {
         // What `relative` gives the daemon for a manifest kept under /history.
         expect(isReportedManifest(`../../history/settings.json`)).toBe(false);
+    });
+
+    it(`reports the conversation registry on the daemon's volume by its absolute path, and nothing else there`, () => {
+        expect(isReportedManifest(`${HISTORY_ROOT}/conversations.db`)).toBe(true);
+        expect(isReportedManifest(`${HISTORY_ROOT}/state-journal.json`)).toBe(false);
+        expect(isReportedManifest(`../history/conversations.db`)).toBe(false);
     });
 });
 

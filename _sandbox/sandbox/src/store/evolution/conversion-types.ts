@@ -98,3 +98,52 @@ export type Retired<History> = History extends readonly (infer C)[] ? RetiredBy<
 
 // The overlap, which the generated checks require to be `never`.
 export type ReusedKeys<D extends DocumentSpec> = Extract<Retired<D["history"]>, keyof Accepted<D>>;
+
+// Assignability cannot see a key that went away: an old file's `personaRouting` fits a schema that no longer declares it
+// (the key is simply extra), so a rename or removal without its conversion passes `Fits` and quietly resets the owner's
+// value to its default. This names every such key instead, as a dotted path (`[]` an element of a list, `{}` a value
+// of a record): each key an old shape holds, after its conversions, that today's schema does not declare anywhere at
+// that place. The generated checks require it to be `never`; a `drop` or a `rename` in the history is how a key leaves.
+type IsAny<T> = 0 extends 1 & T ? true : false;
+// Every arm's keys, and a key's value across the arms that have it: a discriminated union is compared arm-blind, so a
+// key moving between arms is not a vanish, only a key no arm declares.
+type KeysOf<T> = T extends unknown ? keyof T : never;
+type ValueOf<T, K extends PropertyKey> = T extends unknown ? (K extends keyof T ? T[K] : never) : never;
+type Plain<T> = Exclude<T, undefined | null>;
+// Bounded, so a deep or recursive shape stops looking rather than overflowing the checker.
+type Depth = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8];
+export type Vanished<Old, Now, Path extends string = "", D extends number = 9> = [D] extends [never]
+    ? never
+    : IsAny<Old> extends true
+      ? never
+      : IsAny<Now> extends true
+        ? never
+        : unknown extends Now
+          ? never
+          : Plain<Old> extends infer O
+            ? O extends readonly (infer E)[]
+                ? Plain<Now> extends infer N
+                    ? N extends readonly (infer F)[]
+                        ? Vanished<E, F, `${Path}[].`, Depth[D]>
+                        : never
+                    : never
+                : O extends object
+                  ? string extends keyof O
+                      ? // A record then: its keys were never names, so only its values can lose any.
+                        string extends KeysOf<Plain<Now>>
+                          ? Vanished<O[keyof O], ValueOf<Plain<Now>, string>, `${Path}{}.`, Depth[D]>
+                          : never
+                      : string extends KeysOf<Plain<Now>>
+                      ? // A record (or a loose object) today: every key is declared; its values still are not free.
+                        Vanished<O[keyof O], ValueOf<Plain<Now>, string>, `${Path}{}.`, Depth[D]>
+                        : Exclude<
+                              {
+                                  [K in keyof O & string]: K extends KeysOf<Plain<Now>> ? Vanished<O[K], ValueOf<Plain<Now>, K>, `${Path}${K}.`, Depth[D]> : `${Path}${K}`;
+                              }[keyof O & string],
+                              undefined
+                          >
+                  : never
+            : never;
+
+// The keys an old shape of a document loses silently under today's schema: less those a step moves out on purpose.
+export type VanishedKeys<S, D extends DocumentSpec> = Exclude<Vanished<Converted<S, D>, Accepted<D>>, D["movedByStep"][number]>;

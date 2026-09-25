@@ -1,10 +1,15 @@
 // Spells a JSON Schema (as `z.toJSONSchema` emits it, the form the contract lock keeps) as a TypeScript type, for the
 // shape generator to freeze. A schema that says nothing (JSON Schema's "anything", which is also what an unrepresentable
-// zod type becomes) spells as `any`: a frozen shape with no information about a field must not fail every later one. Only what decides assignability is kept: object keys and which are required, element and
-// value types, literal sets, unions. Descriptions, defaults and refinements (`minLength`, patterns) are dropped: the
+// zod type becomes) spells as `any`: a frozen shape with no information about a field must not fail every later one. A
+// schema the generator marks as accepting anything (ANYTHING) spells as `unknown`, which a later narrowing does fail.
+// Only what decides assignability is kept: object keys and which are required, element and value types, literal sets,
+// unions. Descriptions, defaults and refinements (`minLength`, patterns) are dropped: the
 // type system cannot see them, and a frozen shape that differs from the last only in them is the same shape.
 
 type Schema = Record<string, unknown>;
+
+// Set by the shape generator on a schema that accepts anything by design, as opposed to one JSON Schema cannot spell.
+export const ANYTHING = "x-intentic-anything";
 
 const isSchema = (value: unknown): value is Schema => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -92,6 +97,9 @@ const combinator = (schema: Schema, context: Context): string | undefined => {
 export const typeFromSchema = (schema: unknown, context?: Context): string => {
     if (schema === true || !isSchema(schema)) {
         return schema === false ? "never" : "any";
+    }
+    if (schema[ANYTHING] === true) {
+        return "unknown";
     }
     const within: Context = context ?? { root: schema, visiting: new Set() };
     const ref = schema["$ref"];

@@ -3,7 +3,7 @@ import { join, relative } from "node:path";
 
 // Which modules define a stored document or a structural boot step, read from the source text rather than from what a
 // process happened to load: the one discovery the registry generator (write-state-shapes.ts) writes
-// src/state-registry.ts from, and the registry's test checks it against. Never shipped.
+// src/bootstrap/state-registry.ts from, and the registry's test checks it against. Never shipped.
 
 export interface Definition {
     // Package-relative to src/, forward slashes, with its .ts extension.
@@ -18,7 +18,7 @@ export interface StateModules {
 }
 
 // The engine's own modules, which declare the definers rather than call them, and the registry this is read into.
-const SKIPPED = new Set(["store/evolution/documents.ts", "store/evolution/state-steps.ts", "state-registry.ts"]);
+const SKIPPED = new Set(["store/evolution/documents.ts", "store/evolution/state-steps.ts", "bootstrap/state-registry.ts"]);
 
 // Every source module the daemon ships, tests, fixtures and generated trees aside.
 const sourceFiles = async (dir: string): Promise<string[]> => {

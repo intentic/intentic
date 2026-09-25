@@ -100,6 +100,6 @@ export const regenerateStateShapes = (root, changed) => {
         return false;
     }
     const before = existsSync(join(root, STATE_SHAPES)) ? git(root, "hash-object", STATE_SHAPES) : "";
-    spawnSync(process.execPath, ["--import", "tsx", SHAPES_WRITER], { cwd: join(root, DAEMON), stdio: "ignore" });
+    spawnSync(process.execPath, ["--import", "tsx", SHAPES_WRITER, "--freeze"], { cwd: join(root, DAEMON), stdio: "ignore" });
     return existsSync(join(root, STATE_SHAPES)) && git(root, "hash-object", STATE_SHAPES) !== before;
 };

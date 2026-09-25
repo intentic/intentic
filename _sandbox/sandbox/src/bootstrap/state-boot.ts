@@ -29,8 +29,7 @@ interface StateBoot {
     readonly logger: Logger;
     readonly traits: ProfileTraits;
     readonly role: ContainerRole;
-    // Every document and step this build knows: main.ts hands in src/state-registry.ts, which sits above every
-    // subsystem so that nothing under one (this module included) imports it.
+    // Every document and step this build knows: main.ts hands in state-registry.ts, generated beside this module.
     readonly documents: readonly DocumentSpec[];
     readonly steps: readonly StructuralStep[];
 }

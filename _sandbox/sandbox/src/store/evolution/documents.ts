@@ -14,7 +14,11 @@ import type { Conversion, Granularity } from "./conversions.js";
 // (`.intentic/secrets/auth/` unless AGENT_AUTH_DIR moved it).
 export type DocumentRoot = "workspace" | "history" | "auth";
 
-export interface DocumentSpec<Schema extends z.ZodType = z.ZodType, History extends readonly Conversion[] = readonly Conversion[]> {
+export interface DocumentSpec<
+    Schema extends z.ZodType = z.ZodType,
+    History extends readonly Conversion[] = readonly Conversion[],
+    MovedByStep extends readonly string[] = readonly string[],
+> {
     readonly root: DocumentRoot;
     // Root-relative with forward slashes, no trailing slash.
     readonly path: string;
@@ -36,9 +40,13 @@ export interface DocumentSpec<Schema extends z.ZodType = z.ZodType, History exte
     // but are not checked, and the document's reader refuses such a file with a message saying what to do instead. A
     // deliberate support horizon, not a way around a missing conversion.
     readonly horizon: string | undefined;
+    // Keys a structural step moves out of this document into another home (a webhook token into the door store), as
+    // dotted paths (`trigger.token`). Not a conversion, since a reader that ran it without the step (a guest) would lose
+    // the value; declared so the shape check (conversion-types.ts, VanishedKeys) knows the key left on purpose.
+    readonly movedByStep: MovedByStep;
 }
 
-export interface DocumentDefinition<Schema extends z.ZodType, History extends readonly Conversion[]> {
+export interface DocumentDefinition<Schema extends z.ZodType, History extends readonly Conversion[], MovedByStep extends readonly string[] = readonly []> {
     readonly root?: DocumentRoot;
     readonly path: string;
     readonly directory?: boolean;
@@ -48,16 +56,21 @@ export interface DocumentDefinition<Schema extends z.ZodType, History extends re
     readonly history?: History;
     readonly movedFrom?: readonly string[];
     readonly horizon?: string;
+    readonly movedByStep?: MovedByStep;
 }
 
 export const documentKey = (spec: Pick<DocumentSpec, "root" | "path">): string => `${spec.root}:${spec.path}`;
 
 // `const` type parameters keep the history a tuple of its literal conversions, which is what lets the generated shape
 // checks replay it at the type level.
-export const defineDocument = <const Schema extends z.ZodType, const History extends readonly Conversion[] = readonly []>(
-    definition: DocumentDefinition<Schema, History>,
-): DocumentSpec<Schema, History> => {
-    const spec: DocumentSpec<Schema, History> = {
+export const defineDocument = <
+    const Schema extends z.ZodType,
+    const History extends readonly Conversion[] = readonly [],
+    const MovedByStep extends readonly string[] = readonly [],
+>(
+    definition: DocumentDefinition<Schema, History, MovedByStep>,
+): DocumentSpec<Schema, History, MovedByStep> => {
+    const spec: DocumentSpec<Schema, History, MovedByStep> = {
         root: definition.root ?? "workspace",
         path: definition.path.replace(/\/$/, ""),
         directory: definition.directory ?? false,
@@ -67,6 +80,7 @@ export const defineDocument = <const Schema extends z.ZodType, const History ext
         history: definition.history ?? ([] as readonly Conversion[] as History),
         movedFrom: definition.movedFrom ?? [],
         horizon: definition.horizon,
+        movedByStep: definition.movedByStep ?? ([] as readonly string[] as MovedByStep),
     };
     if (spec.movedFrom.includes(spec.path)) {
         throw new Error(`document ${documentKey(spec)} lists its own path among its earlier ones`);

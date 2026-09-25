@@ -9,7 +9,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { isJsonObject, type JsonObject } from "../store/evolution/conversions.js";
+import { drop, isJsonObject, type JsonObject, nested } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { defineStep } from "../store/evolution/state-steps.js";
 import { jsonEntries } from "../store/json-file.js";
@@ -22,7 +22,13 @@ import { stateRelPath } from "../state-paths.js";
 // Ended runs the ledger remembers, newest first; a still-running record is never a retention candidate.
 const RUNS_KEPT = 50;
 
-export const workflowsDocument = defineDocument({ path: stateRelPath(".intentic/config/workflows.json"), schema: WorkflowSchema, granularity: "entries" });
+// The gate-token step below moves a release gate's token into the door store.
+export const workflowsDocument = defineDocument({
+    path: stateRelPath(".intentic/config/workflows.json"),
+    schema: WorkflowSchema,
+    granularity: "entries",
+    movedByStep: ["gate.token"],
+});
 const parsedJson = (text: string | undefined): unknown => {
     try {
         return text === undefined ? undefined : JSON.parse(text);
@@ -75,6 +81,9 @@ export const workflowRunsDocument = defineDocument({
     path: stateRelPath(".intentic/records/workflow-runs.json"),
     schema: WorkflowRunSchema,
     granularity: "entries",
+    // A run snapshots its design, so one started before 2026-09-06 holds a copy of the gate token the door store now
+    // keeps; the copy has no reader, and a credential goes rather than riding along.
+    history: [...nested("workflow.gate", [drop("token")])],
 });
 
 export interface WorkflowsStore {

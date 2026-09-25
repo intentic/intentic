@@ -54,3 +54,33 @@ test("a written card holds only the owner's own words", async () => {
         { id: "work", capabilities: ["reddit-work"], label: "Work Reddit", workspace: { startIn: "docs" } },
     ]);
 });
+
+// A card from before 2026-09-05 names the devices it may use as `computers`: a restriction enforced by absence, so
+// reading it as nothing would widen the card to every device.
+test("a card from an older release keeps its device restriction and loses only the fields that retired", async () => {
+    const { store, path } = tempStore();
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(
+        path,
+        JSON.stringify([
+            {
+                id: "work",
+                capabilities: [],
+                posture: "draft",
+                voice: "calm",
+                repos: ["apps/web"],
+                powers: { browser: true, delegate: false, files: "read", sandbox: true, shell: false, web: true, computers: ["laptop"] },
+                workspace: { copy: "own", startIn: "docs" },
+            },
+        ]),
+    );
+    expect(await store.list()).toEqual([
+        {
+            id: "work",
+            capabilities: [],
+            // `code` arrived after these cards were written; the schema's default stands in for it.
+            powers: { browser: true, code: true, delegate: false, files: "read", sandbox: true, shell: false, web: true, devices: ["laptop"] },
+            workspace: { startIn: "docs" },
+        },
+    ]);
+});

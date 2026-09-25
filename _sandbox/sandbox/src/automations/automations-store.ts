@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { type Automation, type AutomationRun, AutomationRunSchema, AutomationSchema, type ModelPin } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { fold, isJsonObject, type JsonObject } from "../store/evolution/conversions.js";
+import { drop, fold, isJsonObject, type JsonObject, nested } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonEntries, jsonFile } from "../store/json-file.js";
 import { defineStep } from "../store/evolution/state-steps.js";
@@ -39,7 +39,11 @@ export const automationsDocument = defineDocument({
     path: stateRelPath(".intentic/config/automations.json"),
     schema: AutomationSchema,
     granularity: "entries",
-    history: [modelLadder],
+    // `issues.ingestKey` was withdrawn on 2026-09-06 (control tokens replaced it); a credential with no reader left in a
+    // tracked file, so it goes.
+    history: [modelLadder, ...nested("issues", [drop("ingestKey")])],
+    // The relocation step below moves a webhook token into the door store.
+    movedByStep: ["trigger.token"],
 });
 export const automationRunsDocument = defineDocument({ path: stateRelPath(".intentic/records/automation-runs.json"), schema: RunLedgerSchema });
 type RunLedger = z.infer<typeof RunLedgerSchema>;

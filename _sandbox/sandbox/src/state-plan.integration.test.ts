@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
 import { conversionDigest, engineEpoch } from "./store/evolution/documents.js";
-import { stateDocuments, stateSteps } from "./state-registry.js";
+import { stateDocuments, stateSteps } from "./bootstrap/state-registry.js";
 import { newestRunDocument } from "./store/newest-run.js";
 import { version } from "./version.js";
 

@@ -1,5 +1,5 @@
 import { type Persona, PersonaSchema } from "@intentic/sandbox-contract";
-import { retype } from "../store/evolution/conversions.js";
+import { drop, nested, rename, retype } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { idListFile, type IdListStore } from "../store/id-list-file.js";
 import { stateRelPath } from "../state-paths.js";
@@ -25,6 +25,16 @@ export const personasDocument = defineDocument({
             () => undefined,
             "drops the context shelf a card named; shelves were withdrawn",
         ),
+        // Found by the vanished-key check (2026-09-25), each gone from the schema with no conversion. `powers.computers`
+        // was renamed `devices` on 2026-09-05 with the subsystem: a restriction enforced by absence, so a card that lost
+        // it silently widened to every device. The rest retired with their features: `posture`, `voice` and
+        // `workspace.copy` (gone by v1.200.0), and the top-level `repos` (a preference chip, not the `context.repos` a
+        // checkout carries; gone by v1.248.0).
+        ...nested("powers", [rename("computers", "devices")]),
+        drop("posture"),
+        drop("voice"),
+        drop("repos"),
+        ...nested("workspace", [drop("copy")]),
     ],
 });
 

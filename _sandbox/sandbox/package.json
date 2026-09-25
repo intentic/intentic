@@ -12,6 +12,7 @@
     },
     "scripts": {
         "build": "tsgo && tsgo -p tsconfig.bench.json",
+        "pretypecheck": "node --import tsx src/store/shapes/write-state-shapes.ts --checks",
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
         "dev": "tsx watch ./src/main.ts",

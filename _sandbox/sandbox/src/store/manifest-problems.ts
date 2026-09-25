@@ -1,4 +1,5 @@
-import { relative } from "node:path";
+import { relative, sep } from "node:path";
+import { HISTORY_ROOT } from "@intentic/constants";
 import { isNewer, isReportedManifest, type ManifestProblem, type ManifestProblemReport } from "@intentic/sandbox-contract";
 import { version } from "../version.js";
 import { newestRunVersion } from "./newest-run.js";
@@ -55,9 +56,16 @@ export const withSkewHint = (problems: readonly ManifestProblem[], running: stri
         return problem;
     });
 
-export const manifestProblems = (root: string): ManifestProblemReport[] =>
+// How a report names a file: workspace-relative, or, for one on the daemon's volume, the absolute path it has there
+// (`/history/conversations.db`) whatever root this daemon was started with.
+const reportedPath = (root: string, historyRoot: string | undefined, path: string): string =>
+    historyRoot !== undefined && path.startsWith(`${historyRoot}${sep}`)
+        ? `${HISTORY_ROOT}/${relative(historyRoot, path).split(sep).join("/")}`
+        : relative(root, path);
+
+export const manifestProblems = (root: string, historyRoot?: string): ManifestProblemReport[] =>
     [...byPath.entries()]
-        .map(([path, problems]) => ({ rel: relative(root, path), problems }))
+        .map(([path, problems]) => ({ rel: reportedPath(root, historyRoot, path), problems }))
         .filter(({ rel }) => isReportedManifest(rel))
         // Copied on the way out, never by reference, since this is the registry's own array.
         .map(({ rel, problems }) => ({ path: rel, problems: withSkewHint(problems, version, newestRunVersion()) }))

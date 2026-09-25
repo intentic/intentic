@@ -1,4 +1,4 @@
-import { STATE_DIR } from "@intentic/constants";
+import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import type { FileContribution } from "@intentic/extension-manifest";
 import type { StateFile } from "./state-portability.js";
 
@@ -601,9 +601,17 @@ export const REPORTED_MANIFEST_PATHS: readonly string[] = WORKSPACE_STATE_FILES.
     (file) => file.path,
 );
 
+// Files on the daemon's own volume whose unreadable records are reported too, named by their absolute path there: the
+// conversation registry's rows, one of which this build could not read costs that conversation until a build that can
+// runs. Reported, never repaired from the card (no route edits them), and refreshed whenever the card is fetched.
+export const REPORTED_VOLUME_FILES: readonly string[] = [`${HISTORY_ROOT}/conversations.db`];
+
 // Accepts either separator; the daemon holds these as platform paths and normalizing at every call site is what
 // eventually gets forgotten.
-export const isReportedManifest = (relPath: string): boolean => REPORTED_MANIFEST_PATHS.includes(relPath.replaceAll("\\", "/"));
+export const isReportedManifest = (relPath: string): boolean => {
+    const path = relPath.replaceAll("\\", "/");
+    return REPORTED_MANIFEST_PATHS.includes(path) || REPORTED_VOLUME_FILES.includes(path);
+};
 
 // Entries directly under `.intentic/` the file API refuses to read, write, move or delete for anyone, owner
 // included (workspace/workspace-files.ts enforces it). Declared here so the browser can draw the same rule instead

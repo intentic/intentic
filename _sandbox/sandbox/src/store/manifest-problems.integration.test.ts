@@ -1,8 +1,10 @@
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { STATE_DIR } from "@intentic/constants";
+import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
+import { sqliteAgentsStore } from "../agents/registry/agents-store.js";
+import { conversationsDbPath, openConversationsDb } from "./conversations-db.js";
 import { jsonFile } from "./json-file.js";
 import { clearManifestProblems, manifestProblems, withSkewHint } from "./manifest-problems.js";
 import { objectParse } from "./unknown-keys.js";
@@ -180,4 +182,20 @@ test("after a newer build ran, a key it added is explained as its, not guessed a
     ]);
     // With no newer build on record, the guess stands.
     expect(withSkewHint(problems, "1.200.0", "1.200.0")).toEqual(problems);
+});
+
+test("a conversation record this build cannot read is reported by the registry's path on the daemon's volume", async () => {
+    const root = await workspace();
+    const history = await workspace();
+    const db = openConversationsDb(conversationsDbPath(history));
+    const store = sqliteAgentsStore(db);
+    db.db.prepare("INSERT INTO conversation(id, record) VALUES (?, ?)").run("unreadable", JSON.stringify({ placement: { kind: "main" } }));
+    expect(store.load()).toEqual([]);
+    expect(manifestProblems(root, history)).toEqual([
+        {
+            path: `${HISTORY_ROOT}/conversations.db`,
+            problems: [{ kind: "invalidEntry", detail: "conversation unreadable: its record does not match what this build expects (identity); it is kept as written" }],
+        },
+    ]);
+    db.db.close();
 });
