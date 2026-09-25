@@ -96,6 +96,7 @@ const ago = (at: number, short = false): string => {
 
 // A time that keeps itself current: the tick below rewrites every one of these without redrawing the popup.
 const when = (at: number, short: boolean, className?: string): HTMLTimeElement => {
+    // zone-checked: the extension has no kit; this formats per call on the reader's own clock and browser language.
     const node = h("time", { text: ago(at, short), title: new Date(at).toLocaleString(), ...(className === undefined ? {} : { class: className }) });
     node.dataset["at"] = String(at);
     node.dataset["short"] = short ? "1" : "";

@@ -1,4 +1,4 @@
-// The 40 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
+// The 41 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
 // is editorial, not alphabetical; shelves are consecutive runs of it, enforced by spec.test.ts, which also fails a
 // contract group missing here or an entry with no routes.
 
@@ -328,6 +328,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         summary: "Continuous integration runs, and asking an agent to fix a red one",
         description:
             "Read the runs and the jobs inside them, re-run or cancel one, and mark the board read. The interesting one hands a failing run to an agent rather than to you.",
+    },
+    {
+        name: "offload",
+        shelf: "ship",
+        label: "Offloaded work",
+        summary: "Send heavy commands such as tests and typechecks to a runner on one of your machines",
+        description:
+            "Heavy commands are sorted into kinds (tests, typechecks, verify…), and the owner can send each kind to a runner on one of their machines instead of running it here. The sandbox's own `offload-run` command drives the run: it asks whether the runner can take the work, hands it a snapshot of the code and streams the output back, ending with the exit code and every file the command changed. The rest lists the kinds and the recent runs.",
     },
     {
         name: "public",
