@@ -65,10 +65,19 @@ const unaccounted = (list, baselineValues) => {
     });
 };
 
+// A plugin finding that names its symbol ("Rename symbol "STATE_SHAPES" …") is about that name, and such a rule flags
+// every reference to it: one more use of a name the file already had is not a new name. Those count once per file.
+const namesItsSymbol = (d) => PLUGIN_RULE.test(d.code) && /"[^"]+"/u.test(d.message);
+
 /** What `current` has that `baseline` did not: an identity the baseline lacked, or one whose measured value grew. */
 export const introduced = (current, baseline) => {
     const before = grouped(baseline, measured);
-    return [...grouped(current, (d) => d)].flatMap(([key, list]) => unaccounted(list, before.get(key) ?? []));
+    return [...grouped(current, (d) => d)].flatMap(([key, list]) => {
+        if (namesItsSymbol(list[0]) && before.has(key)) {
+            return [];
+        }
+        return unaccounted(list, before.get(key) ?? []);
+    });
 };
 
 /** oxlint's JSON report for `files` under `config`, or undefined when it answered with anything else. */

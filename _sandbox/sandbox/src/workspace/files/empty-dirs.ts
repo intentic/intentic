@@ -66,7 +66,7 @@ export const scanBarrenDirs = async (root: string, options?: { maxDirs?: number;
         return all ? { barren: true, found: [rel, ...found] } : { barren: false, found };
     };
 
-    const { found } = await visit(base, "", createIgnoreScope());
+    const { found } = await visit(base, "", createIgnoreScope(reads.matchers));
     // The workspace root itself is dropped (empty-string path, nothing to sweep there); everything inside stands.
     return found.filter((path) => path !== "");
 };

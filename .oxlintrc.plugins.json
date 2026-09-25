@@ -104,7 +104,10 @@
             "rules": {
                 "anti-slop/no-unknown-parameters": "off",
                 "anti-slop/no-object-parameters": "off",
-                "anti-slop/no-unsafe-dictionary-type": "off"
+                "anti-slop/no-unsafe-dictionary-type": "off",
+                // A suite is a flat list of cases inside one describe, which this meter charges as nesting: every case
+                // added to a long suite raised its score and read as new complexity.
+                "complexity/complexity": "off"
             }
         }
     ]

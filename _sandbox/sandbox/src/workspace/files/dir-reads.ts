@@ -4,7 +4,9 @@ import { readdir, readFile, readlink, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { mapPool } from "@intentic/base/async";
 import { isMissing } from "@intentic/base/errors";
+import { held } from "@intentic/base/held";
 import type { WorkspaceLink } from "@intentic/sandbox-contract";
+import { compileGitignore, type Matchers, walkMatchers } from "@intentic/workspace-ignore";
 import { isUnder, realPathOf } from "./workspace-files-paths.js";
 
 // What the workspace walks read of one directory, fresh or held between walks. The tree walk wants each entry followed
@@ -37,10 +39,12 @@ export interface DirNames {
     readonly gitignore: string | undefined;
 }
 
-// undefined from either read means the directory could not be read, which is unknown, not empty.
+// undefined from either read means the directory could not be read, which is unknown, not empty. `matchers` compiles a
+// folder's .gitignore for the walk's IgnoreScope, held exactly as long as the reads that carried its text.
 export interface DirReads {
     readonly listing: (abs: string, real: string, realRoot: string) => Promise<DirListing | undefined>;
     readonly names: (abs: string) => Promise<DirNames | undefined>;
+    readonly matchers: Matchers;
 }
 
 // Stats in flight at once while resolving one directory. Node's filesystem thread pool is four threads wide, so this is
@@ -166,7 +170,7 @@ const pool = (size: number): (<T>(task: () => Promise<T>) => Promise<T>) => {
 // Every read straight from disk: for a root no watcher reports on, where nothing held could be known to be current.
 export const freshDirReads = (): DirReads => {
     const limit = pool(NAMES_POOL);
-    return { listing: readListing, names: (abs) => limit(() => readNames(abs)) };
+    return { listing: readListing, names: (abs) => limit(() => readNames(abs)), matchers: walkMatchers() };
 };
 
 // Milliseconds a held read stands with no watcher event about it: a folder made under a name the watcher ignores
@@ -178,7 +182,9 @@ export interface HeldDirReads extends DirReads {
     readonly changed: (relPaths: readonly string[]) => void;
 }
 
-// Reads held between walks of one watched root; a changed path drops the folder holding it and its own listing.
+// Reads held between walks of one watched root; a changed path drops the folder holding it and its own listing. Each is
+// held until the watcher names it or HELD_MS passes (@intentic/base/held), and so are the compiled .gitignore matchers,
+// which remember every path they answered: they go when nothing held could still carry their text.
 export const heldDirReads = (root: string, now: () => number = Date.now): HeldDirReads => {
     const base = resolve(root);
     let realBase = base;
@@ -187,51 +193,31 @@ export const heldDirReads = (root: string, now: () => number = Date.now): HeldDi
     } catch {
         // An unresolvable root still walks by its own name; the watcher's paths then land on that name too.
     }
-    type Held = { readonly at: number; listing?: Promise<DirListing | undefined>; names?: Promise<DirNames | undefined> };
-    const held = new Map<string, Held>();
+    const bound = { maxAgeMs: HELD_MS, now };
+    const listings = held<string, Promise<DirListing | undefined>>(bound);
+    const names = held<string, Promise<DirNames | undefined>>(bound);
+    const matchers = held<string, ReturnType<Matchers>>(bound);
     const limit = pool(NAMES_POOL);
-    let swept = now();
-    const slot = (key: string): Held => {
-        const current = held.get(key);
-        if (current !== undefined && now() - current.at <= HELD_MS) {
-            return current;
-        }
-        const fresh: Held = { at: now() };
-        held.set(key, fresh);
-        return fresh;
-    };
     const drop = (abs: string): void => {
-        held.delete(abs);
-        held.delete(dirname(abs));
+        for (const reads of [listings, names]) {
+            reads.drop(abs);
+            reads.drop(dirname(abs));
+        }
     };
     return {
-        listing: (abs, real, realRoot) => {
-            const at = slot(real);
-            at.listing ??= readListing(abs, real, realRoot);
-            return at.listing;
-        },
-        names: (abs) => {
-            const at = slot(abs);
-            at.names ??= limit(() => readNames(abs));
-            return at.names;
-        },
+        listing: (abs, real, realRoot) => listings.get(real, () => readListing(abs, real, realRoot)),
+        names: (abs) => names.get(abs, () => limit(() => readNames(abs))),
+        matchers: (gitignore) => matchers.get(gitignore, () => compileGitignore(gitignore)),
         changed: (relPaths) => {
             if (relPaths.length === 0) {
-                held.clear();
+                listings.clear();
+                names.clear();
+                matchers.clear();
                 return;
             }
             for (const rel of relPaths) {
                 drop(join(base, rel));
                 drop(join(realBase, rel));
-            }
-            // A folder that vanished is never asked for again; its read would otherwise sit here for good.
-            if (now() - swept > HELD_MS) {
-                swept = now();
-                for (const [key, entry] of held) {
-                    if (swept - entry.at > HELD_MS) {
-                        held.delete(key);
-                    }
-                }
             }
         },
     };

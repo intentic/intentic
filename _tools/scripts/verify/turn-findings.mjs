@@ -5,6 +5,8 @@
 // change; verify-push asks about the remote tip, so a push answers for its own range. Separate from them because it is the only part with no side effects, and so the
 // only part a test can pin (turn-findings.test.mjs); getting it wrong is expensive in both directions, since a false
 // accusation sends a conversation to rewrite code it never touched and a missed one leaves a new problem to nobody.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { CHECKS } from "../../checks/manifest.mjs";
 
 // WHAT A CHECK SAID, FINDING BY FINDING, so a change can be held to its own problems rather than to the tree's.
@@ -28,6 +30,39 @@ export const problemLines = (verdict) =>
             .map((line) => [line.replace(LINE_NUMBER, ":#"), line]),
     );
 
+// THE SAME FINDINGS AS A MULTISET, keyed by (path, rule, trimmed source): the flattened line names the path and the
+// rule, and the source line it anchors to, read from `root`, tells two findings of one rule in one file apart. Two
+// identical ones count twice, so a second empty catch added beside a standing one is the change's, which a set of keys
+// cannot see and which only a per-file count baseline caught before. A finding with no `path:line` anchor, or whose file
+// cannot be read at `root`, keys on its line alone.
+const ANCHOR = /([\w./@-]+\.[a-z]+):(\d+)/;
+export const findingCounts = (verdict, root) => {
+    const files = new Map();
+    const sourceAt = (path, line) => {
+        if (!files.has(path)) {
+            let text;
+            try {
+                text = readFileSync(join(root, path), "utf8").split("\n");
+            } catch {
+                // allow(silent-catch): a finding whose file is gone or unreadable keys on its line alone
+                text = undefined;
+            }
+            files.set(path, text);
+        }
+        return files.get(path)?.[line - 1]?.trim() ?? "";
+    };
+    const counts = new Map();
+    for (const line of `${verdict.stderr}${verdict.stdout}`.split("\n").map((each) => each.trimEnd())) {
+        if (!FINDING.test(line)) {
+            continue;
+        }
+        const anchor = root === undefined ? null : ANCHOR.exec(line);
+        const key = `${line.replace(LINE_NUMBER, ":#")}\0${anchor === null ? "" : sourceAt(anchor[1], Number(anchor[2]))}`;
+        counts.set(key, [...(counts.get(key) ?? []), line]);
+    }
+    return counts;
+};
+
 // Whether the base snapshot was in a position to answer for this check at all. A check that `needs: "node_modules"` is
 // blind in a snapshot that was not lent an install — i18n-literals reads no template there and passes vouching for
 // nothing — and a check that exited "could not measure" (`measured: false`, lib/report.mjs's `cannotMeasure`) never
@@ -50,10 +85,14 @@ export const blindAtBase = (verdict, lentModules) =>
  * direction to be wrong in — one actor is asked about lines it may not have written, rather than everything from here on
  * going unchecked.
  */
-export const judgeAgainstBase = (failed, before) =>
+export const judgeAgainstBase = (failed, before, root) =>
     failed.map((verdict) => {
         const standing = before?.get(verdict.id);
-        const unmatched = [...problemLines(verdict)].filter(([key]) => standing === undefined || !standing.lines.has(key)).map(([, line]) => line);
+        // Each key's lines past as many as the base had: a finding the base printed as often is standing, one more is new.
+        // A base read without source (no `findings`) is compared by its lines' keys alone, as it was taken.
+        const held = standing?.findings ?? (standing === undefined ? undefined : findingCounts({ stderr: [...standing.lines.values()].join("\n"), stdout: "" }));
+        const live = findingCounts(verdict, standing?.findings === undefined ? undefined : root);
+        const unmatched = [...live].flatMap(([key, lines]) => lines.slice(held?.get(key)?.length ?? 0));
         if (standing?.blind === true) {
             return { verdict, added: [], unsure: unmatched };
         }

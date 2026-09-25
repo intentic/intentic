@@ -34,6 +34,11 @@ flowchart LR
   the entries those paths touch. Growth is declared with a reason, which the baseline records:
   `layout.mjs --allow <dir> --reason "<why>"` for one entry, from any checkout, or
   `<check>.mjs --write-baseline --reason "<why>"` to adopt every finding, which runs only in the primary checkout.
+- A land and a push are judged against the commit they left, as a multiset of findings keyed by path, rule and the
+  source line each anchors to (`_tools/scripts/verify/turn-findings.mjs`), so a second copy of a standing finding is
+  the change's. The count baselines stay: the per-edit run and the nightly tidy job judge a tree, not a change, and on
+  a sample of 15 recent lands, judging with the baselines removed changed 5 verdicts (an edited line carrying a
+  standing finding, and the per-file totals the checks print, both read as new).
 
 ## Exceptions
 

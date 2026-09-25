@@ -32,23 +32,29 @@ export type IgnoreScope = {
     layer(relDir: string, gitignore: string | undefined): IgnoreScope;
 };
 
-// Compiled matchers by .gitignore text: a walk layers the same few files on every refetch, and compiling one is most of
-// what matching costs. Bounded, since a workspace's distinct .gitignore texts are few and a stale one is only unused.
-const COMPILED_LIMIT = 512;
-const compiled = new Map<string, Ignore>();
-const compile = (gitignore: string): Ignore => {
-    let matcher = compiled.get(gitignore);
-    if (matcher === undefined) {
-        matcher = ignore().add(gitignore);
-        if (compiled.size >= COMPILED_LIMIT) {
-            compiled.delete(compiled.keys().next().value as string);
+/** Compiles a .gitignore's text into a matcher. A matcher remembers every path it has answered for (ignore@7 keeps a
+ *  per-instance cache only `add()` clears), so whoever holds one decides how long: a walk's own reads for one walk, the
+ *  daemon's held reads until its watcher or their time bound says the folder changed (dir-reads.ts). */
+export type Matchers = (gitignore: string) => Ignore;
+
+/** A fresh matcher per layer, held by nothing but the scope that asked for it. */
+export const compileGitignore: Matchers = (gitignore) => ignore().add(gitignore);
+
+/** Matchers shared by text for as long as the returned function is held: one walk's worth, for a walk that layers the
+ *  same .gitignore under many folders. */
+export const walkMatchers = (): Matchers => {
+    const compiled = new Map<string, Ignore>();
+    return (gitignore) => {
+        let matcher = compiled.get(gitignore);
+        if (matcher === undefined) {
+            matcher = compileGitignore(gitignore);
+            compiled.set(gitignore, matcher);
         }
-        compiled.set(gitignore, matcher);
-    }
-    return matcher;
+        return matcher;
+    };
 };
 
-const makeScope = (layers: readonly GitignoreLayer[]): IgnoreScope => ({
+const makeScope = (layers: readonly GitignoreLayer[], compile: Matchers): IgnoreScope => ({
     isIgnored(name, relPath, isDir) {
         // Junk denylist (dirs), plus the browser-profile, agent-worktree and reference-shelf subtrees.
         if (isDir && IGNORED_DIRS.has(name)) {
@@ -94,13 +100,14 @@ const makeScope = (layers: readonly GitignoreLayer[]): IgnoreScope => ({
         if (gitignore === undefined) {
             return this;
         }
-        return makeScope([...layers, { base: relDir.split(sep).join("/"), ig: compile(gitignore) }]);
+        return makeScope([...layers, { base: relDir.split(sep).join("/"), ig: compile(gitignore) }], compile);
     },
 });
 
 // Build the scope for the walk root. A root-level .gitignore is read by the first descend the walker makes; paths
-// passed to isIgnored are root-relative.
-export const createIgnoreScope = (): IgnoreScope => makeScope([]);
+// passed to isIgnored are root-relative. `matchers` decides how long compiled rules live; by default only as long as
+// the scopes that use them.
+export const createIgnoreScope = (matchers: Matchers = compileGitignore): IgnoreScope => makeScope([], matchers);
 
 // A scope that ignores nothing, for a tree that is not a project: an unpacked archive's `.gitignore`, `node_modules`
 // and `.git` are its own contents, and hiding them would hide what the archive actually holds.

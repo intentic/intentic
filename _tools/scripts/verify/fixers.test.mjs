@@ -1,5 +1,6 @@
 // Pins which crates a change set touches and which failing checks may rewrite the tree, since both run unasked at the Stop.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +8,7 @@ import { test } from "node:test";
 import { CHECKS } from "../../checks/manifest.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { adoptedOf, allowanceOf, tightenedOf } from "../../checks/lib/ratchet.mjs";
-import { crates, fixChecks, tightenBaselines, touchedCrates } from "./fixers.mjs";
+import { crates, fixChange, fixChecks, tightenBaselines, touchedCrates } from "./fixers.mjs";
 
 test("a crate is touched only by a path inside it, and build output is never walked", () => {
     const root = mkdtempSync(join(tmpdir(), "crates-"));
@@ -75,4 +76,22 @@ test("adoption records the stated reason on every entry it raises and nowhere el
         "n.ts": "why",
     });
     assert.deepEqual([undefined, 3, "r", { count: 5, why: "r" }].map(allowanceOf), [0, 3, 1, 5]);
+});
+
+test("the worktree entry refuses without a tree and one change list, and answers what ran and wrote as JSON", () => {
+    const script = join(repoRoot(import.meta.url), "_tools/scripts/verify/fixers.mjs");
+    const run = (...args) => spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
+    assert.equal(run("--paths", "a.ts").status, 2);
+    assert.equal(run("--worktree", tmpdir(), "--paths", "a.ts").status, 2);
+    assert.equal(run("--worktree", ".", "--paths", "a.ts", "--since", "HEAD").status, 2);
+    const root = mkdtempSync(join(tmpdir(), "fix-change-"));
+    try {
+        spawnSync("git", ["init", "-q"], { cwd: root });
+        writeFileSync(join(root, "README.md"), "x\n");
+        // Nothing the change touched has a fixer, so nothing runs and nothing is written, however often it is asked.
+        assert.deepEqual(fixChange(root, ["README.md"]), { ran: [], wrote: [] });
+        assert.deepEqual(fixChange(root, ["README.md"]), { ran: [], wrote: [] });
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
 });

@@ -15,6 +15,7 @@ import {
     type UnfinishedWork,
     type SessionOwner,
 } from "@intentic/sandbox-contract";
+import { freshness } from "@intentic/base/held";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../agent/providers/failure-sentences.js";
 import { routingFor } from "../../agent/providers/routing.js";
 import type { JournalledTurn, TurnJournalRows } from "../../agent/run/turn/turn-journal.js";
@@ -56,6 +57,8 @@ import { nextPromptDayAt } from "../../agent/run/prompt-fingerprint.js";
 // roster as a snapshot, never a diff (system.routes relays it onto /events); what a turn is doing lives in its actor.
 
 const MAX_TITLE_LENGTH = 80;
+// How long a watched standing stands with no ref or checkout event about it: a move the feed missed shows within this.
+const STANDINGS_MAX_MS = 60_000;
 // Numeric so promoteTitle's comparison is one `<=`; an entry with no title reads as `derived`, replaceable by anything.
 const TITLE_RANK: Record<AgentTitleSource, number> = { derived: 0, model: 1, plan: 2, user: 3 };
 // Collapses control characters and whitespace to single spaces and cuts to `limit`. A parameter, not a constant, since
@@ -629,10 +632,11 @@ export const createFleet = (
         return true;
     };
 
-    // Whether a refresh must re-read git: set by the watched feed, by a probe that failed, and at start; `watched` says a
-    // feed exists at all, without which nothing could clear it honestly.
+    // Whether a refresh must re-read git: stale on the watched feed, on a probe that failed, at start, and past
+    // STANDINGS_MAX_MS, so a ref event the feed missed moves a standing late instead of never. `watched` says a feed
+    // exists at all, without which nothing could keep a reading fresh honestly.
     let watched = false;
-    let stale = true;
+    const probed = freshness({ maxAgeMs: STANDINGS_MAX_MS });
     // The live agents' own landing inputs as the last probe saw them; a change here moves a standing with no ref moving.
     let probedInputs = ``;
     const landingInputs = (live: readonly IsolatedAgent[]): string =>
@@ -642,10 +646,12 @@ export const createFleet = (
     // never throw: a settle waits on this. `allSettled`, so a failing half costs only its own reading.
     const probeFleet = async (): Promise<boolean> => {
         const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
-        stale = false;
+        probed.taken();
         probedInputs = landingInputs(live);
         const probes = await Promise.allSettled([standings.refresh(live), presences.refresh(live)]);
-        stale ||= probes.some((probe) => probe.status === "rejected");
+        if (probes.some((probe) => probe.status === "rejected")) {
+            probed.changed();
+        }
         return probes.some((probe) => probe.status === "fulfilled" && probe.value);
     };
     // One probe at a time, shared: a caller arriving mid-probe may be asking after a change that probe began too early
@@ -903,7 +909,7 @@ export const createFleet = (
         },
         refreshStandings: async () => {
             const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
-            if (watched && !stale && landingInputs(live) === probedInputs) {
+            if (watched && probed.fresh() && landingInputs(live) === probedInputs) {
                 return;
             }
             if (await reprobe()) {
@@ -912,10 +918,8 @@ export const createFleet = (
         },
         watchStandings: (changes) => {
             watched = true;
-            stale = true;
-            const stop = changes(() => {
-                stale = true;
-            });
+            probed.changed();
+            const stop = changes(probed.changed);
             return () => {
                 watched = false;
                 stop();

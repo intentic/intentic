@@ -61,7 +61,7 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
 
     const tree: Draft[] = [];
     let rootHidden = 0;
-    let level: Job[] = [{ abs: base, real: realRoot, rel: "", parentScope: createIgnoreScope() }];
+    let level: Job[] = [{ abs: base, real: realRoot, rel: "", parentScope: createIgnoreScope(reads.matchers) }];
 
     while (level.length > 0 && budget > 0) {
         const next: Job[] = [];

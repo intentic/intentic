@@ -3,8 +3,11 @@
 // known-standing, and treating those as new once meant whichever turn happened to be running while `i18n-keys` was red
 // was sent back to fix ten findings it had not written.
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
-import { blindAtBase, judgeAgainstBase, problemLines } from "./turn-findings.mjs";
+import { blindAtBase, findingCounts, judgeAgainstBase, problemLines } from "./turn-findings.mjs";
 
 // The shape _tools/checks/run.mjs emits per check, with `lines` where a real one writes its findings to stderr.
 const verdict = (id, lines, { ok = false, measured = true } = {}) => ({
@@ -86,4 +89,25 @@ test("a check that passed on the base and fails now is the caller's even when it
     const live = [verdict("paths", ["nothing here names a location"])];
     const [judged] = judgeAgainstBase(live, atBase([verdict("paths", [], { ok: true })], true));
     assert.deepEqual(judged.added, ["paths passed before this change and fails now"]);
+});
+
+test("findings are a multiset: a second copy of a standing finding is the change's", () => {
+    const live = [verdict("silent-catch", [`  - a.ts:3  empty catch block`, `  - a.ts:9  empty catch block`])];
+    const [judged] = judgeAgainstBase(live, atBase([verdict("silent-catch", [`  - a.ts:3  empty catch block`])], true));
+    assert.deepEqual(judged.added, [`  - a.ts:9  empty catch block`]);
+});
+
+test("with the tree to read, a finding is keyed by the source it anchors to, so which of two alike moved is known", () => {
+    const root = mkdtempSync(join(tmpdir(), "findings-"));
+    const base = mkdtempSync(join(tmpdir(), "findings-base-"));
+    try {
+        writeFileSync(join(base, "a.ts"), "try { one(); } catch {}\n");
+        writeFileSync(join(root, "a.ts"), "// moved down\ntry { one(); } catch {}\ntry { two(); } catch {}\n");
+        const before = new Map([["silent-catch", { ok: false, lines: new Map(), findings: findingCounts(verdict("silent-catch", [`  - a.ts:1  empty catch block`]), base), blind: false }]]);
+        const live = [verdict("silent-catch", [`  - a.ts:2  empty catch block`, `  - a.ts:3  empty catch block`])];
+        assert.deepEqual(judgeAgainstBase(live, before, root)[0].added, [`  - a.ts:3  empty catch block`]);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(base, { recursive: true, force: true });
+    }
 });

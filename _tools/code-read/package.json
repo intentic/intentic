@@ -50,6 +50,17 @@
                 "@intentic/src": "./src/grammars.ts",
                 "default": "./dist/grammars.js"
             }
+        },
+        "./count-cache": {
+            "types": "./dist/count-cache.d.ts",
+            "import": {
+                "@intentic/src": "./src/count-cache.ts",
+                "default": "./dist/count-cache.js"
+            },
+            "require": {
+                "@intentic/src": "./src/count-cache.ts",
+                "default": "./dist/count-cache.js"
+            }
         }
     },
     "scripts": {

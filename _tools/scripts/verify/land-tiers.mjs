@@ -52,6 +52,7 @@ const tidy = (root, from) => {
             from,
             untidy.map(({ id }) => id),
         ),
+        root,
     );
     // An `Allow: <check> — <reason>` trailer in the range accepts what the land adds to that check (lib/allow.mjs).
     const allowed = allowedInRange(root, from);

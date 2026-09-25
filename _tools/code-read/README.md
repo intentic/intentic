@@ -16,6 +16,10 @@ flowchart LR
   both sides whole (`stat.properties.test.ts`), so the two numbers cannot disagree.
 - The app passes the grammars its own renderer already loaded. `./grammars` is for a process with no screen: it
   builds its own Shiki core on the JavaScript RegExp engine (no WASM asset) and loads each grammar once.
+- `./count-cache` (Node only) is `codeLineStat` behind a caller's store: `keptLineStat` answers a pair counted before
+  without loading a grammar. Its key hashes the two texts, the grammar, and `readingId()`: the content of the code-read
+  build the process runs, every file at any depth, plus each dependency's installed version. The daemon's count worker
+  lends it a SQLite table, and the perf scenario `code-recount` measures the same call.
 - `langs.ts` is the one table of grammars the app ships, and `_editor/web`'s Vite config derives its dependency
   pre-bundling from it, so its import specifiers stay literal.
 - An id missing from the table is a compile error. Files over `HIGHLIGHT_MAX_BYTES` render as plain text, since
@@ -25,8 +29,8 @@ flowchart LR
 
 - [src/index.ts](src/index.ts) — the shared surface: `analyzeCode`, `codeLangForPath`, `codeLineStat`.
 - [src/langs.ts](src/langs.ts) — `LANGS`, the Shiki grammars the app ships, imported lazily.
-- [src/lang-for-path.ts](src/lang-for-path.ts) — which grammar a path, extension or shebang resolves to.
 - [src/analysis.ts](src/analysis.ts) — the comment-free text and import spans from one walk.
+- [src/count-cache.ts](src/count-cache.ts) — counts kept under a key no older reading of the code can match.
 - [src/stat.ts](src/stat.ts) — code-only added and removed counts; the lines both sides share are walked once.
 - [src/grammars.ts](src/grammars.ts) — the daemon's own lazily loaded tokenizer.
 

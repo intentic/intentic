@@ -126,6 +126,17 @@
                 "@intentic/src": "./src/plain-text.ts",
                 "default": "./dist/plain-text.js"
             }
+        },
+        "./held": {
+            "types": "./dist/held.d.ts",
+            "import": {
+                "@intentic/src": "./src/held.ts",
+                "default": "./dist/held.js"
+            },
+            "require": {
+                "@intentic/src": "./src/held.ts",
+                "default": "./dist/held.js"
+            }
         }
     },
     "scripts": {

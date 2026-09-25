@@ -1,10 +1,6 @@
-import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { parentPort, workerData } from "node:worker_threads";
-import { type CodeCount, codeLineStat, highlightLangFor, type LineStat } from "@intentic/code-read";
+import type { LineStat } from "@intentic/code-read";
+import { type CountStore, keptLineStat } from "@intentic/code-read/count-cache";
 import { grammars } from "@intentic/code-read/grammars";
 import type { StatementSync } from "node:sqlite";
 import { openSqlite } from "../../store/sqlite.js";
@@ -25,23 +21,6 @@ const { cachePath } = workerData as CodeCountThread;
 // Counts held on disk, newest last; past this many rows the oldest go (a row is about 100 bytes).
 const KEPT_ROWS = 500_000;
 
-// What a count depends on besides the two texts: code-read's reading of them (its own files) and the engine and
-// grammars that tokenize (shiki, whose grammars ship at its own version). Either changing is a new key, so no count an
-// older reading made is ever served; a hit loads no grammar at all.
-const readingDigest = (): string => {
-    const hash = createHash("sha256");
-    const entry = fileURLToPath(import.meta.resolve("@intentic/code-read"));
-    const codeRead = dirname(entry);
-    for (const name of readdirSync(codeRead).toSorted()) {
-        if (/\.(js|ts)$/.test(name) && !/\.(d|test)\.ts$/.test(name)) {
-            hash.update(name).update("\0").update(readFileSync(join(codeRead, name)));
-        }
-    }
-    // Shiki is code-read's dependency, not this package's, so it resolves from there.
-    const shiki = createRequire(entry)("shiki/package.json") as { readonly version: string };
-    return hash.update(shiki.version).digest("hex");
-};
-
 interface Store {
     readonly get: StatementSync;
     readonly put: StatementSync;
@@ -59,28 +38,16 @@ const openStore = (path: string): Store => {
 };
 
 const store = cachePath === undefined ? undefined : openStore(cachePath);
-const reading = store === undefined ? "" : readingDigest();
+// The key, what it hashes and when a count is kept all live in code-read's `keptLineStat`, the path the perf scenarios
+// measure too; this worker only lends it the table.
+const counts: CountStore | undefined =
+    store === undefined
+        ? undefined
+        : {
+              get: (key) => store.get.get(key) as { additions: number | null; deletions: number | null } | undefined,
+              put: (key, additions, deletions) => {
+                  store.put.run(key, additions, deletions);
+              },
+          };
 
-const keyOf = (lang: string, before: string, after: string): string =>
-    createHash("sha256").update(`${reading}\0${lang}\0${String(before.length)}\0`).update(before).update(after).digest("hex");
-
-serveCalls<CodeCountAsk & { readonly id: number }>(port, async (ask): Promise<LineStat | undefined> => {
-    // Resolved as codeLineStat resolves it; a path with no grammar is answered without tokenizing, so it is never kept.
-    const lang = highlightLangFor(ask.path, Math.max(ask.before.length, ask.after.length), ask.after === "" ? ask.before : ask.after);
-    const key = store === undefined || lang === undefined ? undefined : keyOf(lang, ask.before, ask.after);
-    const kept = key === undefined ? undefined : (store?.get.get(key) as { additions: number | null; deletions: number | null } | undefined);
-    if (kept !== undefined) {
-        return kept.additions === null || kept.deletions === null ? undefined : { additions: kept.additions, deletions: kept.deletions };
-    }
-    // `codeLineStat` answers undefined when no grammar ships for the path, and a throw is treated the same way. Neither is
-    // kept: a walk abandoned on a busy machine is not a property of the file.
-    const count: CodeCount | undefined = await codeLineStat(ask.before, ask.after, ask.path, grammars).catch(() => undefined);
-    if (count === undefined) {
-        return undefined;
-    }
-    const stat = "stat" in count ? count.stat : undefined;
-    if (key !== undefined) {
-        store?.put.run(key, stat?.additions ?? null, stat?.deletions ?? null);
-    }
-    return stat;
-});
+serveCalls<CodeCountAsk & { readonly id: number }>(port, (ask): Promise<LineStat | undefined> => keptLineStat(counts, ask.before, ask.after, ask.path, grammars));

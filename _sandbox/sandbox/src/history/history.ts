@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathExists } from "../path-exists.js";
+import { freshness } from "@intentic/base/held";
 import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/scaffold";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
@@ -21,6 +22,9 @@ import type { WorkspacePaths } from "../workspace/workspace.js";
 const SNAPSHOT_INTERVAL_MS = 60_000;
 // Trailing debounce for user-write pings; coalesces a multi-file drop into one snapshot.
 const USER_WRITE_DEBOUNCE_MS = 2_000;
+// How long the history index stands with no snapshot or restore of this daemon's to invalidate it: a scope's log moved
+// by anything else (another process on the history repo) shows within this.
+const INDEX_MAX_MS = 60_000;
 // The triggers that surface as timeline checkpoints; "interval" captures are hidden safety sweeps.
 const VISIBLE_TRIGGERS: ReadonlySet<SnapshotTrigger> = new Set(["turn", "user", "pre-restore", "restore"]);
 const MAX_LABEL_LENGTH = 160;
@@ -323,13 +327,16 @@ export const createWorkspaceHistory = (
         readonly logs: Map<string, ScopeCommit[]>;
     }
 
-    // Caches historyIndex(); invalidated only when a snapshot records a change, or a restore runs.
+    // Caches historyIndex(): invalidated when a snapshot records a change or a restore runs, and past INDEX_MAX_MS.
     let indexCache: HistoryIndex | undefined;
+    const indexRead = freshness({ maxAgeMs: INDEX_MAX_MS });
 
     const historyIndex = async (): Promise<HistoryIndex> => {
-        if (indexCache !== undefined) {
+        if (indexCache !== undefined && indexRead.fresh()) {
             return indexCache;
         }
+        // Taken as the logs are read, so a snapshot landing mid-read leaves the result stale rather than trusted.
+        indexRead.taken();
         const logs = new Map<string, ScopeCommit[]>();
         const byId = new Map<string, { id: string; at: number; trigger: SnapshotTrigger; label?: string; commits: Map<string, string> }>();
         for (const scope of await knownScopes()) {
@@ -457,6 +464,7 @@ export const createWorkspaceHistory = (
         }
         if (changed) {
             indexCache = undefined;
+            indexRead.changed();
         }
         return changed ? id : undefined;
     };
@@ -495,6 +503,7 @@ export const createWorkspaceHistory = (
         // Record the restore point; history is append-only, never rewound.
         await snapshotAll("restore");
         indexCache = undefined;
+        indexRead.changed();
     };
 
     let timer: NodeJS.Timeout | undefined;

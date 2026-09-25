@@ -110,3 +110,19 @@ test(`a folder whose .gitignore is there but cannot be read reads as unknown, no
     expect(await reads.names(join(root, "app"))).toBeUndefined();
     expect(await reads.names(join(root, "app", "src"))).toEqual({ dirs: [], others: 1, gitignore: undefined });
 });
+
+test(`a compiled .gitignore lives only as long as the held reads: shared between walks, dropped by an unnamed change or its time`, () => {
+    let now = 1_000;
+    const reads = heldDirReads(tmpdir(), () => now);
+    const first = reads.matchers("dist/\n");
+    expect(reads.matchers("dist/\n")).toBe(first);
+    reads.changed([]);
+    const second = reads.matchers("dist/\n");
+    expect(second).not.toBe(first);
+    now += 10_001;
+    expect(reads.matchers("dist/\n")).not.toBe(second);
+    // A walk's own reads share one per walk and nothing across walks.
+    const walk = freshDirReads();
+    expect(walk.matchers("dist/\n")).toBe(walk.matchers("dist/\n"));
+    expect(freshDirReads().matchers("dist/\n")).not.toBe(walk.matchers("dist/\n"));
+});

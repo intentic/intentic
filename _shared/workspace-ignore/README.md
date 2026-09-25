@@ -14,6 +14,10 @@ flowchart LR
 - Ignored means "not part of the tracked project". Ignored directories stay listed and lazy-load, so nothing is hidden and this is not a security boundary.
 - The `./constants` entry point has no Node imports, so the browser bundle shares the same lists as the daemon.
 - `refs/` and `public/` count only at the workspace root. A repository's own `public/` stays ordinary content.
+- A compiled `.gitignore` matcher remembers every path it has answered, so its holder decides how long it lives:
+  `createIgnoreScope(matchers)` takes the compiler. By default each layer compiles its own and lives as long as the
+  scope; `walkMatchers()` shares them by text for one walk; the daemon's held directory reads share them until its
+  watcher or their time bound says the folder changed.
 - `descend()` treats a directory without a `.gitignore` as adding no rules, and rejects when one exists but cannot be read, since reading it as empty would count everything under it as tracked.
 
 ## Key files

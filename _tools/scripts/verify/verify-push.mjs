@@ -262,6 +262,7 @@ const findings = [];
                     base,
                     untidy.map(({ id }) => id),
                 ),
+                root,
             );
             // An `Allow: <check> — <reason>` trailer in the range accepts what it adds to that check (lib/allow.mjs).
             const allowed = allowedInRange(root, base);

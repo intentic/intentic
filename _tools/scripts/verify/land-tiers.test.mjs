@@ -70,3 +70,9 @@ test("the plugin tier ignores exactly what the root config ignores, since extend
     assert.ok(ignored(".oxlintrc.json").length > 0);
     assert.deepEqual(ignored(".oxlintrc.plugins.json"), ignored(".oxlintrc.json"));
 });
+
+test("a plugin finding that names its symbol counts once per file: another use of a name already there is not a new name", () => {
+    const named = (line) => ({ code: "anti-slop(no-shape-in-symbol-names)", message: `Rename symbol "STATE_SHAPES" for its domain role (${line})` });
+    const fresh = { code: "anti-slop(no-shape-in-symbol-names)", message: `Rename symbol "shapeOf" for its domain role` };
+    assert.deepEqual(introduced([named(1), named(2), fresh], [named(1)]), [fresh]);
+});

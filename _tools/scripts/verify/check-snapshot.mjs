@@ -9,7 +9,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from "node:
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { git } from "../lib/git.mjs";
-import { blindAtBase, problemLines } from "./turn-findings.mjs";
+import { blindAtBase, findingCounts, problemLines } from "./turn-findings.mjs";
 
 // Checks as verdicts, not output: `--json` lets two runs be compared, `--tidy=warn` keeps a tidy rule from ever holding
 // the run itself — which of its findings refuses is the caller's question, asked after the comparison. Each checkout is
@@ -122,7 +122,13 @@ export const reportsAt = (root, rev, ids) => {
         const verdicts = checkVerdicts(snapshot, ids);
         return verdicts === undefined
             ? undefined
-            : new Map(verdicts.map((verdict) => [verdict.id, { ok: verdict.ok, lines: problemLines(verdict), blind: blindAtBase(verdict, borrowed.lent) }]));
+            : new Map(
+                  verdicts.map((verdict) => [
+                      verdict.id,
+                      // `findings` keys each line with the source it anchors to in the snapshot, read before it is removed.
+                      { ok: verdict.ok, lines: problemLines(verdict), findings: findingCounts(verdict, snapshot), blind: blindAtBase(verdict, borrowed.lent) },
+                  ]),
+              );
     } finally {
         for (const link of borrowed.links) {
             rmSync(link, { force: true }); // unlinks the link itself: node's rm reads it with lstat and never walks through one

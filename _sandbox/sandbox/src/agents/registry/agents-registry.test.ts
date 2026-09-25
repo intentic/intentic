@@ -127,6 +127,33 @@ describe("agents registry", () => {
         expect(probes).toBe(watched + 1);
     });
 
+    it("a watched standing is re-derived once it is a minute old, even with the feed silent", async () => {
+        let probes = 0;
+        const counted = {
+            ...standings(),
+            refresh: async () => {
+                probes += 1;
+                return false;
+            },
+        };
+        const { agents: registry } = createFleet(memoryStore([isolatedAgent([{ repo: "intentic", base: "b0" }])]), counted, presences());
+        await registry.init();
+        registry.watchStandings(() => () => undefined);
+        jest.useFakeTimers();
+        try {
+            await registry.refreshStandings();
+            const fresh = probes;
+            jest.setSystemTime(Date.now() + 60_000);
+            await registry.refreshStandings();
+            expect(probes).toBe(fresh);
+            jest.setSystemTime(Date.now() + 1);
+            await registry.refreshStandings();
+            expect(probes).toBe(fresh + 1);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
     it("begin creates an entry with title, branch, and running status", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
