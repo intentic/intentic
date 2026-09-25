@@ -1,7 +1,7 @@
 import { isAbsolute, join } from "node:path";
 import type { AgentTurn, ModelPin, Rule, SandboxSettings } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { fromWorktree, inWorktree, type IsolationAnchor, nsenterPrefix } from "../../../agents/worktrees/isolation.js";
+import { fromWorktree, inWorktree, type IsolationAnchor, nsenterPrefix } from "../../../conversations/worktrees/isolation.js";
 import type { Services } from "../../../composition.js";
 import { dirtyPathsAcross } from "../../../git/changes/changes.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";

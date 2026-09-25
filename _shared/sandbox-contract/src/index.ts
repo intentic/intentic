@@ -239,6 +239,7 @@ export * from "./state/starter.js";
 export * from "./text/title.js";
 export * from "./state/versions.js";
 export * from "./text/model-answer.js";
+export * from "./text/shell-regions.js";
 export * from "./text/whisper.js";
 export * from "./text/workflow-faults.js";
 export * from "./text/emoji.js";

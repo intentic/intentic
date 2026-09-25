@@ -9,12 +9,12 @@ import { type BundleManifest, HISTORY_STATE_FILES, WORKSPACE_STATE_FILES } from 
 import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore";
 import { pack, type Pack } from "tar-stream";
 import type { Services } from "../composition.js";
-import type { SandboxPresentation } from "../platform/platform-client.js";
+import type { SandboxPresentation } from "../system/platform-client.js";
 import { conversationsDbPath } from "../store/conversations-db.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { carries, historyMayContain, historyPortability, IGNORE_SCOPE_EXCLUSIONS, workspaceMayContain, workspacePortability } from "./classify.js";
 import { deriveDefinition, sweepVaults } from "./definition.js";
-import { webStream } from "../web-stream.js";
+import { webStream } from "@intentic/base/web-stream";
 
 // Packs a gzipped tar of the sandbox's two volumes, driven by the state manifests so adding a store is what adds it to
 // the bundle.

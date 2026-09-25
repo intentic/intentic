@@ -1,28 +1,20 @@
 import type { PrismaClient } from "@intentic/prisma";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { atomicToUsd, USDC_NETWORKS, usdcNetworkOf, usdToAtomic } from "@intentic/sandbox-contract/x402";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import { z } from "zod";
 import type { Config } from "../config.js";
 import { type CustodyGateway, custodyGateway, type TypedData, walletEnabled } from "./wallet-custody.js";
-import { ensureWallet, NETWORKS } from "./wallet-store.js";
+import { ensureWallet } from "./wallet-store.js";
 
 /* These routes enforce the wallet release policy for sandbox agents. */
 
-// USDC's six decimals as bigint units; arithmetic never touches a float, matching the sandbox's x402 module.
-const ATOMIC_PER_USD = 1_000_000n;
+// Dollars to no more places than USDC's six decimals, so no amount a caller states is cut on its way to atomic units.
 const USD_RE = /^\d+(\.\d{1,6})?$/;
 
-const usdToAtomic = (usd: string): bigint => {
-    const [whole, fraction = ``] = usd.split(`.`);
-    return BigInt(whole || `0`) * ATOMIC_PER_USD + BigInt(fraction.padEnd(6, `0`).slice(0, 6) || `0`);
-};
-
-const atomicToUsd = (atomic: bigint): string => {
-    const whole = atomic / ATOMIC_PER_USD;
-    const fraction = (atomic % ATOMIC_PER_USD).toString().padStart(6, `0`).replace(/0+$/, ``);
-    return fraction === `` ? `${whole}.00` : `${whole}.${fraction.padEnd(2, `0`)}`;
-};
+// The chains this signer mints on, USDC only: every signature is a fixed-amount transfer of the token the caps are written in.
+const SIGNED_NETWORKS = USDC_NETWORKS.map(({ network }) => network).join(`, `);
 
 const usd = z.string().regex(USD_RE);
 
@@ -89,8 +81,8 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
             return c.json({ error: `the ensure body must be {"network":"eip155:…"}` }, 400);
         }
         const { network } = parsed.data;
-        if (NETWORKS[network] === undefined) {
-            return c.json({ error: `this platform signs USDC on ${Object.keys(NETWORKS).join(`, `)} only` }, 400);
+        if (usdcNetworkOf(network) === undefined) {
+            return c.json({ error: `this platform signs USDC on ${SIGNED_NETWORKS} only` }, 400);
         }
         try {
             const wallet = await ensureWallet(prisma, gateway(), ownerId, network);
@@ -116,9 +108,9 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
             return c.json({ error: `the sign body must carry a network, asset, EIP-712 domain, amount, host and authorization` }, 400);
         }
         const { network, asset, domainName, domainVersion, amountUsd, host, authorization } = parsed.data;
-        const known = NETWORKS[network];
+        const known = usdcNetworkOf(network);
         if (known === undefined) {
-            return c.json({ error: `this platform signs USDC on ${Object.keys(NETWORKS).join(`, `)} only` }, 400);
+            return c.json({ error: `this platform signs USDC on ${SIGNED_NETWORKS} only` }, 400);
         }
         // Checked against this table, not the caller's claim; another contract is what a compromised sandbox wants.
         if (asset.toLowerCase() !== known.asset.toLowerCase()) {

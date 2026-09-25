@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { isolationScript, type TurnIsolation } from "../../agents/worktrees/isolation.js";
-import { redirectCommand } from "../../agents/worktrees/worktree-redirect.js";
+import { isolationScript, type TurnIsolation } from "../../conversations/worktrees/isolation.js";
+import { redirectCommand } from "../../conversations/worktrees/worktree-redirect.js";
 
 // A watch check runs in the world its arming turn saw: that turn's namespace rebuilt, or its paths rewritten likewise.
 

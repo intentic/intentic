@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
-import { createTurnIsolation } from "../../agents/worktrees/isolation.js";
+import { createTurnIsolation } from "../../conversations/worktrees/isolation.js";
 import { watchCheck } from "./watch-check.js";
 
 const logger = unstubbed<Logger>("logger", { warn: () => {} });

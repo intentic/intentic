@@ -1,3 +1,4 @@
+import { keyedLock } from "@intentic/base/async";
 import { WEBCHAT_DAILY_MAX_DEFAULT, type WebchatConfig, WebchatMessageSchema, type WebchatPending } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -33,17 +34,7 @@ export const WEBCHAT_DOOR: PublicDoorSpec<WebchatConfig> = {
 
 // One turn at a time per automation: concurrent visitor messages queue rather than drop, covering both the fire and the
 // thread-session settle that follows it. Keyed by automation id; a job that throws still lets the next one run.
-const queues = new Map<string, Promise<unknown>>();
-const enqueue = (id: string, job: () => Promise<void>): Promise<void> => {
-    const tail = (queues.get(id) ?? Promise.resolve()).then(job, job);
-    queues.set(id, tail);
-    void tail.finally(() => {
-        if (queues.get(id) === tail) {
-            queues.delete(id);
-        }
-    });
-    return tail;
-};
+const enqueue = keyedLock<string>();
 
 // What a refused message answers with: one shape for every gate, so the handler has exactly one way to say no.
 type Refusal = { status: 400 | 401 | 403 | 404 | 409 | 413 | 429; error: string };

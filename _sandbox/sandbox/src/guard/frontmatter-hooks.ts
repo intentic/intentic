@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoCode } from "@intentic/base/errors";
 import { parse } from "yaml";
+import { SKILL_FILE } from "../skill-file.js";
 
 /* Hooks a skill, subagent or command declares in its frontmatter, under one Claude Code config root (~/.claude, or a
  * project's .claude): the CLI registers them for as long as that definition is in use, beside the settings files'. */
@@ -33,7 +34,7 @@ const definitionFiles = async (root: string, readable: (path: string) => string)
     const names = async (dir: string): Promise<string[]> => (await readdir(readable(join(root, dir))).catch(undefinedIfCliSeesNothing)) ?? [];
     const [skills, agents, commands] = await Promise.all([names("skills"), names("agents"), names("commands")]);
     return [
-        ...skills.map((name) => join(root, "skills", name, "SKILL.md")),
+        ...skills.map((name) => join(root, "skills", name, SKILL_FILE)),
         ...agents.filter((name) => name.endsWith(".md")).map((name) => join(root, "agents", name)),
         ...commands.filter((name) => name.endsWith(".md")).map((name) => join(root, "commands", name)),
     ].toSorted();

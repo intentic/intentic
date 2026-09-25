@@ -7,7 +7,7 @@ import {
     type WorkflowSummary,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { archiveAgents } from "../agents/registry/archive.js";
+import { archiveAgents } from "../conversations/registry/archive.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

@@ -5,10 +5,6 @@ import { isNoTmuxServer } from "./tmux-server.js";
 // Tmux session-name charset for the WebSocket route and control-plane list/kill routes: alnum, underscore, dash only,
 // first char not `-` (tmux reads it as a flag). Prefixes are contract vocabulary from session-names.ts.
 
-// A panel's session (processes/managed-processes.ts). Wire data: session names reach the browser and are string-built
-// there; never rename this prefix.
-export const PANEL_SESSION_PREFIX = "panel-";
-
 // A supervised service's (processes/service-processes.ts): its own prefix so its terminal tails the service's log
 // (terminal-plan.ts) instead of attaching a tmux session; none exists for it.
 export const SERVICE_SESSION_PREFIX = "svc-";

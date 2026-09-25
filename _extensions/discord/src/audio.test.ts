@@ -1,4 +1,5 @@
-import { createTranscriber, type ExecFn, to16kMonoPcm, wavOf, WHISPER_MISSING, whisperCliMissing } from "./audio.js";
+import type { WhisperExec } from "@intentic/base/whisper";
+import { createTranscriber, to16kMonoPcm, wavOf, WHISPER_MISSING } from "./audio.js";
 
 // 48kHz stereo s16le frames of a constant sample value.
 const stereoFrames = (frames: number, value: number): Buffer => {
@@ -9,17 +10,7 @@ const stereoFrames = (frames: number, value: number): Buffer => {
     return buffer;
 };
 
-const enoent: ExecFn = () => Promise.reject(Object.assign(new Error("spawn whisper-cli ENOENT"), { code: "ENOENT" }));
-const present: ExecFn = () => Promise.resolve({ stdout: "usage: whisper-cli" });
-const cranky: ExecFn = () => Promise.reject(Object.assign(new Error("exit 1"), { code: 1 }));
-
-test("whisperCliMissing: only a spawn ENOENT means the binary is absent", async () => {
-    expect(await whisperCliMissing(enoent)).toBe(true);
-    expect(await whisperCliMissing(present)).toBe(false);
-    // A non-zero exit still proves the binary exists.
-    expect(await whisperCliMissing(cranky)).toBe(false);
-    // The guidance routes the agent to the owner-run rebuild (the fragment is already composed) instead of
-    // proposing an overlay itself.
+test("the missing-whisper answer routes the agent to the owner-run rebuild, not to proposing an overlay itself", () => {
     expect(WHISPER_MISSING).toContain("Environment card");
     expect(WHISPER_MISSING).toContain("rebuild");
 });
@@ -49,7 +40,7 @@ test("the transcriber serializes whisper runs, drops blanks, reports lines live,
     const outputs = ["second utterance", "[BLANK_AUDIO]", "first utterance"];
     let active = 0;
     let maxActive = 0;
-    const exec: ExecFn = async (command, args) => {
+    const exec: WhisperExec = async (command, args) => {
         expect(command).toBe("whisper-cli");
         expect(args.slice(0, 2)).toEqual(["-m", "/model.bin"]);
         // whisper-cli defaults to -l en: the language must always be passed explicitly.

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { LineStat } from "@intentic/code-read";
-import { siblingModule, workerCalls } from "../../workers/worker-calls.js";
+import { siblingModule, workerCalls } from "@intentic/base/worker-calls";
 import type { CodeCountAsk, CodeCountThread } from "./code-counts.js";
 
 // The counting thread against a real grammar and a real cache file: what one thread counted, the next reads back

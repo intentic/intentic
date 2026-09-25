@@ -72,7 +72,7 @@ lines, rustfmt, weakened tests left undeclared), and logs a failure that passes 
 green or red with its failures, and the editor shows it: the Main line segment of the board's status bar and a
 status on each session card.
 
-A red run goes to `agents/land/land-breakage.ts`, which decides the same way every time. It waits for the next check
+A red run goes to `conversations/land/land-breakage.ts`, which decides the same way every time. It waits for the next check
 when more work landed while this one ran, and holds while a conversation still working has unlanded changes in a
 failing package, telling that conversation once. Then it lays the failures at a land by the paths each land changed,
 and re-runs nothing to tell suspects apart. When it

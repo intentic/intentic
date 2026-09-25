@@ -1,7 +1,7 @@
 import { checks } from "./invariant.js";
 import type { JournalEntry, TurnJournal } from "./run/turn/turn-journal.js";
 import { unstubbed } from "@intentic/testing";
-import type { ConversationActors } from "../agents/actor/conversation-actors.js";
+import type { ConversationActors } from "../conversations/actor/conversation-actors.js";
 
 /* A running turn must persist its journal before recreation can proceed. */
 

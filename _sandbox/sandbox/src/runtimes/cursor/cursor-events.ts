@@ -1,26 +1,11 @@
 import type { InteractionUpdate, TodoItem as CursorTodo, ToolCall } from "@cursor/sdk";
 import type { AgentEvent, TodoItem, ToolCallContent } from "@intentic/sandbox-contract";
-import { diffContent, displayNameOf, toolCategoryOf, toolLocations, toolTarget, workspacePath } from "../../agent/tools/tool-calls.js";
+import { diffContent, displayNameOf, toolLocations, toolTarget, workspacePath } from "../../agent/tools/tool-calls.js";
+import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
 
 // Pure mapping of Cursor's InteractionUpdate onto AgentEvent frames; drops updates with no UI meaning instead of
 // passing them through. Reads only the delta stream (`send({ onDelta })`), the richer of two overlapping views of a
 // run; `run.stream()` goes unused, and the run's own result supplies only success or failure.
-
-// What a plan phase holds back instead of streaming: the assistant's text is the plan. errored suppresses it, since a
-// plan must never come from partial, failed output.
-export interface CursorTurnCapture {
-    planText?: string;
-    errored?: boolean;
-}
-
-export interface CursorEventMapper {
-    // One update to its frames, usually 0 or 1; a completed tool call can carry both status and content.
-    readonly map: (update: InteractionUpdate) => AgentEvent[];
-    // The turn's usage frame, once; undefined when the run reported none.
-    readonly usage: () => AgentEvent | undefined;
-    // What the turn held back, read at settle: a plan phase's text, and whether an error frame went out.
-    readonly capture: () => CursorTurnCapture;
-}
 
 // shell maps to "Bash"; updateTodos is absent, its checklist is a todos frame, never a card.
 const CURSOR_TOOL_NAMES: Record<string, string> = {
@@ -122,12 +107,11 @@ const TODO_STATUS: Record<string, TodoItem["status"]> = {
 const toTodos = (todos: readonly CursorTodo[]): TodoItem[] =>
     todos.map((todo) => ({ content: todo.content, status: TODO_STATUS[todo.status] ?? "pending" }));
 
-export const createCursorEventMapper = (cwd: string, holdText = false): CursorEventMapper => {
+export const createCursorEventMapper = (cwd: string, holdText = false): VendorEventMapper<InteractionUpdate> => {
     // Shell call in flight: output updates don't name their call; only one runs at a time, so 'last started' is it.
     let liveShell: { id: string; output: string } | undefined;
-    const totals = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
-    let sawUsage = false;
-    const capture: CursorTurnCapture = {};
+    const totals = usageTotals();
+    const capture: TurnCapture = {};
 
     const map = (update: InteractionUpdate): AgentEvent[] => {
         switch (update.type) {
@@ -150,24 +134,17 @@ export const createCursorEventMapper = (cwd: string, holdText = false): CursorEv
                     const args = call.args as { todos?: readonly CursorTodo[] };
                     return args.todos === undefined ? [] : [{ kind: "todos", items: toTodos(args.todos) }];
                 }
-                const name = nameOf(call);
                 if (call.type === "shell") {
                     liveShell = { id: update.callId, output: "" };
                 }
-                const target = targetOf(call, cwd);
-                const locations = toolLocations(call.args, cwd);
-                const content = startedContent(call, cwd);
                 return [
-                    {
-                        kind: "tool_call",
+                    toolCallOpened({
                         id: update.callId,
-                        name,
-                        category: toolCategoryOf(name),
-                        status: "in_progress",
-                        ...(target !== undefined ? { target } : {}),
-                        ...(locations !== undefined ? { locations } : {}),
-                        ...(content !== undefined ? { content } : {}),
-                    },
+                        name: nameOf(call),
+                        target: targetOf(call, cwd),
+                        locations: toolLocations(call.args, cwd),
+                        content: startedContent(call, cwd),
+                    }),
                 ];
             }
             case "tool-call-completed": {
@@ -212,11 +189,12 @@ export const createCursorEventMapper = (cwd: string, holdText = false): CursorEv
                 if (update.usage === undefined) {
                     return [];
                 }
-                sawUsage = true;
-                totals.inputTokens += update.usage.inputTokens;
-                totals.outputTokens += update.usage.outputTokens;
-                totals.cacheReadTokens += update.usage.cacheReadTokens;
-                totals.cacheCreationTokens += update.usage.cacheWriteTokens;
+                totals.add({
+                    inputTokens: update.usage.inputTokens,
+                    outputTokens: update.usage.outputTokens,
+                    cacheReadTokens: update.usage.cacheReadTokens,
+                    cacheCreationTokens: update.usage.cacheWriteTokens,
+                });
                 return [];
             }
             // Silently dropped, each already covered elsewhere:
@@ -231,16 +209,7 @@ export const createCursorEventMapper = (cwd: string, holdText = false): CursorEv
 
     return {
         map,
-        usage: () =>
-            sawUsage
-                ? {
-                      kind: "usage",
-                      inputTokens: totals.inputTokens,
-                      outputTokens: totals.outputTokens,
-                      cacheReadTokens: totals.cacheReadTokens,
-                      cacheCreationTokens: totals.cacheCreationTokens,
-                  }
-                : undefined,
+        usage: totals.frame,
         capture: () => capture,
     };
 };

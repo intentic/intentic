@@ -1,7 +1,7 @@
 import type { AccountUsage, OauthAccount } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
-import { forgetAccountState, sameAccount, signInIdentity } from "../../agent/providers/account-identity.js";
+import { forgetAccountState, sameAccount, signInIdentity } from "../../agent/providers/accounts/account-identity.js";
 import { buildAuthorizeUrl, exchangeCode, newAccount, reconnectAccount, renameAccount, toAccount } from "./claude-credentials.js";
 import type { SeatRefusal } from "./claude-seats.js";
 

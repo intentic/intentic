@@ -3,7 +3,7 @@
 // created through, from inside a turn, with nobody fetching a setup code out of a browser.
 //
 // The CREATE is the whole of it. It raises a card in the owner's chat naming the sandbox and the machine it
-// would run on (fleet/fleet-gate.ts), and only a yes mints anything: the platform's row and its claim are
+// would run on (sandboxes/fleet-gate.ts), and only a yes mints anything: the platform's row and its claim are
 // created against the approval, and the claim is spent immediately by `ic sandbox connect` on that machine.
 // A no leaves the account exactly as it was — no row, no code, nothing to expire.
 //

@@ -1,4 +1,4 @@
-import { installScriptUrl } from "@intentic/constants";
+import { type InstallScript, installScriptUrl } from "@intentic/constants";
 import type { Capability, Device, DeviceCommand, DeviceCommandInput, DeviceCommandResult, DeviceFacts } from "@intentic/sandbox-contract";
 
 import {
@@ -125,6 +125,20 @@ const WITH_PNPM = 'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; exp
 // shape that has always worked there.
 const OWN_SESSION = "detach=$(command -v setsid 2>/dev/null || true);";
 
+// An agent's install one-liner in its target's own dialect; every value arrives already quoted for that shell.
+export const agentInstallLine = (
+    dialect: "powershell" | "sh",
+    scripts: { readonly powershell: InstallScript; readonly sh: InstallScript },
+    env: Readonly<Record<string, string>>,
+): string =>
+    dialect === "powershell"
+        ? `${Object.entries(env)
+              .map(([name, value]) => `$env:${name}=${value};`)
+              .join(" ")} irm ${installScriptUrl(scripts.powershell)} | iex`
+        : `curl -fsSL ${installScriptUrl(scripts.sh)} | env ${Object.entries(env)
+              .map(([name, value]) => `${name}=${value}`)
+              .join(" ")} sh`;
+
 // The install one-liner for this sandbox, in the dialect of the environment it will RUN in — the same script,
 // environment and single-use token the card's copyable command carries, built from the same table
 // (@intentic/constants). The folder is what picks that environment (`doorRoute`), so a folder in a distro gets the sh
@@ -136,14 +150,11 @@ const installLine = (facts: DeviceCommandFacts, route: DeviceCommandRoute = {}):
     // Mirror enrollments carry no folder at all: they forward ports and touch no files.
     const dir = facts.mode === "mirror" ? undefined : facts.localDir;
     const windowsTarget = route.environment === undefined ? facts.platform === "windows" : route.environment === HOST_NATIVE_ENVIRONMENT;
-    if (windowsTarget) {
-        const env = `$env:SANDBOX_URL='${facts.publicUrl}'; $env:PAIR_TOKEN='${facts.pairToken}';${
-            dir === undefined ? "" : ` $env:SYNC_DIR=${shellDir(dir)};`
-        }`;
-        return `${env} irm ${installScriptUrl("desktopPs1")} | iex`;
-    }
-    const env = `env SANDBOX_URL='${facts.publicUrl}' PAIR_TOKEN='${facts.pairToken}'${dir === undefined ? "" : ` SYNC_DIR=${shellDir(dir)}`}`;
-    return `curl -fsSL ${installScriptUrl("desktopSh")} | ${env} sh`;
+    return agentInstallLine(windowsTarget ? "powershell" : "sh", { powershell: "desktopPs1", sh: "desktopSh" }, {
+        SANDBOX_URL: `'${facts.publicUrl}'`,
+        PAIR_TOKEN: `'${facts.pairToken}'`,
+        ...(dir === undefined ? {} : { SYNC_DIR: shellDir(dir) }),
+    });
 };
 
 // EVERY SWITCH OVER AN EXISTING PAIRING GOES WHERE ITS FOLDER IS. One agent per OS install holds the mutagen session

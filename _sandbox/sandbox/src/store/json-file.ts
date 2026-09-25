@@ -1,13 +1,13 @@
 import { lstat, readFile, rename } from "node:fs/promises";
 import { basename } from "node:path";
 import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
+import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { convertDocument } from "./evolution/conversions.js";
 import type { DocumentSpec } from "./evolution/documents.js";
 import { type ManifestProblem, recordManifestProblems } from "./manifest-problems.js";
 import { type ManifestEdit, registerManifestEditor } from "./manifest-repair.js";
 import { newerBuildRan } from "./newest-run.js";
 import { carryUnknown, type EntryRead, type IdKeys, reemitQuarantined } from "./evolution/passthrough.js";
-import { queueOnFile, writeTextFile } from "./text-file.js";
 
 // One JSON file, read through a schema and written whole; every `*-store.ts` in the daemon sits on this.
 // - atomicity: writes go to a sibling temp file and rename over the target, so a reader never sees a half-written file
@@ -74,7 +74,7 @@ export const asideOf = async (path: string): Promise<string> =>
 // Writes one JSON file atomically (temp file, then rename); used by jsonFile and by stores that must own their own read
 // path.
 export const writeJsonFile = (path: string, value: unknown, mode?: number): Promise<void> =>
-    writeTextFile(path, `${JSON.stringify(value, undefined, 2)}\n`, mode);
+    writeFileAtomic(path, `${JSON.stringify(value, undefined, 2)}\n`, mode);
 
 // One decoded read: the value, and how a change to it becomes the bytes to write without losing what parse dropped.
 interface Decoded<T> {
@@ -274,3 +274,53 @@ export const jsonEntries = <E>(path: string, { entry, mode, onUnreadable = "setA
         // An entries document converts per entry; a whole-file conversion of another granularity runs before decode.
         convertsEntries: document?.granularity === "entries",
     });
+
+// A newest-last log kept to its `cap` newest entries, over its store's own file, whose shape, mode and refusal stay the store's.
+export interface BoundedLog<E> {
+    readonly append: (entry: E) => Promise<void>;
+    // Rewrites every entry `match` picks; the file is rewritten even when none does.
+    readonly amend: (match: (entry: E) => boolean, patch: (entry: E) => E) => Promise<void>;
+    // Oldest first, as the file holds them.
+    readonly read: () => Promise<E[]>;
+}
+
+export const boundedLog = <E>(file: JsonFile<E[]>, cap: number): BoundedLog<E> => ({
+    append: async (entry) => {
+        await file.update((entries) => [...entries, entry].slice(-cap));
+    },
+    amend: async (match, patch) => {
+        await file.update((entries) => entries.map((entry) => (match(entry) ? patch(entry) : entry)));
+    },
+    read: () => file.read(),
+});
+
+// The owner's yes to what an agent can write, one pin per key, kept under the history root where no workspace write reaches.
+export interface ApprovalLedger<P> {
+    // An unreadable ledger approves nothing: its pins read as none, and `unreadable` says why.
+    readonly read: () => Promise<{ readonly approved: Readonly<Record<string, P>>; readonly unreadable: boolean }>;
+    // A change that returns the pins it was handed writes nothing.
+    readonly update: (change: (approved: Readonly<Record<string, P>>) => Readonly<Record<string, P>>) => Promise<void>;
+}
+
+type Pins<P> = { readonly approved: Readonly<Record<string, P>> };
+
+// One handle per ledger file, so every writer of it shares its update queue.
+export const approvalLedgers = <P>(parse: (raw: unknown) => Pins<P> | undefined, document: DocumentSpec): ((path: string) => ApprovalLedger<P>) => {
+    const files = new Map<string, JsonFile<Pins<P>>>();
+    return (path) => {
+        const file = files.get(path) ?? jsonFile<Pins<P>>(path, { parse, fallback: () => ({ approved: {} }), document });
+        files.set(path, file);
+        return {
+            read: async () => {
+                const ledger = await file.state();
+                return ledger.unreadable ? { approved: {}, unreadable: true } : { approved: ledger.value.approved, unreadable: false };
+            },
+            update: async (change) => {
+                await file.update((ledger) => {
+                    const approved = change(ledger.approved);
+                    return approved === ledger.approved ? ledger : { approved };
+                });
+            },
+        };
+    };
+};

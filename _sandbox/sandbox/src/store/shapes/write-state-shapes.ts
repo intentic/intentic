@@ -13,7 +13,7 @@ import { type Definition, stateModules } from "./state-modules.js";
 // The shape generator, two modes. `--freeze` (the land check's fixer, after every land that touched daemon or contract
 // source) writes the state registry (src/bootstrap/state-registry.ts, every document and boot step the source defines,
 // which the boot step and the pre-flight read) and records each document's current shape in state-shapes.json, the
-// only one of its outputs that is committed. `--checks` (the package's `pretypecheck`) writes state-shapes.ts from that
+// only one of its outputs that is committed. `--checks` (the package's `pretypecheck`) writes the untracked checks from that
 // record: the type-level checks that each frozen shape still converts to what today's schema accepts and loses no key
 // on the way (store/evolution/conversion-types.ts), so a change that would strand an old file fails `tsc` at the
 // document until a conversion covers it. `--seed` backfills, once, the shapes every release since the contract lock
@@ -228,6 +228,7 @@ const releases = (): Release[] =>
         .split("\n")
         .map((line) => line.split(" "))
         .filter((parts): parts is [string, string] => parts.length === 2 && isRelease(parts[0] ?? ""))
+        // A UTC day, the calendar a shape frozen before stamping by release is dated in (shape-releases.ts).
         .map(([tag, date]) => ({ tag, day: new Date(date).toISOString().slice(0, 10) }));
 
 const { values } = parseArgs({

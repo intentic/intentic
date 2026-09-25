@@ -1,8 +1,8 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
 import { createInterface } from "node:readline";
-import { whenAborted } from "../../abort.js";
-import { nsenterArgv } from "../../agents/worktrees/isolation.js";
+import { whenAborted } from "@intentic/base/async";
+import { nsenterArgv } from "../../conversations/worktrees/isolation.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 
 // Codex client surface: the request fields Intentic sends and the item fields it renders, not the full generated

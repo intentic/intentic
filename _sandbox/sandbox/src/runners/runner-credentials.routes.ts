@@ -9,19 +9,14 @@ import {
 import type { Context } from "hono";
 import { replaceRejectedToken } from "../runtimes/claude/claude-credentials.js";
 import type { Services } from "../composition.js";
-import { bearerFrom } from "../auth/auth.js";
 import type { HarnessCredentialsResult } from "../agent/providers/harness-credentials.js";
-import type { Presented } from "../peers/enrollment.js";
-import { refusePresented } from "../peers/peer-store.js";
+import { bearerPeer } from "../peers/peer-store.js";
 
 // A runner's turns spend this sandbox's model providers through three bearer-authenticated routes:
 // POST /system/runners/credentials: resolves one turn's credential, stripped to what may travel.
 // POST /system/runners/credentials/refresh: re-mints a rejected access token against the local store.
 // ALL /system/runners/translator/*: proxies the loopback translator so its local bearer never leaves.
 // Never travels: refresh tokens, the translator's local bearer, or the per-model allowance (reads parent-local state).
-
-const callerRunner = async (services: Services, c: Context): Promise<Presented> =>
-    await services.runners.verify(bearerFrom(c.req.header("authorization")));
 
 // Exported for its unit test: every arm is a rule about what leaves the sandbox. `envOauth` travels as an ordinary
 // oauth value since resolution answers {} for it; an API-key-shaped fallback stays home instead.
@@ -63,11 +58,11 @@ export type CredentialResolver = (input: {
 }) => Promise<HarnessCredentialsResult>;
 
 export const createRunnerCredentialsRoute =
-    (services: Services, resolve: CredentialResolver) =>
+    (services: Pick<Services, "runners" | "logger" | "config">, resolve: CredentialResolver) =>
     async (c: Context): Promise<Response> => {
-        const caller = await callerRunner(services, c);
-        if (caller.kind !== "enrolled") {
-            return refusePresented(c, caller);
+        const runner = await bearerPeer(services.runners, c);
+        if (typeof runner !== "string") {
+            return runner;
         }
         const body = RunnerCredentialRequestSchema.safeParse(await c.req.json().catch(() => undefined));
         if (!body.success) {
@@ -83,23 +78,23 @@ export const createRunnerCredentialsRoute =
             ...(body.data.account !== undefined ? { account: body.data.account } : {}),
             ...(body.data.model !== undefined ? { model: body.data.model } : {}),
         });
-        services.logger.info({ runner: caller.id, agent: body.data.agent ?? "claude", ok: resolved.ok }, "runner: credential resolved for a remote turn");
+        services.logger.info({ runner, agent: body.data.agent ?? "claude", ok: resolved.ok }, "runner: credential resolved for a remote turn");
         return c.json(toRunnerCredential(resolved, services.config.translator.url, services.config.claudeCodeOauthToken));
     };
 
 export const createRunnerCredentialRefreshRoute =
-    (services: Services) =>
+    (services: Pick<Services, "runners" | "logger" | "claudeStore">) =>
     async (c: Context): Promise<Response> => {
-        const caller = await callerRunner(services, c);
-        if (caller.kind !== "enrolled") {
-            return refusePresented(c, caller);
+        const runner = await bearerPeer(services.runners, c);
+        if (typeof runner !== "string") {
+            return runner;
         }
         const body = RunnerCredentialRefreshRequestSchema.safeParse(await c.req.json().catch(() => undefined));
         if (!body.success) {
             return c.json({ error: "invalid request" }, 400);
         }
         const accessToken = await replaceRejectedToken(services.claudeStore, body.data.account, body.data.rejected).catch((error: unknown) => {
-            services.logger.warn({ err: error, runner: caller.id, account: body.data.account }, "runner: mid-turn token re-mint failed");
+            services.logger.warn({ err: error, runner, account: body.data.account }, "runner: mid-turn token re-mint failed");
             return undefined;
         });
         return c.json(accessToken !== undefined ? { accessToken } : {});
@@ -109,11 +104,11 @@ export const createRunnerCredentialRefreshRoute =
 const DROPPED_HEADERS = new Set(["authorization", "host", "connection", "content-length", "transfer-encoding", "accept-encoding"]);
 
 export const createRunnerTranslatorProxyRoute =
-    (services: Services) =>
+    (services: Pick<Services, "runners" | "config">) =>
     async (c: Context): Promise<Response> => {
-        const caller = await callerRunner(services, c);
-        if (caller.kind !== "enrolled") {
-            return refusePresented(c, caller);
+        const runner = await bearerPeer(services.runners, c);
+        if (typeof runner !== "string") {
+            return runner;
         }
         const translator = services.config.translator;
         if (translator.url === "") {

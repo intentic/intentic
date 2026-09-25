@@ -213,7 +213,7 @@ const copyDaemonFixture = async (dir: string): Promise<string> => {
 // deps: hold a large import graph in your head.
 
 // The entry point whose closure is the answer, chosen for sitting atop the daemon's deepest subsystem.
-const DEPS_ENTRY = "src/agent/routes/agent.routes.ts";
+const DEPS_ENTRY = "src/agent/run/stream-agent.ts";
 
 // Relative import specifiers (`from "./x.js"`, `import("../y/z.js")`); bare specifiers like `@intentic/…` or `node:fs`
 // are not followed.

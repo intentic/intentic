@@ -1,7 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { connectedTranslatorProviders, TRANSLATOR_BINARY_MISSING } from "../../agent/providers/translator.js";
-import { onPath } from "../../platform/boot/on-path.js";
+import { engineReady } from "../../engines/engine-resolve.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 
 // Single answer to whether Codex can serve a turn, read by both planCodexTurn's refusal and the health probe's tooltip.
@@ -42,7 +42,7 @@ export const codexReadiness = async (services: Pick<Services, "authRoot" | "cliP
         return { ok: true, routed: false };
     }
     // No account here means nobody connected one, or the translator can't run; the auth-dir tells them apart.
-    if ((await connectedTranslatorProviders(services.authRoot)).has("codex") && !(await onPath("cli-proxy-api"))) {
+    if ((await connectedTranslatorProviders(services.authRoot)).has("codex") && !(await engineReady("translator"))) {
         return { ok: false, detail: TRANSLATOR_BINARY_MISSING };
     }
     return { ok: false, code: "subscription-required", detail: "Connect your ChatGPT subscription in Sandbox ▸ Agent to run Codex." };

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { IntenticLine } from "@intentic/sandbox-contract";
-import { whenAborted } from "../abort.js";
+import { whenAborted } from "@intentic/base/async";
 import { DAEMON_OWNER, workloadStamp } from "../seams/workload-stamp.js";
 
 // IntenticLine, one parsed line from `intentic ... --output ndjson`, is the wire shape the daemon streams; it lives in

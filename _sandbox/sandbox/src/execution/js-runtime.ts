@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
-import { whenAborted } from "../abort.js";
-import type { TurnPlacement } from "../agents/worktrees/isolation.js";
-import { inWorktree, nsenterArgv } from "../agents/worktrees/isolation.js";
+import { whenAborted } from "@intentic/base/async";
+import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
+import { inWorktree, nsenterArgv } from "../conversations/worktrees/isolation.js";
 import type { TurnPersona } from "../personas/personas.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 

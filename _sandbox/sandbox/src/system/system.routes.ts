@@ -6,7 +6,7 @@ import {
     SANDBOX_ROUTE_SHAPES,
     systemContract,
 } from "@intentic/sandbox-contract";
-import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, PANEL_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { implement, ORPCError } from "@orpc/server";
 import { forkedExec } from "@intentic/scaffold";
 import type { Caller } from "../auth/auth.js";
@@ -32,14 +32,13 @@ import {
     captureScrollback,
     isValidSessionName,
     jobSessionLabel,
-    PANEL_SESSION_PREFIX,
     SERVICE_SESSION_PREFIX,
 } from "../terminal/terminal-session.js";
 import { settleTerminalHelpFor, terminalHelpFor } from "../terminal/terminal-help.js";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
-import { isNewer, latestVersion } from "../platform/boot/version-check.js";
-import { breakingNotes, MAX_UPDATE_NOTES, updateNotes } from "../platform/boot/release-notes.js";
-import { stagedUpdate } from "../platform/boot/staged-update.js";
+import { isNewer, latestVersion } from "./boot/version-check.js";
+import { breakingNotes, MAX_UPDATE_NOTES, updateNotes } from "./boot/release-notes.js";
+import { stagedUpdate } from "./boot/staged-update.js";
 import { runtimeHealth } from "../agent/providers/adapter-health.js";
 import { buildId } from "../version.js";
 import { manifestProblems } from "../store/manifest-problems.js";

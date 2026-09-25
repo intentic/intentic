@@ -1,7 +1,5 @@
-import { mkdirSync, rmSync } from "node:fs";
-import { dirname } from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { guardSchemaVersion, type SqliteDb, wrapDb } from "@intentic/base/sqlite";
+import { rmSync } from "node:fs";
+import { guardSchemaVersion, openSqlite, type SqliteDb, wrapDb } from "@intentic/base/sqlite";
 
 // Bumped on any table/column change OR extraction-logic change that must re-ingest, mismatch drops and
 // recreates everything (the recall index is a pure cache over ~/.claude/projects transcripts).
@@ -76,9 +74,7 @@ END;
 `;
 
 const open = (dbPath: string): SqliteDb => {
-    mkdirSync(dirname(dbPath), { recursive: true });
-    const db = new DatabaseSync(dbPath);
-    db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
+    const db = openSqlite(dbPath);
     db.exec(DDL);
     const wrapped = wrapDb(db);
     guardSchemaVersion(wrapped, SCHEMA_VERSION, "iq recall");

@@ -35,7 +35,7 @@ flowchart LR
 
 The platform never opens a connection to a sandbox:
 
-- The sandbox dials out: the tunnel to the ingress, and `POST /sandbox/announce` to tell the platform its URL and liveness ([`announce.ts`](../../_sandbox/sandbox/src/platform/boot/announce.ts)). No inbound port or router rule is needed.
+- The sandbox dials out: the tunnel to the ingress, and `POST /sandbox/announce` to tell the platform its URL and liveness ([`announce.ts`](../../_sandbox/sandbox/src/system/boot/announce.ts)). No inbound port or router rule is needed.
 - The browser and the devices dial the sandbox, through the ingress or on loopback.
 - The platform never calls a user's daemon. It flips a hosted machine's power through Fly's API, and nothing more.
 

@@ -1,10 +1,11 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { WorkPlace } from "../../workload/resource-budget.js";
-import { worktreeOf } from "../../agents/registry/agents-store.js";
+import { worktreeOf } from "../../conversations/registry/agents-store.js";
 import type { AgentEvent, AgentHarness, AgentProvider, AskQuestion, TurnProfile } from "@intentic/sandbox-contract";
 import { capabilitiesOf, newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
-import type { Holding } from "../../agents/actor/conversation-holdings.js";
-import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
+import { cardDeps, raiseRequest } from "../../conversations/actor/card-offers.js";
+import type { Holding } from "../../conversations/actor/conversation-holdings.js";
+import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Services } from "../../composition.js";
 import { steerTurn } from "../checkpoints/agent-steering.js";
 import { childSpawn } from "../../guard/actions.js";
@@ -17,7 +18,7 @@ import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTu
 import { waitForWork, type WorkWaitOutcome } from "./work-wait.js";
 import { childActor } from "../../auth/principal.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
-import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
+import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
 import { runnerSummaries } from "../../runners/runner-peer.js";
 
@@ -366,39 +367,39 @@ const askOwner = async (
                 `Ask in chat; they can also set the agents.spawn action rule.`,
         };
     }
-    const { id, wait } = services.cards.create(
-        "permission",
-        { kind: "permission", requestId: "", decision: "deny", feedback: "The turn ended before you answered." },
-        parent,
+    const { decision } = await raiseRequest(
+        cardDeps(services),
+        { conversationId: parent, push: (event) => run.push(event) },
+        {
+            kind: "permission",
+            onAbort: { kind: "permission", requestId: "", decision: "deny", feedback: "The turn ended before you answered." },
+            // No `alwaysLabel`: this call persists no grant, so there is nothing for "always" to remember.
+            raised: (requestId) => ({
+                kind: "permission",
+                requestId,
+                toolName: "agents.spawn",
+                title: `${MOVE_TITLE[move]} on ${provider}?`,
+                displayName: MOVE_BUTTON[move],
+                reason,
+            }),
+            approves: (reply) => reply.decision !== "deny",
+            deadlineMs: SUPERVISION_DEADLINE_MS,
+        },
     );
-    // No `alwaysLabel`: this call persists no grant, so there is nothing for "always" to remember.
-    const raised: AgentEvent = {
-        kind: "permission",
-        requestId: id,
-        toolName: "agents.spawn",
-        title: `${MOVE_TITLE[move]} on ${provider}?`,
-        displayName: MOVE_BUTTON[move],
-        reason,
-    };
-    run.push(raised);
-    services.conversations.send(parent, { kind: "frame", frame: raised });
-    const { reply, resolved } = await wait(AbortSignal.timeout(SUPERVISION_DEADLINE_MS));
-    // Every parked card must get a resolution frame, or the client keeps rendering it as live.
-    run.push(resolved);
-    services.conversations.send(parent, { kind: "frame", frame: resolved });
-    if (reply.decision === "deny") {
-        // A resolved frame with no reply is a timeout or dead client, not a decline; don't treat it as one.
-        return resolved.reply === undefined
-            ? {
-                  ok: false,
-                  message: `Nobody answered the request to ${move === "spawn" ? "start" : move} a child agent, so it did not run. Carry on without it and say what you left undone.`,
-              }
-            : {
-                  ok: false,
-                  message: `The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
-              };
+    switch (decision) {
+        case "approved":
+            return { ok: true };
+        case "unanswered":
+            return {
+                ok: false,
+                message: `Nobody answered the request to ${move === "spawn" ? "start" : move} a child agent, so it did not run. Carry on without it and say what you left undone.`,
+            };
+        case "declined":
+            return {
+                ok: false,
+                message: `The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
+            };
     }
-    return { ok: true };
 };
 
 // A child on a runtime with rulebook "none" has no gating of its own, so the parent's turn taints, the same as reading

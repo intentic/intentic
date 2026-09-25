@@ -1,4 +1,4 @@
-import type { Holding } from "../../agents/actor/conversation-holdings.js";
+import type { Holding } from "../../conversations/actor/conversation-holdings.js";
 import type { SubagentRecord } from "./subagents.js";
 
 // The subagent roster's records, by child id (the spawning call's, or a spawned child's own conversation id), held by

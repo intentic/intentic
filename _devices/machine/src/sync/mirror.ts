@@ -3,7 +3,8 @@ import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
-import { type Log, writeFileAtomic } from "@intentic/local-agent";
+import { writeFileAtomic } from "@intentic/base/fs";
+import type { Log } from "@intentic/local-agent";
 import { type PortSkipReason, type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import {
     mirrorHeartbeatPath,

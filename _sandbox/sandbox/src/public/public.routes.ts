@@ -1,15 +1,15 @@
 import { cp, mkdir, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { basename, join, sep } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { publicContract, publicUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { publicContract } from "@intentic/sandbox-contract";
 import { SHARE_DIR } from "@intentic/sandbox-contract/share-paths";
-import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { isPublicPath, toRelPath } from "@intentic/workspace-ignore";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { isControlPlanePath, resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { BLOCK_REASON, blockByName, listPublicFiles, publicRoot } from "./public-files.js";
+import { publicAddressOf } from "../env.config.js";
 
 // The /public routes: the owner's authenticated view of the outbox; `list` reports every file with its URL or its
 // refusal reason, while the serve path answers every refusal with the same 404. `publish` copies rather than moves, so
@@ -23,10 +23,7 @@ const fileUrl = (base: string | undefined, path: string): string | undefined =>
 
 export const createPublicRoutes = (services: PublicRoutesDeps) => {
     const i = implement(publicContract).$context<OrpcContext>();
-    const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
-    const sandboxId = sandboxIdFromToken(services.config.connectToken);
-    const slot = publicSlotFromToken(services.config.connectToken);
-    const base = publicUrl(slot, zone, sandboxId);
+    const { outboxUrl: base } = publicAddressOf(services.config);
     const root = publicRoot(services.workspace.root);
 
     return {

@@ -1,11 +1,9 @@
-import { sameAccount } from "../../agent/providers/account-identity.js";
+import { sameAccount } from "../../agent/providers/accounts/account-identity.js";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import type { MintedProvider, OauthAccount } from "@intentic/sandbox-contract";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { z } from "zod";
+import { accountFiles } from "../../agent/providers/accounts/account-files.js";
 
 // Accounts of a minted provider, one store shared by every provider: rotation removed, since a minted key is static
 // until re-sign-in. No expiry/needsReauth: a revoked key only shows up as a refused turn. `variant` records which
@@ -57,34 +55,9 @@ export interface MintedStore {
     readonly disconnect: (id: string) => Promise<void>;
 }
 
-const credentialPath = (dir: string, id: string): string => join(dir, `${id}.json`);
-
-const jsonOrUndefined = (text: string): unknown => {
-    try {
-        return JSON.parse(text) as unknown;
-    } catch {
-        return undefined;
-    }
-};
-
-// Only a missing file is "no such account"; one that cannot be read throws, or a connected account would read as gone.
-// Content that is not a credential is skipped quietly, since the catalog cache shares this directory.
-const readCredential = async (dir: string, id: string): Promise<StoredKeyAccount | undefined> => {
-    const text = await readFile(credentialPath(dir, id), "utf8").catch(undefinedIfMissing);
-    if (text === undefined) {
-        return undefined;
-    }
-    const parsed = StoredKeySchema.safeParse(jsonOrUndefined(text));
-    return parsed.success ? parsed.data : undefined;
-};
-
 // Only the files with this shape count, so a stray JSON (e.g. the catalog cache) can't make an unconnected provider
 // report itself connected. Oldest first, matching connect order.
-export const readMintedCredentials = async (dir: string): Promise<StoredKeyAccount[]> => {
-    const entries = (await readdir(dir).catch(undefinedIfMissing)) ?? [];
-    const stored = await Promise.all(entries.filter((name) => name.endsWith(".json")).map((name) => readCredential(dir, name.slice(0, -5))));
-    return stored.filter((account): account is StoredKeyAccount => account !== undefined).toSorted((a, b) => a.connectedAt - b.connectedAt);
-};
+export const readMintedCredentials = (dir: string): Promise<StoredKeyAccount[]> => accountFiles(dir, StoredKeySchema).list();
 
 // One <id>.json per account under .intentic/secrets/auth/<provider>/; that tree is already classified secret
 // (workspace-state.ts), so a new provider directory is fenced without naming it anywhere.
@@ -94,16 +67,8 @@ export const fileMintedStore = (input: {
     readonly providerName: string;
     readonly logger: Logger;
 }): MintedStore => {
-    const { dir, providerName } = input;
-    // Atomic write: a reader must never observe a half-written file, since an unparseable read degrades to "no such
-    // account", looking like a self-disconnected credential.
-    const write = async (account: StoredKeyAccount): Promise<void> => {
-        await mkdir(dir, { recursive: true });
-        const path = credentialPath(dir, account.id);
-        const temp = `${path}.${randomUUID()}.tmp`;
-        await writeFile(temp, `${JSON.stringify(account, undefined, 2)}\n`, { mode: 0o600 });
-        await rename(temp, path);
-    };
+    const { providerName } = input;
+    const files = accountFiles(input.dir, StoredKeySchema);
     // Connects run one at a time: the stamp is read from what's already on disk, and two landing together (two estates
     // approved the same second, a scripted seed) would tie. Only connect needs the queue; rename keeps its stamp,
     // disconnect removes by name.
@@ -115,14 +80,14 @@ export const fileMintedStore = (input: {
         return next;
     };
     return {
-        list: async () => (await readMintedCredentials(dir)).map((stored) => toMintedAccount(stored, providerName)),
-        credentials: () => readMintedCredentials(dir),
+        list: async () => (await files.list()).map((stored) => toMintedAccount(stored, providerName)),
+        credentials: files.list,
         connect: ({ apiKey, variant, email }) =>
             serialized(async () => {
                 // A mint takes no time, so two connects can land in the same millisecond; equal stamps would leave
                 // order to readdir's arbitrary filename sort. Each new credential is stamped at least one tick past the
                 // newest stored one, keeping connect order recoverable from the files alone.
-                const stored = await readMintedCredentials(dir);
+                const stored = await files.list();
                 const newest = stored.at(-1)?.connectedAt ?? 0;
                 // The one connect rule (account-identity.ts): the same person on the same estate lands on their account
                 // again, same id, name and place in the order, so every conversation pinned to it carries on.
@@ -140,23 +105,21 @@ export const fileMintedStore = (input: {
                     ...(kept?.label !== undefined ? { label: kept.label } : {}),
                     ...(arriving.email !== undefined ? { email: arriving.email } : {}),
                 };
-                await write(account);
+                await files.write(account);
                 input.logger.info({ provider: input.provider, account: account.id, variant, reconnected: kept !== undefined }, "minted provider connected");
                 return toMintedAccount(account, providerName);
             }),
         rename: async (id, label) => {
-            const stored = await readCredential(dir, id);
+            const stored = await files.read(id);
             if (stored === undefined) {
                 return undefined;
             }
             // A blank label clears rather than stores an empty string, so the row falls back to the derived name.
             const { label: _dropped, ...rest } = stored;
             const renamed: StoredKeyAccount = label.trim() === "" ? rest : { ...rest, label: label.trim() };
-            await write(renamed);
+            await files.write(renamed);
             return toMintedAccount(renamed, providerName);
         },
-        disconnect: async (id) => {
-            await rm(credentialPath(dir, id), { force: true });
-        },
+        disconnect: files.remove,
     };
 };

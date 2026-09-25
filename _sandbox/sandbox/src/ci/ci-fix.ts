@@ -3,7 +3,7 @@ import { isInfraStep } from "@intentic/constants/ci-infra-steps";
 import type { Logger } from "pino";
 import type { Services } from "../composition.js";
 import type { TurnInput } from "../seams/turn-starter.js";
-import { daemonFixAttemptDeps, type FixAttemptOutcome, startFixAttempt } from "../agents/fix/fix-attempts.js";
+import { daemonFixAttemptDeps, type FixAttemptOutcome, startFixAttempt } from "../conversations/fix/fix-attempts.js";
 import type { CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 

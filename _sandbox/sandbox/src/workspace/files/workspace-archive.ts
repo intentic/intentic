@@ -6,7 +6,7 @@ import { drain, extractAll } from "../../tar-extract.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, writeStreamCounted } from "./workspace-files-upload.js";
 import { setWorkspaceMtime } from "./workspace-files.js";
-import { nodeStream } from "../../web-stream.js";
+import { nodeStream } from "@intentic/base/web-stream";
 
 // A tar entry whose path escapes /work aborts the whole extraction with 400.
 export class PathEscapeError extends Error {

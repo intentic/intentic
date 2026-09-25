@@ -1,7 +1,7 @@
 import { CONTROL_MCP_SERVERS } from "@intentic/sandbox-contract";
 import { outsideSourceOf } from "../guard/outside-results.js";
 import { clearTerminalHelp, raiseTerminalHelp, settleTerminalHelpFor, terminalHelpFor } from "./terminal-help.js";
-import { parkedCards } from "../agents/actor/parked-cards.js";
+import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.

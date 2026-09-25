@@ -22,13 +22,13 @@ import { createServices } from "./composition.js";
 import { stateDocuments, stateSteps } from "./bootstrap/state-registry.js";
 import { logsRoot } from "./logs/log-files.js";
 import { loadConfig } from "./env.config.js";
-import { claimContainer } from "./platform/boot/container-owner.js";
-import { finishPrewarm } from "./platform/boot/prewarm.js";
-import { listenHost, profileTraits, requireLocalContract } from "./platform/boot/profile.js";
-import { checks as containerChecks, owner as containerOwner } from "./platform/invariant.js";
-import { readCgroup } from "./platform/resources/cgroup.js";
-import { startBootProfile } from "./platform/resources/loop/boot-profile.js";
-import { startLoopWatchdog } from "./platform/resources/loop/loop-watchdog.js";
+import { claimContainer } from "./system/boot/container-owner.js";
+import { finishPrewarm } from "./system/boot/prewarm.js";
+import { listenHost, profileTraits, requireLocalContract } from "./system/boot/profile.js";
+import { checks as containerChecks, owner as containerOwner } from "./system/invariant.js";
+import { readCgroup } from "./system/resources/cgroup.js";
+import { startBootProfile } from "./system/resources/loop/boot-profile.js";
+import { startLoopWatchdog } from "./system/resources/loop/loop-watchdog.js";
 import { answers } from "./ports/port-probe.js";
 import { runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { appPanelKey } from "./workspace/layout/app-previews.js";
@@ -45,7 +45,7 @@ const main = async (): Promise<void> => {
     const config = loadConfig();
     requireAuthWhenReachable(config);
     requireLocalContract(config);
-    // Profile differences below read a named trait, never the profile value directly (platform/boot/profile.ts).
+    // Profile differences below read a named trait, never the profile value directly (system/boot/profile.ts).
     const traits = profileTraits(config);
     const host = listenHost(config);
     const logger = prepareDaemonProcess(config, traits);

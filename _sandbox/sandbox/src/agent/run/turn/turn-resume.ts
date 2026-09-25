@@ -24,13 +24,13 @@ import { POST_PLAN_MODE } from "../agent.js";
 import { formatAnswers } from "../../tools/question-answers.js";
 import { personaRunModel, runRoleModel } from "../../models/run-role-model.js";
 import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
-import { type Routing, routingFor } from "../../providers/routing.js";
+import { type Routing, routingFor } from "../../providers/accounts/routing.js";
 import { consumeEntry, type JournalEntry, type JournalledTurn, resumeBars, spendAttempt } from "./turn-journal.js";
 import type { SentTurn, StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
-import { refusedBegin } from "../conversation/turn-placement.js";
+import { refusedBegin } from "../placement/turn-placement.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";
-import type { BeginRefusal } from "../../../agents/actor/conversation-decide.js";
-import type { HeldRecord } from "../../../agents/actor/conversation-state.js";
+import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
+import type { HeldRecord } from "../../../conversations/actor/conversation-state.js";
 import { opt } from "../../../opt.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
 
@@ -69,7 +69,7 @@ export interface HeldTurn {
     readonly remint?: { readonly account: string; readonly refusedToken: string } | undefined;
 }
 
-// Where a press sends the held turn, by the one routing rule (agent/providers/routing.ts), with the held turn's own
+// Where a press sends the held turn, by the one routing rule (agent/providers/accounts/routing.ts), with the held turn's own
 // routing as the profile: naming no account keeps the held turn's on its provider, since only a person's explicit pick
 // (switchAccount, or an older editor's `account`) moves a conversation to another account.
 const pressed = (input: AgentTurn, routing: ResumeRouting): Routing =>

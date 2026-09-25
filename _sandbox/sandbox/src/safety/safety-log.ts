@@ -1,6 +1,6 @@
 import { type SafetyLogEntry, SafetyLogEntrySchema } from "@intentic/sandbox-contract";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { boundedLog, jsonFile } from "../store/json-file.js";
 import { stateRelPath } from "../state-paths.js";
 
 // What the safety policy actually decided, newest first: an owner could see a rule was set to "ask me" but not how
@@ -54,18 +54,17 @@ export const fileSafetyLog = (path: string): SafetyLog => {
         fallback: () => [],
         document: safetyLogDocument,
     });
+    const log = boundedLog(file, KEPT);
     return {
-        recent: async () => [...(await file.read())].sort((left, right) => right.at - left.at),
-        record: async (entry) => {
-            await file.update((entries) => [...entries, entry].slice(-KEPT));
-        },
+        recent: async () => [...(await log.read())].sort((left, right) => right.at - left.at),
+        record: (entry) => log.append(entry),
         // Matched on timestamp AND still-unanswered, not timestamp alone: `Date.now()` repeats within a turn, and
         // matching by timestamp alone would rewrite a neighbour's verdict. `outcome: "asked"` makes the match unique,
         // since a card parks the turn.
-        answered: async (at, answer, outcome) => {
-            await file.update((entries) =>
-                entries.map((entry) => (entry.at === at && entry.outcome === "asked" ? { ...entry, answer, outcome } : entry)),
-            );
-        },
+        answered: (at, answer, outcome) =>
+            log.amend(
+                (entry) => entry.at === at && entry.outcome === "asked",
+                (entry) => ({ ...entry, answer, outcome }),
+            ),
     };
 };

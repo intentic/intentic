@@ -6,7 +6,7 @@ import { MAINLINE_FAILURES_KEPT, type MainlineLand, type MainlineRouting, type W
 import type { Logger } from "pino";
 import type { ActivityStore } from "../../activity/activity-store.js";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
-import { QUEUE_SKIPPED_EXIT_CODE } from "../../platform/resources/heavy-commands.js";
+import { QUEUE_SKIPPED_EXIT_CODE } from "../../system/resources/heavy-commands.js";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
@@ -190,7 +190,7 @@ const localCommand = async (deps: LandCheckDeps, command: string, startedMark: s
 };
 
 // The runner this check goes to, when the owner sends it to one; a setting that cannot be read keeps it here.
-const offloadTarget = async (deps: LandCheckDeps): Promise<string | undefined> =>
+const landCheckRunner = async (deps: LandCheckDeps): Promise<string | undefined> =>
     deps.offload().catch((error: unknown) => {
         deps.logger.warn({ err: error }, "dependency verify: could not read where the check runs, running it here");
         return undefined;
@@ -329,7 +329,7 @@ export const createLandCheck = (deps: LandCheckDeps): LandCheck => {
     // `pipestatus[1]` is the check's exit, not tee's.
     const runPanel = async (dir: string, command: string, lands: readonly QueuedLand[], ceilingMs: number): Promise<boolean> => {
         const paths = artifactsOf(deps, dir);
-        const runner = await offloadTarget(deps);
+        const runner = await landCheckRunner(deps);
         const wrapped = runner === undefined ? await localCommand(deps, command, paths.started) : await offloadedCommand(deps, command, runner);
         // What the check is told: where to leave its failures as data, and the main-line commit the oldest land it covers left.
         const from = lands.map((land) => spanOf(land, dir)?.from).find((sha) => sha !== undefined);

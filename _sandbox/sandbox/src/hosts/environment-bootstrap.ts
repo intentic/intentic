@@ -1,6 +1,6 @@
-import { installScriptUrl } from "@intentic/constants";
 import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts, hostEntryOf, hostConnectionKey, hostEnvironmentOf, userDistrosOf } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+import { agentInstallLine } from "./device-commands.js";
 import { callTool } from "./device-reports.js";
 
 // ONE INSTALL CONNECTS THE WHOLE COMPUTER. The owner connected a PC, not one of its shells, so the moment any
@@ -36,16 +36,13 @@ export const bootstrapTargets = (environment: string, facts: DeviceFacts): strin
 // The one-liner that puts the agent in the target environment, in that environment's own dialect, plus the `in` that
 // carries it there. The token is single-use and minted for the connection it enrolls, so a redeemed one can only ever
 // become the environment it was meant for.
-const installLine = (target: string, url: string, token: string): { readonly command: string; readonly in: string } =>
-    target === HOST_NATIVE_ENVIRONMENT
-        ? {
-              command: `$env:SANDBOX_URL='${url}'; $env:PAIR_TOKEN='${token}'; irm ${installScriptUrl("devicePs1")} | iex`,
-              in: "windows",
-          }
-        : {
-              command: `curl -fsSL ${installScriptUrl("deviceSh")} | env SANDBOX_URL='${url}' PAIR_TOKEN='${token}' sh`,
-              in: `wsl:${target.slice("wsl:".length)}`,
-          };
+const installLine = (target: string, url: string, token: string): { readonly command: string; readonly in: string } => {
+    const native = target === HOST_NATIVE_ENVIRONMENT;
+    return {
+        command: agentInstallLine(native ? "powershell" : "sh", { powershell: "devicePs1", sh: "deviceSh" }, { SANDBOX_URL: `'${url}'`, PAIR_TOKEN: `'${token}'` }),
+        in: native ? "windows" : `wsl:${target.slice("wsl:".length)}`,
+    };
+};
 
 // Puts an agent in one environment through the connection we already have. Returns what happened for the log, never
 // throws: a machine whose owner switched commands off, or a distro that has no curl, is a fact about that machine and

@@ -2,7 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { OpencodeClient } from "@opencode-ai/sdk";
 import type { OauthAccount } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import { forgetAccountState } from "../../agent/providers/account-identity.js";
+import { forgetAccountState } from "../../agent/providers/accounts/account-identity.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
 
 // xAI subscription OAuth relayed through OpenCode, which owns the protocol and token storage. Uses the headless

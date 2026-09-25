@@ -1,6 +1,6 @@
 import type { Services } from "../composition.js";
 import type { DependencyOrigin } from "../workspace/deps/dependency-origin.js";
-import { breakageRunSettled, resumeBreakageRouter } from "../agents/land/land-breakage.js";
+import { breakageRunSettled, resumeBreakageRouter } from "../conversations/land/land-breakage.js";
 import { subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { resumeRepairGate } from "../ci/repair-gate.js";
 

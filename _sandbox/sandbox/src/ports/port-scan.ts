@@ -1,6 +1,6 @@
 import { readdir, readFile, readlink } from "node:fs/promises";
 import { join } from "node:path";
-import { parentPid, parseProcStat } from "../platform/resources/proc-stat.js";
+import { parentPid, parseProcStat } from "../system/resources/proc-stat.js";
 
 // Discovers every listening TCP socket via procfs, no lsof/ss dependency. The only way to see ports bound outside the
 // managed-process registry: a terminal's dev servers, an agent's ad-hoc process, a docker-proxy.

@@ -4,7 +4,7 @@ import { extract, type Header } from "tar-stream";
 import { ArrivalFormatError } from "../arrival-error.js";
 import { drain, extractAll } from "../tar-extract.js";
 import { skipReason } from "./scan-policy.js";
-import { nodeStream } from "../web-stream.js";
+import { nodeStream } from "@intentic/base/web-stream";
 
 // Reads a gzipped tar of a foreign home directory into a bounded in-memory file map adapters can be pure over. Held in
 // memory, not on disk: the archive is a credential store, and a temp file would be a second place those bytes live.

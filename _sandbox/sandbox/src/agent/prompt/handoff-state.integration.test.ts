@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
-import type { PersistedAgent } from "../../agents/registry/agents-store.js";
+import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import type { Services } from "../../composition.js";
 import { isolatedAgent } from "../../testing.js";
 import { taskStoreDir } from "../run/task-store.js";

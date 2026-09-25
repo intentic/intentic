@@ -1,13 +1,15 @@
 import type { WalletConfig } from "@intentic/sandbox-contract";
+import { atomicToUsd, usdcNetworkOf, usdToAtomic } from "@intentic/sandbox-contract/x402";
 import type { Context } from "hono";
-import { actorObserver, liveRequestRun } from "../agents/actor/card-offers.js";
+import { cardDeps } from "../conversations/actor/card-offers.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
+import { answerResponse, cliBody } from "../http/cli-answer.js";
 import { conversationTainted } from "../guard/turn-taint.js";
 import { gatedPaidFetch } from "./payment-offer.js";
 import { relayWalletSign } from "./wallet-signer.js";
 import { spentTodayAtomic } from "./wallet-ledger.js";
-import { atomicToUsd, usdcBalance, usdcNetworkOf, usdToAtomic } from "./x402.js";
+import { usdcBalance } from "./x402.js";
 
 /* Wallet routes are scoped to the agent token. */
 
@@ -51,13 +53,11 @@ export const createWalletRoutes = (services: Services) => ({
         });
     },
     fetch: async (c: Context<AppEnv>): Promise<Response> => {
-        let body: unknown;
-        try {
-            body = await c.req.json();
-        } catch {
-            return c.json({ error: { type: "invalid_request", message: 'the fetch body must be JSON: {"url":"https://…", …}' } }, 400);
+        const body = await cliBody(c, "fetch", '{"url":"https://…", …}');
+        if (body instanceof Response) {
+            return body;
         }
-        const { url, method, body: payload, contentType, maxUsd, why } = (body ?? {}) as Record<string, unknown>;
+        const { url, method, body: payload, contentType, maxUsd, why } = body;
         if (typeof url !== "string" || url === "") {
             return c.json({ error: { type: "invalid_request", message: "`url` names the endpoint to fetch (and pay, if it asks)" } }, 400);
         }
@@ -66,9 +66,7 @@ export const createWalletRoutes = (services: Services) => ({
                 wallet: () => walletEntry(services),
                 ledger: services.walletLedger,
                 sign: (request) => relayWalletSign(services.config, request),
-                liveRun: liveRequestRun(services.conversations),
-                observe: actorObserver(services.conversations),
-                cards: services.cards,
+                ...cardDeps(services),
                 tainted: conversationTainted,
             },
             {
@@ -82,9 +80,8 @@ export const createWalletRoutes = (services: Services) => ({
                 signal: c.req.raw.signal,
             },
         );
-        return c.newResponse(answer.body, answer.status as 200, {
-            "content-type": answer.contentType,
-            // The receipt facts ride headers so the CLI can print data on stdout and the receipt on stderr.
+        // The receipt facts ride headers so the CLI can print data on stdout and the receipt on stderr.
+        return answerResponse(c, answer, {
             ...(answer.paidUsd !== undefined ? { "x-intentic-paid-usd": answer.paidUsd } : {}),
             ...(answer.transaction !== undefined ? { "x-intentic-paid-tx": answer.transaction } : {}),
         });

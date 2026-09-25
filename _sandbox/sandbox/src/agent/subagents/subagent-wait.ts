@@ -6,7 +6,7 @@ import { z } from "zod";
 import { type ChildSupervisor, spawnedNote } from "./children.js";
 import type { SubagentWaitUntil } from "./subagents.js";
 import { waitForWork, workWaitAnswer } from "./work-wait.js";
-import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
+import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 
 // A tool, not a CLI: a blocking shell command would hit the soft-timeout and become the polling it replaces.
 

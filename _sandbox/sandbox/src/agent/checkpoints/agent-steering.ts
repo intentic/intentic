@@ -1,5 +1,5 @@
-import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
-import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
+import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { markConversationTaint } from "../../guard/turn-taint.js";
 import type { Steer } from "../../seams/turn-starter.js";
 

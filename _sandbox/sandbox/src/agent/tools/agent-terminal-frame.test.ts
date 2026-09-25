@@ -5,7 +5,7 @@ import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
 import { type HarnessRequest, runAgent } from "../run/agent.js";
 import type { QueryFn } from "../run/sdk-stream.js";
 import * as fsOriginal from "node:fs";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
 // One fleet's actors, and the cards a turn here parks in them.

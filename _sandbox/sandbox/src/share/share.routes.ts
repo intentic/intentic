@@ -1,13 +1,13 @@
 import { randomBytes } from "node:crypto";
-import { publicUrl, type SharedConversation, shareContract, type ShareDetail, zoneFromUrl } from "@intentic/sandbox-contract";
+import { type SharedConversation, shareContract, type ShareDetail } from "@intentic/sandbox-contract";
 import { SHARE_DIR, SHARE_ID, shareId } from "@intentic/sandbox-contract/share-paths";
-import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { publishShare, unpublishShare, viewerDist } from "./share-publish.js";
 import { shareTranscript } from "./share-payload.js";
 import type { StoredShare } from "./share-store.js";
+import { publicAddressOf } from "../env.config.js";
 
 // Turns a conversation into a page anyone with the link can read, and takes it back; every route is a deliberate act on
 // one named conversation, and nothing about the live conversation changes when it's shared. A share is frozen: `create`
@@ -21,10 +21,7 @@ const RANDOM_BYTES = 8;
 
 export const createShareRoutes = (services: ShareRoutesDeps) => {
     const i = implement(shareContract).$context<OrpcContext>();
-    const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
-    const sandboxId = sandboxIdFromToken(services.config.connectToken);
-    const slot = publicSlotFromToken(services.config.connectToken);
-    const base = publicUrl(slot, zone, sandboxId);
+    const { outboxUrl: base } = publicAddressOf(services.config);
 
     // Trailing slash, since the page is `<id>/index.html`, and the outbox serves a directory's index; the link names
     // the conversation, not a file.

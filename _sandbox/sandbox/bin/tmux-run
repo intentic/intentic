@@ -24,7 +24,7 @@
 #
 # -b names the capture dir for a BACKGROUND JOB (Bash `run_in_background: true`), minted by the caller
 # instead of by mktemp here, because the daemon has to be able to read the job's completion after this
-# wrapper is gone (src/agent/tools/background-jobs.ts polls $JOB-DIR/status).
+# wrapper is gone (src/agent/tools/jobs/background-jobs.ts polls $JOB-DIR/status).
 #
 # A background job is the ONE case where this wrapper dying must not take the command with it. Intentic runs
 # every turn as its own short-lived CLI process, and that process SIGTERMs its background shells on the way
@@ -313,6 +313,6 @@ case "$code" in '' | *[!0-9]*) code=1 ;; esac
 # Emit the complete captured output once — the SDK captures this stdout as the whole Bash tool result.
 emit "$code"
 # A job dir is the daemon's, not this wrapper's: the adoption may not have read the status yet, and the tmp
-# sweep (platform/boot/reaper.ts, `intentic-run-` prefix) reclaims it on its own clock.
+# sweep (system/boot/reaper.ts, `intentic-run-` prefix) reclaims it on its own clock.
 [ -n "$jobdir" ] || rm -rf "$d"
 exit "$code"

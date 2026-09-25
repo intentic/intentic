@@ -3,7 +3,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { GATE_DAILY_MAX_DEFAULT, type GateVerdict, workflowFaults, workflowRunFaults } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { PAYLOAD_MAX } from "../automations/scheduler.js";
-import { presentedDoorToken } from "../auth/door-tokens.js";
+import { presentedDoorToken } from "../auth/tokens/door-tokens.js";
 import { sessionStart } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import type { Services } from "../composition.js";

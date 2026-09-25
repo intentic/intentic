@@ -1,9 +1,8 @@
 import { rm } from "node:fs/promises";
-import { errorMessage } from "@intentic/base/errors";
 import type { IntenticLine, NetdiskConfig, NetdiskLink } from "@intentic/sandbox-contract";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
-import { notCarriedYet, type TunnelEntry, tunnelEntries } from "../tunnel/tunnel-links.js";
-import { markUp, upSince } from "../tunnel/tunnel-state.js";
+import { restoreTunnels, type TunnelEntry, tunnelEntries, tunnelUp } from "../tunnel/tunnel-links.js";
+import { upSince } from "../tunnel/tunnel-state.js";
 import { netdiskDrivers } from "./netdisk-drivers.js";
 import { mountPoint, netdiskDir, upMarkerPath } from "./netdisk-paths.js";
 
@@ -34,16 +33,13 @@ export const netdiskLink = async (entry: NetdiskEntry): Promise<NetdiskLink> => 
 export const netdiskLinks = async (capabilities: CapabilitiesStore): Promise<NetdiskLink[]> =>
     Promise.all(tunnelEntries(await capabilities.list(), "netdisk").map((entry) => netdiskLink(entry)));
 
-// Mounts one disk, streaming progress; the up marker is written only after the driver reports success, so it never
-// contradicts a probe.
+// Mounts one disk, streaming progress.
 export async function* mountNetdisk(entry: NetdiskEntry): AsyncGenerator<IntenticLine> {
     const driver = netdiskDrivers[entry.config.provider];
-    const missing = await driver.missingTool();
-    if (missing !== undefined) {
-        throw notCarriedYet(missing, "netdisk");
-    }
-    yield* driver.mount(entry.id, entry.config);
-    await markUp(netdiskDir(), upMarkerPath(entry.id));
+    yield* tunnelUp("netdisk", await driver.missingTool(), () => driver.mount(entry.id, entry.config), {
+        dir: netdiskDir(),
+        path: upMarkerPath(entry.id),
+    });
 }
 
 // Unmounts one disk; an already-unmounted disk counts as success, since the goal state is just "not mounted".
@@ -52,29 +48,15 @@ export const unmountNetdisk = async (entry: NetdiskEntry): Promise<void> => {
     await rm(upMarkerPath(entry.id), { force: true });
 };
 
-// Boot restore: mounts die with the container while the manifest survives on /work, so every auto-mount disk is
-// re-mounted. Runs after the VPNs reconnect, since a disk behind a tunnel is unreachable before it. Best-effort; a dead
-// server logs a warning rather than failing boot.
-export const remountNetdisks = async (
+// Boot restore of every auto-mount disk; runs after the VPNs reconnect, since a disk behind a tunnel is unreachable
+// before it.
+export const remountNetdisks = (
     capabilities: CapabilitiesStore,
     logger: { info: (message: string) => void; warn: (message: string) => void },
-): Promise<void> => {
-    for (const entry of tunnelEntries(await capabilities.list(), "netdisk")) {
-        if (entry.config.autoMount !== "on") {
-            continue;
-        }
-        // Probed inside the try: one disk whose state can't be read must not strand every one after it.
-        try {
-            const probe = await netdiskDrivers[entry.config.provider].probe(entry.id, entry.config);
-            if (probe.state === "mounted") {
-                continue;
-            }
-            for await (const line of mountNetdisk(entry)) {
-                void line;
-            }
-            logger.info(`netdisk ${entry.id}: mounted`);
-        } catch (error) {
-            logger.warn(`netdisk ${entry.id}: could not mount: ${errorMessage(error)}`);
-        }
-    }
-};
+): Promise<void> =>
+    restoreTunnels(capabilities, logger, "netdisk", {
+        automatic: (config) => config.autoMount === "on",
+        isUp: async (entry) => (await netdiskDrivers[entry.config.provider].probe(entry.id, entry.config)).state === "mounted",
+        up: (entry) => mountNetdisk(entry),
+        words: { done: "mounted", failed: "could not mount" },
+    });

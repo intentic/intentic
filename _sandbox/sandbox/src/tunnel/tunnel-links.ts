@@ -1,5 +1,7 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/base/errors";
+import type { Capability, IntenticLine } from "@intentic/sandbox-contract";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
+import { markUp } from "./tunnel-state.js";
 
 /* A TUNNEL is a capability the manifest stores and the machine either holds or does not: a VPN into somewhere of the user's (vpn/), a geo exit (exit/), a mounted network disk (netdisk/). */
 
@@ -38,3 +40,52 @@ export const notCarriedYet = (missing: string, kind: TunnelKindName): Error =>
     new Error(
         `This sandbox doesn't carry ${missing} yet. Rebuild it from the Sandbox ▸ Environment card: the ${CARRIED_WORDING[kind].card} capability's image fragment installs it, and ${CARRIED_WORDING[kind].comesBack} once the sandbox restarts.`,
     );
+
+// Brings one tunnel up: refused while its client isn't carried yet, and marked up only once the driver succeeded, so
+// the marker never contradicts a probe.
+export async function* tunnelUp(
+    kind: TunnelKindName,
+    missing: string | undefined,
+    dial: () => AsyncGenerator<IntenticLine>,
+    marker: { readonly dir: string; readonly path: string },
+): AsyncGenerator<IntenticLine> {
+    if (missing !== undefined) {
+        throw notCarriedYet(missing, kind);
+    }
+    yield* dial();
+    await markUp(marker.dir, marker.path);
+}
+
+export interface TunnelRestore<Config> {
+    readonly automatic: (config: Config) => boolean;
+    // Up or on its way up: nothing to restore.
+    readonly isUp: (entry: TunnelEntry<Config>) => Promise<boolean>;
+    readonly up: (entry: TunnelEntry<Config>) => AsyncGenerator<IntenticLine>;
+    readonly words: { readonly done: string; readonly failed: string };
+}
+
+// Boot restore: tunnels die with the container while the manifest survives on /work, so every automatic one is brought
+// back. Best-effort, one at a time: a tunnel that can't be read or dialled is logged and never strands the rest.
+export const restoreTunnels = async <K extends TunnelKindName>(
+    capabilities: CapabilitiesStore,
+    logger: { info: (message: string) => void; warn: (message: string) => void },
+    kind: K,
+    restore: TunnelRestore<ConfigOf<K>>,
+): Promise<void> => {
+    for (const entry of tunnelEntries(await capabilities.list(), kind)) {
+        if (!restore.automatic(entry.config)) {
+            continue;
+        }
+        try {
+            if (await restore.isUp(entry)) {
+                continue;
+            }
+            for await (const line of restore.up(entry)) {
+                void line;
+            }
+            logger.info(`${kind} ${entry.id}: ${restore.words.done}`);
+        } catch (error) {
+            logger.warn(`${kind} ${entry.id}: ${restore.words.failed}: ${errorMessage(error)}`);
+        }
+    }
+};

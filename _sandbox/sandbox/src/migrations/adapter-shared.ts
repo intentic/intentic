@@ -2,7 +2,7 @@ import type { ArrivalItem, Automation, Capability, SkillDraft } from "@intentic/
 import { asZone, AutomationSchema, CapabilitySchema, SkillDraftSchema } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
 import { isBakedSkill } from "../settings/skills.js";
-import { parseSkillFile } from "../skill-file.js";
+import { parseSkillFile, SKILL_FILE } from "../skill-file.js";
 
 // Shared across every source adapter: tolerant readers, name shaping, and the one translation both ecosystems spell
 // identically (a SKILL.md folder). An adapter's own judgment stays out of here; two adapters disagreeing on a valid id
@@ -102,7 +102,7 @@ export const clipped = (body: string): string =>
 // tool is renamed, not shadowed; `taken` is the caller's, so scanned locations resolve collisions in its order.
 export const planSkillFiles = (files: Files, prefix: string, sourceLabel: string, taken: Set<string>, refused: string[]): PlannedItem[] => {
     const planned: PlannedItem[] = [];
-    for (const path of [...files.keys()].filter((candidate) => candidate.startsWith(prefix) && candidate.endsWith("/SKILL.md")).toSorted()) {
+    for (const path of [...files.keys()].filter((candidate) => candidate.startsWith(prefix) && candidate.endsWith(`/${SKILL_FILE}`)).toSorted()) {
         const dirName = path.split("/").at(-2) ?? "skill";
         const parsed = parseSkillFile(text(files, path) ?? "");
         if (parsed.body.trim() === "") {
@@ -118,7 +118,7 @@ export const planSkillFiles = (files: Files, prefix: string, sourceLabel: string
             continue;
         }
         taken.add(name);
-        const siblings = [...files.keys()].filter((candidate) => candidate.startsWith(path.slice(0, -"SKILL.md".length)) && candidate !== path);
+        const siblings = [...files.keys()].filter((candidate) => candidate.startsWith(path.slice(0, -SKILL_FILE.length)) && candidate !== path);
         const skill = SkillDraftSchema.safeParse({
             name,
             description:

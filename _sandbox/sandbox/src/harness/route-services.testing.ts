@@ -7,20 +7,20 @@ import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { unstubbed } from "@intentic/testing";
 import { createAuthConnections } from "../auth/connections.js";
 import { createPasskeyCeremonies } from "../auth/passkeys/passkey-store.js";
-import type { ControlScope } from "../auth/control-tokens.js";
-import { memoryDoorTokens } from "../auth/door-tokens.js";
-import { createMediaTickets } from "../auth/media-tickets.js";
-import { createWsTickets } from "../auth/ws-tickets.js";
+import type { ControlScope } from "../auth/tokens/control-tokens.js";
+import { memoryDoorTokens } from "../auth/tokens/door-tokens.js";
+import { createMediaTickets } from "../auth/tokens/media-tickets.js";
+import { createWsTickets } from "../auth/tokens/ws-tickets.js";
 import { type Services, wireReactions } from "../composition.js";
 import { createLogger } from "../logger.js";
-import { createAnnouncer } from "../platform/boot/announce.js";
-import { createBootTracker } from "../platform/boot/boot.js";
-import { createPerfTracker } from "../platform/resources/perf.js";
+import { createAnnouncer } from "../system/boot/announce.js";
+import { createBootTracker } from "../system/boot/boot.js";
+import { createPerfTracker } from "../system/resources/perf.js";
 import { providerReadiness } from "../agent/providers/provider-registry.js";
 import { budgetOn } from "../agent/run/turn/turn-plan.testing.js";
 import { PROVIDER_MODULES, RUNTIME_ADAPTERS } from "../runtimes/runtime-table.js";
-import { createReachReporter } from "../platform/listeners/reach-report.js";
-import { enrolledFleet, syncPairBurnPath, type SyncMode } from "../platform/sync.js";
+import { createReachReporter } from "../system/listeners/reach-report.js";
+import { enrolledFleet, syncPairBurnPath, type SyncMode } from "../hosts/desktop-sync.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { createPortForwards } from "../ports/port-forwards.js";
 import { rejectAuth } from "./route-client.testing.js";
@@ -43,21 +43,21 @@ import { deriveText, readDerivedText } from "../derived/derived-text.js";
 import { sidecarStatus } from "../derived/sidecar-service.js";
 import { claudeStoreOf } from "../sessions/session-store.js";
 import { openSearchIndex } from "../sessions/search-index.js";
-import { IN_MEMORY } from "../store/sqlite.js";
+import { IN_MEMORY } from "@intentic/base/sqlite";
 import { toolChildrenOf, transcriptPageOf } from "../sessions/agent-transcript.js";
 import { spokenLinesOf } from "../sessions/transcript-search.js";
 import { pairings } from "../peers/enrollment.js";
 import { createTerminalRunner } from "../terminal/terminal-run.js";
 import { fleetStoreOver, memoryFleet, noIsolation, testConfig, testTurnMounts } from "../testing.js";
-import { sqliteAgentsStore } from "../agents/registry/agents-store.js";
+import { sqliteAgentsStore } from "../conversations/registry/agents-store.js";
 import { openConversationsDb } from "../store/conversations-db.js";
 import { conversationUnits } from "../store/conversation-units.js";
 import { stateRelPath } from "../state-paths.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { turnDoors } from "../agent/run/turn/turn-doors.js";
-import { streamAgent } from "../agent/routes/agent.routes.js";
+import { streamAgent } from "../agent/run/stream-agent.js";
 import { createDomainEvents } from "../seams/domain-events.js";
-import { parkedCards } from "../agents/actor/parked-cards.js";
+import { parkedCards } from "../conversations/actor/parked-cards.js";
 
 // Composes the daemon's `Services` for route suites driving its HTTP surface, split by what a suite reaches for: stores
 // (route-stores.testing.ts), recording fakes (route-fakes.testing.ts), the client and auth stubs
@@ -139,7 +139,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         config: testConfig,
         logger: createLogger(testConfig),
         // A box with room, stated rather than measured, for the admission gate every turn route passes through. The
-        // real reading is of live cgroup files, and since it counts swap (platform/resources/resource-budget.ts) a
+        // real reading is of live cgroup files, and since it counts swap (workload/resource-budget.ts) a
         // suite running on a machine that is genuinely full refuses turns these tests are asserting the shape of.
         resources: budgetOn(),
         // No chain declared, so converged from birth; the gate itself is covered below with a declared chain.

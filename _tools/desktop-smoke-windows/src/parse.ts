@@ -253,7 +253,7 @@ export const desktopReadiness = (open: readonly WindowInfo[], session: SessionSt
     };
 };
 
-// Control-token store shape as auth/control-tokens.ts persists it: sha256 of the raw token, never the token. Kept as a
+// Control-token store shape as auth/tokens/control-tokens.ts persists it: sha256 of the raw token, never the token. Kept as a
 // pure decision, separate from the docker exec that writes it.
 export const controlTokenStore = (digest: string): string =>
     JSON.stringify({

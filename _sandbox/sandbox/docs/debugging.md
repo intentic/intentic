@@ -34,7 +34,7 @@ owns the layout and prunes by size, age and count.
 | `filter-stats.jsonl` | One row per agent shell command through the output filter |
 | `terminals/`, `services/`, `intentic-runs/` | tmux pane captures, supervised service processes, `intentic` CLI runs |
 | `daemon-exit.json` | Whether the previous run exited cleanly or was killed |
-| `boot-*.cpuprofile` | The CPU profile of a start whose event loop stalled, the newest three (`platform/resources/loop/boot-profile.ts`) |
+| `boot-*.cpuprofile` | The CPU profile of a start whose event loop stalled, the newest three (`system/resources/loop/boot-profile.ts`) |
 
 Node's fatal-error reports (`report.*.json`) land in the same directory. `LOG_LEVEL` sets the level; `LOG_PRETTY=1`
 pretty-prints to stdout instead of writing `daemon.log`.
@@ -45,7 +45,7 @@ pretty-prints to stdout instead of writing `daemon.log`.
   role.
 - Agents get a read-only `diagnostics` MCP server ([src/logs/diagnostics-tools.ts](../src/logs/diagnostics-tools.ts))
   with `errors`, `slow`, `turns` and `resources` over the same files and the spend ledger.
-- Invariant violations and event-loop stalls (`platform/resources/loop-watchdog.ts`) are written to `daemon.log`.
+- Invariant violations and event-loop stalls (`system/resources/loop-watchdog.ts`) are written to `daemon.log`.
 
 ## State on disk
 

@@ -1,7 +1,7 @@
 import { extname } from "node:path";
 import { type CheckPlacement, diagnose } from "@intentic/lsp/client";
 import type { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import { fromWorktree, inWorktree, nsenterArgv, type TurnPlacement } from "../../agents/worktrees/isolation.js";
+import { fromWorktree, inWorktree, nsenterArgv, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { modulesNear, type NearbyModules } from "../../workspace/deps/dependency-drift.js";
 import type { ShellEditTracker } from "../tools/agent-shell-edits.js";
 import { EDIT_TOOLS, editedPath } from "../../rules/edit-tools.js";

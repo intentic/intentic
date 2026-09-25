@@ -1,6 +1,7 @@
 import { cp, lstat, mkdir, readdir, readFile, rename, rm, rmdir, stat } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { writeFileAtomic } from "@intentic/base/fs";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { stateRelPath } from "../../state-paths.js";
@@ -10,7 +11,6 @@ import { jsonEntries } from "../json-file.js";
 import { isDowngrade, newestRunVersion, recordNewestRun } from "../newest-run.js";
 import { commitEpisodes, type Episode, GRACE_MS, type Journal, openEpisode, pruneEpisodes, readJournal, restoreEpisode, writeJournal } from "./state-journal.js";
 import type { StructuralStep } from "./state-steps.js";
-import { writeTextFile } from "../text-file.js";
 import { version as buildVersion } from "../../version.js";
 
 // The boot step that brings this workspace's stored files to this build's shapes before any store opens: moves
@@ -308,7 +308,7 @@ const applyWrite = async (path: string, content: string | undefined): Promise<vo
         return;
     }
     const mode = (await stat(path).catch(undefinedIfMissing))?.mode;
-    await writeTextFile(path, content, mode === undefined ? undefined : mode & 0o777);
+    await writeFileAtomic(path, content, mode === undefined ? undefined : mode & 0o777);
 };
 
 // A directory emptied by removing an earlier address goes too; one still holding anything stays.

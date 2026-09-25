@@ -1,6 +1,6 @@
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "../agent/run/turn/turn-resume.js";
-import { adoptBackgroundJobs } from "../agent/tools/background-adoption.js";
-import { restoreBackgroundJobs } from "../agent/tools/background-jobs.js";
+import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js";
+import { restoreBackgroundJobs } from "../agent/tools/jobs/background-jobs.js";
 import { restoreWatchers } from "../agent/verification/watchers.js";
 import { resumeInterruptedFires } from "../automations/fire-resume.js";
 import { resumeWorkflowExecution } from "../workflows/workflow-runner.js";

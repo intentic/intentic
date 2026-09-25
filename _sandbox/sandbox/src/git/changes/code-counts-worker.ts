@@ -3,8 +3,8 @@ import type { LineStat } from "@intentic/code-read";
 import { type CountStore, keptLineStat } from "@intentic/code-read/count-cache";
 import { grammars } from "@intentic/code-read/grammars";
 import type { StatementSync } from "node:sqlite";
-import { openSqlite } from "../../store/sqlite.js";
-import { serveCalls } from "../../workers/worker-calls.js";
+import { openSqlite } from "@intentic/base/sqlite";
+import { serveCalls } from "@intentic/base/worker-calls";
 import type { CodeCountAsk, CodeCountThread } from "./code-counts.js";
 
 // Tokenizing both sides of a file with its TextMate grammar is the costly part of a code count (over a second for a

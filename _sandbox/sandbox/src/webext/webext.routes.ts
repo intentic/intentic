@@ -1,8 +1,7 @@
 import { WebExtSessionExportSchema, WebExtSessionImportSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { bearerFrom } from "../auth/auth.js";
 import type { Services } from "../composition.js";
-import { refusePresented } from "../peers/peer-store.js";
+import { bearerPeer } from "../peers/peer-store.js";
 import { exportBrowserSession } from "./session-export.js";
 import { importBrowserSession } from "./session-import.js";
 
@@ -17,11 +16,10 @@ export type WebExtRoutesDeps = Pick<Services, "webexts" | "workspace" | "capabil
 export const createWebExtSessionRoute =
     (services: WebExtRoutesDeps) =>
     async (c: Context): Promise<Response> => {
-        const caller = await services.webexts.verify(bearerFrom(c.req.header("authorization")));
-        if (caller.kind !== "enrolled") {
-            return refusePresented(c, caller);
+        const id = await bearerPeer(services.webexts, c);
+        if (typeof id !== "string") {
+            return id;
         }
-        const id = caller.id;
         const parsed = WebExtSessionImportSchema.safeParse(await c.req.json().catch(() => undefined));
         if (!parsed.success) {
             return c.json({ ok: false, message: "That session payload is not one this sandbox can read." }, 400);
@@ -39,11 +37,10 @@ export const createWebExtSessionRoute =
 export const createWebExtLendRoute =
     (services: WebExtRoutesDeps) =>
     async (c: Context): Promise<Response> => {
-        const caller = await services.webexts.verify(bearerFrom(c.req.header("authorization")));
-        if (caller.kind !== "enrolled") {
-            return refusePresented(c, caller);
+        const id = await bearerPeer(services.webexts, c);
+        if (typeof id !== "string") {
+            return id;
         }
-        const id = caller.id;
         const parsed = WebExtSessionExportSchema.safeParse(await c.req.json().catch(() => undefined));
         if (!parsed.success) {
             return c.json({ ok: false, message: "That request is not one this sandbox can read." }, 400);

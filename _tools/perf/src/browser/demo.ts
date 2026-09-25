@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { createServer } from "node:net";
 import { join } from "node:path";
+import { freePort } from "@intentic/base/fs";
 
 export interface DemoServer {
     /** `http://127.0.0.1:<port>`; the demo's routes live under `/demo/`. */
@@ -10,23 +10,13 @@ export interface DemoServer {
     readonly stop: () => Promise<void>;
 }
 
-// 47145/47146 may be port-mirrors of the owner's servers, so the port is always one the OS just handed out.
-const freePort = (): Promise<number> =>
-    new Promise((resolve, reject) => {
-        const probe = createServer();
-        probe.once("error", reject);
-        probe.listen(0, "127.0.0.1", () => {
-            const address = probe.address();
-            probe.close(() => (typeof address === "object" && address !== null ? resolve(address.port) : reject(new Error("no port"))));
-        });
-    });
-
 /**
  * Starts `_site/demo`'s Vite directly rather than `pnpm dev`, which first fetches the listed extensions from GitHub:
  * the counts must not depend on the network. `--force` re-optimises dependencies so a stale pre-bundle cannot serve old
  * code.
  */
 export const startDemo = async (repo: string): Promise<DemoServer> => {
+    // 47145/47146 may be port-mirrors of the owner's servers, so the port is always one the OS just handed out.
     const port = await freePort();
     const demo = join(repo, "_site", "demo");
     const child = spawn(process.execPath, [join(demo, "node_modules", "vite", "bin", "vite.js"), "--port", String(port), "--strictPort", "--force"], {

@@ -132,3 +132,35 @@ export interface OneShotAsk {
     // The caller's cancel: a second click, a closed panel.
     readonly signal: AbortSignal;
 }
+
+// A one-shot's own deadline beside its caller's cancel, both ending the call through `stop` until it is released.
+export interface OneShotDeadline {
+    // Whether the clock, rather than the caller, is what ended the call.
+    readonly expired: () => boolean;
+    // The call came back with nothing: said as the deadline when that is what ended it.
+    readonly unanswered: () => Error;
+    // A failure once the deadline passed is the deadline's, whatever the torn-down call threw instead.
+    readonly claim: (error: unknown) => unknown;
+    readonly release: () => void;
+}
+
+// `namedMs` is the figure the sentence gives, which is the deadline itself unless a caller has always named another.
+export const oneShotDeadline = (caller: AbortSignal, ms: number, stop: () => void, namedMs = ms): OneShotDeadline => {
+    let expired = false;
+    caller.addEventListener("abort", stop, { once: true });
+    const timer = setTimeout(() => {
+        expired = true;
+        stop();
+    }, ms);
+    const overdue = (cause?: unknown): Error =>
+        new Error(`the model did not answer within ${namedMs / 1_000}s`, cause === undefined ? undefined : { cause });
+    return {
+        expired: () => expired,
+        unanswered: () => (expired ? overdue() : new Error("the model did not answer")),
+        claim: (error) => (expired ? overdue(error) : error),
+        release: () => {
+            clearTimeout(timer);
+            caller.removeEventListener("abort", stop);
+        },
+    };
+};

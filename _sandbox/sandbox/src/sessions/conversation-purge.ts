@@ -2,7 +2,7 @@ import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { capabilitiesOf, isConversationId } from "@intentic/sandbox-contract";
-import type { PersistedAgent } from "../agents/registry/agents-store.js";
+import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import { claudeStoreOf } from "./session-store.js";
 import type { FileTranscriptRecord } from "./transcript-record.js";
 import { statePath } from "../state-paths.js";

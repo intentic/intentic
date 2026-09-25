@@ -1,6 +1,6 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import type { IsolationPlan, TurnPlacement } from "../../agents/worktrees/isolation.js";
+import type { IsolationPlan, TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { syncHookOutput } from "../../testing.js";
 import { type DiagRequest, type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agent-diagnostics.js";
 import { EDIT_TOOLS } from "../../rules/edit-tools.js";
@@ -188,7 +188,7 @@ test("an anchored turn is checked in its own names, by a compiler entered into i
     expect(request?.placement?.enter("/usr/bin/env", ["-C", "/work", "tsgo", "--noEmit"])).toEqual({
         command: "nsenter",
         // `env -u PWD -u OLDPWD` rides between the hop and the compiler: the daemon's inherited logical cwd
-        // names the worktree by its /history path, where no dependency mirror is mounted (agents/isolation.ts).
+        // names the worktree by its /history path, where no dependency mirror is mounted (conversations/isolation.ts).
         args: [
             "--mount=/proc/4321/ns/mnt",
             "--wdns=/work",

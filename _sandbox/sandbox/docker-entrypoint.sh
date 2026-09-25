@@ -60,7 +60,7 @@ fi
 
 # sshd backs the local-sync path: the laptop's Mutagen connects over SSH and auto-injects its agent, which
 # reads/writes /work. It is reached on 127.0.0.1 here — the daemon carries the stream in from its own HTTPS
-# surface (platform/sync-ssh.ts), so nothing about this listener depends on how the sandbox is reachable, and
+# surface (hosts/desktop-sync-ssh.ts), so nothing about this listener depends on how the sandbox is reachable, and
 # no port of it is ever published. Key-only auth; the machine's public key is enrolled at runtime by the
 # daemon's POST /system/authorized-key (authorized by a browser-minted pairing, or the owner's Google token).
 
@@ -132,7 +132,7 @@ fi
 #
 # --report-on-fatalerror: a V8 fatal error (heap limit, native OOM) prints only to stderr and dies — and
 # stderr lives in `docker logs`, which the next recreate erases. The diagnostic report lands on /history
-# instead, where the next boot's death check (src/platform/boot-marker.ts) finds and names it — without this,
+# instead, where the next boot's death check (src/system/boot/boot-marker.ts) finds and names it — without this,
 # a daemon that dies on a fatal error dies without a trace.
 # --max-old-space-size: V8 sizes its default heap from /proc/meminfo, which inside a container is the HOST's memory,
 # not this cgroup's — so on a 20 GB machine the daemon is handed roughly a 4 GB ceiling whatever `--memory` said, and

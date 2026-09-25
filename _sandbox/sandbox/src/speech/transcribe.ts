@@ -1,20 +1,11 @@
-import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { mkdir, mkdtemp, rename, rm, stat, writeFile } from "node:fs/promises";
-import { availableParallelism, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { availableParallelism } from "node:os";
+import { pathExists } from "@intentic/base/fs";
+import { runWhisper, storeWhisperModel, type WhisperExec, whisperCliMissing } from "@intentic/base/whisper";
 import { cleanTranscription, WHISPER_MODEL_REPO } from "@intentic/sandbox-contract";
 import { downloadFile } from "@huggingface/hub";
 import { statePath } from "../state-paths.js";
-import { nodeStream } from "../web-stream.js";
 
-// whisper.cpp over WAV utterances the browser already segments (16kHz mono s16le; this side never decodes audio).
-// Mirrors the Discord voice transcriber's whisper conventions (_extensions/discord/src/audio.ts) in separate code,
-// since the extension's gateway process can't share code with the daemon. Ships in the `whisper` feature pack; an image
-// without it reports unprovisioned.
+// whisper.cpp over WAV utterances the browser segments, run as Discord voice runs it; an image without the `whisper` pack reports unprovisioned.
 
 // One multilingual model for every request, since language arrives per-utterance from the browser's locale.
 const MODEL_FILE = "ggml-large-v3-turbo.bin";
@@ -24,24 +15,6 @@ const THREADS = Math.max(1, Math.min(8, availableParallelism()));
 
 // Covers the longest legal utterance (1 min at 16kHz mono s16le) with headroom; refuses anything longer.
 export const MAX_UTTERANCE_WAV_BYTES = 2 * 1024 * 1024;
-// Backstop for a wedged run, not the normal budget; the browser's request dies at Cloudflare's cap first anyway.
-const TRANSCRIBE_TIMEOUT_MS = 120_000;
-
-export type ExecFn = (command: string, args: string[], options: { timeout: number }) => Promise<{ stdout: string }>;
-const defaultExec: ExecFn = (command, args, options) =>
-    new Promise((resolve, reject) => {
-        execFile(command, args, options, (error, stdout) => (error === null ? resolve({ stdout }) : reject(error)));
-    });
-
-// ENOENT on spawn ⇒ the binary isn't on PATH. Any other outcome (including a non-zero exit) means it exists.
-const whisperCliMissing = async (exec: ExecFn): Promise<boolean> => {
-    try {
-        await exec("whisper-cli", ["--help"], { timeout: 10_000 });
-        return false;
-    } catch (error) {
-        return (error as NodeJS.ErrnoException).code === "ENOENT";
-    }
-};
 
 // whisper-cli takes a bare two-letter code and silently defaults to `en`; the primary subtag is extracted, and anything
 // unusable becomes explicit `auto` rather than an accidental English.
@@ -79,12 +52,12 @@ export class SpeechModelNotReadyError extends Error {
 export interface SpeechDeps {
     readonly workspaceRoot: string;
     readonly log: (message: string) => void;
-    readonly exec?: ExecFn;
+    readonly exec?: WhisperExec;
     // Injectable for tests; defaults to HF's downloadFile, since plain HTTP fetches get 403'd by the CAS bridge.
     readonly fetchModel?: (file: string) => Promise<Blob | null>;
 }
 
-export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchModel }: SpeechDeps): Speech => {
+export const createSpeech = ({ workspaceRoot, log, exec, fetchModel }: SpeechDeps): Speech => {
     // Under cache/, since the model is content-re-downloadable, like anything else the `derived` cache promises.
     const modelPath = statePath(workspaceRoot, ".intentic/local/cache/", "whisper", MODEL_FILE);
     const download = fetchModel ?? ((file: string) => downloadFile({ repo: WHISPER_MODEL_REPO, path: file }));
@@ -95,11 +68,7 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
 
     // One download regardless of callers; shares Discord voice's download directory, so either fetch serves both.
     let downloading: Promise<void> | undefined;
-    const modelReady = (): Promise<boolean> =>
-        stat(modelPath).then(
-            () => true,
-            () => false,
-        );
+    const modelReady = (): Promise<boolean> => pathExists(modelPath);
     const ensureModel = (): Promise<void> =>
         (downloading ??= (async () => {
             if (await modelReady()) {
@@ -110,19 +79,8 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
             if (blob === null) {
                 throw new Error(`speech model download failed: ${WHISPER_MODEL_REPO} has no ${MODEL_FILE}`);
             }
-            await mkdir(dirname(modelPath), { recursive: true });
-            // Streamed to a uniquely-named staged file, then renamed atomically into place: readiness is a bare `stat`,
-            // so growing the real file in place would read ready mid-download. Staged names are unique per attempt,
-            // since Discord voice may fetch the same file into this directory concurrently.
-            const staged = `${modelPath}.${randomUUID()}.part`;
-            try {
-                // hub's web ReadableStream and the DOM lib's disagree on generics, same object at runtime.
-                await pipeline(Readable.fromWeb(nodeStream(blob.stream())), createWriteStream(staged));
-                await rename(staged, modelPath);
-            } catch (error) {
-                await rm(staged, { force: true });
-                throw error;
-            }
+            // Staged, never grown in place: readiness is an existence check, which a partial model would pass.
+            await storeWhisperModel(modelPath, blob);
         })()).catch((error) => {
             // A failed download must not poison every later attempt; clearing the latch lets the next ask retry.
             downloading = undefined;
@@ -157,24 +115,10 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
             if (!(await modelReady())) {
                 throw new SpeechModelNotReadyError();
             }
-            return serialize(async () => {
-                // An atomically created private directory keeps another process from pre-creating the path as a
-                // symlink.
-                const wavDir = await mkdtemp(join(tmpdir(), "intentic-utterance-"));
-                const wavPath = join(wavDir, "utterance.wav");
-                try {
-                    await writeFile(wavPath, wav, { mode: 0o600 });
-                    // whisper-cli defaults to `-l en`, silently mangling other languages; always pass one explicitly.
-                    const { stdout } = await exec(
-                        "whisper-cli",
-                        ["-m", modelPath, "-f", wavPath, "-l", whisperLanguage(locale), "-t", String(THREADS), "--no-timestamps", "--no-prints"],
-                        { timeout: TRANSCRIBE_TIMEOUT_MS },
-                    );
-                    return cleanTranscription(stdout) ?? "";
-                } finally {
-                    await rm(wavDir, { force: true, recursive: true });
-                }
-            });
+            return serialize(
+                async () =>
+                    cleanTranscription(await runWhisper(wav, { model: modelPath, language: whisperLanguage(locale), threads: THREADS, exec })) ?? "",
+            );
         },
     };
 };

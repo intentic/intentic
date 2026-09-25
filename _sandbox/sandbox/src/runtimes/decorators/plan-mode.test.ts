@@ -1,7 +1,7 @@
 import { type AgentEvent, CLAUDE_CODE, CODEX, type PermissionMode } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, type PlanPhaseResult, planMode } from "./plan-mode.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
 // Where a turn here parks its plan card: one fleet's actors.

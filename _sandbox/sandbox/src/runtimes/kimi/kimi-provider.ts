@@ -1,4 +1,4 @@
-import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
+import { type ProviderModule, translatorAccountEntries, translatorReady } from "../../agent/providers/provider-module.js";
 import type { CliProxyClient } from "../../agent/providers/translator.js";
 import type { Services } from "../../composition.js";
 import { createKimiCatalog, type KimiCatalog } from "./kimi-catalog.js";
@@ -21,9 +21,6 @@ export const kimiProvider: ProviderModule<KimiProviderDeps> = {
     id: "kimi",
     adapters: [],
     catalog: (services) => services.kimiModels.models(),
-    ready: async (services, shared) => services.config.translator.url !== "" && (await shared.translatorAccounts()).kimi.length > 0,
-    secretEntries: async (_services, shared) =>
-        (await shared.translatorAccounts()).kimi.map((account) =>
-            providerAccountEntry("kimi", "Kimi Code", account.name, account.label, authStateRelPath("cliproxy")),
-        ),
+    ready: translatorReady("kimi"),
+    secretEntries: translatorAccountEntries("kimi", "Kimi Code"),
 };

@@ -1,6 +1,6 @@
 import type { StopResult, StopTurn } from "@intentic/sandbox-contract";
-import type { ConversationActors } from "../../../agents/actor/conversation-actors.js";
-import { type LiveRun, liveRunOf } from "../../../agents/actor/conversation-holdings.js";
+import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
+import { type LiveRun, liveRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { TurnStarter } from "../../../seams/turn-starter.js";

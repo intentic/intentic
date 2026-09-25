@@ -3,20 +3,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { forkedExec } from "@intentic/scaffold";
-import { nsenterPrefix, type TurnPlacement } from "../../agents/worktrees/isolation.js";
-import { AGENT_SESSION_ENV } from "../../platform/boot/container-owner.js";
+import { nsenterPrefix, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
+import { AGENT_SESSION_ENV } from "../../system/boot/container-owner.js";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
-import { redirectCommand } from "../../agents/worktrees/worktree-redirect.js";
+import { redirectCommand } from "../../conversations/worktrees/worktree-redirect.js";
 import { resolveCommandSecrets, type SecretAccess } from "../../secrets/secret-access.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
 import { OFFLOAD_RUN_BIN } from "../../offload/offload-prefix.js";
-import { type HeavyCommands, heavyEnvPrefix } from "../../platform/resources/heavy-commands.js";
+import { type HeavyCommands, heavyEnvPrefix } from "../../system/resources/heavy-commands.js";
 import { queueArgs, ruleById } from "@intentic/constants/heavy-rules";
 import { shellPrefix } from "../../workload/workload-class.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { type BackgroundJob, backgroundJobOf, type BackgroundJobSeed, jobCommandLine, openBackgroundJob, stopBackgroundJob } from "./background-jobs.js";
-import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
+import { type BackgroundJob, backgroundJobOf, type BackgroundJobSeed, jobCommandLine, openBackgroundJob, stopBackgroundJob } from "./jobs/background-jobs.js";
+import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 
 // Rewrites every Bash tool command through bin/tmux-run so it runs visibly in the `agent-<sdk session>` tmux session
 // the terminal panel attaches to; subagent Bash calls land in the same session as extra windows.
@@ -75,7 +75,7 @@ const POLITE_PREFIX = shellPrefix({ class: "command" });
 // trap on the command's first line: its text, line numbers and exit status stay the agent's own.
 export const PIPESTATUS_TRAP = `trap 'printf "%s " "\${PIPESTATUS[@]}" 2>/dev/null >"\${INTENTIC_PIPESTATUS_FILE:-/dev/null}"' EXIT; `;
 
-// Heavy programs are judged as they start, by what they are (platform/resources/heavy-commands.ts heavyEnvPrefix): the
+// Heavy programs are judged as they start, by what they are (system/resources/heavy-commands.ts heavyEnvPrefix): the
 // line only carries the table down. Queueing is only on where queue-run is, and a program that matches keeps its
 // toolchain class whether or not it queues.
 const queueRunOf = (): string | undefined => (queueRunEnabled() ? QUEUE_RUN_BIN : undefined);

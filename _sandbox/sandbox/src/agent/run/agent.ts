@@ -30,8 +30,8 @@ import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { join, normalize, relative, sep } from "node:path";
 import { claudeStatePath } from "../../sessions/session-store.js";
 import { z } from "zod";
-import { daemonMountNs, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV } from "../../agents/worktrees/isolation.js";
-import { worktreeRedirectHooks } from "../../agents/worktrees/worktree-redirect.js";
+import { daemonMountNs, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV } from "../../conversations/worktrees/isolation.js";
+import { worktreeRedirectHooks } from "../../conversations/worktrees/worktree-redirect.js";
 import { browserArtifactHooks } from "../../browser/cast/browser-artifacts.js";
 import { browserSessionHooks } from "../../browser/sessions/browser-sessions.js";
 import { depsNoticeHooks } from "../tools/agent-deps.js";
@@ -68,7 +68,7 @@ import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/syste
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
 import { ASK_TOOL_NAMES, formatAnswers } from "../tools/question-answers.js";
-import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
+import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 
 // The request the Claude Code loop runs: it spends a stored account's token, a routed endpoint, the trial, or the
 // container's own credential.

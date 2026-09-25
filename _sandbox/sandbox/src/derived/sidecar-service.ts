@@ -1,3 +1,4 @@
+import { serialLock } from "@intentic/base/async";
 import type { Logger } from "pino";
 import { isCandidatePath } from "@intentic/fileq/formats";
 import type { DerivedState, SidecarStatus } from "@intentic/sandbox-contract";
@@ -91,7 +92,7 @@ export const startSidecarService = (deps: SidecarServiceDeps, subscribe: (listen
     let sweepWanted = false;
     let lastEnabled: boolean | undefined;
     let broken = false;
-    let queue: Promise<unknown> = Promise.resolve();
+    const serially = serialLock();
     const listeners = new Set<(paths: string[]) => void>(earlyListeners);
 
     const status = (): SidecarStatus => ({
@@ -198,7 +199,7 @@ export const startSidecarService = (deps: SidecarServiceDeps, subscribe: (listen
     };
 
     const schedule = (): void => {
-        queue = queue.then(run, run);
+        void serially(run);
     };
 
     // Boot pass: sweeps the pre-existing tree if the setting is already on.

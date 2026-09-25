@@ -1,7 +1,7 @@
 import type { AgentTurn, Persona } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import type { PersistedAgent } from "../../agents/registry/agents-store.js";
+import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import { conversationEntry, isolatedAgent } from "../../testing.js";
 import { contextNoteFor, decideComposition } from "./conversation-context.js";
 

@@ -5,7 +5,7 @@ import { fakeAcpAgentApp, fakeAcpConnection } from "./__fixtures__/fake-acp-agen
 import { createAcpAgent } from "./acp-agent.js";
 import type { TurnTimeouts } from "../decorators/turn-watchdog.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.

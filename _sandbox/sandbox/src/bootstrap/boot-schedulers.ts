@@ -1,9 +1,9 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
-import { adoptBackgroundJobs } from "../agent/tools/background-adoption.js";
-import { resolveTurnJobs } from "../agent/tools/job-fates.js";
+import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js";
+import { resolveTurnJobs } from "../agent/tools/jobs/job-fates.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
 import { childKillNote } from "../agent/subagents/children.js";
-import { conversationProfile } from "../agents/registry/agents-store.js";
+import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";

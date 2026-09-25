@@ -1,7 +1,7 @@
 import { open } from "node:fs/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { immediateTransaction } from "@intentic/base/sqlite";
 import type { DatabaseSync } from "node:sqlite";
-import { transaction } from "../sqlite.js";
 
 // Schema evolution for the daemon's SQLite databases, versioned by the one number SQLite keeps for exactly this
 // (`PRAGMA user_version`, stamped inside the same transaction as the step it counts, so a crash leaves a database at a
@@ -36,7 +36,7 @@ export const migrateSqlite = (db: DatabaseSync, baseline: string, steps: readonl
         return { from, to, newer: true };
     }
     if (from === 0) {
-        transaction(db, () => {
+        immediateTransaction(db, () => {
             db.exec(baseline);
             db.exec("PRAGMA user_version = 1");
         });
@@ -46,7 +46,7 @@ export const migrateSqlite = (db: DatabaseSync, baseline: string, steps: readonl
         if (step === undefined) {
             break;
         }
-        transaction(db, () => {
+        immediateTransaction(db, () => {
             step.up(db);
             db.exec(`PRAGMA user_version = ${version + 1}`);
         });

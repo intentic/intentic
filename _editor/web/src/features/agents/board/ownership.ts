@@ -76,7 +76,7 @@ export const sessionMark = (
 export const ownedBy = (agent: { readonly owner?: SessionOwner | undefined }, email: string | undefined): boolean =>
     agent.owner !== undefined && sameAddress(agent.owner.email, email);
 
-// Mirrors the daemon's verdict (agents/ownership.ts) for what to offer; the route decides for real.
+// Mirrors the daemon's verdict (conversations/ownership.ts) for what to offer; the route decides for real.
 export const mayAssign = (owner: SessionOwner | undefined, me: string | undefined, canShip: boolean): boolean =>
     owner === undefined || sameAddress(owner.email, me) || canShip;
 

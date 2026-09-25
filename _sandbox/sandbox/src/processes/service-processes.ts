@@ -4,10 +4,10 @@ import { closeSync, mkdirSync, openSync, renameSync, statSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Backoff, createBackoff } from "@intentic/base/async";
+import { freePort } from "@intentic/base/fs";
 import type { Logger } from "pino";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { SERVICE_SESSION_PREFIX } from "../terminal/terminal-session.js";
-import { freePort } from "./free-port.js";
 
 // Daemon-supervised background services (messaging gateways, `contributes.processes` extensions), not terminal panels:
 // exits are events, and a crash respawns on the shared backoff ladder. dockerd and local model servers stay out, since

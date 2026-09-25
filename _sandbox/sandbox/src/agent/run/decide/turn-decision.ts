@@ -1,4 +1,4 @@
-import { routingFor } from "../../providers/routing.js";
+import { routingFor } from "../../providers/accounts/routing.js";
 import type {
     AgentCapabilities,
     AgentHarness,
@@ -69,7 +69,7 @@ export interface TurnDecision extends DecidedEffects {
 const underRepoChecks = (settings: SandboxSettings, declared: readonly Rule[]): SandboxSettings =>
     declared.length === 0 ? settings : { ...settings, rules: withRepoChecks(settings.rules, declared) };
 
-// The account the arm is called with, by the one routing rule (agent/providers/routing.ts): the one the turn names, else
+// The account the arm is called with, by the one routing rule (agent/providers/accounts/routing.ts): the one the turn names, else
 // the one its conversation runs on for this provider, else none, which the credential resolver answers by serviceability.
 // A session resumes only under the account that minted it, so a turn naming none must not wander.
 const routedInput = (input: AgentTurn, entry: ConversationEntry | undefined): AgentTurn => {

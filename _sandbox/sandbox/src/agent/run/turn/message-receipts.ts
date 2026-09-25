@@ -1,6 +1,6 @@
 import type { MessageReceipt, TranscriptRow } from "@intentic/sandbox-contract";
-import type { ConversationActors } from "../../../agents/actor/conversation-actors.js";
-import { type Holding, turnRunOf } from "../../../agents/actor/conversation-holdings.js";
+import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
+import { type Holding, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import type { Services } from "../../../composition.js";
 
 // What became of each message a sender named, per conversation, so the same message sent again after a lost answer is

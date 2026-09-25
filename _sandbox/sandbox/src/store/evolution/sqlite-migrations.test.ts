@@ -1,4 +1,4 @@
-import { IN_MEMORY, openSqlite } from "../sqlite.js";
+import { IN_MEMORY, openSqlite } from "@intentic/base/sqlite";
 import { migrateSqlite, schemaVersionOf, type SqliteStep } from "./sqlite-migrations.js";
 
 const BASELINE = "CREATE TABLE IF NOT EXISTS note (id TEXT PRIMARY KEY, body TEXT NOT NULL) STRICT;";

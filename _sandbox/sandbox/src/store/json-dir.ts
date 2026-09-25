@@ -1,12 +1,12 @@
 import { readdir, readFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
+import { queueOnFile } from "@intentic/base/fs";
 import { convertDocument } from "./evolution/conversions.js";
 import type { DocumentSpec } from "./evolution/documents.js";
 import { asideOf, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
 import { newerBuildRan } from "./newest-run.js";
 import { carryUnknown } from "./evolution/passthrough.js";
-import { queueOnFile } from "./text-file.js";
 
 // Directory of one JSON file per entry, for a store with a second writer besides the daemon; jsonFile is the
 // single-manifest shape for a daemon-only writer.

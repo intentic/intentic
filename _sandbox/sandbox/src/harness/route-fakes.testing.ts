@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { type Logger, pino } from "pino";
-import type { AgentWorktrees } from "../agents/worktrees/worktrees.js";
+import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { claudeStoreOf } from "../sessions/session-store.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";

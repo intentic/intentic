@@ -9,9 +9,9 @@ import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, type HarnessRe
 import type { AgentQuery, QueryFn } from "./sdk-stream.js";
 import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { noteSubagentTask, resetSubagents } from "../subagents/subagents.js";
-import { backgroundJobOf, openBackgroundJob, settledBackgroundJobs } from "../tools/background-jobs.js";
+import { backgroundJobOf, openBackgroundJob, settledBackgroundJobs } from "../tools/jobs/background-jobs.js";
 import { EDIT_TOOLS } from "../../rules/edit-tools.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.

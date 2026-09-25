@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentEvent, type AgentTurn, type Loop, LOOP_DIR } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { turnRunOf } from "../agents/actor/conversation-holdings.js";
+import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "./loops-store.js";
 import { loopRunning, runLoop } from "./loop-runner.js";

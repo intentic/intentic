@@ -1,3 +1,4 @@
+import { serialLock } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -60,7 +61,7 @@ export const createCiHookReconciler = (
     // Previous pass's wired hooks, keyed by host+project; diffing against it finds an unmapped repo's hook.
     let wired = new Map<string, CiProject>();
     let timer: NodeJS.Timeout | undefined;
-    let pass: Promise<void> = Promise.resolve();
+    const serially = serialLock();
 
     const reconcileOnce = async (): Promise<void> => {
         const projects = await ciProjects(services);
@@ -97,11 +98,7 @@ export const createCiHookReconciler = (
 
     // Serializes reconcile calls; a manual call during the interval's pass chains after it instead of racing two hook
     // lists.
-    const reconcile = (): Promise<void> => {
-        const run = pass.then(reconcileOnce, reconcileOnce);
-        pass = run.catch(() => undefined);
-        return run;
-    };
+    const reconcile = (): Promise<void> => serially(reconcileOnce);
 
     return {
         reconcile,

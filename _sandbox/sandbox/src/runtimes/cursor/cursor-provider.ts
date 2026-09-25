@@ -3,9 +3,9 @@ import type { AgentEvent, AgentTurn, Capability } from "@intentic/sandbox-contra
 import type { Logger } from "pino";
 import { browserFields } from "../../browser/tools/browser-fields.js";
 import {
-    attemptProbe,
-    armPlan,
     type AgentAdapter,
+    armPlan,
+    attemptProbe,
     healthReady,
     healthUnavailable,
     healthUnknown,

@@ -10,7 +10,7 @@ import type { AgentRequest, CodexCredential, TurnPolicy, TurnSpec, TurnTools } f
 import { createCodexAgent } from "../runtimes/codex/codex-agent.js";
 import { writeCodexConfig } from "../runtimes/codex/codex-config.js";
 import { codexBinary } from "../runtimes/codex/codex-path.js";
-import { parkedCards } from "../agents/actor/parked-cards.js";
+import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.

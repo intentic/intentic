@@ -1,8 +1,8 @@
+import { IN_MEMORY } from "@intentic/base/sqlite";
 import { createLogger } from "../logger.js";
 import { testConfig } from "../testing.js";
 import { backfillSearchIndex, type BackfillSource } from "./search-backfill.js";
 import { openSearchIndex } from "./search-index.js";
-import { IN_MEMORY } from "../store/sqlite.js";
 import type { SpokenLine } from "./transcript-search.js";
 
 const logger = createLogger(testConfig);

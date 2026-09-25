@@ -1,9 +1,9 @@
 import type { SubagentSession } from "@intentic/sandbox-contract";
 import type { PendingChildCard } from "./children.js";
-import { whenFileAppears } from "../../file-appears.js";
-import { type BackgroundJob, backgroundJobOf, jobFinished, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../tools/background-jobs.js";
+import { whenFileAppears } from "../tools/file-appears.js";
+import { type BackgroundJob, backgroundJobOf, jobFinished, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../tools/jobs/background-jobs.js";
 import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } from "./subagents.js";
-import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
+import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 
 // The one park for work a conversation started here: a child agent, or a background command.
 

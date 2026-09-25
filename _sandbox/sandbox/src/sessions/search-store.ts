@@ -1,8 +1,8 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { immediateTransaction, IN_MEMORY, openSqlite } from "@intentic/base/sqlite";
 import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract";
-import { IN_MEMORY, openSqlite, transaction } from "../store/sqlite.js";
 import type { SearchIndexMetrics, SearchKind } from "./search-index.js";
 import type { SpokenLine } from "./transcript-search.js";
 
@@ -132,14 +132,14 @@ export const openSearchStore = (dir: string): SearchStore => {
 
     return {
         forget: (key) =>
-            transaction(db, () => {
+            immediateTransaction(db, () => {
                 deleteLines.run(key);
                 deleteSource.run(key);
             }),
-        add: (key, kind, lines) => transaction(db, () => insert(key, kind, lines)),
+        add: (key, kind, lines) => immediateTransaction(db, () => insert(key, kind, lines)),
         stamp: (key, kind, version, lines) => void upsertSource.run(key, kind, version, lines),
         extend: (key, kind, version, lines) =>
-            transaction(db, () => {
+            immediateTransaction(db, () => {
                 insert(key, kind, lines);
                 bumpSource.run(key, kind, version, lines.length);
             }),

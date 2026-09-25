@@ -30,6 +30,6 @@ flowchart LR
 - [src/index.ts](src/index.ts) — everything the package exports.
 - [src/autostart.ts](src/autostart.ts) — the login entry per OS, including the Windows task XML.
 - [src/detached.ts](src/detached.ts) — pidfiles, `spawnDetached`, the launcher-stub spawn and log rotation.
-- [src/home.ts](src/home.ts) — the state directory, atomic writes and owner-only secret files.
+- [src/home.ts](src/home.ts) — the state directory and owner-only secret files, written atomically through `@intentic/base/fs`.
 - [src/launcher.ts](src/launcher.ts) — the argv to re-launch this CLI and the stub command line.
 - [src/ui.ts](src/ui.ts) — the checklist renderer and its output modes.

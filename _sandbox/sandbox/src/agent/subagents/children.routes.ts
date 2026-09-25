@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { z } from "zod";
 import { listSubagentSessions, type SubagentWaitUntil } from "./subagents.js";
 import { waitForWork, workWaitAnswer } from "./work-wait.js";
-import { soleLiveConversation } from "../../agents/actor/conversation-holdings.js";
+import { soleLiveConversation } from "../../conversations/actor/conversation-holdings.js";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { pendingQuestionOf, supervisorFor } from "./children.js";

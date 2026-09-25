@@ -28,7 +28,7 @@ import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { applyBundle, bundleActions, bundleItems, dropSpool, type HeldBundle, spoolBundle } from "./bundle-arrival.js";
 import { parseDefinitionToml } from "./definition.js";
 import { MAX_UPLOAD_BYTES } from "../workspace/files/workspace-files-upload.js";
-import { nodeStream, webStream } from "../web-stream.js";
+import { nodeStream, webStream } from "@intentic/base/web-stream";
 
 // Arrival pipeline: one plan → apply → report for everything that can arrive (sandbox.toml, a bundle, a Hermes/OpenClaw
 // home), replacing four near-identical surfaces. Only one artifact is held at a time, dropped asynchronously since a

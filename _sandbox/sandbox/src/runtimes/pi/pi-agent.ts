@@ -1,9 +1,7 @@
 import { type AcpAgentConfig, type AgentCommand, type AgentEvent, PI } from "@intentic/sandbox-contract";
-import { whenAborted } from "../../abort.js";
+import { whenAborted } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
-import { withFileNote } from "../../agent/prompt/attachment-note.js";
-import { loadAttachments } from "../decorators/attachment-images.js";
-import { EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
+import { imageBlock } from "../decorators/attachment-images.js";
 import {
     DEFAULT_TURN_TIMEOUTS,
     EXPIRED,
@@ -16,11 +14,11 @@ import {
 } from "../decorators/turn-watchdog.js";
 import { withStderrTail } from "../decorators/vendor-errors.js";
 import { withTimeout } from "../acp/acp-connection.js";
-import { vendorTurnGate } from "../decorators/vendor-gate.js";
+import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import { createPiEventMapper } from "./pi-events.js";
 import type { PiEvent, PiProcess, PiSpawn } from "./pi-rpc.js";
 
-// Pi provider adapter (same seam as runAgent/createCodexAgent/createGrokAgent/runAcpAgent): AgentRequest in, AgentEvent
+// Pi provider adapter (same seam as runAgent/createCodexAgent/createOpenCodeAgent/runAcpAgent): AgentRequest in, AgentEvent
 // frames out, over Pi's RPC. One process per turn (Pi persists sessions as files; resume is `switch_session` on a fresh
 // process); the session id on the wire is the session file path, which is also what holdsSession checks. Above the ACP
 // floor it forwards steering onto Pi's `steer` queue and effort onto `set_thinking_level`; no MCP, no tmux, container
@@ -169,28 +167,9 @@ const pumpSteering = (proc: PiProcess, request: AgentRequest): void => {
 export const createPiAgent = (spawnPi: PiSpawn, timeouts: TurnTimeouts = DEFAULT_TURN_TIMEOUTS) =>
     async function* runPiAgent(config: AcpAgentConfig, request: AgentRequest<ContainerCredential>): AsyncGenerator<AgentEvent> {
         const state: PiTurnState = { queue: [], exited: false, exitCode: null, wait: idleWait() };
-        let proc: PiProcess;
-        try {
-            proc = spawnPi(config, request.spec.cwd, {
-                onEvent: (event) => {
-                    state.queue.push(event);
-                    state.wait.wake();
-                },
-                onExit: (code) => {
-                    state.exited = true;
-                    state.exitCode = code;
-                    state.wait.wake();
-                },
-            });
-        } catch (error) {
-            yield { kind: "error", message: error instanceof Error ? error.message : "Pi failed to start" };
-            yield { kind: "done" };
-            return;
-        }
 
-        // The turn body, as its own generator so an early return (a dead session, a rejected model pin) still falls
-        // through to the one `done` below; a `return` inside the try would skip it.
-        async function* serve(): AsyncGenerator<AgentEvent> {
+        // The turn body as its own generator, so an early return (a dead session, a rejected pin) still reaches the one `done`.
+        async function* serve(proc: PiProcess): AsyncGenerator<AgentEvent> {
             // Resume: the recorded session id is the Pi session file the last turn reported. A file Pi no longer
             // accepts is the coded self-heal every runtime shares: the client drops the id and the next send starts
             // fresh.
@@ -251,30 +230,12 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: TurnTimeouts = DEFAULT
             pumpSteering(proc, request);
 
             // Raster attachments ride the prompt as native Pi ImageContent blocks; unreadable files degrade to a path note.
-            const attached = await loadAttachments(request.spec, true);
-            const blocks = attached.images.map((image) => ({ type: "image", data: image.data, mimeType: image.mimeType }));
-            const prompt = withFileNote(request.spec.prompt, [...attached.files, ...attached.unread]);
-
-            yield* planMode(
-                PI,
-                request,
-                () => ({
-                    // Plan flow is text-only prompts; attachment paths, images included, ride the note, since the planning
-                    // phase reads rather than looks at screenshots.
-                    prompt: PLAN_PREAMBLE + withFileNote(request.spec.prompt, [...attached.files, ...attached.pictures]),
-                    async *plan(phasePrompt) {
-                        const outcome = yield* runPiTurn(proc, state, request, { type: "prompt", message: phasePrompt }, timeouts, true);
-                        return {
-                            sessionId: typeof sessionFile === "string" ? sessionFile : undefined,
-                            planText: outcome.planText,
-                            errored: outcome.errored,
-                        };
-                    },
-                    execute: () => runPiTurn(proc, state, request, { type: "prompt", message: EXECUTE_PROMPT }, timeouts),
-                }),
-                () =>
-                    runPiTurn(proc, state, request, { type: "prompt", message: prompt, ...(blocks.length > 0 ? { images: blocks } : {}) }, timeouts),
-            );
+            // Pi resumes by the session file it reported, so a phase's own session id goes unread.
+            yield* textPlanTurn(PI, request, true, async function* (text, images, _sessionId, planning) {
+                const message = { type: "prompt", message: text, ...(images.length > 0 ? { images: images.map(imageBlock) } : {}) };
+                const outcome = yield* runPiTurn(proc, state, request, message, timeouts, planning);
+                return { sessionId: typeof sessionFile === "string" ? sessionFile : undefined, planText: outcome.planText, errored: outcome.errored };
+            });
 
             // Context-window fill for the conversation, read once the turn settles. Pi's own estimate, the same number
             // its footer shows. Best-effort: a killed process simply reports nothing.
@@ -288,15 +249,23 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: TurnTimeouts = DEFAULT
         // Pi has no consult seam: no permission request ever arrives to gate, so only the outside-content bit is
         // published (`rulebook: "none"`). Treated as carrying outside content for its whole life, since nothing here
         // can later act on it; the wallet's payment gate asks in chat instead.
-        const { release } = vendorTurnGate(request);
-        try {
-            yield* serve();
-        } catch (error) {
-            // A throwing setup (switch_session timeout, a dead transport) surfaces, never swallows.
-            yield { kind: "error", message: withStderrTail(error instanceof Error ? error.message : "Pi agent failed", proc.stderrTail()) };
-        } finally {
-            proc.kill();
-            release();
-        }
-        yield { kind: "done" };
+        yield* vendorTurn(request, {
+            open: () =>
+                spawnPi(config, request.spec.cwd, {
+                    onEvent: (event) => {
+                        state.queue.push(event);
+                        state.wait.wake();
+                    },
+                    onExit: (code) => {
+                        state.exited = true;
+                        state.exitCode = code;
+                        state.wait.wake();
+                    },
+                }),
+            unopened: "Pi failed to start",
+            // A throwing setup (switch_session timeout, a dead transport), with Pi's own stderr folded in.
+            failure: (error, proc) => withStderrTail(error instanceof Error ? error.message : "Pi agent failed", proc.stderrTail()),
+            close: (proc) => proc.kill(),
+            serve,
+        });
     };

@@ -12,18 +12,19 @@ import {
 } from "../../agent/providers/adapter.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
-import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
+import {
+    engineMissing,
+    enginesReady,
+    type ProviderModule,
+    translatorAccountEntries,
+    translatorReady,
+} from "../../agent/providers/provider-module.js";
 import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
-import { createGrokAgent, createGrokRunner } from "../grok/grok-agent.js";
-import { OPENCODE_GEMINI_PROVIDER, openCodeBinaryMissing, type OpenCodeService } from "../grok/opencode.js";
-import { onPath } from "../../platform/boot/on-path.js";
 import { createGeminiCatalog, type GeminiCatalog } from "./gemini-catalog.js";
 import { geminiOneShot } from "./gemini-one-shot.js";
 
-// Everything Gemini contributes to the daemon, listed in runtimes/runtime-table.ts. Its native runtime is Grok's
-// OpenCode loop pointed at a different backend, and its credential is the translator's, so this module owns only the
-// catalog and the loop binding.
+// Everything Gemini contributes, listed in runtimes/runtime-table.ts: the OpenCode loop Grok runs on, on its own backend.
 
 export interface GeminiSlice {
     // Never empty (discovery → persisted → seed); OpenCode's server config also reads it to register ids at boot.
@@ -33,14 +34,14 @@ export interface GeminiSlice {
     readonly geminiAgent: (request: AgentRequest<ContainerCredential>) => AsyncGenerator<AgentEvent>;
 }
 
+// The loop comes built: one warm OpenCode server serves Grok and Gemini both, only the backend the prompt names differs.
 export const createGeminiSlice = (input: {
     readonly config: Config;
     readonly authRoot: string;
-    readonly openCode: OpenCodeService;
+    readonly geminiAgent: GeminiSlice["geminiAgent"];
 }): GeminiSlice => ({
     geminiModels: createGeminiCatalog(input.config, join(input.authRoot, "gemini", "models.json")),
-    // One warm OpenCode server serves Grok and Gemini both; only the model backend the prompt names differs.
-    geminiAgent: createGrokAgent(createGrokRunner(input.openCode), OPENCODE_GEMINI_PROVIDER),
+    geminiAgent: input.geminiAgent,
 });
 
 // Gemini on the same OpenCode loop Grok runs on, pointed at the translator instead of xAI; OpenCode holds no
@@ -111,19 +112,17 @@ const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini", GeminiAdapterDeps
         if (accounts.gemini.length === 0) {
             return healthUnavailable(`Connect your ${PROVIDER_ACCESS.gemini.requirement} in Sandbox ▸ Agent.`);
         }
-        return (await onPath("opencode")) ? healthReady() : healthUnavailable(openCodeBinaryMissing("Google"));
+        return (await enginesReady(geminiProvider)) ? healthReady() : healthUnavailable(engineMissing("the OpenCode CLI", "Google"));
     },
     holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
 };
 
 export const geminiProvider: ProviderModule<GeminiAdapterDeps> = {
     id: "gemini",
+    engines: ["opencode"],
     adapters: [OPENCODE_GEMINI_ADAPTER],
     catalog: (services) => services.geminiModels.models(),
-    ready: async (services, shared) => services.config.translator.url !== "" && (await shared.translatorAccounts()).gemini.length > 0,
+    ready: translatorReady("gemini"),
     // No boot or pack of its own: Grok's loop, translatorWanted's credential, catalog needs nothing started.
-    secretEntries: async (_services, shared) =>
-        (await shared.translatorAccounts()).gemini.map((account) =>
-            providerAccountEntry("gemini", "Gemini", account.name, account.label, authStateRelPath("cliproxy")),
-        ),
+    secretEntries: translatorAccountEntries("gemini", "Gemini"),
 };

@@ -20,7 +20,7 @@ import type { Config } from "../../env.config.js";
 import type { Services } from "../../composition.js";
 import { type CompatEntry, compatYaml, endpointCompatEntries, translatedEndpoints } from "../../endpoints/endpoint-translator.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
-import { engineBinary } from "../../engines/engine-resolve.js";
+import { engineBinary, engineReady } from "../../engines/engine-resolve.js";
 import type { AccountUsageStore } from "../../usage/account-usage.js";
 import { fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { HeadroomSource } from "../../usage/headroom.js";
@@ -194,7 +194,7 @@ export const startTranslator = (services: Services): void => {
         };
         // Daemon-owned and stamped, so a later daemon can recognize this as its own leftover.
         // Falls back from a store copy, to the pack install, to the bare name, reported as missing.
-        const binary = (await engineBinary("translator", "cli-proxy-api")) ?? "cli-proxy-api";
+        const binary = (await engineBinary("translator")) ?? "cli-proxy-api";
         child = spawnAs({ class: "service" }, binary, ["--config", configPath], {
             stdio: ["ignore", "pipe", "pipe"],
             env: { ...process.env, ...workloadStamp(DAEMON_OWNER) },
@@ -284,7 +284,7 @@ export const createCliProxyClient = (params: {
     const { managementUrl, token, configPath, authDir, usageStore } = params;
     const fetchFn = params.fetchFn ?? fetch;
     // Counts as present: a core image bakes none, and an installed binary may be invisible to PATH.
-    const binaryPresent = params.binaryPresent ?? (async () => (await engineBinary("translator", "cli-proxy-api")) !== undefined);
+    const binaryPresent = params.binaryPresent ?? (() => engineReady("translator"));
     const spawnFn = params.spawnFn ?? spawn;
     const auth = { authorization: `Bearer ${token}` };
 
@@ -399,7 +399,7 @@ export const createCliProxyClient = (params: {
     let codexLogin: { state: string; status: TranslatorStatus } | undefined;
     const connectCodex = async (): Promise<TranslatorLogin> => {
         // Resolved before the executor so the login drives the same binary the supervised proxy does.
-        const binary = (await engineBinary("translator", "cli-proxy-api")) ?? "cli-proxy-api";
+        const binary = (await engineBinary("translator")) ?? "cli-proxy-api";
         return new Promise((resolve, reject) => {
             if (codexLogin?.status.status === "wait") {
                 codexLogin.status = { status: "error", error: "This sign-in was replaced by a newer attempt." };

@@ -1,6 +1,6 @@
-import type { OneShotAsk } from "../../agent/providers/adapter.js";
+import { type OneShotAsk, oneShotDeadline } from "../../agent/providers/adapter.js";
 import type { Services } from "../../composition.js";
-import { OPENCODE_GEMINI_PROVIDER } from "../grok/opencode.js";
+import { OPENCODE_GEMINI_PROVIDER } from "./gemini-models.js";
 
 // Runs on OpenCode instead of the Claude Code harness: Google's Antigravity channel refuses any request whose system
 // block carries the Claude Code CLI's identity line, as a false RESOURCE_EXHAUSTED. The translator holds the
@@ -34,13 +34,7 @@ export const geminiOneShot = async (services: Pick<Services, "openCode">, ask: O
         throw new Error(`the model did not answer (Gemini's runtime opened no session)`);
     }
     // Deadline and cancel both abort the session, and must also end the wait; abort alone won't settle it.
-    let expired = false;
-    const abort = (): void => void client.session.abort({ path: { id } }).catch(() => {});
-    const deadline = setTimeout(() => {
-        expired = true;
-        abort();
-    }, DEADLINE_MS);
-    ask.signal.addEventListener(`abort`, abort, { once: true });
+    const deadline = oneShotDeadline(ask.signal, DEADLINE_MS, () => void client.session.abort({ path: { id } }).catch(() => {}));
     try {
         const answered = await client.session.prompt({
             path: { id },
@@ -56,14 +50,13 @@ export const geminiOneShot = async (services: Pick<Services, "openCode">, ask: O
         const text = textOf(answered.data?.parts ?? []);
         if (text === ``) {
             // Empty covers every quiet failure alike; only the clock is worth distinguishing.
-            throw new Error(expired ? `the model did not answer within ${DEADLINE_MS / 1_000}s` : `the model did not answer`);
+            throw deadline.unanswered();
         }
         return text;
     } catch (error) {
-        throw expired ? new Error(`the model did not answer within ${DEADLINE_MS / 1_000}s`) : error;
+        throw deadline.claim(error);
     } finally {
-        clearTimeout(deadline);
-        ask.signal.removeEventListener(`abort`, abort);
+        deadline.release();
         // Same guarantee as persistSession: false on the Claude Code helper, done by hand; OpenCode has no such option.
         await client.session.delete({ path: { id } }).catch(() => {});
     }

@@ -1,15 +1,7 @@
 import { randomUUID } from "node:crypto";
-import {
-    type AgentTurn,
-    capabilitiesOf,
-    resumeDisclosure,
-    type TranscriptRow,
-    unspokenPromptRow,
-    withoutResumeNote,
-} from "@intentic/sandbox-contract";
+import { type AgentTurn, capabilitiesOf, type TranscriptRow, unspokenPromptRow } from "@intentic/sandbox-contract";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
-import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
-import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
+import { parseQueuedPrompt } from "../agent/prompt/turn-preamble.js";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
 
@@ -17,42 +9,31 @@ import type { TranscriptAgent } from "./agent-transcript.js";
 export const rootRelative = (paths: readonly string[], root: string): string[] =>
     paths.map((path) => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path));
 
-// A prompt nobody typed replaces the user's bubble rather than riding it.
-const unspokenRow = (prompt: string): TranscriptRow | undefined => {
-    const unspoken = unspokenPromptRow(prompt);
-    if (unspoken !== undefined) {
-        return unspoken;
-    }
-    const resume = resumeDisclosure(prompt);
-    return resume?.kind === "notice" ? { role: "notice", text: resume.text } : undefined;
-};
-
 // The id the opening message's row carries: its sender's, or one the sandbox names, since a rewind can only name a
 // message that has an id.
 const messageIdOf = (turn: { readonly messageId?: string | undefined }): string => turn.messageId ?? randomUUID();
 
-// Strips the daemon's own layers off `turn.prompt` (an outer resume note, a trailing attachment note) to recover the
-// user's words; the preamble frame is never among them. `turn.attachments` is authoritative when present; paths are
-// workspace-root-relative.
+// The user's own words and root-relative attachments off `turn.prompt`, `turn.attachments` winning when the turn has them.
 export const openingRows = (
     turn: { readonly prompt: string; readonly attachments?: readonly string[] | undefined; readonly messageId?: string | undefined },
     root: string,
     // When the turn started; the user row is stamped with this (`TranscriptRow.sentAt`).
     sentAt: number,
 ): TranscriptRow[] => {
-    const unspoken = unspokenRow(turn.prompt);
+    const unspoken = unspokenPromptRow(turn.prompt);
     if (unspoken !== undefined) {
         return [unspoken];
     }
-    const resume = resumeDisclosure(turn.prompt);
-    const stripped = stripAttachmentNote(resume === undefined ? turn.prompt : withoutResumeNote(turn.prompt));
-    const attachments = rootRelative(turn.attachments ?? stripped.attachments, root);
-    // A handoff prompt embeds the folded-in transcript (runtime-history.ts); this keeps only what the user typed.
-    const text = parseRuntimeHistory(stripped.text)?.prompt ?? stripped.text;
-    if (text.length === 0 && attachments.length === 0) {
+    const { spoken, attachments: noted, resume } = parseQueuedPrompt(turn.prompt);
+    // A re-run's repeated words are nobody's new message: the interruption stands in for the user's bubble.
+    if (resume?.kind === "notice") {
+        return [{ role: "notice", text: resume.text }];
+    }
+    const attachments = rootRelative(turn.attachments ?? noted, root);
+    if (spoken.length === 0 && attachments.length === 0) {
         return [];
     }
-    const row = userRow(text, sentAt, attachments, messageIdOf(turn));
+    const row = userRow(spoken, sentAt, attachments, messageIdOf(turn));
     // An answered-park resume's note rides the user's own row, like every other daemon note.
     return [resume?.kind === "note" ? { ...row, notes: [resume.note] } : row];
 };

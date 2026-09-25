@@ -132,7 +132,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "converting/", portability: "secret", note: "An update's undo record stays with the sandbox it happened on." },
     // Which conversion episodes are open or recently committed, and earlier addresses awaiting removal.
     { path: "state-journal.json", portability: "derived" },
-    // Every conversation the import of the pre-1.308 layout settled (the daemon's agents/registry/pre-1308-import.ts),
+    // Every conversation the import of the pre-1.308 layout settled (the daemon's conversations/registry/pre-1308-import.ts),
     // so one deleted after its import is not brought back from the old files still on disk. About this volume only.
     { path: "pre-1308-import.json", portability: "derived" },
 ];

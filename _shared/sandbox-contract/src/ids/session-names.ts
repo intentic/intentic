@@ -6,6 +6,8 @@ export const WEB_SESSION_PREFIX = "web-";
 export const AGENT_SESSION_PREFIX = "agent-";
 export const JOB_SESSION_PREFIX = "job-";
 export const BROWSER_SESSION_PREFIX = "browser-";
+// A panel's session, one per managed process; the browser string-builds these names too, so never rename it.
+export const PANEL_SESSION_PREFIX = "panel-";
 
 // Eight characters of the SDK session UUID, sanitized to the name-guard charset; groups a turn's work, including its
 // subagents', under one name. Undefined when it sanitizes to empty.
@@ -20,6 +22,11 @@ export const agentSessionName = (sessionId: string): string | undefined => {
     const suffix = sessionSuffix(sessionId);
     return suffix === undefined ? undefined : `${AGENT_SESSION_PREFIX}${suffix}`;
 };
+
+// The session a panel keyed `key` runs in, and back; undefined for a name that isn't a panel session at all.
+export const panelSession = (key: string): string => `${PANEL_SESSION_PREFIX}${key}`;
+export const panelKeyOf = (session: string | undefined): string | undefined =>
+    session?.startsWith(PANEL_SESSION_PREFIX) === true ? session.slice(PANEL_SESSION_PREFIX.length) : undefined;
 
 // The browser session one SDK session drives. Shares the suffix with agentSessionName on purpose: a conversation's
 // shell and its browser read as the pair they are.

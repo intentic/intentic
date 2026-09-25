@@ -17,7 +17,7 @@ import {
     type LocalModelSource,
 } from "../../endpoints/local-model.js";
 import { advanceIdle, type IdleSample } from "../../endpoints/local-model-idle.js";
-import { parseProcStat } from "../../platform/resources/proc-stat.js";
+import { parseProcStat } from "../../system/resources/proc-stat.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 
 // A model the sandbox runs itself: the user picks weights, this downloads and serves them with the bundled

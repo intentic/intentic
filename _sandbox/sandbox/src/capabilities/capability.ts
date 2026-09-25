@@ -1,7 +1,7 @@
 import type { CapabilityStatus, IntenticLine } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
-import { fleetWhoami } from "../fleet/fleet-client.js";
+import { fleetWhoami } from "../sandboxes/fleet-client.js";
 import { relayWalletEnsure } from "../wallet/wallet-signer.js";
 import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";

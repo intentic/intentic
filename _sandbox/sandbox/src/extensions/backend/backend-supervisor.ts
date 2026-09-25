@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { createBackoff, pollUntil } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
+import { freePort } from "@intentic/base/fs";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { backendToolPathsOf } from "@intentic/extension-manifest";
 import type { Logger } from "pino";
@@ -16,7 +17,6 @@ import { invalidateContributions } from "../../capabilities/contributions.js";
 import type { ExtensionGrant } from "../../auth/grants.js";
 import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../extension-readiness.js";
 import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../installed-extensions.js";
-import { freePort } from "../../processes/free-port.js";
 import {
     BACKEND_CONFIG_ENV,
     BACKEND_HOST_HEADER,

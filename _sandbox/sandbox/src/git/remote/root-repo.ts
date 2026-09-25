@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { pathExists } from "../../path-exists.js";
+import { pathExists } from "@intentic/base/fs";
 import { STATE_DIR } from "@intentic/constants";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { defaultGit, gitInit, gitStageAll, type GitRunner } from "@intentic/scaffold";

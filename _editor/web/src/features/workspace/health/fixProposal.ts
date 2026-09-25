@@ -1,6 +1,6 @@
 import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
 
-// What a refused push says. The fix it proposes is the daemon's (agents/fix/push-fix.ts, from the refusal it filed with
+// What a refused push says. The fix it proposes is the daemon's (conversations/fix/push-fix.ts, from the refusal it filed with
 // what pushes left), so nothing here writes a prompt or names an attempt.
 
 // A predicate following the command (drawn in the same monospace). Empty for a plain failure; the terminal and proposal

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { immediateTransaction, openSqlite } from "@intentic/base/sqlite";
 import { headerSchemaVersion, migrateSqlite, type SqliteStep, targetVersion } from "./evolution/sqlite-migrations.js";
-import { openSqlite, transaction } from "./sqlite.js";
 import { defineStep } from "./evolution/state-steps.js";
 
 // The daemon's operational state that must agree with itself, one database beside the conversation units: the registry,
@@ -146,7 +146,7 @@ const sharedColumns = (db: DatabaseSync, table: string): string[] => {
 export const openConversationsDb = (path: string): ConversationsDb => {
     const db = openSqlite(path);
     migrateSqlite(db, SCHEMA, CONVERSATIONS_STEPS);
-    const tx = <T>(work: () => T): T => transaction(db, work);
+    const tx = <T>(work: () => T): T => immediateTransaction(db, work);
     const tables = db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
     const columns = db.prepare("SELECT name FROM pragma_table_info(?)");
     // The column that names a conversation in each table, where one does.

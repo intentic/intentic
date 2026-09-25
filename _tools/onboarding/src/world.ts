@@ -2,9 +2,10 @@ import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
+import { freePort } from "@intentic/base/fs";
 import { mintCertificate } from "./certs.js";
 import { createNetwork, execIn, IPS, isRunning, logsOf, removeContainer, removeNetwork, startContainer, sweepStrays } from "./containers.js";
-import { dockerAvailable, freePort, HOST, plainUrlFor, requireLoopback, urlFor } from "./docker.js";
+import { dockerAvailable, HOST, plainUrlFor, PUBLISH_HOST, requireLoopback, urlFor } from "./docker.js";
 import { IMAGES } from "./images.js";
 
 // Stands up everything every onboarding path shares (postgres, the stand-in model, the platform api, the SPA); only
@@ -129,7 +130,13 @@ export const startWorld = async (): Promise<World> => {
         web: `intentic-onboarding-web-${run}`,
         webtls: `intentic-onboarding-webtls-${run}`,
     };
-    const [dbPort, upstreamPort, apiPort, webPort] = await Promise.all([freePort(), freePort(), freePort(), freePort()]);
+    // Pre-allocated rather than left to Docker, so the api and SPA know each other's origin before either starts.
+    const [dbPort, upstreamPort, apiPort, webPort] = await Promise.all([
+        freePort(PUBLISH_HOST),
+        freePort(PUBLISH_HOST),
+        freePort(PUBLISH_HOST),
+        freePort(PUBLISH_HOST),
+    ]);
 
     const started: string[] = [];
     const stop = async (): Promise<void> => {

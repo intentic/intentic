@@ -47,6 +47,8 @@ export interface PeerHub<Client extends PeerClient<Facts, Scopes>, Announced, Fa
     readonly refresh: (id: string, timeoutMs: number) => Promise<void>;
     // Typed client for a connected peer, undefined when offline; use `mcp` instead for a reason the model can read.
     readonly client: (id: string) => Client | undefined;
+    // The door's own sentence for a peer holding no socket, for a caller refusing on it.
+    readonly offline: (id: string) => string;
     // Throws when offline; pass `signal` for a deadline shorter than the default tool-call ceiling.
     readonly mcp: (id: string, payload: unknown, options?: { readonly signal?: AbortSignal }) => Promise<unknown>;
     // False means nobody took it: offline, or a failed push that dropped the peer; it gets the grant on its next connect.
@@ -179,6 +181,7 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
             }
         },
         client: (id) => live.get(id)?.client,
+        offline: (id) => spec.offline(id),
         mcp: async (id, payload, options) => {
             const peer = live.get(id);
             if (peer === undefined || peer.client.mcp === undefined) {

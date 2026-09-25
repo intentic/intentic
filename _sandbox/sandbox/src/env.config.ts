@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { DAEMON_PORT, HISTORY_ROOT, LOCAL_PORT, PLATFORM_WEB_ORIGIN, PREVIEW_PORT, WORKSPACE_ROOT } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
+import { publicUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { type ConfigDefinition, cliArgs, env, envFile, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
 import { z } from "zod";
 
@@ -176,3 +178,11 @@ const definition = {
 export type Config = z.infer<typeof configSchema>;
 
 export const loadConfig = (): Config => loadPuristicConfig(definition);
+
+// Where this sandbox is reachable from outside, as its config says: the zone, its id, and the outbox's slot and base URL.
+export const publicAddressOf = (config: Pick<Config, "zone" | "sandbox" | "connectToken">) => {
+    const zone = config.zone !== "" ? config.zone : zoneFromUrl(config.sandbox.publicUrl);
+    const sandboxId = sandboxIdFromToken(config.connectToken);
+    const slot = publicSlotFromToken(config.connectToken);
+    return { zone, sandboxId, slot, outboxUrl: publicUrl(slot, zone, sandboxId) };
+};

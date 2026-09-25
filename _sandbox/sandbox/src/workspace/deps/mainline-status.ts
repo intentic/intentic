@@ -1,11 +1,11 @@
 import type { MainlineLandRef, MainlineProject, MainlineRun, MainlineStatus } from "@intentic/sandbox-contract";
+import { panelSession } from "@intentic/sandbox-contract/session-names";
 import type { Services } from "../../composition.js";
 import { publicPushes } from "./push-checks-store.js";
 import type { QueuedLand, Streak } from "./verify-store.js";
 import { opt } from "../../opt.js";
 import { failureOf } from "./failure-units.js";
 import { mainlineLandOf, verifyPanelKey } from "./verify-deps.js";
-import { panelSession } from "../../processes/managed-processes.js";
 
 // The main-line check as the editor reads it (GET /workspace/mainline): what runs now, from the land check; what waits,
 // the last run and the red streak per project, and the latest runs with what became of each red one, from the verify

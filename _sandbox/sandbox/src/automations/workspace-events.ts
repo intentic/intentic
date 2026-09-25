@@ -1,3 +1,4 @@
+import { serialLock } from "@intentic/base/async";
 import type { Trigger, WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { fireAutomation, firedBy } from "./scheduler.js";
@@ -11,12 +12,7 @@ import { fireAutomation, firedBy } from "./scheduler.js";
 const QUEUE_MAX = 4;
 
 // Workspace-wide chain keeping every chore's turn from overlapping another's, on top of each one's own queue.
-let turnChain: Promise<unknown> = Promise.resolve();
-const serially = <T>(task: () => Promise<T>): Promise<T> => {
-    const next = turnChain.then(task, task);
-    turnChain = next.catch(() => undefined);
-    return next;
-};
+const serially = serialLock();
 
 interface Queue {
     readonly waiting: WorkspaceEvent[];

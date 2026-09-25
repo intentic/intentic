@@ -7,7 +7,7 @@ import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
 import { createCursorAgent, type CursorAgentDeps, FIRST_DELTA_MS } from "./cursor-agent.js";
 import type { CursorHookService } from "./cursor-hooks.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.

@@ -17,9 +17,12 @@ flowchart LR
 
 ## Composition
 
-`createServices` in [src/composition.ts](../src/composition.ts) builds `Services` once from the config. Each provider
-adds its own slice to the interface. A module takes `Pick<Services, …>` of the seams it uses, so its dependencies are
-visible in its signature. `wireReactions` in the same file subscribes the reacting subsystems to the domain events.
+`createServices` in [src/composition.ts](../src/composition.ts) builds `Services` once from the config. `Services` is
+the sum of slices each subsystem declares beside its own code (`auth/auth-slice.ts`, `conversations/conversations-slice.ts`,
+`runtimes/claude/claude-provider.ts`, …), and a slice whose construction stands alone is built there too
+(`createAuthSlice`, `createSessionsSlice`); what spans subsystems is wired in composition, in the one order that works. A
+module takes `Pick<Services, …>` of the seams it uses, so its dependencies are visible in its signature. `wireReactions`
+in the same file subscribes the reacting subsystems to the domain events.
 
 ## Boot
 
@@ -48,11 +51,29 @@ Subsystems that react to each other never import each other:
 - `seams/turn-starter.ts` is how automations, loops, approvals, CI fixes, subagents and runners start or drive a turn;
   composition hands them `agent/run/turn/turn-doors.ts`.
 
+## Asking a person
+
+Every card a turn can park on is one list, `PARK_KINDS` in the contract, read by the conversation's parked state, the
+push and the silence judge. A gate that asks from outside the turn (a payment, a capability, a credential, a new
+sandbox, a command on the owner's machine, a child agent) raises its card through `raiseRequest`
+(`conversations/actor/card-offers.ts`, seams from `cardDeps`), which announces `turn.awaiting` and answers
+`approved`, `declined` or `unanswered`; each gate keeps only its own policy and wording.
+
 ## Peers
 
 `peers/` gives every outside party one door shape: a short-lived pairing, a durable enrollment token, a socket and an
 MCP bridge. The owner's computers (`hosts/`), the browser extension (`webext/`) and runners (`runners/`) are its three
-users.
+users; a bearer route admits one through `bearerPeer`. Desktop sync (`hosts/desktop-sync.ts`) keeps its own token store,
+but answers a store it cannot read the way the doors do: unavailable, never unauthorized.
+
+## Shared primitives
+
+Reach for these before writing a new one: `store/keyed-entries.ts` (a ledger keyed by one field, and a counted boot
+resume), `resumeCapped` (`loops/loop-runner.ts`), `serialLock`/`keyedLock` (`@intentic/base/async`),
+`http/cli-answer.ts` (what a CLI route answers), `exchangeWithPlatform` (`system/platform-client.ts`, every call to the
+platform) and `restoreTunnels` (`tunnel/tunnel-links.ts`, boot restore of VPNs and network disks). Session names and
+their prefixes (`panelSession`, `panelKeyOf`, `agentSessionName`) come from `@intentic/sandbox-contract/session-names`,
+never a spelled prefix: the browser derives the same names.
 
 ## Invariants
 

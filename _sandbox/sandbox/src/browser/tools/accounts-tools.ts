@@ -9,7 +9,7 @@ import type { OpenAccountInput } from "../../capabilities/open-account.js";
 import { browserAccountPage, clearBrowserHelp, raiseBrowserHelp } from "../sessions/browser-sessions.js";
 import { type fetchEmailCode, type Mailbox, mailboxOf, siteToken } from "./email-codes.js";
 import { hasSession, markConnected, profileOwner } from "../sessions/session-store.js";
-import type { ParkedCards } from "../../agents/actor/parked-cards.js";
+import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 
 // Lets the agent connect, sign in to, sign up for, and open new browser accounts, and call the owner in when a step
 // needs a person, instead of every login going through the owner's guided window.

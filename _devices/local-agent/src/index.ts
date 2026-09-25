@@ -2,7 +2,7 @@
 // OS, re-invoking a compiled binary, and a detached agent found again by pidfile. Used by @intentic/machine and
 // @intentic/acp-bridge.
 
-export { agentHome, homeDir, writeFileAtomic, writeSecretFile, type AgentHome, type Log } from "./home.js";
+export { agentHome, homeDir, writeSecretFile, type AgentHome, type Log } from "./home.js";
 export { cliLauncher, quotedCommandLine, stubCommand, WINDOWS_LAUNCH_STUB, windowsLaunchStub, type CliLauncher } from "./launcher.js";
 export {
     autostart,

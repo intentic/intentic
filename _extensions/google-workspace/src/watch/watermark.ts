@@ -1,7 +1,7 @@
-import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
-import { dirname, join } from "node:path";
+import { writeFileAtomic } from "@intentic/base/fs";
+import { join } from "node:path";
 import { runtimeDir } from "../google/paths.js";
 
 // How far the watcher has read, kept on disk per connection. Without it a restart either replays the inbox or silently
@@ -40,14 +40,8 @@ export const readWatermark = async (path: string, onUnreadable: (detail: string)
     };
 };
 
-// Written beside and renamed over: the mail and calendar polls save concurrently, and a crash mid-write must leave the
-// previous mark rather than a torn one.
-export const writeWatermark = async (path: string, mark: Watermark): Promise<void> => {
-    await mkdir(dirname(path), { recursive: true });
-    const staged = `${path}.${randomBytes(4).toString("hex")}.tmp`;
-    await writeFile(staged, JSON.stringify(mark));
-    await rename(staged, path);
-};
+// Atomic: the mail and calendar polls save concurrently, and a crash mid-write must leave the previous mark, not a torn one.
+export const writeWatermark = async (path: string, mark: Watermark): Promise<void> => await writeFileAtomic(path, JSON.stringify(mark));
 
 // Forgets announced events once their start is well behind any window that could resurface them; unpruned this map is
 // the only unbounded growth in the watcher.

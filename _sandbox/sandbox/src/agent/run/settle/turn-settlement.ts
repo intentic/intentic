@@ -1,6 +1,6 @@
 import { type AgentProvider, KeyedProviderSchema, type TurnProof } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
-import type { TurnPlacement } from "../../../agents/worktrees/isolation.js";
+import type { TurnPlacement } from "../../../conversations/worktrees/isolation.js";
 import type { RefreshOptions } from "../../../usage/headroom.js";
 import type { AgentRequest } from "../../providers/agent-request.js";
 import { ERROR_MESSAGE_CHARS } from "../frames/classify-failure.js";

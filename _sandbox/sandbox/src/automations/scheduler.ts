@@ -8,7 +8,7 @@ import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { Services } from "../composition.js";
-import { type PersistedAgent, reposOf } from "../agents/registry/agents-store.js";
+import { type PersistedAgent, reposOf } from "../conversations/registry/agents-store.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";

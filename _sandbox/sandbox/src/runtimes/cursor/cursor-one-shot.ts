@@ -1,6 +1,6 @@
 import type { AgentOptions, InteractionUpdate, ModelSelection, Run, SDKAgent, ToolName } from "@cursor/sdk";
-import { whenAborted } from "../../abort.js";
-import type { OneShotAsk } from "../../agent/providers/adapter.js";
+import { whenAborted } from "@intentic/base/async";
+import { type OneShotAsk, oneShotDeadline } from "../../agent/providers/adapter.js";
 import type { Services } from "../../composition.js";
 import type { StoredCursorAccount } from "./cursor-credentials.js";
 import { selectionFor } from "./cursor-models.js";
@@ -89,14 +89,8 @@ export const cursorOneShot = async (services: CursorOneShotDeps, ask: OneShotAsk
     const item = await services.cursorModels.item(modelId);
     const selection: ModelSelection = item === undefined ? { id: modelId } : selectionFor(item, ask.effort);
 
-    let expired = false;
     const abort = new AbortController();
-    const forward = (): void => abort.abort();
-    ask.signal.addEventListener(`abort`, forward, { once: true });
-    const deadline = setTimeout(() => {
-        expired = true;
-        abort.abort();
-    }, DEADLINE_MS);
+    const deadline = oneShotDeadline(ask.signal, DEADLINE_MS, () => abort.abort());
 
     // Two attempts at most: a spent allowance is a fact about one account, and the ledger the first refusal files is
     // what sends the second somewhere else. Past that there is nothing left to try, and the chain has other rungs.
@@ -118,16 +112,16 @@ export const cursorOneShot = async (services: CursorOneShotDeps, ask: OneShotAsk
                 if (text !== ``) {
                     return text;
                 }
-                if (ask.signal.aborted && !expired) {
+                if (ask.signal.aborted && !deadline.expired()) {
                     throw new Error(`aborted`);
                 }
-                throw new Error(expired ? `the model did not answer within ${DEADLINE_MS / 1_000}s` : `the model did not answer`);
+                throw deadline.unanswered();
             } catch (error) {
-                if (ask.signal.aborted && !expired) {
+                if (ask.signal.aborted && !deadline.expired()) {
                     throw error;
                 }
-                if (expired) {
-                    throw new Error(`the model did not answer within ${DEADLINE_MS / 1_000}s`, { cause: error });
+                if (deadline.expired()) {
+                    throw deadline.claim(error);
                 }
                 if (!(error instanceof sdk.RateLimitError)) {
                     throw helperError(error, sdk);
@@ -140,7 +134,6 @@ export const cursorOneShot = async (services: CursorOneShotDeps, ask: OneShotAsk
         }
         throw refusal ?? new Error(`Connect your Cursor subscription in Sandbox ▸ Agent to run Cursor.`);
     } finally {
-        clearTimeout(deadline);
-        ask.signal.removeEventListener(`abort`, forward);
+        deadline.release();
     }
 };

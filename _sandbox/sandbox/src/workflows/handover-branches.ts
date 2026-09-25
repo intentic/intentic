@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { RepoBase } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { branchSha } from "../agents/land/agent-refs.js";
+import { branchSha } from "../conversations/land/agent-refs.js";
 
 // Which repos a finished step actually left work in: a handover names a branch (`agent/<conversation>`) so the next
 // step reviews real changes, but the name is derived and can be false (partial touch, unclean turn, no diff vs base).

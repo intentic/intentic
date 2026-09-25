@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import type { ConversationWorktree } from "../agents/worktrees/worktrees.js";
+import type { ConversationWorktree } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { dispatchRemoteTurn } from "./runner-dispatch.js";
 

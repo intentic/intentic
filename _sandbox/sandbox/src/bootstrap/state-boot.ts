@@ -1,7 +1,7 @@
 import type { Logger } from "pino";
 import type { Config } from "../env.config.js";
-import { AGENT_SESSION_ENV, type ContainerRole } from "../platform/boot/container-owner.js";
-import type { ProfileTraits } from "../platform/boot/profile.js";
+import { AGENT_SESSION_ENV, type ContainerRole } from "../system/boot/container-owner.js";
+import type { ProfileTraits } from "../system/boot/profile.js";
 import { statePath } from "../state-paths.js";
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import { commitState, convergeState, type StateRoots } from "../store/evolution/state-convergence.js";

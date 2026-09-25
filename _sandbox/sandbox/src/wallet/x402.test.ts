@@ -1,4 +1,4 @@
-import { atomicToUsd, mintAuthorization, parseChallenge, parseSettlement, paymentHeader, usdToAtomic } from "./x402.js";
+import { mintAuthorization, parseChallenge, parseSettlement, paymentHeader } from "./x402.js";
 
 /* The wire, driven with the strings a real endpoint would actually send. */
 
@@ -20,17 +20,6 @@ const V2_CHALLENGE = {
         },
     ],
 };
-
-it("converts USD and atomic units without floats, in both directions", () => {
-    expect(usdToAtomic("1.00")).toBe(1_000_000n);
-    expect(usdToAtomic("0.1")).toBe(100_000n);
-    expect(usdToAtomic("0.000001")).toBe(1n);
-    // The classic float trap: 0.1 + 0.2 in binary floating point is not 0.3, and money must not care.
-    expect(usdToAtomic("0.1") + usdToAtomic("0.2")).toBe(usdToAtomic("0.3"));
-    expect(atomicToUsd(1_000_000n)).toBe("1.00");
-    expect(atomicToUsd(100_000n)).toBe("0.10");
-    expect(atomicToUsd(1n)).toBe("0.000001");
-});
 
 it("reads a v2 challenge off the response header", () => {
     const parsed = parseChallenge("https://api.example.com/premium", new Headers({ "payment-required": base64(V2_CHALLENGE) }), "");

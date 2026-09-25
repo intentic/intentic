@@ -1,7 +1,7 @@
 import { ATTACHMENTS_DIR, CONTROL_SCOPES, type ContractRoute, RAW_ROUTE_LIST, SANDBOX_ROUTES, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import type { ControlTokens } from "./control-tokens.js";
-import { controlScoped } from "./control-tokens.js";
+import type { ControlTokens } from "./tokens/control-tokens.js";
+import { controlScoped } from "./tokens/control-tokens.js";
 import { grantsOf } from "./grants.js";
 import { guestReach, routeFloor } from "./role-floor.js";
 
@@ -514,7 +514,7 @@ const machineGatesOf = async (method: string, path: string): Promise<string[]> =
         controlTokens: unstubbed<ControlTokens>("controlTokens", {}),
         verifySync: async (_presented, poll) => {
             checkedIn = poll;
-            return true;
+            return { kind: "enrolled", id: "laptop", card: "laptop" };
         },
         verifyExtension: () => undefined,
     });

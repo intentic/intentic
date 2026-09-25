@@ -5,10 +5,10 @@ import { basename, dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
+import { pathExists } from "@intentic/base/fs";
 import { type ArrivalItem, type ArrivalReport, BundleManifestSchema, type BundleManifest, type NeedsAction } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { extract, type Header } from "tar-stream";
-import { pathExists } from "../path-exists.js";
 import { convertDocument, fold, isJsonObject, nested, retype } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { conversationsDbPath } from "../store/conversations-db.js";
@@ -23,7 +23,7 @@ import { definitionDocument } from "./definition.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { sizeLabel } from "@intentic/base/format";
-import { nodeStream } from "../web-stream.js";
+import { nodeStream } from "@intentic/base/web-stream";
 
 // Bundle arrival: this sandbox's own export format, taken in as a preview-first plan instead of the old write-on-pick
 // restore. Spooled to /history, never memory, since a bundle can be tens of gigabytes; one pass writes the spool and

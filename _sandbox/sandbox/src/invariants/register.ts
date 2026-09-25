@@ -1,5 +1,5 @@
 import { checks as agentChecks, owner as agentOwner, type TurnJournalDeps } from "../agent/invariant.js";
-import { checks as agentsChecks, owner as agentsOwner, type FleetRegistryDeps } from "../agents/invariant.js";
+import { checks as agentsChecks, owner as agentsOwner, type FleetRegistryDeps } from "../conversations/invariant.js";
 import { checks as capabilityChecks, owner as capabilityOwner, type ManifestSecretDeps } from "../capabilities/invariant.js";
 import { type ChildLedgerDeps, checks as childrenChecks, owner as childrenOwner } from "../agent/subagents/invariant.js";
 import { checks as cursorChecks, type CommandGuardDeps, owner as cursorOwner } from "../runtimes/cursor/invariant.js";
@@ -22,7 +22,7 @@ import { checks as webextChecks, owner as webextOwner } from "../webext/invarian
 import type { InvariantRegistry } from "./invariants.js";
 
 // The one list wiring invariant companions to the registry, so an unregistered companion is visible to the gate.
-// platform/invariant.ts is excluded (main.ts registers it once it knows this process's role); a companion with no
+// system/invariant.ts is excluded (main.ts registers it once it knows this process's role); a companion with no
 // checks is still registered, since owners() means "answered", not "has checks".
 
 export type DaemonInvariantDeps = TurnJournalDeps &

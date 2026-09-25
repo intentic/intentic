@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { DEFAULT_SAFETY_POLICY, type SafetyPolicy } from "@intentic/sandbox-contract";
-import { queueOnFile, writeTextFile } from "../store/text-file.js";
 
 // The owner's safety policy on disk (.intentic/config/safety.md); the judge reads it before a flagged command. A text
 // file, not a manifest: it travels verbatim, with no shape to validate. `custom` reflects whether the file exists, not
@@ -53,12 +53,12 @@ export const fileSafetyPolicyStore = (path: string): SafetyPolicyStore => {
     return {
         get: read,
         text: async () => (await read()).text,
-        set: (text) => queueOnFile(path, () => writeTextFile(path, terminated(text))),
+        set: (text) => queueOnFile(path, () => writeFileAtomic(path, terminated(text))),
         // Read and write on the file's queue: two cards accepted at once must both land.
         append: (line) =>
             queueOnFile(path, async () => {
                 const { text } = await read();
-                await writeTextFile(path, withAddedLine(text, line));
+                await writeFileAtomic(path, withAddedLine(text, line));
             }),
     };
 };

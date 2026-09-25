@@ -61,6 +61,17 @@
                 "default": "./dist/acme.js"
             }
         },
+        "./web-stream": {
+            "types": "./dist/node/web-stream.d.ts",
+            "import": {
+                "@intentic/src": "./src/node/web-stream.ts",
+                "default": "./dist/node/web-stream.js"
+            },
+            "require": {
+                "@intentic/src": "./src/node/web-stream.ts",
+                "default": "./dist/node/web-stream.js"
+            }
+        },
         "./async": {
             "types": "./dist/async.d.ts",
             "import": {
@@ -136,6 +147,39 @@
             "require": {
                 "@intentic/src": "./src/held.ts",
                 "default": "./dist/held.js"
+            }
+        },
+        "./fs": {
+            "types": "./dist/node/fs.d.ts",
+            "import": {
+                "@intentic/src": "./src/node/fs.ts",
+                "default": "./dist/node/fs.js"
+            },
+            "require": {
+                "@intentic/src": "./src/node/fs.ts",
+                "default": "./dist/node/fs.js"
+            }
+        },
+        "./worker-calls": {
+            "types": "./dist/workers/worker-calls.d.ts",
+            "import": {
+                "@intentic/src": "./src/workers/worker-calls.ts",
+                "default": "./dist/workers/worker-calls.js"
+            },
+            "require": {
+                "@intentic/src": "./src/workers/worker-calls.ts",
+                "default": "./dist/workers/worker-calls.js"
+            }
+        },
+        "./whisper": {
+            "types": "./dist/node/whisper.d.ts",
+            "import": {
+                "@intentic/src": "./src/node/whisper.ts",
+                "default": "./dist/node/whisper.js"
+            },
+            "require": {
+                "@intentic/src": "./src/node/whisper.ts",
+                "default": "./dist/node/whisper.js"
             }
         }
     },

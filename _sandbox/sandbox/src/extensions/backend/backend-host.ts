@@ -110,6 +110,7 @@ export const createBackendHostApp = async (config: BackendDeviceConfig): Promise
                 if (extension === undefined) {
                     return json({ error: `no backend for extension "${id}"` }, 404);
                 }
+                // allow(silent-catch): a body that is not JSON is answered as the 400 just below
                 const body = (await request.json().catch(() => undefined)) as ToolRequest | undefined;
                 if (body?.message === undefined) {
                     return json({ error: "a tools request carries { card?, conversationId?, message }" }, 400);

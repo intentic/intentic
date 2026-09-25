@@ -39,7 +39,7 @@ export interface StoreOwner {
 /**
  * Where a conversation's runtime session state is: its transcripts, plans, backups, shell snapshots and checklists.
  * A conversation born fenced keeps its own, outside the workspace; its turn's namespace binds that over the shared
- * path (agents/worktrees/isolation.ts), so the CLI writing to `~/.claude` and the daemon reading here name one file.
+ * path (conversations/worktrees/isolation.ts), so the CLI writing to `~/.claude` and the daemon reading here name one file.
  */
 export const claudeStoreOf = (workspaceRoot: string, historyRoot: string, entry: StoreOwner | undefined): string =>
     entry?.identity.areas === undefined ? statePath(workspaceRoot, ".intentic/records/sessions/claude/") : sessionsDir(historyRoot, entry.id);

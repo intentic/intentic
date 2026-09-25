@@ -22,7 +22,7 @@ import { createCredentialOracle } from "./credential-files.js";
 import { guard } from "./guard.js";
 import { excerptProgram } from "../safety/safety-log.js";
 import type { TurnTaint } from "./turn-taint.js";
-import type { ParkedCards } from "../agents/actor/parked-cards.js";
+import type { ParkedCards } from "../conversations/actor/parked-cards.js";
 
 // Second layer under the admission floor (guard/actions.ts sessionStart): what an already-running session's commands
 // may do. Four tiers run in `consult`: triage, an un-waivable hard rule, a judge, then a person; only the last

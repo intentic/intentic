@@ -1,11 +1,9 @@
-import { sameAccount } from "../../agent/providers/account-identity.js";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { sameAccount } from "../../agent/providers/accounts/account-identity.js";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import type { OauthAccount } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
+import { accountFiles } from "../../agent/providers/accounts/account-files.js";
 import { ensureCursorSdk } from "./cursor-sdk.js";
 
 // Cursor accounts, one JSON file per account under the auth root; no refresh, since Cursor's key doesn't rotate. Stores
@@ -72,56 +70,21 @@ export interface CursorStore {
     readonly logger: Logger;
 }
 
-const cursorCredentialPath = (dir: string, id: string): string => join(dir, `${id}.json`);
-
-const jsonOrUndefined = (text: string): unknown => {
-    try {
-        return JSON.parse(text) as unknown;
-    } catch {
-        return undefined;
-    }
-};
-
-// Only a missing file is "no such account"; one that cannot be read throws, or a connected account would read as gone.
-const readCursorCredential = async (dir: string, id: string): Promise<StoredCursorAccount | undefined> => {
-    const text = await readFile(cursorCredentialPath(dir, id), "utf8").catch(undefinedIfMissing);
-    if (text === undefined) {
-        return undefined;
-    }
-    const parsed = StoredAccountSchema.safeParse(jsonOrUndefined(text));
-    return parsed.success ? parsed.data : undefined;
-};
-
 // Files with Cursor's own account shape; shared with the provider-pack predicate so a stray cache or foreign JSON can't
 // make a disconnected sandbox look connected.
-export const readCursorCredentials = async (dir: string): Promise<StoredCursorAccount[]> => {
-    const entries = (await readdir(dir).catch(undefinedIfMissing)) ?? [];
-    const stored = await Promise.all(
-        entries.filter((name) => name.endsWith(".json")).map((name) => readCursorCredential(dir, name.slice(0, -5))),
-    );
-    return stored.filter((account): account is StoredCursorAccount => account !== undefined).toSorted((a, b) => a.connectedAt - b.connectedAt);
-};
+export const readCursorCredentials = (dir: string): Promise<StoredCursorAccount[]> => accountFiles(dir, StoredAccountSchema).list();
 
 // One <id>.json per account under .intentic/secrets/auth/cursor/, already classified secret (workspace-state.ts):
 // fenced from search, export and file routes without naming it.
 export const fileCursorStore = (dir: string, logger: Logger): CursorStore => {
+    const files = accountFiles(dir, StoredAccountSchema);
     return {
         logger,
-        read: (id) => readCursorCredential(dir, id),
-        // Atomic write (temp file + rename): a reader must never observe a half-written file, which would read as a
-        // disconnected account.
-        write: async (account) => {
-            await mkdir(dir, { recursive: true });
-            const path = cursorCredentialPath(dir, account.id);
-            const temp = `${path}.${randomUUID()}.tmp`;
-            await writeFile(temp, `${JSON.stringify(account, undefined, 2)}\n`, { mode: 0o600 });
-            await rename(temp, path);
-        },
-        clear: async (id) => {
-            await rm(cursorCredentialPath(dir, id), { force: true });
-        },
-        list: async () => (await readCursorCredentials(dir)).map(toAccount),
-        credentials: () => readCursorCredentials(dir),
+        read: files.read,
+        write: files.write,
+        clear: files.remove,
+        list: async () => (await files.list()).map(toAccount),
+        credentials: files.list,
     };
 };
 

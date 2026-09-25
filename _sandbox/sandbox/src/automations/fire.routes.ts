@@ -1,6 +1,6 @@
 import { FIRE_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { presentedDoorToken } from "../auth/door-tokens.js";
+import { presentedDoorToken } from "../auth/tokens/door-tokens.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { dailyBudget } from "../store/daily-budget.js";

@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
+import { whisperCliMissing } from "@intentic/base/whisper";
 import { type GatewayHooks, runConnectorGateway } from "@intentic/connector-runtime";
 import type { Client } from "discord.js";
-import { whisperCliMissing } from "./audio.js";
 import { type DiscordConnectorConfig, discordGatewayState, ensureDiscordClient, releaseDiscordClient } from "./client.js";
 import { createDiscordListener, deliverToChannel } from "./listener.js";
 import { activeVoiceSession, joinVoice, leaveVoice, stopVoice, voiceStatus } from "./voice.js";

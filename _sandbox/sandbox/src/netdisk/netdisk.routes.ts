@@ -1,9 +1,8 @@
 import { netdiskContract } from "@intentic/sandbox-contract";
-import { implement, ORPCError } from "@orpc/server";
+import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { tunnelEntry } from "../tunnel/tunnel-links.js";
-import { heldStream } from "../tunnel/tunnel-route.js";
+import { heldStream, tunnelEntryOr404 } from "../tunnel/tunnel-route.js";
 import { mountNetdisk, netdiskLink, netdiskLinks, unmountNetdisk } from "./netdisk-links.js";
 
 // The live network-disk routes. Adding a disk is a capability add; MOUNTING one is here, because mounting is a runtime
@@ -16,13 +15,7 @@ export const createNetdiskRoutes = (services: NetdiskRoutesDeps) => {
     const i = implement(netdiskContract).$context<OrpcContext>();
     const mounting = new Set<string>();
 
-    const entryOf = async (id: string) => {
-        const entry = await tunnelEntry(services.capabilities, "netdisk", id);
-        if (entry === undefined) {
-            throw new ORPCError("NOT_FOUND", { message: `no netdisk capability with that id` });
-        }
-        return entry;
-    };
+    const entryOf = (id: string) => tunnelEntryOr404(services.capabilities, "netdisk", id);
 
     return {
         list: i.list.handler(async () => ({ links: await netdiskLinks(services.capabilities) })),

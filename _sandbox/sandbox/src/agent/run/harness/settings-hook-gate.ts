@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { inWorktree, type IsolationPlan, MAIN_MOUNT } from "../../../agents/worktrees/isolation.js";
+import { inWorktree, type IsolationPlan, MAIN_MOUNT } from "../../../conversations/worktrees/isolation.js";
 import { gateSettingsHooks, HOOKS_HELD_NOTE } from "../../../guard/hook-approvals.js";
 import { hookPlaceOf, settingsHookSet } from "../../../guard/settings-hooks.js";
 import type { TurnPolicy, TurnSpec } from "../../providers/agent-request.js";

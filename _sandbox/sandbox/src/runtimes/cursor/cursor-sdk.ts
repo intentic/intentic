@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type * as CursorSdk from "@cursor/sdk";
+import { engineMissing } from "../../agent/providers/provider-module.js";
 import { engineDescriptor } from "../../engines/engine-descriptors.js";
 import { type EngineInstallOutcome, installEngine } from "../../engines/engine-install.js";
 import { forgetEngineResolution, resolveEngine } from "../../engines/engine-resolve.js";
@@ -10,9 +11,7 @@ import { forgetEngineResolution, resolveEngine } from "../../engines/engine-reso
 // only dynamically, never a static import that would fail every image to boot. Tried in order: the engine store, the
 // pack's prefix (/opt/cursor-sdk), then this package's own dependency (a dev checkout).
 
-// "rebuild" is load-bearing: the UI routes on this word; the rest of the sentence can be reworded freely.
-export const CURSOR_SDK_MISSING =
-    "This sandbox's image doesn't include the Cursor agent yet: rebuild it from the Environment card in Sandbox ▸ Environment to run Cursor here.";
+export const CURSOR_SDK_MISSING = engineMissing("the Cursor agent", "Cursor");
 
 // Where the Dockerfile installs it; overridable so a test can point at a fixture tree with no pack.
 const packRoot = (): string => process.env["INTENTIC_CURSOR_SDK_DIR"] ?? "/opt/cursor-sdk";

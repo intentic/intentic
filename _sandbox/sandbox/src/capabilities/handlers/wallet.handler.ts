@@ -1,5 +1,6 @@
 import type { WalletConfig } from "@intentic/sandbox-contract";
-import { atomicToUsd, usdcBalance, usdcNetworkOf } from "../../wallet/x402.js";
+import { atomicToUsd, usdcNetworkOf } from "@intentic/sandbox-contract/x402";
+import { usdcBalance } from "../../wallet/x402.js";
 import type { CapabilityHandler } from "../capability.js";
 
 /* THE SANDBOX WALLET's handler, the entry half of a feature whose money half lives elsewhere on purpose. */

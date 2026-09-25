@@ -1,5 +1,5 @@
-import type { ControlTokens } from "./control-tokens.js";
-import { type Grant, grantsOf } from "./grants.js";
+import type { ControlTokens } from "./tokens/control-tokens.js";
+import { admitByGrant, type Grant, grantsOf } from "./grants.js";
 
 // The verdict alone: what a grant admits or refuses is the subject here, not the principal it may hand back.
 const verdict = async (grant: Grant, presented: string, method: string, path: string) => (await grant.authorize(presented, method, path)).verdict;
@@ -12,7 +12,7 @@ test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a 
         panelToken: "panel",
         agentToken: "agent",
         controlTokens: { resolve: async () => undefined, touch: async () => undefined } as unknown as ControlTokens,
-        verifySync: async () => false,
+        verifySync: async () => ({ kind: "unknown" }),
         verifyExtension: () => undefined,
     });
     const agent = grants.find((grant) => grant.header === "x-intentic-agent");
@@ -45,7 +45,7 @@ test("the agent grant reaches the fleet reads and never the board's presses", as
         panelToken: "panel",
         agentToken: "agent",
         controlTokens: { resolve: async () => undefined, touch: async () => undefined } as unknown as ControlTokens,
-        verifySync: async () => false,
+        verifySync: async () => ({ kind: "unknown" }),
         verifyExtension: () => undefined,
     });
     const agent = grants.find((grant) => grant.header === "x-intentic-agent");
@@ -75,7 +75,7 @@ test("the sync grant reaches ports, its own report and the ssh transport, and no
         panelToken: "panel",
         agentToken: "agent",
         controlTokens: { resolve: async () => undefined, touch: async () => undefined } as unknown as ControlTokens,
-        verifySync: async (presented) => presented === "sync",
+        verifySync: async (presented) => (presented === "sync" ? { kind: "enrolled", id: "laptop", card: "laptop" } : { kind: "unknown" }),
         verifyExtension: () => undefined,
     });
     const sync = grants.find((grant) => grant.header === "x-intentic-sync");
@@ -96,6 +96,24 @@ test("the sync grant reaches ports, its own report and the ssh transport, and no
     expect(await verdict(sync, "intruder", "GET", "/system/sync/ssh")).toBe("unauthorized");
 });
 
+// An enrollment store the daemon cannot read says nothing about the token: a 401 would send the laptop off to re-pair a
+// credential that was never withdrawn, so the answer is the retryable 503 the peer doors give.
+test("the sync grant answers an unreadable enrollment store as unavailable, never as unauthorized", async () => {
+    const grants = grantsOf({
+        panelToken: "panel",
+        agentToken: "agent",
+        controlTokens: { resolve: async () => undefined, touch: async () => undefined } as unknown as ControlTokens,
+        verifySync: async () => ({ kind: "unreadable", detail: "the file is not valid JSON" }),
+        verifyExtension: () => undefined,
+    });
+    const headers: Readonly<Record<string, string>> = { "x-intentic-sync": "ist_laptop" };
+    expect(await admitByGrant(grants, (name) => headers[name], "GET", "/ports")).toEqual({
+        admitted: false,
+        status: 503,
+        error: "this sandbox cannot read its enrollment manifest right now (the file is not valid JSON)",
+    });
+});
+
 // The panel grant is broad on purpose (a repo's operator panel is an app somebody else wrote), with the routes that hand
 // back or put in motion a stored credential carved out. That token is injected into every operator panel, so leaving
 // one in reach would make stored passwords, bot tokens and TOTP seeds readable by anything that can read /proc.
@@ -105,7 +123,7 @@ test("the panel grant reaches the daemon broadly but never a route that returns 
         panelToken: "panel",
         agentToken: "agent",
         controlTokens: { resolve: async () => undefined, touch: async () => undefined } as unknown as ControlTokens,
-        verifySync: async () => false,
+        verifySync: async () => ({ kind: "unknown" }),
         verifyExtension: () => undefined,
     });
     const panel = grants.find((grant) => grant.header === "x-intentic-panel");
@@ -151,7 +169,7 @@ test("the extension grant reaches exactly the declared daemon routes", async () 
         panelToken: "panel",
         agentToken: "agent",
         controlTokens: { resolve: async () => undefined, touch: async () => undefined } as unknown as ControlTokens,
-        verifySync: async () => false,
+        verifySync: async () => ({ kind: "unknown" }),
         verifyExtension: (presented) =>
             presented === "ext-token" ? { id: "acme.tool", permissions: ["GET /workspace/file", "POST /agents"] } : undefined,
     });
@@ -177,7 +195,7 @@ test("an extension grant reaches only its own listener provider's routes, whatev
         panelToken: "panel",
         agentToken: "agent",
         controlTokens: { resolve: async () => undefined, touch: async () => undefined } as unknown as ControlTokens,
-        verifySync: async () => false,
+        verifySync: async () => ({ kind: "unknown" }),
         verifyExtension: (presented) =>
             presented === "discord-token"
                 ? { id: "intentic.discord", permissions: ["GET /listeners/*/state", "GET /ports"], listener: "discord" }
@@ -221,7 +239,7 @@ test("the control grant admits with a principal and touches the token; the fixed
                 touched.push(id);
             },
         } as unknown as ControlTokens,
-        verifySync: async () => false,
+        verifySync: async () => ({ kind: "unknown" }),
         verifyExtension: () => undefined,
     });
     const control = grants.find((grant) => grant.header === "x-intentic-control");

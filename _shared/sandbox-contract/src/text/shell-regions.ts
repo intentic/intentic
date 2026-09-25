@@ -30,9 +30,8 @@ const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 // `<<EOF`, `<<-EOF`, quoted or not; the delimiter's quoting only affects expansion, not classification here.
 const HEREDOC_OPEN = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/g;
 
-// Found in their own pass, first: a heredoc body is line-oriented and can hold anything, an odd quote count in it would
-// desync the word scanner.
-const heredocBodies = (command: string): CommandSpan[] => {
+// Heredoc bodies in order, each from the line after its opener to its terminator's line; as in bash, only `<<-` indents that.
+export const heredocBodies = (command: string): CommandSpan[] => {
     const bodies: CommandSpan[] = [];
     for (const open of command.matchAll(HEREDOC_OPEN)) {
         const indented = command.slice(open.index, open.index + 3).startsWith("<<-");
@@ -158,6 +157,7 @@ const scanWords = (command: string, skip: readonly CommandSpan[]): ShellWord[] =
 // Unsorted and possibly overlapping; callers only ask containment of them. Computed once per command by the classifier
 // and shared across every table.
 export const inertRegions = (command: string): CommandSpan[] => {
+    // First, in a pass of their own: a body can hold anything, and an odd quote count in it would desync the word scanner.
     const bodies = heredocBodies(command);
     const regions: CommandSpan[] = [...bodies];
     const words = scanWords(command, bodies);

@@ -8,7 +8,7 @@ import { z } from "zod";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { captureScrollback } from "./terminal-session.js";
-import type { ParkedCards } from "../agents/actor/parked-cards.js";
+import type { ParkedCards } from "../conversations/actor/parked-cards.js";
 
 // Hands the terminal back to the person, the browser handover's twin: every Bash command runs in a tmux window the
 // owner can type into, so a prompt is one keystroke from being answered. Parks only on a command already waiting; the

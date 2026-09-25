@@ -1,16 +1,14 @@
-import { randomUUID } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { errorMessage } from "@intentic/base/errors";
+import { pathExists } from "@intentic/base/fs";
+import { storeWhisperModel, whisperCliMissing } from "@intentic/base/whisper";
 import { STATE_DIR, WHISPER_MODEL_REPO } from "@intentic/sandbox-contract";
 import { EndBehaviorType, entersState, joinVoiceChannel, type VoiceConnection, VoiceConnectionStatus } from "@discordjs/voice";
 import { downloadFile } from "@huggingface/hub";
 import type { Client, VoiceBasedChannel, VoiceState } from "discord.js";
 import { OpusEncoder } from "mediaplex";
-import { createTranscriber, MIN_UTTERANCE_BYTES, type Transcriber, WHISPER_MISSING, whisperCliMissing } from "./audio.js";
+import { createTranscriber, MIN_UTTERANCE_BYTES, type Transcriber, WHISPER_MISSING } from "./audio.js";
 import { ensureDiscordClient, releaseDiscordClient, visibleChannel } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";
 import type { DiscordConnectorConfig } from "./client.js";
@@ -19,19 +17,13 @@ import type { DiscordConnectorConfig } from "./client.js";
 // per-speaker audio and transcribes each utterance locally with whisper.cpp as it ends (1s silence), dispatching a
 // voice_utterance event each time so automations can react mid-call. A module singleton: one session per sandbox.
 
-const fileExists = async (path: string): Promise<boolean> =>
-    stat(path).then(
-        () => true,
-        () => false,
-    );
-
 // Whisper model, downloaded on first use into the workspace volume, kept out of the image. Size and language come from
 // connector config; voiceLanguage=en selects the English-specialized ggml-*.en variant instead of the multilingual one.
 const ensureWhisperModel = async (ctx: GatewayCtx, config: DiscordConnectorConfig): Promise<string> => {
     const model = config.voiceModel ?? "medium";
     const file = config.voiceLanguage === "en" && model !== "large-v3-turbo" ? `ggml-${model}.en.bin` : `ggml-${model}.bin`;
     const path = join(ctx.workspaceRoot, STATE_DIR, "local", "cache", "whisper", file);
-    if (await fileExists(path)) {
+    if (await pathExists(path)) {
         return path;
     }
     ctx.log.info({ model: file }, "downloading whisper model (first voice session)");
@@ -40,17 +32,7 @@ const ensureWhisperModel = async (ctx: GatewayCtx, config: DiscordConnectorConfi
     if (blob === null) {
         throw new Error(`whisper model download failed: ${WHISPER_MODEL_REPO} has no ${file}`);
     }
-    await mkdir(dirname(path), { recursive: true });
-    // Staged then renamed atomically, so a torn download can never look like a finished model.
-    const staged = `${path}.${randomUUID()}.part`;
-    try {
-        // hub's web ReadableStream and the DOM lib's disagree on generics, same object at runtime.
-        await pipeline(Readable.fromWeb(blob.stream() as unknown as import("node:stream/web").ReadableStream), createWriteStream(staged));
-        await rename(staged, path);
-    } catch (error) {
-        await rm(staged, { force: true });
-        throw error;
-    }
+    await storeWhisperModel(path, blob);
     return path;
 };
 

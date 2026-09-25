@@ -11,7 +11,7 @@ import type { JudgeFacts } from "../agent/tools/command-judge.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandGateHooks, type CommandGuardOptions } from "./command-guard.js";
 import { createTurnTaint, NO_TAINT } from "./turn-taint.js";
-import { parkedCards } from "../agents/actor/parked-cards.js";
+import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.

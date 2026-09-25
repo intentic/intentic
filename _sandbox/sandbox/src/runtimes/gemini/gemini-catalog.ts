@@ -1,5 +1,5 @@
-import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
+import { unrankedCatalog } from "../../agent/models/model-discovery.js";
 import type { Config } from "../../env.config.js";
 import { jsonFile } from "../../store/json-file.js";
 import { discoverGeminiModels, type GeminiModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
@@ -14,13 +14,6 @@ export interface GeminiCatalog {
 }
 
 const MODELS_TTL_MS = 60_000;
-
-// The translator's endpoints publish an unranked set (model-order.ts imposes order), so this keeps Pro above Flash and
-// makes default the newest frontier id, not whichever the endpoint listed first.
-const toCatalog = (models: readonly GeminiModel[]): { models: GeminiModel[]; default: string } => {
-    const ordered = models.toSorted((left, right) => compareUnrankedModelIds(left.id, right.id));
-    return { models: [...ordered], default: ordered[0]!.id };
-};
 
 const isGeminiModel = (entry: unknown): entry is GeminiModel => {
     const model = entry as { id?: unknown; label?: unknown; inputModalities?: unknown };
@@ -46,8 +39,9 @@ export const createGeminiCatalog = (config: Config, persistPath: string, fetchIm
         }),
         toStored: (models) => [...models],
         seed: SEED_GEMINI_MODELS,
-        fromLive: toCatalog,
-        fromStored: toCatalog,
+        // The translator publishes an unranked set: Pro above Flash, and the newest frontier id the default, not its first.
+        fromLive: unrankedCatalog,
+        fromStored: unrankedCatalog,
     });
     return { models: catalog.models, live: catalog.live };
 };

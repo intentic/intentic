@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Logger } from "pino";
 import { isConversationId } from "@intentic/sandbox-contract";
 import { conversationsRoot, conversationUnit } from "../../store/conversation-units.js";
-import { siblingModule, workerPool } from "../../workers/worker-calls.js";
+import { siblingModule, workerPool } from "@intentic/base/worker-calls";
 import { type FileTranscriptRecord, legacyTranscriptFile, transcriptFile } from "../transcript-record.js";
 import type { Converted } from "./record-convert.js";
 

@@ -164,6 +164,12 @@ export const keyedLock = <K>(): (<T>(key: K, task: () => Promise<T>) => Promise<
     };
 };
 
+// One run at a time, each after the last however it ended: a keyedLock with one key.
+export const serialLock = (): (<T>(task: () => Promise<T>) => Promise<T>) => {
+    const lock = keyedLock<undefined>();
+    return (task) => lock(undefined, task);
+};
+
 // Attempts, waits, attempts again; when attempts run out, throws the last attempt's own error, since that is what a
 // caller can act on.
 export const retry = async <T>(task: () => Promise<T>, delay: number, attempts: number): Promise<T> => {
@@ -331,3 +337,17 @@ export async function* narrate<Value, Frame>(
     await finished;
     yield end(settled);
 }
+
+// An already-aborted signal never fires `addEventListener('abort', …)` (events aren't replayed); this runs the handler
+// synchronously instead and returns an always-safe unregister function.
+export const whenAborted = (signal: AbortSignal | undefined, handler: () => void): (() => void) => {
+    if (signal === undefined) {
+        return (): void => {};
+    }
+    if (signal.aborted) {
+        handler();
+        return (): void => {};
+    }
+    signal.addEventListener("abort", handler, { once: true });
+    return (): void => signal.removeEventListener("abort", handler);
+};

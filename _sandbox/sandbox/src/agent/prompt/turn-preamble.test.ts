@@ -3,7 +3,17 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../../workspace/layout/workspace-setup.js";
 import { SPAWN_NOTE_HEADER } from "../subagents/spawn-note.js";
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
-import { LITERAL_SLASH_NOTE, preambleNotes, stripTurnPreamble, unwrapStoredPrompt, withTurnPreamble } from "./turn-preamble.js";
+import { withRuntimeHistory } from "../providers/runtime-history.js";
+import { withAttachmentNote } from "./attachment-note.js";
+import {
+    composeWirePrompt,
+    LITERAL_SLASH_NOTE,
+    parsePromptEnvelope,
+    parseQueuedPrompt,
+    preambleNotes,
+    stripTurnPreamble,
+    withTurnPreamble,
+} from "./turn-preamble.js";
 
 const notice = `${SETUP_NOTICE_HEADER}\n(a dropped project arrives without them on purpose):\n- intentic: run \`pnpm install\` there first.`;
 const note = `${SPAWN_NOTE_HEADER}\n\nThis sandbox can start full agents on any connected provider from your shell.`;
@@ -122,14 +132,69 @@ test("a re-run unwraps the same whichever way its note and the preamble are nest
     const recorded = withResumeNote(withTurnPreamble([notice], "fix the bug"), RESUME_NOTES.auth);
 
     for (const stored of [sent, recorded]) {
-        const unwrapped = unwrapStoredPrompt(stored);
-        expect(unwrapped.text).toBe("fix the bug");
+        const unwrapped = parsePromptEnvelope(stored);
+        expect(unwrapped.spoken).toBe("fix the bug");
         expect(unwrapped.notes).toMatchObject([{ title: "Dependencies aren't installed yet" }]);
         expect(unwrapped.resume).toMatchObject({ kind: "notice" });
+        expect(unwrapped.queued).toBe(withResumeNote("fix the bug", RESUME_NOTES.auth));
     }
 });
 
 // Unwrapping runs on every message, so it must return unstructured text unchanged.
 test("an ordinary prompt unwraps to itself", () => {
-    expect(unwrapStoredPrompt("fix the bug")).toEqual({ text: "fix the bug", notes: [] });
+    expect(parsePromptEnvelope("fix the bug")).toEqual({ spoken: "fix the bug", queued: "fix the bug", attachments: [], notes: [] });
+    expect(parseQueuedPrompt("fix the bug")).toEqual({ spoken: "fix the bug", queued: "fix the bug", attachments: [], notes: [] });
+});
+
+// The layers as a Claude turn sends them (agent.routes.ts, harness-plan.ts, turn-resume.ts), each composed by its own builder.
+describe("the envelope of a prompt as the daemon composes it", () => {
+    const answered = { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } } as const;
+    const carried = [{ role: "user" as const, text: "pick a store" }];
+    const spawning = { title: "Spawning child agents", text: note };
+
+    test("every layer comes back apart, and the words come back as they were typed and as they were queued", () => {
+        const queued = withResumeNote("the second option", RESUME_NOTES.answered);
+        const stored = composeWirePrompt([spawning], withAttachmentNote(withRuntimeHistory(queued, carried), [`${WORKSPACE_ROOT}/a.png`]));
+        expect(parsePromptEnvelope(stored)).toEqual({
+            spoken: "the second option",
+            queued,
+            attachments: [`${WORKSPACE_ROOT}/a.png`],
+            notes: [spawning],
+            handoff: { history: carried, resume: answered },
+        });
+    });
+
+    test("without a handoff the re-run note is the envelope's own, whichever side of the preamble it sits", () => {
+        const queued = withResumeNote("ship the parser", RESUME_NOTES.restart);
+        const restart = { kind: "notice", text: "The sandbox came back, this turn picked up where it left off." } as const;
+        const expected = { spoken: "ship the parser", queued, attachments: [`${WORKSPACE_ROOT}/a.png`], resume: restart };
+        const sent = withAttachmentNote(queued, [`${WORKSPACE_ROOT}/a.png`]);
+        expect(parsePromptEnvelope(composeWirePrompt([spawning], sent))).toEqual({ ...expected, notes: [spawning] });
+        expect(parseQueuedPrompt(sent)).toEqual({ ...expected, notes: [] });
+    });
+
+    test("an attachment-only message has no words, only its files", () => {
+        const files = [`${WORKSPACE_ROOT}/a.png`];
+        expect(parsePromptEnvelope(withAttachmentNote("", files))).toEqual({ spoken: "", queued: "", attachments: files, notes: [] });
+    });
+
+    // Sent again, it is `<re-run note>\n\n` with the attachment note after it, the one shape where the note starts the rest.
+    test("a re-run of an attachment-only message still has no words, only its files", () => {
+        const files = [`${WORKSPACE_ROOT}/a.png`];
+        const queued = withResumeNote("", RESUME_NOTES.answered);
+        const expected = { spoken: "", queued, attachments: files, notes: [], resume: answered };
+        expect(parsePromptEnvelope(withAttachmentNote(queued, files))).toEqual(expected);
+    });
+
+    // A queued prompt never carries the preamble, so words that merely open like a note are the user's own there.
+    test("a queued prompt opening like a note keeps it as words, where a stored one hands it back as a note", () => {
+        const typed = withTurnPreamble([note], "why does this say that?");
+        expect(parseQueuedPrompt(typed)).toEqual({ spoken: typed, queued: typed, attachments: [], notes: [] });
+        expect(parsePromptEnvelope(typed)).toEqual({
+            spoken: "why does this say that?",
+            queued: "why does this say that?",
+            attachments: [],
+            notes: [spawning],
+        });
+    });
 });

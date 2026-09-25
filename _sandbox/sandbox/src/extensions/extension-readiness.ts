@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { pathExists } from "../path-exists.js";
+import { pathExists } from "@intentic/base/fs";
 import { extensionApiVersion } from "@intentic/extension-api/protocol";
 import { bundleProblem, bundleSpecifiers, type ExtensionManifest } from "@intentic/extension-manifest";
 import { extensionRead } from "../capabilities/extension-dirs.js";

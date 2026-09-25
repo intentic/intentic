@@ -439,7 +439,7 @@ export const SandboxSettingsSchema = z.object({
             "Whether breakage found after the work left its turn is repaired without asking. A land that turns the main tree's check red is repaired once the work queued behind it has been checked too: by the conversation that landed it while it still has the work in mind, otherwise by a fresh conversation handed the failures and the suspects' changes. Main's CI staying red on the same failure gets a fix agent once pushes go quiet, and a failure on the CI fleet itself is re-run once instead. Off, all of it is only reported.",
         ),
     // Where heavy work runs: a runner (the same image, on one of the owner's machines) instead of this sandbox. Keyed by
-    // the heavy-command rule an agent's command matched (platform/resources/heavy-commands.ts), and one entry for the
+    // the heavy-command rule an agent's command matched (system/resources/heavy-commands.ts), and one entry for the
     // check after landing, each naming a runner id. A runner that is offline, outdated or full hands the work back here,
     // which the command's output says. Never pushed to a runner itself (portability/definition.ts), which must not pass
     // work on again.

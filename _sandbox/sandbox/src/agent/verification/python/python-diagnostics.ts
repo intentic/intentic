@@ -3,7 +3,7 @@ import { access, constants } from "node:fs/promises";
 import os from "node:os";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import type { CheckPlacement } from "@intentic/lsp/client";
-import { onPath } from "../../../platform/boot/on-path.js";
+import { onPath } from "../../../system/boot/on-path.js";
 import type { DiagAnswer, DiagRequest } from "../agent-diagnostics.js";
 
 // Python half of the same post-edit-check seam (DiagRunner), a different pair of tools. ruff answers parsing and

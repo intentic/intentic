@@ -3,14 +3,6 @@ import type { CustodyGateway } from "./wallet-custody.js";
 
 /* The wallet row is shared by sandbox funding and owner signing. */
 
-// The chains this signer will mint for, and the token it will mint for on each, the compliance surface as a
-// lookup: USDC only, `exact` scheme only, so every signature is a fixed-amount transfer of a dollar-pegged
-// token the owner's caps are honestly written in.
-export const NETWORKS: Record<string, { readonly chainId: number; readonly asset: string }> = {
-    "eip155:8453": { chainId: 8453, asset: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` },
-    "eip155:84532": { chainId: 84532, asset: `0x036CbD53842c5426634e7929541eC2318f3dCF7e` },
-};
-
 export interface WalletRow {
     readonly id: string;
     readonly address: string;

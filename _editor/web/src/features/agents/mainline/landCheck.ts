@@ -3,7 +3,7 @@ import type { MainlineLand, MainlineRoutingKind, MainlineRun, MainlineStatus, Tu
 // WHAT A CARD SAYS ABOUT ITS WORK NOW THAT NOTHING IS CHECKED INSIDE A TURN: what the main tree's own check made of the
 // conversation's latest land (workspace.mainline), and what its last turn showed of its own work (AgentSummary.proof).
 // Pure functions over plain data, no store, no Vue, like agentStatus.ts: the words belong to the marks that draw these
-// (CardChecks.vue), so a rail row and a board card read one projection and cannot disagree about it.
+// (CardSeal.vue), so a rail row and a board card read one projection and cannot disagree about it.
 
 export type LandCheckKind = `checking` | `waiting` | `passed` | `broke` | `checked-red`;
 
@@ -115,7 +115,7 @@ export interface CardChecks {
 
 // ONE MARK FOR BOTH READINGS: the card's seal (CardSeal.vue), where the worst of them wins. A reader learns four shapes
 // instead of reading up to three phrases on every finished card, and only a red, the one answer that asks for anything,
-// also keeps its words on the card (CardChecks.vue).
+// also keeps its words on the card.
 // `checked-red` is not this card's red, since the failures were laid at other work, but it is no pass either: main could
 // not vouch for the land, so the seal stays open.
 // Main passing does NOT close a seal the turn left open. Main's check is the project's suite, and it says nothing about

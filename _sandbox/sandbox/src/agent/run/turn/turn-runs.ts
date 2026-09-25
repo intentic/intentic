@@ -1,9 +1,18 @@
-import { type AgentEvent, isTurnFact, type ParkedRequest, type TranscriptPatch, type TranscriptRow, type TurnFact } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    isParkKind,
+    isTurnFact,
+    type ParkedRequest,
+    type ParkKind,
+    type TranscriptPatch,
+    type TranscriptRow,
+    type TurnFact,
+} from "@intentic/sandbox-contract";
 import { TranscriptFold, type TurnEnding } from "@intentic/sandbox-contract/transcript-fold";
-import type { ConversationActors } from "../../../agents/actor/conversation-actors.js";
-import { type AttachedRun, type AttachEntry, type AttachHead, type LiveRun, RUN_RETAINED_MS, RUNS } from "../../../agents/actor/conversation-holdings.js";
-import type { BeginRefusal } from "../../../agents/actor/conversation-decide.js";
-import type { AwaitingKind, DomainEvents } from "../../../seams/domain-events.js";
+import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
+import { type AttachedRun, type AttachEntry, type AttachHead, type LiveRun, RUN_RETAINED_MS, RUNS } from "../../../conversations/actor/conversation-holdings.js";
+import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
+import type { DomainEvents } from "../../../seams/domain-events.js";
 import type { SentTurn, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import type { JournalledTurn } from "./turn-journal.js";
 import { recordCommands } from "../../providers/agent-commands.js";
@@ -16,8 +25,8 @@ import { type FrameBacklog, frameBacklog } from "../../../seams/frame-backlog.js
 // The two moments a turn's starter might want reported: when it parks and when it settles. This module knows only WHEN;
 // the starter owns the wording and whether to send at all.
 export interface TurnObserver {
-    // Agent waits on the user (plan, question, permission, browser/terminal handover); may fire several times.
-    readonly awaiting: (kind: AwaitingKind) => void;
+    // Agent waits on the user on any card it can park on; may fire several times.
+    readonly awaiting: (kind: ParkKind) => void;
     // Run ended, exactly once; `error` only for a real failure, a /agent/stop abort settles as a clean "done".
     readonly settled: (outcome: { readonly ok: boolean; readonly error?: string }) => void;
 }
@@ -381,14 +390,9 @@ export function startTurnRun(
                     recordCommands(provider, event.items);
                 }
                 // Frames that park the turn on the user; they keep the run's fetch open, so it still looks live.
-                if (
-                    event.kind === "plan" ||
-                    event.kind === "question" ||
-                    event.kind === "permission" ||
-                    event.kind === "browser_help" ||
-                    event.kind === "terminal_help"
-                ) {
-                    tell((target) => target.awaiting(event.kind));
+                if (isParkKind(event.kind)) {
+                    const awaiting = event.kind;
+                    tell((target) => target.awaiting(awaiting));
                 }
                 // Restorable cards ride the journal entry while up (handovers excluded) and come off as each resolves.
                 if (event.kind === "plan" || event.kind === "question" || event.kind === "permission") {

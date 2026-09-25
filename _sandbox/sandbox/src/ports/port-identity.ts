@@ -1,9 +1,8 @@
-import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX, panelKeyOf, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
 import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.js";
-import { PANEL_SESSION_PREFIX } from "../terminal/terminal-session.js";
 import type { ListeningPort } from "./port-scan.js";
-import { SANDBOX_INSTALL_DIR } from "../platform/boot/exec-bits.js";
+import { SANDBOX_INSTALL_DIR } from "../system/boot/exec-bits.js";
 
 // Turns scan evidence (argv, cwd, session) into a name, sentence and origin for each listener. Lives here, not in the
 // view, since the facts that attribute a port (panel key to extension index, workspace root) exist only here.
@@ -162,10 +161,6 @@ const extensionTitle = (extensionId: string, processName: string): string => {
 
 // The container-side port from docker-proxy's argv; the host-side number is already the row's own port.
 const containerPort = (command: string): string | undefined => /-container-port\s+(\d+)/.exec(command)?.[1];
-
-// Panel key carried by a panel-<key> session, for sessions the process manager owns.
-const panelKeyOf = (session: string | undefined): string | undefined =>
-    session?.startsWith(PANEL_SESSION_PREFIX) === true ? session.slice(PANEL_SESSION_PREFIX.length) : undefined;
 
 export interface PortAttribution {
     readonly workspaceRoot: string;

@@ -4,12 +4,16 @@
 // humanizeModelId, the rule the app's labels share.
 import { compareUnrankedModelIds, humanizeModelId } from "@intentic/sandbox-contract";
 
+// A set its source publishes unranked, as a catalog: ordered by compareUnrankedModelIds, its head the default.
+export const unrankedCatalog = <M extends { readonly id: string }>(models: readonly M[]): { models: M[]; default: string } => {
+    const ordered = models.toSorted((left, right) => compareUnrankedModelIds(left.id, right.id));
+    return { models: ordered, default: ordered[0]?.id ?? "" };
+};
+
 // Bare ids → the wire shape, for providers whose discovery returns nothing but ids. Neither publishes a ranking, so the
 // app orders them (compareUnrankedModelIds) and takes the head as `default`; callers with richer data order their own.
-export const idCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
-    const ordered = ids.toSorted(compareUnrankedModelIds);
-    return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
-};
+export const idCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } =>
+    unrankedCatalog(ids.map((id) => ({ id, label: humanizeModelId(id) })));
 
 export const authHeader = (token: string): Record<string, string> => ({ authorization: `Bearer ${token}` });
 

@@ -1,5 +1,5 @@
 import type { AgentRequest, TurnHooks } from "../../agent/providers/agent-request.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { vendorSubject } from "../../guard/command-guard.js";
 import { conversationTainted } from "../../guard/turn-taint.js";
 import { memoryFleet } from "../../testing.js";

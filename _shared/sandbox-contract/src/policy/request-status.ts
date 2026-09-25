@@ -1,4 +1,4 @@
-import type { RequestField, TranscriptRequests, TranscriptRow } from "../events/transcript.js";
+import { REQUEST_FIELDS, type RequestField, type TranscriptRequests, type TranscriptRow } from "../events/transcript.js";
 import type { AgentReply } from "../schemas/providers/plan-limits.js";
 
 // How a reply settles the card it answers: one rule used both by the fold and by a chat freezing its own card
@@ -65,16 +65,7 @@ export const settledRequests = (cards: TranscriptRequests, reply: AgentReply | u
 export const cancelledRequests = (cards: TranscriptRequests): TranscriptRequests => {
     const out: Cards = {};
     let changed = false;
-    for (const field of [
-        "plan",
-        "question",
-        "permission",
-        "browserHelp",
-        "terminalHelp",
-        "capabilityOffer",
-        "paymentOffer",
-        "credentialOffer",
-    ] as const) {
+    for (const field of REQUEST_FIELDS) {
         const card = cards[field];
         if (card === undefined) {
             continue;

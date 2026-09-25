@@ -3,7 +3,7 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { type HarnessRequest, runAgent } from "./agent.js";
 import type { QueryFn } from "./sdk-stream.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
 // One fleet's actors, and the cards a turn here parks in them.

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { type HarnessRequest, runAgent } from "../src/agent/run/agent.js";
 import { sumUsage, type UsageFrame } from "../src/agent/run/turn/turn-usage.js";
-import { parkedCards } from "../src/agents/actor/parked-cards.js";
+import { parkedCards } from "../src/conversations/actor/parked-cards.js";
 import { memoryFleet } from "../src/testing.js";
 import { type BenchTask, taskFor } from "./agent-tasks.js";
 

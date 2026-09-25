@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { z } from "zod";
+import { bearerFrom } from "../auth/auth.js";
 import { enrollments, pairings, type Presented } from "./enrollment.js";
 import type { PeerStoreSpec } from "./peer.js";
 
@@ -10,6 +11,12 @@ export const refusePresented = (c: Context, refused: Exclude<Presented, { readon
     refused.kind === "unreadable"
         ? c.json({ error: `this sandbox cannot read its enrollment manifest right now (${refused.detail})` }, 503)
         : c.json({ error: "unauthorized" }, 401);
+
+// A bearer door's caller: the enrolled peer's id, or the answer that refuses whoever else is presenting.
+export const bearerPeer = async (store: Pick<PeerStore<unknown>, "verify">, c: Context): Promise<string | Response> => {
+    const caller = await store.verify(bearerFrom(c.req.header("authorization")));
+    return caller.kind === "enrolled" ? caller.id : refusePresented(c, caller);
+};
 
 // Credential half of a peer door: enrolled once, then a durable per-peer token on every reconnect; binds a pairing to
 // one id so a redeemed token can only become the peer meant. Lives on /history, not /work (which the agent reads and

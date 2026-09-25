@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // Regression guard for `undefined is not an object (evaluating 'W.type')`: Grok's partial markdown re-renders every
 // delta, and a throw mid-render blanks the bubble. Mocked daemon; frames stress mid-table/fence/list states.
 
-// Mirrors grok-agent.ts's frames, split so each accumulated prefix is invalid, partial markdown.
+// Mirrors runtimes/opencode/opencode-agent.ts's frames, split so each accumulated prefix is invalid, partial markdown.
 const DELTA_CHUNKS = [
     "Yes, I'm here and wired into chat. Quick status:\n\n| Piece | St", // mid table header
     "ate |\n|-------|---", // mid separator row

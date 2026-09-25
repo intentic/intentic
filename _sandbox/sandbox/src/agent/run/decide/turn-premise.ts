@@ -9,7 +9,7 @@ import {
     capabilitiesOf,
 } from "@intentic/sandbox-contract";
 import { conversationFence } from "../../../areas/area-scope.js";
-import { compactedSinceLastTurn, type PersistedAgent } from "../../../agents/registry/agents-store.js";
+import { compactedSinceLastTurn, type PersistedAgent } from "../../../conversations/registry/agents-store.js";
 import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
 import type { GuidanceVariant } from "../../prompt/guidance.js";
 import { type TurnBriefing, briefingOf } from "../../prompt/turn-briefing.js";

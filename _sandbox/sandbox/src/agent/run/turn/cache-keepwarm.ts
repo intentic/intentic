@@ -9,8 +9,8 @@ import {
     SPENT_UTILIZATION,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
-import type { Holding } from "../../../agents/actor/conversation-holdings.js";
-import { type IsolationAnchor, startAnchor } from "../../../agents/worktrees/isolation.js";
+import type { Holding } from "../../../conversations/actor/conversation-holdings.js";
+import { type IsolationAnchor, startAnchor } from "../../../conversations/worktrees/isolation.js";
 import { ensureFreshToken, holdAccount } from "../../../runtimes/claude/claude-credentials.js";
 import { opt } from "../../../opt.js";
 import { serviceability, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";

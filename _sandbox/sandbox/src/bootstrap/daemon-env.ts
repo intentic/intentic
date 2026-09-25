@@ -3,8 +3,8 @@ import type { Logger } from "pino";
 import type { Config } from "../env.config.js";
 import { createLogger } from "../logger.js";
 import { logsRoot, terminalLogsDir } from "../logs/log-files.js";
-import { claimBootMarker } from "../platform/boot/boot-marker.js";
-import type { ProfileTraits } from "../platform/boot/profile.js";
+import { claimBootMarker } from "../system/boot/boot-marker.js";
+import type { ProfileTraits } from "../system/boot/profile.js";
 
 // Runs before the first service exists, so nothing here may depend on one.
 

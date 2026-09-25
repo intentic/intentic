@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { parentPid } from "../platform/resources/proc-stat.js";
+import { parentPid } from "../system/resources/proc-stat.js";
 import { scanListeningPorts, withOwningSessions } from "./port-scan.js";
 
 // procfs fixture: net/tcp{,6} tables plus /proc/<pid>/{fd,cmdline,cwd}; fd entries are dangling symlinks whose target

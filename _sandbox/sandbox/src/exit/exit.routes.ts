@@ -1,9 +1,8 @@
 import { exitContract, type IntenticLine } from "@intentic/sandbox-contract";
-import { implement, ORPCError } from "@orpc/server";
+import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { tunnelEntry } from "../tunnel/tunnel-links.js";
-import { heldStream } from "../tunnel/tunnel-route.js";
+import { heldStream, tunnelEntryOr404 } from "../tunnel/tunnel-route.js";
 import { exitDrivers } from "./exit-drivers.js";
 import { checkExit, type ExitEntry, exitLink, exitLinks, rotateExit, startExit, stopExit } from "./exit-links.js";
 
@@ -18,13 +17,7 @@ export const createExitRoutes = (services: ExitRoutesDeps) => {
     // One move per exit at a time, or a losing verification could report a switch that never happened.
     const moving = new Set<string>();
 
-    const entryOf = async (id: string): Promise<ExitEntry> => {
-        const entry = await tunnelEntry(services.capabilities, "exit", id);
-        if (entry === undefined) {
-            throw new ORPCError("NOT_FOUND", { message: `no exit capability with that id` });
-        }
-        return entry;
-    };
+    const entryOf = (id: string): Promise<ExitEntry> => tunnelEntryOr404(services.capabilities, "exit", id);
 
     // start / use / rotate differ only in which generator they run.
     async function* move(id: string, run: (entry: ExitEntry) => AsyncGenerator<IntenticLine>): AsyncGenerator<IntenticLine> {

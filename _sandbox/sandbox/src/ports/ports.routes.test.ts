@@ -6,7 +6,7 @@ import { workspacePaths } from "../workspace/workspace.js";
 import { memoryFleet, testConfig } from "../testing.js";
 import { errorCode, routesClient } from "../harness/route-client.testing.js";
 import { fakeServiceProcesses } from "../harness/route-fakes.testing.js";
-import { handJobOver, openBackgroundJob, portJobOf } from "../agent/tools/background-jobs.js";
+import { handJobOver, openBackgroundJob, portJobOf } from "../agent/tools/jobs/background-jobs.js";
 import { createPortForwards } from "./port-forwards.js";
 import { createPortsRoutes, type PortsRoutesDeps } from "./ports.routes.js";
 

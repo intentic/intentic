@@ -1,12 +1,12 @@
-import { routingFor } from "../../providers/routing.js";
+import { routingFor } from "../../providers/accounts/routing.js";
 import { randomUUID } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
 import { MENTION_LIMIT, type MessageReceipt, profileOf } from "@intentic/sandbox-contract";
-import type { BeginRefusal } from "../../../agents/actor/conversation-decide.js";
-import { type LiveRun, liveRunOf, turnRunOf } from "../../../agents/actor/conversation-holdings.js";
-import type { QueuedItem } from "../../../agents/actor/conversation-queue.js";
-import { cardsParkedOn } from "../../../agents/actor/parked-cards.js";
-import { conversationProfile, worktreeOf } from "../../../agents/registry/agents-store.js";
+import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
+import { type LiveRun, liveRunOf, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
+import type { QueuedItem } from "../../../conversations/actor/conversation-queue.js";
+import { cardsParkedOn } from "../../../conversations/actor/parked-cards.js";
+import { conversationProfile, worktreeOf } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { Said, Steer, TurnInput, TurnStarter, Unsaid, Unsteered } from "../../../seams/turn-starter.js";
@@ -161,7 +161,7 @@ export const together = (items: readonly QueuedItem[]): readonly QueuedItem[] =>
 };
 
 // Whether a drained batch goes on in the conversation's session: only on the runtime and account the session was minted
-// on, by the one routing rule (agent/providers/routing.ts).
+// on, by the one routing rule (agent/providers/accounts/routing.ts).
 const continuesSession = (services: Services, routing: Pick<Turn, "conversationId" | "agent" | "harness" | "account">): boolean =>
     routingFor(services.agents.entry(routing.conversationId)?.profile, routing).continues;
 

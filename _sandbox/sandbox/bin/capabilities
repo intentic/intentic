@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The in-sandbox capability command — how an agent discovers what this sandbox can be connected to and asks
 // the owner, in chat, to connect something the task needs. The ASK is the whole of it: `request` parks on
-// the daemon while a card goes up in the owner's chat (capabilities/capability-offer.ts) titled with the
+// the daemon while a card goes up in the owner's chat (capabilities/offers/capability-offer.ts) titled with the
 // catalog's own words, and the call is answered by how the card settles — connected (the setup finished
 // while you waited; continue with it), skipped (continue without it), or expired. The agent never connects
 // anything itself and never sees a credential — the owner's setup happens in their own UI.

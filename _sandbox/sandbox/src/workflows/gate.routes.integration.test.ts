@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { type AgentEvent, type AgentTurn, LOOP_DIR, SandboxSettingsSchema, type Workflow } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
-import { memoryDoorTokens } from "../auth/door-tokens.js";
+import { memoryDoorTokens } from "../auth/tokens/door-tokens.js";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "../loops/loops-store.js";
 import { createGateRoute } from "./gate.routes.js";

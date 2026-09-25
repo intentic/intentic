@@ -23,7 +23,7 @@ import { opt } from "../../opt.js";
 import { type CacheCreationBuckets, ttlFromCacheCreation } from "./turn/prompt-cache.js";
 import { promptFingerprint } from "./prompt-fingerprint.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../subagents/subagents.js";
-import { noteJobNotice, noteJobShell, noteModelRequest } from "../tools/background-jobs.js";
+import { noteJobNotice, noteJobShell, noteModelRequest } from "../tools/jobs/background-jobs.js";
 import { TaskChecklist } from "./task-checklist.js";
 import type { ChecklistSeed } from "./task-store.js";
 import {

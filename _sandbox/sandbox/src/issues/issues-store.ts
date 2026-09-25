@@ -1,3 +1,4 @@
+import { keyedLock } from "@intentic/base/async";
 import { type Issue, type IssueReport, IssueSchema, type IssueStatus, type IssueSummary } from "@intentic/sandbox-contract";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonDir } from "../store/json-dir.js";
@@ -105,16 +106,7 @@ export const fileIssuesStore = (dir: string): IssuesStore => {
     };
 
     // One chain per fingerprint, dropped once drained, so concurrent arrivals of one bug are never undercounted.
-    const chains = new Map<string, Promise<unknown>>();
-    const serialize = <T>(id: string, job: () => Promise<T>): Promise<T> => {
-        const tail = (chains.get(id) ?? Promise.resolve()).then(job, job);
-        chains.set(id, tail);
-        void tail.then(
-            () => chains.get(id) === tail && chains.delete(id),
-            () => chains.get(id) === tail && chains.delete(id),
-        );
-        return tail;
-    };
+    const serialize = keyedLock<string>();
 
     // Cached file count so the ceiling costs one directory read, not one per insert; relearned after a restart.
     let known: number | undefined;

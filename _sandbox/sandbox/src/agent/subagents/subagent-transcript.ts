@@ -1,6 +1,6 @@
 import type { TranscriptRow } from "@intentic/sandbox-contract";
-import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
-import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
+import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { sdk } from "../../engines/claude-sdk.js";
 import type { TranscriptAgent } from "../../sessions/agent-transcript.js";
 import { restoredSessionMessages } from "../../sessions/sessions.js";

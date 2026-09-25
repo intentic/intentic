@@ -1,16 +1,15 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import { freePort } from "@intentic/base/fs";
+import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX, PANEL_SESSION_PREFIX, panelSession } from "@intentic/sandbox-contract/session-names";
 import { forkedExec } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { endSession } from "../seams/session-processes.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { SHELL } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
-import { PANEL_SESSION_PREFIX } from "../terminal/terminal-session.js";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
 import { applyWorkload, type WorkloadClass } from "../workload/workload-class.js";
-import { freePort } from "./free-port.js";
 
 export interface ProcessSpec {
     // Runs in a detached tmux session in `cwd`, with PORT (manager-assigned) and `env` set.
@@ -21,7 +20,7 @@ export interface ProcessSpec {
     readonly portEnv?: readonly string[];
     // A one-shot job reports done once its shell returns to prompt; default panels run until session end.
     readonly oneShot?: true;
-    // What the pane's shell and everything it runs are to the sandbox (platform/resources/workload-class.ts); absent is
+    // What the pane's shell and everything it runs are to the sandbox (workload-class.ts); absent is
     // a panel.
     readonly workload?: Extract<WorkloadClass, "panel" | "install" | "toolchain">;
 }
@@ -36,10 +35,6 @@ export type PanelLaunch = "launching" | "installing" | "starting" | "exited";
 // it says nothing about completion.
 const installFinished = (cwd: string): boolean =>
     existsSync(join(cwd, "node_modules", ".pnpm", "lock.yaml")) || existsSync(join(cwd, "node_modules", ".package-lock.json"));
-export const panelSession = (key: string): string => `${PANEL_SESSION_PREFIX}${key}`;
-// Inverse of panelSession; undefined for a name that isn't a panel session at all.
-export const panelKeyOf = (session: string): string | undefined =>
-    session.startsWith(PANEL_SESSION_PREFIX) ? session.slice(PANEL_SESSION_PREFIX.length) : undefined;
 
 // The tmux side of the manager, injectable so tests need no tmux binary. `states` reports every pane's foreground
 // command in one call; absence means dead, so a listing that failed throws rather than answering empty.

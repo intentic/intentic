@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import type { EngineId } from "@intentic/sandbox-contract";
-import { resolveOnPath } from "../platform/boot/on-path.js";
+import { resolveOnPath } from "../system/boot/on-path.js";
 import { engineDescriptor, type EnginePaths } from "./engine-descriptors.js";
 import { engineVersionDir, isQuarantined, readEngineState } from "./engine-store.js";
 
@@ -60,8 +60,13 @@ export const resolveEngine = (id: EngineId, now: number = Date.now()): Promise<R
 
 // The store's binary, the image's copy on PATH, or nothing; a core image with no provider packs is a known, explainable
 // absence rather than a bare name that ENOENTs on spawn.
-export const engineBinary = async (id: EngineId, onPathName: string): Promise<string | undefined> =>
-    (await resolveEngine(id)).paths.binPath ?? resolveOnPath(onPathName);
+export const engineBinary = async (id: EngineId): Promise<string | undefined> => {
+    const command = engineDescriptor(id).command;
+    return (await resolveEngine(id)).paths.binPath ?? (command === undefined ? undefined : resolveOnPath(command));
+};
+
+// Whether a spawned engine has a copy here to run: an Environment-card install counts as much as the image's own.
+export const engineReady = async (id: EngineId): Promise<boolean> => (await engineBinary(id)) !== undefined;
 
 // Drops the cache immediately: this process just moved the pointer itself, or a test suite is switching fixture trees.
 export const forgetEngineResolution = (id?: EngineId): void => {

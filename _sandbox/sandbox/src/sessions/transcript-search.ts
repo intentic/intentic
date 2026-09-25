@@ -1,8 +1,6 @@
 import { sdk } from "../engines/claude-sdk.js";
 import type { MatchSnippet, TranscriptRow, Speaker } from "@intentic/sandbox-contract";
-import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
-import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
-import { stripTurnPreamble } from "../agent/prompt/turn-preamble.js";
+import { parsePromptEnvelope } from "../agent/prompt/turn-preamble.js";
 
 // Only spoken text, a side's own words, not tool calls, tool output, or protocol wrapping (preambles, attachment
 // notes), is what the fleet filter and history search match on. The durable extraction lives in search-index.ts; this
@@ -59,17 +57,12 @@ const spoken = (text: string, speaker: Speaker): SpokenLine[] => {
     return [{ text: Buffer.from(collapsed, "utf8").toString("utf8"), speaker }];
 };
 
-// A stored user message, cleaned of daemon protocol. Unfolds a runtime handoff's embedded history into its own
-// user/agent lines rather than leaving it as one opaque block.
+// A stored user message as its turn was queued, a re-run's note included; a runtime handoff's history unfolds into its own lines.
 const userMessageLines = (text: string): SpokenLine[] => {
-    const stripped = stripAttachmentNote(stripTurnPreamble(text)).text;
-    const runtime = parseRuntimeHistory(stripped);
-    if (runtime === undefined) {
-        return spoken(stripped, "user");
-    }
+    const { queued, handoff } = parsePromptEnvelope(text);
     return [
-        ...runtime.history.flatMap((message) => spoken(message.text, message.role === "user" ? "user" : "agent")),
-        ...spoken(runtime.prompt, "user"),
+        ...(handoff?.history ?? []).flatMap((message) => spoken(message.text, message.role === "user" ? "user" : "agent")),
+        ...spoken(queued, "user"),
     ];
 };
 

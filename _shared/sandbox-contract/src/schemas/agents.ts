@@ -56,7 +56,7 @@ export const AgentAttentionSchema = z.object({
     plan: z.boolean().describe("It has proposed a plan and is waiting for a yes."),
     question: z.boolean().describe("It has asked you something."),
     permission: z.boolean().describe("It wants to use a tool it needs permission for."),
-    // A missing capability (capabilities/capability-offer.ts); lets the lane say "setup needed" rather than a generic
+    // A missing capability (capabilities/offers/capability-offer.ts); lets the lane say "setup needed" rather than a generic
     // pause.
     capability: z.boolean().describe("It needs something connected that is not connected yet."),
     // A gated credential parked on a named person's click; the one pause the board's reader may not be able to clear
@@ -411,7 +411,7 @@ export const AgentSummarySchema = z.object({
             "When somebody last opened it, in milliseconds. Newer activity than this is what makes it unread. Kept by the sandbox rather than by a browser, so clearing site data or picking up a phone does not resurrect every badge.",
         ),
     attention: AgentAttentionSchema.describe("Which kinds of waiting-for-you it is doing."),
-    // Only the causes that still hold, re-read live (agents/land/standing.ts), never the stored report's own list: a
+    // Only the causes that still hold, re-read live (conversations/land/standing.ts), never the stored report's own list: a
     // blocker the user has since cleared is not something to offer them an action about.
     conflictCauses: z
         .array(LandConflictReasonSchema)
@@ -514,7 +514,7 @@ export const AgentSummarySchema = z.object({
                 startedAt: z.number().describe("When it started, in milliseconds."),
                 endedAt: z.number().optional().describe("When the command exited, in milliseconds. Absent while it runs."),
                 exitCode: z.number().int().optional().describe("The code it exited with. Absent while it runs, or when its exit left none."),
-                // What the turn that left it running decided about it (agent/tools/job-fates.ts): one of these, or none
+                // What the turn that left it running decided about it (agent/tools/jobs/job-fates.ts): one of these, or none
                 // while its turn is still going.
                 watch: z
                     .string()

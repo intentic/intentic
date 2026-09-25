@@ -1,6 +1,6 @@
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { type StarterReadiness, waitForStarter } from "../platform/boot/prewarm.js";
+import { type StarterReadiness, waitForStarter } from "../system/boot/prewarm.js";
 import { answers } from "../ports/port-probe.js";
 import { runAutostart } from "../scaffold/autostart.js";
 import { appPanelKey } from "../workspace/layout/app-previews.js";

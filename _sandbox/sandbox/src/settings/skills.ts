@@ -1,9 +1,9 @@
-import { readdir, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { statePath } from "../state-paths.js";
 import type { Services } from "../composition.js";
 import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../store/loaded-skills.js";
-import { parseSkillFile, skillDocument } from "../skill-file.js";
+import { parseSkillFile, scanSkillFolders, SKILL_FILE, skillDocument } from "../skill-file.js";
 
 // Baked-tool skills gate a tool already on PATH; writing its SKILL.md surfaces it, so adding one is a registry entry
 // here plus its name in the settings `skills` array. That array names baked tools only: an own skill is the owner's
@@ -111,10 +111,13 @@ export const isBakedSkill = (name: string): boolean => name in SKILLS;
 // A baked tool's skill text as shipped; the Skills list reads a switched-off tool's description from this same string.
 export const bakedSkillText = (name: string): string | undefined => SKILLS[name];
 
+// The two seams every skill read and write here goes through.
+type SkillSeams = Pick<Services, "files" | "workspace">;
+
 // Where the owner's own skills are kept, switched on or off.
 const ownSkillsRoot = (root: string): string => statePath(root, ".intentic/config/skills/");
 export const ownSkillDir = (root: string, name: string): string => join(ownSkillsRoot(root), name);
-const ownSkillFile = (root: string, name: string): string => join(ownSkillDir(root, name), "SKILL.md");
+const ownSkillFile = (root: string, name: string): string => join(ownSkillDir(root, name), SKILL_FILE);
 
 export interface OwnSkill {
     readonly name: string;
@@ -124,7 +127,7 @@ export interface OwnSkill {
 
 // One of the owner's skills, as stored; undefined when the directory is missing or its file unreadable. Callers turn
 // that into a 404, not an empty skill.
-export const readOwnSkill = async (services: Services, name: string): Promise<OwnSkill | undefined> => {
+export const readOwnSkill = async (services: SkillSeams, name: string): Promise<OwnSkill | undefined> => {
     const text = await services.files.read(ownSkillFile(services.workspace.root, name));
     if (text === undefined) {
         return undefined;
@@ -136,34 +139,25 @@ export const readOwnSkill = async (services: Services, name: string): Promise<Ow
 
 // Every skill the owner has written. A directory with no readable SKILL.md is skipped, not listed empty: it's
 // half-written, not a skill that does nothing.
-export const listOwnSkills = async (services: Services): Promise<OwnSkill[]> => {
-    const entries = await readdir(ownSkillsRoot(services.workspace.root), { withFileTypes: true }).catch(() => []);
-    const skills: OwnSkill[] = [];
-    for (const entry of entries.filter((candidate) => candidate.isDirectory()).toSorted((a, b) => a.name.localeCompare(b.name))) {
-        const skill = await readOwnSkill(services, entry.name);
-        if (skill !== undefined) {
-            skills.push(skill);
-        }
-    }
-    return skills;
-};
+export const listOwnSkills = (services: SkillSeams): Promise<OwnSkill[]> =>
+    scanSkillFolders(ownSkillsRoot(services.workspace.root), (path) => services.files.read(path));
 
-export const writeOwnSkill = async (services: Services, skill: OwnSkill): Promise<void> => {
+export const writeOwnSkill = async (services: SkillSeams, skill: OwnSkill): Promise<void> => {
     await services.files.write(ownSkillFile(services.workspace.root, skill.name), skillDocument(skill.name, skill.description, skill.body));
 };
 
 // Deletes the durable copy and the loaded one together; a loaded copy left behind would stay in the agent's context.
-export const removeOwnSkill = async (services: Services, name: string): Promise<void> => {
+export const removeOwnSkill = async (services: SkillSeams, name: string): Promise<void> => {
     await rm(ownSkillDir(services.workspace.root, name), { recursive: true, force: true });
     await removeLoadedSkill(services.files, services.workspace.root, name);
 };
 
 // Whether the agent can reach an own skill: its loaded copy is the only account of that, never the settings list.
-export const ownSkillOn = async (services: Services, name: string): Promise<boolean> =>
+export const ownSkillOn = async (services: SkillSeams, name: string): Promise<boolean> =>
     (await services.files.read(loadedSkillFile(services.workspace.root, name))) !== undefined;
 
 // Writes or removes the loaded copy of a stored skill; the stored copy is never touched, so off keeps the text.
-export const switchOwnSkill = async (services: Services, skill: OwnSkill, on: boolean): Promise<void> => {
+export const switchOwnSkill = async (services: SkillSeams, skill: OwnSkill, on: boolean): Promise<void> => {
     if (on) {
         await writeLoadedSkill(services.files, services.workspace.root, skill.name, skillDocument(skill.name, skill.description, skill.body));
         return;
@@ -173,7 +167,7 @@ export const switchOwnSkill = async (services: Services, skill: OwnSkill, on: bo
 
 // Writes every baked tool named in `enabled` and removes the rest; a name that is no baked tool is ignored (it may
 // belong to an extension). Never reaches an own skill: a reconcile cannot create or delete the owner's files.
-export const reconcileBakedSkills = async (services: Services, enabled: readonly string[]): Promise<void> => {
+export const reconcileBakedSkills = async (services: SkillSeams, enabled: readonly string[]): Promise<void> => {
     for (const [name, body] of Object.entries(SKILLS)) {
         if (enabled.includes(name)) {
             await writeLoadedSkill(services.files, services.workspace.root, name, body);

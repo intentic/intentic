@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { createServer, connect as tcpConnect } from "node:net";
 import type { Readable } from "node:stream";
 import { pollUntil } from "@intentic/base/async";
+import { freePort } from "@intentic/base/fs";
 import { Client } from "ssh2";
 
 export interface SshResult {
@@ -86,19 +87,6 @@ interface CloudflaredForwarder {
     readonly stderr: () => string;
 }
 
-// Binds a loopback socket on port 0 to reserve a free port, then releases it for cloudflared to claim; a small race
-// window is acceptable.
-const reserveLocalPort = (): Promise<number> =>
-    new Promise((resolve, reject) => {
-        const probe = createServer();
-        probe.once("error", reject);
-        probe.listen(0, "127.0.0.1", () => {
-            const address = probe.address();
-            const port = typeof address === "object" && address !== null ? address.port : 0;
-            probe.close(() => resolve(port));
-        });
-    });
-
 // One TCP connect attempt to a loopback port; resolves whether it accepted.
 const tcpProbe = (port: number): Promise<boolean> =>
     new Promise((resolve) => {
@@ -133,7 +121,8 @@ const waitForPort = async (port: number, failure: () => string | undefined, time
 // Starts `cloudflared access tcp` for `hostname` and resolves once its local listener accepts; rejects if cloudflared
 // is missing from PATH or the listener never comes up.
 const startCloudflaredForwarder = async (hostname: string): Promise<CloudflaredForwarder> => {
-    const port = await reserveLocalPort();
+    // Released again for cloudflared to claim; the small race window until it binds is acceptable.
+    const port = await freePort();
     const child = spawn("cloudflared", ["access", "tcp", "--hostname", hostname, "--url", `127.0.0.1:${port}`], {
         stdio: ["ignore", "ignore", "pipe"],
     });

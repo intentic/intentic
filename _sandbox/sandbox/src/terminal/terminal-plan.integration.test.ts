@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWsTickets } from "../auth/ws-tickets.js";
+import { createWsTickets } from "../auth/tokens/ws-tickets.js";
 import { planTerminal, type TerminalPlanDeps } from "./terminal-plan.js";
 
 // Node's whole say over a terminal the front serves: who may open it, and which session, directory or log it opens onto.

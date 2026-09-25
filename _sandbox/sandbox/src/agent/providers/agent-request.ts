@@ -8,14 +8,14 @@ import type {
     SystemPromptMode,
     TurnNote,
 } from "@intentic/sandbox-contract";
-import type { TurnPlacement } from "../../agents/worktrees/isolation.js";
+import type { TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import type { AccountsServerFactory } from "../../browser/tools/accounts-tools.js";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
 import type { JsExecutionPlan } from "../../execution/js-runtime.js";
 import type { CommandGuardOptions } from "../../guard/command-guard.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { PersonaScope } from "../../personas/persona-scope.js";
-import type { HeavyCommands } from "../../platform/resources/heavy-commands.js";
+import type { HeavyCommands } from "../../system/resources/heavy-commands.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
@@ -25,10 +25,10 @@ import type { ChildSupervisor } from "../subagents/children.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import type { DirtyFiles } from "../tools/agent-shell-edits.js";
 import type { AgentTool } from "../tools/agent-tools.js";
-import type { BackgroundJobSeed } from "../tools/background-jobs.js";
+import type { BackgroundJobSeed } from "../tools/jobs/background-jobs.js";
 import type { EditReviewer } from "../verification/agent-diagnostics.js";
 import type { TurnAllowance } from "./harness-credentials.js";
-import type { ParkedCards } from "../../agents/actor/parked-cards.js";
+import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 
 // The one request every runtime is handed, in five groups: what to say and where (spec), what may happen (policy), what
 // is mounted (tools), what authenticates it (credential), and what the daemon answers while it runs (hooks). A runtime
@@ -45,7 +45,7 @@ export interface TurnSpec {
     // Conversation this turn belongs to, for filing its subagents under the parent. Absent: unregistered.
     readonly conversationId?: string;
     // How deep that conversation sits under the spawns above it (0 or absent for one nobody spawned): the runtime's
-    // OOM rank, so a child goes before the parent supervising it (platform/resources/workload-class.ts).
+    // OOM rank, so a child goes before the parent supervising it (workload-class.ts).
     readonly spawnDepth?: number;
     // Working dir the agent edits, the workspace root; under `isolation` it's the root as seen inside the namespace.
     readonly cwd: string;

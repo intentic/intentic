@@ -1,5 +1,5 @@
 import type { CredentialGateKind, CredentialLane, CredentialOffer } from "@intentic/sandbox-contract";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, whyOf } from "../agents/actor/card-offers.js";
+import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, whyOf } from "../conversations/actor/card-offers.js";
 import { credentialUse } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import type { CredentialGatesStore } from "./credential-gates.js";
@@ -15,8 +15,6 @@ const DETAIL_MAX = 80;
 export interface CredentialGateDeps extends CardDeps {
     readonly gates: CredentialGatesStore;
     readonly grants: CredentialGrants;
-    // Notifies the owner's devices when the card goes up; optional (tests need no push stack) and fire-and-forget.
-    readonly notify?: (conversationId: string) => void;
     readonly deadlineMs?: number;
     readonly now?: () => number;
 }
@@ -128,24 +126,23 @@ export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate =
                     ? undefined
                     : `Only ${approvers} can release "${gate.subject}".`;
             },
-            ...(deps.notify === undefined ? {} : { notify: deps.notify }),
+            approves: (reply) => reply.approve,
             signal: input.signal,
             deadlineMs: deps.deadlineMs ?? OFFER_DEADLINE_MS,
         });
-        const { reply, caller } = raised;
+        const { caller } = raised;
         const receipt = (outcome: "released" | "refused", approvedBy?: string): void =>
             raised.say({ kind: "credential_receipt", requestId: raised.requestId, outcome, ...(approvedBy !== undefined ? { approvedBy } : {}) });
-        if (!reply.approve) {
-            // Told apart by whether a person answered; only a real decline writes a receipt, since the feature is about
-            // attributing a decision to a person.
-            if (!raised.answered) {
-                return {
-                    allow: false,
-                    reason:
-                        `The request to release "${gate.subject}" went unanswered and expired: it was not used. Only ${approvers} can release it. ` +
-                        `Continue without it and say what you left undone; ask again only if one of them is around.`,
-                };
-            }
+        if (raised.decision === "unanswered") {
+            return {
+                allow: false,
+                reason:
+                    `The request to release "${gate.subject}" went unanswered and expired: it was not used. Only ${approvers} can release it. ` +
+                    `Continue without it and say what you left undone; ask again only if one of them is around.`,
+            };
+        }
+        if (raised.decision === "declined") {
+            // Only a real decline writes a receipt, since the feature is about attributing a decision to a person.
             receipt("refused", caller?.email);
             return {
                 allow: false,

@@ -21,7 +21,7 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import type { Services } from "../composition.js";
 import { approvedPath } from "../environment/environment.js";
-import type { SyncEnrollmentRow } from "../platform/sync.js";
+import type { SyncEnrollmentRow } from "./desktop-sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { type HostClient, hostConnections, hostSummaries } from "./host-peer.js";
@@ -374,9 +374,7 @@ const mintingPlatform = (services: Services): string => {
 export async function* manageDeviceSandbox(services: Services, id: string, input: DeviceSandboxFlow): AsyncGenerator<DeviceFlowLine> {
     const client = services.hostHub.client(id);
     if (client === undefined) {
-        throw new ORPCError("CONFLICT", {
-            message: `"${id}" is not connected right now, the device is asleep, offline, or its agent isn't running.`,
-        });
+        throw new ORPCError("CONFLICT", { message: services.hostHub.offline(id) });
     }
     // The ops an agent can't do, refused here before anything reaches the machine. An agent that predates `later` drops
     // it and reshapes at once, restarting the sandbox under everyone working in it: the opposite of what Save promised.
@@ -446,9 +444,7 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
 export async function* runDeviceAgentFlow(services: Services, id: string, input: DeviceAgentFlow): AsyncGenerator<DeviceFlowLine> {
     const client = services.hostHub.client(id);
     if (client === undefined) {
-        throw new ORPCError("CONFLICT", {
-            message: `"${id}" is not connected right now, the device is asleep, offline, or its agent isn't running.`,
-        });
+        throw new ORPCError("CONFLICT", { message: services.hostHub.offline(id) });
     }
     try {
         for await (const line of await client.runAgentFlow(input, { signal: AbortSignal.timeout(AGENT_FLOW_TIMEOUT_MS) })) {

@@ -3,7 +3,7 @@ import { type HookRequests, HookScriptSchema, SettingsHookSchema, type TurnNote 
 import { z } from "zod";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { type JsonFile, jsonFile } from "../store/json-file.js";
+import { approvalLedgers, type JsonFile, jsonFile } from "../store/json-file.js";
 import { type HookPlace, type HookSet, settingsHookSet } from "./settings-hooks.js";
 
 /* The owner's yes to a set of Claude Code hooks (settings-hooks.ts), pinned by its digest, and the sets turns found still
@@ -13,7 +13,6 @@ import { type HookPlace, type HookSet, settingsHookSet } from "./settings-hooks.
 const LedgerSchema = z.object({
     approved: z.record(z.string(), z.object({ approvedAt: z.number(), hooks: z.array(SettingsHookSchema) })),
 });
-type Ledger = z.infer<typeof LedgerSchema>;
 
 export const hookApprovalsDocument = defineDocument({ root: "history", path: "hook-approvals.json", schema: LedgerSchema });
 
@@ -32,22 +31,13 @@ export const hookRequestsDocument = defineDocument({ root: "history", path: "hoo
 // Newest kept: an older set nobody answered is one the workspace has since moved past.
 const REQUESTS_KEPT = 20;
 
-// Memoized per path, so every writer of one file shares its update queue (json-file.ts).
-const ledgers = new Map<string, JsonFile<Ledger>>();
-const requestFiles = new Map<string, JsonFile<Requests>>();
+const ledgers = approvalLedgers((raw) => LedgerSchema.safeParse(raw).data, hookApprovalsDocument);
 
-const ledgerOf = (historyRoot: string): JsonFile<Ledger> => {
-    const path = join(historyRoot, "hook-approvals.json");
-    const file =
-        ledgers.get(path) ??
-        jsonFile<Ledger>(path, {
-            parse: (raw) => LedgerSchema.safeParse(raw).data,
-            fallback: () => ({ approved: {} }),
-            document: hookApprovalsDocument,
-        });
-    ledgers.set(path, file);
-    return file;
-};
+// Keyed by the set's digest, which is the whole pin: a set changed in any way is a new key, unapproved.
+const ledgerOf = (historyRoot: string) => ledgers(join(historyRoot, "hook-approvals.json"));
+
+// Memoized per path, so every writer of one file shares its update queue (json-file.ts).
+const requestFiles = new Map<string, JsonFile<Requests>>();
 
 const requestsOf = (historyRoot: string): JsonFile<Requests> => {
     const path = join(historyRoot, "hook-requests.json");
@@ -62,11 +52,7 @@ const requestsOf = (historyRoot: string): JsonFile<Requests> => {
     return file;
 };
 
-// Whether the ledger approves this digest; an unreadable one approves nothing.
-const approved = async (historyRoot: string, digest: string): Promise<boolean> => {
-    const ledger = await ledgerOf(historyRoot).state();
-    return !ledger.unreadable && ledger.value.approved[digest] !== undefined;
-};
+const approved = async (historyRoot: string, digest: string): Promise<boolean> => (await ledgerOf(historyRoot).read()).approved[digest] !== undefined;
 
 // Files the set once, so a set found by every turn raises one request; a dismissed one stays dismissed.
 const requestApproval = async (historyRoot: string, set: HookSet, conversationId: string | undefined, now: number): Promise<void> => {
@@ -110,9 +96,9 @@ export const HOOKS_HELD_NOTE: TurnNote = {
 
 // The owner's list: unanswered sets newest first, dismissed ones after them, none the ledger already approves.
 export const hookRequests = async (historyRoot: string): Promise<HookRequests> => {
-    const [stored, ledger] = await Promise.all([requestsOf(historyRoot).read(), ledgerOf(historyRoot).state()]);
+    const [stored, ledger] = await Promise.all([requestsOf(historyRoot).read(), ledgerOf(historyRoot).read()]);
     const requests = Object.entries(stored.requests)
-        .filter(([digest]) => ledger.unreadable || ledger.value.approved[digest] === undefined)
+        .filter(([digest]) => ledger.approved[digest] === undefined)
         .map(([digest, request]) => ({ digest, ...request }))
         .toSorted((left, right) => Number(left.dismissed ?? false) - Number(right.dismissed ?? false) || right.seenAt - left.seenAt);
     return { requests, ...(ledger.unreadable ? { ledgerUnreadable: true } : {}) };
@@ -124,7 +110,7 @@ export const approveHookSet = async (historyRoot: string, digest: string, now = 
     if (request === undefined) {
         return false;
     }
-    await ledgerOf(historyRoot).update((ledger) => ({ approved: { ...ledger.approved, [digest]: { approvedAt: now, hooks: request.hooks } } }));
+    await ledgerOf(historyRoot).update((pins) => ({ ...pins, [digest]: { approvedAt: now, hooks: request.hooks } }));
     await requestsOf(historyRoot).update(({ requests: { [digest]: _approved, ...rest } }) => ({ requests: rest }));
     publishRuntimeChange("approvals");
     return true;

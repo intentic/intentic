@@ -1,4 +1,5 @@
-import { listModels, suggestedModels } from "./model-discovery.js";
+import { humanizeModelId } from "@intentic/sandbox-contract";
+import { idCatalog, listModels, suggestedModels, unrankedCatalog } from "./model-discovery.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
 
@@ -25,4 +26,31 @@ test("suggestedModels reads only the clause after 'did you mean', never the id b
     const message = "Model `grok-4.20` not found. Did you mean: grok-4.20-reasoning, grok-4.20-multi-agent?";
     expect(suggestedModels(message, /grok[\w.-]+/gi)).toEqual(["grok-4.20-reasoning", "grok-4.20-multi-agent"]);
     expect(suggestedModels("xAI authentication failed", /grok[\w.-]+/gi)).toEqual([]);
+});
+
+test("an unranked set is served frontier first with its head the default, each row kept whole", () => {
+    const rows = ["kimi-k2.6", "kimi-k2.7-code-highspeed", "kimi-k3", "kimi-k2.7-code"].map((id) => ({
+        id,
+        label: id.toUpperCase(),
+        efforts: ["low"],
+    }));
+    const catalog = unrankedCatalog(rows);
+
+    expect(catalog.models.map((row) => row.id)).toEqual(["kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6"]);
+    expect(catalog.models[0]).toEqual({ id: "kimi-k3", label: "KIMI-K3", efforts: ["low"] });
+    expect(catalog.default).toBe("kimi-k3");
+});
+
+test("an empty set has no default rather than an invented one", () => {
+    expect(unrankedCatalog([])).toEqual({ models: [], default: "" });
+});
+
+test("bare ids read through the contract's labels, in the same order", () => {
+    expect(idCatalog(["kimi-k2.6", "kimi-k3"])).toEqual({
+        models: [
+            { id: "kimi-k3", label: humanizeModelId("kimi-k3") },
+            { id: "kimi-k2.6", label: humanizeModelId("kimi-k2.6") },
+        ],
+        default: "kimi-k3",
+    });
 });

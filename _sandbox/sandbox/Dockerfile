@@ -500,7 +500,7 @@ COPY --chmod=755 _sandbox/sandbox/bin/tmux-run /usr/local/bin/tmux-run
 # or unbounded. Not on PATH ⇒ nothing queues, and heavy programs are still ranked (terminal-run.ts queueRunEnabled).
 COPY --chmod=755 _sandbox/sandbox/bin/queue-run /usr/local/bin/queue-run
 # The thin wrappers for heavy programs that are not node scripts (pnpm's own binary, bun, cargo), first on an agent
-# command's PATH (src/platform/resources/heavy-commands.ts heavyEnvPrefix); node programs are judged by the hook
+# command's PATH (src/system/resources/heavy-commands.ts heavyEnvPrefix); node programs are judged by the hook
 # node loads for them instead. Each name is a link to the one wrapper.
 COPY --chmod=755 _sandbox/sandbox/bin/heavy-shims /opt/sandbox/heavy-shims
 COPY --chmod=755 _sandbox/sandbox/bin/agent-output-filter.mjs /usr/local/bin/agent-output-filter
@@ -552,7 +552,7 @@ COPY --chmod=755 _sandbox/sandbox/bin/agents /usr/local/bin/agents
 # daemon, brings back what the command changed, and runs the line here when the runner cannot take it.
 COPY --chmod=755 _sandbox/sandbox/bin/offload-run /usr/local/bin/offload-run
 # The sandbox-fleet command the fleet skill teaches: the owner's other sandboxes, and the one door a new one
-# is created through (src/fleet/). Same shape as wallet — it relays through the daemon, which owns the
+# is created through (src/sandboxes/). Same shape as wallet — it relays through the daemon, which owns the
 # provisioning token, the consent card and the machine that builds it; the CLI holds no credential, and a
 # create that was not approved in chat mints nothing.
 COPY --chmod=755 _sandbox/sandbox/bin/sandboxes /usr/local/bin/sandboxes

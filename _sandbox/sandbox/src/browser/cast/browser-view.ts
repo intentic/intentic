@@ -4,7 +4,7 @@ import { answerBrowserDialog, browserSessionContext, browserSessionDisplayKey, b
 import { startLiveView, type LiveView } from "./live-view.js";
 import type { ScreencastClientMessage } from "./screencast.js";
 import type { Services } from "../../composition.js";
-import { redeemTicket } from "../../auth/ws-tickets.js";
+import { redeemTicket } from "../../auth/tokens/ws-tickets.js";
 
 // The socket the handlers below answer on, named once so each of them does not repeat hono's generic.
 type Socket = WSContext;

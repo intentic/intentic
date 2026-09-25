@@ -1,7 +1,7 @@
 import type { Mock } from "bun:test";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
-import type { Social } from "../../agents/registry/agents-store.js";
+import type { Social } from "../../conversations/registry/agents-store.js";
 import { conversationEntry } from "../../testing.js";
 import { cleanSessionTitle, nameAgentTitle, splitTitleAction } from "./title-namer.js";
 

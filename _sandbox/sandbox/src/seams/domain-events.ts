@@ -1,10 +1,7 @@
-import type { WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { ParkKind, WorkspaceEvent } from "@intentic/sandbox-contract";
 
 // What a turn and the fleet announce, delivered in-process to whatever reacts to it: a publisher names only the event,
 // and each reacting subsystem is subscribed in composition, so neither imports the other.
-
-// Why a card is up; the kinds a parked turn may wait on its person with.
-export type AwaitingKind = "plan" | "question" | "permission" | "browser_help" | "terminal_help";
 
 // Every event by name, with what it carries.
 export interface DomainEventMap {
@@ -21,7 +18,7 @@ export interface DomainEventMap {
         readonly closing: string;
     };
     // A turn begun through the port's `start` parked on its person; may happen several times a turn.
-    readonly "turn.awaiting": { readonly conversationId: string; readonly awaiting: AwaitingKind };
+    readonly "turn.awaiting": { readonly conversationId: string; readonly awaiting: ParkKind };
     // That same turn ended, exactly once; `error` only for a real failure, a stop ends it clean.
     readonly "turn.finished": {
         readonly conversationId: string;

@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sqliteAgentsStore } from "../../../agents/registry/agents-store.js";
+import { sqliteAgentsStore } from "../../../conversations/registry/agents-store.js";
 import { conversationsDbPath, openConversationsDb } from "../../../store/conversations-db.js";
 import { conversationEntry } from "../../../testing.js";
 import { sqliteTurnJournal } from "./turn-journal.js";

@@ -2,7 +2,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import { errorMessage } from "@intentic/base/errors";
 import type { WorkspaceTreeDelta } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { post, serveCalls } from "../../workers/worker-calls.js";
+import { post, serveCalls } from "@intentic/base/worker-calls";
 import { createResidentTree } from "../files/resident-tree.js";
 import { createWorkspaceWatch, type WatchAsk, type WatchNews } from "./workspace-watch.js";
 

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
-import { sqliteAgentsStore } from "../agents/registry/agents-store.js";
+import { sqliteAgentsStore } from "../conversations/registry/agents-store.js";
 import { conversationsDbPath, openConversationsDb } from "./conversations-db.js";
 import { jsonFile } from "./json-file.js";
 import { clearManifestProblems, manifestProblems, withSkewHint } from "./manifest-problems.js";

@@ -1,6 +1,6 @@
-import { sqliteAgentsStore } from "../../../agents/registry/agents-store.js";
+import { IN_MEMORY } from "@intentic/base/sqlite";
+import { sqliteAgentsStore } from "../../../conversations/registry/agents-store.js";
 import { openConversationsDb } from "../../../store/conversations-db.js";
-import { IN_MEMORY } from "../../../store/sqlite.js";
 import { conversationEntry } from "../../../testing.js";
 import { type JournalledFire, type JournalledTurn, sqliteTurnJournal } from "./turn-journal.js";
 

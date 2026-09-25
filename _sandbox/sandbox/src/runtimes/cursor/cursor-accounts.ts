@@ -1,5 +1,5 @@
 import type { Services } from "../../composition.js";
-import { forgetAccountState, signInIdentity } from "../../agent/providers/account-identity.js";
+import { forgetAccountState, signInIdentity } from "../../agent/providers/accounts/account-identity.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
 import { cancelCursorLogin, startCursorLogin, toAccount } from "./cursor-credentials.js";
 

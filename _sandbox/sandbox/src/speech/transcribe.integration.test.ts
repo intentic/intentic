@@ -3,12 +3,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { waitFor } from "@intentic/testing/bun";
-import { createSpeech, type ExecFn, SpeechModelNotReadyError, SpeechUnprovisionedError, whisperLanguage } from "./transcribe.js";
+import type { WhisperExec } from "@intentic/base/whisper";
+import { createSpeech, SpeechModelNotReadyError, SpeechUnprovisionedError, whisperLanguage } from "./transcribe.js";
 
 // Speech engine over its two injected seams (exec, model fetch); the same shape the Discord voice transcriber pins its
 // whisper conventions with (_extensions/discord/src/audio.test.ts).
 
-const enoent: ExecFn = () => Promise.reject(Object.assign(new Error("spawn whisper-cli ENOENT"), { code: "ENOENT" }));
+const enoent: WhisperExec = () => Promise.reject(Object.assign(new Error("spawn whisper-cli ENOENT"), { code: "ENOENT" }));
 
 // A workspace root, with or without the model already on disk.
 const rootWith = (model: boolean): string => {
@@ -35,7 +36,7 @@ const streamingModel = (): { blob: Blob; push: (bytes: number) => void; finish: 
 };
 
 // What's on disk in the model's directory, by name: the staged download and the finished model are told apart the same
-// way `stat` does in the engine.
+// way the engine's existence check does.
 const modelDir = (root: string): string => join(root, STATE_DIR, "local", "cache", "whisper");
 const bytesOnDisk = (root: string, name: string): number => {
     const found = readdirSync(modelDir(root)).filter((entry) => (name === "model" ? entry === "ggml-large-v3-turbo.bin" : entry.endsWith(".part")));
@@ -143,7 +144,7 @@ test("transcribe serializes whisper runs, passes the language explicitly, and an
     const wavBytes: string[] = [];
     let active = 0;
     let maxActive = 0;
-    const exec: ExecFn = async (command, args) => {
+    const exec: WhisperExec = async (command, args) => {
         if (args[0] === "--help") {
             return { stdout: "usage: whisper-cli" };
         }

@@ -8,7 +8,7 @@ import type { BundleExport } from "@intentic/sandbox-contract";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import type { Services } from "../composition.js";
 import { packBundle } from "./bundle.js";
-import { webStream } from "../web-stream.js";
+import { webStream } from "@intentic/base/web-stream";
 
 // An export's state is the directory: `<name>.tar.gz.part` mid-pack, `<name>.tar.gz` finished, `<name>.tar.gz.failed`
 // with the reason; no registry to disagree with the files. Progress is the `.part` file's own size. Lives under

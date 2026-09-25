@@ -14,7 +14,7 @@ import {
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
-import { onPath } from "../../platform/boot/on-path.js";
+import { onPath } from "../../system/boot/on-path.js";
 
 // The Pi row: the reserved `pi` agent-kind capability, served over Pi's own RPC protocol. A plain adapter rather than a
 // provider module (the ACP reason): Pi is an installed capability, so everything past serving a turn is the capability

@@ -5,9 +5,9 @@ import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import { browserFields } from "../../browser/tools/browser-fields.js";
 import {
-    attemptProbe,
-    armPlan,
     type AgentAdapter,
+    armPlan,
+    attemptProbe,
     healthReady,
     healthUnavailable,
     healthUnknown,
@@ -17,16 +17,16 @@ import {
 import type { AgentRequest, CodexCredential } from "../../agent/providers/agent-request.js";
 import { opt } from "../../opt.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
-import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
+import { type ProviderModule, translatorAccountEntries, translatorReady } from "../../agent/providers/provider-module.js";
 import { connectedTranslatorProviders } from "../../agent/providers/translator.js";
 import type { Services } from "../../composition.js";
 import { turnPersona } from "../../personas/personas.js";
-import { onPath } from "../../platform/boot/on-path.js";
-import { codexThreadExists } from "../../sessions/codex-sessions.js";
+import { engineReady } from "../../engines/engine-resolve.js";
 import { createCodexAgent } from "./codex-agent.js";
 import { type CodexCatalog, createCodexCatalog } from "./codex-catalog.js";
 import { writeCodexConfig } from "./codex-config.js";
 import { codexReadiness } from "./codex-readiness.js";
+import { codexThreadExists } from "./codex-sessions.js";
 
 // Everything Codex contributes to the daemon, listed in runtimes/runtime-table.ts; the runtime files keep their own jobs.
 
@@ -64,8 +64,8 @@ export const planCodexTurn = async (
     granted: readonly Capability[],
 ): Promise<TurnArmPlan> => {
     // The subscription via the translator is the credential; the container OPENAI_API_KEY is the only fallback.
-    const translatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
-    if (!translatorReady && services.config.openaiApiKey === "") {
+    const subscribed = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
+    if (!subscribed && services.config.openaiApiKey === "") {
         return {
             ok: false,
             code: "subscription-required",
@@ -93,7 +93,7 @@ export const planCodexTurn = async (
             ...browserFields(services.workspace.root, mounted.browser),
         },
         // Subscription turns use the translator endpoint with a fixed bearer; the dev path falls to Codex's own key.
-        credential: translatorReady
+        credential: subscribed
             ? { kind: "codex-endpoint", baseUrl: services.config.translator.url, authToken: services.config.translator.token }
             : { kind: "container" },
     };
@@ -101,7 +101,7 @@ export const planCodexTurn = async (
     return armPlan(
         releasingMounts(services.codexAgent, mounted),
         withAttachments(request, context.attachmentPaths),
-        translatorReady ? "codex-subscription" : undefined,
+        subscribed ? "codex-subscription" : undefined,
     );
 };
 
@@ -138,22 +138,17 @@ export const codexProvider: ProviderModule<CodexProviderDeps> = {
     catalog: (services) => services.codexModels.models(),
     // Ready means the translator holds a ChatGPT subscription, not the OPENAI_API_KEY fallback: this feeds routed-turn
     // pickers, which the container key can't serve.
-    ready: async (services, shared) => services.config.translator.url !== "" && (await shared.translatorAccounts()).codex.length > 0,
-    // Writes CODEX_HOME's config.toml at boot, an authoritative overwrite. Selects the translator provider only when
-    // its binary is on PATH: TRANSLATOR_URL alone is set on every image, including ones with nothing listening on it.
+    ready: translatorReady("codex"),
+    // Overwrites CODEX_HOME's config.toml at boot, naming the translator only when a copy is here: every image sets TRANSLATOR_URL.
     boot: (services, role, logger) => {
         void (async () => {
             if (!role.roots) {
                 return;
             }
-            const translatorUrl = (await onPath("cli-proxy-api")) ? services.config.translator.url : "";
+            const translatorUrl = (await engineReady("translator")) ? services.config.translator.url : "";
             await writeCodexConfig(services.codexHome, translatorUrl);
         })().catch((error: unknown) => logger.warn({ err: error }, "codex config not written"));
     },
     packs: async (services) => ((await codexConnected(services)) ? ["codex"] : []),
-    // One auth file per connected account in the cliproxy auth-dir; its filename doubles as the entry id.
-    secretEntries: async (_services, shared) =>
-        (await shared.translatorAccounts()).codex.map((account) =>
-            providerAccountEntry("codex", "ChatGPT", account.name, account.label, authStateRelPath("cliproxy")),
-        ),
+    secretEntries: translatorAccountEntries("codex", "ChatGPT"),
 };

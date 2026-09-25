@@ -6,10 +6,11 @@ import { type ResponsesRequest, userMessages } from "@intentic/fake-model/respon
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
 import type { TurnSpec } from "../agent/providers/agent-request.js";
-import { onPath } from "../platform/boot/on-path.js";
-import { createGrokAgent, createGrokRunner } from "../runtimes/grok/grok-agent.js";
-import { createOpenCodeService, OPENCODE_GEMINI_PROVIDER, type OpenCodeService } from "../runtimes/grok/opencode.js";
-import { parkedCards } from "../agents/actor/parked-cards.js";
+import { onPath } from "../system/boot/on-path.js";
+import { createOpenCodeAgent, createOpenCodeRunner } from "../runtimes/opencode/opencode-agent.js";
+import { OPENCODE_GEMINI_PROVIDER } from "../runtimes/gemini/gemini-models.js";
+import { createOpenCodeService, type OpenCodeService } from "../runtimes/opencode/opencode.js";
+import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
@@ -51,7 +52,7 @@ interface TurnResult {
 const runTurn = async (scenario: { marker: string }, overrides: Pick<TurnSpec, "systemAppend"> = {}): Promise<TurnResult> => {
     const controller = new AbortController();
     const events: AgentEvent[] = [];
-    const agent = createGrokAgent(createGrokRunner(service!), OPENCODE_GEMINI_PROVIDER);
+    const agent = createOpenCodeAgent(createOpenCodeRunner(service!), OPENCODE_GEMINI_PROVIDER);
     try {
         for await (const event of agent({
             spec: { prompt: `${scenario.marker}: do the thing`, cwd: workspace, model: MODEL_ID, ...overrides },

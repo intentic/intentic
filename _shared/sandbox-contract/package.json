@@ -51,6 +51,17 @@
                 "default": "./dist/policy/batch-runs.js"
             }
         },
+        "./x402": {
+            "types": "./dist/protocol/x402.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/x402.ts",
+                "default": "./dist/protocol/x402.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/x402.ts",
+                "default": "./dist/protocol/x402.js"
+            }
+        },
         "./embed": {
             "types": "./dist/text/embed.d.ts",
             "import": {

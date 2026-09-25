@@ -1,4 +1,4 @@
-import type { QueuedItem } from "../../../agents/actor/conversation-queue.js";
+import type { QueuedItem } from "../../../conversations/actor/conversation-queue.js";
 import { together } from "./turn-admission.js";
 
 // Which waiting messages leave as one turn. A turn carries one sender's attribution, ownership and fence, so a batch

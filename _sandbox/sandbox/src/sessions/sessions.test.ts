@@ -1,9 +1,12 @@
+import { IN_MEMORY } from "@intentic/base/sqlite";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
+import { withAttachmentNote } from "../agent/prompt/attachment-note.js";
+import { composeWirePrompt } from "../agent/prompt/turn-preamble.js";
+import { SPAWN_NOTE_HEADER } from "../agent/subagents/spawn-note.js";
 import { createRecentSessions, listWorkspaceSessions, readWorkspaceSession, readWorkspaceSessionTail, searchWorkspaceSessions } from "./sessions.js";
 import { openSearchIndex } from "./search-index.js";
-import { IN_MEMORY } from "../store/sqlite.js";
 import { readSessionLines } from "./transcript-search.js";
 
 // Fakes the SDK store: `listSessions` is newest-first, `getSessionMessages` returns Anthropic-shaped turns.
@@ -593,6 +596,13 @@ test("a history-list title falling back to firstPrompt names the chat, not the i
     expect(sessions[0]?.title).toBe("fix the config");
 });
 
+// Sent again, an attachment-only message is its re-run note, then the attachment note: still nothing typed, only files.
+test("a session opened by a re-sent attachment-only message is titled by its files, not by the attachment note", async () => {
+    const first = withAttachmentNote(withResumeNote("", RESUME_NOTES.door), [`${WORKSPACE_ROOT}/shots/before.png`]);
+    listSessions.mockResolvedValue([{ sessionId: "s0", summary: first, firstPrompt: first, lastModified: 1 }]);
+    expect((await listWorkspaceSessions(WORKSPACE_ROOT))[0]?.title).toBe("before.png");
+});
+
 test("a session row the SDK could not read is titled New chat, never left blank", async () => {
     // That row is the SDK's own shape for an unreadable session file: a required `summary`, empty, and no other field.
     listSessions.mockResolvedValue([{ sessionId: "unreadable", summary: "", lastModified: 1 }]);
@@ -606,6 +616,21 @@ test("a replacement runtime session keeps the conversation's original user title
     ]);
     listSessions.mockResolvedValue([{ sessionId: "replacement", summary: first, firstPrompt: first, lastModified: 1 }]);
     expect((await listWorkspaceSessions("/work"))[0]?.title).toBe("Investigate the blank chat.");
+});
+
+// The search reads a user message as its turn was queued: a re-run's note is part of that, the preamble never is.
+test("a re-run's prompt is searchable as its turn was queued, re-run note included", async () => {
+    const spawning = { title: "Spawning child agents", text: `${SPAWN_NOTE_HEADER}\n\nStart one.` };
+    const sent = composeWirePrompt([spawning], withResumeNote("ship the parser", RESUME_NOTES.restart));
+    getSessionMessages.mockResolvedValue([{ type: "user", message: { content: sent } }]);
+    expect(await readSessionLines(WORKSPACE_ROOT, "s0")).toEqual([{ text: `${RESUME_NOTES.restart} ship the parser`, speaker: "user" }]);
+});
+
+// With no user words in the carried transcript, a handoff's title falls back to its prompt as queued, a re-run note included.
+test("a handoff with no user words carried titles by its prompt as queued", async () => {
+    const first = withRuntimeHistory(withResumeNote("Continue.", RESUME_NOTES.switched), [{ role: "assistant", text: "Ported the edge." }]);
+    listSessions.mockResolvedValue([{ sessionId: "carried", summary: first, firstPrompt: first, lastModified: 1 }]);
+    expect((await listWorkspaceSessions(WORKSPACE_ROOT))[0]?.title).toBe(withResumeNote("Continue.", RESUME_NOTES.switched));
 });
 
 test("runtime-handoff search indexes what both sides said before the switch, but not the protocol", async () => {

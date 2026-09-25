@@ -8,7 +8,7 @@ import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { z } from "zod";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
-import type { PersistedAgent } from "../agents/registry/agents-store.js";
+import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { Services } from "../composition.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";

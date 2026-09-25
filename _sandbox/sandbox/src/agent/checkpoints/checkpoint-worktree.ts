@@ -3,7 +3,7 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { headSha } from "../../git/changes/changes.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
-import type { AgentWorktrees } from "../../agents/worktrees/worktrees.js";
+import type { AgentWorktrees } from "../../conversations/worktrees/worktrees.js";
 import type { TurnCheckpoint } from "./turn-checkpoints.js";
 
 // Pins an isolated conversation's checkout (an isolated turn has no workspace-history capture to checkpoint on): commits

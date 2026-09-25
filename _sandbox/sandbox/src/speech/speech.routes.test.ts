@@ -1,5 +1,5 @@
 import { createLogger } from "../logger.js";
-import { createPerfTracker } from "../platform/resources/perf.js";
+import { createPerfTracker } from "../system/resources/perf.js";
 import { testConfig } from "../testing.js";
 import { createSpeechRoute, type SpeechRoutesDeps } from "./speech.routes.js";
 import { MAX_UTTERANCE_WAV_BYTES, type Speech, SpeechModelNotReadyError, SpeechUnprovisionedError } from "./transcribe.js";

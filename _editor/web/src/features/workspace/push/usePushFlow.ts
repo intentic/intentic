@@ -38,7 +38,7 @@ import { t } from "@intentic/ui/i18n";
 //   so, and the same card comes back on a press. What retires it is the world changing, never a timer.
 // - a failure has ATTEMPTS, and at most one live one: the card shows what became of the latest, and a press asks the
 //   daemon, which files the hook's refusal with what pushes left (push-checks) and plans, continues or starts the
-//   attempt there (agents/fix/push-fix.ts), the same hand-over the Main line's "Hand to an agent" makes.
+//   attempt there (conversations/fix/push-fix.ts), the same hand-over the Main line's "Hand to an agent" makes.
 
 // What's about to leave, named the way the control that asked for it was labelled, so the flow echoes the
 // click ("Publish", "Sync") instead of renaming it "Push".

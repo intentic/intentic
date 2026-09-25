@@ -1,5 +1,5 @@
 import type { Services } from "../../composition.js";
-import { isIsolated, type PersistedAgent } from "../../agents/registry/agents-store.js";
+import { isIsolated, type PersistedAgent } from "../../conversations/registry/agents-store.js";
 import { checkpointWorktree } from "./checkpoint-worktree.js";
 import type { TurnCheckpoint } from "./turn-checkpoints.js";
 

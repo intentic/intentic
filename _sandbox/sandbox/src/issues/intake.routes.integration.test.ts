@@ -17,7 +17,7 @@ import { conversationsDbPath, openConversationsDb } from "../store/conversations
 import { automationConfig } from "../harness/route-stores.testing.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
-import { memoryDoorTokens } from "../auth/door-tokens.js";
+import { memoryDoorTokens } from "../auth/tokens/door-tokens.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { createIntakeRoutes } from "./intake.routes.js";

@@ -1,6 +1,6 @@
 import type { AgentEvent, SubagentVerification, ToolCallStatus } from "@intentic/sandbox-contract";
-import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
-import type { Holding } from "../../agents/actor/conversation-holdings.js";
+import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import type { Holding } from "../../conversations/actor/conversation-holdings.js";
 import { createFrameLedger, type FrameLedger, trackedCall } from "../verification/agent-verification.js";
 import { ROSTER } from "./subagent-roster.js";
 

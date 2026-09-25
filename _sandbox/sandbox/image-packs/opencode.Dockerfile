@@ -1,4 +1,4 @@
-# The `opencode` CLI — the Grok provider (grok/opencode.ts) spawns `opencode serve` via @opencode-ai/sdk's
+# The `opencode` CLI — the OpenCode service (runtimes/opencode/opencode.ts) spawns `opencode serve` via @opencode-ai/sdk's
 # createOpencodeServer, which shells out to this binary; xAI OAuth tokens are persisted by OpenCode under
 # XDG_DATA_HOME, which the service pins to the workspace's .intentic so they survive restarts. The agent's
 # shell also drives it directly (`opencode run`) to delegate tasks to Grok (agent/delegation.ts). Pinned in
@@ -9,6 +9,6 @@ RUN --mount=type=cache,target=/root/.npm \
     npm install -g opencode-ai@1.18.32 && opencode --version
 # OpenCode privacy defaults, in the GLOBAL config (the only level where autoupdate:false is honored): no
 # auto-update (the CLI is version-pinned above) and no session sync to opncd.ai, even manual /share. The
-# daemon's server-spawn config (grok/opencode.ts) merges over this file, so runtime overrides are unaffected.
+# daemon's server-spawn config (runtimes/opencode/opencode.ts) merges over this file, so runtime overrides are unaffected.
 RUN mkdir -p /root/.config/opencode \
     && printf '{ "autoupdate": false, "share": "disabled" }\n' > /root/.config/opencode/opencode.json

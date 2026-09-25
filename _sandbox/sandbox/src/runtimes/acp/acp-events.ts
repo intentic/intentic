@@ -7,6 +7,7 @@ import type {
 } from "@agentclientprotocol/sdk";
 import { type AgentEvent, type ToolCallContent, type ToolCallLocation, type ToolKind, ToolKindSchema } from "@intentic/sandbox-contract";
 import { diffContent, toolCategoryOf, toolTarget, workspacePath } from "../../agent/tools/tool-calls.js";
+import { toolCallOpened } from "../decorators/vendor-events.js";
 
 // Maps ACP session/update notifications onto AgentEvent frames; an update with no UI mapping returns undefined. ACP's
 // `plan` is a TodoWrite-style checklist, not intentic's approval plan frame, and maps to `todos`.
@@ -64,21 +65,16 @@ export const sessionUpdateEvent = (update: SessionUpdate, cwd: string): AgentEve
             const text = textOf(update.content);
             return text === "" ? undefined : { kind: "thinking", text };
         }
-        case "tool_call": {
-            const target = toolTarget(update.rawInput);
-            const locations = mapLocations(update.locations, cwd);
-            const content = mapContent(update.content, cwd);
-            return {
-                kind: "tool_call",
+        case "tool_call":
+            return toolCallOpened({
                 id: update.toolCallId,
                 name: update.title,
                 category: categoryOf(update.kind, update.title),
                 status: update.status ?? "in_progress",
-                ...(target !== undefined ? { target } : {}),
-                ...(locations !== undefined ? { locations } : {}),
-                ...(content !== undefined ? { content } : {}),
-            };
-        }
+                target: toolTarget(update.rawInput),
+                locations: mapLocations(update.locations, cwd),
+                content: mapContent(update.content, cwd),
+            });
         case "tool_call_update": {
             const locations = mapLocations(update.locations, cwd);
             const content = mapContent(update.content, cwd);

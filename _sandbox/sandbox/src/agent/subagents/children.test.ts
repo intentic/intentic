@@ -15,8 +15,8 @@ import {
     supervisorFor,
     type ChildSupervisor,
 } from "./children.js";
-import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { createDomainEvents } from "../../seams/domain-events.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";
 import { drivenBy, memoryFleet } from "../../testing.js";

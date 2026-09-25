@@ -15,7 +15,7 @@ import {
     withResumeNote,
 } from "@intentic/sandbox-contract";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
-import { sqliteAgentsStore } from "../../../agents/registry/agents-store.js";
+import { sqliteAgentsStore } from "../../../conversations/registry/agents-store.js";
 import { conversationsDbPath, openConversationsDb } from "../../../store/conversations-db.js";
 import { fileHeldWakesStore } from "../../../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../../../automations/automations-store.js";
@@ -32,13 +32,13 @@ import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } fro
 import { providerReadiness } from "../../providers/provider-registry.js";
 import { PROVIDER_MODULES } from "../../../runtimes/runtime-table.js";
 import { type JournalledTurn, sqliteTurnJournal, type TurnJournal } from "./turn-journal.js";
-import { turnRunOf } from "../../../agents/actor/conversation-holdings.js";
+import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { createDomainEvents } from "../../../seams/domain-events.js";
 import type { SentTurn, TurnStarter } from "../../../seams/turn-starter.js";
-import type { BeginRefusal } from "../../../agents/actor/conversation-decide.js";
+import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
 import type { TurnRun } from "./turn-runs.js";
 import { createTurnResumeScheduler, fireHeldResume, type HeldTurn, resumeInterruptedTurns, startConversationTurn } from "./turn-resume.js";
-import { parkedCards } from "../../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 
 // `takes` answers each abandon attempt (false: the turn is still unwinding); `armed`/`limitArmed` are per-conversation
 // overrides for outage/limit resume, a missing id follows the sandbox default.

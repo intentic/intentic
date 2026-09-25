@@ -32,7 +32,7 @@ flowchart LR
 
 ## Asking the owner
 
-An agent that needs something unconnected runs the in-sandbox `capabilities` command ([`bin/capabilities`](../../_sandbox/sandbox/bin/capabilities)): `list` shows what could be connected, and `request <id> --why "…"` asks. The daemon ([`capability-offer.ts`](../../_sandbox/sandbox/src/capabilities/capability-offer.ts)) raises a request in the owner's chat and holds the call open until the owner connects it, skips it or lets it expire. The agent never connects anything itself and never sees the credential the owner enters.
+An agent that needs something unconnected runs the in-sandbox `capabilities` command ([`bin/capabilities`](../../_sandbox/sandbox/bin/capabilities)): `list` shows what could be connected, and `request <id> --why "…"` asks. The daemon ([`capability-offer.ts`](../../_sandbox/sandbox/src/capabilities/offers/capability-offer.ts)) raises a request in the owner's chat and holds the call open until the owner connects it, skips it or lets it expire. The agent never connects anything itself and never sees the credential the owner enters.
 
 ## Credentials
 

@@ -1,5 +1,5 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { serveCalls } from "../../workers/worker-calls.js";
+import { serveCalls } from "@intentic/base/worker-calls";
 import { putBlob } from "./record-blobs.js";
 import { convertLegacy } from "./record-convert.js";
 import type { ConvertAsk } from "./record-migration.js";

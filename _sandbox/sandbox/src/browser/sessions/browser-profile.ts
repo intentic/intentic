@@ -12,7 +12,7 @@ import { acceptLanguage, browserFingerprint } from "./fingerprint.js";
 import { acquireProfileLock, launchSessionDir, markConnected, passkeyPath, profileOwner, releaseProfileLock } from "./session-store.js";
 import { stealthInit } from "./stealth.js";
 import type { Services } from "../../composition.js";
-import { redeemTicket } from "../../auth/ws-tickets.js";
+import { redeemTicket } from "../../auth/tokens/ws-tickets.js";
 import { browserUrls, contributionKey, contributionRegistry } from "../../capabilities/contributions.js";
 import { identityLoginUrl } from "../../capabilities/handlers/identity.handler.js";
 

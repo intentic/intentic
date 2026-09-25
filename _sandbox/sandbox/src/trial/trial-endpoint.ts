@@ -2,7 +2,7 @@ import { type Capability, TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sa
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { CompatEntry } from "../endpoints/endpoint-translator.js";
 import type { Config } from "../env.config.js";
-import type { PlatformTunnel } from "../platform/listeners/local-tunnel.js";
+import type { PlatformTunnel } from "../system/listeners/local-tunnel.js";
 import type { TrialService } from "./trial.js";
 
 // Synthetic capability laid over the store, never written to .intentic/config/capabilities.json: its "API key" is this

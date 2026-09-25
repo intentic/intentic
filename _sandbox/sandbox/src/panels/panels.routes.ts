@@ -2,8 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { ARTIFACT_FILE, CONFIG_FILE, REPO_ROLES, type RepoRole } from "@intentic/scaffold";
-import { panelsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
-import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { panelsContract, previewUrl } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -11,7 +10,8 @@ import { resolvePanelUpstream } from "./panel-upstream.js";
 import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, panelRunDir } from "./panels.js";
 import { cachedScheme } from "../ports/port-probe.js";
 import type { ListeningPort } from "../ports/port-scan.js";
-import { panelSession } from "../processes/managed-processes.js";
+import { panelSession } from "@intentic/sandbox-contract/session-names";
+import { publicAddressOf } from "../env.config.js";
 
 // Per-repository panel routes. `list` reports each repo's runtime status and the content facts extensions detect on
 // (role, marker files, evidence, not identity); `start`/`stop` drive the repo's dev server, whose tmux session shows on
@@ -82,8 +82,7 @@ const detectServers = async (
 
 export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
     const i = implement(panelsContract).$context<OrpcContext>();
-    const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
-    const sandboxId = sandboxIdFromToken(services.config.connectToken);
+    const { zone, sandboxId } = publicAddressOf(services.config);
 
     return {
         list: i.list.handler(async () => {

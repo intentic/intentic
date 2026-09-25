@@ -13,6 +13,7 @@ import { drop, isJsonObject, type JsonObject, nested } from "../store/evolution/
 import { defineDocument } from "../store/evolution/documents.js";
 import { defineStep } from "../store/evolution/state-steps.js";
 import { jsonEntries } from "../store/json-file.js";
+import { countResume, keyedEntries } from "../store/keyed-entries.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Two files: `workflows.json` is a manifest the user edits by hand; `workflow-runs.json` is an append-mostly ledger the
@@ -98,31 +99,8 @@ export interface WorkflowsStore {
 export const fileWorkflowsStore = (path: string): WorkflowsStore => {
     // One entry at a time: a design this build cannot read is skipped and kept, never the whole manifest.
     const file = jsonEntries<Workflow>(path, { entry: (raw) => WorkflowSchema.safeParse(raw).data, document: workflowsDocument });
-    return {
-        list: () => file.read(),
-        get: async (id) => (await file.read()).find((workflow) => workflow.id === id),
-        save: async (workflow, create) => {
-            let outcome: "saved" | "conflict" | "missing" = "saved";
-            await file.update((workflows) => {
-                const index = workflows.findIndex((entry) => entry.id === workflow.id);
-                if (create && index !== -1) {
-                    outcome = "conflict";
-                    return workflows;
-                }
-                if (!create && index === -1) {
-                    outcome = "missing";
-                    return workflows;
-                }
-                return create ? [...workflows, workflow] : workflows.map((entry, at) => (at === index ? workflow : entry));
-            });
-            return outcome;
-        },
-        remove: async (id) => {
-            const before = (await file.read()).length;
-            const after = await file.update((workflows) => workflows.filter((workflow) => workflow.id !== id));
-            return after.length < before;
-        },
-    };
+    const { get, save, remove } = keyedEntries(file, "id");
+    return { list: () => file.read(), get, save, remove };
 };
 
 // Every field optional: the scheduler writes this at three different moments (start, end, skip) and each knows a
@@ -153,14 +131,9 @@ export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
         document: workflowRunsDocument,
         idKeys: ["runId"],
     });
-    // Find this run, replace it; a run not found is a no-op, not an error, since a scheduler may still be writing to
-    // one that already rolled off the ledger.
-    const amend = async (runId: string, change: (run: WorkflowRun) => WorkflowRun): Promise<void> => {
-        await file.update((runs) => {
-            const existing = runs.find((run) => run.runId === runId);
-            return existing === undefined ? runs : runs.map((run) => (run === existing ? change(existing) : run));
-        });
-    };
+    // A scheduler may still be writing to a run that already rolled off the ledger; that write is a no-op.
+    const runs = keyedEntries(file, "runId");
+    const amend = runs.amend;
     const amendSteps = (runId: string, change: (step: WorkflowStepRun) => WorkflowStepRun): Promise<void> =>
         amend(runId, (run) => ({ ...run, steps: run.steps.map(change) }));
 
@@ -177,7 +150,7 @@ export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
 
     return {
         list: async () => (await file.read()).toSorted((a, b) => b.startedAt - a.startedAt),
-        get: async (runId) => (await file.read()).find((run) => run.runId === runId),
+        get: runs.get,
         start: async (run) => {
             let evicted: WorkflowRun[] = [];
             await file.update((runs) => {
@@ -210,9 +183,6 @@ export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
             await file.update((runs) => runs.filter((run) => run.runId !== runId));
             await rm(join(artifacts, runId), { recursive: true, force: true });
         },
-        countResume: async (runId) => {
-            await amend(runId, (run) => ({ ...run, resumed: run.resumed + 1 }));
-            return (await file.read()).find((run) => run.runId === runId);
-        },
+        countResume: (runId) => countResume(runs, runId),
     };
 };

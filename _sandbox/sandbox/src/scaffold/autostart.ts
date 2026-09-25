@@ -1,13 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { zoneFromUrl } from "@intentic/sandbox-contract";
-import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import type { Services } from "../composition.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import { appPanelKey, buildAppSpec } from "../workspace/layout/app-previews.js";
 import { statePath, stateRelPath } from "../state-paths.js";
+import { publicAddressOf } from "../env.config.js";
 
 // What this workspace runs on boot: one entry per `<repo>/_apps/<app>` with its dev command, so every boot restarts it,
 // not only the seed's first one. `autostart` (bootstrap/workspace-apps.ts) starts what the file names and is idempotent; a missing folder
@@ -65,8 +64,7 @@ export type AutostartDeps = Pick<Services, "config" | "processes" | "workspace">
 // matches a manual start. Per-entry failures are reported, not thrown, so one bad app does not block the rest.
 export const runAutostart = async (services: AutostartDeps): Promise<AutostartOutcome> => {
     const root = services.workspace.root;
-    const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
-    const sandboxId = sandboxIdFromToken(services.config.connectToken);
+    const { zone, sandboxId } = publicAddressOf(services.config);
     const started: string[] = [];
     const skipped: { key: string; why: string }[] = [];
     for (const entry of await readAutostart(root)) {

@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Capability, Persona, SandboxSettings, SkillSummary } from "@intentic/sandbox-contract";
@@ -7,13 +7,26 @@ import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { readSkillText, skillInventory } from "./skill-inventory.js";
-import { writePersonaSkill } from "../personas/persona-kit.js";
+import { personaSkillsRoot, writePersonaSkill } from "../personas/persona-kit.js";
+import { scanSkillFolders, SKILL_FILE } from "../skill-file.js";
 import { reconcileBakedSkills, switchOwnSkill, writeOwnSkill } from "./skills.js";
+
+// The image's own plugin dirs; none by default, as on a bare dev run.
+interface BakedPlugins {
+    readonly iqPluginDir: string;
+    readonly webqPluginDir: string;
+}
 
 // A row's origin decides its switch, edit, and delete controls; getting it wrong is a functional bug, not cosmetic.
 // Tests build the four directory shapes the inventory reads: loaded folder, owner's store, plugin and extension
 // checkouts.
-const stubServices = (root: string, capabilities: readonly Capability[], settings: SandboxSettings, personas: readonly Persona[] = []): Services =>
+const stubServices = (
+    root: string,
+    capabilities: readonly Capability[],
+    settings: SandboxSettings,
+    personas: readonly Persona[] = [],
+    baked: BakedPlugins = { iqPluginDir: "", webqPluginDir: "" },
+): Services =>
     unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         files: unstubbed<Services["files"]>("files", {
@@ -28,7 +41,7 @@ const stubServices = (root: string, capabilities: readonly Capability[], setting
         }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [...capabilities] }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings }),
-        config: unstubbed<Services["config"]>("config", { extensionsDir: "" }),
+        config: unstubbed<Services["config"]>("config", { extensionsDir: "", ...baked }),
         // Read on every listing: a persona's kit skills are part of what the agent knows (the `persona` origin). Empty
         // is the default most cases here want.
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [...personas] }),
@@ -38,7 +51,7 @@ const settingsWith = (skills: readonly string[]): SandboxSettings => SandboxSett
 
 const writeSkill = async (dir: string, name: string, description: string, body = "Body."): Promise<void> => {
     await mkdir(join(dir, name), { recursive: true });
-    await writeFile(join(dir, name, "SKILL.md"), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`);
+    await writeFile(join(dir, name, SKILL_FILE), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`);
 };
 
 const rowFor = (rows: readonly SkillSummary[], id: string): SkillSummary => {
@@ -205,10 +218,13 @@ test("every id the list mints reads back the right skill", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const plugin: Capability = { id: "my-pack", kind: "plugin", config: { url: "https://example.com/pack.git" } };
     const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
-    const services = stubServices(root, [plugin], settingsWith([]), [studio]);
+    const baked = { iqPluginDir: join(root, "iq-plugin"), webqPluginDir: join(root, "webq-plugin") };
+    const services = stubServices(root, [plugin], SandboxSettingsSchema.parse({ iqSearch: true }), [studio], baked);
     await writeOwnSkill(services, { name: "notes", description: "Use it.", body: "Stored body." });
     await writeSkill(join(root, ".intentic", "records", "plugins", "my-pack", "skills"), "review", "Use when reviewing.", "Plugin body.");
     await writePersonaSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
+    await writeSkill(join(baked.iqPluginDir, "skills"), "iq", "Workspace code search.", "Search body.");
+    await writeSkill(join(baked.webqPluginDir, "skills"), "webq", "Web pages as markdown.", "Web body.");
 
     for (const row of await skillInventory(services)) {
         const found = await readSkillText(services, row.id);
@@ -220,6 +236,72 @@ test("every id the list mints reads back the right skill", async () => {
     expect((await readSkillText(services, "plugin:my-pack:review"))?.text).toContain("Plugin body.");
     // A kit skill's id carries the persona id; its row shows the label instead, which is not a key.
     expect((await readSkillText(services, "persona:studio:voice"))?.text).toContain("Kit body.");
+    // A plugin the image ships reads from its own dir, never from a loaded or stored skill of the same name.
+    expect((await readSkillText(services, "builtin:iq:iq"))?.text).toContain("Search body.");
+    expect((await readSkillText(services, "builtin:webq:webq"))?.text).toContain("Web body.");
+});
+
+// A turn loads the image's webq plugin always and its iq plugin while iq search is on; neither has a switch on this list.
+test("the image's iq and webq plugins list their skills, iq only while its setting is on", async () => {
+    const root = mkdtempSync(join(tmpdir(), "inventory-"));
+    const baked = { iqPluginDir: join(root, "iq-plugin"), webqPluginDir: join(root, "webq-plugin") };
+    await writeSkill(join(baked.iqPluginDir, "skills"), "iq", "Workspace code search.");
+    await writeSkill(join(baked.webqPluginDir, "skills"), "webq", "Web pages as markdown.");
+    const fixed = { origin: "builtin", enabled: true, switchable: false, editable: false, removable: false } as const;
+
+    const off = await skillInventory(stubServices(root, [], settingsWith([]), [], baked));
+    expect(off.filter((row) => row.id.includes(":"))).toEqual([
+        { id: "builtin:webq:webq", name: "webq", description: "Web pages as markdown.", owner: "Web pages", ...fixed },
+    ]);
+
+    const on = await skillInventory(stubServices(root, [], SandboxSettingsSchema.parse({ iqSearch: true }), [], baked));
+    expect(on.filter((row) => row.id.includes(":"))).toEqual([
+        { id: "builtin:iq:iq", name: "iq", description: "Workspace code search.", owner: "Code search", ...fixed },
+        { id: "builtin:webq:webq", name: "webq", description: "Web pages as markdown.", owner: "Web pages", ...fixed },
+    ]);
+});
+
+// A turn mounts a persona's kit only once its manifest exists, so skills in a folder without one are nothing a turn loads.
+test("a persona's skills list only once its kit has the manifest a turn mounts it by", async () => {
+    const root = mkdtempSync(join(tmpdir(), "inventory-"));
+    const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
+    const services = stubServices(root, [], settingsWith([]), [studio]);
+    await writeSkill(personaSkillsRoot(root, "studio"), "voice", "How we write.");
+    expect((await skillInventory(services)).filter((row) => row.origin === "persona")).toEqual([]);
+
+    await writePersonaSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
+    expect((await skillInventory(services)).filter((row) => row.origin === "persona").map((row) => row.id)).toEqual(["persona:studio:voice"]);
+});
+
+// The one scan every skills folder goes through: the owner's store, a kit, a mounted plugin, the loaded folder.
+describe("scanSkillFolders", () => {
+    const readAny = (path: string): Promise<string | undefined> => readFile(path, "utf8").catch(() => undefined);
+
+    it("reads each folder's skill in name order, named by the folder, and skips what is not a skill", async () => {
+        const dir = join(mkdtempSync(join(tmpdir(), "scan-")), "skills");
+        await writeSkill(dir, "beta", "Second.", "Beta body.");
+        await writeSkill(dir, "alpha", "First.", "Alpha body.");
+        await mkdir(join(dir, "gamma"), { recursive: true });
+        await writeFile(join(dir, "gamma", SKILL_FILE), "---\nname: other\n---\nGamma body.\n");
+        await mkdir(join(dir, "half-written"), { recursive: true });
+        await writeFile(join(dir, "loose.md"), "Not a skill.");
+
+        expect(await scanSkillFolders(dir, readAny)).toEqual([
+            { name: "alpha", description: "First.", body: "Alpha body.\n" },
+            { name: "beta", description: "Second.", body: "Beta body.\n" },
+            { name: "gamma", description: "", body: "Gamma body.\n" },
+        ]);
+    });
+
+    it("lists an absent folder as none, and one it cannot list as none unless told to throw", async () => {
+        const root = mkdtempSync(join(tmpdir(), "scan-"));
+        expect(await scanSkillFolders(join(root, "absent"), readAny)).toEqual([]);
+        expect(await scanSkillFolders(join(root, "absent"), readAny, "throw")).toEqual([]);
+        // A link to itself fails with ELOOP for any user, root included, which is no kind of absence.
+        await symlink(join(root, "loop"), join(root, "loop"));
+        expect(await scanSkillFolders(join(root, "loop"), readAny)).toEqual([]);
+        await expect(scanSkillFolders(join(root, "loop"), readAny, "throw")).rejects.toMatchObject({ code: "ELOOP" });
+    });
 });
 
 // A kit skill lists, but narrowly: it must not read as available to every chat, and offers no switch since nothing here

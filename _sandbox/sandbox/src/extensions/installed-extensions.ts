@@ -168,16 +168,23 @@ export const installedExtensions = async (services: ExtensionHost): Promise<Inst
 export const enabledExtensions = async (services: ExtensionHost): Promise<InstalledExtension[]> =>
     (await installedExtensions(services)).filter((extension) => extension.enabled);
 
-// Absolute dirs of enabled extensions contributing agent plugins, appended after pluginDirsOf in the plugins option.
-// contributes.agent.path is relative to the extension root.
-export const extensionAgentDirsOf = async (services: ExtensionHost): Promise<string[]> => {
-    const dirs: string[] = [];
+// An enabled extension's agent plugin: the extension's id, its manifest name, and the plugin's dir.
+export interface ExtensionAgentDir {
+    readonly id: string;
+    readonly name: string;
+    readonly dir: string;
+}
+
+// Each enabled extension contributing an agent plugin; `contributes.agent.path` is relative to the extension root.
+export const extensionAgentDirsOf = async (services: ExtensionHost): Promise<ExtensionAgentDir[]> => {
+    const dirs: ExtensionAgentDir[] = [];
     for (const extension of await enabledExtensions(services)) {
         const agent = extension.manifest.contributes?.agent;
         if (agent === undefined) {
             continue;
         }
-        dirs.push(agent.path === undefined ? extension.dir : join(extension.dir, agent.path));
+        const dir = agent.path === undefined ? extension.dir : join(extension.dir, agent.path);
+        dirs.push({ id: extension.id, name: extension.manifest.name, dir });
     }
     return dirs;
 };

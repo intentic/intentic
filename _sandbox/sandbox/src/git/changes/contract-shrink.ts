@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import { lockShrinkage } from "@intentic/constants/contract-shrink";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
-// Detects a wire-contract shrink when the landing commit message is drafted (agents/landed-subject.ts) and forces the
+// Detects a wire-contract shrink when the landing commit message is drafted (conversations/landed-subject.ts) and forces the
 // `!`/Breaking-Note onto it, using the same comparison (@intentic/constants/contract-shrink) as the push gate
 // (_tools/checks/contract-shrink.mjs).
 // Any file with this basename is a wire-contract lock: JSON whose top-level keys are exported schema names.

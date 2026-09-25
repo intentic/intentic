@@ -11,12 +11,12 @@ import type {
     SubagentStatus,
     SubagentVerification,
 } from "@intentic/sandbox-contract";
-import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
-import type { Holding } from "../../agents/actor/conversation-holdings.js";
+import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import type { Holding } from "../../conversations/actor/conversation-holdings.js";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { childVerification, childVerificationNote, forgetChild, resetChildVerification } from "./child-verification.js";
 import { ROSTER } from "./subagent-roster.js";
-import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
+import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 
 // The registry of subagents the daemon can name, read by the Subagents area and the rail; the third registry of its
 // kind after terminal and browser sessions, with its own short retention window. An SDK child is keyed by the spawning

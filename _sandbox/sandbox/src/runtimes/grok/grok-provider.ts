@@ -11,23 +11,22 @@ import {
 } from "../../agent/providers/adapter.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
-import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
+import {
+    authStateRelPath,
+    engineMissing,
+    enginesReady,
+    type ProviderModule,
+    providerAccountEntry,
+    translatorReady,
+} from "../../agent/providers/provider-module.js";
 import type { Services } from "../../composition.js";
-import { createGrokAgent, createGrokRunner } from "./grok-agent.js";
-import { engineBinary } from "../../engines/engine-resolve.js";
-import { openCodeBinaryMissing, type OpenCodeService } from "./opencode.js";
 import { type GrokAccountDeps, grokAccountDoor } from "./grok-accounts.js";
 
-// Everything Grok contributes to the daemon, listed in runtimes/runtime-table.ts. The slice is one member: OpenCode is
-// core rather than Grok's own, since one warm `opencode serve` also serves Gemini and the delegation watchers.
+// Everything Grok contributes, listed in runtimes/runtime-table.ts; its loop and credential are OpenCode's (runtimes/opencode).
 
 export interface GrokSlice {
     readonly grokAgent: (request: AgentRequest<ContainerCredential>) => AsyncGenerator<AgentEvent>;
 }
-
-export const createGrokSlice = (openCode: OpenCodeService): GrokSlice => ({
-    grokAgent: createGrokAgent(createGrokRunner(openCode)),
-});
 
 // Grok rides OpenCode with xAI subscription OAuth; gated on OpenCode's own connection view. Claude-only fields
 // (plugins, MCP tools, thinking) don't apply.
@@ -69,7 +68,7 @@ const OPENCODE_ADAPTER: AgentAdapter<"opencode", GrokAdapterDeps> = {
         }
         // Signed in, but OpenCode is a feature pack this image may not carry; only a rebuild or an Environment-card
         // install fixes it.
-        return (await engineBinary("opencode", "opencode")) !== undefined ? healthReady() : healthUnavailable(openCodeBinaryMissing("Grok"));
+        return (await enginesReady(grokProvider)) ? healthReady() : healthUnavailable(engineMissing("the OpenCode CLI", "Grok"));
     },
     holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
 };
@@ -79,12 +78,13 @@ export type GrokProviderDeps = GrokAdapterDeps & GrokAccountDeps & Pick<Services
 
 export const grokProvider: ProviderModule<GrokProviderDeps> = {
     id: "grok",
+    engines: ["opencode"],
     accounts: grokAccountDoor,
     adapters: [OPENCODE_ADAPTER],
     catalog: (services) => services.openCode.xaiModels(),
     // Feeds the routed pickers (Grok under the Claude Code harness); the translator's question, not OpenCode's (native
     // account health is above).
-    ready: async (services, shared) => services.config.translator.url !== "" && (await shared.translatorAccounts()).grok.length > 0,
+    ready: translatorReady("grok"),
     // Warms the OpenCode server at boot: a cold spawn can stall the /events heartbeat past the browser's watchdog. Runs
     // only if xAI is already connected; ensure() is idempotent, so the first interactive call reuses this client.
     boot: (services, _role, logger) => {
@@ -92,7 +92,7 @@ export const grokProvider: ProviderModule<GrokProviderDeps> = {
             if (!(await services.openCode.connected("xai"))) {
                 return;
             }
-            if ((await engineBinary("opencode", "opencode")) === undefined) {
+            if (!(await enginesReady(grokProvider))) {
                 logger.info("opencode: the binary is not in this image, add it by rebuilding from the Environment card");
                 return;
             }

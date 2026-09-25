@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { connect, createServer } from "node:net";
+import { connect } from "node:net";
 import { hostname } from "node:os";
 import { promisify } from "node:util";
 
@@ -21,22 +21,8 @@ export const dockerAvailable = async (): Promise<boolean> => {
     }
 };
 
-// Pre-allocates a port, rather than letting Docker pick, so the api and SPA can know each other's origin before either
-// starts. Bound on 0.0.0.0, where Docker publishes, not loopback.
-export const freePort = async (): Promise<number> =>
-    new Promise<number>((resolvePort, rejectPort) => {
-        const probe = createServer();
-        probe.once(`error`, rejectPort);
-        probe.listen(0, `0.0.0.0`, () => {
-            const address = probe.address();
-            if (address === null || typeof address === `string`) {
-                probe.close(() => rejectPort(new Error(`could not reserve a host port`)));
-                return;
-            }
-            const { port } = address;
-            probe.close(() => resolvePort(port));
-        });
-    });
+// Where Docker publishes a container's port: every interface, so a port is reserved there, not on loopback alone.
+export const PUBLISH_HOST = `0.0.0.0`;
 
 const reaches = async (port: number, timeoutMs: number): Promise<boolean> =>
     new Promise<boolean>((resolveProbe) => {

@@ -3,7 +3,7 @@ import { type Member, type MembersStore, memberRow } from "../auth/auth.js";
 import type { PasskeyStore, StoredCredential, StoredRecoveryCode } from "../auth/passkeys/passkey-store.js";
 import type { AutomationRecord, AutomationsStore } from "../automations/automations-store.js";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
-import type { DismissalsStore, DismissedRecommendation } from "../capabilities/dismissals-store.js";
+import type { DismissalsStore, DismissedRecommendation } from "../capabilities/offers/dismissals-store.js";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import { type MintedStore, type StoredKeyAccount, toMintedAccount } from "../runtimes/minted/minted-credentials.js";
 import type { PersonasStore } from "../personas/personas-store.js";

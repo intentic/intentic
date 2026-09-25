@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { utcDayOf } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { boundedLog, jsonFile } from "../store/json-file.js";
 import { stateRelPath } from "../state-paths.js";
 
 // One row per payment attempt that reached a signature request, plus declines and expiries; what the history command,
@@ -93,13 +93,11 @@ export const fileWalletLedger = (path: string, now: () => number = Date.now): Wa
         onUnreadable: "refuse",
         document: walletLedgerDocument,
     });
-    const append = async (row: PaymentRow): Promise<void> => {
-        await file.update((current) => [...current, row].slice(-ROWS_CAP));
-    };
+    const log = boundedLog(file, ROWS_CAP);
     return {
         open: async (payment) => {
             const id = randomBytes(8).toString("hex");
-            await append({
+            await log.append({
                 id,
                 at: now(),
                 url: payment.url,
@@ -113,13 +111,13 @@ export const fileWalletLedger = (path: string, now: () => number = Date.now): Wa
             });
             return id;
         },
-        settle: async (id, outcome, transaction) => {
-            await file.update((current) =>
-                current.map((row) => (row.id === id ? { ...row, outcome, ...(transaction !== undefined ? { transaction } : {}) } : row)),
-            );
-        },
+        settle: (id, outcome, transaction) =>
+            log.amend(
+                (row) => row.id === id,
+                (row) => ({ ...row, outcome, ...(transaction !== undefined ? { transaction } : {}) }),
+            ),
         record: async (payment, outcome) => {
-            await append({
+            await log.append({
                 id: randomBytes(8).toString("hex"),
                 at: now(),
                 url: payment.url,

@@ -1,6 +1,7 @@
-import { compareUnrankedModelIds, type MintedProvider, type MintedVariant, type Model } from "@intentic/sandbox-contract";
+import type { MintedProvider, MintedVariant, Model } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
+import { unrankedCatalog } from "../../agent/models/model-discovery.js";
 import type { JsonFile } from "../../store/json-file.js";
 import type { MintedStore } from "./minted-credentials.js";
 
@@ -32,11 +33,10 @@ const labelFor = (id: string): string => (id.split("/").at(-1) ?? "") || id;
 // /models returns ids in registry iteration order, not a preference, so the order is derived from the ids instead
 // (compareUnrankedModelIds, frontier generation first); the head is what a fresh conversation opens on.
 const toCatalog = (models: readonly Model[], seed: readonly Model[]): { models: Model[]; default: string } => {
-    const list = models.filter(isChatModel).toSorted((left, right) => compareUnrankedModelIds(left.id, right.id));
+    const catalog = unrankedCatalog(models.filter(isChatModel));
     // Never empty: the ladder only calls this with a live, persisted, or seed list, and the seed is non-empty for every
     // provider. The fallback covers a filter that removed every row.
-    const ordered = list.length > 0 ? list : [...seed];
-    return { models: ordered, default: ordered[0]?.id ?? "" };
+    return catalog.models.length > 0 ? catalog : { models: [...seed], default: seed[0]?.id ?? "" };
 };
 
 export interface MintedCatalog {

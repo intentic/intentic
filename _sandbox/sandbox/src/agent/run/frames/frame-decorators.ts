@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import { type AgentEvent, PARK_KINDS } from "@intentic/sandbox-contract";
 import { withCacheTtl } from "../turn/prompt-cache.js";
 import type { TurnFrames } from "./frame-reducers.js";
 
@@ -29,8 +29,6 @@ export const decorateFrame = (event: AgentEvent, turn: { readonly attribution: A
 // An abort is not a failure, said once here: every adapter reports it like a real death.
 export const abortSuppresses = (event: AgentEvent, aborted: boolean): boolean => event.kind === "error" && aborted;
 
-// Cards a turn can park on, meaning it addressed the user; prose counts too, a tool call doesn't.
-const ADDRESSED_FRAMES: readonly AgentEvent["kind"][] = ["plan", "question", "permission", "capability_offer", "payment_offer", "browser_help", "terminal_help"];
 
 // What judging a silent ending reads, gathered at the `done` frame where every field is final.
 export interface TurnSilence {
@@ -62,7 +60,7 @@ export const silenceOf = (
 };
 
 // Whether this turn put anything in front of the person who asked: prose, or a card it parked on.
-const addressedUser = (turn: TurnSilence): boolean => turn.proseChars > 0 || ADDRESSED_FRAMES.some((kind) => turn.kinds.has(kind));
+const addressedUser = (turn: TurnSilence): boolean => turn.proseChars > 0 || PARK_KINDS.some((kind) => turn.kinds.has(kind));
 
 // The sentence for a turn that ended with nothing to show for itself, otherwise indistinguishable from a finished one.
 // Excludes an edited turn, one never answered, one the user stopped, and one that already failed.

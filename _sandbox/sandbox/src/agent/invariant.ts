@@ -1,5 +1,5 @@
-import type { ConversationActors } from "../agents/actor/conversation-actors.js";
-import { liveTurnConversations } from "../agents/actor/conversation-holdings.js";
+import type { ConversationActors } from "../conversations/actor/conversation-actors.js";
+import { liveTurnConversations } from "../conversations/actor/conversation-holdings.js";
 import type { InvariantCheck } from "../invariants/invariants.js";
 import type { TurnJournal } from "./run/turn/turn-journal.js";
 

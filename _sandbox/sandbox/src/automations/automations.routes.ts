@@ -1,7 +1,7 @@
 import { type Automation, type AutomationCatalog, type AutomationSummary, automationsContract, cronOptions, VISITOR_CHAT_PERSONA, type Zone } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
-import type { DoorKind } from "../auth/door-tokens.js";
+import type { DoorKind } from "../auth/tokens/door-tokens.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -22,7 +22,7 @@ const refusePastMoment = (trigger: Automation["trigger"], now: number): void => 
     }
 };
 
-// Which door an automation opens, if any: the kind its credential is filed under (auth/door-tokens.ts).
+// Which door an automation opens, if any: the kind its credential is filed under (auth/tokens/door-tokens.ts).
 // An event trigger is a webhook; a bug intake takes a key from clients with no origin; everything else has no
 // credential to mint.
 const doorOf = (automation: Automation): DoorKind | undefined => {

@@ -5,7 +5,7 @@ import { deliverWake, type WakeDoors } from "../run/turn/wake-delivery.js";
 import { childVerification } from "./child-verification.js";
 import { subagentEndingReported } from "./subagents.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
-import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
+import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 
 // A child's settled turn reaches its parent one way: a parked `wait` took it, or it is delivered like any wake, queued
 // behind a parent busy with a turn that cannot take it.

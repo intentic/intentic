@@ -1,9 +1,8 @@
 import { rm } from "node:fs/promises";
-import { errorMessage } from "@intentic/base/errors";
 import type { IntenticLine, VpnConfig, VpnLink } from "@intentic/sandbox-contract";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
-import { notCarriedYet, type TunnelEntry, tunnelEntries } from "../tunnel/tunnel-links.js";
-import { markUp, upSince } from "../tunnel/tunnel-state.js";
+import { restoreTunnels, type TunnelEntry, tunnelEntries, tunnelUp } from "../tunnel/tunnel-links.js";
+import { upSince } from "../tunnel/tunnel-state.js";
 import { vpnDrivers } from "./vpn-drivers.js";
 import { upMarkerPath, vpnDir } from "./vpn-paths.js";
 
@@ -37,16 +36,13 @@ export const vpnLink = async (entry: VpnEntry): Promise<VpnLink> => {
 export const vpnLinks = async (capabilities: CapabilitiesStore): Promise<VpnLink[]> =>
     Promise.all(tunnelEntries(await capabilities.list(), "vpn").map((entry) => vpnLink(entry)));
 
-// Dials one tunnel, streaming progress; the up marker is written only after the driver reports success, so it never
-// contradicts a probe.
+// Dials one tunnel, streaming progress.
 export async function* connectVpn(entry: VpnEntry, options: { readonly otp?: string | undefined } = {}): AsyncGenerator<IntenticLine> {
     const driver = vpnDrivers[entry.config.provider];
-    const missing = await driver.missingTool();
-    if (missing !== undefined) {
-        throw notCarriedYet(missing, "vpn");
-    }
-    yield* driver.connect(entry.id, entry.config, options);
-    await markUp(vpnDir(), upMarkerPath(entry.id));
+    yield* tunnelUp("vpn", await driver.missingTool(), () => driver.connect(entry.id, entry.config, options), {
+        dir: vpnDir(),
+        path: upMarkerPath(entry.id),
+    });
 }
 
 // Drops one tunnel; an already-down tunnel counts as success, since the goal state is just "not up".
@@ -55,28 +51,17 @@ export const disconnectVpn = async (entry: VpnEntry): Promise<void> => {
     await rm(upMarkerPath(entry.id), { force: true });
 };
 
-// Boot restore: tunnels die with the container while the manifest survives on /work, so every auto-connect VPN is
-// re-dialled. Best-effort; a dead gateway logs a warning rather than failing boot.
-export const reconnectVpns = async (
+// Boot restore of every auto-connect VPN; a dead gateway logs a warning rather than failing boot.
+export const reconnectVpns = (
     capabilities: CapabilitiesStore,
     logger: { info: (message: string) => void; warn: (message: string) => void },
-): Promise<void> => {
-    for (const entry of tunnelEntries(await capabilities.list(), "vpn")) {
-        if (entry.config.autoConnect !== "on") {
-            continue;
-        }
-        // Probed inside the try: one VPN whose state can't be read must not strand every one after it.
-        try {
-            const probe = await vpnDrivers[entry.config.provider].probe(entry.id, entry.config);
-            if (probe.state === "connected" || probe.state === "connecting") {
-                continue;
-            }
-            for await (const line of connectVpn(entry)) {
-                void line;
-            }
-            logger.info(`vpn ${entry.id}: reconnected`);
-        } catch (error) {
-            logger.warn(`vpn ${entry.id}: could not reconnect: ${errorMessage(error)}`);
-        }
-    }
-};
+): Promise<void> =>
+    restoreTunnels(capabilities, logger, "vpn", {
+        automatic: (config) => config.autoConnect === "on",
+        isUp: async (entry) => {
+            const { state } = await vpnDrivers[entry.config.provider].probe(entry.id, entry.config);
+            return state === "connected" || state === "connecting";
+        },
+        up: (entry) => connectVpn(entry),
+        words: { done: "reconnected", failed: "could not reconnect" },
+    });

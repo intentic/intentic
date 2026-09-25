@@ -13,7 +13,7 @@ import type {
     WorkflowStepRun,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { resumeLoops, runLoop, stopLoop } from "../loops/loop-runner.js";
+import { resumeCapped, resumeLoops, runLoop, stopLoop } from "../loops/loop-runner.js";
 import { resolvedBranches } from "./handover-branches.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
 import { stateRelPath } from "../state-paths.js";
@@ -342,19 +342,11 @@ export const runWorkflow = async (services: Services, run: WorkflowRun): Promise
 
 // A run still `running` here is one the daemon died under; container recreation is the main way that happens. Past
 // RESUME_MAX tries, the run settles as `error` instead of coming back forever.
-const RESUME_MAX = 2;
-
 const resumeWorkflowRuns = async (services: Services, candidates?: readonly WorkflowRun[]): Promise<string[]> => {
-    const resumed: string[] = [];
-    for (const run of candidates ?? (await services.workflowRuns.list())) {
-        if (run.state !== "running" || running.has(run.runId)) {
-            continue;
-        }
-        const counted = await services.workflowRuns.countResume(run.runId);
-        if (counted === undefined) {
-            continue;
-        }
-        if (counted.resumed > RESUME_MAX) {
+    const stranded = (candidates ?? (await services.workflowRuns.list())).filter((run) => run.state === "running" && !running.has(run.runId));
+    const resumed = await resumeCapped(stranded, {
+        count: (run) => services.workflowRuns.countResume(run.runId),
+        abandon: async (counted) => {
             const conversations = new Set(counted.steps.map((step) => step.conversationId));
             await Promise.all(
                 [...conversations].map(async (conversationId) => {
@@ -370,18 +362,16 @@ const resumeWorkflowRuns = async (services: Services, candidates?: readonly Work
                 }),
             );
             await services.workflowRuns.settle(
-                run.runId,
+                counted.runId,
                 "error",
                 Date.now(),
                 `Abandoned after the daemon died under this run ${counted.resumed} times.`,
             );
-            services.logger.warn({ runId: run.runId }, "workflow: abandoned after repeated daemon deaths");
-            continue;
-        }
-        resumed.push(run.runId);
-        void runWorkflow(services, counted);
-    }
-    return resumed;
+            services.logger.warn({ runId: counted.runId }, "workflow: abandoned after repeated daemon deaths");
+        },
+        restart: (counted) => void runWorkflow(services, counted),
+    });
+    return resumed.map((run) => run.runId);
 };
 
 // One boot coordinator for both journals: workflow steps are loops, so launching the two recovery passes separately

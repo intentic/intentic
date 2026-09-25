@@ -1,12 +1,11 @@
 import { type ContentBlock, type McpServer, methods, type PromptResponse, RequestError, type SessionNotification } from "@agentclientprotocol/sdk";
 import { ACP, type AcpAgentConfig, type AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { whenAborted } from "../../abort.js";
+import { whenAborted } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
-import { withFileNote } from "../../agent/prompt/attachment-note.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
-import { loadAttachments } from "../decorators/attachment-images.js";
-import { EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
+import { imageBlock } from "../decorators/attachment-images.js";
+import type { PlanPhaseResult } from "../decorators/plan-mode.js";
 import {
     DEFAULT_TURN_TIMEOUTS,
     EXPIRED,
@@ -18,12 +17,12 @@ import {
     watchedPull,
 } from "../decorators/turn-watchdog.js";
 import { withStderrTail } from "../decorators/vendor-errors.js";
-import { vendorTurnGate } from "../decorators/vendor-gate.js";
+import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
 import { sessionUpdateEvent } from "./acp-events.js";
 import { decidePermission, type PermissionPhase } from "./acp-permissions.js";
 
-// The ACP provider adapter, the seam runAgent/createCodexAgent/createGrokAgent share: AgentRequest in, AgentEvent out,
+// The ACP provider adapter, the seam runAgent/createCodexAgent/createOpenCodeAgent share: AgentRequest in, AgentEvent out,
 // over any agent speaking the Agent Client Protocol. One warm connection per agent, one session per conversation. A
 // documented floor, not the native ceiling: the agent owns its model settings, MCP tools pass through only when
 // advertised.
@@ -48,13 +47,6 @@ const failureOf = (error: unknown): string => {
     const details = (error as { data?: { details?: unknown } }).data?.details;
     return typeof details === "string" && details !== "" ? details : error instanceof Error ? error.message : "ACP agent failed";
 };
-
-interface TurnOutcome {
-    readonly sessionId: string | undefined;
-    // Agent text held back during a plan phase (becomes the plan frame).
-    readonly text: string;
-    readonly errored: boolean;
-}
 
 // The session a phase runs on: the one asked for when this process holds it or can load it, else a new one, announced. A
 // session the agent can't bring back is the coded self-heal every runtime shares: the next send starts fresh.
@@ -197,10 +189,10 @@ async function* runAcpTurn(
         readonly gate: CommandGuard;
         readonly sink: { push: (event: AgentEvent) => void };
     },
-): AsyncGenerator<AgentEvent, TurnOutcome> {
+): AsyncGenerator<AgentEvent, PlanPhaseResult> {
     const session = yield* sessionFor(connection, request, sessionId);
     if (session === undefined) {
-        return { sessionId: undefined, text: "", errored: true };
+        return { sessionId: undefined, planText: "", errored: true };
     }
     const wait = idleWait();
     const { queue, held, unbind } = bindPhase(connection, request, session, turn, wait);
@@ -233,7 +225,7 @@ async function* runAcpTurn(
                 cancel();
                 connection.kill();
                 yield { kind: "error", message: `ACP agent timed out: ${clock.expiry()}. It was stopped; send again to retry.` };
-                return { sessionId: session, text: held.text, errored: true };
+                return { sessionId: session, planText: held.text, errored: true };
             }
             yield next;
         }
@@ -242,7 +234,7 @@ async function* runAcpTurn(
         if (failed !== undefined) {
             yield { kind: "error", message: failed };
         }
-        return { sessionId: session, text: held.text, errored: failed !== undefined };
+        return { sessionId: session, planText: held.text, errored: failed !== undefined };
     } finally {
         unbind();
         unwatchAbort();
@@ -253,48 +245,24 @@ async function* runAcpTurn(
 // as an error frame, then done.
 export const createAcpAgent = (connections: AcpConnections, timeouts: TurnTimeouts = DEFAULT_TURN_TIMEOUTS) =>
     async function* runAcpAgent(id: string, config: AcpAgentConfig, request: AgentRequest<ContainerCredential>): AsyncGenerator<AgentEvent> {
-        let connection: AcpConnection;
-        try {
-            connection = await connections.acquire(id, config, request.spec.cwd);
-        } catch (error) {
-            yield { kind: "error", message: error instanceof Error ? error.message : "ACP agent failed to start" };
-            yield { kind: "done" };
-            return;
-        }
-
-        // Native image blocks when the agent advertises image prompts; everything else rides the file note.
-        const attached = await loadAttachments(request.spec, connection.capabilities.promptCapabilities?.image === true);
-        const blocks: ContentBlock[] = attached.images.map((image) => ({ type: "image", data: image.data, mimeType: image.mimeType }));
-        const prompt = withFileNote(request.spec.prompt, [...attached.files, ...attached.unread]);
-
-        // Minted once per turn: the command rulebook, plus an outside-content bit the wallet's gate reads from outside
-        // the generator. The sink starts as a no-op; each phase repoints it at its own queue, while the gate outlives
-        // the phase.
-        const sink = { push: (_event: AgentEvent) => {} };
-        const { gate, release } = vendorTurnGate(request);
-        const phase = (content: ContentBlock[], sessionId: string | undefined, permission: PermissionPhase, captureText: boolean) =>
-            runAcpTurn(connection, request, content, sessionId, { phase: permission, captureText, timeouts, gate, sink });
-
-        try {
-            yield* planMode(
-                ACP,
-                request,
-                () => ({
-                    // Plan flow is text-only: attachments (images included) ride the note instead, keeping phases uniform.
-                    prompt: PLAN_PREAMBLE + withFileNote(request.spec.prompt, [...attached.files, ...attached.pictures]),
-                    async *plan(phasePrompt, sessionId) {
-                        const outcome = yield* phase([{ type: "text", text: phasePrompt }], sessionId, "plan", true);
-                        return { sessionId: outcome.sessionId, planText: outcome.text, errored: outcome.errored };
-                    },
-                    execute: (sessionId) => phase([{ type: "text", text: EXECUTE_PROMPT }], sessionId, "execute", false),
-                }),
-                () => phase([{ type: "text", text: prompt }, ...blocks], request.spec.sessionId, "execute", false),
-            );
-        } catch (error) {
-            // A throwing turn (session/new failure, connection torn down mid-turn) surfaces, never swallows.
-            yield { kind: "error", message: withStderrTail(failureOf(error), connection.stderrTail()) };
-        } finally {
-            release();
-        }
-        yield { kind: "done" };
+        yield* vendorTurn(request, {
+            open: () => connections.acquire(id, config, request.spec.cwd),
+            unopened: "ACP agent failed to start",
+            // A session/new failure or a connection torn down mid-turn, with the agent's own stderr folded in.
+            failure: (error, connection) => withStderrTail(failureOf(error), connection.stderrTail()),
+            serve: (connection, gate) => {
+                // Starts as a no-op; each phase repoints it at its own queue, while the gate outlives the phase.
+                const sink = { push: (_event: AgentEvent) => {} };
+                // Native image blocks when the agent advertises image prompts; everything else rides the file note.
+                return textPlanTurn(ACP, request, connection.capabilities.promptCapabilities?.image === true, (text, images, sessionId, planning) =>
+                    runAcpTurn(connection, request, [{ type: "text", text }, ...images.map(imageBlock)], sessionId, {
+                        phase: planning ? "plan" : "execute",
+                        captureText: planning,
+                        timeouts,
+                        gate,
+                        sink,
+                    }),
+                );
+            },
+        });
     };

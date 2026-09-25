@@ -310,7 +310,7 @@ test("a stripper claims the command, not a filename that contains its name", () 
     // Invocations themselves are still claimed, quoted by the launcher or behind a `cd … &&`.
     expect(matchedCleaners("pnpm install", enabled)).toEqual(["pnpm"]);
     expect(matchedCleaners("cd /work/intentic && pnpm build", enabled)).toEqual(["pnpm"]);
-    expect(matchedCleaners(WRAPPED("timeout 900 npx vitest run src/agents"), enabled)).toEqual(["test"]);
+    expect(matchedCleaners(WRAPPED("timeout 900 npx vitest run src/conversations"), enabled)).toEqual(["test"]);
     expect(matchedCleaners("cargo test --release", enabled)).toEqual(["test"]);
     expect(matchedCleaners("sudo apt-get install -y jq", enabled)).toEqual(["apt"]);
 });

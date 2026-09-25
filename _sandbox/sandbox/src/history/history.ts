@@ -1,7 +1,8 @@
+import { serialLock } from "@intentic/base/async";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pathExists } from "../path-exists.js";
+import { pathExists } from "@intentic/base/fs";
 import { freshness } from "@intentic/base/held";
 import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/scaffold";
@@ -424,12 +425,7 @@ export const createWorkspaceHistory = (
     };
 
     // Serialize snapshot + restore, they share the per-scope snapshot.index files.
-    let chain: Promise<unknown> = Promise.resolve();
-    const serialize = <T>(task: () => Promise<T>): Promise<T> => {
-        const next = chain.then(task, task);
-        chain = next.catch(() => undefined);
-        return next;
-    };
+    const serialize = serialLock();
 
     // Each scope's change count when its last interval sweep ran: a sweep over a checkout nothing touched since is skipped.
     const sweptAt = new Map<string, number>();

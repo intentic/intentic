@@ -9,15 +9,11 @@ import {
     type TranscriptQuestion,
     type TranscriptRow,
     type TranscriptTool,
-    resumeDisclosure,
     unspokenPromptRow,
-    withoutResumeNote,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
 import { COMPACTED_NOTICE } from "@intentic/sandbox-contract/transcript-fold";
 import { ASK_TOOL_NAMES, parseAnswers } from "../agent/tools/question-answers.js";
-import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { TaskChecklist } from "../agent/run/task-checklist.js";
 import {
     type CalledTool,
@@ -31,7 +27,7 @@ import {
     toolTarget,
 } from "../agent/tools/tool-calls.js";
 import { browserOutputDir } from "../browser/cast/browser-artifacts.js";
-import { unwrapStoredPrompt } from "../agent/prompt/turn-preamble.js";
+import { parsePromptEnvelope } from "../agent/prompt/turn-preamble.js";
 import { rootRelative } from "./turn-transcript.js";
 import type { SearchIndex } from "./search-index.js";
 import { matchLines, sessionOverlay } from "./transcript-search.js";
@@ -72,9 +68,9 @@ const promptTitle = (firstPrompt: string | undefined): string | undefined => {
     if (firstPrompt === undefined) {
         return undefined;
     }
-    const { text, attachments } = stripAttachmentNote(unwrapStoredPrompt(firstPrompt).text);
-    const runtime = parseRuntimeHistory(text);
-    const title = runtime?.history.find((message) => message.role === "user")?.text ?? runtime?.prompt ?? text;
+    const { spoken, queued, attachments, handoff } = parsePromptEnvelope(firstPrompt);
+    // A handoff titles by the conversation's own opening words, else by its prompt as queued.
+    const title = handoff === undefined ? spoken : (handoff.history.find((message) => message.role === "user")?.text ?? queued);
     return title.length > 0 ? title : attachments.map((path) => basename(path)).join(", ") || undefined;
 };
 
@@ -185,33 +181,28 @@ const storedPromptRows = (text: string, dir: string, options: RestoreOptions): T
     if (unspoken !== undefined) {
         return [unspoken];
     }
-    const unwrapped = unwrapStoredPrompt(text);
+    const envelope = parsePromptEnvelope(text);
     // A re-run's resumed prompt becomes a muted line, not a duplicate; its note rides separately on the card.
-    const resume = unwrapped.resume;
+    const resume = envelope.resume;
     if (resume?.kind === "notice") {
         return [{ role: "notice", text: resume.text }];
     }
-    const stripped = stripAttachmentNote(unwrapped.text);
-    const attachments = rootRelative(stripped.attachments, dir);
+    const attachments = rootRelative(envelope.attachments, dir);
     // The stripped preamble rides along as a note, read the same way the daemon's own record keeps it.
-    const notes = [...unwrapped.notes, ...(resume?.kind === "note" ? [resume.note] : [])];
-    const added = notes.length > 0 ? { notes } : {};
+    const notes = [...envelope.notes, ...(resume?.kind === "note" ? [resume.note] : [])];
     const chips = attachments.length > 0 ? { attachments } : {};
-    const runtime = parseRuntimeHistory(stripped.text);
-    if (runtime !== undefined) {
-        const carried: TranscriptRow[] = options.carried === "bubbles" ? [...runtime.history] : [];
-        // A re-run sent to a fresh session wraps its resume note inside the envelope, where unwrapStoredPrompt can't see
-        // it; read here, it becomes the same notice the daemon's own record shows (turn-transcript.ts `openingRows`).
-        const inner = resumeDisclosure(runtime.prompt);
-        if (inner?.kind === "notice") {
-            return [...carried, { role: "notice", text: inner.text }];
-        }
-        const typed = inner === undefined ? runtime.prompt : withoutResumeNote(runtime.prompt);
-        const all = inner === undefined ? notes : [...notes, inner.note];
-        const noted = all.length > 0 ? { notes: all } : {};
-        return typed.length > 0 || attachments.length > 0 ? [...carried, { role: "user", text: typed, ...chips, ...noted }] : carried;
+    const said = envelope.spoken.length > 0 || attachments.length > 0;
+    const handoff = envelope.handoff;
+    if (handoff === undefined) {
+        return said ? [{ role: "user", text: envelope.spoken, ...chips, ...(notes.length > 0 ? { notes } : {}) }] : [];
     }
-    return stripped.text.length > 0 || attachments.length > 0 ? [{ role: "user", text: stripped.text, ...chips, ...added }] : [];
+    const carried: TranscriptRow[] = options.carried === "bubbles" ? [...handoff.history] : [];
+    // A re-run sent to a fresh session carries its note inside the handoff: the same notice the record shows (`openingRows`).
+    if (handoff.resume?.kind === "notice") {
+        return [...carried, { role: "notice", text: handoff.resume.text }];
+    }
+    const all = handoff.resume === undefined ? notes : [...notes, handoff.resume.note];
+    return said ? [...carried, { role: "user", text: envelope.spoken, ...chips, ...(all.length > 0 ? { notes: all } : {}) }] : carried;
 };
 
 // A background task's report, stored as a user message; the live stream shows it on the task's own card, never as words.

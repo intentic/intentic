@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
-import { pathExists } from "../path-exists.js";
+import { pathExists } from "@intentic/base/fs";
 import {
     gitContract,
     type GitChange,
@@ -136,7 +136,7 @@ export const createGitRoutes = (services: Services) => {
         }
         return target;
     };
-    // Serializes user writes here with an agent's land (agents/land.ts) on the same repo lock (worktrees.withRepoLock);
+    // Serializes user writes here with an agent's land (conversations/land.ts) on the same repo lock (worktrees.withRepoLock);
     // never nest calls, the chain is a queue, not reentrant. Read-only routes stay outside it.
     const onRepo = <T>(repo: string, task: (dir: string) => Promise<T>): Promise<T> =>
         services.agentWorktrees.withRepoLock(repo, async () => task(await repoDir(repo)));

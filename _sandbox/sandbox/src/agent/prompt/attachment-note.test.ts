@@ -14,6 +14,11 @@ test("an attachment-only message strips to empty text with its paths intact", ()
     expect(stripAttachmentNote(withAttachmentNote("", paths))).toEqual({ text: "", attachments: paths });
 });
 
+// A resumed attachment-only turn is sent as `<re-run note>\n\n` and then the note, so peeling the re-run note leaves this.
+test("a note after a blank line at the very start strips like any other", () => {
+    expect(stripAttachmentNote(`\n\n${withAttachmentNote("", paths)}`)).toEqual({ text: "", attachments: paths });
+});
+
 test("ordinary messages ride untouched", () => {
     expect(stripAttachmentNote("fix the bug")).toEqual({ text: "fix the bug", attachments: [] });
 });

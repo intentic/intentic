@@ -4,8 +4,8 @@ import { arch, platform } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { pathExists } from "../path-exists.js";
 import { errorMessage } from "@intentic/base/errors";
+import { pathExists } from "@intentic/base/fs";
 import { type EngineId, isNewer } from "@intentic/sandbox-contract";
 import { readPack } from "../environment/packs.js";
 
@@ -35,6 +35,8 @@ export interface EngineDescriptor {
     readonly id: EngineId;
     readonly label: string;
     readonly source: EngineSource;
+    // The name the image's own copy answers to on PATH; absent for an engine the daemon imports rather than spawns.
+    readonly command?: string;
     // What lives where inside an installed prefix; whether paths exist is verify()'s question, not this one.
     readonly paths: (prefix: string) => Promise<EnginePaths>;
     // Version the image bakes; undefined is ordinary (no provider pack baked) and means store-only.
@@ -196,6 +198,7 @@ const codexDescriptor: EngineDescriptor = {
     id: "codex",
     label: "Codex",
     source: { kind: "npm", package: "@openai/codex" },
+    command: "codex",
     // The wrapper, not the platform binary: it runs `codex app-server --stdio` and picks the platform package.
     paths: async (prefix) => ({ binPath: join(prefix, "node_modules", "@openai", "codex", "bin", "codex.js") }),
     baked: () => packPin("codex", /@openai\/codex@(\S+)/g),
@@ -231,6 +234,7 @@ const opencodeDescriptor: EngineDescriptor = {
     id: "opencode",
     label: "OpenCode",
     source: { kind: "npm", package: "opencode-ai" },
+    command: "opencode",
     paths: async (prefix) => ({ binPath: join(prefix, "node_modules", ".bin", "opencode") }),
     baked: () => packPin("opencode", /opencode-ai@(\S+)/g),
     verify: async (prefix) => {
@@ -252,6 +256,7 @@ const translatorDescriptor: EngineDescriptor = {
         asset: (version) => `CLIProxyAPI_${version}_linux_${releaseArch()}.tar.gz`,
         binary: "cli-proxy-api",
     },
+    command: "cli-proxy-api",
     paths: async (prefix) => ({ binPath: join(prefix, "cli-proxy-api") }),
     baked: () => packPin("translator", /version=(\S+)/g),
     verify: async (prefix) => {

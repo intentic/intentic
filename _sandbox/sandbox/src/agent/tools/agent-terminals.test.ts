@@ -10,7 +10,7 @@ import { OOM_SCORE, priorityOf } from "../../workload/workload-class.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { queueRunEnabled } from "../../terminal/terminal-run.js";
 import { bashTmuxHooks, PIPESTATUS_TRAP } from "./agent-terminals.js";
-import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./background-jobs.js";
+import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./jobs/background-jobs.js";
 
 // One fleet's actors, and the cards a turn here parks in them.
 const actors = memoryFleet().conversations;

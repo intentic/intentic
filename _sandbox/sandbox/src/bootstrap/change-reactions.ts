@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { startVanishedRepoSweep } from "../agents/registry/vanished-repos.js";
+import { startVanishedRepoSweep } from "../conversations/registry/vanished-repos.js";
 import { startSidecarService } from "../derived/sidecar-service.js";
 import { invalidateContributions } from "../capabilities/contributions.js";
 import { stopPendingExtensionProcesses } from "../extensions/extension-processes.js";

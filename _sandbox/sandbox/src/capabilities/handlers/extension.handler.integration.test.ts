@@ -179,7 +179,7 @@ test("extensionAgentDirsOf maps contributes.agent checkouts (honoring config.pat
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
         config: { ...testConfig, extensionsDir: "" },
     });
-    expect(await extensionAgentDirsOf(services)).toEqual([join(extensionDir(root, "with-agent"), "plugin")]);
+    expect(await extensionAgentDirsOf(services)).toEqual([{ id: "with-agent", name: "demo", dir: join(extensionDir(root, "with-agent"), "plugin") }]);
 });
 
 test("the config schema requires a full 40-character sha ref", () => {

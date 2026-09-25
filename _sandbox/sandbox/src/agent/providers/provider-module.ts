@@ -1,13 +1,17 @@
 import type {
     AgentCapabilities,
+    EngineId,
     LoginStart,
     Model,
     NativeProvider,
     OauthAccount,
     SecretInventoryEntry,
     TranslatorAccounts,
+    TranslatorProvider,
 } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
+import { engineReady } from "../../engines/engine-resolve.js";
+import type { Config } from "../../env.config.js";
 import { stateRelPath } from "../../state-paths.js";
 import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { AgentAdapter } from "./adapter.js";
@@ -71,6 +75,8 @@ export interface ProviderModule<D> {
     readonly catalog: (deps: D) => Promise<{ models: Model[]; default: string }>;
     // Whether a turn could be served now, from cheap facts only; never a probe that costs a turn.
     readonly ready: (deps: D, shared: SharedProviderReads) => Promise<boolean>;
+    // The contract's engines this provider's own runtime spawns, which its health reads through enginesReady.
+    readonly engines?: readonly EngineId[];
     // Fire-and-forget and best-effort: a throw is logged, not a failed daemon. Absent means nothing to start.
     readonly boot?: (deps: D, role: BootRole, logger: Logger) => void;
     // Feature packs a connected account wants in the next rebuild, read from disk, not a live helper.
@@ -98,3 +104,25 @@ export const providerAccountEntry = (provider: string, providerName: string, id:
 // Auth tree every provider's credential lives under; uses the same helper the stores use so `storedAt` can't drift from
 // the real path.
 export const authStateRelPath = (...segments: string[]): string => stateRelPath(".intentic/secrets/auth/", ...segments);
+
+// Why a provider cannot run for want of an engine; the UI routes on the word "rebuild", and `backend` is what the user picked.
+export const engineMissing = (engine: string, backend: string): string =>
+    `This sandbox's image doesn't include ${engine} yet: rebuild it from the Environment card in Sandbox ▸ Environment to run ${backend} here.`;
+
+// Whether every engine a provider names has a copy here to run, from the engine store or the image; never PATH alone.
+export const enginesReady = async ({ engines = [] }: Pick<ProviderModule<never>, "engines">): Promise<boolean> =>
+    (await Promise.all(engines.map(engineReady))).every(Boolean);
+
+// The routed readiness of a provider whose credential is the translator's: a translator here, and an account on it.
+export const translatorReady =
+    (provider: TranslatorProvider) =>
+    async (services: { readonly config: Pick<Config, "translator"> }, shared: SharedProviderReads): Promise<boolean> =>
+        services.config.translator.url !== "" && (await shared.translatorAccounts())[provider].length > 0;
+
+// Inventory rows of a provider whose accounts are the translator's auth files; a file's name doubles as the entry id.
+export const translatorAccountEntries =
+    (provider: TranslatorProvider, providerName: string) =>
+    async (_services: unknown, shared: SharedProviderReads): Promise<SecretInventoryEntry[]> =>
+        (await shared.translatorAccounts())[provider].map((account) =>
+            providerAccountEntry(provider, providerName, account.name, account.label, authStateRelPath("cliproxy")),
+        );

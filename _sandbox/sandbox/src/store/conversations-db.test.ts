@@ -1,7 +1,7 @@
-import { sqliteAgentsStore } from "../agents/registry/agents-store.js";
+import { IN_MEMORY } from "@intentic/base/sqlite";
+import { sqliteAgentsStore } from "../conversations/registry/agents-store.js";
 import { conversationEntry, isolatedAgent } from "../testing.js";
 import { openConversationsDb } from "./conversations-db.js";
-import { IN_MEMORY } from "./sqlite.js";
 
 const count = (db: ReturnType<typeof openConversationsDb>, table: string): number =>
     (db.db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n;

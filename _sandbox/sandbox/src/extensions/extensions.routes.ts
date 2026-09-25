@@ -2,8 +2,7 @@ import { basename, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { extensionIdOf, type ProcessContribution } from "@intentic/extension-manifest";
-import { type ExtensionSummary, extensionsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
-import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { type ExtensionSummary, extensionsContract, previewUrl } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { requireMaintainer } from "../auth/owner-gates.js";
 import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
@@ -31,14 +30,14 @@ import {
 import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
 import { ESSENTIAL_EXTENSIONS, extensionInventory, type InstalledExtension, installedExtensions, type PendingExtension } from "./installed-extensions.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
+import { publicAddressOf } from "../env.config.js";
 
 // Installed extensions (git-installed ∪ image-baked) resolved to manifests and settings; boots the web extension host.
 // A checkout whose manifest no longer parses is skipped here; its capability row still shows status until re-added.
 export const createExtensionsRoutes = (services: Services) => {
     const i = implement(extensionsContract).$context<OrpcContext>();
     const root = services.workspace.root;
-    const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
-    const sandboxId = sandboxIdFromToken(services.config.connectToken);
+    const { zone, sandboxId } = publicAddressOf(services.config);
     // Same operating-tier gate the add route holds over installing: update/revert/policy are the same decision.
     const authorizeOperator = (context: OrpcContext): Promise<void> =>
         requireMaintainer(services, context.headers, "only a sandbox maintainer can do this");

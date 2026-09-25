@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { diffPowerMaps, type ExtensionManifest, powersOf, type PowersDiff } from "@intentic/extension-manifest";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { type JsonFile, jsonFile } from "../store/json-file.js";
+import { approvalLedgers } from "../store/json-file.js";
 
 /* The owner's yes to each workspace extension, pinned by its id and a digest of the powers it declared then. Kept under
  * the history root: an agent can write the extension's folder, so its approval must sit where no workspace write
@@ -12,25 +12,13 @@ import { type JsonFile, jsonFile } from "../store/json-file.js";
 const LedgerSchema = z.object({
     approved: z.record(z.string(), z.object({ digest: z.string(), powers: z.record(z.string(), z.string()), approvedAt: z.number() })),
 });
-type Ledger = z.infer<typeof LedgerSchema>;
 
 export const extensionApprovalsDocument = defineDocument({ root: "history", path: "extension-approvals.json", schema: LedgerSchema });
 
-// Memoized per path, so every writer of one file shares its update queue (json-file.ts).
-const ledgers = new Map<string, JsonFile<Ledger>>();
+const ledgers = approvalLedgers((raw) => LedgerSchema.safeParse(raw).data, extensionApprovalsDocument);
 
-const ledgerOf = (historyRoot: string): JsonFile<Ledger> => {
-    const path = join(historyRoot, "extension-approvals.json");
-    const file =
-        ledgers.get(path) ??
-        jsonFile<Ledger>(path, {
-            parse: (raw) => LedgerSchema.safeParse(raw).data,
-            fallback: () => ({ approved: {} }),
-            document: extensionApprovalsDocument,
-        });
-    ledgers.set(path, file);
-    return file;
-};
+// Keyed by extension id; the pin carries the digest, since one id is approved again for new powers.
+const ledgerOf = (historyRoot: string) => ledgers(join(historyRoot, "extension-approvals.json"));
 
 // Over the power KEYS, sorted: a relabelled view keeps its approval, a newly declared power does not.
 const digestOf = (powers: ReadonlyMap<string, string>): string => createHash("sha256").update(JSON.stringify([...powers.keys()].toSorted())).digest("hex");
@@ -48,8 +36,7 @@ export interface ExtensionApproval {
 
 // One read of the ledger, then a verdict per extension; an enumeration judges every workspace extension against it.
 export const extensionApprovals = async (historyRoot: string): Promise<(id: string, manifest: ExtensionManifest) => ExtensionApproval> => {
-    const ledger = await ledgerOf(historyRoot).state();
-    const approved = ledger.unreadable ? {} : ledger.value.approved;
+    const { approved } = await ledgerOf(historyRoot).read();
     return (id, manifest) => {
         const pin = approved[id];
         const powers = powersOf(manifest);
@@ -65,18 +52,17 @@ export const extensionApprovals = async (historyRoot: string): Promise<(id: stri
 
 export const approveExtension = async (historyRoot: string, id: string, manifest: ExtensionManifest, now = Date.now()): Promise<void> => {
     const powers = powersOf(manifest);
-    await ledgerOf(historyRoot).update((ledger) => ({
-        approved: { ...ledger.approved, [id]: { digest: digestOf(powers), powers: Object.fromEntries(powers), approvedAt: now } },
-    }));
+    const pin = { digest: digestOf(powers), powers: Object.fromEntries(powers), approvedAt: now };
+    await ledgerOf(historyRoot).update((approved) => ({ ...approved, [id]: pin }));
 };
 
 // A removed extension written again later asks again, whatever it declares.
 export const forgetExtensionApproval = async (historyRoot: string, id: string): Promise<void> => {
-    await ledgerOf(historyRoot).update((ledger) => {
-        if (!(id in ledger.approved)) {
-            return ledger;
+    await ledgerOf(historyRoot).update((approved) => {
+        if (!(id in approved)) {
+            return approved;
         }
-        const { [id]: _forgotten, ...rest } = ledger.approved;
-        return { approved: rest };
+        const { [id]: _forgotten, ...rest } = approved;
+        return rest;
     });
 };

@@ -15,8 +15,8 @@ import type {
     StopResult,
     StopTurn,
 } from "@intentic/sandbox-contract";
-import type { BeginRefusal } from "../agents/actor/conversation-decide.js";
-import type { QueueChange } from "../agents/actor/conversation-queue.js";
+import type { BeginRefusal } from "../conversations/actor/conversation-decide.js";
+import type { QueueChange } from "../conversations/actor/conversation-queue.js";
 
 // How a subsystem starts or drives a conversation's turn without importing the turn engine: it names this port in its
 // deps, and composition hands it the engine's own implementation (agent/run/turn/turn-doors.ts).

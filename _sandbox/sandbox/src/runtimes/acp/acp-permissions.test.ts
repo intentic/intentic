@@ -3,7 +3,7 @@ import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
 import { createCommandGuard } from "../../guard/command-guard.js";
 import { createTurnTaint, NO_TAINT } from "../../guard/turn-taint.js";
 import { decidePermission } from "./acp-permissions.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.

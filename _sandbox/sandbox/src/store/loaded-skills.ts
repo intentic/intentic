@@ -1,14 +1,11 @@
 import { lstat, mkdir, readdir, readFile, readlink, rm, symlink } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Services } from "../composition.js";
-import { parseSkillFile } from "../skill-file.js";
+import { scanSkillFolders, SKILL_FILE, skillFolderNames } from "../skill-file.js";
 
 // `.agents/skills/` is canonical; Codex reads it directly, other runtimes get a generated catalogue. `.claude/skills/`
 // is a derived, per-workspace-serialized symlink projection for Claude Code, never the source of truth. AGENTS.md is
 // user-owned and untouched; skill content goes through the files seam, the links and scan touch disk directly.
-
-const SKILL_FILE = "SKILL.md";
 
 // The two writes this store needs; a structural subset of `Services["files"]`, so no caller can pass something that
 // writes elsewhere.
@@ -56,25 +53,10 @@ const ensureClaudeLink = async (root: string, name: string): Promise<void> => {
 // renamed link still sweeps.
 const isManagedLink = (target: string | undefined): boolean => target !== undefined && target.split(/[\\/]/).includes(".agents");
 
-// Only a missing folder lists empty: converge sweeps every link this list does not name.
-const skillDirNames = async (dir: string): Promise<string[]> => {
-    const entries = (await readdir(dir, { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
-    return entries
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name)
-        .toSorted((a, b) => a.localeCompare(b));
-};
-
 // Catalogue for a runtime without a skill loader: names and descriptions now, full SKILL.md only when a task matches.
 // Paths use the root the agent sees, so an isolated turn never gets a daemon-only worktree path; empty means no note.
 export const loadedSkillCatalogNote = async (localRoot: string, agentRoot: string): Promise<string | undefined> => {
-    const skills: { name: string; description: string }[] = [];
-    for (const name of await skillDirNames(loadedSkillsRoot(localRoot))) {
-        const text = await readFile(loadedSkillFile(localRoot, name), "utf8").catch(() => undefined);
-        if (text !== undefined) {
-            skills.push({ name, description: parseSkillFile(text).description ?? "" });
-        }
-    }
+    const skills = await scanSkillFolders(loadedSkillsRoot(localRoot), (path) => readFile(path, "utf8").catch(() => undefined), "throw");
     if (skills.length === 0) {
         return undefined;
     }
@@ -95,7 +77,8 @@ export const loadedSkillCatalogNote = async (localRoot: string, agentRoot: strin
 // One pass: a Claude link per canonical skill, and no Claude link without one. Only sweeps symlinks that point at the
 // canonical folder; a real directory or a link to somewhere else is untouched.
 const converge = async (root: string): Promise<void> => {
-    const names = await skillDirNames(loadedSkillsRoot(root));
+    // Only a missing folder lists empty: converge sweeps every link this list does not name.
+    const names = await skillFolderNames(loadedSkillsRoot(root), "throw");
     for (const name of names) {
         await ensureClaudeLink(root, name);
     }

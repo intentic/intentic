@@ -1,27 +1,11 @@
 import type { AgentEvent, ToolCallContent } from "@intentic/sandbox-contract";
-import { diffContent, displayNameOf, resultText, toolCategoryOf, toolLocations, toolTarget, workspacePath } from "../../agent/tools/tool-calls.js";
+import { diffContent, displayNameOf, resultText, toolLocations, toolTarget, workspacePath } from "../../agent/tools/tool-calls.js";
+import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
 
-// Pure mapping of Pi RPC events onto AgentEvent frames (the grok-agent streamTurn shape, rebuilt for a pull-per-event
+// Pure mapping of Pi RPC events onto AgentEvent frames (the opencode-agent streamTurn shape, rebuilt for a pull-per-event
 // transport); events with no UI mapping are dropped. Stateful where the protocol is: tool args arrive on
 // tool_execution_start and the diff is derived at _end, so the mapper keeps them; usage sums across assistant messages
 // into one frame at settle.
-
-// What a plan phase holds back instead of streaming: the assistant's text is the plan. `errored` suppresses the plan
-// frame, since an error already streamed.
-export interface PiTurnCapture {
-    planText?: string;
-    errored?: boolean;
-}
-
-export interface PiEventMapper {
-    // One Pi event → its frames (usually 0 or 1; a tool result can carry a status and content together).
-    readonly map: (event: Record<string, unknown>) => AgentEvent[];
-    // The turn's summed usage frame, once, undefined when no assistant message reported any.
-    readonly usage: () => AgentEvent | undefined;
-    // What the turn held back, read at settle: the plan text of a `holdText` mapper, and whether an error frame went
-    // out. Accumulated here rather than into a caller's object, exactly as `usage` is.
-    readonly capture: () => PiTurnCapture;
-}
 
 const str = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 const num = (value: unknown): number => (typeof value === "number" ? value : 0);
@@ -61,12 +45,11 @@ const piEditDiffs = (name: string, args: unknown, cwd: string): ToolCallContent[
 
 // `holdText` ⇒ plan phase: the assistant's text is accumulated into the capture instead of streamed, since that text is
 // the plan.
-export const createPiEventMapper = (cwd: string, holdText = false): PiEventMapper => {
+export const createPiEventMapper = (cwd: string, holdText = false): VendorEventMapper<Record<string, unknown>> => {
     // toolCallId → its (display) name and args from tool_execution_start, read back when the result lands.
     const calls = new Map<string, { name: string; args: unknown }>();
-    const totals = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0 };
-    let sawUsage = false;
-    const capture: PiTurnCapture = {};
+    const totals = usageTotals();
+    const capture: TurnCapture = {};
 
     const map = (event: Record<string, unknown>): AgentEvent[] => {
         switch (event["type"]) {
@@ -104,12 +87,13 @@ export const createPiEventMapper = (cwd: string, holdText = false): PiEventMappe
                 }
                 const usage = message["usage"] as Record<string, unknown> | undefined;
                 if (usage !== undefined) {
-                    sawUsage = true;
-                    totals.inputTokens += num(usage["input"]);
-                    totals.outputTokens += num(usage["output"]);
-                    totals.cacheReadTokens += num(usage["cacheRead"]);
-                    totals.cacheCreationTokens += num(usage["cacheWrite"]);
-                    totals.costUsd += num((usage["cost"] as Record<string, unknown> | undefined)?.["total"]);
+                    totals.add({
+                        inputTokens: num(usage["input"]),
+                        outputTokens: num(usage["output"]),
+                        cacheReadTokens: num(usage["cacheRead"]),
+                        cacheCreationTokens: num(usage["cacheWrite"]),
+                        costUsd: num((usage["cost"] as Record<string, unknown> | undefined)?.["total"]),
+                    });
                 }
                 if (message["stopReason"] === "error") {
                     capture.errored = true;
@@ -125,19 +109,7 @@ export const createPiEventMapper = (cwd: string, holdText = false): PiEventMappe
                 const name = displayNameOf(str(event["toolName"]) ?? "tool");
                 const args = event["args"];
                 calls.set(id, { name, args });
-                const target = toolTarget(args);
-                const locations = toolLocations(args, cwd);
-                return [
-                    {
-                        kind: "tool_call",
-                        id,
-                        name,
-                        category: toolCategoryOf(name),
-                        status: "in_progress",
-                        ...(target !== undefined ? { target } : {}),
-                        ...(locations !== undefined ? { locations } : {}),
-                    },
-                ];
+                return [toolCallOpened({ id, name, target: toolTarget(args), locations: toolLocations(args, cwd) })];
             }
             case "tool_execution_update": {
                 const id = str(event["toolCallId"]);
@@ -165,7 +137,7 @@ export const createPiEventMapper = (cwd: string, holdText = false): PiEventMappe
                 if (known === undefined) {
                     // A call first seen at its end (the start was missed) arrives as one whole tool_call; its args are
                     // gone with the start event, so the card is name + output alone.
-                    return [{ kind: "tool_call", id, name, category: toolCategoryOf(name), status: failed ? "failed" : "completed", content }];
+                    return [toolCallOpened({ id, name, status: failed ? "failed" : "completed", content })];
                 }
                 return [{ kind: "tool_call_update", id, status: failed ? "failed" : "completed", content }];
             }
@@ -213,7 +185,7 @@ export const createPiEventMapper = (cwd: string, holdText = false): PiEventMappe
 
     return {
         map,
-        usage: () => (sawUsage ? { kind: "usage", ...totals } : undefined),
+        usage: totals.frame,
         capture: () => capture,
     };
 };

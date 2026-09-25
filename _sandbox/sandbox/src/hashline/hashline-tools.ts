@@ -1,10 +1,10 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
+import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { sdk } from "../engines/claude-sdk.js";
 import { z } from "zod";
-import { queueOnFile, writeTextFile } from "../store/text-file.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { applyEdit, type HashlineEdit, type HashlineOp, renderForEdit, renderForRead } from "./hashline.js";
 
@@ -32,7 +32,7 @@ const replaceFile = async (target: string, content: string): Promise<void> => {
         (info) => info.mode & 0o7777,
         () => undefined,
     );
-    await writeTextFile(target, content, mode);
+    await writeFileAtomic(target, content, mode);
 };
 
 export const createHashlineServer = (root: string): McpSdkServerConfigWithInstance =>

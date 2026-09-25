@@ -11,7 +11,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { ORPCError } from "@orpc/server";
 import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
-import { enrolledFleet, type SyncEnrollmentRow } from "../platform/sync.js";
+import { enrolledFleet, type SyncEnrollmentRow } from "./desktop-sync.js";
 import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow, sandboxesFromTool } from "./device-reports.js";
 import { HOST_CARD_RULE } from "./host-peer.js";
 

@@ -1,19 +1,11 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { PaymentOffer, WalletConfig } from "@intentic/sandbox-contract";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, type SettledCard, whyOf } from "../agents/actor/card-offers.js";
-import type { RelayedAnswer } from "../platform/platform-relay.js";
+import { atomicToUsd, usdcNetworkOf, usdToAtomic } from "@intentic/sandbox-contract/x402";
+import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, type SettledCard, whyOf } from "../conversations/actor/card-offers.js";
+import { type CliAnswer, refusalAnswer } from "../http/cli-answer.js";
 import type { SignRequest } from "./wallet-signer.js";
 import { type OpenedPayment, type PaymentRow, spentTodayAtomic, type WalletLedgerStore } from "./wallet-ledger.js";
-import {
-    atomicToUsd,
-    mintAuthorization,
-    parseChallenge,
-    parseSettlement,
-    paymentHeader,
-    type PaymentQuote,
-    usdcNetworkOf,
-    usdToAtomic,
-} from "./x402.js";
+import { mintAuthorization, parseChallenge, parseSettlement, paymentHeader, type PaymentQuote } from "./x402.js";
 
 // Unpaid probe, parse the 402 challenge, check policy, raise an offer card whose numbers are the challenge's and the
 // ledger's, never the model's (except `why`); only a click or the auto-approve band releases a signature.
@@ -27,13 +19,7 @@ const PROBE_TIMEOUT_MS = 60_000;
 // The paid retry's budget: the actual work runs now, plus onchain settlement.
 const RETRY_TIMEOUT_MS = 300_000;
 
-const refusal = (status: number, type: string, message: string): RelayedAnswer => ({
-    status,
-    body: JSON.stringify({ error: { type, message } }),
-    contentType: "application/json",
-});
-
-export interface PaidAnswer extends RelayedAnswer {
+export interface PaidAnswer extends CliAnswer {
     // Present only when a payment settled with this answer; what the CLI's receipt line renders.
     readonly paidUsd?: string;
     readonly transaction?: string;
@@ -44,7 +30,7 @@ export interface PaymentGateDeps extends CardDeps {
     readonly wallet: () => Promise<WalletConfig | undefined>;
     readonly ledger: WalletLedgerStore;
     // The platform signer relay (wallet-signer.ts), injected so tests drive the gate without a platform.
-    readonly sign: (request: SignRequest) => Promise<RelayedAnswer>;
+    readonly sign: (request: SignRequest) => Promise<CliAnswer>;
     readonly fetchFn?: typeof fetch;
     // Whether the turn has read outside content (guard/turn-taint.ts); the one non-policy input to auto-approve.
     readonly tainted: (conversationId: string) => boolean;
@@ -80,30 +66,30 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     const now = deps.now ?? Date.now;
     const config = await deps.wallet();
     if (config === undefined) {
-        return refusal(
+        return refusalAnswer(
             409,
             "no_wallet",
             'This sandbox has no wallet. Ask the owner to connect one: `capabilities request wallet --why "..."`, nothing can be paid until they do.',
         );
     }
     if (config.address === undefined || config.address === "") {
-        return refusal(409, "wallet_pending", "The wallet is added but not finished setting up: its address has not arrived from the platform yet.");
+        return refusalAnswer(409, "wallet_pending", "The wallet is added but not finished setting up: its address has not arrived from the platform yet.");
     }
     const network = usdcNetworkOf(config.network);
     if (network === undefined) {
-        return refusal(409, "wallet_misconfigured", `The wallet names an unsupported network (${config.network}).`);
+        return refusalAnswer(409, "wallet_misconfigured", `The wallet names an unsupported network (${config.network}).`);
     }
     let url: URL;
     try {
         url = new URL(request.url);
     } catch {
-        return refusal(400, "invalid_request", `Not a URL: ${request.url.slice(0, 200)}`);
+        return refusalAnswer(400, "invalid_request", `Not a URL: ${request.url.slice(0, 200)}`);
     }
     if (url.protocol !== "https:") {
-        return refusal(400, "invalid_request", "Payments ride only https URLs: a challenge over plain http could be anyone's.");
+        return refusalAnswer(400, "invalid_request", "Payments ride only https URLs: a challenge over plain http could be anyone's.");
     }
     if (request.maxUsd !== undefined && !USD_RE.test(request.maxUsd)) {
-        return refusal(400, "invalid_request", `--max wants a USD amount like 0.50, got: ${request.maxUsd.slice(0, 40)}`);
+        return refusalAnswer(400, "invalid_request", `--max wants a USD amount like 0.50, got: ${request.maxUsd.slice(0, 40)}`);
     }
     const host = url.hostname.toLowerCase();
 
@@ -123,7 +109,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         probe = await fetchFn(url, { ...requestInit(), signal: AbortSignal.any([request.signal, AbortSignal.timeout(PROBE_TIMEOUT_MS)]) });
         probeBody = await probe.text();
     } catch (error) {
-        return refusal(502, "unreachable", `The endpoint could not be reached (${error instanceof Error ? error.message : "network error"}), nothing was spent.`);
+        return refusalAnswer(502, "unreachable", `The endpoint could not be reached (${error instanceof Error ? error.message : "network error"}), nothing was spent.`);
     }
     if (probe.status !== 402) {
         return { status: probe.status, body: probeBody, contentType: probe.headers.get("content-type") ?? "application/json" };
@@ -131,7 +117,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
 
     const challenge = parseChallenge(request.url, probe.headers, probeBody);
     if (challenge.kind === "unsupported") {
-        return refusal(502, "unsupported_protocol", `${challenge.reason}: nothing was spent.`);
+        return refusalAnswer(502, "unsupported_protocol", `${challenge.reason}: nothing was spent.`);
     }
     if (challenge.kind === "none") {
         // A 402 that isn't a machine-payable challenge is the endpoint's own refusal, relayed whole.
@@ -142,7 +128,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     );
     if (quote === undefined) {
         const offered = challenge.quotes.map((candidate) => `${candidate.network} ${candidate.asset}`).join(", ");
-        return refusal(
+        return refusalAnswer(
             409,
             "no_matching_rail",
             `The endpoint charges on rails this wallet does not hold: it accepts [${offered}], the wallet pays USDC on ${network.label} (${config.network}). Nothing was spent.`,
@@ -166,7 +152,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     try {
         rows = await deps.ledger.all();
     } catch (error) {
-        return refusal(
+        return refusalAnswer(
             500,
             "ledger_unreadable",
             `This payment cannot be checked against the daily cap, so nothing was spent: ${errorMessage(error)}. Tell the owner.`,
@@ -174,24 +160,24 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     }
     if (hostsOf(config.deny).some((entry) => hostMatches(host, entry))) {
         await deps.ledger.record(opened, "refused");
-        return refusal(403, "denied_host", `${host} is on the wallet's deny list: nothing was spent.`);
+        return refusalAnswer(403, "denied_host", `${host} is on the wallet's deny list: nothing was spent.`);
     }
     if (quote.amountAtomic > usdToAtomic(config.perPaymentMaxUsd)) {
         await deps.ledger.record(opened, "refused");
-        return refusal(
+        return refusalAnswer(
             403,
             "over_payment_cap",
             `This costs $${amountUsd}, over the wallet's per-payment ceiling of $${config.perPaymentMaxUsd}. Nothing was spent; the owner can raise the ceiling on the wallet card.`,
         );
     }
     if (request.maxUsd !== undefined && quote.amountAtomic > usdToAtomic(request.maxUsd)) {
-        return refusal(403, "over_own_max", `This costs $${amountUsd}, over the $${request.maxUsd} ceiling you passed with --max. Nothing was spent.`);
+        return refusalAnswer(403, "over_own_max", `This costs $${amountUsd}, over the $${request.maxUsd} ceiling you passed with --max. Nothing was spent.`);
     }
     const spentToday = spentTodayAtomic(rows, now(), usdToAtomic);
     const dailyCap = usdToAtomic(config.dailyCapUsd);
     if (spentToday + quote.amountAtomic > dailyCap) {
         await deps.ledger.record(opened, "refused");
-        return refusal(
+        return refusalAnswer(
             403,
             "over_daily_cap",
             `This costs $${amountUsd}, and $${atomicToUsd(spentToday)} of the $${config.dailyCapUsd} daily cap is already spent or in flight. Nothing was spent; the cap resets at midnight UTC.`,
@@ -212,7 +198,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     if (!auto) {
         const run = cardRun(deps, request.conversationId);
         if (run === undefined) {
-            return refusal(
+            return refusalAnswer(
                 409,
                 "no_conversation",
                 "A payment needs a live conversation to raise its approval card in, and none could be found. Nothing was spent.",
@@ -234,17 +220,17 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
             kind: "payment_offer",
             onAbort: { kind: "payment_offer", requestId: "", approve: false },
             raised: (requestId) => ({ kind: "payment_offer", requestId, offer }),
+            approves: (reply) => reply.approve,
             signal: request.signal,
             deadlineMs: deps.deadlineMs ?? OFFER_DEADLINE_MS,
         });
-        if (!card.reply.approve) {
-            // Two different refusals, told apart by whether a person actually answered.
-            if (!card.answered) {
-                await deps.ledger.record(opened, "unanswered");
-                return refusal(408, "unanswered", "The payment offer went unanswered and expired: nothing was spent. Continue without it; offer again only if the owner shows up.");
-            }
+        if (card.decision === "unanswered") {
+            await deps.ledger.record(opened, "unanswered");
+            return refusalAnswer(408, "unanswered", "The payment offer went unanswered and expired: nothing was spent. Continue without it; offer again only if the owner shows up.");
+        }
+        if (card.decision === "declined") {
             await deps.ledger.record(opened, "declined");
-            return refusal(403, "declined", "The owner skipped this payment: nothing was spent. Continue without it.");
+            return refusalAnswer(403, "declined", "The owner skipped this payment: nothing was spent. Continue without it.");
         }
     }
 
@@ -255,7 +241,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     try {
         rowId = await deps.ledger.open({ ...opened, auto });
     } catch {
-        return refusal(500, "ledger_unwritable", "The wallet ledger could not be written, so the payment was refused: no spend without a record.");
+        return refusalAnswer(500, "ledger_unwritable", "The wallet ledger could not be written, so the payment was refused: no spend without a record.");
     }
     const receipt = (outcome: "paid" | "failed", transaction?: string): void => {
         if (card === undefined) {
@@ -283,7 +269,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     if (signed.status !== 200) {
         await deps.ledger.settle(rowId, "refused");
         receipt("failed");
-        return { ...refusal(signed.status === 502 ? 502 : 403, "signer_refused", `The platform declined to sign: ${signed.body.slice(0, 300)}, nothing was spent.`) };
+        return { ...refusalAnswer(signed.status === 502 ? 502 : 403, "signer_refused", `The platform declined to sign: ${signed.body.slice(0, 300)}, nothing was spent.`) };
     }
     let signature: string;
     try {
@@ -295,7 +281,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     } catch {
         await deps.ledger.settle(rowId, "refused");
         receipt("failed");
-        return refusal(502, "signer_broken", "The platform's signing answer was unreadable: nothing was spent.");
+        return refusalAnswer(502, "signer_broken", "The platform's signing answer was unreadable: nothing was spent.");
     }
     const header = paymentHeader(quote, authorization, signature);
     let paid: Response;
@@ -309,7 +295,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     } catch (error) {
         // The retry died before an answer arrived; the row stays pending until the authorization ages out on its own.
         receipt("failed");
-        return refusal(
+        return refusalAnswer(
             502,
             "settlement_unknown",
             `The endpoint stopped answering after the payment was sent (${error instanceof Error ? error.message : "network error"}). The authorization expires within minutes if unsettled; check \`wallet history\` and the owner's balance before retrying.`,
@@ -321,7 +307,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         await deps.ledger.settle(rowId, "failed");
         receipt("failed");
         const reason = settlement?.errorReason ?? `the endpoint answered ${paid.status} to the paid retry`;
-        return refusal(502, "payment_failed", `Payment failed: ${reason}, the authorization expires unused, nothing was spent. Response: ${paidBody.slice(0, 300)}`);
+        return refusalAnswer(502, "payment_failed", `Payment failed: ${reason}, the authorization expires unused, nothing was spent. Response: ${paidBody.slice(0, 300)}`);
     }
     await deps.ledger.settle(rowId, "paid", settlement?.transaction);
     receipt("paid", settlement?.transaction);

@@ -5,7 +5,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
 import { rename, retireEntries, retype } from "./evolution/conversions.js";
 import { defineDocument, type DocumentSpec } from "./evolution/documents.js";
-import { type JsonFile, jsonEntries, jsonFile, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
+import { approvalLedgers, boundedLog, type JsonFile, jsonEntries, jsonFile, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
 import { recordedProblems } from "./manifest-problems.js";
 import { clearNewestRun, recordNewestRun } from "./newest-run.js";
 
@@ -353,5 +353,71 @@ describe("jsonEntries", () => {
         const path = await tempFile();
         await seed(path, { id: "a" });
         expect(await entries(path).state()).toEqual({ value: [], unreadable: true, detail: "the file does not match what this build expects" });
+    });
+});
+
+describe("boundedLog", () => {
+    test("an append keeps the newest `cap` entries, oldest first, which is how a read gives them back", async () => {
+        const path = await tempFile();
+        const log = boundedLog(numbers(path), 3);
+        for (const entry of [1, 2, 3, 4]) {
+            await log.append(entry);
+        }
+        expect(await log.read()).toEqual([2, 3, 4]);
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual([2, 3, 4]);
+    });
+
+    test("an amend rewrites exactly the entries it matches, in place", async () => {
+        const path = await tempFile();
+        await seed(path, [1, 2, 3]);
+        await boundedLog(numbers(path), 3).amend(
+            (entry) => entry % 2 === 1,
+            (entry) => entry * 10,
+        );
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual([10, 2, 30]);
+    });
+
+    // A log only appends and amends through its store's own file, so that file decides what happens over unreadable content.
+    test("over content its file refuses to replace, an append and an amend throw and write nothing", async () => {
+        const path = await tempFile();
+        const refusing = jsonFile<number[]>(path, { parse: (raw) => NumbersSchema.safeParse(raw).data, fallback: () => [], onUnreadable: "refuse" });
+        await seed(path, { not: "a log" });
+        const log = boundedLog(refusing, 3);
+        const unchanged = (entry: number): number => entry;
+        await expect(log.append(1)).rejects.toBeInstanceOf(ManifestUnreadableError);
+        await expect(log.amend(() => true, unchanged)).rejects.toBeInstanceOf(ManifestUnreadableError);
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ not: "a log" });
+    });
+
+    test("an amend matching nothing still writes, so content its file could not read is set aside", async () => {
+        const path = await tempFile();
+        await seed(path, { not: "a log" });
+        await boundedLog(numbers(path), 3).amend(
+            () => false,
+            (entry) => entry,
+        );
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual([]);
+        expect(JSON.parse(await readFile(`${path}.corrupt`, "utf8"))).toEqual({ not: "a log" });
+    });
+});
+
+describe("approvalLedgers", () => {
+    const Ledger = z.object({ approved: z.record(z.string(), z.object({ approvedAt: z.number() })) });
+    const ledgerAt = approvalLedgers((raw) => Ledger.safeParse(raw).data, defineDocument({ path: "evolution/approvals.json", schema: Ledger }));
+
+    test("a pin approves its key, and a change handing back the pins it was given writes nothing", async () => {
+        const path = await tempFile("approvals.json");
+        await ledgerAt(path).update((approved) => ({ ...approved, a: { approvedAt: 1 } }));
+        expect(await ledgerAt(path).read()).toEqual({ approved: { a: { approvedAt: 1 } }, unreadable: false });
+        // Compact bytes, which any write would re-indent.
+        await writeFile(path, `{"approved":{"a":{"approvedAt":1}}}`);
+        await ledgerAt(path).update((approved) => approved);
+        expect(await readFile(path, "utf8")).toBe(`{"approved":{"a":{"approvedAt":1}}}`);
+    });
+
+    test("a ledger this build cannot read approves nothing, and says it could not read it", async () => {
+        const path = await tempFile("approvals.json");
+        await seed(path, { approved: { a: "not a pin" } });
+        expect(await ledgerAt(path).read()).toEqual({ approved: {}, unreadable: true });
     });
 });

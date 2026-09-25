@@ -1,7 +1,7 @@
 import { createReadStream } from "node:fs";
 import { extname } from "node:path";
 import { Readable } from "node:stream";
-import { webStream } from "../../web-stream.js";
+import { webStream } from "@intentic/base/web-stream";
 
 // Hard cap on a raw read; the browser holds the whole response as a Blob.
 export const MAX_RAW_BYTES = 25 * 1024 * 1024;

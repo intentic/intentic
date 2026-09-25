@@ -15,7 +15,7 @@ import { type AssistantSetup, applyAssistantSetup } from "./assistants.js";
 import { applyMigration, type MigrationDeps } from "./apply.js";
 import { planHermes } from "./hermes.js";
 import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
-import { webStream } from "../web-stream.js";
+import { webStream } from "@intentic/base/web-stream";
 
 /* The whole crossing, minus the HTTP framing: a packed `~/.hermes` through the archive reader, the adapter and the apply loop. */
 

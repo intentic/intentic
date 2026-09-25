@@ -8,7 +8,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import type { PerfFields } from "../../platform/resources/perf.js";
+import type { PerfFields } from "../../system/resources/perf.js";
 import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
 import { askRoleModel, REFUSED_FOR_MS } from "./role-model.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";

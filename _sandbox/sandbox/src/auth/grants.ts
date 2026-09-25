@@ -1,8 +1,9 @@
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { sandboxRouteFor } from "@intentic/sandbox-contract";
 import { tokenEquals } from "./auth.js";
-import { type ControlTokens, controlScoped } from "./control-tokens.js";
+import { type ControlTokens, controlScoped } from "./tokens/control-tokens.js";
 import type { Principal } from "./principal.js";
+import type { Presented } from "../peers/enrollment.js";
 
 // Grants: every credential the daemon accepts instead of the owner's Google bearer, in one table so each fails the same
 // way.
@@ -10,12 +11,16 @@ import type { Principal } from "./principal.js";
 // The empty-string check matters: `tokenEquals("", "")` is true, so an empty secret would authorize every
 // unauthenticated request.
 
-export type GrantVerdict = "ok" | "unauthorized" | "out-of-scope";
+export type GrantVerdict = "ok" | "unauthorized" | "out-of-scope" | "unavailable";
 
 // What a grant answers.
 // `principal` rides only on an admission from a grant whose credential names a party; a per-boot secret admits a
 // process and says nothing more.
-export type GrantOutcome = { readonly verdict: "ok"; readonly principal?: Principal } | { readonly verdict: "unauthorized" | "out-of-scope" };
+// `unavailable` is a store this daemon could not read: its own problem, never a revocation the holder must act on.
+export type GrantOutcome =
+    | { readonly verdict: "ok"; readonly principal?: Principal }
+    | { readonly verdict: "unauthorized" | "out-of-scope" }
+    | { readonly verdict: "unavailable"; readonly detail: string };
 
 const OK: GrantOutcome = { verdict: "ok" };
 const UNAUTHORIZED: GrantOutcome = { verdict: "unauthorized" };
@@ -103,7 +108,9 @@ export const callingExtension = (
 // The grant loop: a non-empty header selects a grant and commits the request to it, the first grant whose header is
 // present answers.
 // `undefined` means no grant header was presented at all, so the caller falls through to the bearer path.
-export type GrantAdmission = { readonly admitted: true; readonly principal?: Principal } | { readonly admitted: false; readonly status: 401 | 403; readonly error: string };
+export type GrantAdmission =
+    | { readonly admitted: true; readonly principal?: Principal }
+    | { readonly admitted: false; readonly status: 401 | 403 | 503; readonly error: string };
 
 export const admitByGrant = async (
     grants: readonly Grant[],
@@ -121,9 +128,14 @@ export const admitByGrant = async (
             return outcome.principal === undefined ? { admitted: true } : { admitted: true, principal: outcome.principal };
         }
         // Out of scope is its own answer: the right credential on the wrong route reads "not for this route", not 401.
-        return outcome.verdict === "out-of-scope"
-            ? { admitted: false, status: 403, error: `${grant.name} not valid for this route` }
-            : { admitted: false, status: 401, error: "unauthorized" };
+        if (outcome.verdict === "out-of-scope") {
+            return { admitted: false, status: 403, error: `${grant.name} not valid for this route` };
+        }
+        // The peer doors' answer too (peer-store.ts): no holder throws away a credential this daemon still holds.
+        if (outcome.verdict === "unavailable") {
+            return { admitted: false, status: 503, error: `this sandbox cannot read its enrollment manifest right now (${outcome.detail})` };
+        }
+        return { admitted: false, status: 401, error: "unauthorized" };
     }
     return undefined;
 };
@@ -134,7 +146,7 @@ export interface GrantSources {
     readonly controlTokens: ControlTokens;
     // Passed in rather than imported, so this module stays free of platform/ and is testable with a one-line fake.
     // `checkedIn` is true only for the watcher's poll, not the transport; only the poll refreshes the heartbeat.
-    readonly verifySync: (presented: string, checkedIn: boolean) => Promise<boolean>;
+    readonly verifySync: (presented: string, checkedIn: boolean) => Promise<Presented>;
     // An extension token resolves to its extension's grant; unknown token means 401.
     readonly verifyExtension: (presented: string) => ExtensionGrant | undefined;
 }
@@ -172,7 +184,7 @@ export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync, ve
             if (!controlScoped(token.scope, method, path)) {
                 return OUT_OF_SCOPE;
             }
-            // Do not let a failed token touch reject an otherwise valid request.
+            // allow(silent-catch): a failed last-used stamp must not reject an otherwise valid request.
             await controlTokens.touch(token.id).catch(() => undefined);
             return { verdict: "ok", principal: { kind: "control", id: token.id, label: token.label, scope: token.scope } };
         },
@@ -188,7 +200,11 @@ export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync, ve
                 return OUT_OF_SCOPE;
             }
             // Mutagen holds the transport pipe open regardless; only a poll is a check-in that refreshes the heartbeat.
-            return (await verifySync(presented, sync === "poll")) ? OK : UNAUTHORIZED;
+            const holder = await verifySync(presented, sync === "poll");
+            if (holder.kind === "unreadable") {
+                return { verdict: "unavailable", detail: holder.detail };
+            }
+            return holder.kind === "enrolled" ? OK : UNAUTHORIZED;
         },
     },
 ];

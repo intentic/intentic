@@ -5,7 +5,7 @@ import { truncatedTotal } from "../truncation";
 // What a maker's one Save press records the tree under. A maker never writes a commit message, so the subject is
 // chosen for them: the sentence the commit-message model already wrote for an assistant's landing when the whole
 // tree is that one landing, and a constant otherwise. Nothing here asks a model — the drafting happened at land
-// time (agents/land/landed-subject.ts) and this only spends what it produced.
+// time (conversations/land/landed-subject.ts) and this only spends what it produced.
 
 // The subject the daemon writes for the tree's own dirty remainder (version-landed.ts). Reused verbatim so a save
 // pressed by hand and one made for the owner read the same in the history.

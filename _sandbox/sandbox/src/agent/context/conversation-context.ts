@@ -1,6 +1,6 @@
 import type { AgentTurn, TurnNote } from "@intentic/sandbox-contract";
-import { compactedSinceLastTurn, type Composition, worktreeOf } from "../../agents/registry/agents-store.js";
-import type { ConversationWorktree } from "../../agents/worktrees/worktrees.js";
+import { compactedSinceLastTurn, type Composition, worktreeOf } from "../../conversations/registry/agents-store.js";
+import type { ConversationWorktree } from "../../conversations/worktrees/worktrees.js";
 import type { Services } from "../../composition.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import { conversationFence } from "../../areas/area-scope.js";

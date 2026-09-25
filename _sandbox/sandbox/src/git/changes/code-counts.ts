@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { LineStat } from "@intentic/code-read";
 import type { GitChange } from "@intentic/sandbox-contract";
 import { readWorkspaceFile, statWorkspaceSizeMtime } from "../../workspace/files/workspace-files.js";
-import { siblingModule, type WorkerCalls, workerPool } from "../../workers/worker-calls.js";
+import { siblingModule, type WorkerCalls, workerPool } from "@intentic/base/worker-calls";
 import { readObject } from "./blob-reader.js";
 import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
 

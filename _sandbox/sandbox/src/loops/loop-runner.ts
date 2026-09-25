@@ -9,8 +9,8 @@ import {
     profileOf,
 } from "@intentic/sandbox-contract";
 import { sumUsage, type UsageFrame } from "../agent/run/turn/turn-usage.js";
-import type { ConversationActors } from "../agents/actor/conversation-actors.js";
-import type { Holding, Holdings } from "../agents/actor/conversation-holdings.js";
+import type { ConversationActors } from "../conversations/actor/conversation-actors.js";
+import type { Holding, Holdings } from "../conversations/actor/conversation-holdings.js";
 import type { Services } from "../composition.js";
 import { briefForIteration, loopDirIn } from "./loop-brief.js";
 import { treeDigest } from "./loop-progress.js";
@@ -261,33 +261,48 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
     };
 };
 
-// Resumes loops still marked `running` after a restart (the manifest is the journal: `running` means no `settle`
-// landed). RESUME_MAX caps repeat attempts, so a loop that reliably kills the daemon settles `error` instead.
+// How many boot resumes a run the daemon drives gets before it is abandoned instead: loops and workflows alike.
 const RESUME_MAX = 2;
 
-export const resumeLoops = async (services: Services, ownedByWorkflow: ReadonlySet<string> = new Set()): Promise<string[]> => {
-    const resumed: string[] = [];
-    for (const record of await services.loops.list()) {
-        if (record.state !== "running" || loopRunning(services.conversations, record.conversationId) || ownedByWorkflow.has(record.conversationId)) {
-            continue;
-        }
-        const counted = await services.loops.countResume(record.conversationId);
+// Resumes every run still marked running that nothing drives (the ledger is the journal: `running` means no settle
+// landed), counting each resume; past RESUME_MAX it is abandoned, so a run that reliably kills the daemon ends.
+export const resumeCapped = async <R extends { readonly resumed: number }>(
+    candidates: readonly R[],
+    run: {
+        readonly count: (candidate: R) => Promise<R | undefined>;
+        readonly abandon: (counted: R) => Promise<void>;
+        readonly restart: (counted: R) => void;
+    },
+): Promise<R[]> => {
+    const resumed: R[] = [];
+    for (const candidate of candidates) {
+        const counted = await run.count(candidate);
         if (counted === undefined) {
             continue;
         }
         if (counted.resumed > RESUME_MAX) {
-            await services.loops.settle(
-                record.conversationId,
-                "error",
-                Date.now(),
-                `Abandoned after the daemon died under this loop ${counted.resumed} times.`,
-            );
-            publish(services, record, "error", record.iterations.length);
-            services.logger.warn({ conversationId: record.conversationId }, "loop: abandoned after repeated daemon deaths");
+            await run.abandon(counted);
             continue;
         }
-        resumed.push(record.conversationId);
-        void runLoop(services, counted);
+        resumed.push(counted);
+        run.restart(counted);
     }
     return resumed;
+};
+
+export const resumeLoops = async (services: Services, ownedByWorkflow: ReadonlySet<string> = new Set()): Promise<string[]> => {
+    const stranded = (await services.loops.list()).filter(
+        (record) =>
+            record.state === "running" && !loopRunning(services.conversations, record.conversationId) && !ownedByWorkflow.has(record.conversationId),
+    );
+    const resumed = await resumeCapped(stranded, {
+        count: (record) => services.loops.countResume(record.conversationId),
+        abandon: async (record) => {
+            await services.loops.settle(record.conversationId, "error", Date.now(), `Abandoned after the daemon died under this loop ${record.resumed} times.`);
+            publish(services, record, "error", record.iterations.length);
+            services.logger.warn({ conversationId: record.conversationId }, "loop: abandoned after repeated daemon deaths");
+        },
+        restart: (record) => void runLoop(services, record),
+    });
+    return resumed.map((record) => record.conversationId);
 };

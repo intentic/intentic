@@ -1,3 +1,6 @@
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { isMissing } from "@intentic/base/errors";
 import { opt } from "./opt.js";
 
 // Reads and writes a SKILL.md's frontmatter (`name`, `description`); composes it for a skill the daemon owns, parses it
@@ -84,4 +87,45 @@ export const parseSkillFile = (text: string): ParsedSkill => {
             .join("\n")
             .replace(/^\n+/, ""),
     };
+};
+
+// A skill is a folder holding this file, named by the folder whatever its frontmatter declares: the loader keys it so.
+export const SKILL_FILE = "SKILL.md";
+
+export interface FoundSkill {
+    readonly name: string;
+    readonly description: string;
+    readonly body: string;
+}
+
+// The folders directly under a skills directory, in name order; `throw` is for a caller that sweeps whatever it omits.
+export const skillFolderNames = async (dir: string, unlistable: "none" | "throw" = "none"): Promise<string[]> => {
+    const entries = await readdir(dir, { withFileTypes: true }).catch((error: unknown) => {
+        if (unlistable === "throw" && !isMissing(error)) {
+            throw error;
+        }
+        // allow(silent-catch): an absent folder lists none; so does an unreadable one for a caller that only shows what it finds
+        return [];
+    });
+    return entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .toSorted((a, b) => a.localeCompare(b));
+};
+
+// Every skill under `dir` in name order, each file read through `read`; a folder whose file reads as undefined is skipped.
+export const scanSkillFolders = async (
+    dir: string,
+    read: (path: string) => Promise<string | undefined>,
+    unlistable: "none" | "throw" = "none",
+): Promise<FoundSkill[]> => {
+    const found: FoundSkill[] = [];
+    for (const name of await skillFolderNames(dir, unlistable)) {
+        const text = await read(join(dir, name, SKILL_FILE));
+        if (text !== undefined) {
+            const parsed = parseSkillFile(text);
+            found.push({ name, description: parsed.description ?? "", body: parsed.body });
+        }
+    }
+    return found;
 };

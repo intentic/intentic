@@ -1,8 +1,9 @@
 import { isUtf8 } from "node:buffer";
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, readdir, readFile, rename, stat } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rename, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { agentHome, writeFileAtomic } from "@intentic/local-agent";
+import { writeFileAtomic } from "@intentic/base/fs";
+import { agentHome } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { assertPath, assertScope } from "../policy.js";
 
@@ -177,12 +178,8 @@ const current = async (target: string, path: string, revision: string): Promise<
     return { file, mode };
 };
 
-// Beside the file and then renamed over it, so nothing ever reads half of it. The staged copy's mode was cut by the
-// umask, so the file's own is put back exactly.
-const replace = async (target: string, bytes: Buffer, mode: number): Promise<void> => {
-    await writeFileAtomic(target, bytes, mode);
-    await chmod(target, mode);
-};
+// Beside the file and then renamed over it, so nothing ever reads half of it, carrying the file's own mode exactly.
+const replace = async (target: string, bytes: Buffer, mode: number): Promise<void> => await writeFileAtomic(target, bytes, mode);
 
 const exists = async (target: string): Promise<boolean> =>
     await stat(target).then(
@@ -215,8 +212,8 @@ export const writeTextFile = async (path: string, content: string, revision: str
     }
     await mkdir(dirname(target), { recursive: true });
     const bytes = encode(content, undefined);
-    // What any program's new file gets: the umask decides the rest.
-    await writeFileAtomic(target, bytes, 0o666);
+    // No mode: the umask decides, as for any program's new file.
+    await writeFileAtomic(target, bytes);
     return `Created ${target} (${content.length} characters). Revision ${revisionOf(bytes)}.`;
 };
 

@@ -9,6 +9,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonEntries } from "../store/json-file.js";
+import { countResume, keyedEntries } from "../store/keyed-entries.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Loop manifest (<workspace>/.intentic/records/loops.json): every loop run, with its iteration history; mirrors the
@@ -44,16 +45,10 @@ export const fileLoopsStore = (path: string): LoopsStore => {
         document: loopsDocument,
         idKeys: ["conversationId"],
     });
-    // Finds the record by conversationId and replaces it; a missing record is a no-op, not an error.
-    const amend = async (conversationId: string, change: (record: LoopRecord) => LoopRecord): Promise<void> => {
-        await file.update((records) => {
-            const existing = records.find((record) => record.conversationId === conversationId);
-            return existing === undefined ? records : records.map((record) => (record === existing ? change(existing) : record));
-        });
-    };
+    const records = keyedEntries(file, "conversationId");
     return {
         list: async () => (await file.read()).toSorted((a, b) => b.startedAt - a.startedAt),
-        get: async (conversationId) => (await file.read()).find((record) => record.conversationId === conversationId),
+        get: records.get,
         start: async (loop, now) => {
             const record: LoopRecord = { ...loop, state: "running", startedAt: now, resumed: 0, iterations: [] };
             await file.update((records) =>
@@ -62,13 +57,10 @@ export const fileLoopsStore = (path: string): LoopsStore => {
             return record;
         },
         recordIteration: (conversationId, iteration) =>
-            amend(conversationId, (record) => ({ ...record, iterations: [...record.iterations, iteration].slice(-ITERATIONS_KEPT) })),
+            records.amend(conversationId, (record) => ({ ...record, iterations: [...record.iterations, iteration].slice(-ITERATIONS_KEPT) })),
         settle: (conversationId, state, now, detail) =>
-            amend(conversationId, (record) => ({ ...record, state, endedAt: now, ...(detail !== undefined ? { detail } : {}) })),
-        countResume: async (conversationId) => {
-            await amend(conversationId, (record) => ({ ...record, resumed: record.resumed + 1 }));
-            return (await file.read()).find((record) => record.conversationId === conversationId);
-        },
+            records.amend(conversationId, (record) => ({ ...record, state, endedAt: now, ...(detail !== undefined ? { detail } : {}) })),
+        countResume: (conversationId) => countResume(records, conversationId),
     };
 };
 
@@ -84,29 +76,6 @@ export interface LoopDesignsStore {
 
 export const fileLoopDesignsStore = (path: string): LoopDesignsStore => {
     const file = jsonEntries<LoopDesign>(path, { entry: (raw) => LoopDesignSchema.safeParse(raw).data, document: loopDesignsDocument });
-    return {
-        list: () => file.read(),
-        get: async (id) => (await file.read()).find((design) => design.id === id),
-        save: async (design, create) => {
-            let outcome: "saved" | "conflict" | "missing" = "saved";
-            await file.update((designs) => {
-                const index = designs.findIndex((entry) => entry.id === design.id);
-                if (create && index !== -1) {
-                    outcome = "conflict";
-                    return designs;
-                }
-                if (!create && index === -1) {
-                    outcome = "missing";
-                    return designs;
-                }
-                return create ? [...designs, design] : designs.map((entry, at) => (at === index ? design : entry));
-            });
-            return outcome;
-        },
-        remove: async (id) => {
-            const before = (await file.read()).length;
-            const after = await file.update((designs) => designs.filter((design) => design.id !== id));
-            return after.length < before;
-        },
-    };
+    const { get, save, remove } = keyedEntries(file, "id");
+    return { list: () => file.read(), get, save, remove };
 };

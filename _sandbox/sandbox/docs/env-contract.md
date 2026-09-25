@@ -48,5 +48,5 @@ The daemon exits with code 78 rather than serve an unsafe posture:
 - reachable (`CONNECT_TOKEN` or `SANDBOX_PUBLIC_URL` set) with an empty `GOOGLE_CLIENT_ID`, since nobody would be
   authenticated; only the e2e harnesses bypass this, with `SANDBOX_ALLOW_UNAUTHENTICATED`;
 - `SANDBOX_PROFILE=local` with a non-loopback `SANDBOX_HOST`, a connect token, a public URL or a platform URL
-  (`requireLocalContract` in [src/platform/boot/profile.ts](../src/platform/boot/profile.ts));
+  (`requireLocalContract` in [src/system/boot/profile.ts](../src/system/boot/profile.ts));
 - started without the two front sockets.

@@ -1,5 +1,5 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { Coalescer, createBackoff, Delayer, keyedLock, narrate, pollUntil, retry, sleep, SingleFlight } from "./async.js";
+import { Coalescer, createBackoff, Delayer, keyedLock, narrate, pollUntil, retry, serialLock, sleep, SingleFlight, whenAborted } from "./async.js";
 
 beforeEach(() => {
     jest.useFakeTimers();
@@ -207,6 +207,30 @@ describe(`keyedLock`, () => {
         expect(order.filter((step) => !step.startsWith(`other`))).toEqual([`first start`, `first end`, `second start`, `second end`]);
         // Another key never waits on this one's queue.
         expect(order.indexOf(`other start`)).toBeLessThan(order.indexOf(`first end`));
+    });
+});
+
+describe(`serialLock`, () => {
+    it(`runs one task at a time, the next after the last however it ended`, async () => {
+        const serially = serialLock();
+        const order: string[] = [];
+        const slow = (name: string, fail = false) => async (): Promise<string> => {
+            order.push(`${name} start`);
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            order.push(`${name} end`);
+            if (fail) {
+                throw new Error(name);
+            }
+            return name;
+        };
+
+        const first = serially(slow(`first`, true));
+        const second = serially(slow(`second`));
+        await advanceTimersByTimeAsync(20);
+
+        await expect(first).rejects.toThrow(`first`);
+        await expect(second).resolves.toBe(`second`);
+        expect(order).toEqual([`first start`, `first end`, `second start`, `second end`]);
     });
 });
 
@@ -423,5 +447,83 @@ describe(`narrate`, () => {
         const rest = drain(stream as AsyncGenerator<Frame>);
         await advanceTimersByTimeAsync(50);
         expect(await rest).toEqual([{ kind: `done`, ok: true, detail: `done` }]);
+    });
+});
+
+describe(`whenAborted`, () => {
+    test("a signal that aborted before anyone listened still runs the handler", () => {
+        const controller = new AbortController();
+        controller.abort();
+        let ran = 0;
+        whenAborted(controller.signal, () => {
+            ran += 1;
+        });
+        // The bare listener this replaces would leave `ran` at 0: the abort event fired before registration and is
+        // never replayed, which is how a Stop clicked during a provider's connect handshake used to be dropped.
+        expect(ran).toBe(1);
+    });
+
+    test("the handler runs synchronously, so the line after the registration already sees the cancellation", () => {
+        const controller = new AbortController();
+        controller.abort();
+        let killed = false;
+        whenAborted(controller.signal, () => {
+            killed = true;
+        });
+        expect(killed).toBe(true);
+    });
+
+    test("a live signal fires the handler once, when it aborts", () => {
+        const controller = new AbortController();
+        let ran = 0;
+        whenAborted(controller.signal, () => {
+            ran += 1;
+        });
+        expect(ran).toBe(0);
+        controller.abort();
+        controller.abort();
+        expect(ran).toBe(1);
+    });
+
+    test("the returned dispose removes a handler that has not fired", () => {
+        const controller = new AbortController();
+        let ran = 0;
+        const dispose = whenAborted(controller.signal, () => {
+            ran += 1;
+        });
+        dispose();
+        controller.abort();
+        expect(ran).toBe(0);
+    });
+
+    test("dispose is safe after the handler already ran, and safe with no signal at all", () => {
+        const controller = new AbortController();
+        let ran = 0;
+        const dispose = whenAborted(controller.signal, () => {
+            ran += 1;
+        });
+        controller.abort();
+        expect(ran).toBe(1);
+        expect(() => dispose()).not.toThrow();
+        expect(ran).toBe(1);
+
+        let neverRan = 0;
+        const disposeNothing = whenAborted(undefined, () => {
+            neverRan += 1;
+        });
+        expect(() => disposeNothing()).not.toThrow();
+        expect(neverRan).toBe(0);
+    });
+
+    test("an already-aborted signal still hands back a dispose that does not re-run the handler", () => {
+        const controller = new AbortController();
+        controller.abort();
+        let ran = 0;
+        const dispose = whenAborted(controller.signal, () => {
+            ran += 1;
+        });
+        expect(ran).toBe(1);
+        dispose();
+        expect(ran).toBe(1);
     });
 });

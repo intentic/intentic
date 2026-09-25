@@ -1,7 +1,7 @@
 import type { AgentEvent, WalletConfig } from "@intentic/sandbox-contract";
 import { gatedPaidFetch, type PaidFetchRequest, type PaymentGateDeps } from "./payment-offer.js";
 import type { PaymentRow, WalletLedgerStore } from "./wallet-ledger.js";
-import { parkedCards } from "../agents/actor/parked-cards.js";
+import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
@@ -75,6 +75,8 @@ interface Fake {
     readonly signed: unknown[];
     readonly ledger: WalletLedgerStore & { readonly rows: PaymentRow[] };
     readonly paidHeaders: (string | null)[];
+    // Every card the owner's devices were told a turn now waits on.
+    readonly awaited: { readonly conversationId: string; readonly kind: string }[];
 }
 
 const fake = (
@@ -84,6 +86,7 @@ const fake = (
     const frames: AgentEvent[] = [];
     const signed: unknown[] = [];
     const paidHeaders: (string | null)[] = [];
+    const awaited: { conversationId: string; kind: string }[] = [];
     const ledger = memoryLedger();
     const deps: PaymentGateDeps = {
         cards,
@@ -109,10 +112,11 @@ const fake = (
         }) as unknown as typeof fetch,
         liveRun: (conversationId) => ({ conversationId: conversationId ?? "sole-conv", push: (event) => frames.push(event) }),
         observe: () => {},
+        awaiting: (conversationId, kind) => awaited.push({ conversationId, kind }),
         tainted: () => false,
         ...over,
     };
-    return { deps, frames, signed, ledger, paidHeaders };
+    return { deps, frames, signed, ledger, paidHeaders, awaited };
 };
 
 const asked = (over: Partial<PaidFetchRequest> = {}): PaidFetchRequest => ({
@@ -139,7 +143,7 @@ const answerCard = async (frames: AgentEvent[], approve: boolean): Promise<void>
 };
 
 it("pays only after the click, and receipts the endpoint's own settlement", async () => {
-    const { deps, frames, signed, ledger, paidHeaders } = fake();
+    const { deps, frames, signed, ledger, paidHeaders, awaited } = fake();
     const pending = gatedPaidFetch(deps, asked());
     await answerCard(frames, true);
     const answer = await pending;
@@ -157,6 +161,8 @@ it("pays only after the click, and receipts the endpoint's own settlement", asyn
     expect(frames.map((frame) => frame.kind)).toEqual(["payment_offer", "resolved", "payment_receipt"]);
     expect(frames[2]).toMatchObject({ kind: "payment_receipt", outcome: "paid", amountUsd: "0.10", transaction: "0xdeadbeef" });
     expect(ledger.rows.at(-1)).toMatchObject({ outcome: "paid", amountUsd: "0.10", host: "api.example.com" });
+    // A payment card parks the turn like any other, so the owner's devices hear it waits.
+    expect(awaited).toEqual([{ conversationId: "conv-1", kind: "payment_offer" }]);
 });
 
 it("a skip signs nothing and tells the agent to continue without it", async () => {

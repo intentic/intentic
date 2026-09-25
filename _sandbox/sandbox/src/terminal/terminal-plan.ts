@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
 import type { Answer, TerminalPlan } from "@intentic/sandbox-contract/front-wire";
-import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
-import { redeemTicket, type WsTickets } from "../auth/ws-tickets.js";
+import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX, PANEL_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import { redeemTicket, type WsTickets } from "../auth/tokens/ws-tickets.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
-import { isValidSessionName, PANEL_SESSION_PREFIX, SERVICE_SESSION_PREFIX } from "./terminal-session.js";
+import { isValidSessionName, SERVICE_SESSION_PREFIX } from "./terminal-session.js";
 
 // A terminal socket is the front's (_sandbox/front, term/): it asks here, once per socket, whether the socket may open
 // and onto what, and none of its bytes ever pass through this process.

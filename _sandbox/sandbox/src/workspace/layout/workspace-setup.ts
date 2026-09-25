@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pathExists } from "../../path-exists.js";
+import { pathExists } from "@intentic/base/fs";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { isManifest, managerFromPackageJson, recipeFor, type SetupRecipe } from "@intentic/workspace-setup";
-import { onPath } from "../../platform/boot/on-path.js";
+import { onPath } from "../../system/boot/on-path.js";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import {
     type OutdatedDependency,

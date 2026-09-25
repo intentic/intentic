@@ -66,7 +66,7 @@
         // TEST_MEMORY_CEILING_MB moves the ceiling each bun process is held under; `envMode: strict` drops any
         // variable not named here. On the TASK, not in `globalPassThroughEnv`, which mirrors the Dockerfile's ENV
         // blocks and is diffed against them; passThrough keeps the VALUE out of the cache key. INTENTIC_TURN_OWNER
-        // is the stamp the sandbox's reaper finds a stopped conversation's leftovers by (platform/boot/reaper.ts):
+        // is the stamp the sandbox's reaper finds a stopped conversation's leftovers by (system/boot/reaper.ts):
         // stripped here, a test run whose conversation had stopped was invisible to it. `CI` is in the HASH instead:
         // a test that needs something of the machine stands down without it and fails on CI (@intentic/testing's
         // requires), so a run that stood down locally must never be replayed as a CI result.

@@ -1,3 +1,4 @@
+import { serialLock } from "@intentic/base/async";
 import { CI_POLL_INTERVAL_MS } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
@@ -21,7 +22,7 @@ export interface CiPoller {
 
 export const createCiPoller = (services: Services, fetchFn: FetchFn = fetch, intervalMs = CI_POLL_INTERVAL_MS): CiPoller => {
     let timer: NodeJS.Timeout | undefined;
-    let pass: Promise<void> = Promise.resolve();
+    const serially = serialLock();
 
     const pollRepo = async (project: Awaited<ReturnType<typeof ciProjects>>[number]): Promise<void> => {
         const client = ciClientFor(project.account.provider, fetchFn);
@@ -72,11 +73,7 @@ export const createCiPoller = (services: Services, fetchFn: FetchFn = fetch, int
 
     // Serializes poll calls; a manual poll during the interval's pass chains after it instead of racing the
     // announced-ids record.
-    const poll = (): Promise<void> => {
-        const run = pass.then(pollOnce, pollOnce);
-        pass = run.catch(() => undefined);
-        return run;
-    };
+    const poll = (): Promise<void> => serially(pollOnce);
 
     return {
         poll,

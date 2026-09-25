@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { activateVersion, engineVersionDir, forgetEngineStates, quarantineVersion } from "./engine-store.js";
-import { forgetEngineResolution, resolveEngine } from "./engine-resolve.js";
+import { engineBinary, engineReady, forgetEngineResolution, resolveEngine } from "./engine-resolve.js";
 
 // Every doubt resolves to the image's copy: an unused, missing, or quarantined store entry all fall back the same way,
 // since this read sits in the turn path.
@@ -66,4 +66,26 @@ test("the cached answer expires, so an update reaches the next turn", async () =
 
     expect((await resolveEngine("cursor", start + 1_000)).source).toBe("image");
     expect((await resolveEngine("cursor", start + 6_000)).source).toBe("store");
+});
+
+// The Engines card installs into the store, never onto PATH, so a PATH-only probe read that install as missing.
+test("a spawned engine installed from the store reads ready with no copy on PATH", async () => {
+    const path = process.env["PATH"];
+    process.env["PATH"] = mkdtempSync(join(tmpdir(), "engine-resolve-path-"));
+    try {
+        expect(await engineReady("opencode")).toBe(false);
+
+        mkdirSync(engineVersionDir("opencode", "1.14.0"), { recursive: true });
+        await activateVersion("opencode", "1.14.0");
+        forgetEngineResolution();
+
+        expect(await engineReady("opencode")).toBe(true);
+        expect(await engineBinary("opencode")).toBe(join(engineVersionDir("opencode", "1.14.0"), "node_modules", ".bin", "opencode"));
+    } finally {
+        if (path === undefined) {
+            delete process.env["PATH"];
+        } else {
+            process.env["PATH"] = path;
+        }
+    }
 });

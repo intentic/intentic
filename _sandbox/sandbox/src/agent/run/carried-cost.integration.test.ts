@@ -7,7 +7,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { type HarnessRequest, runAgent } from "./agent.js";
 import { CHUNK_BYTES, carriedCostOf, TAIL_LIMIT_BYTES } from "./carried-cost.js";
 import type { QueryFn } from "./sdk-stream.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.

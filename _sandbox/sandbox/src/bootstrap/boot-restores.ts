@@ -3,24 +3,24 @@ import { capabilityCtx } from "../capabilities/capability.js";
 import { restoreConnectorHooks } from "../capabilities/cli/connector-hooks.js";
 import { startDockerdIfEnabled } from "../capabilities/handlers/docker.handler.js";
 import { startLocalModelsIfEnabled } from "../capabilities/handlers/localmodel.handler.js";
+import { engineReady } from "../engines/engine-resolve.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { restoreExits } from "../exit/exit-links.js";
 import { startAllExtensionProcesses } from "../extensions/extension-processes.js";
 import { applyTmuxLogHooks } from "../logs/log-files.js";
 import { remountNetdisks } from "../netdisk/netdisk-links.js";
-import { restoreExecBits, SANDBOX_INSTALL_DIR } from "../platform/boot/exec-bits.js";
-import { onPath } from "../platform/boot/on-path.js";
+import { restoreExecBits, SANDBOX_INSTALL_DIR } from "../system/boot/exec-bits.js";
 import { reconnectVpns } from "../vpn/vpn-links.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // Container-local state re-derived from manifests that outlived the container. Detached and best-effort: never on the boot path.
 
-// Gated on the binary being in the image (a feature pack): TRANSLATOR_URL alone does not imply it is present.
+// Gated on the engine being here, the image's own or an Environment-card install: TRANSLATOR_URL alone does not imply it.
 const startTranslatorIfPacked = async ({ config, logger, services }: BootPhase): Promise<void> => {
     if (config.translator.url === "") {
         return;
     }
-    if (!(await onPath("cli-proxy-api"))) {
+    if (!(await engineReady("translator"))) {
         logger.info("translator: cli-proxy-api is not in this image, add it by rebuilding from the Environment card");
         return;
     }

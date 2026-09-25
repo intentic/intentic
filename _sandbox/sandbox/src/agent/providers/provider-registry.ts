@@ -2,7 +2,7 @@ import type { Model, NativeProvider, OauthAccount, SecretInventoryEntry } from "
 import type { Logger } from "pino";
 import type { Services } from "../../composition.js";
 import type { ProviderDeps } from "../../runtimes/runtime-table.js";
-import { mergeSupersededAccounts } from "./account-identity.js";
+import { mergeSupersededAccounts } from "./accounts/account-identity.js";
 import type { BootRole, ProviderCatalog, ProviderModule, SharedProviderReads } from "./provider-module.js";
 
 export type { ProviderCatalog } from "./provider-module.js";

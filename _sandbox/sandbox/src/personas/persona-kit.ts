@@ -1,7 +1,7 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { parseSkillFile, skillDocument } from "../skill-file.js";
+import { parseSkillFile, scanSkillFolders, SKILL_FILE, skillDocument } from "../skill-file.js";
 import { statePath } from "../state-paths.js";
 
 // A persona's own kit: prompt, skills and tools in one folder per persona, read natively by the runtime's own Claude Code
@@ -13,7 +13,7 @@ export const personaKitDir = (root: string, id: string): string => statePath(roo
 const manifestPath = (root: string, id: string): string => join(personaKitDir(root, id), ".claude-plugin", "plugin.json");
 export const personaPromptPath = (root: string, id: string): string => join(personaKitDir(root, id), "PROMPT.md");
 export const personaSkillsRoot = (root: string, id: string): string => join(personaKitDir(root, id), "skills");
-export const personaSkillFile = (root: string, id: string, name: string): string => join(personaSkillsRoot(root, id), name, "SKILL.md");
+export const personaSkillFile = (root: string, id: string, name: string): string => join(personaSkillsRoot(root, id), name, SKILL_FILE);
 
 // Daemon-written so a missing manifest never means a silently empty kit; rewritten on every touch so a renamed label
 // doesn't linger. A persona id colliding with an installed plugin's name is resolved arbitrarily by the loader.
@@ -61,10 +61,13 @@ export const removePersonaPrompt = async (root: string, id: string): Promise<voi
     await rm(personaPromptPath(root, id), { force: true });
 };
 
+// allow(silent-catch): a kit is a folder the owner edits by hand, so a skill file that cannot be read is one the kit lacks
+const readKitFile = (path: string): Promise<string | undefined> => readFile(path, "utf8").catch(() => undefined);
+
 // Directory name wins over a disagreeing frontmatter `name:`, since the directory is what the loader keys by. Undefined
 // for no such skill; the route turns that into a 404.
 export const readPersonaSkill = async (root: string, id: string, name: string): Promise<PersonaSkill | undefined> => {
-    const text = await readFile(personaSkillFile(root, id, name), "utf8").catch(() => undefined);
+    const text = await readKitFile(personaSkillFile(root, id, name));
     if (text === undefined) {
         return undefined;
     }
@@ -79,17 +82,7 @@ export interface PersonaSkill {
 }
 
 // Every skill this persona carries; a directory with no SKILL.md is half-written and skipped.
-export const listPersonaSkills = async (root: string, id: string): Promise<PersonaSkill[]> => {
-    const entries = await readdir(personaSkillsRoot(root, id), { withFileTypes: true }).catch(() => []);
-    const skills: PersonaSkill[] = [];
-    for (const entry of entries.filter((candidate) => candidate.isDirectory()).toSorted((a, b) => a.name.localeCompare(b.name))) {
-        const skill = await readPersonaSkill(root, id, entry.name);
-        if (skill !== undefined) {
-            skills.push(skill);
-        }
-    }
-    return skills;
-};
+export const listPersonaSkills = (root: string, id: string): Promise<PersonaSkill[]> => scanSkillFolders(personaSkillsRoot(root, id), readKitFile);
 
 // Uses the same composer as the sandbox's own skills, so the frontmatter is always loader-readable; prevents a saved
 // skill that silently never loads.

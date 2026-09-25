@@ -24,7 +24,7 @@ what connecting a VPN means (the browser on `/vpn`, the agent on `/usr/local/bin
 dials appears in your UI with nothing syncing the two), one `tmux` server behind your terminals and
 its shell commands, one `iq` index behind `/workspace/search` and its Bash calls, and one tree: each
 agent on its own git worktree, landing its delta into your Changes panel as the review boundary
-(`_sandbox/sandbox/src/agents/worktrees.ts`, `land.ts`). A window opened anywhere shows the run as
+(`_sandbox/sandbox/src/conversations/worktrees.ts`, `land.ts`). A window opened anywhere shows the run as
 it actually is, not a replay of it.
 
 But an autonomous agent is not fire-and-forget. AI still needs its context configured, its work
@@ -104,7 +104,7 @@ below, so that is what the page now claims and proves; the rest support it or li
    unread**: one sandbox and one git worktree per agent, run ten at once; the runs live on your
    machine, not in the tab, so any browser or phone reopens onto the same board; and the review
    boundary is a real branch: land it into your tree or discard it
-   (`_sandbox/sandbox/src/agents/worktrees.ts`, `land.ts`, `_editor/web/src/pages/Agents.vue`).
+   (`_sandbox/sandbox/src/conversations/worktrees.ts`, `land.ts`, `_editor/web/src/pages/Agents.vue`).
    Local orchestrators share the ownership instinct; none of them pair it with the persistence, the
    reach and the environment below. (P1, P2, P4, P6)
 2. **Ownership without giving up the cloud UX**, the moat: the only agent workspace where the

@@ -1,11 +1,11 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { SingleFlight, sleep } from "@intentic/base/async";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import type { OauthAccount } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
+import { accountFiles } from "../../agent/providers/accounts/account-files.js";
 
 // Claude subscription OAuth (PKCE) against the public Claude Code client; the sandbox owns these credentials, not the
 // platform. The constants mirror claude setup-token and are unofficial. Anthropic's redirect page returns code#state;
@@ -242,28 +242,11 @@ export interface ClaudeStore {
     readonly logger: Logger;
 }
 
-const jsonOrUndefined = (text: string): unknown => {
-    try {
-        return JSON.parse(text) as unknown;
-    } catch {
-        return undefined;
-    }
-};
-
 // A JSON file store: one <id>.json per account under <workspace>/.intentic/secrets/auth/claude/ (outside the three repos).
 export const fileClaudeStore = (dir: string, logger: Logger): ClaudeStore => {
-    const path = (id: string): string => join(dir, `${id}.json`);
+    // The catalog's models.json shares this directory, and reads as no account.
+    const files = accountFiles(dir, StoredAccountSchema);
     const lockPath = (id: string): string => join(dir, `${id}.refresh.lock`);
-    // Only a missing file is "not connected"; an unreadable one throws, or a connected account would read as signed out.
-    // Content that is not an account is skipped quietly: the catalog's models.json shares this directory.
-    const readStored = async (id: string): Promise<StoredAccount | undefined> => {
-        const text = await readFile(path(id), "utf8").catch(undefinedIfMissing);
-        if (text === undefined) {
-            return undefined;
-        }
-        const parsed = StoredAccountSchema.safeParse(jsonOrUndefined(text));
-        return parsed.success ? parsed.data : undefined;
-    };
     // Takes the lock file, or explains why it proceeds without it. Exclusive create is the lock: two processes racing
     // `wx` on one path, exactly one wins.
     const acquire = async (id: string): Promise<boolean> => {
@@ -297,27 +280,13 @@ export const fileClaudeStore = (dir: string, logger: Logger): ClaudeStore => {
     };
     return {
         logger,
-        read: readStored,
-        // Atomic: a reader must never observe a half-written file. Written 0o600 via the temp file, since rename
-        // carries its mode onto the target and the umask would otherwise publish 0644.
-        write: async (account) => {
-            await mkdir(dir, { recursive: true });
-            const temp = `${path(account.id)}.${randomUUID()}.tmp`;
-            await writeFile(temp, `${JSON.stringify(account, undefined, 2)}\n`, { mode: 0o600 });
-            await rename(temp, path(account.id));
-        },
+        read: files.read,
+        write: files.write,
         clear: async (id) => {
-            await rm(path(id), { force: true });
+            await files.remove(id);
             await rm(lockPath(id), { force: true });
         },
-        list: async () => {
-            const entries = (await readdir(dir).catch(undefinedIfMissing)) ?? [];
-            const stored = await Promise.all(entries.filter((name) => name.endsWith(".json")).map((name) => readStored(name.slice(0, -5))));
-            return stored
-                .filter((account): account is StoredAccount => account !== undefined)
-                .map(toAccount)
-                .toSorted((a, b) => a.connectedAt - b.connectedAt);
-        },
+        list: async () => (await files.list()).map(toAccount),
         withRefreshLock: async (id, act) => {
             await mkdir(dir, { recursive: true });
             const held = await acquire(id);

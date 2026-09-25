@@ -18,7 +18,7 @@ import { opt } from "../../opt.js";
 // What each push check found and let through (<workspace>/.intentic/records/push-checks.json), and what became of every
 // finding since. The pre-push hook never refuses a push: it measures, prints, and leaves a report in the repository's
 // git common dir (push-checks.ts reads it). Filed here, a finding stays open until a later measurement no longer prints
-// it or somebody dismisses it. Nothing is sent after one; acting on it is the owner's press (agents/fix/push-fix.ts).
+// it or somebody dismisses it. Nothing is sent after one; acting on it is the owner's press (conversations/fix/push-fix.ts).
 
 // A finding as filed: the wire's, plus the key the hook gave it, which a later measurement names it by. Never sent.
 const StoredFindingSchema = PushFindingSchema.extend({ key: z.string() });
@@ -263,7 +263,7 @@ export const ingestMeasurement = (
 
 // A PUSH THE REPOSITORY'S OWN HOOK REFUSED. Nothing reached the remote, so no report of this sandbox's tooling was filed
 // for it (a hook of any repository may refuse); the daemon files it here itself, as a push whose one finding is what the
-// hook printed, so the owner's hand-over (agents/fix/push-fix.ts) reads it from the same place as every other finding.
+// hook printed, so the owner's hand-over (conversations/fix/push-fix.ts) reads it from the same place as every other finding.
 export const REFUSAL_SOURCE = "pre-push";
 // What of the hook's output a refusal keeps: its end, where a hook says what failed.
 const REFUSAL_TAIL = 4_000;

@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requires } from "@intentic/testing/requires";
-import { classifyProcess } from "../../platform/resources/process-scan.js";
+import { classifyProcess } from "../../system/resources/process-scan.js";
 import { OOM_SCORE } from "../../workload/workload-class.js";
 import { type AcpProcess, spawnAcpProcess } from "./acp-spawn.js";
 

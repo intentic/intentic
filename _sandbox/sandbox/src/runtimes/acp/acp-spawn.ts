@@ -3,7 +3,7 @@ import { Readable, Writable } from "node:stream";
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
 import { spawnAs } from "../../workload/workload-class.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
-import { webStream } from "../../web-stream.js";
+import { webStream } from "@intentic/base/web-stream";
 
 /* Spawning an ACP agent subprocess: the capability's command split on whitespace (no shell quoting, the config documents this). */
 

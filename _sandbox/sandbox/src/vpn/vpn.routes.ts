@@ -1,9 +1,8 @@
 import { vpnContract } from "@intentic/sandbox-contract";
-import { implement, ORPCError } from "@orpc/server";
+import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { tunnelEntry } from "../tunnel/tunnel-links.js";
-import { heldStream } from "../tunnel/tunnel-route.js";
+import { heldStream, tunnelEntryOr404 } from "../tunnel/tunnel-route.js";
 import { parseForticlientConfig } from "./forticlient-config.js";
 import { connectVpn, disconnectVpn, vpnLink, vpnLinks } from "./vpn-links.js";
 
@@ -17,13 +16,7 @@ export const createVpnRoutes = (services: VpnRoutesDeps) => {
     const i = implement(vpnContract).$context<OrpcContext>();
     const dialling = new Set<string>();
 
-    const entryOf = async (id: string) => {
-        const entry = await tunnelEntry(services.capabilities, "vpn", id);
-        if (entry === undefined) {
-            throw new ORPCError("NOT_FOUND", { message: `no vpn capability with that id` });
-        }
-        return entry;
-    };
+    const entryOf = (id: string) => tunnelEntryOr404(services.capabilities, "vpn", id);
 
     return {
         list: i.list.handler(async () => ({ links: await vpnLinks(services.capabilities) })),

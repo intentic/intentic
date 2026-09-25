@@ -5,23 +5,23 @@
 // subsystem, in the boot wiring, on purpose: nothing under a subsystem imports bootstrap/.
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
-import { conversationRecordDocument } from "../agents/registry/agents-store.js";
-import { pre1308ImportStep } from "../agents/registry/pre-1308-import.js";
 import { approvalsDocument } from "../approvals/approvals-store.js";
 import { areasDocument } from "../areas/areas-store.js";
 import { membersDocument, ownerDocument } from "../auth/auth.js";
-import { controlTokensDocument } from "../auth/control-tokens.js";
-import { doorTokensDocument } from "../auth/door-tokens.js";
 import { passkeysDocument } from "../auth/passkeys/passkey-store.js";
+import { controlTokensDocument } from "../auth/tokens/control-tokens.js";
+import { doorTokensDocument } from "../auth/tokens/door-tokens.js";
 import { automationRunsDocument, automationsDocument, automationsRelocationStep } from "../automations/automations-store.js";
 import { heldWakesDocument } from "../automations/held-wakes-store.js";
 import { sendersDocument } from "../automations/senders-store.js";
 import { browserPasskeysDocument } from "../browser/tools/passkeys.js";
 import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
 import { capabilitySecretsDocument, extensionSecretsDocument } from "../capabilities/credentials/secret-vault.js";
-import { dismissalsDocument } from "../capabilities/dismissals-store.js";
+import { dismissalsDocument } from "../capabilities/offers/dismissals-store.js";
 import { choreLedgerDocument, choreProbesDocument } from "../chores/chores-store.js";
 import { ciDocument } from "../ci/ci-store.js";
+import { conversationRecordDocument } from "../conversations/registry/agents-store.js";
+import { pre1308ImportStep } from "../conversations/registry/pre-1308-import.js";
 import { enginePolicyDocument } from "../engines/engine-policy.js";
 import { engineStateDocument } from "../engines/engine-store.js";
 import { runtimeInstallsDocument } from "../environment/runtime-installs.js";
@@ -31,14 +31,13 @@ import { extensionSettingsDocument } from "../extensions/extension-settings.js";
 import { extensionUpdatePolicyDocument, extensionUpdatesDocument } from "../extensions/extension-updates.js";
 import { extensionUsageDocument } from "../extensions/extension-usage.js";
 import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-approvals.js";
+import { syncEnrollmentsDocument } from "../hosts/desktop-sync.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { issuesDocument } from "../issues/issues-store.js";
 import { loopDesignsDocument, loopsDocument } from "../loops/loops-store.js";
 import { hostEnrollmentsDocument, hostPairConsumedDocument, runnerEnrollmentsDocument, runnerPairConsumedDocument, syncPairConsumedDocument, webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/enrollment.js";
 import { peerToolsDocument } from "../peers/peer-tool-memory.js";
 import { personasDocument } from "../personas/personas-store.js";
-import { heavyCommandsDocument } from "../platform/resources/heavy-commands.js";
-import { syncEnrollmentsDocument } from "../platform/sync.js";
 import { bundleManifestDocument } from "../portability/bundle-arrival.js";
 import { definitionDocument } from "../portability/definition.js";
 import { pushDocument } from "../push/push-store.js";
@@ -56,6 +55,7 @@ import { conversionsDocument } from "../store/evolution/state-convergence.js";
 import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
 import { newestRunDocument } from "../store/newest-run.js";
+import { heavyCommandsDocument } from "../system/resources/heavy-commands.js";
 import { workspaceIdentityDocument } from "../system/workspace-identity.js";
 import { accountUsageDocument } from "../usage/account-usage.js";
 import { modelCooldownsDocument } from "../usage/model-cooldowns.js";
@@ -71,14 +71,13 @@ import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js"
 import { verifyDocument } from "../workspace/deps/verify-store.js";
 
 export const stateDocuments = (): readonly DocumentSpec[] => [
-    conversationRecordDocument,
     approvalsDocument,
     areasDocument,
     membersDocument,
     ownerDocument,
+    passkeysDocument,
     controlTokensDocument,
     doorTokensDocument,
-    passkeysDocument,
     automationRunsDocument,
     automationsDocument,
     heldWakesDocument,
@@ -91,6 +90,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     choreLedgerDocument,
     choreProbesDocument,
     ciDocument,
+    conversationRecordDocument,
     enginePolicyDocument,
     engineStateDocument,
     runtimeInstallsDocument,
@@ -102,6 +102,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     extensionUsageDocument,
     hookApprovalsDocument,
     hookRequestsDocument,
+    syncEnrollmentsDocument,
     hostSetupSeededDocument,
     issuesDocument,
     loopDesignsDocument,
@@ -115,8 +116,6 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     webextPairConsumedDocument,
     peerToolsDocument,
     personasDocument,
-    heavyCommandsDocument,
-    syncEnrollmentsDocument,
     bundleManifestDocument,
     definitionDocument,
     pushDocument,
@@ -133,6 +132,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     issueInstallsDocument,
     webchatInstallsDocument,
     newestRunDocument,
+    heavyCommandsDocument,
     workspaceIdentityDocument,
     accountUsageDocument,
     modelCooldownsDocument,
@@ -151,4 +151,4 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
 
 // By id, not by the order modules happened to load in: the plan must not depend on an import graph.
 export const stateSteps = (): readonly StructuralStep[] =>
-    [pre1308ImportStep, automationsRelocationStep, conversationsSchemaStep, stateRegroupStep, workflowGateTokensStep].toSorted((a, b) => a.id.localeCompare(b.id));
+    [automationsRelocationStep, pre1308ImportStep, conversationsSchemaStep, stateRegroupStep, workflowGateTokensStep].toSorted((a, b) => a.id.localeCompare(b.id));

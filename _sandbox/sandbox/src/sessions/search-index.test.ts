@@ -1,5 +1,5 @@
+import { IN_MEMORY } from "@intentic/base/sqlite";
 import { openSearchIndex } from "./search-index.js";
-import { IN_MEMORY } from "../store/sqlite.js";
 import type { SpokenLine } from "./transcript-search.js";
 
 const said = (...lines: [string, "user" | "agent"][]): SpokenLine[] => lines.map(([text, speaker]) => ({ text, speaker }));

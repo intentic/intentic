@@ -2,7 +2,7 @@ import type { AgentEvent, CredentialGate as GatePolicy } from "@intentic/sandbox
 import { createCredentialGate, type CredentialCheck, type CredentialGateDeps } from "./credential-gate.js";
 import type { CredentialGatesStore } from "./credential-gates.js";
 import { createCredentialGrants } from "./credential-grants.js";
-import { parkedCards } from "../agents/actor/parked-cards.js";
+import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
@@ -39,13 +39,13 @@ const memoryGates = (gates: readonly GatePolicy[], broken = false): CredentialGa
 interface Fake {
     readonly deps: CredentialGateDeps;
     readonly frames: AgentEvent[];
-    readonly notified: string[];
+    readonly awaited: { readonly conversationId: string; readonly kind: string }[];
     readonly grants: ReturnType<typeof createCredentialGrants>;
 }
 
 const fake = (gates: readonly GatePolicy[], over: Partial<CredentialGateDeps> = {}, broken = false): Fake => {
     const frames: AgentEvent[] = [];
-    const notified: string[] = [];
+    const awaited: { conversationId: string; kind: string }[] = [];
     const grants = createCredentialGrants();
     const deps: CredentialGateDeps = {
         cards,
@@ -53,11 +53,11 @@ const fake = (gates: readonly GatePolicy[], over: Partial<CredentialGateDeps> = 
         grants,
         liveRun: (conversationId) => ({ conversationId: conversationId ?? "sole-conv", push: (event) => frames.push(event) }),
         observe: () => {},
-        notify: (conversationId) => notified.push(conversationId),
+        awaiting: (conversationId, kind) => awaited.push({ conversationId, kind }),
         now: () => 1_700_000_000_000,
         ...over,
     };
-    return { deps, frames, notified, grants };
+    return { deps, frames, awaited, grants };
 };
 
 const asked = (over: Partial<CredentialCheck> = {}): CredentialCheck => ({
@@ -96,7 +96,7 @@ it("lets an ungated credential through without raising anything", async () => {
 });
 
 it("raises a card naming the approvers and the scope, and releases on the approver's click", async () => {
-    const { deps, frames, notified } = fake([policy()]);
+    const { deps, frames, awaited } = fake([policy()]);
     const pending = createCredentialGate(deps).check(asked({ why: "run the migration" }));
     await answerCard(frames, true, BOB);
     expect(await pending).toEqual({ allow: true, approvedBy: "bob@corp.com" });
@@ -114,7 +114,7 @@ it("raises a card naming the approvers and the scope, and releases on the approv
         },
     });
     expect(frames[2]).toEqual({ kind: "credential_receipt", requestId: expect.any(String), outcome: "released", approvedBy: "bob@corp.com" });
-    expect(notified).toEqual(["conv-1"]);
+    expect(awaited).toEqual([{ conversationId: "conv-1", kind: "credential_offer" }]);
 });
 
 it("refuses a click from somebody the card does not name, and leaves the card standing for one it does", async () => {

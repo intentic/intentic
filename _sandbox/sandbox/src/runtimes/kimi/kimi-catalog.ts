@@ -1,5 +1,6 @@
-import { compareUnrankedModelIds, type Model } from "@intentic/sandbox-contract";
+import type { Model } from "@intentic/sandbox-contract";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
+import { unrankedCatalog } from "../../agent/models/model-discovery.js";
 import type { CliProxyClient } from "../../agent/providers/translator.js";
 
 /* Kimi Code's picker catalog. */
@@ -20,10 +21,7 @@ const isChatModel = (model: Model): boolean => !/(embedding|whisper|tts|audio|vi
 
 // CLIProxyAPI publishes a set in registry order, not a preference order. Put the frontier generation first so
 // the catalog's first row is also the default a turn receives when nothing was pinned.
-const toCatalog = (models: readonly Model[]): { models: Model[]; default: string } => {
-    const ordered = models.filter(isChatModel).toSorted((left, right) => compareUnrankedModelIds(left.id, right.id));
-    return { models: ordered, default: ordered[0]!.id };
-};
+const toCatalog = (models: readonly Model[]): { models: Model[]; default: string } => unrankedCatalog(models.filter(isChatModel));
 
 export const createKimiCatalog = (cliProxy: Pick<CliProxyClient, "models">): KimiCatalog => {
     const catalog = discoveredCatalog({

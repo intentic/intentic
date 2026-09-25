@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { pathExists } from "../path-exists.js";
+import { pathExists } from "@intentic/base/fs";
 
 // Where a checkout's git admin files live, read straight off the filesystem so a hot path pays no spawn. A linked
 // worktree or submodule has a `.git` pointer file; its per-worktree dir holds HEAD and operation markers, and the common

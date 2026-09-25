@@ -10,7 +10,7 @@ import { createApp } from "../app.js";
 
 import { createLogger } from "../logger.js";
 
-import { createBootTracker } from "../platform/boot/boot.js";
+import { createBootTracker } from "./boot/boot.js";
 
 import { beginTurn, testConfig } from "../testing.js";
 
@@ -586,7 +586,7 @@ test("events: the beat states the fleet revision it was sent at, so a browser ca
     controller.abort();
 });
 
-// The route answers the one reading the sampler took (platform/resources/live-metrics.ts), told of the conversations
+// The route answers the one reading the sampler took (system/resources/live-metrics.ts), told of the conversations
 // this daemon's roster holds: a stamp another daemon or an archived conversation left behind is nobody's card.
 test("system.metrics answers the reading, told only of conversations this daemon knows", async () => {
     const reading: SandboxMetrics = {

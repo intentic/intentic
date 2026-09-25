@@ -17,7 +17,7 @@ import { createAuthConnections } from "./auth/connections.js";
 
 import { createLogger } from "./logger.js";
 
-import { createBootTracker } from "./platform/boot/boot.js";
+import { createBootTracker } from "./system/boot/boot.js";
 
 import type { AgentRequest } from "./agent/providers/agent-request.js";
 

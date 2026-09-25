@@ -1,7 +1,7 @@
 import { observeGitCommands } from "@intentic/scaffold";
-import { turnRunMetrics } from "../agents/actor/conversation-holdings.js";
+import { turnRunMetrics } from "../conversations/actor/conversation-holdings.js";
 import { browserSessionMetrics } from "../browser/sessions/browser-sessions.js";
-import { startResourceMetrics } from "../platform/resources/resource-metrics.js";
+import { startResourceMetrics } from "../system/resources/resource-metrics.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // Neither series reads back into the code it measures.

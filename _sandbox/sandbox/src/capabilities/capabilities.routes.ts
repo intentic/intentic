@@ -21,7 +21,7 @@ import { totpCode } from "./credentials/totp.js";
 import { browseMarketplace } from "./marketplace.js";
 import { readRemoteRefs, RemoteRefsError } from "./remote-refs.js";
 import { probeCapability } from "./probe.js";
-import { capabilityRecommendations } from "./recommend.js";
+import { capabilityRecommendations } from "./offers/recommend.js";
 import { registry } from "./registry.js";
 import { createStatusCache } from "./status/status-cache.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";

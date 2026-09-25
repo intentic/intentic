@@ -6,7 +6,7 @@ import type { Services } from "../../composition.js";
 import { memoryFleet, testConfig, testTurnMounts } from "../../testing.js";
 import * as browserToolsOriginal from "../../browser/tools/browser-tools.js";
 import * as cursorSdkOriginal from "./cursor-sdk.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);

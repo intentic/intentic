@@ -1,8 +1,7 @@
-import { request } from "node:https";
 import { sleep } from "@intentic/base/async";
 import { type TrialHealth, TrialStatusSchema } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
-import { isLocalHost } from "../platform/tls/local-tls.js";
+import { getFromPlatform } from "../system/platform-client.js";
 
 // Trial is served by the platform, not this daemon, and its existence is the platform operator's decision; a sandbox
 // must probe rather than assume it. Availability is probed at boot and on the allowance poll, then cached; unknown
@@ -33,40 +32,8 @@ export interface TrialService {
 // Bounds the whole exchange (lookup, connect, body): `req.setTimeout` arms only once connected.
 const PROBE_TIMEOUT_MS = 15_000;
 
-// Authenticated GET via the connect token, over node:https rather than undici, since a dev platform's self-signed cert
-// on host.docker.internal needs per-request verification skip undici can't do.
 const getJson = (config: Config, path: string): Promise<{ status: number; json: unknown }> =>
-    new Promise((resolve, reject) => {
-        const url = new URL(path, config.platform.url);
-        const req = request(
-            url,
-            {
-                method: "GET",
-                headers: { "x-intentic-connect": config.connectToken },
-                rejectUnauthorized: !isLocalHost(url.hostname),
-                signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-            },
-            (response) => {
-                let raw = "";
-                response.on("data", (chunk: Buffer) => {
-                    raw += chunk.toString();
-                });
-                // A body cut off mid-read errors the response, not the request; unheard, it would be an uncaught error.
-                response.on("error", reject);
-                response.on("end", () => {
-                    let json: unknown;
-                    try {
-                        json = JSON.parse(raw);
-                    } catch {
-                        json = undefined;
-                    }
-                    resolve({ status: response.statusCode ?? 0, json });
-                });
-            },
-        );
-        req.on("error", reject);
-        req.end();
-    });
+    getFromPlatform(config, path, AbortSignal.timeout(PROBE_TIMEOUT_MS));
 
 const isStatus = (value: unknown): value is TrialStatus => {
     if (typeof value !== "object" || value === null) {

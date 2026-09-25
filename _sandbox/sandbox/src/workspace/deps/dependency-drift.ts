@@ -1,8 +1,8 @@
 import { opendir, readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { pathExists } from "@intentic/base/fs";
 import { parse, YAMLError } from "yaml";
-import { pathExists } from "../../path-exists.js";
 import { readWorkspaceManifests } from "./package-graph.js";
 
 // Dependency drift: an installed tree that no longer satisfies what is declared above it, missed by workspace-setup's

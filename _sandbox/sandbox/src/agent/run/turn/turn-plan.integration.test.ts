@@ -16,7 +16,7 @@ import type { TurnContext } from "../../providers/adapter.js";
 import { planTurn } from "./turn-plan.js";
 import { base, budgetOn, codexServices, context, harnessServices, servicesWith, turn, wire } from "./turn-plan.testing.js";
 import { RUNTIME_ADAPTERS } from "../../../runtimes/runtime-table.js";
-import { parkedCards } from "../../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);

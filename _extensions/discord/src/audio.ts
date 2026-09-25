@@ -1,9 +1,4 @@
-import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { promisify } from "node:util";
+import { runWhisper, type WhisperExec } from "@intentic/base/whisper";
 import { cleanTranscription } from "@intentic/sandbox-contract";
 
 // PCM downsampling, WAV framing, whisper-cli transcription, and a serialized transcriber queue for the voice session;
@@ -11,26 +6,12 @@ import { cleanTranscription } from "@intentic/sandbox-contract";
 
 // Dropped below this: sub-quarter-second blips feed only hallucinations (192,000 B/s at 48kHz stereo).
 export const MIN_UTTERANCE_BYTES = 48_000;
-const TRANSCRIBE_TIMEOUT_MS = 120_000;
-
-export type ExecFn = (command: string, args: string[], options: { timeout: number }) => Promise<{ stdout: string }>;
-const defaultExec: ExecFn = promisify(execFile);
 
 // Shown when whisper isn't installed; routes the agent to the pending rebuild instead of a doomed retry loop.
 export const WHISPER_MISSING =
     "whisper-cli isn't installed in this sandbox yet. It's part of the environment overlay that was composed when " +
     "Discord was connected: the sandbox needs a one-time rebuild. Ask the owner to run the rebuild command shown on " +
     "the Sandbox page's Environment card, and don't retry joining voice (or propose an overlay) until it has landed.";
-
-// ENOENT on spawn means the binary isn't on PATH; any other outcome, even a non-zero exit, means it exists.
-export const whisperCliMissing = async (exec: ExecFn = defaultExec): Promise<boolean> => {
-    try {
-        await exec("whisper-cli", ["--help"], { timeout: 10_000 });
-        return false;
-    } catch (error) {
-        return (error as NodeJS.ErrnoException).code === "ENOENT";
-    }
-};
 
 // 48kHz stereo to 16kHz mono: averages each group of 6 samples into one. Naive decimation, no low-pass; fine for
 // speech, swap in a real resampler if quality suffers.
@@ -86,7 +67,7 @@ export const createTranscriber = (
     startedAt: number,
     onLine: (sorted: { at: number; line: string }[], newLine: string) => Promise<void>,
     onError: (error: unknown) => void,
-    exec: ExecFn = defaultExec,
+    exec?: WhisperExec,
 ): Transcriber => {
     const lines: { at: number; line: string }[] = [];
     let queue: Promise<void> = Promise.resolve();
@@ -94,26 +75,14 @@ export const createTranscriber = (
         push: (speaker, atMs, pcm) => {
             queue = queue
                 .then(async () => {
-                    const wavPath = join(tmpdir(), `intentic-utterance-${randomUUID()}.wav`);
-                    await writeFile(wavPath, wavOf(to16kMonoPcm(pcm)));
-                    try {
-                        // whisper-cli defaults to -l en, silently mangling other languages, always pass one.
-                        const { stdout } = await exec(
-                            "whisper-cli",
-                            ["-m", modelPath, "-f", wavPath, "-l", language, "--no-timestamps", "--no-prints"],
-                            { timeout: TRANSCRIBE_TIMEOUT_MS },
+                    const text = cleanTranscription(await runWhisper(wavOf(to16kMonoPcm(pcm)), { model: modelPath, language, exec }));
+                    if (text !== undefined) {
+                        const line = `[${elapsedLabel(atMs - startedAt)}] ${speaker}: ${text}`;
+                        lines.push({ at: atMs, line });
+                        await onLine(
+                            lines.toSorted((a, b) => a.at - b.at),
+                            line,
                         );
-                        const text = cleanTranscription(stdout);
-                        if (text !== undefined) {
-                            const line = `[${elapsedLabel(atMs - startedAt)}] ${speaker}: ${text}`;
-                            lines.push({ at: atMs, line });
-                            await onLine(
-                                lines.toSorted((a, b) => a.at - b.at),
-                                line,
-                            );
-                        }
-                    } finally {
-                        await rm(wavPath, { force: true });
                     }
                 })
                 .catch(onError);

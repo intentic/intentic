@@ -1,5 +1,5 @@
 import { unstubbed } from "@intentic/testing";
-import { mergeSupersededAccounts } from "../../agent/providers/account-identity.js";
+import { mergeSupersededAccounts } from "../../agent/providers/accounts/account-identity.js";
 import type { Services } from "../../composition.js";
 import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
 import { displayLabel, type StoredAccount } from "./claude-credentials.js";

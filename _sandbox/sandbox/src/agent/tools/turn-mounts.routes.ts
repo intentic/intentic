@@ -58,6 +58,7 @@ const answerRpc = async (c: Context<AppEnv>, handle: (message: RpcMessage) => Pr
     if (c.req.method !== "POST") {
         return c.json({ error: `${c.req.method} is not part of the MCP transport` }, 405);
     }
+    // allow(silent-catch): a body that is not JSON is answered as the JSON-RPC parse error just below
     const payload = (await c.req.json().catch(() => undefined)) as RpcMessage | RpcMessage[] | null | undefined;
     if (payload === undefined || payload === null || typeof payload !== "object") {
         return c.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "invalid json" } }, 400);

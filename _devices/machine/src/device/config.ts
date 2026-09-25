@@ -1,7 +1,8 @@
 import { readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { writeFileAtomic, writeSecretFile } from "@intentic/local-agent";
+import { writeFileAtomic } from "@intentic/base/fs";
+import { writeSecretFile } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { LONG_OUTAGE_ATTEMPTS, type PeerLinkState, type PeerOutage } from "@intentic/sandbox-contract/peer-dial";
 import { baseDir } from "../config.js";

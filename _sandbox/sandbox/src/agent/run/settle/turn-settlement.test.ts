@@ -5,7 +5,7 @@ import { createTurnFrames } from "../frames/frame-reducers.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { HeldTurn } from "../turn/turn-resume.js";
 import { settleTurn, type TurnEnd } from "./turn-settlement.js";
-import { parkedCards } from "../../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.

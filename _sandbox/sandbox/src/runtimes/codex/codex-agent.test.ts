@@ -7,7 +7,7 @@ import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { fakeCodexRunner, memoryFleet } from "../../testing.js";
 import type { CodexEvent, CodexRunner } from "./codex-app-server.js";
 import { createCodexAgent } from "./codex-agent.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);

@@ -12,6 +12,7 @@ import { openBrowserSession } from "../../browser/sessions/browser-sessions.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { ROUTED_BROWSER_SERVER } from "../../browser/tools/browser-tools.js";
 import { type CommandGuard, vendorSubject } from "../../guard/command-guard.js";
+import { planPhaseOf, type TurnCapture } from "../decorators/vendor-events.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { codexUsageFromRateLimits } from "../../usage/translator-usage.js";
 import {
@@ -29,7 +30,7 @@ import {
 import { persistCodexImageArtifact } from "./codex-image-artifacts.js";
 import { codexInstructionConfig } from "./codex-instructions.js";
 import { CODEX_ADVISORY, CODEX_MODEL_INVALID, CODEX_MODEL_RESUMED_ELSEWHERE } from "./codex-models.js";
-import type { ParkedCards } from "../../agents/actor/parked-cards.js";
+import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 
 // Codex provider adapter: same seam as agent.ts's runAgent (AgentRequest in, AgentEvent frames out), backed by the
 // Codex CLI's app-server instead of the Claude Agent SDK. App-server publishes whole item completions plus lifecycle,
@@ -298,15 +299,6 @@ async function* consumeAttempt(
     return attemptOutcome(shown);
 }
 
-// What phase 1 of a plan turn holds back: the thread id to resume for execution, and the trailing message the user
-// approves as the plan.
-interface TurnCapture {
-    threadId?: string;
-    heldMessage?: string;
-    // Set when the plan phase failed, so a failed turn never surfaces a plan even if a message was held.
-    errored?: boolean;
-}
-
 interface ImageArtifactContext {
     readonly workspaceRoot: string;
     readonly codexHome: string;
@@ -407,7 +399,7 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
     const capture: TurnCapture = {};
     for await (const event of events) {
         if (event.type === "thread.started") {
-            capture.threadId = event.thread_id;
+            capture.sessionId = event.thread_id;
             yield { kind: "session", sessionId: event.thread_id };
         } else if (event.type === "item.started" || event.type === "item.updated" || event.type === "item.completed") {
             const item = event.item;
@@ -424,11 +416,11 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
                 }
                 // Held one message deep: flushed the instant a newer one arrives, so only the last stays held as the
                 // plan.
-                if (capture.heldMessage !== undefined) {
-                    yield { kind: "delta", text: capture.heldMessage };
+                if (capture.planText !== undefined) {
+                    yield { kind: "delta", text: capture.planText };
                     yield { kind: "text_end" };
                 }
-                capture.heldMessage = item.text;
+                capture.planText = item.text;
             } else if (item.type === "reasoning") {
                 if (event.type === "item.completed") {
                     yield { kind: "thinking", text: item.text };
@@ -470,7 +462,7 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
             } else if (item.type === "mcp_tool_call") {
                 const name = `${item.server}.${item.tool}`;
                 if (event.type === "item.started") {
-                    attachBrowserSession(item, capture.threadId, browser);
+                    attachBrowserSession(item, capture.sessionId, browser);
                     yield { kind: "tool_call", id: item.id, name, category: toolCategoryOf(name), status: "in_progress" };
                 } else if (event.type === "item.completed") {
                     yield {
@@ -631,7 +623,7 @@ const codexPlan = (request: CodexRequest, phase: ReturnType<typeof codexPhase>):
         async *plan(prompt, sessionId) {
             const capture = yield* phase({ prompt, images, sessionId, sandboxMode: "read-only", holdMessages: true });
             images = [];
-            return { sessionId: capture.threadId, planText: capture.heldMessage, errored: capture.errored === true };
+            return planPhaseOf(capture);
         },
         execute: (sessionId) => phase({ prompt: EXECUTE_PROMPT, images, sessionId, sandboxMode: "danger-full-access", holdMessages: false }),
     };

@@ -8,7 +8,7 @@ import { fakeFiles } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
 import { sqliteTurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
-import { sqliteAgentsStore } from "../agents/registry/agents-store.js";
+import { sqliteAgentsStore } from "../conversations/registry/agents-store.js";
 import { transcriptFile } from "../sessions/transcript-record.js";
 import { isolatedAgent, testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";

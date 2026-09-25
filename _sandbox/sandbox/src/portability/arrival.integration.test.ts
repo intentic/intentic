@@ -11,7 +11,7 @@ import { beginTurn, testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { createArrivals } from "./arrival.js";
 import { packBundle } from "./bundle.js";
-import { webStream } from "../web-stream.js";
+import { webStream } from "@intentic/base/web-stream";
 
 // One picker for every format (definition, bundle, foreign home), tested with real artifacts from the real
 // packers/exporters, not hand-written headers — sniffing that only works on fixtures is the risk.

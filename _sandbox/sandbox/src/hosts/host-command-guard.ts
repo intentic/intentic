@@ -6,9 +6,9 @@ import {
     type SafetyVerdict,
 } from "@intentic/sandbox-contract";
 import { judgeCommand } from "../agent/tools/command-judge.js";
-import { actorObserver, raiseRequest } from "../agents/actor/card-offers.js";
+import { cardDeps, raiseRequest } from "../conversations/actor/card-offers.js";
 import { RoleModelUnsetError } from "../seams/role-model-unset.js";
-import { turnRunOf } from "../agents/actor/conversation-holdings.js";
+import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import type { Services } from "../composition.js";
 import { commandRun } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
@@ -168,8 +168,8 @@ export const judgeHostCommand = async (
     record("asked");
     const answerNotRecorded = (error: unknown): void =>
         services.logger.warn({ err: error, machine: input.machine }, "safety log: the owner's answer on a device command was not recorded");
-    const { reply } = await raiseRequest(
-        { observe: actorObserver(services.conversations), cards: services.cards },
+    const answered = await raiseRequest(
+        cardDeps(services),
         { conversationId, push: (event) => run.push(event) },
         {
             kind: "permission",
@@ -187,13 +187,14 @@ export const judgeHostCommand = async (
                 // `explain` and not `reason`: they would be the same sentence, printed twice on one card.
                 explain: verdict.sentence,
             }),
+            approves: (answer) => answer.decision !== "deny",
             deadlineMs: DEADLINE_MS,
         },
     );
-    if (reply.decision === "deny") {
+    if (answered.decision !== "approved") {
         void services.safetyLog.answered(at, "declined", "refused").catch(answerNotRecorded);
         return refusal(
-            reply.feedback?.trim() ||
+            answered.reply.feedback?.trim() ||
                 `The user declined this. Do not run it on "${input.machine}", and do not look for another way to achieve the same thing.`,
         );
     }

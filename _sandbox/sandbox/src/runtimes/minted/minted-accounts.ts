@@ -1,6 +1,6 @@
 import type { MintedProvider } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import { forgetAccountState, signInIdentity } from "../../agent/providers/account-identity.js";
+import { forgetAccountState, signInIdentity } from "../../agent/providers/accounts/account-identity.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
 import { cancelMintedLogin, cancelMintedLoginsFor, completeMintedLogin, startMintedLogin } from "./minted-login.js";
 

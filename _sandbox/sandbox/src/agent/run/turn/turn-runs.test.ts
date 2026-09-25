@@ -1,12 +1,12 @@
+import { IN_MEMORY } from "@intentic/base/sqlite";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { waitFor } from "@intentic/testing/bun";
-import type { BeginRefusal } from "../../../agents/actor/conversation-decide.js";
+import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
 import type { JournalledTurn } from "./turn-journal.js";
-import { type AttachEntry, type AttachHead, turnRunOf } from "../../../agents/actor/conversation-holdings.js";
+import { type AttachEntry, type AttachHead, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { createDomainEvents, type DomainEventMap } from "../../../seams/domain-events.js";
 import type { SentTurn, TurnStarter } from "../../../seams/turn-starter.js";
 import { openConversationsDb } from "../../../store/conversations-db.js";
-import { IN_MEMORY } from "../../../store/sqlite.js";
 import { beginTurn, fleetStoreOver, memoryFleet } from "../../../testing.js";
 import { commandsOf, resetCommands } from "../../providers/agent-commands.js";
 import { MAX_BACKLOG_FRAMES } from "../../../seams/frame-backlog.js";

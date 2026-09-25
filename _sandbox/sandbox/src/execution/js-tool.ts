@@ -3,7 +3,7 @@ import { sdk } from "../engines/claude-sdk.js";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { resolveCommandSecrets, type SecretAccess } from "../secrets/secret-access.js";
-import type { TurnPlacement } from "../agents/worktrees/isolation.js";
+import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
 import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S, type JsExecutionPlan, type JsRunResult, runJs } from "./js-runtime.js";
 
 // One tool, a peer of Bash, mounted by agent.ts from the request's own `jsExecution` field; the SDK server is only the
@@ -15,7 +15,7 @@ export const JS_TOOL_ALIAS = "Code";
 
 export interface JsToolDeps {
     readonly plan: JsExecutionPlan;
-    // Where this turn's tree actually stands (agents/isolation.ts); the runner enters or maps it, see placedPlan.
+    // Where this turn's tree actually stands (conversations/isolation.ts); the runner enters or maps it, see placedPlan.
     readonly placement: TurnPlacement | undefined;
     // The turn's own signal: a script still running when the user stops the turn dies with it.
     readonly signal: AbortSignal;

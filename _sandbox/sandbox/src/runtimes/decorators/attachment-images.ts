@@ -33,6 +33,13 @@ export interface TurnAttachments {
     readonly files: readonly string[];
 }
 
+// A picture as the `{ type: "image" }` content block the ACP and Pi protocols both take.
+export const imageBlock = (image: AttachedImage): { readonly type: "image"; readonly data: string; readonly mimeType: string } => ({
+    type: "image",
+    data: image.data,
+    mimeType: image.mimeType,
+});
+
 // `native` is whether this runtime (or this connection) takes pictures as input at all.
 export const loadAttachments = async (spec: Pick<TurnSpec, "attachments">, native: boolean): Promise<TurnAttachments> => {
     const { images: pictures, others: files } = splitAttachments(spec.attachments);

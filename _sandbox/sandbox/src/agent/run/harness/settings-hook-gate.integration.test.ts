@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookCallback, HookInput } from "@anthropic-ai/claude-agent-sdk";
-import type { IsolationPlan } from "../../../agents/worktrees/isolation.js";
+import type { IsolationPlan } from "../../../conversations/worktrees/isolation.js";
 import { approveHookSet, HOOKS_HELD_NOTE, hookRequests } from "../../../guard/hook-approvals.js";
 import type { TurnPolicy, TurnSpec } from "../../providers/agent-request.js";
 import { settingsHookChangeHooks, withSettingsHookGate } from "./settings-hook-gate.js";

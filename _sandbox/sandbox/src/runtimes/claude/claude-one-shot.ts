@@ -1,6 +1,6 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { sendableEffort, sendableThinking } from "@intentic/sandbox-contract";
-import type { OneShotAsk } from "../../agent/providers/adapter.js";
+import { type OneShotAsk, oneShotDeadline } from "../../agent/providers/adapter.js";
 import { isFailureSentence } from "../../agent/providers/failure-sentences.js";
 import {
     type HarnessCredentialDeps,
@@ -74,17 +74,10 @@ const oneShotOptions = (run: OneShotRun, abort: AbortController): Options => {
 // The harness run itself, on already-resolved credentials; the seam tests drive without a real CLI.
 const runOnHarness = async (run: OneShotRun): Promise<string> => {
     const abort = new AbortController();
-    // Caller's signal is the user's cancel, forwarded rather than passed through since success must tear down too.
-    const forward = (): void => abort.abort();
-    run.signal.addEventListener(`abort`, forward, { once: true });
-    // Deadline and cancel both end the stream the same way; expired says which one actually happened.
-    let expired = false;
     // Longer for a rung asked to think; the fast-path deadline would time out every reasoning call otherwise.
     const budget = reasoningOf(run).thinking === true ? THINKING_DEADLINE_MS : DEADLINE_MS;
-    const deadline = setTimeout(() => {
-        expired = true;
-        abort.abort();
-    }, budget);
+    // The caller's cancel is forwarded rather than passed through, since success must tear down too; the sentence names the fast-path figure.
+    const deadline = oneShotDeadline(run.signal, budget, () => abort.abort(), DEADLINE_MS);
     const session = sdk().query({ prompt: run.prompt, options: oneShotOptions(run, abort) });
     try {
         for await (const message of session) {
@@ -114,13 +107,12 @@ const runOnHarness = async (run: OneShotRun): Promise<string> => {
             return message.result;
         }
         // Stream ended with no result (deadline, CLI death, or abort); only the deadline is worth naming.
-        throw new Error(expired ? `the model did not answer within ${DEADLINE_MS / 1_000}s` : `the model did not answer`);
+        throw deadline.unanswered();
     } catch (error) {
         // A torn-down CLI can throw instead of ending the stream, so the deadline must claim its failure on both exits.
-        throw expired ? new Error(`the model did not answer within ${DEADLINE_MS / 1_000}s`) : error;
+        throw deadline.claim(error);
     } finally {
-        clearTimeout(deadline);
-        run.signal.removeEventListener(`abort`, forward);
+        deadline.release();
         abort.abort();
         await session.return(undefined).catch(() => {});
     }

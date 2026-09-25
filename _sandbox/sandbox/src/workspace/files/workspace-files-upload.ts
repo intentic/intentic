@@ -3,7 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { nodeStream } from "../../web-stream.js";
+import { nodeStream } from "@intentic/base/web-stream";
 
 // Only bounds a single upload/archive against filling disk; higher than MAX_RAW_BYTES since nothing buffers.
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;

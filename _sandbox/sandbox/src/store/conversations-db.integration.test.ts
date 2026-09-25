@@ -1,11 +1,11 @@
 import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { openSqlite } from "@intentic/base/sqlite";
 import { sqliteTurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
-import { sqliteAgentsStore } from "../agents/registry/agents-store.js";
+import { sqliteAgentsStore } from "../conversations/registry/agents-store.js";
 import { conversationEntry, isolatedAgent } from "../testing.js";
 import { conversationsDbPath, openConversationsDb } from "./conversations-db.js";
-import { openSqlite } from "./sqlite.js";
 
 const historyRoot = (): string => mkdtempSync(join(tmpdir(), "conversations-db-"));
 

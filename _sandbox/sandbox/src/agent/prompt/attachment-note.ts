@@ -32,15 +32,17 @@ export const withAttachmentNote = (prompt: string, paths: readonly string[]): st
 // wording elsewhere survives.
 export const stripAttachmentNote = (text: string): { text: string; attachments: string[] } => {
     const marker = `\n\n${NOTE_HEADER}\n`;
-    const at = text.startsWith(`${NOTE_HEADER}\n`) ? 0 : text.lastIndexOf(marker);
+    // Opening on the header is the note alone; the marker at 0 is a blank line before it, as after a stripped re-run note.
+    const alone = text.startsWith(`${NOTE_HEADER}\n`);
+    const at = alone ? 0 : text.lastIndexOf(marker);
     if (at === -1) {
         return { text, attachments: [] };
     }
-    const lines = text.slice(at === 0 ? NOTE_HEADER.length + 1 : at + marker.length).split("\n");
+    const lines = text.slice(alone ? NOTE_HEADER.length + 1 : at + marker.length).split("\n");
     if (!lines.every((line) => line.startsWith("- "))) {
         return { text, attachments: [] };
     }
-    return { text: at === 0 ? "" : text.slice(0, at), attachments: lines.map((line) => line.slice(2)) };
+    return { text: text.slice(0, at), attachments: lines.map((line) => line.slice(2)) };
 };
 
 // Attachments ride as absolute paths; each adapter decides whether they become native image inputs or a file list.

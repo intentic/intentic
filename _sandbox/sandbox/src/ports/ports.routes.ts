@@ -1,11 +1,11 @@
-import { portsContract, portUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { portsContract, portUrl } from "@intentic/sandbox-contract";
 import { identifyPort } from "./port-identity.js";
 import { extensionProcessIndex } from "../extensions/extension-processes.js";
 import type { ExtensionHost } from "../extensions/installed-extensions.js";
-import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
+import { publicAddressOf } from "../env.config.js";
 
 // list scans procfs on demand, no background poller; forward/unforward drive the slot table. Forwarding is the explicit
 // exposure gesture: a preview is public once forwarded; the daemon's own surfaces are never listed.
@@ -19,15 +19,14 @@ export interface PortJob {
     readonly label: string;
 }
 
-// `jobOn` answers from the background-job registry (agent/tools/background-jobs.ts), handed in by the router rather than
+// `jobOn` answers from the background-job registry (agent/tools/jobs/background-jobs.ts), handed in by the router rather than
 // imported, which would tie this subsystem to the agent's in a cycle.
 export type PortsRoutesDeps = Pick<Services, "config" | "portForwards" | "scanPorts" | "serviceProcesses" | "workspace"> &
     ExtensionHost & { readonly jobOn: (port: number) => PortJob | undefined };
 
 export const createPortsRoutes = (services: PortsRoutesDeps) => {
     const i = implement(portsContract).$context<OrpcContext>();
-    const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
-    const sandboxId = sandboxIdFromToken(services.config.connectToken);
+    const { zone, sandboxId } = publicAddressOf(services.config);
     // The daemon's own listeners (oRPC server, preview proxy, sshd); everything else is the user's to forward.
     const reserved = new Set([services.config.sandbox.port, services.config.preview.port, 22]);
 

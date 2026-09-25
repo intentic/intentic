@@ -256,6 +256,11 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
     }),
 ]);
 export type AgentReply = z.infer<typeof AgentReplySchema>;
+// Every card a turn can park on its person with, one per reply kind, so a new card reaches every park reader at once.
+export type ParkKind = AgentReply["kind"];
+export const PARK_KINDS: readonly ParkKind[] = AgentReplySchema.options.map((option) => option.shape.kind.value);
+const PARKING = new Set<string>(PARK_KINDS);
+export const isParkKind = (kind: string): kind is ParkKind => PARKING.has(kind);
 // A message injected into a running turn between tool calls; NOT_FOUND when none is steerable, and the client queues it
 // as the next turn instead. Carries everything a fresh prompt can (files, editor context).
 export const SteerSchema = z

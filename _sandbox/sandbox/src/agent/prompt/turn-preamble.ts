@@ -15,10 +15,11 @@ import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { CONTEXT_NOTE_HEADER, CONTEXT_NOTE_TITLE } from "../context/context-note.js";
+import { parseRuntimeHistory, type RuntimeHistoryMessage } from "../providers/runtime-history.js";
+import { opt } from "../../opt.js";
+import { stripAttachmentNote } from "./attachment-note.js";
 
-// Notes the daemon prepends to a user message before it reaches the model; TurnNote is canonical, serialized into the
-// wire prompt once by composeWirePrompt. The parser half (preambleNotes, stripTurnPreamble, unwrapStoredPrompt) exists
-// only to read notes back off a provider's own session store, which keeps the composed wire prompt verbatim.
+// TurnNote is canonical and becomes wire text once, in composeWirePrompt; the parser half reads a stored prompt back.
 
 const SEPARATOR = "\n\n---\n\n";
 
@@ -57,7 +58,7 @@ export const worktreeReminder = (root: string): TurnNote => ({
 
 // Deliberately no note: the model reliably over-reacted to being told about a routine rebase, re-verifying builds
 // unprompted. The human still sees it in the `worktree` frame; a rebase that doesn't apply is caught at land time
-// (agents/land.ts) instead of by prose.
+// (conversations/land.ts) instead of by prose.
 
 // Every note opening a PROVIDER-STORE prompt can carry, with the title shown when read back there; the typed path
 // doesn't consult this, so add an entry here only so history/search/adoption can recognize a new note too. Titles must
@@ -141,24 +142,49 @@ export const preambleNotes = (text: string): TurnNote[] => {
     return end === undefined ? [] : splitTurnNotes(text.slice(0, end));
 };
 
-// Two wrapper layers nest in EITHER order: the daemon's own record has the re-run note outermost, a provider's session
-// store has the preamble outermost. Assuming one order leaks the other layer back as the user's own words.
-export interface StoredPrompt {
-    // The user's words alone. Their attachment note (a Claude-path trailer) is the caller's to strip.
-    readonly text: string;
-    // The notes the daemon put in front of them, titled for the row the chat draws.
+// What a stored prompt says under every layer the daemon wraps round it; the transcript, history list and search all read it.
+export interface PromptEnvelope {
+    // The user's own words, every layer taken off.
+    readonly spoken: string;
+    // The words as their turn was queued: the preamble, attachment note and handoff off, a re-run note still on.
+    readonly queued: string;
+    // The paths a trailing attachment note named, as sent.
+    readonly attachments: readonly string[];
+    // The notes the daemon put in front of the words, titled for the row the chat draws.
     readonly notes: readonly TurnNote[];
-    // How the interruption that re-ran this turn should read, if it was one (resumeDisclosure).
+    // How the interruption that re-ran this turn reads, when its note sat outside a runtime handoff.
     readonly resume?: ResumeDisclosure;
+    // A runtime handoff's folded-in transcript (runtime-history.ts), and how a re-run note inside its prompt reads.
+    readonly handoff?: { readonly history: readonly RuntimeHistoryMessage[]; readonly resume?: ResumeDisclosure };
 }
 
-export const unwrapStoredPrompt = (stored: string): StoredPrompt => {
-    // The note OUTSIDE the preamble: peel it first, or the preamble below it never finds its own anchor.
-    const outer = resumeDisclosure(stored);
-    const body = outer === undefined ? stored : withoutResumeNote(stored);
-    const notes = preambleNotes(body);
-    const inner = stripTurnPreamble(body);
-    // Or inside it, once the preamble is stripped off; a no-op for either half that wasn't there.
-    const resume = outer ?? resumeDisclosure(inner);
-    return { text: withoutResumeNote(inner), notes, ...(resume !== undefined ? { resume } : {}) };
+// The re-run note a text opens with, the blank line after it included; empty when it opens with none.
+const rerunNoteOf = (text: string): string => text.slice(0, text.length - withoutResumeNote(text).length);
+
+// A prompt as its turn was queued, which never carries the preamble: a re-run note, the words, an attachment note, a handoff.
+export const parseQueuedPrompt = (queued: string): PromptEnvelope => {
+    const note = rerunNoteOf(queued);
+    const { text, attachments } = stripAttachmentNote(queued.slice(note.length));
+    const runtime = parseRuntimeHistory(text);
+    return {
+        spoken: runtime === undefined ? text : withoutResumeNote(runtime.prompt),
+        queued: runtime === undefined ? `${note}${text}` : runtime.prompt,
+        attachments,
+        notes: [],
+        ...opt("resume", resumeDisclosure(queued)),
+        ...(runtime === undefined ? {} : { handoff: { history: runtime.history, ...opt("resume", resumeDisclosure(runtime.prompt)) } }),
+    };
+};
+
+// A stored prompt is a queued one behind the preamble, its re-run note outside it (the daemon's record) or inside (a provider's).
+export const parsePromptEnvelope = (stored: string): PromptEnvelope => {
+    const outer = rerunNoteOf(stored);
+    const body = stored.slice(outer.length);
+    const inner = parseQueuedPrompt(stripTurnPreamble(body));
+    return {
+        ...inner,
+        queued: inner.handoff === undefined ? `${outer}${inner.queued}` : inner.queued,
+        notes: preambleNotes(body),
+        ...opt("resume", resumeDisclosure(stored) ?? inner.resume),
+    };
 };

@@ -1,10 +1,7 @@
 import { type AgentTurn, type Capability, profileOf, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { browserFields } from "../../../browser/tools/browser-fields.js";
-import { pluginDirsOf } from "../../../capabilities/plugin-dirs.js";
 import type { Services } from "../../../composition.js";
-import { extensionAgentDirsOf } from "../../../extensions/installed-extensions.js";
 import { withSettingsHookGate } from "./settings-hook-gate.js";
-import { personaKitPlugin } from "../../../personas/persona-kit.js";
 import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
 import { standing } from "../../../rules/rules.js";
 import { offloadRunEnabled } from "../../../offload/offload-prefix.js";
@@ -22,6 +19,7 @@ import { LITERAL_SLASH_NOTE } from "../../prompt/turn-preamble.js";
 import { releasingMounts } from "../../tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../tools/turn-tools.js";
 import { opt } from "../../../opt.js";
+import { agentMounts } from "./agent-mounts.js";
 import { harnessHooks, type HarnessHooksDeps } from "./harness-hooks.js";
 import { harnessAccounts, harnessServers, type HarnessServersDeps, turnSecretAccess } from "./harness-servers.js";
 
@@ -56,33 +54,17 @@ const harnessReads = (deps: HarnessPlanDeps, input: AgentTurn, context: TurnCont
         deps.safetyPolicy.text(),
     ]);
 
-// The last planning I/O, run together rather than chained: an extension scan, the turn's MCP mounts (the browsers
-// filtered to this persona's accounts, each call bound to its account's persisted profile), and the card's own folder
-// as a plugin dir.
-const harnessMounts = (deps: HarnessPlanDeps, input: AgentTurn, granted: readonly Capability[], persona: TurnPersona) =>
+// The last planning I/O, run together rather than chained: the plugin dirs the Skills list also derives from, and the
+// turn's MCP mounts (the browsers filtered to this persona's accounts, each call bound to its account's persisted profile).
+const harnessMounts = (deps: HarnessPlanDeps, input: AgentTurn, granted: readonly Capability[], persona: TurnPersona, iqLoaded: boolean) =>
     Promise.all([
-        deps.perf.track("turn.plan.extensions", {}, () => extensionAgentDirsOf(deps)),
+        deps.perf.track("turn.plan.extensions", {}, () =>
+            agentMounts(deps, { iqLoaded, capabilities: granted, personas: persona.persona === undefined ? [] : [persona.persona] }),
+        ),
         deps.perf.track("turn.plan.mounts", {}, () =>
             turnToolsOf(deps, granted, { conversationId: input.conversationId, anonymousBrowser: persona.powers.browser }),
         ),
-        persona.persona === undefined ? Promise.resolve(undefined) : personaKitPlugin(deps.workspace.root, persona.persona.id),
     ]);
-
-// The image-baked iq plugin loads ahead of any user plugin so the agent prefers it for code search, and webq rides
-// ungated since its CLI is always on PATH. The persona's kit is last, the most specific thing this turn carries.
-const pluginsOf = (
-    config: Services["config"],
-    iqLoaded: boolean,
-    granted: readonly Capability[],
-    root: string,
-    mounted: { readonly extensionAgentDirs: readonly string[]; readonly personaKit: string | undefined },
-): string[] => [
-    ...(iqLoaded ? [config.iqPluginDir] : []),
-    ...(config.webqPluginDir !== "" ? [config.webqPluginDir] : []),
-    ...pluginDirsOf(granted, root),
-    ...mounted.extensionAgentDirs,
-    ...(mounted.personaKit === undefined ? [] : [mounted.personaKit]),
-];
 
 // The user's message with the attachment note folded in. A leading `/` naming no real command would otherwise be
 // silently discarded by the CLI, so a note keeps the user's words in front of the model, last so `/` still leads.
@@ -175,11 +157,11 @@ export const planHarnessTurn = async (
     const ownBrowsers = await deps.webextReach(granted);
     // Resolved by planTurn and already applied to `granted`; the open, attended fallback is only for the bench.
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
-    const [extensionAgentDirs, mounted, personaKit] = await harnessMounts(deps, input, granted, persona);
-    const { browser, tools: remote } = mounted;
     // Resolved once and read twice (the plugin list and `iqAvailable`), so the notice and the load can't disagree.
     const iqLoaded = deps.config.iqPluginDir !== "" && (context.iqSearchEnabled ?? settings.iqSearch);
-    const plugins = pluginsOf(deps.config, iqLoaded, granted, deps.workspace.root, { extensionAgentDirs, personaKit });
+    const [mounts, mounted] = await harnessMounts(deps, input, granted, persona, iqLoaded);
+    const { browser, tools: remote } = mounted;
+    const plugins = mounts.map((mount) => mount.pluginDir);
     const secrets = turnSecretAccess(deps, input, context.base.signal);
     const sdkServers = harnessServers(deps, { input, context, persona, browser, secrets, hashlineEdits: settings.hashlineEdits });
     const tools: TurnTools = {

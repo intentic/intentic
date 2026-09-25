@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { freePort } from "@intentic/base/fs";
 import type { BrowserContext } from "playwright";
 import { answerBrowserDialog, browserSessionContext, closeBrowserSession, listBrowserSessions, openBrowserSession } from "./browser-sessions.js";
 
@@ -10,15 +10,6 @@ import { answerBrowserDialog, browserSessionContext, closeBrowserSession, listBr
 // moment it attached, and browser_handle_dialog had nothing to handle. The browser here is launched the way the
 // MCP launches it (a debugging port the daemon attaches to), and the page is driven by the launching client, the
 // agent's role.
-
-const freePort = (): Promise<number> =>
-    new Promise((resolve, reject) => {
-        const server = createServer();
-        server.listen(0, "127.0.0.1", () => {
-            const address = server.address();
-            server.close(() => (typeof address === "object" && address !== null ? resolve(address.port) : reject(new Error("no port"))));
-        });
-    });
 
 const launch = async (port: number): Promise<{ context: BrowserContext; profile: string } | undefined> => {
     let playwright: typeof import("playwright");

@@ -8,7 +8,7 @@ import {
     type TreeChanged,
 } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
-import type { PersistedAgent } from "../agents/registry/agents-store.js";
+import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { Caller } from "./auth.js";
 
 // What a caller may see of the fleet, on two independent narrowings. A GUEST sees the conversations they own or

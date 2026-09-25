@@ -1,6 +1,6 @@
 import { REQUEST_ID_HEADER } from "@intentic/sandbox-contract";
 import { createApp } from "../app.js";
-import { createPerfTracker, type PerfFields } from "../platform/resources/perf.js";
+import { createPerfTracker, type PerfFields } from "../system/resources/perf.js";
 import { services } from "../harness/route-services.testing.js";
 import { pino } from "pino";
 

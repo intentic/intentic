@@ -4,7 +4,7 @@ import { openSpawnedChild, resetSubagents, settleSpawnedChild, type SubagentTurn
 import type { AgentRequest, TurnHooks, TurnPolicy, TurnTools } from "../../agent/providers/agent-request.js";
 import type { ChildSupervisor } from "../../agent/subagents/children.js";
 import { waitForWork } from "../../agent/subagents/work-wait.js";
-import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import type { JsExecutionPlan } from "../../execution/js-runtime.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { createTurnTaint } from "../../guard/turn-taint.js";

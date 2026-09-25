@@ -1,5 +1,5 @@
 import type { FleetConfig } from "@intentic/sandbox-contract";
-import { answerError, type FleetWho } from "../../fleet/fleet-client.js";
+import { answerError, type FleetWho } from "../../sandboxes/fleet-client.js";
 import type { CapabilityHandler } from "../capability.js";
 
 /* THE OWNER'S ACCOUNT, connected to one sandbox so that box can bring up others. The wallet's sibling one level up. */

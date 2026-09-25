@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pathExists } from "../../path-exists.js";
+import { pathExists } from "@intentic/base/fs";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { gitDirOf } from "../git-dir.js";
 

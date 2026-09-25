@@ -1,10 +1,10 @@
-import { sweepAgedAgents } from "../agents/registry/archive.js";
+import { sweepAgedAgents } from "../conversations/registry/archive.js";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { unloadIdleLocalModels } from "../capabilities/handlers/localmodel.handler.js";
 import { LOCAL_MODEL_IDLE_MS, LOCAL_MODEL_IDLE_SWEEP_MS } from "../endpoints/local-model-idle.js";
 import { runGitMaintenance } from "../git/ops/maintenance.js";
 import { logsRoot, pruneLogFiles } from "../logs/log-files.js";
-import { panelKeyOf } from "../processes/managed-processes.js";
+import { panelKeyOf } from "@intentic/sandbox-contract/session-names";
 import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-session.js";
 import { pinTmuxServer, reportTmuxServerNamespace } from "../terminal/tmux-server.js";
 import { sweepAgedState, sweepStateAtBoot } from "../workspace/watch/state-janitor.js";

@@ -44,7 +44,6 @@ const UNAUDITED = new Set([
     "share",
     "speech",
     "store",
-    "system",
     "terminal",
     "trial",
     "usage",

@@ -1,7 +1,7 @@
 import type { AgentOptions, ModelSelection, Run, SDKAgent, SendOptions } from "@cursor/sdk";
 import { type AgentEvent, CURSOR } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { whenAborted } from "../../abort.js";
+import { whenAborted } from "@intentic/base/async";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
 import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
 import { EventQueue } from "../../agent/run/event-queue.js";
@@ -15,7 +15,7 @@ import { selectionFor } from "./cursor-models.js";
 import { CURSOR_SDK_MISSING, cursorSdk } from "./cursor-sdk.js";
 import { cursorCustomTools, cursorMcpServers, TOOLS_WITHHELD } from "./cursor-tools.js";
 
-// Cursor provider adapter: same AgentRequest-in/AgentEvent-out seam as createCodexAgent/createGrokAgent/runPiAgent,
+// Cursor provider adapter: same AgentRequest-in/AgentEvent-out seam as createCodexAgent/createOpenCodeAgent/runPiAgent,
 // over @cursor/sdk's local agent runtime. Runs in-process, not a child process, so the daemon's own functions can be
 // tools; reads only the delta stream from `send({ onDelta })`, not the overlapping `run.stream()`.
 

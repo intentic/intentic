@@ -26,7 +26,7 @@ export const procFile = (path: string): Promise<string> =>
     });
 
 // The session field of a /proc/<pid>/stat line: the fourth after the comm, which is bracketed by the first "(" and the
-// LAST ")" since a comm may itself hold either. Read here rather than through platform/resources/proc-stat.ts: this is a
+// LAST ")" since a comm may itself hold either. Read here rather than through system/resources/proc-stat.ts: this is a
 // seam both the agent's jobs and the managed panels end sessions through, and a value import of platform from here
 // would close a cycle the daemon-boundaries check refuses.
 export const sessionOf = (stat: string): number | undefined => {

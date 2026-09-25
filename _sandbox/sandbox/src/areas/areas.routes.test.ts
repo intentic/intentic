@@ -4,7 +4,7 @@ import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { createAuthConnections } from "../auth/connections.js";
-import { createWsTickets } from "../auth/ws-tickets.js";
+import { createWsTickets } from "../auth/tokens/ws-tickets.js";
 import { memoryAreasStore, memoryMembersStore } from "../harness/route-stores.testing.js";
 import { createAreasRoutes } from "./areas.routes.js";
 

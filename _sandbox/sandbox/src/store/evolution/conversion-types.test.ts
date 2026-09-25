@@ -3,7 +3,7 @@ import { drop, rename } from "./conversions.js";
 import type { VanishedKeys } from "./conversion-types.js";
 import { defineDocument } from "./documents.js";
 
-// The vanished-key check the generated state-shapes.ts applies to every frozen shape, pinned on shapes small enough to
+// The vanished-key check the generated shape checks (untracked) apply to every frozen shape, pinned on shapes small enough to
 // read: what it names, and what it must not.
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;

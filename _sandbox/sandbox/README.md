@@ -22,13 +22,13 @@ flowchart LR
 - Routes are declared in `@intentic/sandbox-contract`, implemented in `*.routes.ts` and assembled in `src/router.ts`.
   `/events` pushes file, git and fleet changes to the browser.
 - One turn: `agent/run/turn/turn-admission.ts` admits it, `turn-plan.ts` picks a runtime, it runs in the
-  conversation's worktree (or the main tree, or a remote runner), and `agents/land/land.ts` lands the result as
+  conversation's worktree (or the main tree, or a remote runner), and `conversations/land/land.ts` lands the result as
   uncommitted changes. Nothing checks the turn when it ends. `verify-landed.ts` asks the one land check
   (`services.landCheck`, `workspace/deps/verify-deps.ts`) to run the repository's check on the main tree in the
-  background, and `agents/land/land-breakage.ts` decides who is sent a red one. The lands waiting for a verdict and what
+  background, and `conversations/land/land-breakage.ts` decides who is sent a red one. The lands waiting for a verdict and what
   the router holds or waits on live in the verify store, so a restart picks both up again.
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
-  a nudge, an automation's thread) is refused on an archived one (`agents/actor/conversation-decide.ts`), and a
+  a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.
 - Extension code never runs in the daemon process; it runs in a supervised backend host and in declared processes.
   Both reach the daemon on one token per extension, held to its manifest's `permissions.daemon` (`auth/grants.ts`).
@@ -46,7 +46,7 @@ flowchart LR
   `spawnAs`): its niceness, IO class and rank for the kernel's OOM killer, inherited by everything it forks. Builds
   go first, agent runtimes last, children before their parents. Nothing ranks a process by its command line.
 - A heavy program (a build, a test run, a typecheck) is recognised by what it is as it starts, not by the words of
-  the line that started it: the daemon hands every agent command the table (`platform/resources/heavy-commands.ts`,
+  the line that started it: the daemon hands every agent command the table (`system/resources/heavy-commands.ts`,
   the shared rules in `@intentic/constants/heavy-rules`), and the program queues itself through `bin/queue-run`.
   Agent commands reach their pane by file (`bin/tmux-run -f`), so no command line carries their words.
 - One `ResourceBudget` (`workload/resource-budget.ts`) decides whether there is room for more work: the turn door, a
@@ -72,17 +72,26 @@ flowchart LR
 - A `rename` conversion moves a key and nothing more: there is no grace window writing both names. A build rolled back
   past a committed rename keeps the new name as a key it does not know, and reads its own default for the old one.
 
+- `agent/` runs one turn: its prompt, tools, provider seam and the pipeline in `agent/run/stream-agent.ts`.
+  `conversations/` is what turns belong to: the actors, the registry, each conversation's worktree and its land.
+  `system/` is this container and its link to the platform: boot, resources and memory admission, TLS, listeners and
+  the platform client. `sandboxes/` creates other sandboxes on the owner's account; `hosts/` holds the owner's own
+  computers, desktop sync included.
+- Each subsystem declares its part of `Services` beside its code (`auth/auth-slice.ts`,
+  `conversations/conversations-slice.ts`, …) and builds it there where it can (`createAuthSlice`,
+  `createSessionsSlice`); `composition.ts` extends the slices and wires them in the one order that works.
+
 More: [subsystems](docs/subsystems.md) (how the parts connect), [environment](docs/env-contract.md) (what the daemon
 reads at start), [debugging](docs/debugging.md) (logs, diagnostics, state on disk).
 
 ## Key files
 
 - [src/main.ts](src/main.ts) — the entry point: boot phases in the one order that matters.
-- [src/composition.ts](src/composition.ts) — `createServices` builds every subsystem once; `wireReactions` subscribes them to each other.
+- [src/composition.ts](src/composition.ts) — `Services` extends each module's own slice; `createServices` builds every subsystem once, `wireReactions` subscribes them to each other.
 - [src/app.ts](src/app.ts) — the Hono app: security headers, boot gate, CORS, auth, raw routes, then the oRPC handler.
 - [src/router.ts](src/router.ts) — the per-domain route factories assembled into the contract's shape.
 - [src/env.config.ts](src/env.config.ts) — the configuration schema read from the environment.
-- [src/agent/routes/agent.routes.ts](src/agent/routes/agent.routes.ts) — `streamAgent`: one turn, from placement to settlement.
+- [src/agent/run/stream-agent.ts](src/agent/run/stream-agent.ts) — `streamAgent`: one turn, from placement to settlement.
 
 ## Layout
 
@@ -90,12 +99,12 @@ Main groups under `src/`:
 
 | Concern | Directories |
 | --- | --- |
-| Turns and agents | `agent/` `agents/` `runtimes/` `sessions/` `personas/` `loops/` `workflows/` `guard/` `rules/` |
+| Turns and agents | `agent/` `conversations/` `runtimes/` `sessions/` `personas/` `loops/` `workflows/` `guard/` `rules/` |
 | Workspace | `workspace/` `git/` `history/` `derived/` `terminal/` `processes/` `ports/` `panels/` |
 | Owner controls | `auth/` `secrets/` `areas/` `approvals/` `safety/` `usage/` `wallet/` `settings/` |
-| Outside world | `capabilities/` `extensions/` `browser/` `hosts/` `peers/` `webext/` `runners/` `fleet/` `ci/` `automations/` |
-| Network | `front/` `platform/` `tunnel/` `vpn/` `exit/` `netdisk/` `public/` `share/` `webchat/` |
-| Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `workers/` `logs/` `invariants/` `workload/` |
+| Outside world | `capabilities/` `extensions/` `browser/` `hosts/` `peers/` `webext/` `runners/` `sandboxes/` `ci/` `automations/` |
+| Network | `front/` `tunnel/` `vpn/` `exit/` `netdisk/` `public/` `share/` `webchat/` |
+| Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `logs/` `invariants/` `workload/` |
 | Test support | `harness/` `fences/` `e2e/` |
 
 ## Commands

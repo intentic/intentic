@@ -1,8 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { HEALTH_LIMIT, includeGlobs, MAX_REF_CANDIDATES, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
-import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { HEALTH_LIMIT, includeGlobs, MAX_REF_CANDIDATES, previewUrl, workspaceContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -38,6 +37,7 @@ import {
 import { provenanceOf, refuseUnlessVisible } from "../auth/fleet-scope.js";
 import { callerFence } from "../areas/area-scope.js";
 import type { Fence } from "@intentic/sandbox-contract";
+import { publicAddressOf } from "../env.config.js";
 
 // What runs a directory's tests: its own `test` script, or without one the runner its config names.
 const testCommand = (dir: string): string => {
@@ -121,8 +121,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         return scopedTarget(scope, agent, relPath);
     };
     // Zone and sandbox id used to build per-app preview URLs (preview-<panel>-<id>.<zone>).
-    const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
-    const sandboxId = sandboxIdFromToken(services.config.connectToken);
+    const { zone, sandboxId } = publicAddressOf(services.config);
     // Resolves and validates the {repo} path param for the apps extension's routes; the repo must already exist.
     const monorepoOf = async (context: OrpcContext, repo: string): Promise<string> => {
         if (!isValidRepoName(repo)) {
