@@ -174,7 +174,6 @@
     "_extensions/onlyoffice/src/server/docker.ts": 1,
     "_extensions/onlyoffice/src/server/jwt.ts": 1,
     "_extensions/onlyoffice/src/server/listener.ts": 1,
-    "_extensions/onlyoffice/src/server/server.ts": 2,
     "_extensions/repo-apps/src/AppsView.vue": 1,
     "_extensions/slack/src/client.ts": 2,
     "_extensions/slack/src/listener.ts": 2,
