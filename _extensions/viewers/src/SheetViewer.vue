@@ -75,7 +75,7 @@ const render = async (source: Blob): Promise<void> => {
         if (!isLatest()) {
             return;
         }
-        const next = createSheetWorkerClient(new SheetWorker());
+        const next = createSheetWorkerClient(async () => new SheetWorker());
         client = next;
         const names = await next.load(buffer);
         if (!isLatest() || next !== client) {

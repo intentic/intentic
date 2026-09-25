@@ -23,6 +23,7 @@ import { chatWide } from "../../chat/panel/chatPanelLayout";
 import { openRunInChat } from "../../chat/run/openRun";
 import { summonChat } from "../../chat/run/summon";
 import { chatStrip } from "../../chat/panel/useChat-strip";
+import LaneHeader from "../../../components/LaneHeader.vue";
 import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
 import AgentsDock from "../dock/AgentsDock.vue";
@@ -224,8 +225,8 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                     :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
                 >
                     <!-- Finished's header doubles as the archive's window, swapping its dot/label and growing a way back; pinned while scrolling stacked. -->
-                    <header class="flex h-8 shrink-0 items-center gap-2.5 px-1" :class="narrow ? 'sticky top-0 z-10 rounded-t-xl bg-canvas' : ''">
-                        <template v-if="lane.key === 'finished' && view.archive">
+                    <LaneHeader :label="lane.label" :dot="lane.dot" class="px-1" :class="narrow ? 'sticky top-0 z-10 rounded-t-xl bg-canvas' : ''">
+                        <template v-if="lane.key === 'finished' && view.archive" #mark>
                             <button
                                 type="button"
                                 :aria-label="t(`agents.agentsView.backToFinishedAgents`)"
@@ -238,53 +239,50 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ t(`shared.archived`) }}</span>
                             <Icon v-if="archiveLoading" name="spinner" spin class="text-2xs text-muted" />
                         </template>
-                        <template v-else>
-                            <span class="h-2 w-2 rounded-full" :class="lane.dot"></span>
-                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
-                        </template>
-                        <span class="flex-1"></span>
-                        <template v-if="lane.key === 'finished' && !view.archive">
-                            <!-- Archive feedback highlights the destination counter. -->
-                            <button
-                                v-if="archiveSize > 0"
-                                type="button"
-                                :aria-label="t(`agents.agentsView.openArchive`, { archiveSize })"
-                                v-tooltip.bottom="t(`agents.agentsView.takenOffBoardBranches`)"
-                                class="ui-chip shrink-0 gap-1"
-                                :class="pulsing ? `ui-chip-on ring-1 ring-primary-500/50` : ``"
-                                @click="toggleArchive"
-                            >
-                                <Icon name="history" class="text-2xs" />{{ archiveSize }}
-                            </button>
-                            <!-- Hidden while filtering, like the drag: Clear archives the whole lane, not the filtered subset on screen. -->
+                        <template #actions>
+                            <template v-if="lane.key === 'finished' && !view.archive">
+                                <!-- Archive feedback highlights the destination counter. -->
+                                <button
+                                    v-if="archiveSize > 0"
+                                    type="button"
+                                    :aria-label="t(`agents.agentsView.openArchive`, { archiveSize })"
+                                    v-tooltip.bottom="t(`agents.agentsView.takenOffBoardBranches`)"
+                                    class="ui-chip shrink-0 gap-1"
+                                    :class="pulsing ? `ui-chip-on ring-1 ring-primary-500/50` : ``"
+                                    @click="toggleArchive"
+                                >
+                                    <Icon name="history" class="text-2xs" />{{ archiveSize }}
+                                </button>
+                                <!-- Hidden while filtering, like the drag: Clear archives the whole lane, not the filtered subset on screen. -->
+                                <Button
+                                    v-if="clearable > 0 && !filtering"
+                                    size="small"
+                                    severity="secondary"
+                                    :text="true"
+                                    class="ui-button-thumb shrink-0"
+                                    :aria-label="t(`agents.agentsView.archiveEveryFinishedAgent`)"
+                                    v-tooltip.bottom="t(`agents.agentsView.archiveAllUndo`, { clearable })"
+                                    @click="archive()"
+                                >
+                                    {{ t(`ui.action.clear`) }}
+                                </Button>
+                            </template>
+                            <!-- Retired-agent danger appears on hover; the dialog is the actionable warning. -->
                             <Button
-                                v-if="clearable > 0 && !filtering"
+                                v-if="lane.key === 'finished' && view.archive && archiveSize > 0 && !filtering"
                                 size="small"
-                                severity="secondary"
+                                severity="danger"
                                 :text="true"
-                                class="ui-button-thumb shrink-0"
-                                :aria-label="t(`agents.agentsView.archiveEveryFinishedAgent`)"
-                                v-tooltip.bottom="t(`agents.agentsView.archiveAllUndo`, { clearable })"
-                                @click="archive()"
+                                class="shrink-0"
+                                :aria-label="t(`agents.agentsView.deleteAllArchivedAgents`, { count: archived.length })"
+                                :disabled="purging"
+                                v-tooltip.bottom="t(`agents.agentsView.deleteAllPermanentlyBranches`, { count: archived.length })"
+                                @click="pendingPurge = true"
                             >
-                                {{ t(`ui.action.clear`) }}
+                                <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />{{ t(`agents.agentsView.deleteAll`) }}
                             </Button>
                         </template>
-                        <!-- Retired-agent danger appears on hover; the dialog is the actionable warning. -->
-                        <Button
-                            v-if="lane.key === 'finished' && view.archive && archiveSize > 0 && !filtering"
-                            size="small"
-                            severity="danger"
-                            :text="true"
-                            class="shrink-0"
-                            :aria-label="t(`agents.agentsView.deleteAllArchivedAgents`, { count: archived.length })"
-                            :disabled="purging"
-                            v-tooltip.bottom="t(`agents.agentsView.deleteAllPermanentlyBranches`, { count: archived.length })"
-                            @click="pendingPurge = true"
-                        >
-                            <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />{{ t(`agents.agentsView.deleteAll`) }}
-                        </Button>
-                    </header>
+                    </LaneHeader>
                     <!-- Held wakes lead the lane, since a hold is wholly waiting on the user, more than anything running below it; Attention lane only. -->
                     <div v-if="lane.key === 'attention' && !view.archive && scopedHeld.length > 0" class="flex flex-col gap-2.5 pb-2.5">
                         <HeldWakeCard
@@ -427,11 +425,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
             </button>
             <div v-if="view.beyond" class="mt-2 flex min-h-0 flex-col gap-3 overflow-auto">
                 <section v-if="archivedHits.length > 0" class="flex min-w-0 flex-col gap-2.5">
-                    <div class="flex items-center gap-2 px-1">
-                        <Icon name="box" class="shrink-0 text-2xs text-subtle" />
-                        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ t(`agents.agentsView.inArchive`) }}</span>
-                        <span class="text-2xs tabular-nums text-subtle">{{ archivedHits.length }}</span>
-                    </div>
+                    <LaneHeader :label="t(`agents.agentsView.inArchive`)" icon="box" :count="archivedHits.length" class="px-1" />
                     <!-- Archived agents retain the branch, diff, and transcript actions. -->
                     <div class="grid gap-2.5" :class="narrow ? '' : 'grid-cols-3 items-start lg:gap-4.5'">
                         <AgentCard
@@ -453,11 +447,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                     </div>
                 </section>
                 <section v-if="sessionMatches.length > 0" class="flex min-w-0 flex-col gap-1">
-                    <div class="flex items-center gap-2 px-1">
-                        <Icon name="history" class="shrink-0 text-2xs text-subtle" />
-                        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ t(`agents.agentsView.inEarlierChats`) }}</span>
-                        <span class="text-2xs tabular-nums text-subtle">{{ sessionMatches.length }}</span>
-                    </div>
+                    <LaneHeader :label="t(`agents.agentsView.inEarlierChats`)" icon="history" :count="sessionMatches.length" class="px-1" />
                     <!-- Conversations no agent entry owns; with no card to draw, they read as history rows and open as tabs, the same act the History menu performs. -->
                     <button
                         v-for="session in sessionMatches"

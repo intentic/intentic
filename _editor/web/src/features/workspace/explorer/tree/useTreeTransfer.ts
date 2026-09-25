@@ -14,7 +14,7 @@ import type { useWorkspaceTree } from "../useWorkspaceTree";
 import { isUnlisted } from "./treeRows";
 import type { useInlineEdit } from "./useTreeEdits";
 import type { useTreeRules } from "./useTreeRules";
-import type { useTreeSelection } from "./useTreeSelection";
+import type { MultiSelect } from "../../../../lib/multiSelect";
 
 // Entries into, out of and around a file surface (the tree, the home); a pointer move never uses the platform's drag.
 
@@ -30,7 +30,7 @@ export interface TreeTransferHost {
     // The nest alone, for a drag onto a folder row, which leaves that folder as it was.
     readonly openNest: (dir: string, landed?: readonly LandedEntry[]) => void;
     readonly rules: Pick<ReturnType<typeof useTreeRules>, "unlockedOnly" | "archived" | "noDrops" | "refuseIn">;
-    readonly selecting: Pick<ReturnType<typeof useTreeSelection>, "selection" | "lead" | "selectLanded">;
+    readonly selecting: Pick<MultiSelect, "selection" | "lead" | "selectLanded">;
     readonly inline: Pick<ReturnType<typeof useInlineEdit>, "edit" | "editing">;
     // The tree element: a clipboard write goes through its window, so a popped-out explorer writes to its own.
     readonly el: Readonly<Ref<HTMLElement | undefined>>;

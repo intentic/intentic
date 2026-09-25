@@ -7,7 +7,7 @@ import type { OpenMode } from "../../tabs/workspaceTabs";
 import { consumeSuppressedClick } from "../transfer/useEntryDrag";
 import { type KeyIntent, keyIntent } from "./treeKeys";
 import { holdsRows, type MoreRow, type Row } from "./treeRows";
-import type { useTreeSelection } from "./useTreeSelection";
+import type { MultiSelect } from "../../../../lib/multiSelect";
 
 // What a press on the tree does: a row's click, double-click and chevron, the tree's background, and the keyboard
 // (treeKeys.ts decides, this does). Activation opens a file, expands a folder or an archive, and explains a locked path.
@@ -18,7 +18,7 @@ export interface TreeGesturesHost {
     readonly byPath: Readonly<Ref<ReadonlyMap<string, WorkspaceTreeEntry>>>;
     // Dirs with a management surface, which keyboard activation also opens.
     readonly manageableDirs: () => ReadonlySet<string>;
-    readonly selecting: ReturnType<typeof useTreeSelection>;
+    readonly selecting: MultiSelect;
     readonly pending: (path: string) => boolean;
     readonly toggleExpand: (path: string) => void;
     // An open inline field owns its keys.

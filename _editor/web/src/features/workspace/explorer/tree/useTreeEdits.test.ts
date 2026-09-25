@@ -2,10 +2,9 @@ import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { h, nextTick, render, type VNode } from "vue";
+import { nextTick } from "vue";
 import { dir, file, type StoreOptions, treeSurface } from "../../../../testing/treeSurface";
 import { noteArriving } from "../../files/provisionalEntries";
-import { focusField } from "./useTreeEdits";
 
 // Pins what the inline field's gestures write, where the selection lands, when a new file opens, and that Enter writes once.
 
@@ -162,18 +161,5 @@ describe(`ending the field`, () => {
         edits.beginRename(`src/main.ts`);
         await edits.endEdit(`cancel`);
         expect([inline.edit.value, store.createFile.mock.calls, store.moveEntry.mock.calls]).toEqual([{ kind: `idle` }, [], []]);
-    });
-});
-
-describe(`the field's element`, () => {
-    it(`takes the focus with its text selected the moment it mounts`, () => {
-        const host = document.createElement(`div`);
-        document.body.append(host);
-        render(h(`input`, { value: `main.ts`, onVnodeMounted: (vnode: VNode) => focusField(vnode) }), host);
-        const input = host.querySelector(`input`) as HTMLInputElement;
-
-        expect([document.activeElement === input, input.selectionStart, input.selectionEnd]).toEqual([true, 0, 7]);
-        render(null, host);
-        host.remove();
     });
 });

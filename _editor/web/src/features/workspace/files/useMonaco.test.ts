@@ -17,6 +17,9 @@ jest.mock("@intentic/ui/theme", () => ({ useTheme: jest.fn() }));
 // The two app-wide channels a failure reaches, stubbed because the real ones talk to the daemon and to the
 // notification host: what matters here is that a grammar that never arrived reaches both.
 jest.mock("../../../app/clientDiagnostics", () => diagnostics);
+// Every chunk Monaco needs arrives through the kit's one loader; stubbed so a case can make it fail.
+const chunk = { loadChunk: jest.fn((): Promise<unknown> => Promise.reject(new TypeError(`Failed to fetch dynamically imported module`))) };
+jest.mock("@intentic/ui/chunk", () => chunk);
 jest.mock("../../../app/appUpdate", () => appUpdate);
 
 const { useMonaco } = await import("./useMonaco");
@@ -67,5 +70,18 @@ describe(`ensureLanguage`, () => {
         await expect(useMonaco().ensureLanguage(monaco as never, `cuneiform`)).resolves.toBeUndefined();
         expect(diagnostics.reportClient).not.toHaveBeenCalled();
         expect(appUpdate.reportIncompleteBundle).not.toHaveBeenCalled();
+    });
+});
+
+describe(`ensureMonaco`, () => {
+    // A cached rejection used to leave the code editor dead until the tab was closed: every file opened after one failed
+    // load replayed it without asking the network again.
+    it(`forgets a failed load, so the next file opened fetches the editor again`, async () => {
+        chunk.loadChunk.mockClear();
+        await expect(useMonaco().ensureMonaco()).rejects.toThrow(`dynamically imported module`);
+        expect(chunk.loadChunk.mock.calls.length).toBe(3);
+
+        await expect(useMonaco().ensureMonaco()).rejects.toThrow(`dynamically imported module`);
+        expect(chunk.loadChunk.mock.calls.length).toBe(6);
     });
 });

@@ -6,7 +6,7 @@ import type { OpenMode } from "../../tabs/workspaceTabs";
 import { beginEntryDrag } from "../transfer/useEntryDrag";
 import type { MoreRow, Row } from "./treeRows";
 import { useTreeGestures } from "./useTreeGestures";
-import { useTreeSelection } from "./useTreeSelection";
+import { useMultiSelect } from "../../../../lib/multiSelect";
 
 // Pins what a press on the tree does: a click selects, picks and activates, Shift and Ctrl only select, a double-click
 // keeps a file, a nest's chevron toggles it, the background drops the selection, and each key's intent is carried out.
@@ -55,7 +55,7 @@ const gesturesOver = () => {
         cleared: jest.fn(() => done.push(`cleared`)),
     };
     const { selecting, gestures } = effectScope().run(() => {
-        const selection = useTreeSelection({ selectedPath: () => undefined, order });
+        const selection = useMultiSelect(order);
         return { selecting: selection, gestures: useTreeGestures({ ...host, selecting: selection }) };
     })!;
     const state = () => ({ selected: [...selecting.selection.value], anchor: selecting.anchor.value, lead: selecting.lead.value });

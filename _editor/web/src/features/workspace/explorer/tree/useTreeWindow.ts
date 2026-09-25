@@ -20,8 +20,6 @@ export interface TreeWindowHost {
 export const useTreeWindow = (host: TreeWindowHost) => {
     // The scrollport the window measures against.
     const scroller = ref<HTMLElement>();
-    // Tree container; tabindex -1 so clicking empty space still parks focus here, letting clipboard events fire.
-    const treeEl = ref<HTMLElement>();
     // Everything above the first row (the top spacer, and the root's phantom create row), measured rather than assumed.
     const preamble = ref<HTMLElement>();
     // A hidden row wearing the real classes, so the stylesheet stays the one place a row's height is decided.
@@ -98,7 +96,6 @@ export const useTreeWindow = (host: TreeWindowHost) => {
 
     return {
         scroller,
-        treeEl,
         preamble,
         probeRow,
         rowHeight,

@@ -1,6 +1,7 @@
 <!-- Dispatches one authored figure fence to the component that draws it. -->
 <script setup lang="ts">
 import { defineAsyncComponent } from "vue";
+import { loadChunk } from "../../lib/loadChunk.js";
 import type { Figure } from "../../markdown/figures.js";
 import BarChart from "./BarChart.vue";
 import MermaidDiagram from "./MermaidDiagram.vue";
@@ -9,7 +10,7 @@ import StatStrip from "./StatStrip.vue";
 defineProps<{ figure: Figure }>();
 
 /* The dag is the one branch that is not imported with the rest: it draws on a graph canvas (Vue Flow, dagre and a stylesheet). */
-const DagFigure = defineAsyncComponent(() => import("./DagFigure.vue"));
+const DagFigure = defineAsyncComponent(() => loadChunk(() => import("./DagFigure.vue")));
 </script>
 
 <template>

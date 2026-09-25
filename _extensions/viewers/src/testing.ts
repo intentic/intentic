@@ -1,3 +1,4 @@
+import type { WorkerCallRequest, WorkerCallResponse, WorkerPort } from "@intentic/extension-ui/worker";
 import { strToU8, zipSync } from "fflate";
 
 // Fixture builder: the smallest Word document docx-preview accepts, built in code rather than committed as a binary,
@@ -61,3 +62,34 @@ export const docxBytes = (paragraphs: readonly FixtureParagraph[]): Uint8Array =
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs.map(paragraphXml).join(``)}${SECTION}</w:body></w:document>`,
         ),
     });
+
+/** A worker stand-in the viewers' suites share: answers each call with `answer` a microtask later, or dies when it says
+ * `crash`. `sent` and `transferred` record what the page posted; `terminated` whether it was ended. */
+export const fakeWorkerPort = <Args, Result>(
+    answer: (request: WorkerCallRequest<Args>) => WorkerCallResponse<Result> | `crash`,
+): WorkerPort<Args, Result> & { readonly sent: WorkerCallRequest<Args>[]; readonly transferred: (Transferable[] | undefined)[]; terminated: boolean } => {
+    const listeners: { message?: (event: MessageEvent<WorkerCallResponse<Result>>) => void; error?: (event: ErrorEvent) => void } = {};
+    return {
+        sent: [],
+        transferred: [],
+        terminated: false,
+        postMessage(request, transfer) {
+            this.sent.push(request);
+            this.transferred.push(transfer);
+            queueMicrotask(() => {
+                const reply = answer(request);
+                if (reply === `crash`) {
+                    listeners.error?.({ message: `worker died` } as ErrorEvent);
+                } else {
+                    listeners.message?.({ data: reply } as MessageEvent<WorkerCallResponse<Result>>);
+                }
+            });
+        },
+        addEventListener: ((type: `message` | `error`, listener: never) => {
+            listeners[type] = listener;
+        }) as WorkerPort<Args, Result>[`addEventListener`],
+        terminate() {
+            this.terminated = true;
+        },
+    };
+};

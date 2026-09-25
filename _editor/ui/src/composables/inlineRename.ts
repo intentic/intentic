@@ -8,8 +8,9 @@ import { errorMessage } from "./useAsyncAction.js";
 
 // Focus and select the input the moment it mounts (the @vue:mounted trick). The selection waits a tick because
 // v-model writes the value in its OWN mounted hook, which runs after this one: selecting before that selects the
-// empty string, and the caret then lands after the name instead of over it.
-const focusInput = (vnode: VNode): void => {
+// empty string, and the caret then lands after the name instead of over it. Every field that opens over a name uses
+// this, including those that draw their own (`@vue:mounted="focusInput"`).
+export const focusInput = (vnode: VNode): void => {
     const el = vnode.el as HTMLInputElement;
     el.focus();
     void nextTick(() => el.select());

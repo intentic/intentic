@@ -53,7 +53,7 @@ const headingClass = computed(() => (stickyHeadings ? `sticky top-0 z-10 bg-canv
                         :style="{ background: seriesColor(group.accent) }"
                         aria-hidden="true"
                     ></span>
-                    <span :class="ui.sectionLabel(`min-w-0 truncate text-2xs`)">{{ group.label }}</span>
+                    <span :class="ui.sectionLabelSm(`min-w-0 truncate`)">{{ group.label }}</span>
                     <span v-if="group.count !== undefined" class="ml-auto shrink-0 text-2xs tabular-nums text-subtle">{{ group.count }}</span>
                 </h3>
                 <!-- A HAIRLINE BETWEEN ROWS, because these rows are ROUNDED AND TINTED. -->

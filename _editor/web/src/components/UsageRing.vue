@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { placeAnchored, type Placement, ProgressRing, type Side } from "@intentic/ui";
+import { placeAnchored, type Placement, ProgressRing, type Side, useHoverIntent } from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref } from "vue";
 import { formatAge, formatReset, formatUtilization, type PlanHeadroom, usageDetail, usageTone } from "../features/chat/session/usageStatus";
 import { useT } from "@intentic/ui/i18n";
@@ -22,14 +22,13 @@ const { headroom, flank = `right` } = defineProps<{
 const GAP = 8; // px between the ring and the card: the arrow's height
 const EDGE = 8; // px of the window kept clear on every side
 // Long enough to skip a pass-by sweep across a column of rings, short enough a deliberate hover feels instant.
-const OPEN_DELAY_MS = 120;
+const hover = useHoverIntent({ open: 120 });
 
 const anchor = ref<HTMLElement>();
 const box = ref<HTMLElement>();
-const open = ref(false);
+const open = hover.shown;
 // Undefined until measured; parked off-screen until then so it doesn't flash at the window's origin on open.
 const placement = ref<Placement>();
-let timer: ReturnType<typeof setTimeout> | undefined;
 
 const style = computed<CSSProperties>(() =>
     placement.value === undefined
@@ -67,23 +66,21 @@ const reposition = (): void => {
 let armed: { readonly doc: Document; readonly view: Window } | undefined;
 
 const hide = (): void => {
-    clearTimeout(timer);
+    hover.hide();
     if (armed !== undefined) {
         armed.doc.removeEventListener(`scroll`, hide, true);
         armed.view.removeEventListener(`resize`, hide);
         armed = undefined;
     }
-    open.value = false;
     placement.value = undefined;
 };
 
 const reveal = async (): Promise<void> => {
-    open.value = true;
     await nextTick(); // the card exists, and has a size: only after this render
     reposition();
     const doc = anchor.value?.ownerDocument;
     const view = doc?.defaultView;
-    if (doc === undefined || view === null || view === undefined) {
+    if (doc === undefined || view === null || view === undefined || armed !== undefined) {
         return;
     }
     doc.addEventListener(`scroll`, hide, true); // capture: it is the scrolling ANCESTOR that fires
@@ -91,10 +88,7 @@ const reveal = async (): Promise<void> => {
     armed = { doc, view };
 };
 
-const show = (): void => {
-    clearTimeout(timer);
-    timer = setTimeout(() => void reveal(), OPEN_DELAY_MS);
-};
+const show = (): void => hover.enter(() => void reveal());
 
 onBeforeUnmount(hide);
 </script>

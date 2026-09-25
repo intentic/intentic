@@ -2,16 +2,16 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { ContextMenu, useLoadingReveal } from "@intentic/ui";
+import { ContextMenu, useHoverIntent, useLoadingReveal } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { variableRows } from "../../../lib/rowWindow";
 import { useRowWindow } from "../../../lib/useRowWindow";
 import { useLayout } from "../../../shell/window/useLayout";
 import { explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import { consumeSuppressedClick, useEntryDrag } from "../explorer/transfer/useEntryDrag";
 import { deadLink } from "../explorer/tree/treeRows";
-import { focusField } from "../explorer/tree/useTreeEdits";
+import { focusInput } from "@intentic/ui/inline-rename";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { opensAsFolder } from "../files/archiveEntries";
 import { withProvisionalEntries } from "../files/provisionalEntries";
@@ -293,61 +293,22 @@ const open = (entry: WorkspaceTreeEntry): void => {
 // --- The quick look ------------------------------------------------------------------------------------------------
 // A short dwell before the first card, so a pointer crossing the home raises nothing; once one is up, the next tile
 // shows at once, and that readiness outlives a close by a moment, as tooltips do.
-const OPEN_DELAY_MS = 160;
-const CLOSE_DELAY_MS = 150;
-const WARM_MS = 300;
-const peekEntry = ref<WorkspaceTreeEntry>();
-const peekAnchor = ref<HTMLElement>();
-let openTimer: ReturnType<typeof setTimeout> | undefined;
-let closeTimer: ReturnType<typeof setTimeout> | undefined;
-let warmTimer: ReturnType<typeof setTimeout> | undefined;
-let warm = false;
-
-const clearTimers = (): void => {
-    clearTimeout(openTimer);
-    clearTimeout(closeTimer);
-};
-const showPeek = (entry: WorkspaceTreeEntry, el: HTMLElement): void => {
-    clearTimeout(warmTimer);
-    warm = true;
-    peekEntry.value = entry;
-    peekAnchor.value = el;
-};
-const closePeek = (): void => {
-    clearTimers();
-    if (peekEntry.value === undefined) {
-        return;
-    }
-    peekEntry.value = undefined;
-    peekAnchor.value = undefined;
-    clearTimeout(warmTimer);
-    warmTimer = setTimeout(() => {
-        warm = false;
-    }, WARM_MS);
-};
+const look = useHoverIntent({ open: 160, close: 150, warm: 300 });
+const peekAt = shallowRef<{ readonly entry: WorkspaceTreeEntry; readonly el: HTMLElement }>();
+const peekEntry = computed(() => (look.shown.value ? peekAt.value?.entry : undefined));
+const peekAnchor = computed(() => (look.shown.value ? peekAt.value?.el : undefined));
+const closePeek = (): void => look.hide();
 const onTileEnter = (entry: WorkspaceTreeEntry, el: HTMLElement): void => {
-    clearTimers();
     // Nothing to look into: the padlock and the placeholder say all there is; a drag or a rename is not a look.
     if (isLockedWorkspacePath(entry.path) || pending(entry.path) || dragging.value || editing.value) {
         closePeek();
         return;
     }
-    if (warm || peekEntry.value !== undefined) {
-        showPeek(entry, el);
-        return;
-    }
-    openTimer = setTimeout(() => showPeek(entry, el), OPEN_DELAY_MS);
+    look.enter(() => {
+        peekAt.value = { entry, el };
+    });
 };
-const onTileLeave = (): void => {
-    clearTimeout(openTimer);
-    if (peekEntry.value !== undefined) {
-        closeTimer = setTimeout(closePeek, CLOSE_DELAY_MS);
-    }
-};
-onBeforeUnmount(() => {
-    clearTimers();
-    clearTimeout(warmTimer);
-});
+const onTileLeave = (): void => look.leave();
 
 // --- Keyboard ------------------------------------------------------------------------------------------------------
 // Only the drawn tiles are here to find, which is a screenful rather than the folder; a tile outside the window has no
@@ -585,7 +546,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                     @keydown.enter.prevent="endEdit('commit')"
                                     @keydown.esc.prevent="endEdit('cancel')"
                                     @blur="endEdit('blur')"
-                                    @vue:mounted="focusField"
+                                    @vue:mounted="focusInput"
                                 />
                                 <p v-if="createError !== undefined" class="text-center text-2xs text-danger">{{ createError }}</p>
                             </div>

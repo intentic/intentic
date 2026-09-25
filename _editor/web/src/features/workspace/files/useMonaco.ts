@@ -1,4 +1,5 @@
 import { useHighlighter, useTheme } from "@intentic/ui";
+import { loadChunk } from "@intentic/ui/chunk";
 import { useTextSize } from "@intentic/ui/text-size";
 import type * as Monaco from "monaco-editor-core";
 import { watch } from "vue";
@@ -66,19 +67,22 @@ const applyBridge = (monaco: typeof Monaco, core: NonNullable<ShikiCore>): void 
     monaco.editor.setTheme(activeTheme());
 };
 
+// Every chunk first, then every side effect: a load that fails has touched nothing, so the next open starts clean.
 const init = async (): Promise<typeof Monaco> => {
-    const monaco = await import(`monaco-editor-core`);
+    const [monaco, { default: EditorWorker }, { shikiToMonaco }] = await Promise.all([
+        loadChunk(() => import(`monaco-editor-core`)),
+        loadChunk(() => import(`./editorWorker?worker`)),
+        loadChunk(() => import(`@shikijs/monaco`)),
+    ]);
+    // With no grammars loaded, the bridge still sets the themes, so even plaintext renders the right background.
+    const core = await useHighlighter().ensureCore();
     const icons = document.createElement(`style`);
     icons.dataset[`intenticEditorIcons`] = ``;
     icons.textContent = EDITOR_ICON_CSS;
     document.head.append(icons);
-    const { default: EditorWorker } = await import(`./editorWorker?worker`);
     // Ships only the editor worker; no language workers. Own entry: monaco's module never calls start().
     self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
-
-    bridge = (await import(`@shikijs/monaco`)).shikiToMonaco;
-    // With no grammars loaded, the bridge still sets the themes, so even plaintext renders the right background.
-    const core = await useHighlighter().ensureCore();
+    bridge = shikiToMonaco;
     applyBridge(monaco, core);
     // Reruns the bridge (not setTheme) on scheme or accent change, so the background is re-resolved and rebaked.
     const { scheme, accent } = useTheme();
@@ -86,8 +90,13 @@ const init = async (): Promise<typeof Monaco> => {
     return monaco;
 };
 
-// Builds the shared Monaco namespace once, with workers, the Shiki bridge, and theme sync wired up.
-const ensureMonaco = (): Promise<typeof Monaco> => (ready ??= init());
+// Builds the shared Monaco namespace once, with workers, the Shiki bridge, and theme sync wired up. A failed build is
+// forgotten rather than cached, so the next file opened asks again instead of failing for the life of the tab.
+const ensureMonaco = (): Promise<typeof Monaco> =>
+    (ready ??= init().catch((error: unknown) => {
+        ready = undefined;
+        throw error;
+    }));
 
 // The grammar's own lazy chunk. A fetch that fails leaves every file in that language plain for the rest of the
 // document's life — the browser won't ask for that module again, so reopening the file changes nothing — and on

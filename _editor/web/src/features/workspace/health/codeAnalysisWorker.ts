@@ -1,4 +1,4 @@
-import { serveWorkerCall } from "../../../lib/workerCall";
+import { serveWorkerCall } from "@intentic/ui/worker-call";
 import { analyzeInApp } from "../files/appGrammars";
 import type { CodeAnalysisArgs } from "./codeAnalysisClient";
 

@@ -1,7 +1,7 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
-import { computed, type Ref, ref, shallowRef, type VNode } from "vue";
+import { computed, type Ref, ref, shallowRef } from "vue";
 import { newNameError } from "../entryNames";
 import type { LandedEntry } from "../fileNesting";
 import { noteUserCreatedDir } from "../useEmptyDirs";
@@ -32,13 +32,6 @@ export const useInlineEdit = (exists: (path: string) => boolean) => {
         return step.write;
     };
     return { edit, draft, createError, editing, apply };
-};
-
-// Focuses and selects the field the moment it mounts; only one is ever rendered at a time.
-export const focusField = (vnode: VNode): void => {
-    const el = vnode.el as HTMLInputElement;
-    el.focus();
-    el.select();
 };
 
 export interface TreeEditsHost {

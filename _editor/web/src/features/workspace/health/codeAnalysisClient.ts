@@ -1,5 +1,5 @@
 import type { CodeAnalysis } from "@intentic/code-read";
-import { createWorkerCall, type WorkerFactory } from "../../../lib/workerCall";
+import { createWorkerCall, type WorkerFactory } from "@intentic/ui/worker-call";
 import { analyzeInApp } from "../files/appGrammars";
 
 export interface CodeAnalysisArgs {

@@ -1,4 +1,4 @@
-import { createWorkerCall } from "../../../../lib/workerCall";
+import { createWorkerCall } from "@intentic/ui/worker-call";
 import { compareSides, type SidesComparison } from "./imageSides";
 
 export interface ImageSidesArgs {

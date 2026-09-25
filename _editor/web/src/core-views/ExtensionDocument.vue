@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { Component } from "vue";
 import { defineAsyncComponent } from "vue";
+import { loadChunk } from "@intentic/ui";
 import type { RegisteredDocumentProvider } from "./documentRegistry";
 
 /* Renders one directory's extension-contributed document (documentRegistry) in a Workspace tab, with the directory `path` bound. */
@@ -11,7 +12,7 @@ const componentOf = (provider: RegisteredDocumentProvider): Component => {
     if (cached !== undefined) {
         return cached;
     }
-    const component = defineAsyncComponent(provider.component);
+    const component = defineAsyncComponent(() => loadChunk(provider.component));
     components.set(provider, component);
     return component;
 };

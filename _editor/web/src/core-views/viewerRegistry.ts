@@ -1,4 +1,5 @@
 import type { Disposable } from "@intentic/extension-api";
+import { loadChunk } from "@intentic/ui/chunk";
 import { useLatest } from "@intentic/ui/async";
 import { type Component, type Ref, type ShallowRef, shallowRef, watch } from "vue";
 
@@ -26,7 +27,14 @@ const viewers = shallowRef<readonly RegisteredViewer[]>([]);
 
 // Keyed by owner + viewer id, like the view registry: re-registering the same identity replaces its
 // predecessor in place instead of stacking a shadowing second entry.
-export const registerViewer = (viewer: RegisteredViewer): Disposable => {
+// A viewer's component is a lazy chunk like any view's, so a redeploy under an open tab gets `loadChunk`'s reload.
+export const registerViewer = (registration: RegisteredViewer): Disposable => {
+    const { compare } = registration;
+    const viewer: RegisteredViewer = {
+        ...registration,
+        component: () => loadChunk(registration.component),
+        ...(compare === undefined ? {} : { compare: () => loadChunk(compare) }),
+    };
     const index = viewers.value.findIndex((existing) => existing.owner === viewer.owner && existing.id === viewer.id);
     viewers.value = index === -1 ? [...viewers.value, viewer] : viewers.value.with(index, viewer);
     return {

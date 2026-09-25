@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
+import { Meter, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useSandboxReadout } from "./sandboxFigures";
 
@@ -28,22 +29,7 @@ const readout = useSandboxReadout(() => props.metrics);
                     <span class="shrink-0 text-muted">{{ gauge.label }}</span>
                     <span class="ml-auto truncate tabular-nums" :class="gauge.warn ? `text-warning` : `text-content`">{{ gauge.detail }}</span>
                 </div>
-                <div
-                    class="h-1 overflow-hidden rounded-full"
-                    :class="gauge.warn ? `bg-warning/15` : `bg-content/8`"
-                    role="meter"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                    :aria-valuenow="gauge.fraction === undefined ? undefined : Math.round(gauge.fraction * 100)"
-                    :aria-valuetext="gauge.detail"
-                    :aria-label="gauge.label"
-                >
-                    <div
-                        class="h-full rounded-full transition-[width] duration-500"
-                        :class="gauge.warn ? `bg-warning` : `bg-primary-600`"
-                        :style="{ width: `${(gauge.fraction ?? 0) * 100}%` }"
-                    />
-                </div>
+                <Meter :value="gauge.fraction" :tone="gauge.warn ? `warning` : `accent`" :label="gauge.label" :valuetext="gauge.detail" />
             </div>
         </div>
 
@@ -65,10 +51,7 @@ const readout = useSandboxReadout(() => props.metrics);
         </dl>
 
         <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex min-w-56 flex-1 flex-col gap-1.5">
-            <h4
-                v-tooltip.left="t(`agents.liveMetrics.rolesHint`)"
-                class="cursor-help self-start text-2xs font-medium uppercase tracking-wide text-subtle"
-            >
+            <h4 v-tooltip.left="t(`agents.liveMetrics.rolesHint`)" :class="ui.sectionLabelSm(`cursor-help self-start`)">
                 {{ t(`agents.liveMetrics.rolesLabel`) }}
             </h4>
             <div class="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-x-6 gap-y-1.5">
@@ -79,9 +62,7 @@ const readout = useSandboxReadout(() => props.metrics);
                     class="grid grid-cols-[minmax(0,7.5rem)_minmax(1.5rem,1fr)_auto] items-center gap-2 text-2xs"
                 >
                     <span class="truncate text-muted">{{ role.label }}</span>
-                    <div class="h-1 overflow-hidden rounded-full bg-content/5" aria-hidden="true">
-                        <div class="h-full rounded-full bg-primary-600/60 transition-[width] duration-500" :style="{ width: `${role.share * 100}%` }" />
-                    </div>
+                    <Meter :value="role.share" />
                     <span class="text-right whitespace-nowrap tabular-nums text-content">{{ role.value }}</span>
                 </div>
             </div>

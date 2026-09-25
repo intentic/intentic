@@ -1,6 +1,6 @@
 import { waitFor } from "@intentic/testing/bun";
 import type { CodeAnalysis } from "@intentic/code-read";
-import { FakeWorker } from "../../../testing/fakeWorker";
+import { FakeWorker } from "@intentic/ui/testing";
 import { type CodeAnalysisArgs, createCodeAnalysisClient } from "./codeAnalysisClient";
 
 describe(`code analysis worker client`, () => {

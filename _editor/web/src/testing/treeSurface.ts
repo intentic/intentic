@@ -7,15 +7,11 @@ import { barrenChainOf, barrenChildren, barrenRoots } from "../features/workspac
 import type { RowAction } from "../features/workspace/explorer/rowActions";
 import type { DroppedFile } from "../features/workspace/explorer/transfer/dropEntries";
 import { indexEntries } from "../features/workspace/explorer/tree/treeRows";
-import { useTreeDelete } from "../features/workspace/explorer/tree/useTreeDelete";
-import { useInlineEdit, useTreeEdits } from "../features/workspace/explorer/tree/useTreeEdits";
-import { type TreeMenuHost, useTreeMenu } from "../features/workspace/explorer/tree/useTreeMenu";
+import { createFileVerbs } from "../features/workspace/explorer/tree/fileVerbs";
+import type { TreeMenuHost } from "../features/workspace/explorer/tree/useTreeMenu";
 import { useTreeRows } from "../features/workspace/explorer/tree/useTreeRows";
-import { useTreeRules } from "../features/workspace/explorer/tree/useTreeRules";
-import { useTreeSelection } from "../features/workspace/explorer/tree/useTreeSelection";
-import { useTreeTransfer } from "../features/workspace/explorer/tree/useTreeTransfer";
 
-// A file surface wired as WorkspaceTree.vue wires it, over fakes of its two seams: the store's daemon calls, empty folders.
+// A file surface built as WorkspaceTree.vue builds it (createFileVerbs), over fakes of its two seams: the store's daemon calls, empty folders.
 
 const nameOf = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 const parentOf = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf(`/`)));
@@ -177,58 +173,25 @@ export const treeSurface = (
             store,
             emptyDirs,
         });
-        const { byPath, targetDir, openLanding, openNest } = rows;
-        const rules = useTreeRules({ byPath, store });
-        const selecting = useTreeSelection({ selectedPath: () => undefined, order: rows.orderedPaths });
-        const inline = useInlineEdit((path) => byPath.value.has(path));
-        const edits = useTreeEdits({
-            inline,
-            byPath,
-            rules,
-            targetDir,
-            openLanding,
-            selectSingle: selecting.selectSingle,
+        const verbs = createFileVerbs({
+            seams: { store, uploads, say, sayDeleted, openTerminal: () => undefined },
+            byPath: rows.byPath,
+            order: rows.orderedPaths,
+            rootDir: () => rootDir,
+            tree: () => store.tree.value,
+            childrenOf: rows.childrenOf,
+            targetDir: rows.targetDir,
+            reveal: { openLanding: rows.openLanding, openNest: rows.openNest },
+            el: ref(el),
+            emptyDirs,
             focusLead: async () => {
                 calls.push(`focus`);
             },
-            store,
             openCreated: (path) => calls.push(`opened ${path}`),
-        });
-        const deleting = useTreeDelete({ byPath, targetDir, rules, emptyDirs, selecting, store, say, sayDeleted });
-        const transfer = useTreeTransfer({
-            tree: () => store.tree.value,
-            rootDir: () => rootDir,
-            byPath,
-            childrenOf: rows.childrenOf,
-            targetDir,
-            openLanding,
-            openNest,
-            rules,
-            selecting,
-            inline,
-            el: ref(el),
-            store,
-            uploads,
-            say,
-        });
-        const menu = useTreeMenu({
-            rootDir: () => rootDir,
             rowActions,
-            isBarren: emptyDirs.isBarren,
-            rules,
-            selecting,
-            store,
             frame,
-            beginCreate: edits.beginCreate,
-            beginRename: edits.beginRename,
-            extract: transfer.extract,
-            keepFolder: deleting.keepFolder,
-            requestDelete: deleting.requestDelete,
-            stage: transfer.stage,
-            paste: transfer.paste,
-            openTerminal: () => undefined,
         });
-        return { rows, rules, selecting, inline, edits, deleting, transfer, menu };
+        return { rows, ...verbs };
     })!;
     // Marks `paths` selected, the last leading, as a run of Ctrl-clicks would.
     const select = (...paths: string[]): void => {

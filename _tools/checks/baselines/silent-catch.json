@@ -149,7 +149,6 @@
     "_editor/web/src/features/workspace/viewers/image/imageSides.ts": 2,
     "_editor/web/src/lib/browserStorage.ts": 5,
     "_editor/web/src/lib/queryPersistence.ts": 3,
-    "_editor/web/src/lib/workerCall.ts": 1,
     "_editor/web/src/push/nativePush.ts": 1,
     "_editor/web/src/push/usePushNotifications.ts": 1,
     "_editor/web/src/router/platformRetry.ts": 1,

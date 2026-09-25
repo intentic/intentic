@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import { clipboardOf } from "../lib/clipboard.js";
-import { lateImport } from "../lib/lateImport.js";
+import { loadChunk } from "../lib/loadChunk.js";
 import type { ShikiLang } from "@intentic/code-read/langs";
 import { JSON_FIGURE_LANGS } from "./figures.js";
 
@@ -84,8 +84,15 @@ const settleBatch = (): void => {
 // Imports useHighlighter.js directly, not the design-system barrel, since this engine also runs from plain node
 // unit tests.
 let highlighter: Promise<(code: string, lang: string) => Promise<string | undefined>> | undefined;
+// A failed load is forgotten, so the next fence asks again instead of rendering plain for the life of the tab.
 const loadHighlighter = (): Promise<(code: string, lang: string) => Promise<string | undefined>> =>
-    (highlighter ??= lateImport(() => import(`../composables/useHighlighter.js`)).then((module) => module.useHighlighter().highlight));
+    (highlighter ??= loadChunk(() => import(`../composables/useHighlighter.js`)).then(
+        (module) => module.useHighlighter().highlight,
+        (error: unknown) => {
+            highlighter = undefined;
+            throw error;
+        },
+    ));
 
 // The fence's info string reduced to a grammar id: `ts`, but also ```` ```ts title=x ```` and ```` ```TS ````.
 const langId = (fence: string): string | undefined => {

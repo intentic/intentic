@@ -1,7 +1,7 @@
 import { mermaidTheme } from "./mermaidTheme.js";
 import { ICONS } from "../../icons/iconSets.js";
 import { glyphBody } from "../../icons/glyph.js";
-import { lateImport } from "../../lib/lateImport.js";
+import { loadChunk } from "../../lib/loadChunk.js";
 
 // One shared mermaid module: config, measuring area, and diagram registry are singletons, but a page can hold several
 // diagrams. Owns the id counter (per-instance would collide across diagrams), keeps initialize+render atomic so a theme
@@ -33,7 +33,7 @@ const bounded = async (work: Promise<string>): Promise<string> => {
 // sanitizes labels like surrounding prose; `suppressErrorRendering` turns mermaid's own error card into a rejection.
 export const renderMermaid = (code: string, scheme: "light" | "dark", font: string): Promise<string> => {
     const work = async (): Promise<string> => {
-        const mermaid = (await lateImport(() => import(`mermaid`))).default;
+        const mermaid = (await loadChunk(() => import(`mermaid`))).default;
         mermaid.registerIconPacks([
             {
                 name: `intentic`,

@@ -1,7 +1,8 @@
 import "@intentic/testing/dom";
 import { InlineRename } from "@intentic/ui";
 import { waitFor } from "@intentic/testing/bun";
-import { type App, createApp, h, nextTick } from "vue";
+import { focusInput } from "@intentic/ui/inline-rename";
+import { type App, createApp, h, nextTick, ref, vModelText, withDirectives } from "vue";
 
 // The app's one rename control lives in @intentic/ui, which has no test runner; its contract is pinned here.
 // What these assert is the thing the three call sites used to each answer differently: what the press opens, what
@@ -201,4 +202,24 @@ it(`is plain text where the name is not the reader's to change`, () => {
     expect(root(host).children.length).toBe(1);
     // The cell holds its measuring twin and the name itself, in that order, in both modes.
     expect(root(host).children[0]?.lastElementChild?.textContent).toBe(`radarsu-intentic`);
+});
+
+// The field a surface draws itself (a tree row, a home tile, a terminal pill) binds its draft with v-model, whose own
+// mounted hook writes the value AFTER `@vue:mounted` runs. A select() at mount selected the empty field, and F2 left the
+// caret after the name instead of over it; the earlier test mounted a static `value` and so could not see it.
+it(`selects the whole name in a v-model field that mounts already holding it`, async () => {
+    const host = document.createElement(`div`);
+    document.body.append(host);
+    const draft = ref(`main.ts`);
+    app = createApp({
+        render: () =>
+            withDirectives(h(`input`, { "onUpdate:modelValue": (next: string) => (draft.value = next), onVnodeMounted: focusInput }), [
+                [vModelText, draft.value],
+            ]),
+    });
+    app.mount(host);
+    await nextTick();
+
+    const input = field(host);
+    expect([document.activeElement === input, input.value, input.selectionStart, input.selectionEnd]).toEqual([true, `main.ts`, 0, 7]);
 });

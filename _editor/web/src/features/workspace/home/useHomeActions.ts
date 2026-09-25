@@ -1,21 +1,12 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { t } from "@intentic/ui/i18n";
 import { parentDir } from "@intentic/ui/path";
-import { computed, type Ref, ref, watch } from "vue";
-import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
-import { useNotifications } from "../../../shell/notifications/notifications";
-import { useDeleteUndo } from "../explorer/undo/useDeleteUndo";
+import { computed, type Ref } from "vue";
 import type { RowAction } from "../explorer/rowActions";
-import { useTerminalPanel } from "../../terminal/useTerminalPanel";
-import { useTreeDelete } from "../explorer/tree/useTreeDelete";
-import { useInlineEdit, useTreeEdits } from "../explorer/tree/useTreeEdits";
-import { useTreeMenu } from "../explorer/tree/useTreeMenu";
-import { useTreeRules } from "../explorer/tree/useTreeRules";
-import { useTreeTransfer } from "../explorer/tree/useTreeTransfer";
+import { createFileVerbs } from "../explorer/tree/fileVerbs";
+import { fileVerbSeams } from "../explorer/tree/fileVerbSeams";
 import { useEmptyDirs } from "../explorer/useEmptyDirs";
-import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { provisionalAt } from "../files/provisionalEntries";
-import { useUploadQueue } from "../files/upload/useUploadQueue";
 
 // The tree's own verbs (explorer/tree) over the home's tiles, every one aimed at the open folder; the clipboard is shared.
 
@@ -35,138 +26,37 @@ export interface HomeActionsContext {
     readonly dirActions: (dir: string) => readonly RowAction[];
 }
 
-export type SelectModifiers = Pick<MouseEvent, "shiftKey" | "ctrlKey" | "metaKey">;
-
 export function useHomeActions(ctx: HomeActionsContext) {
-    const store = useWorkspaceTree();
-    const { entriesByPath: byPath } = store;
-    const uploads = useUploadQueue();
-    const { say } = useNotifications();
-    const emptyDirs = useEmptyDirs(() => store.barren.value);
-    const rules = useTreeRules({ byPath, store });
-    const here = (): string => ctx.dir.value;
-
-    // ---- selection: unlike the tree's, its lead is the shared current entry, so every gesture here moves it ----
+    const seams = fileVerbSeams();
+    const { store } = seams;
     const tiles = computed(() => ctx.order.value.map((tile) => tile.path));
-    const start = ctx.lead.value;
-    const selection = ref(new Set<string>(start !== undefined && tiles.value.includes(start) ? [start] : []));
-    // The Shift pivot, which also stands in for the tree's lead: the tile a verb falls back to when nothing is marked.
-    const anchor = ref<string | null>([...selection.value][0] ?? null);
-    const selectSingle = (path: string): void => {
-        selection.value = new Set([path]);
-        anchor.value = path;
-        ctx.lead.value = path;
-    };
-    const select = (path: string, modifiers?: SelectModifiers): void => {
-        const intent = modifiers === undefined ? `single` : clickIntent(modifiers, anchor.value !== null);
-        if (intent === `single`) {
-            selectSingle(path);
-            return;
-        }
-        if (intent === `range`) {
-            selection.value = new Set(rangeSelect(tiles.value, anchor.value ?? undefined, path) ?? [path]);
-            ctx.lead.value = path;
-            return;
-        }
-        const next = new Set(selection.value);
-        if (!next.delete(path)) {
-            next.add(path);
-        }
-        selection.value = next;
-        anchor.value = path;
-        ctx.lead.value = path;
-    };
-    const selectAll = (): void => {
-        selection.value = new Set(tiles.value);
-    };
-    const clear = (): void => {
-        selection.value = new Set();
-        anchor.value = null;
-        ctx.lead.value = undefined;
-    };
-    // Only what landed in the open folder is on screen to mark.
-    const selectLanded = (paths: readonly string[]): void => {
-        const last = paths.at(-1);
-        if (last !== undefined && parentDir(last) === ctx.dir.value) {
-            selection.value = new Set(paths);
-            anchor.value = last;
-            ctx.lead.value = last;
-        }
-    };
-    // A lead set elsewhere collapses the set to it, or empties it off the tiles; a tile toggled out here is the anchor.
-    watch(ctx.lead, (path) => {
-        if (path === undefined || !tiles.value.includes(path)) {
-            selection.value = new Set();
-            anchor.value = null;
-        } else if (!selection.value.has(path) && path !== anchor.value) {
-            selectSingle(path);
-        }
+    // Unlike the tree's, the lead here is the shared current entry, so every gesture here moves it.
+    const lead = computed<string | null>({
+        get: () => ctx.lead.value ?? null,
+        set: (path) => {
+            ctx.lead.value = path ?? undefined;
+        },
     });
-    // Tiles that left the listing (deleted, moved, filtered) leave the selection too.
-    watch(tiles, (list) => {
-        const present = new Set(list);
-        if ([...selection.value].some((path) => !present.has(path))) {
-            selection.value = new Set([...selection.value].filter((path) => present.has(path)));
-        }
-    });
-    const selecting = { selection, lead: anchor, selectSingle, selectLanded, clear };
-
     // The home shows one folder: nothing opens around a verb, and focus parks on the home once the name field closes.
-    const inline = useInlineEdit((path) => store.entry(path) !== undefined || provisionalAt(path) !== undefined);
-    const { beginRename, beginCreate, endEdit } = useTreeEdits({
-        inline,
-        byPath,
-        rules,
-        targetDir: here,
-        openLanding: () => undefined,
-        selectSingle,
-        focusLead: async () => ctx.host.value?.focus({ preventScroll: true }),
-        store,
-        openCreated: ctx.openCreated,
-    });
-    const { requestDelete, keepFolder } = useTreeDelete({
-        byPath,
-        targetDir: here,
-        rules,
-        emptyDirs,
-        selecting,
-        store,
-        say,
-        sayDeleted: useDeleteUndo().sayDeleted,
-    });
-    const transfer = useTreeTransfer({
-        tree: () => store.tree.value,
-        rootDir: () => ``,
-        byPath,
+    const { selecting, inline, edits, deleting, transfer, menu: entryMenu, rules } = createFileVerbs({
+        seams,
+        byPath: store.entriesByPath,
+        order: tiles,
+        lead,
+        rootDir: () => ctx.dir.value,
+        tree: () => store.listingOf(ctx.dir.value) ?? [],
         childrenOf: (folder) => store.listingOf(folder.path) ?? [],
-        targetDir: here,
-        openLanding: () => undefined,
-        openNest: () => undefined,
-        rules,
-        selecting,
-        inline,
+        targetDir: () => ctx.dir.value,
+        // Only what landed in the open folder is on screen to mark.
+        shows: (path) => parentDir(path) === ctx.dir.value,
+        exists: (path) => store.entry(path) !== undefined || provisionalAt(path) !== undefined,
         el: ctx.host,
-        store,
-        uploads,
-        say,
-    });
-    const terminalPanel = useTerminalPanel();
-    const { menu, menuItems, openMenu } = useTreeMenu({
-        rootDir: here,
+        emptyDirs: useEmptyDirs(() => store.barren.value),
+        focusLead: async () => ctx.host.value?.focus({ preventScroll: true }),
+        openCreated: ctx.openCreated,
         rowActions: ctx.dirActions,
-        isBarren: emptyDirs.isBarren,
-        rules,
-        selecting,
-        store,
         // A folder tile takes a paste itself, but a create lands in the open folder, where its tile can be seen.
-        beginCreate: (_dir, type) => beginCreate(ctx.dir.value, type),
-        beginRename,
-        extract: transfer.extract,
-        keepFolder,
-        requestDelete,
-        stage: transfer.stage,
-        paste: transfer.paste,
-        openTerminal: (dir) => terminalPanel.spawnShell(dir),
+        createIn: () => ctx.dir.value,
         // What a double-click does, for the keyboard and touch.
         frame: (target, multi) => ({
             head:
@@ -175,6 +65,10 @@ export function useHomeActions(ctx: HomeActionsContext) {
                     : [{ label: t(`ui.action.open`), icon: target.type === `dir` ? `folder-open` : `file`, command: () => ctx.open(target) }],
         }),
     });
+    const { selection, select, selectAll, clear } = selecting;
+    const { beginRename, endEdit } = edits;
+    const { requestDelete } = deleting;
+    const { menu, menuItems, openMenu } = entryMenu;
 
     // F2 renames the lead only when it stands alone: a rename over a selection would name one of several.
     const renameLead = (): void => {

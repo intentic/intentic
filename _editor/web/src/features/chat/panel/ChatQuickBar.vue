@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ProgressRing, ui } from "@intentic/ui";
-import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
+import { isOverlayTarget, ProgressRing, ui, useHoverIntent } from "@intentic/ui";
+import { computed, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { chatBarPeek, chatParked } from "./chatPanelLayout";
 import { chatBarDock } from "../../../shell/window/dockSlots";
@@ -9,10 +9,11 @@ import { useChat } from "../run/useChat";
 import { useT } from "@intentic/ui/i18n";
 import IdentityTile from "../../capabilities/connect/IdentityTile.vue";
 import { contextPct } from "../../agents/fleet/agentStatus";
+import { CLOSED, type QuickBar, type QuickBarEvent, stepQuickBar } from "./quickBarHold";
 
 // The parked chat's home: a pill over the bottom of the area that grows into the focused chat's own composer (the panel
 // teleports into `slot`), with that pane's own transcript unfolding above it on request (chatBarPeek). Hover borrows the
-// box and a press keeps it until the reader dismisses it.
+// box and a press keeps it until the reader dismisses it (quickBarHold.ts).
 
 // The section's area the bar floats over: a press there is the one gesture that means the reader went back to the page.
 const { page } = defineProps<{ page: HTMLElement | undefined }>();
@@ -22,14 +23,16 @@ const t = useT();
 const router = useRouter();
 const { active, messages, streaming, draft, composerFocus, awaitingDecision, contextUsage, provider } = useChat();
 
-const expanded = ref(false);
+// The box and its transcript, moved only by `apply` (quickBarHold.ts).
+const bar = shallowRef<QuickBar>(CLOSED);
+const expanded = computed(() => bar.value.box !== `closed`);
+// A press, the caret or a summons has made the box the reader's: only a dismissal closes it, never the pointer.
+const kept = computed(() => bar.value.box === `kept`);
+// The transcript is shown, and a press has kept it past the pointer that borrowed it.
+const peekOpen = computed(() => bar.value.peek !== `closed`);
+const peekKept = computed(() => bar.value.peek === `kept`);
 // Whether the box has ever opened: its closing animation must not play on a box that starts closed.
 const woken = ref(false);
-// A press, the caret or a summons has made the box the reader's: only a dismissal closes it, never the pointer.
-const kept = ref(false);
-// The transcript is shown, and a press has kept it past the pointer that borrowed it.
-const peekOpen = ref(false);
-const peekKept = ref(false);
 const float = useTemplateRef(`float`);
 const slot = useTemplateRef(`slot`);
 
@@ -60,146 +63,80 @@ const rim = computed<{ percent: number; tone: string; spin: boolean } | undefine
     return percent === undefined ? undefined : { percent, tone: percent >= 80 ? `text-warning` : `text-primary-500`, spin: false };
 });
 
-// A pointer crossing the bottom of the area on its way to a scrollbar or the terminal must not unfold the box.
-const HOVER_INTENT_MS = 250;
-// Long enough to cross back after overshooting an edge; the transcript's is shorter, so it always folds before the box.
-const HOVER_GRACE_MS = 400;
-const PEEK_GRACE_MS = 200;
-// The eye is reached on purpose, so its intent only has to outlast a pointer crossing it.
-const PEEK_INTENT_MS = 140;
-// Must match the card's exit transition in chat.css: the turns stay mounted this long so they fade with it.
-const PEEK_EXIT_MS = 130;
-// Menus and dialogs are teleported to the body and answer their own Escape.
-const OVERLAYS = `.ui-anchored, [role="dialog"], .p-contextmenu`;
+// A pointer crossing the bottom of the area on its way to a scrollbar or the terminal must not unfold the box, and one
+// overshooting an edge can cross back; the transcript's grace is shorter, so it always folds before the box. The eye is
+// reached on purpose, so its intent only has to outlast a pointer crossing it.
+const boxHover = useHoverIntent({ open: 250, close: 400 });
+const peekHover = useHoverIntent({ open: 140, close: 200 });
 
-let boxTimer: ReturnType<typeof setTimeout> | undefined;
-let peekTimer: ReturnType<typeof setTimeout> | undefined;
-let peekExit: ReturnType<typeof setTimeout> | undefined;
-const cancelBoxTimer = (): void => {
-    clearTimeout(boxTimer);
-    boxTimer = undefined;
-};
-const cancelPeekTimer = (): void => {
-    clearTimeout(peekTimer);
-    peekTimer = undefined;
-};
-
+const words = (): boolean => draft.value.trim() !== ``;
 const onPage = (node: EventTarget | null): boolean => node instanceof Node && page?.contains(node) === true;
 
-// `peekOpen` is whether the transcript is asked for and `chatBarPeek` whether the panel draws it: they part only on the
-// way out, where the turns must stay mounted to fade with the card, and both flip in one render so Escape reads true.
-const openPeek = (keep: boolean): void => {
-    cancelPeekTimer();
-    clearTimeout(peekExit);
-    peekExit = undefined;
-    peekOpen.value = true;
-    chatBarPeek.value = true;
-    if (keep) {
-        peekKept.value = true;
-        kept.value = true;
+// The one place the bar moves. The panel is told the transcript is wanted in the same render it opens, so Escape reads
+// true at once; it is told it is no longer wanted when the card has finished fading (`onPeekGone`), since the turns
+// fade with the card and must stay mounted until then. A clock whose surface closed by another route is stopped too.
+const apply = (event: QuickBarEvent): void => {
+    const before = bar.value;
+    const next = stepQuickBar(before, event);
+    bar.value = next;
+    if (next.peek !== `closed`) {
+        chatBarPeek.value = true;
+    }
+    if (next.box !== `closed` && !woken.value) {
+        woken.value = true;
+    }
+    if (next.box === `closed` && before.box !== `closed`) {
+        boxHover.hide();
+    }
+    if (next.peek === `closed` && before.peek !== `closed`) {
+        peekHover.hide();
     }
 };
-const closePeek = (): void => {
-    cancelPeekTimer();
+const onPeekGone = (): void => {
     if (!peekOpen.value) {
-        return;
-    }
-    peekOpen.value = false;
-    peekKept.value = false;
-    peekExit = setTimeout(() => {
         chatBarPeek.value = false;
-        peekExit = undefined;
-    }, PEEK_EXIT_MS);
-};
-// The whole box is leaving, so the transcript goes with it in the same render rather than fading on its own.
-const dropPeek = (): void => {
-    cancelPeekTimer();
-    clearTimeout(peekExit);
-    peekExit = undefined;
-    peekOpen.value = false;
-    peekKept.value = false;
-    chatBarPeek.value = false;
+    }
 };
 
 // Only a press or a summons takes the caret: taken on hover, it would route the next keystroke away from the page.
 const expand = (caret: boolean): void => {
-    cancelBoxTimer();
-    // A waiting card is answered in the transcript, not by a message, so no box is offered; one already open stays.
-    if (standing.value === `asking`) {
-        return;
-    }
-    if (!expanded.value) {
-        expanded.value = true;
-        woken.value = true;
-    }
-    if (caret) {
-        kept.value = true;
+    apply({ kind: `open`, keep: caret, asking: standing.value === `asking` });
+    if (caret && kept.value) {
         focusComposer();
     }
 };
-const collapse = (): void => {
-    cancelBoxTimer();
-    dropPeek();
-    expanded.value = false;
-    kept.value = false;
-};
-// Words in the box hold it open against the pointer and a press on the page; only Escape or minimizing folds them.
-const collapsible = computed(() => !kept.value && draft.value.trim() === ``);
-
-// What the reader going back to the page ends: the transcript always, the box unless it holds words. Nothing else
-// does: the rail switching views, a menu, a dialog, or the caret moving anywhere leaves the box as it is.
-const release = (): void => {
-    closePeek();
-    kept.value = false;
-    if (collapsible.value) {
-        collapse();
-    }
-};
+const collapse = (): void => apply({ kind: `fold` });
 
 const onEnter = (): void => {
-    cancelBoxTimer();
-    cancelPeekTimer();
-    if (!expanded.value) {
-        boxTimer = setTimeout(() => expand(false), HOVER_INTENT_MS);
-    }
+    peekHover.cancel();
+    boxHover.enter(() => expand(false));
 };
 const onLeave = (): void => {
-    cancelBoxTimer();
-    cancelPeekTimer();
-    if (peekOpen.value && !peekKept.value) {
-        peekTimer = setTimeout(closePeek, PEEK_GRACE_MS);
-    }
-    if (expanded.value && collapsible.value) {
-        boxTimer = setTimeout(() => {
-            if (collapsible.value) {
-                collapse();
-            }
-        }, HOVER_GRACE_MS);
-    }
+    peekHover.leave(() => apply({ kind: `peekLeave` }));
+    boxHover.leave(() => apply({ kind: `leave`, words: words() }));
 };
 // A press anywhere on the box's content keeps it and whatever it is showing; the tools act on their own presses.
 const onPressInside = (event: Event): void => {
-    if (!expanded.value || (event.target instanceof Element && event.target.closest(`.chat-quick-tools`) !== null)) {
-        return;
-    }
-    kept.value = true;
-    if (peekOpen.value) {
-        peekKept.value = true;
+    if (!(event.target instanceof Element && event.target.closest(`.chat-quick-tools`) !== null)) {
+        apply({ kind: `press` });
     }
 };
+// What the reader going back to the page ends: the transcript always, the box unless it holds words. Nothing else
+// does: the rail switching views, a menu, a dialog, or the caret moving anywhere leaves the box as it is.
 const onPagePress = (event: Event): void => {
     if (onPage(event.target)) {
-        release();
+        apply({ kind: `release`, words: words() });
     }
 };
 // A press on transcript text or on the rail leaves the caret off the page and out of the box, so that is where the
-// reader's Escape lands; kept, the box was the last thing pressed and the key is its.
+// reader's Escape lands; kept, the box was the last thing pressed and the key is its. Menus and dialogs are teleported
+// to the body and answer their own Escape.
 const onStrayEscape = (event: KeyboardEvent): void => {
     const target = event.target;
     if (event.key !== `Escape` || !kept.value || !(target instanceof Element) || float.value?.contains(target) === true) {
         return;
     }
-    if (!onPage(target) && target.closest(OVERLAYS) === null) {
+    if (!onPage(target) && !isOverlayTarget(target)) {
         onEscape(event);
     }
 };
@@ -208,52 +145,32 @@ const disarm = (): void => {
     document.removeEventListener(`keydown`, onStrayEscape);
 };
 // Capture phase, so a page that stops its own presses cannot hide from the box that the reader went back to it.
-watch(expanded, (open) => {
+watch(expanded, (isOpen) => {
     disarm();
-    if (open) {
+    if (isOpen) {
         document.addEventListener(`pointerdown`, onPagePress, true);
         document.addEventListener(`keydown`, onStrayEscape);
     }
 });
 onBeforeUnmount(disarm);
 
-const onFocusIn = (): void => {
-    if (expanded.value) {
-        kept.value = true;
-    }
-};
+const onFocusIn = (): void => apply({ kind: `focus` });
 // Escape is the composer's first (a turn to stop, an edit to drop) and it claims one with preventDefault; then the
 // transcript, then the box: one press undoes one thing.
 const onEscape = (event: KeyboardEvent): void => {
-    if (event.defaultPrevented) {
-        return;
+    if (!event.defaultPrevented) {
+        apply({ kind: `escape` });
     }
-    if (peekOpen.value) {
-        closePeek();
-        return;
-    }
-    collapse();
 };
 
-const onEyeEnter = (): void => {
-    cancelPeekTimer();
-    if (!peekOpen.value) {
-        peekTimer = setTimeout(() => openPeek(false), PEEK_INTENT_MS);
-    }
-};
+const onEyeEnter = (): void => peekHover.enter(() => apply({ kind: `peek`, keep: false }));
 const onEyeLeave = (): void => {
     if (!peekOpen.value) {
-        cancelPeekTimer();
+        peekHover.cancel();
     }
 };
 // A press keeps what a hover only borrowed, and a second press folds it: keyboard and touch have no hover to borrow with.
-const onEyePress = (): void => {
-    if (peekOpen.value && peekKept.value) {
-        closePeek();
-        return;
-    }
-    openPeek(true);
-};
+const onEyePress = (): void => apply({ kind: `peek`, keep: true });
 const openChat = (): void => {
     collapse();
     void router.push(`/chat`);
@@ -280,8 +197,8 @@ watch(
 );
 onBeforeUnmount(() => {
     chatBarDock.value = null;
-    cancelBoxTimer();
-    dropPeek();
+    collapse();
+    chatBarPeek.value = false;
 });
 
 const restingLine = computed(() => {
@@ -332,11 +249,15 @@ const tool = ui.iconButton(`rounded-full text-subtle`);
             @focusin="onFocusIn"
             @keydown.esc="onEscape"
         >
-            <!-- The transcript's glass: exactly the box's rect, drawn here so it can arrive without the composer moving. -->
-            <div
-                v-if="chatBarPeek"
-                class="chat-quick-card pointer-events-auto absolute inset-0 rounded-2xl border border-line-strong bg-card/85 shadow-2xl backdrop-blur-2xl"
-            ></div>
+            <!-- The transcript's glass: exactly the box's rect, drawn here so it can arrive without the composer moving. Its
+                 fade out (chat.css) is what the panel's turns wait for before they unmount; a box folding whole takes it
+                 with it in the same render, so no fade is waited for then. -->
+            <Transition name="chat-quick-card" :css="expanded" @after-leave="onPeekGone">
+                <div
+                    v-if="peekOpen"
+                    class="chat-quick-card pointer-events-auto absolute inset-0 rounded-2xl border border-line-strong bg-card/85 shadow-2xl backdrop-blur-2xl"
+                ></div>
+            </Transition>
 
             <!-- The form not showing leaves the flow, so the box is always the size of what is in it. `inert` is not a
                  boolean Vue knows, so a false value is written as `undefined` to drop the attribute. -->

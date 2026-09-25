@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { devRebuildLogPath } from "@intentic/sandbox-contract";
-import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, type IconName, Notice } from "@intentic/ui";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, type IconName, Notice, useHoverIntent } from "@intentic/ui";
+import { computed, ref, watch } from "vue";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
 import DevRebuildProgress from "./DevRebuildProgress.vue";
 import { turnInFlight } from "../../agents/fleet/agentStatus";
@@ -65,7 +65,6 @@ watch(
 );
 
 const confirming = ref(false);
-const overlayOpen = ref(false);
 const anchorRef = ref<HTMLElement>();
 
 const live = computed(() => rebuildRunning(run.phase));
@@ -83,37 +82,28 @@ const command = computed(() =>
     props.root === undefined ? `pnpm rebuild:sandbox ${props.slug}` : `cd ${props.root} && pnpm rebuild:sandbox ${props.slug}`,
 );
 
-const OPEN_DELAY_MS = 150;
-const CLOSE_DELAY_MS = 150;
-let timer: ReturnType<typeof setTimeout> | undefined;
-
-const settle = (open: boolean, delay: number): void => {
-    clearTimeout(timer);
-    if (delay === 0) {
-        overlayOpen.value = open;
-        return;
-    }
-    timer = setTimeout(() => {
-        overlayOpen.value = open;
-    }, delay);
-};
+// The card opens for a pointer that stays, and waits for one that overshoots; the keyboard opens and closes it at once.
+const hover = useHoverIntent({ open: 150, close: 150 });
+// The overlay closes itself too (Escape, a press outside), which the clock has to hear.
+const overlayOpen = computed({
+    get: () => hover.shown.value,
+    set: (open: boolean) => (open ? hover.show() : hover.hide()),
+});
 
 const onEnter = (event: PointerEvent): void => {
     if (event.pointerType === `mouse`) {
-        settle(true, OPEN_DELAY_MS);
+        hover.enter();
     }
 };
-const onLeave = (): void => settle(false, CLOSE_DELAY_MS);
-const onCardEnter = (): void => clearTimeout(timer);
-const onFocus = (): void => settle(true, 0);
-const onBlur = (): void => settle(false, 0);
+const onLeave = (): void => hover.leave();
+const onCardEnter = (): void => hover.cancel();
+const onFocus = (): void => hover.show();
+const onBlur = (): void => hover.hide();
 
 const onButtonClick = (): void => {
-    settle(false, 0);
+    hover.hide();
     confirming.value = true;
 };
-
-onBeforeUnmount(() => clearTimeout(timer));
 
 // Where the detached build writes, named by the contract that also builds both command lines from it, so the path a
 // reader is sent to is the path something actually writes.

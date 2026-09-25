@@ -1,4 +1,4 @@
-import { createWorkerCall } from "../../../../lib/workerCall";
+import { createWorkerCall } from "@intentic/ui/worker-call";
 import { MAX_ROWS, type Sheet, type SheetDiff, tableDiff } from "./tableDiff";
 
 export interface TableDiffArgs {

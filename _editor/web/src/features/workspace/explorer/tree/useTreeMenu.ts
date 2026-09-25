@@ -7,7 +7,7 @@ import { type EntryMenuInput, type EntryVerbs, entryMenuItems } from "../entryMe
 import type { RowAction } from "../rowActions";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
 import type { useTreeRules } from "./useTreeRules";
-import type { useTreeSelection } from "./useTreeSelection";
+import type { MultiSelect } from "../../../../lib/multiSelect";
 
 // The right-click menu (entryMenu.ts) of a file surface: on a selected entry it acts on the whole selection.
 
@@ -18,7 +18,7 @@ export interface TreeMenuHost {
     readonly rowActions: (dir: string) => readonly RowAction[];
     readonly isBarren: (path: string) => boolean;
     readonly rules: Pick<ReturnType<typeof useTreeRules>, "archiveDir" | "unlockedOnly">;
-    readonly selecting: Pick<ReturnType<typeof useTreeSelection>, "selection" | "selectSingle">;
+    readonly selecting: Pick<MultiSelect, "selection" | "selectSingle">;
     readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "canEditFiles" | "clipboard">;
     // The surface's own rows around the verbs: the home's Open first, the tree's Collapse Folders last.
     readonly frame: (target: WorkspaceTreeEntry | undefined, multi: boolean) => Pick<EntryMenuInput, "head" | "tail">;

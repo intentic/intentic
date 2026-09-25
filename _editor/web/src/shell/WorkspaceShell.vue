@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic/ui";
+import { loadChunk, useDevice } from "@intentic/ui";
 import { defineAsyncComponent, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { watchAgentsScope } from "../features/agents/board/agentsTile";
@@ -15,8 +15,8 @@ import { useGuestFence } from "./guestFence";
 // pointer, ShellMobile (tab bar, full-screen views) below 768px. State lives in module composables, so
 // the breakpoint swap doesn't restart it; liveness and the panels mount above the router (WorkspaceRuntime.vue).
 
-const ShellDesktop = defineAsyncComponent(() => import("./ShellDesktop.vue"));
-const ShellMobile = defineAsyncComponent(() => import("./ShellMobile.vue"));
+const ShellDesktop = defineAsyncComponent(() => loadChunk(() => import("./ShellDesktop.vue")));
+const ShellMobile = defineAsyncComponent(() => loadChunk(() => import("./ShellMobile.vue")));
 
 const { mobile } = useDevice();
 // Boot installed third-party extensions once the sandbox is reachable (idempotent across shell remounts).

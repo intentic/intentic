@@ -2,7 +2,8 @@
 import { ConfirmDialog, ContextMenu, Icon, type IconName, Modal, ui, vMiddleclick } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, onBeforeUnmount, onMounted, ref, type VNode } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { focusInput } from "@intentic/ui/inline-rename";
 import { clickIntent } from "../../../lib/multiSelect";
 import { TERMINAL } from "../../../shell/commands/categories";
 import { commandShortcut, registerCommand, withShortcut } from "../../../shell/commands/useCommands";
@@ -105,12 +106,6 @@ const commitRename = (): void => {
     if (name !== undefined) {
         setTerminalMeta(name, { label: renameDraft.value.trim() === `` ? undefined : renameDraft.value.trim() });
     }
-};
-// Focuses and selects the field the moment it mounts (`@vue:mounted`).
-const focusRename = (vnode: VNode): void => {
-    const el = vnode.el as HTMLInputElement;
-    el.focus();
-    el.select();
 };
 // A middle-click is the pill's × pressed, and does nothing where the strip offers no kill or the pill is being renamed.
 const middleKill = (name: string): void => {
@@ -358,7 +353,7 @@ onBeforeUnmount(() => {
                             @keydown.enter.stop.prevent="commitRename"
                             @keydown.esc.stop.prevent="renamingName = undefined"
                             @blur="commitRename"
-                            @vue:mounted="focusRename"
+                            @vue:mounted="focusInput"
                         />
                         <span v-else :class="vertical ? 'min-w-0 flex-1 truncate text-left' : undefined">{{ segmentLabel(name) }}</span>
                         <!-- The pill identifies the live terminal target. -->

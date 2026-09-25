@@ -1,11 +1,10 @@
-<!-- One lane of a rail: a header labelling the cards under it, with no slab of its own. Used by the chat rail and the subagent list; the fleet board draws its columns itself. -->
+<!-- One lane of a rail: a header labelling the cards under it, with no slab of its own. Used by the chat rail and the subagent list; the fleet board draws the same header (LaneHeader) over its own columns. -->
 <script setup lang="ts">
 import type { IconName } from "@intentic/ui";
+import LaneHeader from "./LaneHeader.vue";
 
 defineProps<{
     label: string;
-    // The lane's mark: the board's own coloured dot for a lane of the fleet, or a glyph for a group that is
-    // not one (the rail's "Not open" search hits).
     dot?: string;
     icon?: IconName;
     count?: string | number;
@@ -14,16 +13,10 @@ defineProps<{
 
 <template>
     <section class="lane flex min-w-0 flex-col">
-<!-- THE BOARD'S OWN LANE MEASUREMENTS, to the pixel: header `h-8 px-3`. Paints nothing, and cannot: pinning it would need a fill to occlude the cards passing under it, and a fill here is a flat patch over whatever the panel's skin has drawn. -->
-        <header class="flex h-8 shrink-0 items-center gap-2 px-3">
-            <span v-if="dot !== undefined" class="h-2 w-2 shrink-0 rounded-full" :class="dot"></span>
-            <Icon v-else-if="icon !== undefined" :name="icon" class="shrink-0 text-2xs text-subtle" />
-            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ label }}</span>
-            <span v-if="count !== undefined" data-lane-count class="text-2xs tabular-nums text-subtle">{{ count }}</span>
-            <span class="flex-1"></span>
-            <!-- The lane's own bulk act, where the lane is the target: "Clear". -->
-            <slot name="actions" />
-        </header>
+<!-- `px-3`: the lane insets its cards by `px-2`, so the header sits 4px inside them, as the board's does. Paints nothing, and cannot: pinning it would need a fill to occlude the cards passing under it, and a fill here is a flat patch over whatever the panel's skin has drawn. -->
+        <LaneHeader :label="label" :dot="dot" :icon="icon" :count="count" class="px-3">
+            <template #actions><slot name="actions" /></template>
+        </LaneHeader>
 <!-- The lane's contents, inset and spaced by the LANE rather than by each caller. -->
         <div class="flex min-w-0 flex-col gap-2.5 px-2 pb-2">
             <slot />

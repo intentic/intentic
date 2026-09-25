@@ -44,6 +44,7 @@ import { opensAsFolder } from "../files/archiveEntries";
 import { withProvisionalEntries } from "../files/provisionalEntries";
 import { explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import { deadLink } from "../explorer/tree/treeRows";
+import { deleteEntries } from "../explorer/tree/useTreeDelete";
 import { useInlineEdit } from "../explorer/tree/useTreeEdits";
 import { useTreeRules } from "../explorer/tree/useTreeRules";
 import FileViewer from "../viewers/FileViewer.vue";
@@ -86,7 +87,6 @@ const {
     refetch,
     readBlob,
     moveEntry,
-    removeEntries,
     run,
     busy,
     actionError,
@@ -278,10 +278,7 @@ const confirmRename = (): void => {
 // No confirm: it goes to the trash, and the receipt's Undo brings it back, which a thumb reaches as easily as a dialog.
 const removeEntry = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
-    void run(async () => {
-        const batch = await removeEntries([target.path]);
-        sayDeleted(`${target.name} deleted`, batch);
-    }, `Couldn't delete that.`);
+    void deleteEntries({ store, sayDeleted }, [target.path]);
 };
 const copyPath = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;

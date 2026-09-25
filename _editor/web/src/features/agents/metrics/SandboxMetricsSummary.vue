@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
+import { Meter } from "@intentic/ui";
 import { useSandboxReadout } from "./sandboxFigures";
 
 // The board's geek metrics at rest, inside their status-bar segment: three small gauges (CPU, memory, disk) and nothing
@@ -18,13 +19,7 @@ const readout = useSandboxReadout(() => props.metrics);
         <Icon name="server" class="shrink-0 text-2xs text-subtle" />
         <span v-for="gauge in readout.gauges" :key="gauge.key" data-figure class="inline-flex shrink-0 items-center gap-1.5">
             <span>{{ gauge.label }}</span>
-            <span class="h-1 w-8 overflow-hidden rounded-full" :class="gauge.warn ? `bg-warning/20` : `bg-content/10`" aria-hidden="true">
-                <span
-                    class="block h-full rounded-full transition-[width] duration-500"
-                    :class="gauge.warn ? `bg-warning` : `bg-content/35`"
-                    :style="{ width: `${(gauge.fraction ?? 0) * 100}%` }"
-                />
-            </span>
+            <Meter :value="gauge.fraction" :tone="gauge.warn ? `warning` : `muted`" class="w-8" />
             <span class="tabular-nums" :class="gauge.warn ? `text-warning` : ``">{{ gauge.value }}</span>
         </span>
         <!-- Only past a limit: a figure worth acting on shouldn't hide behind a click. -->

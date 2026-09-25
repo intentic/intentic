@@ -146,6 +146,14 @@
         "./inline-rename": {
             "types": "./src/composables/inlineRename.ts",
             "default": "./src/composables/inlineRename.ts"
+        },
+        "./chunk": {
+            "types": "./src/lib/loadChunk.ts",
+            "default": "./src/lib/loadChunk.ts"
+        },
+        "./worker-call": {
+            "types": "./src/lib/workerCall.ts",
+            "default": "./src/lib/workerCall.ts"
         }
     },
     "scripts": {

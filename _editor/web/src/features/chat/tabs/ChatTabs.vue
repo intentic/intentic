@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Button, ContextMenu, SearchBar } from "@intentic/ui";
+import { AnchoredOverlay, Button, ContextMenu, isOverlayTarget, SearchBar } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
@@ -95,7 +95,7 @@ const onDocumentPointerDown = (event: Event): void => {
     if (!(target instanceof Node)) {
         return;
     }
-    if (bar.value?.contains(target) === true || (target instanceof Element && target.closest(`.p-contextmenu, .ui-anchored`) !== null)) {
+    if (bar.value?.contains(target) === true || isOverlayTarget(target)) {
         return;
     }
     listOpen.value = false;

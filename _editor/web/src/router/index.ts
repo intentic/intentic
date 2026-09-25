@@ -1,5 +1,6 @@
 import type { User } from "@intentic/api-contract";
 import { useDevice } from "@intentic/ui";
+import { isStaleChunkError, recoverStaleChunk } from "@intentic/ui/chunk";
 import { type FunctionalComponent, h } from "vue";
 import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
 import { asyncView } from "../components/asyncView";
@@ -15,7 +16,6 @@ import { useRole } from "../features/sandbox/secrets/useRole";
 import { retryOnEntry } from "./platformRetry";
 import { setupRedirect } from "./setupGate";
 import { signInAt } from "./signIn";
-import { isStaleChunkError, recoverStaleChunk } from "./staleChunk";
 import { t } from "@intentic/ui/i18n";
 
 declare module "vue-router" {
@@ -323,12 +323,12 @@ router.beforeEach((to) => conversationRedirect(to.query, useDevice().mobile.valu
 // invite, the shell); a dead chunk here reloads onto the route asked for.
 router.onError((error, to) => {
     if (isStaleChunkError(error)) {
-        recoverStaleChunk(to.fullPath);
+        recoverStaleChunk(router.resolve(to).href);
     }
 });
 
 // The reload guard is not cleared on a landed navigation: asyncView lands every nav instantly regardless of chunk
-// health, so clearing here risks a reload loop on a broken deploy.
+// health, so clearing here risks a reload loop on a broken deploy. A chunk that loads clears it (`loadChunk`).
 
 // Sets the tab title to `<Page> / intentic` from the route's `title`, falling back to the bare brand when none is
 // declared. Asked for per navigation, so it is in the reader's language even when they changed it after boot.

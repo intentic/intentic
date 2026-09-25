@@ -1,12 +1,12 @@
-import { Notice, useLoadingReveal } from "@intentic/ui";
+import { loadChunk, Notice, useLoadingReveal } from "@intentic/ui";
 import { type Component, computed, defineComponent, h, ref, shallowRef } from "vue";
-import { useRoute } from "vue-router";
-import { clearStaleChunkReload, isStaleChunkError, recoverStaleChunk } from "../router/staleChunk";
+import { useRouter } from "vue-router";
 import { t } from "@intentic/ui/i18n";
 
 // Wraps a route's `() => import(...)` so navigation completes immediately; `outline` shows only past the same
 // reveal-delay thresholds data skeletons use. Owns the failure path, invisible to router.onError once navigation lands:
-// a dead chunk gets the shared stale-chunk reload (one per destination), anything else a notice with retry.
+// a dead chunk gets `loadChunk`'s one reload onto the page just landed on (the outline stays while it goes), anything
+// else a notice with retry.
 
 type Loader = () => Promise<{ readonly default: Component }>;
 
@@ -22,9 +22,6 @@ export const asyncView = (load: Loader, outline?: Component): Component => {
         inflight ??= load()
             .then((module) => {
                 resolved.value = module.default;
-                // A chunk resolving proves this window's assets are current; the next redeploy earns its own reload
-                // again.
-                clearStaleChunkReload();
             })
             .catch((error: unknown) => {
                 // A later retry re-fetches rather than replaying this rejection forever.
@@ -38,7 +35,7 @@ export const asyncView = (load: Loader, outline?: Component): Component => {
     return defineComponent({
         name: `AsyncView`,
         setup() {
-            const route = useRoute();
+            const router = useRouter();
             const loading = ref(false);
             const failure = ref<string | undefined>(undefined);
             const attempt = (): void => {
@@ -47,13 +44,10 @@ export const asyncView = (load: Loader, outline?: Component): Component => {
                 }
                 failure.value = undefined;
                 loading.value = true;
-                start()
+                // Only a mount answers a dead chunk with a reload, never the idle prefetcher; one in flight never
+                // settles, so the outline stays until the page is replaced.
+                loadChunk(start, router.resolve(router.currentRoute.value.fullPath).href)
                     .catch((error: unknown) => {
-                        // Keeps the outline while a reload is in flight; falls through once this destination's one
-                        // reload is spent.
-                        if (isStaleChunkError(error) && recoverStaleChunk(route.fullPath)) {
-                            return;
-                        }
                         failure.value = String(error);
                     })
                     .finally(() => {

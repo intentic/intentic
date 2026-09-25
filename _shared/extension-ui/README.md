@@ -20,7 +20,9 @@ flowchart LR
   re-exports, and a `dist/index.js` bridge that throws when loaded outside an intentic host.
 - `names.mjs` lists the runtime export names by hand, because the `.vue` graph cannot load in Node. The editor's shim
   generator reads it, and a dev-time assertion in `hostModules.ts` catches drift.
-- `./diff`, `./format` and `./i18n` skip the component barrel, for extension tests that run without a Vue compiler.
+- `./diff`, `./format`, `./i18n` and `./worker` skip the component barrel, for extension tests that run without a Vue
+  compiler. `./worker` is also what a worker module imports `serveWorkerCall` from. A worker has no host bridge, so an
+  extension built outside this repository bundles that module into its worker instead of marking it external.
 
 ## Key files
 

@@ -88,6 +88,12 @@ export const sourceAliases = (): Record<string, string> => ({
     // a tree node) and so cannot use <InlineRename> itself; off the barrel because a tree row must not boot mermaid
     // to know that Escape cancels.
     "@intentic/ui/inline-rename": fromRoot("_editor/ui/src/composables/inlineRename.ts"),
+    // The one stale-chunk recovery every lazy import goes through, reached by plain modules (the router, Monaco's
+    // loader, the viewer registry) whose tests must not boot the component graph.
+    "@intentic/ui/chunk": fromRoot("_editor/ui/src/lib/loadChunk.ts"),
+    // A call a dedicated worker answers, or the page when it cannot; its worker half runs where the barrel's Vue
+    // components and `document` do not exist.
+    "@intentic/ui/worker-call": fromRoot("_editor/ui/src/lib/workerCall.ts"),
     // Press-state machine (a clock and two booleans) shared by <Button> and the `v-action` directive, so the app has
     // one answer for how a press feels.
     "@intentic/ui/press": fromRoot("_editor/ui/src/lib/pressLock.ts"),
@@ -141,6 +147,7 @@ export const sourceAliases = (): Record<string, string> => ({
     "@intentic/extension-ui/format": fromRoot("_shared/extension-ui/src/format.ts"),
     "@intentic/extension-ui/i18n": fromRoot("_shared/extension-ui/src/i18n.ts"),
     "@intentic/extension-ui/diff": fromRoot("_shared/extension-ui/src/diff.ts"),
+    "@intentic/extension-ui/worker": fromRoot("_shared/extension-ui/src/worker.ts"),
     "@intentic/extension-ui": fromRoot("_shared/extension-ui/src/index.ts"),
     "@intentic/api-contract": fromRoot("_shared/api-contract/src/index.ts"),
     // The "+" grid's card/category data; omitted from this map, the app would silently resolve a stale `dist` instead

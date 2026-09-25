@@ -3,7 +3,7 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { explorerColorClass, type IconName, iconForEntry } from "@intentic/ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { focusField } from "../explorer/tree/useTreeEdits";
+import { focusInput } from "@intentic/ui/inline-rename";
 import { stopWaiting, whenNear } from "./nearViewport";
 import { thumbnailKind, thumbnailUrl } from "./thumbnails";
 import { useT } from "@intentic/ui/i18n";
@@ -208,7 +208,7 @@ const seekFrame = (event: Event): void => {
             @keydown.enter.prevent="emit('commit')"
             @keydown.esc.prevent="emit('cancel')"
             @blur="emit('commit')"
-            @vue:mounted="focusField"
+            @vue:mounted="focusInput"
         />
         <!-- Two lines whether the name needs them or not: the home places its rows by arithmetic, so a tile whose height
              depended on its own name would leave the row below it in the wrong place. -->

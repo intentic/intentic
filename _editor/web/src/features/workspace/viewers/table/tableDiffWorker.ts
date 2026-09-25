@@ -1,4 +1,4 @@
-import { serveWorkerCall } from "../../../../lib/workerCall";
+import { serveWorkerCall } from "@intentic/ui/worker-call";
 import { tableDiff } from "./tableDiff";
 import type { TableDiffArgs } from "./tableDiffClient";
 

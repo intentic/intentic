@@ -177,6 +177,8 @@ export {
 } from "./format.js";
 // Also reachable as `@intentic/extension-ui/diff`: the edit scripts a viewer marks two versions of a file with.
 export { diffSequence, pairEdits, similarity, wordDiff } from "./diff.js";
+// Also reachable as `@intentic/extension-ui/worker`: work moved off the page, with the page as its fallback.
+export { createWorkerCall, serveWorkerCall, WorkerCallError } from "./worker.js";
 // The extension's own words. `extensionT(id)` is the translator for the catalog the host mounted from the module's
 // `messages` export; `activeLocale` is the language on screen, for a contribution that formats something itself.
 // The `Locale` type comes off `@intentic/extension-ui/i18n`, not from here: this file's re-exports become runtime

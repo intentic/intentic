@@ -27,6 +27,9 @@ import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
         disconnect(): void {}
     } as unknown as typeof globalThis.IntersectionObserver;
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
+    // jsdom's frame clock is an interval it starts once, on whichever timers are installed then, so it dies with the
+    // first test's fake timers; the card's leave transition waits two frames, which ride the current clock instead.
+    globalThis.requestAnimationFrame = (run: FrameRequestCallback): number => Number(setTimeout(() => run(performance.now()), 16));
 })();
 
 // An empty roster and an empty ledger: neither the fleet nor a workflow run is what these tests are about.
@@ -97,6 +100,13 @@ const peekThroughHandle = async (): Promise<void> => {
     await settle();
 };
 const said = (): void => useChat().active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+// The transcript's card fading out, which the panel's turns wait for before they unmount: the render that starts it,
+// then the frames the transition runs on.
+const fadeOut = async (): Promise<void> => {
+    await settle();
+    jest.advanceTimersByTime(200);
+    await settle();
+};
 // Past both delays the pill uses, so a test never has to restate either one.
 const waitOutHover = async (): Promise<void> => {
     jest.advanceTimersByTime(1_000);
@@ -455,8 +465,7 @@ it(`keeps the transcript on a press, and gives it back one Escape before the box
     expect(chatBarPeek.value).toBe(true);
 
     escape();
-    jest.advanceTimersByTime(130);
-    await settle();
+    await fadeOut();
     expect([chatBarPeek.value, opened()]).toEqual([false, true]);
 
     escape();
@@ -478,8 +487,7 @@ it(`keeps a borrowed transcript on the eye's press, and folds it on the next`, a
     expect([chatBarPeek.value, handle()!.getAttribute(`aria-expanded`)]).toEqual([true, `true`]);
 
     handle()!.click();
-    jest.advanceTimersByTime(130);
-    await settle();
+    await fadeOut();
     expect([chatBarPeek.value, handle()!.getAttribute(`aria-expanded`)]).toEqual([false, `false`]);
 });
 
@@ -500,8 +508,7 @@ it(`hears an Escape that lands off the page while the box is the last thing pres
     expect([chatBarPeek.value, opened()]).toEqual([true, true]);
 
     escapeOn(railLink());
-    jest.advanceTimersByTime(130);
-    await settle();
+    await fadeOut();
     expect([chatBarPeek.value, opened()]).toEqual([false, true]);
 
     escapeOn(document.body);

@@ -208,6 +208,7 @@ export { default as SkeletonRows } from "./components/feedback/SkeletonRows.vue"
 export { default as SplitView } from "./components/layout/SplitView.vue";
 // Whether the screen has folded its index above its body; lets a rail match the shell's compact-width breakpoint.
 export { useCompact } from "./components/layout/splitView.js";
+export { default as Meter, type MeterTone } from "./components/charts/Meter.vue";
 export { default as StatStrip } from "./components/charts/StatStrip.vue";
 export { default as StatusBadge, type StatusVariant } from "./components/feedback/StatusBadge.vue";
 export { default as StepSection } from "./components/layout/StepSection.vue";
@@ -217,7 +218,7 @@ export { default as Verdict } from "./components/charts/Verdict.vue";
 export { VERDICT_RANKS, VERDICT_TONES, type VerdictSize, type VerdictTone } from "./components/charts/verdict.js";
 export { Theme } from "./styles/theme.js";
 export { installUi } from "./plugin.js";
-export { lateImport, setLateImportFailure } from "./lib/lateImport.js";
+export { installChunkRecovery, isStaleChunkError, loadChunk, recoverStaleChunk } from "./lib/loadChunk.js";
 // Markdown engine ships separately as `@intentic/ui/markdown`, so plain-TypeScript callers and tests avoid this
 // barrel's component graph.
 export { vTw } from "./lib/tw.js";
@@ -271,6 +272,8 @@ export { useLatest } from "./composables/useLatest.js";
 // Gates when a loading placeholder may appear; a fast response resolves within the reveal delay so nothing
 // flashes for a normal round trip.
 export { useLoadingReveal } from "./composables/loadingReveal.js";
+export { type HoverIntent, type HoverIntentOptions, useHoverIntent } from "./composables/useHoverIntent.js";
+export { isOverlayTarget } from "./lib/overlayTarget.js";
 export { errorMessage, noticeFrom, noticeOf, useAsyncAction, useConcurrentActions } from "./composables/useAsyncAction.js";
 // Declares an account preference: read, write, apply and cross-window change notification in one definition, so
 // a setting can't be live in one window and stale in another.

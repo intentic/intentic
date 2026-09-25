@@ -93,6 +93,10 @@ const overlayChip = (...twClasses: string[]) =>
 /** Uppercase section heading label (e.g. "CONNECTIONS", "YOUR APPS"). */
 const sectionLabel = (...twClasses: string[]) => twMerge(`text-xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
 
+/** The same heading on a dense surface (a dock's panel, a group inside a card, a rail's group), one step smaller. A
+ * separate recipe, like `inputSm`, so the size is chosen by name rather than by overriding the text class. */
+const sectionLabelSm = (...twClasses: string[]) => twMerge(`text-2xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
+
 // One tab in a row that says which view a column or a pane is showing (the workspace's file strip,
 // `SegmentedControl variant="underline"`). The state argument is not a convenience: the inactive tab carries a
 // TRANSPARENT rule of the same weight, so moving the selection shifts nothing, and a definition that gave only the
@@ -117,5 +121,6 @@ export const ui = {
     addTile,
     overlayChip,
     sectionLabel,
+    sectionLabelSm,
     tab,
 };

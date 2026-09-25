@@ -1,15 +1,23 @@
-import { effectScope, nextTick, ref } from "vue";
-import { useTreeSelection } from "./useTreeSelection";
+import { effectScope, nextTick, ref, watch } from "vue";
+import { useMultiSelect } from "./multiSelect";
 
 // Pins the selection's three parts as the gestures move them: one row, a Shift range from the anchor, a Ctrl toggle,
 // what lands after a paste, a cleared set that keeps the lead, an opened file collapsing it all, and the one tab stop.
+// One model for every multi-selecting surface: the tree, whose lead is its own cursor, and the home, whose lead is the
+// page's shared current entry.
 
 const ORDER = [`src`, `src/api`, `src/main.ts`, `README.md`];
 
 const selectionOver = (opened: string | null | undefined = undefined, order: readonly string[] = ORDER) => {
     const selectedPath = ref(opened);
     const visible = ref(order);
-    const selecting = effectScope().run(() => useTreeSelection({ selectedPath: () => selectedPath.value, order: visible }))!;
+    // The tree's own wiring: the selection follows the file the editor opens.
+    const selecting = effectScope().run(() => {
+        const made = useMultiSelect(visible);
+        made.follow(selectedPath.value ?? null);
+        watch(selectedPath, (path) => made.follow(path ?? null));
+        return made;
+    })!;
     const state = () => ({ selected: [...selecting.selection.value], anchor: selecting.anchor.value, lead: selecting.lead.value });
     return { selecting, selectedPath, visible, state };
 };
@@ -75,5 +83,49 @@ describe(`the tab stop`, () => {
 
         visible.value = [];
         expect(selecting.tabbablePath.value).toBeNull();
+    });
+});
+
+describe(`a shared lead`, () => {
+    const sharedOver = (current: string | null = null) => {
+        const lead = ref<string | null>(current);
+        const visible = ref<readonly string[]>(ORDER);
+        const selecting = effectScope().run(() => useMultiSelect(visible, { lead }))!;
+        const state = () => ({ selected: [...selecting.selection.value], anchor: selecting.anchor.value, lead: lead.value });
+        return { selecting, lead, visible, state };
+    };
+
+    it(`starts on the current entry when it is listed, and selects with modifiers as a press would`, () => {
+        const { selecting, state } = sharedOver(`src/api`);
+        expect(state()).toEqual({ selected: [`src/api`], anchor: `src/api`, lead: `src/api` });
+
+        selecting.select(`README.md`, { shiftKey: true, ctrlKey: false, metaKey: false });
+        expect(state()).toEqual({ selected: [`src/api`, `src/main.ts`, `README.md`], anchor: `src/api`, lead: `README.md` });
+        selecting.select(`src`, { shiftKey: false, ctrlKey: true, metaKey: false });
+        expect(state()).toEqual({ selected: [`src/api`, `src/main.ts`, `README.md`, `src`], anchor: `src`, lead: `src` });
+        selecting.select(`src/main.ts`);
+        expect(state()).toEqual({ selected: [`src/main.ts`], anchor: `src/main.ts`, lead: `src/main.ts` });
+    });
+
+    it(`follows the lead set elsewhere, empties for one that is not listed, and drops entries that left`, async () => {
+        const { selecting, lead, visible, state } = sharedOver();
+        lead.value = `README.md`;
+        await nextTick();
+        expect(state()).toEqual({ selected: [`README.md`], anchor: `README.md`, lead: `README.md` });
+
+        lead.value = `elsewhere`;
+        await nextTick();
+        expect(state()).toEqual({ selected: [], anchor: null, lead: `elsewhere` });
+
+        selecting.selectAll();
+        visible.value = [`src`, `README.md`];
+        await nextTick();
+        expect(state().selected).toEqual([`src`, `README.md`]);
+    });
+
+    it(`clears the lead with the selection, since it named something no longer marked`, () => {
+        const { selecting, state } = sharedOver(`src`);
+        selecting.clear();
+        expect(state()).toEqual({ selected: [], anchor: null, lead: null });
     });
 });

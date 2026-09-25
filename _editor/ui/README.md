@@ -29,6 +29,13 @@ flowchart LR
 - **Figures.** A fenced block in `dag`, `bars` or `stats` carries JSON, and a `mermaid` block carries Mermaid
   source. `MarkdownFigure.vue` draws each one with the kit's own charts and palette. A fence that does not parse
   renders as an ordinary code block.
+- **Lazy chunks.** Every dynamic import in the editor goes through `loadChunk` (`@intentic/ui/chunk`). A chunk a
+  redeploy removed reloads the page once onto where the reader is, and any chunk that loads re-arms that reload.
+  `installChunkRecovery` catches the preload failures Vite reports for imports nobody wrapped.
+- **Workers.** `createWorkerCall` and `serveWorkerCall` (`@intentic/ui/worker-call`, re-exported to extensions as
+  `@intentic/extension-ui/worker`) are the two halves of one call a dedicated worker answers, with the page as the
+  fallback when no worker runs or one dies. A caller whose work is sometimes cheap checks that first and runs it
+  inline, as `tableDiffClient.ts` in the editor does.
 - **Translations.** `@intentic/ui/i18n` is the only i18n import path. It registers the kit's own words and loads one
   chunk per language.
 - **Tests and preview.** The kit's suites live in `_editor/web/src/design-system`. The editor's dev server shows

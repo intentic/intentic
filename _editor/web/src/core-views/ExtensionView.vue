@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { ViewRegistration } from "@intentic/extension-api";
 import { type Component, defineAsyncComponent } from "vue";
+import { loadChunk } from "@intentic/ui";
 
 /* Renders one extension activation's view with its `repo` (+ props) bound: the single source consumed by both hosts. */
 
@@ -13,7 +14,7 @@ const viewOf = (registration: ViewRegistration): Component => {
     if (cached !== undefined) {
         return cached;
     }
-    const component = defineAsyncComponent(registration.view);
+    const component = defineAsyncComponent(() => loadChunk(registration.view));
     views.set(registration, component);
     return component;
 };

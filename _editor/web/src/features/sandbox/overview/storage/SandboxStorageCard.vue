@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { StorageCategoryId, StorageCategoryUsage } from "@intentic/sandbox-contract";
-import { Button, Card, ConfirmDialog, Notice, type NoticeModel } from "@intentic/ui";
+import { Button, Card, ConfirmDialog, Meter, Notice, type NoticeModel } from "@intentic/ui";
 import { formatBytes, formatDateTime, timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
@@ -131,19 +131,13 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
         <!-- The previous measurement stays readable while the next one runs, dimmed so nobody acts on it as current. -->
         <div v-if="scan" class="flex flex-col gap-3 transition-opacity" :class="scanning ? `opacity-60` : ``">
             <div v-if="disk" class="flex flex-col gap-1">
-                <!-- A meter: the fill carries how close the volume is to full, its track a lighter step of the same tone. -->
-                <div
-                    class="h-2 overflow-hidden rounded-full"
-                    :class="disk.near ? `bg-warning/15` : `bg-primary-600/15`"
-                    role="meter"
-                    aria-valuemin="0"
-                    :aria-valuemax="disk.totalBytes"
-                    :aria-valuenow="disk.usedBytes"
-                    :aria-valuetext="t(`sandbox.sandboxStorageCard.diskUsed`, { used: formatBytes(disk.usedBytes), total: formatBytes(disk.totalBytes) })"
-                    :aria-label="t(`sandbox.sandboxStorageCard.heading`)"
-                >
-                    <div class="h-full rounded-full" :class="disk.near ? `bg-warning` : `bg-primary-600`" :style="{ width: `${disk.percent}%` }" />
-                </div>
+                <Meter
+                    :value="disk.percent / 100"
+                    :tone="disk.near ? `warning` : `accent`"
+                    size="md"
+                    :label="t(`sandbox.sandboxStorageCard.heading`)"
+                    :valuetext="t(`sandbox.sandboxStorageCard.diskUsed`, { used: formatBytes(disk.usedBytes), total: formatBytes(disk.totalBytes) })"
+                />
                 <p class="text-2xs tabular-nums" :class="disk.near ? `text-warning` : `text-muted`">
                     {{ t(`sandbox.sandboxStorageCard.diskUsed`, { used: formatBytes(disk.usedBytes), total: formatBytes(disk.totalBytes) }) }}
                 </p>
@@ -165,9 +159,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                         </button>
                         <span class="shrink-0 text-xs tabular-nums text-content">{{ formatBytes(row.category.bytes) }}</span>
                     </div>
-                    <div class="h-1 overflow-hidden rounded-full bg-content/5" aria-hidden="true">
-                        <div class="h-full rounded-full bg-primary-600/60" :style="{ width: `${row.share}%` }" />
-                    </div>
+                    <Meter :value="row.share / 100" />
                     <!-- The action sits under the size rather than beside it, so every row's size stays in one column. -->
                     <div class="flex items-start gap-3">
                         <p class="min-w-0 flex-1 text-2xs leading-relaxed text-muted">{{ row.text.reason }}</p>

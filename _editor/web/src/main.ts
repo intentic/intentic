@@ -1,7 +1,7 @@
 // In production every lazy view's CSS is extracted into the initial stylesheet; this virtual module gives dev the same
 // stable style set before the app mounts.
 import { installDevStyles } from "virtual:intentic-dev-styles";
-import { installUi, setLateImportFailure } from "@intentic/ui";
+import { installChunkRecovery, installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
 import App from "./App.vue";
@@ -19,7 +19,6 @@ import "./features/sandbox/client/sandboxScope";
 import "./features/sandbox/client/sandboxScreen";
 import "./extension-host/hostModules";
 import { router } from "./router";
-import { isStaleChunkError, recoverStaleChunk } from "./router/staleChunk";
 import { installNotificationTaps } from "./shell/notifications/notificationTaps";
 import "./styles.css";
 
@@ -76,10 +75,6 @@ app.use(router);
 // Our own client so requireAuth can hydrate it from IndexedDB (per-user) before any route mounts.
 app.use(VueQueryPlugin, { queryClient });
 installUi(app);
-// A kit chunk gone stale (a redeploy, or Vite re-optimizing deps under a live tab) reloads once instead of degrading.
-setLateImportFailure((error) => {
-    if (isStaleChunkError(error)) {
-        recoverStaleChunk(`${location.pathname}${location.search}`);
-    }
-});
+// Every lazy chunk goes through `loadChunk`; this catches the preload Vite fails for one that doesn't.
+installChunkRecovery();
 app.mount("#app");

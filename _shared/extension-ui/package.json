@@ -36,6 +36,11 @@
             "types": "./dist/types/extension-ui/src/format.d.ts",
             "default": "./dist/format.js"
         },
+        "./worker": {
+            "@intentic/src": "./src/worker.ts",
+            "types": "./dist/types/extension-ui/src/worker.d.ts",
+            "default": "./dist/worker.js"
+        },
         "./i18n": {
             "@intentic/src": "./src/i18n.ts",
             "types": "./dist/types/extension-ui/src/i18n.d.ts",

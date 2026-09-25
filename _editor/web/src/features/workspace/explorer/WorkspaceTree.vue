@@ -10,36 +10,28 @@ import {
     vAction,
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { nextTick } from "vue";
+import { nextTick, ref, watch } from "vue";
 import { useVocabulary } from "../../../core-views/vocabulary";
-import { useNotifications } from "../../../shell/notifications/notifications";
-import { useDeleteUndo } from "./undo/useDeleteUndo";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import { viewersOfPath } from "../../../shell/presence/usePresence";
 import { useLayout } from "../../../shell/window/useLayout";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { isRecentlyChanged } from "../changes/live/useWorkspaceLive";
 import { lensRefuses } from "../directory-ui/personaReach";
-import { useUploadQueue } from "../files/upload/useUploadQueue";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { ancestorDirs } from "./revealPath";
 import type { RowAction } from "./rowActions";
 import { specialChip } from "./specialPaths";
 import { deadLink, dropDirOf, linkTooltip, provisionalTooltip, type Row } from "./tree/treeRows";
-import { useTreeDelete } from "./tree/useTreeDelete";
-import { focusField, useInlineEdit, useTreeEdits } from "./tree/useTreeEdits";
+import { focusInput } from "@intentic/ui/inline-rename";
+import { createFileVerbs } from "./tree/fileVerbs";
+import { fileVerbSeams } from "./tree/fileVerbSeams";
 import { useTreeGestures } from "./tree/useTreeGestures";
-import { useTreeMenu } from "./tree/useTreeMenu";
 import { useTreeReveal } from "./tree/useTreeReveal";
 import { useTreeRows } from "./tree/useTreeRows";
-import { useTreeRules } from "./tree/useTreeRules";
-import { useTreeSelection } from "./tree/useTreeSelection";
-import { useTreeTransfer } from "./tree/useTreeTransfer";
 import { useTreeWindow } from "./tree/useTreeWindow";
 import { useEmptyDirs } from "./useEmptyDirs";
 import { useFileNesting } from "./useFileNesting";
-import { useWorkspaceTree } from "./useWorkspaceTree";
-import { useTerminalPanel } from "../../terminal/useTerminalPanel";
 
 // Recursive file tree and file-management surface: verbs act on the whole selection via useWorkspaceTree, with a file
 // standing in for its parent directory as a target. Template and wiring: what the tree draws and what every gesture
@@ -74,12 +66,11 @@ const {
 // `openFile`'s `mode` is the gesture (a click previews, a double-click keeps); `pick` is the click or Enter itself.
 const emit = defineEmits<{ openFile: [path: string, mode: OpenMode]; openDirectory: [path: string]; pick: [entry: WorkspaceTreeEntry]; clear: [] }>();
 
-const store = useWorkspaceTree();
+const seams = fileVerbSeams();
+const { store } = seams;
 const { clipboard, lazyLoading } = store;
 const layout = useLayout();
 const words = useVocabulary();
-const uploads = useUploadQueue();
-const { say } = useNotifications();
 const { fileNesting } = useFileNesting();
 // Settled folders holding only empty folders; tracked by path since `tree`'s listing may not reach every branch here.
 const emptyDirs = useEmptyDirs(() => barren);
@@ -95,51 +86,59 @@ const { byPath, childrenOf, visibleRows, orderedPaths, technicalCount, targetDir
         store,
         emptyDirs,
     });
-const rules = useTreeRules({ byPath, store });
+// Tree container; tabindex -1 so clicking empty space still parks focus here, letting clipboard events fire.
+const treeEl = ref<HTMLElement>();
+// A row's own affordances, or none when the parent supplied no source (the mobile listing, a test).
+const actionsFor = (path: string): readonly RowAction[] => rowActions?.(path) ?? [];
+const { rules, selecting, inline, edits, deleting, transfer, menu: entryMenu } = createFileVerbs({
+    seams,
+    byPath,
+    order: orderedPaths,
+    rootDir: () => rootDir,
+    tree: () => tree,
+    childrenOf,
+    targetDir,
+    reveal: { openLanding, openNest },
+    el: treeEl,
+    emptyDirs,
+    // Bound late: the row window that focuses the lead is built over this selection, below.
+    focusLead: () => focusLead(),
+    openCreated: (path) => {
+        emit(`openFile`, path, `keep`);
+        layout.setEditMode(true);
+    },
+    rowActions: actionsFor,
+    frame: () => ({
+        tail:
+            store.expanded.value.size > 0
+                ? [{ label: t(`workspace.workspaceTree.collapseFolders`), icon: `collapse-all`, command: store.collapseAll }]
+                : [],
+    }),
+});
+// Opening a file collapses the selection to it; Ctrl/Shift-click never emit openFile, so a multi-selection survives.
+selecting.follow(selectedPath ?? null);
+watch(
+    () => selectedPath,
+    (path) => selecting.follow(path ?? null),
+);
 const { pendingRow, pending, dropTargetOf } = rules;
 // An arriving row holding nothing a press can reach: a pending file, not a pending folder, which still expands.
 const notYetOpenable = (row: Row): boolean => pending(row.entry.path) && !expandable(row);
 const { personas } = usePersonas();
 // Only dims the rows the read-as persona's fence refuses: a lens must not restrict the actual user.
 const refused = (path: string): boolean => lensRefuses(personas.value, path);
-const selecting = useTreeSelection({ selectedPath: () => selectedPath, order: orderedPaths });
 const { selection, lead, tabbablePath } = selecting;
-const inline = useInlineEdit((path) => byPath.value.has(path));
 const { edit, draft, createError, editing } = inline;
-const { scroller, treeEl, preamble, probeRow, rowHeight, createBlock, painted, treeHeight, onScroll, setRowEl, showRow, focusLead, focusRow } =
-    useTreeWindow({
-        rows: visibleRows,
-        lead,
-        edit,
-        createError,
-    });
+const { scroller, preamble, probeRow, rowHeight, createBlock, painted, treeHeight, onScroll, setRowEl, showRow, focusLead, focusRow } = useTreeWindow({
+    rows: visibleRows,
+    lead,
+    edit,
+    createError,
+});
 useTreeReveal({ selectedPath: () => selectedPath, rows: visibleRows, tree: () => tree, byPath, childrenOf, nesting: fileNesting, openAll, showRow });
 
-const { beginRename, beginCreate, endEdit } = useTreeEdits({
-    inline,
-    byPath,
-    rules,
-    targetDir,
-    openLanding,
-    selectSingle: selecting.selectSingle,
-    focusLead,
-    store,
-    openCreated: (path) => {
-        emit(`openFile`, path, `keep`);
-        layout.setEditMode(true);
-    },
-});
-const { sayDeleted } = useDeleteUndo();
-const { requestDelete, keepFolder, sweepOpen, pointedBarren, barrenBranches, soleBarren, sweepAll } = useTreeDelete({
-    byPath,
-    targetDir,
-    rules,
-    emptyDirs,
-    selecting,
-    store,
-    say,
-    sayDeleted,
-});
+const { beginRename, endEdit } = edits;
+const { requestDelete, keepFolder, sweepOpen, pointedBarren, barrenBranches, soleBarren, sweepAll } = deleting;
 // Opens the way down to an empty folder, selects it and brings its row on screen; the keyboard stays with the sweep line.
 const revealBarren = async (path: string): Promise<void> => {
     openAll(ancestorDirs(path));
@@ -149,22 +148,7 @@ const revealBarren = async (path: string): Promise<void> => {
 };
 // Reads `soleBarren` here, since a template closure would read it outside the `v-if` proving it.
 const revealSoleBarren = (): Promise<void> => (soleBarren.value === undefined ? Promise.resolve() : revealBarren(soleBarren.value.path));
-const { stage, paste, extract, onCopyEvent, onPasteEvent, onPointerDown, carried, dropLit, onDragOver, onDragLeave, onDrop } = useTreeTransfer({
-    tree: () => tree,
-    rootDir: () => rootDir,
-    byPath,
-    childrenOf,
-    targetDir,
-    openLanding,
-    openNest,
-    rules,
-    selecting,
-    inline,
-    el: treeEl,
-    store,
-    uploads,
-    say,
-});
+const { onCopyEvent, onPasteEvent, onPointerDown, carried, dropLit, onDragOver, onDragLeave, onDrop } = transfer;
 const { onRowClick, onRowDblClick, onChevronClick, onBackgroundClick, onKeydown } = useTreeGestures({
     rows: visibleRows,
     order: orderedPaths,
@@ -183,32 +167,7 @@ const { onRowClick, onRowDblClick, onChevronClick, onBackgroundClick, onKeydown 
     pick: (entry) => emit(`pick`, entry),
     cleared: () => emit(`clear`),
 });
-
-// A row's own affordances, or none when the parent supplied no source (the mobile listing, a test).
-const actionsFor = (path: string): readonly RowAction[] => rowActions?.(path) ?? [];
-const terminalPanel = useTerminalPanel();
-const { menu, menuItems, openMenu, runAction } = useTreeMenu({
-    rootDir: () => rootDir,
-    rowActions: actionsFor,
-    isBarren: emptyDirs.isBarren,
-    rules,
-    selecting,
-    store,
-    beginCreate,
-    beginRename,
-    extract,
-    keepFolder,
-    requestDelete,
-    stage,
-    paste,
-    openTerminal: (dir) => terminalPanel.spawnShell(dir),
-    frame: () => ({
-        tail:
-            store.expanded.value.size > 0
-                ? [{ label: t(`workspace.workspaceTree.collapseFolders`), icon: `collapse-all`, command: store.collapseAll }]
-                : [],
-    }),
-});
+const { menu, menuItems, openMenu, runAction } = entryMenu;
 
 // The active file-tree setup (minimal/colorful/vivid): size, colour and folder emphasis for every row.
 const { explorerStyle } = useExplorerStyle();
@@ -267,7 +226,7 @@ const restingClass = (action: RowAction, path: string): string =>
                             @keydown.enter.prevent="endEdit('commit')"
                             @keydown.esc.prevent="endEdit('cancel')"
                             @blur="endEdit('blur')"
-                            @vue:mounted="focusField"
+                            @vue:mounted="focusInput"
                         />
                     </div>
                     <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
@@ -355,7 +314,7 @@ const restingClass = (action: RowAction, path: string): string =>
                                 @keydown.enter.prevent="endEdit('commit')"
                                 @keydown.esc.prevent="endEdit('cancel')"
                                 @blur="endEdit('blur')"
-                                @vue:mounted="focusField"
+                                @vue:mounted="focusInput"
                             />
                             <!-- Collapsed barren chains act as one selectable path. -->
                             <span
@@ -474,7 +433,7 @@ const restingClass = (action: RowAction, path: string): string =>
                                     @keydown.enter.prevent="endEdit('commit')"
                                     @keydown.esc.prevent="endEdit('cancel')"
                                     @blur="endEdit('blur')"
-                                    @vue:mounted="focusField"
+                                    @vue:mounted="focusInput"
                                 />
                             </div>
                             <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
