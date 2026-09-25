@@ -569,7 +569,6 @@
     "_tools/scripts/verify/check-snapshot.mjs": 2,
     "_tools/scripts/verify/failure-units.mjs": 3,
     "_tools/scripts/verify/flakes.mjs": 3,
-    "_tools/scripts/verify/test-workers.mjs": 1,
     "_tools/scripts/verify/verify-push.mjs": 1,
     "_tools/testing/src/stripe-fake.ts": 1
 }
