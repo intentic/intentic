@@ -16,27 +16,18 @@ import type { Said, SentTurn } from "../../seams/turn-starter.js";
 import { isolatedAgent } from "../../testing.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { LandBreakage } from "../../workspace/deps/verify-deps.js";
-import type { BisectAsk } from "./land-bisect.js";
-import { type LandSuspect, narrowCheckOf } from "./land-fix.js";
+import { narrowCheckOf } from "./land-fix.js";
 
 // What a red main-line check is owed, decided from the fleet as it stands: wait for the check behind it, hold while a
 // conversation still works on what failed, send it back to the land it came with while that conversation still has the
 // work in mind, else a fresh conversation, and past a streak's allowance, a person. Which land the units name is read off
 // the units the land verify reports (failure-units.mjs, land-tiers.mjs).
 
-// A conversation's unlanded paths and a suspect's re-run are both real git (landing-paths.ts, land-bisect.ts, each with
-// its own suite); here each is the answer a case sets.
+// A conversation's unlanded paths are real git (landing-paths.ts, with its own suite); here they are the answer a case
+// sets.
 const unlanded = new Map<string, readonly string[]>();
-const bisected: BisectAsk[] = [];
-let reproduced: (ask: BisectAsk) => LandSuspect[] | undefined = () => undefined;
 jest.mock("./landing-paths.js", () => ({
     landingPaths: async (_services: unknown, agent: { readonly id: string }) => unlanded.get(agent.id) ?? [],
-}));
-jest.mock("./land-bisect.js", () => ({
-    bisectSuspects: async (_deps: unknown, ask: BisectAsk) => {
-        bisected.push(ask);
-        return reproduced(ask);
-    },
 }));
 const {
     breakageRunSettled,
@@ -53,8 +44,6 @@ const {
 beforeEach(() => {
     resetBreakageRouter();
     unlanded.clear();
-    bisected.length = 0;
-    reproduced = () => undefined;
 });
 
 afterEach(() => {
@@ -420,10 +409,9 @@ describe("blame across several lands", () => {
         expect(routing).toEqual(routed("original", { conversationId: "two", detail: "Sent back to the conversation that landed it (1 of 2)." }));
         expect(world.told().map(({ to }) => to)).toEqual(["two"]);
         expect(world.filed.map(({ suspects }) => suspects)).toEqual([["two"]]);
-        expect(bisected).toEqual([]);
     });
 
-    test("hands every land to a fresh conversation when their changes cannot be told apart and no re-run was named", async () => {
+    test("hands every land to a fresh conversation when their changes cannot be told apart, re-running nothing", async () => {
         const world = fleet(both);
         const git = changedBy({ "tip-one": ["_sandbox/sandbox/src/lexer.ts"], "tip-two": ["_sandbox/sandbox/src/parser.ts"] });
 
@@ -438,39 +426,6 @@ describe("blame across several lands", () => {
         expect(world.told()).toEqual([]);
         expect(world.started.map(({ title }) => title)).toEqual(["Fix main: workspace"]);
         expect(world.started[0]?.prompt).toContain("No single land could be named for them; these are every land the red check covered:");
-        expect(world.filed.map(({ suspects }) => suspects)).toEqual([["one", "two"]]);
-    });
-
-    // The check named a command that re-runs only some failures; each suspect's own landed tree is asked in turn.
-    test("asks each suspect's own tree when the check named a re-run, and sends the failures to the one that reproduces them", async () => {
-        const world = fleet(both);
-        const git = changedBy({ "tip-one": ["_sandbox/sandbox/src/lexer.ts"], "tip-two": ["_sandbox/sandbox/src/parser.ts"] });
-        reproduced = (ask) => ask.suspects.filter(({ land: { agentId } }) => agentId === "two");
-
-        const routing = await decided(routeLandBreakage(world.services, red({ lands: [origin("one"), origin("two")], rerun: "pnpm rerun" }), git));
-
-        expect(bisected).toEqual([
-            {
-                project: "",
-                suspects: [
-                    { land: origin("one"), paths: ["_sandbox/sandbox/src/lexer.ts"], from: "from-one", tip: "tip-one" },
-                    { land: origin("two"), paths: ["_sandbox/sandbox/src/parser.ts"], from: "from-two", tip: "tip-two" },
-                ],
-                failures: [SANDBOX_TEST],
-                rerun: "pnpm rerun",
-            },
-        ]);
-        expect(routing).toEqual(routed("original", { conversationId: "two", detail: "Sent back to the conversation that landed it (1 of 2)." }));
-    });
-
-    test("falls back to every suspect when no suspect's own tree could say", async () => {
-        const world = fleet(both);
-        const git = changedBy({ "tip-one": ["_sandbox/sandbox/src/lexer.ts"], "tip-two": ["_sandbox/sandbox/src/parser.ts"] });
-
-        const routing = await decided(routeLandBreakage(world.services, red({ lands: [origin("one"), origin("two")], rerun: "pnpm rerun" }), git));
-
-        expect(bisected).toHaveLength(1);
-        expect(routing?.kind).toBe("fix-up");
         expect(world.filed.map(({ suspects }) => suspects)).toEqual([["one", "two"]]);
     });
 });

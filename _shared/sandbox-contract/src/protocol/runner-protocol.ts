@@ -188,6 +188,59 @@ export const RunnerTurnSchema = z.object({
 });
 export type RunnerTurn = z.infer<typeof RunnerTurnSchema>;
 
+// OFFLOADED COMMANDS: one shell line the parent hands a runner instead of running it itself (settings `offload`). The
+// code travels as a snapshot commit of the parent's working tree, uncommitted and untracked work included, parked under
+// this ref in the repo's git dir for the runner to fetch through the git door, and deleted once the run ends.
+export const OFFLOAD_REF_PREFIX = "refs/intentic-offload/";
+export const offloadRef = (runId: string): string => `${OFFLOAD_REF_PREFIX}${runId}`;
+const OffloadRunIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{7,63}$/u);
+const EnvNameSchema = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/u);
+
+export const RunnerCommandSchema = z.object({
+    runId: OffloadRunIdSchema,
+    // The repo id the git door serves (a /history/gits entry: `root` for the workspace itself).
+    repo: z.string().min(1),
+    // The snapshot commit's ref in that repo, always under OFFLOAD_REF_PREFIX.
+    ref: z.string().startsWith(OFFLOAD_REF_PREFIX),
+    // Where in the repo the line runs, repo-relative; "" is the repo root.
+    cwd: z.string().refine((path) => !path.startsWith("/") && !path.split("/").includes(".."), "must stay inside the repo"),
+    command: z.string().min(1).max(64_000),
+    // Values set for the line, beside the runner's own environment. Never a secret: a line that needs one runs here.
+    env: z.record(EnvNameSchema, z.string()).default({}),
+    // Variables the line writes a file to (a report path): the runner points each at a scratch file and hands the file
+    // back with the exit.
+    exports: z.array(EnvNameSchema).max(8).default([]),
+    // The heavy-command rule it matched here, named in the runner's own output and queue.
+    label: z.string().min(1).max(80),
+    timeoutMs: z
+        .number()
+        .int()
+        .positive()
+        .max(6 * 60 * 60_000)
+        .optional(),
+});
+export type RunnerCommand = z.infer<typeof RunnerCommandSchema>;
+
+// What a running command streams back: narration of the runner's own steps (fetch, install, queue), the line's output
+// as it comes, and last its end: the exit, every file it changed as a binary git patch against the snapshot, and the
+// exported files, base64.
+export const RunnerCommandFrameSchema = z.union([
+    z.object({ kind: z.literal("status"), text: z.string() }),
+    z.object({ kind: z.literal("output"), stream: z.enum(["stdout", "stderr"]), text: z.string() }),
+    z.object({
+        kind: z.literal("exit"),
+        code: z.number().int(),
+        signal: z.string().optional(),
+        // Why the run did not end on its own: stopped, timed out, or never started (a fetch or install that failed).
+        failure: z.string().optional(),
+        // False when the line never started there, which sends it back to run on the parent.
+        ran: z.boolean().default(true),
+        patchBase64: z.string().optional(),
+        files: z.record(EnvNameSchema, z.string()).default({}),
+    }),
+]);
+export type RunnerCommandFrame = z.infer<typeof RunnerCommandFrameSchema>;
+
 // Where a conversation runs, fixed on its first turn like `isolated` placement: later turns follow the registry, not
 // the sender. `runner` implies isolation since a remote conversation is branch-anchored; absent means local.
 export const AgentPlacementSchema = z.union([z.object({ kind: z.literal("local") }), z.object({ kind: z.literal("runner"), id: z.string().min(1) })]);

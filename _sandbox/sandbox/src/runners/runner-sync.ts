@@ -24,7 +24,7 @@ export interface RunnerSyncDeps {
     readonly worktrees: AgentWorktrees;
 }
 
-const gitEnv = (identity: RunnerIdentity): NodeJS.ProcessEnv => ({
+export const gitEnv = (identity: RunnerIdentity): NodeJS.ProcessEnv => ({
     ...process.env,
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_KEY_0: "http.extraHeader",

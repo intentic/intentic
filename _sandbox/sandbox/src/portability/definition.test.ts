@@ -137,6 +137,15 @@ test("settingsDefinition is settings-only: non-defaults in, every other section 
     expect(parseDefinitionToml(emitDefinitionToml(scoped))).toEqual(scoped);
 });
 
+test("a runner is never handed where this sandbox sends its work, and never reads it as drift", async () => {
+    const offload = { commands: { "bun-test": "runner-omen" }, landCheck: "runner-omen" };
+    const services = { sandboxSettings: { get: async () => ({ hashlineEdits: true, offload }) } };
+    const scoped = await settingsDefinition(services as unknown as Parameters<typeof settingsDefinition>[0]);
+    expect(scoped.settings).toEqual({ hashlineEdits: true });
+    const bare = { schemaVersion: 1 as const, environment: {}, repositories: [], capabilities: [], secrets: [] };
+    expect(settingsDrift({ ...bare, settings: { offload } }, { ...bare, settings: {} })).toEqual([]);
+});
+
 test("settingsDrift names each differing key once, with defaults meaning agreement", () => {
     const scoped = (settings: SandboxDefinition["settings"]): SandboxDefinition => ({
         schemaVersion: 1,

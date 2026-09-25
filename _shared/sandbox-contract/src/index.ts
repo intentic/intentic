@@ -40,6 +40,7 @@ import { skillsContract } from "./contracts/skills.contract.js";
 import { systemContract } from "./contracts/system.contract.js";
 import { translatorContract } from "./contracts/translator.contract.js";
 import { usageContract } from "./contracts/usage.contract.js";
+import { offloadContract } from "./contracts/offload.contract.js";
 import { vpnContract } from "./contracts/vpn.contract.js";
 import { workflowsContract } from "./contracts/workflows.contract.js";
 import { workspaceContract } from "./contracts/workspace.contract.js";
@@ -100,6 +101,7 @@ export { systemContract } from "./contracts/system.contract.js";
 export { translatorContract } from "./contracts/translator.contract.js";
 export { type PlanLimitsHeld, type PlanLimitsRefreshed, PlanLimitsRefreshedSchema, usageContract } from "./contracts/usage.contract.js";
 export { netdiskContract } from "./contracts/netdisk.contract.js";
+export { offloadContract } from "./contracts/offload.contract.js";
 export { vpnContract } from "./contracts/vpn.contract.js";
 export { workflowsContract } from "./contracts/workflows.contract.js";
 export { workspaceContract } from "./contracts/workspace.contract.js";
@@ -221,6 +223,7 @@ export * from "./schemas/turn-break.js";
 export * from "./schemas/keep-warm.js";
 export * from "./schemas/providers/usage.js";
 export * from "./schemas/vpn.js";
+export * from "./schemas/offload.js";
 export * from "./schemas/webext.js";
 export * from "./schemas/workflows.js";
 export * from "./schemas/workspace/workspace-repos.js";
@@ -280,6 +283,7 @@ export const sandboxContract = {
     translator: translatorContract,
     usage: usageContract,
     vpn: vpnContract,
+    offload: offloadContract,
     exit: exitContract,
     netdisk: netdiskContract,
     workflows: workflowsContract,

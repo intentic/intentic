@@ -10,6 +10,7 @@ import { personaKitPlugin } from "../../../personas/persona-kit.js";
 import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
 import { standing } from "../../../rules/rules.js";
 import { queueRunEnabled } from "../../../terminal/terminal-run.js";
+import { offloadRunEnabled } from "../../../offload/offload-prefix.js";
 import { armPlan, type TurnArmPlan, type TurnContext } from "../../providers/adapter.js";
 import type { TurnPolicy, TurnSpec, TurnTools } from "../../providers/agent-request.js";
 import { isUnknownSlashCommand } from "../../providers/agent-commands.js";
@@ -162,10 +163,12 @@ const harnessPolicy = (
 
 // The Bash pipeline's filters and queue: the output-cleaner spec (empty lets the filter's own default apply), the
 // holdout fraction, and the heavy-command queue where the image can enforce it (bin/queue-run on PATH).
-const shellTools = (deps: HarnessPlanDeps, settings: SandboxSettings): Pick<TurnTools, "outputCleaners" | "outputHoldout" | "heavyCommands"> => ({
+const shellTools = (deps: HarnessPlanDeps, settings: SandboxSettings): Pick<TurnTools, "outputCleaners" | "outputHoldout" | "heavyCommands" | "offloadCommands"> => ({
     ...(settings.outputCleaners !== "" ? { outputCleaners: settings.outputCleaners } : {}),
     ...(settings.outputHoldout > 0 ? { outputHoldout: settings.outputHoldout } : {}),
     ...(queueRunEnabled() ? { heavyCommands: () => deps.heavyCommands.read() } : {}),
+    // Read per command like the rules, so sending a kind of work elsewhere binds on the next line.
+    ...(queueRunEnabled() && offloadRunEnabled() ? { offloadCommands: async () => (await deps.sandboxSettings.get()).offload.commands } : {}),
 });
 
 // Where the browser stack's own facts ride: the servers' --output-dir, so the screenshot redirect shares one source, and

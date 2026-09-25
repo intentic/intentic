@@ -8,7 +8,8 @@ import { redirectCommand } from "../../agents/worktrees/worktree-redirect.js";
 import { resolveCommandSecrets, type SecretAccess } from "../../secrets/secret-access.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
-import { type HeavyCommands, matchHeavyCommand } from "../../platform/resources/heavy-commands.js";
+import { offloadPrefix } from "../../offload/offload-prefix.js";
+import { type HeavyCommands, type HeavyMatch, matchHeavyCommand } from "../../platform/resources/heavy-commands.js";
 import { choomPrefix, OOM_SCORE } from "../../platform/resources/oom-priority.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type BackgroundJob, backgroundJobOf, type BackgroundJobSeed, jobCommandLine, openBackgroundJob, stopBackgroundJob } from "./background-jobs.js";
@@ -74,13 +75,11 @@ export const PIPESTATUS_TRAP = `trap 'printf "%s " "\${PIPESTATUS[@]}" 2>/dev/nu
 // Bounds concurrent heavy commands via bin/queue-run, since demotion rations CPU but not memory, and makes each the
 // first thing the OOM killer takes. Spliced inside the namespace hop and the demotion, so both cover the forked tree.
 const queuePrefix = (command: string, config: HeavyCommands | undefined): string => {
-    if (config === undefined) {
-        return "";
-    }
-    const match = matchHeavyCommand(command, config);
-    if (match === undefined) {
-        return "";
-    }
+    const match = config === undefined ? undefined : matchHeavyCommand(command, config);
+    return match === undefined || config === undefined ? "" : queuePrefixOf(match, config);
+};
+
+const queuePrefixOf = (match: HeavyMatch, config: HeavyCommands): string => {
     const flags = [
         `--pool ${shellQuote(match.pool)}`,
         `--limit ${String(match.limit)}`,
@@ -92,6 +91,27 @@ const queuePrefix = (command: string, config: HeavyCommands | undefined): string
     ].join(" ");
     return `${QUEUE_RUN_BIN} ${flags} -- ${choomPrefix(OOM_SCORE.heavy)}`;
 };
+
+// Where a heavy line runs instead of here (settings `offload`): its matched rule's runner, when the owner sends that kind
+// of work to one. `offload-run` then stands in for the queue, holding the queue's own prefix for when the runner cannot
+// take it (bin/offload-run). A line that resolved a secret stays here: the value would travel to another machine.
+// The prefix a heavy line gets: offload-run when its rule's kind goes to a runner, else the local queue, else nothing.
+const heavyPrefix = (command: string, config: HeavyCommands | undefined, offload: Readonly<Record<string, string>>, secretResolved: boolean): string => {
+    const match = config === undefined ? undefined : matchHeavyCommand(command, config);
+    if (match === undefined || config === undefined) {
+        return "";
+    }
+    const queue = queuePrefixOf(match, config);
+    const runner = offload[match.id];
+    return runner === undefined || secretResolved ? queue : offloadPrefix(runner, match.id, queue);
+};
+
+// The queue prefix a whole command line would get, "" when none: for a caller that hands the line to offload-run, which
+// keeps it for running the line here when the runner cannot take it.
+export const queuePrefixFor =
+    (heavy: () => Promise<HeavyCommands>) =>
+    async (command: string): Promise<string> =>
+        queueRunEnabled() ? queuePrefix(command, await heavy()) : "";
 
 // Wraps a whole command line behind the queue, for a caller that runs one command directly rather than rewriting an
 // agent's. Same rules and the same queueRunEnabled standing-down; an unmatched command returns unchanged.
@@ -165,6 +185,8 @@ export const bashTmuxHooks = (
     secrets?: SecretAccess,
     // Reads .intentic/config/heavy-commands.json per call; absent when this sandbox does not queue at all.
     heavy?: () => Promise<HeavyCommands>,
+    // Which heavy rules' lines run on a runner instead (settings `offload.commands`), read per call like the rules.
+    offload?: () => Promise<Readonly<Record<string, string>>>,
     // Conversation and routing a background job's completion wakes; absent leaves such a job ordinary, so it still
     // dies with the turn — a conversationless turn has nowhere to deliver the wake anyway.
     jobs?: BackgroundJobSeed,
@@ -219,7 +241,7 @@ export const bashTmuxHooks = (
                         // wrapped string.
                         const queue = await (async (): Promise<string> => {
                             try {
-                                return heavy === undefined ? "" : queuePrefix(command, await heavy());
+                                return heavy === undefined ? "" : heavyPrefix(command, await heavy(), (await offload?.().catch(() => ({}))) ?? {}, executed !== command);
                             } catch {
                                 return "";
                             }

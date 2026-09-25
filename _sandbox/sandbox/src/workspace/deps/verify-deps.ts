@@ -14,6 +14,7 @@ import type { DependencyLandOrigin, DependencyOrigin } from "./dependency-origin
 import { statePath } from "../../state-paths.js";
 import type { RecordedVerdict, VerifyStore } from "./verify-store.js";
 import { installPanelKey, workspaceSetup } from "../layout/workspace-setup.js";
+import { LAND_CHECK_LABEL, offloadPrefix } from "../../offload/offload-prefix.js";
 
 // Runs a project's land check (its repository's declared `land` check, else the `verify` script, else `test`) after its
 // install settles, records the verdict and the run, hands a red one to the breakage router (`route`), and emits
@@ -44,6 +45,10 @@ export interface VerifyDeps {
     readonly announce: () => void;
     // Same queue an agent's turn uses, so a check can't stack beside live turns; absent means unqueued.
     readonly queue?: (command: string) => Promise<string>;
+    // The runner the owner sends the check after landing to (settings `offload.landCheck`), undefined to run it here;
+    // with it, the queue's own prefix, which offload-run keeps for running the check here when the runner cannot.
+    readonly offload?: () => Promise<string | undefined>;
+    readonly heavyPrefix?: (command: string) => Promise<string>;
     // Hands every red run to the breakage router, which decides what its failures are owed (mainline.ts's routing kinds);
     // undefined when there was nothing to decide. Anything but `reported` means somebody took it, so no chore wakes too.
     readonly route?: (breakage: LandBreakage) => Promise<MainlineRouting | undefined>;
@@ -75,8 +80,6 @@ export interface LandBreakage {
     readonly redSince: number;
     // Whether more lands for this project are queued behind it, whose check will measure this tree again.
     readonly queuedBehind: boolean;
-    // A command the check named that re-runs only named failures, when it has one (the report's `rerun`).
-    readonly rerun?: string | undefined;
     // Whether the check wrote a list at all. A red run with none (a crash, a timeout, a repository whose check writes no
     // report) says nothing about which earlier failures still stand, so nothing carried may be read as resolved by it.
     readonly measured: boolean;
@@ -90,9 +93,9 @@ interface PendingVerify {
     readonly lands: readonly DependencyLandOrigin[];
 }
 
-// The report a project's check may write (INTENTIC_VERIFY_REPORT): what it failed on, as units it names itself, and a
-// command that re-runs only some of them (fed the units by file, INTENTIC_RERUN_UNITS), which blame may use.
-const ReportSchema = z.object({ failures: z.array(z.string()), rerun: z.string().min(1).optional() });
+// The report a project's check may write (INTENTIC_VERIFY_REPORT): what it failed on, as units it names itself. A `rerun`
+// an older check still writes is read past: nothing re-runs failures to tell suspect lands apart any more.
+const ReportSchema = z.object({ failures: z.array(z.string()) });
 type VerifyReport = z.infer<typeof ReportSchema>;
 
 // The land span's entry for a project dir; the workspace repo is "root" in a span and "" as a dir.
@@ -111,6 +114,8 @@ interface CurrentRun {
     readonly command: string;
     readonly startedAt: number;
     readonly lands: readonly DependencyLandOrigin[];
+    // The runner it was sent to (settings `offload.landCheck`); absent when it runs here.
+    readonly on?: string;
 }
 let current: CurrentRun | undefined;
 
@@ -188,6 +193,29 @@ const queuedCommand = async (command: string, deps: VerifyDeps): Promise<string>
               return command;
           });
 
+// The runner this check goes to, when the owner sends it to one; a setting that cannot be read keeps it here.
+const offloadTarget = async (deps: VerifyDeps): Promise<string | undefined> =>
+    deps.offload === undefined
+        ? undefined
+        : await deps.offload().catch((error: unknown) => {
+              deps.logger.warn({ err: error }, "dependency verify: could not read where the check runs, running it here");
+              return undefined;
+          });
+
+// The check handed to offload-run (bin/offload-run): the land's base and the report path travel, the report and the
+// tree verdict come back, and the queued form is kept for running it here when the runner cannot take it.
+const offloadedCommand = async (command: string, runner: string, deps: VerifyDeps): Promise<string> => {
+    const prefix = await (deps.heavyPrefix?.(command) ?? Promise.resolve("")).catch(() => "");
+    return `${offloadPrefix(runner, LAND_CHECK_LABEL, prefix, ["INTENTIC_LAND_FROM"], ["INTENTIC_VERIFY_REPORT", "INTENTIC_VERDICT_OUT"])}bash -c ${shellQuote(command)}`;
+};
+
+// A verdict the check recorded on the runner, merged into this repository's own record for the push gate and the base
+// verify:turn judges against; the recorder is the repository's own (tree-verdict.mjs), so a repository without one keeps
+// none, as it would here.
+const VERDICT_RECORDER = "_tools/scripts/lib/tree-verdict.mjs";
+const verdictMerge = (verdict: string): string =>
+    `; [ -f ${shellQuote(verdict)} ] && [ -f ${VERDICT_RECORDER} ] && node ${VERDICT_RECORDER} merge ${shellQuote(verdict)} >/dev/null 2>&1`;
+
 // What the pane left behind. No status file is -1, the pane having died before the wrapper's echo, and unknown is not
 // green; no log is an empty tail.
 const paneOutcome = async (statusPath: string, logPath: string): Promise<{ readonly exitCode: number; readonly logTail: string }> => {
@@ -202,10 +230,17 @@ const paneOutcome = async (statusPath: string, logPath: string): Promise<{ reado
 
 // Where one project's run leaves its log, exit status and report; under .intentic, outside the repo, so a check never
 // dirties the tree.
-const artifactsOf = (deps: VerifyDeps, dir: string): { key: string; dir: string; log: string; status: string; report: string } => {
+const artifactsOf = (deps: VerifyDeps, dir: string): { key: string; dir: string; log: string; status: string; report: string; verdict: string } => {
     const key = verifyPanelKey(dir);
     const at = statePath(deps.workspace.root, ".intentic/local/verify/");
-    return { key, dir: at, log: join(at, `${key}.log`), status: join(at, `${key}.status`), report: join(at, `${key}.report.json`) };
+    return {
+        key,
+        dir: at,
+        log: join(at, `${key}.log`),
+        status: join(at, `${key}.status`),
+        report: join(at, `${key}.report.json`),
+        verdict: join(at, `${key}.verdict.json`),
+    };
 };
 
 // Runs the check in its panel until it settles or outruns the watch; the wrapped command is one zsh line, and
@@ -213,18 +248,23 @@ const artifactsOf = (deps: VerifyDeps, dir: string): { key: string; dir: string;
 const runPanel = async (verify: PendingVerify, dir: string, command: string, timeoutMs: number | undefined): Promise<boolean> => {
     const { deps } = verify;
     const paths = artifactsOf(deps, dir);
-    const queued = await queuedCommand(command, deps);
+    const runner = await offloadTarget(deps);
+    const queued = runner === undefined ? await queuedCommand(command, deps) : await offloadedCommand(command, runner, deps);
     // What the check is told: where to leave its failures as data, and the main-line commit the oldest land it covers left.
     const from = verify.lands.map((land) => spanOf(land, dir)?.from).find((sha) => sha !== undefined);
-    const exported = [`export INTENTIC_VERIFY_REPORT=${shellQuote(paths.report)}`, ...(from === undefined ? [] : [`export INTENTIC_LAND_FROM=${shellQuote(from)}`])];
+    const exported = [
+        `export INTENTIC_VERIFY_REPORT=${shellQuote(paths.report)}`,
+        ...(from === undefined ? [] : [`export INTENTIC_LAND_FROM=${shellQuote(from)}`]),
+        ...(runner === undefined ? [] : [`export INTENTIC_VERDICT_OUT=${shellQuote(paths.verdict)}`]),
+    ];
     // Open across the whole run: the build inside it empties and rewrites an output dir the repo may track, and a
     // review scanning mid-build would otherwise report the rewrite as the owner's own deletion.
     const checkDone = markCheckRunning(dir);
-    current = { dir, command, startedAt: Date.now(), lands: verify.lands };
+    current = { dir, command, startedAt: Date.now(), lands: verify.lands, ...(runner === undefined ? {} : { on: runner }) };
     publishRuntimeChange("mainline");
     try {
         await deps.processes.start(paths.key, {
-            command: `mkdir -p ${paths.dir} && rm -f ${paths.status} ${paths.report} && { ${exported.join("; ")}; ${queued}; } 2>&1 | tee ${paths.log}; echo $pipestatus[1] > ${paths.status}`,
+            command: `mkdir -p ${paths.dir} && rm -f ${paths.status} ${paths.report} ${paths.verdict} && { ${exported.join("; ")}; ${queued}; } 2>&1 | tee ${paths.log}; echo $pipestatus[1] > ${paths.status}${runner === undefined ? "" : verdictMerge(paths.verdict)}`,
             cwd: join(deps.workspace.root, dir),
             oneShot: true,
         });
@@ -334,7 +374,6 @@ const settleVerdict = async (
                   runAt: at,
                   redSince: await redSinceOf(deps, dir, at),
                   queuedBehind: queuedBehind(dir),
-                  rerun: report?.rerun,
                   measured: report !== undefined,
               });
     if (routing !== undefined) {

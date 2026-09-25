@@ -6,16 +6,17 @@ import { conversationProfile, isIsolated, type PersistedAgent, reposOf } from ".
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import { landCheckAhead, type LandBreakage } from "../../workspace/deps/verify-deps.js";
 import { landingPaths } from "./landing-paths.js";
-import { bisectSuspects } from "./land-bisect.js";
 import { landChange, type LandSuspect, narrowCheckOf, startLandFix } from "./land-fix.js";
 
 /* WHAT A RED MAIN-LINE CHECK IS OWED. Nothing checks inside a turn, so this is where a failure meets the work that caused
    it, decided in the order that wastes the least:
    1. more work landed while the check ran: wait for the check that measures it too, which may already be green;
    2. a conversation still working touches what failed: wait for it to stop, and tell it, rather than start a competitor;
-   3. one land can be named (by the paths it changed, or by re-running the failures on each suspect's own tree) and its
-      conversation still has the work in mind, warm in the prompt cache and with room left: send it back there;
+   3. one land can be named by the paths it changed, and its conversation still has the work in mind, warm in the
+      prompt cache and with room left: send it back there;
    4. otherwise a fresh conversation, handed the failures, the suspects' changes and where to read their sessions.
+   Nothing is re-run to tell several suspects apart: a fresh conversation handed all of them costs one session, and
+   re-running the failing suites on each suspect's own tree cost a full test run per suspect on a shared machine.
    A red streak allows a few sends and a few fresh attempts; past them it waits for a person. Every decision is filed on
    the run it answers (mainline.ts's routing kinds), which the editor shows. */
 
@@ -184,8 +185,8 @@ const tipOf =
         return entry === undefined ? undefined : reposOf(entry).find((record) => record.repo === repo)?.landedTip;
     };
 
-// Who the failures are laid at: the one land a run covered, the lands whose changes touch a failing package, and, when
-// several still do and the check named a re-run, the ones whose own tree reproduces the failures.
+// Who the failures are laid at: the one land a run covered, else the lands whose changes touch a failing package. One
+// such land is named; several, or none, go to a fresh conversation together.
 const blame = async (services: BreakageRouter, breakage: LandBreakage, git: GitRunner): Promise<{ readonly suspects: LandSuspect[]; readonly named: boolean }> => {
     const changes = await Promise.all(breakage.lands.map((land) => landChange(services, land, breakage.project, tipOf(services), git)));
     if (changes.length === 1) {
@@ -196,19 +197,7 @@ const blame = async (services: BreakageRouter, breakage: LandBreakage, git: GitR
         changes.map(({ land, paths }) => ({ land, paths })),
     );
     const suspects = changes.filter((change) => byPath.includes(change.land));
-    if (suspects.length === 1 || breakage.rerun === undefined) {
-        return suspects.length === 0 ? { suspects: changes, named: false } : { suspects, named: suspects.length === 1 };
-    }
-    const bisected = await bisectSuspects(services, {
-        project: breakage.project,
-        suspects: suspects.length === 0 ? changes : suspects,
-        failures: breakage.fresh,
-        rerun: breakage.rerun,
-    });
-    if (bisected !== undefined) {
-        return { suspects: bisected, named: bisected.length === 1 };
-    }
-    return suspects.length === 0 ? { suspects: changes, named: false } : { suspects, named: false };
+    return suspects.length === 0 ? { suspects: changes, named: false } : { suspects, named: suspects.length === 1 };
 };
 
 // Sends the failures back to the conversation that landed them; `entry` is its record, which passedOverWhy found live.

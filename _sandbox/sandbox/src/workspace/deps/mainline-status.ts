@@ -18,7 +18,14 @@ export const mainlineStatus = async (deps: Pick<Services, "verifyStore" | "pushC
         return {
             project: dir,
             ...(current?.dir === dir
-                ? { running: { command: current.command, startedAt: current.startedAt, lands: current.lands.map(mainlineLandOf) } }
+                ? {
+                      running: {
+                          command: current.command,
+                          startedAt: current.startedAt,
+                          lands: current.lands.map(mainlineLandOf),
+                          ...(current.on === undefined ? {} : { on: current.on }),
+                      },
+                  }
                 : {}),
             queued: pending.filter((entry) => entry.dirs.includes(dir)).flatMap((entry) => entry.lands.map(mainlineLandOf)),
             ...(last === undefined ? {} : { last }),

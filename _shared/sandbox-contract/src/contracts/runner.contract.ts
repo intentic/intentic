@@ -2,7 +2,7 @@ import { oc } from "@orpc/contract";
 import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
 import { AgentEventSchema } from "../events/agent-events.js";
-import { RunnerFactsSchema, RunnerSyncLineSchema, RunnerSyncSchema, RunnerTurnSchema } from "../protocol/runner-protocol.js";
+import { RunnerCommandFrameSchema, RunnerCommandSchema, RunnerFactsSchema, RunnerSyncLineSchema, RunnerSyncSchema, RunnerTurnSchema } from "../protocol/runner-protocol.js";
 import { EditorContextSchema } from "../schemas/agent.js";
 import { AgentReplySchema } from "../schemas/providers/plan-limits.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -35,6 +35,12 @@ export const runnerContract = {
     applyDefinition: oc.input(z.object({ toml: z.string() })).output(z.object({ settings: z.array(z.string()) })),
     // Stop the running turn; the parent's stop button reaching through.
     interrupt: oc.input(RunnerTurnSchema.pick({ conversationId: true })).output(OkSchema),
+    // One shell line the parent offloaded (settings `offload`), run against a snapshot of the parent's tree; its output
+    // streams back as it comes, then its exit with what it changed. An older runner lacks this procedure, which the
+    // parent reads as "can't take it" and runs the line itself.
+    runCommand: oc.input(RunnerCommandSchema).output(streamOf(RunnerCommandFrameSchema)),
+    // Stops an offloaded line and everything it started; the parent's stop reaching through.
+    cancelCommand: oc.input(RunnerCommandSchema.pick({ runId: true })).output(OkSchema),
     // Liveness driven by the parent: keepalive and gone-detection in one.
     ping: oc.output(OkSchema),
 };

@@ -134,6 +134,8 @@ export interface TurnTools {
     readonly secrets?: SecretAccess;
     // Heavy-command rules, read fresh per Bash command so an edit to the file binds immediately.
     readonly heavyCommands?: () => Promise<HeavyCommands>;
+    // Which heavy rules' lines run on a runner instead (settings `offload.commands`), read fresh per Bash command too.
+    readonly offloadCommands?: () => Promise<Readonly<Record<string, string>>>;
     // Whether the diagnostics server is mounted; withheld from a persona whose `files` power is `none`.
     readonly diagnostics?: boolean;
     // Whether the iq plugin is actually loaded, so the empty-search notice can name it only where it's real.

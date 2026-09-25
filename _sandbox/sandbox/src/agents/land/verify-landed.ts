@@ -1,4 +1,5 @@
 import { queueWhole } from "../../agent/tools/agent-terminals.js";
+import { offloadRunEnabled } from "../../offload/offload-prefix.js";
 import type { Services } from "../../composition.js";
 import type { MainlineRouting } from "@intentic/sandbox-contract";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
@@ -14,7 +15,7 @@ import { announceUnwatchedWrite } from "../../workspace/watch/workspace-watch.js
 
 export type LandVerifier = Pick<
     Services,
-    "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "heavyCommands" | "dependencies" | "events" | "sandboxSettings"
+    "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "heavyCommands" | "heavyPrefix" | "dependencies" | "events" | "sandboxSettings"
 >;
 
 // The check's verdict is announced as a workspace event (deps.broken, deps.fixed) for whatever reacts to it; a red that
@@ -34,6 +35,9 @@ export const verifyLandedTree = async (
         emit: (event) => services.events.publish("workspace", event),
         announce: announceUnwatchedWrite,
         queue: queueWhole(services.heavyCommands.read),
+        // Where the owner sends the check after landing (settings `offload.landCheck`); read per run, so a change binds
+        // on the next land.
+        ...(offloadRunEnabled() ? { offload: async () => (await services.sandboxSettings.get()).offload.landCheck, heavyPrefix: services.heavyPrefix } : {}),
         landCheck: async (dir) => adoptedLandCheck(services.workspace.root, dir, (await services.sandboxSettings.get()).adoptedChecks),
         ...(route === undefined ? {} : { route, settled: (project: string) => breakageSettled(services, project) }),
     };

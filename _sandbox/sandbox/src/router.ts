@@ -42,6 +42,7 @@ import { createSystemRoutes } from "./system/system.routes.js";
 import { createUsageRoutes } from "./usage/usage.routes.js";
 import { createExitRoutes } from "./exit/exit.routes.js";
 import { createVpnRoutes } from "./vpn/vpn.routes.js";
+import { createOffloadRoutes } from "./offload/offload.routes.js";
 import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
 import { pruneStore } from "./workspace/watch/state-janitor.js";
 
@@ -93,6 +94,7 @@ export const createRouter = (services: Services) => ({
     },
     usage: createUsageRoutes(services),
     vpn: createVpnRoutes(services),
+    offload: createOffloadRoutes(services),
     exit: createExitRoutes(services),
     netdisk: createNetdiskRoutes(services),
 });

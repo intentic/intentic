@@ -23,6 +23,7 @@ import AgentSafetyPolicy from "../agent-settings/safety/AgentSafetyPolicy.vue";
 import AgentSafetyRules from "../agent-settings/safety/AgentSafetyRules.vue";
 import AgentSkills from "../agent-settings/skills/AgentSkills.vue";
 import AgentSubagents from "../agent-settings/behaviour/AgentSubagents.vue";
+import AgentOffload from "../agent-settings/behaviour/AgentOffload.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Agent tab: every AI-related setting for this sandbox. Each group reads and writes the same settings object via
@@ -108,6 +109,8 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentCodeSearch />
             <AgentCommandOutput />
             <AgentSubagents />
+            <!-- Last: not what it may reach for but where the heaviest of it runs, which only matters once a machine has a runner. -->
+            <AgentOffload />
         </template>
 
         <!-- Whether anything judges, then what it judges against; the decision log sits last so it doesn't bury the controls above it. -->

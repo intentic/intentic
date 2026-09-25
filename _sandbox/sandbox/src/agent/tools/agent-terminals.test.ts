@@ -104,7 +104,7 @@ test("a background command carries a job dir, and is filed for the turn's ending
     const jobs = { conversationId: "conv-bg", profile: {}, conversations: actors };
     const command = await rewritten(
         { command: "pnpm build", description: "Build the app", run_in_background: true },
-        bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs),
+        bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, jobs),
     );
     const dir = /tmux-run -b (\S+) -c /.exec(command ?? "")?.[1];
     expect(dir).toStartWith(join(tmpdir(), "intentic-run-job-"));
@@ -124,7 +124,7 @@ test("a background command carries a job dir, and is filed for the turn's ending
 test("an ordinary command, and a background one with nowhere to deliver a wake, carry no job dir", async () => {
     const jobs = { conversationId: "conv-bg-none", profile: {}, conversations: actors };
     // Foreground: dies with the turn as everything else does, which is what its timeout semantics need.
-    expect(await rewritten({ command: "pnpm build" }, bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs))).not.toContain("-b ");
+    expect(await rewritten({ command: "pnpm build" }, bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, jobs))).not.toContain("-b ");
     // No conversation: a job that outlived the turn would have nobody to report to.
     expect(await rewritten({ command: "pnpm build", run_in_background: true })).not.toContain("-b ");
     expect(settledBackgroundJobs(actors, "conv-bg-none")).toEqual({ running: [], unseen: [] });
@@ -302,6 +302,38 @@ test("the queue rides inside the namespace hop, so its slot is held in the tree 
     expect(command?.indexOf("nsenter")).toBeLessThan(command?.indexOf("queue-run") ?? -1);
 });
 
+// A heavy line whose kind the owner sends to a runner (settings `offload.commands`) gets offload-run where the queue
+// was, holding the queue's own prefix for when the runner cannot take it (bin/offload-run).
+const offloadTo = (map: Record<string, string>) => () => Promise.resolve(map);
+
+test("a heavy line whose kind goes to a runner is handed to offload-run, which keeps the queue for running it here", async () => {
+    const command = await rewritten({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy(), offloadTo({ "package-script": "runner-omen" })));
+    const queue = `/usr/local/bin/queue-run --pool heavy --limit 2 --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${DEFAULT_HEAVY_COMMANDS.onDeadline} --label package-script -- choom -n ${String(OOM_SCORE.heavy)} -- `;
+    const offloaded = `nice -n 10 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- /usr/local/bin/offload-run --to runner-omen --label package-script --here ${shellQuote(queue)} -- ${shell("pnpm test")}`;
+    expect(command).toBe(wrap("pnpm test", born(offloaded), "run"));
+});
+
+test("only the kinds sent to a runner leave; every other heavy line queues here as before", async () => {
+    const command = await rewritten({ command: "pnpm verify" }, bashTmuxHooks([], undefined, undefined, undefined, heavy(), offloadTo({ "package-script": "runner-omen" })));
+    expect(command).not.toContain("offload-run");
+    expect(command).toContain("--label repo-verify");
+});
+
+test("a line that resolved a secret never leaves, whatever its kind", async () => {
+    const bundle: SecretAccess = {
+        list: async () => [{ name: "TOKEN", value: "t0k3n", source: "env" }],
+        used: () => {},
+        release: async () => ({ ok: true }),
+    };
+    const reference = `{{secret:${"TOKEN"}}}`;
+    const command = await rewritten(
+        { command: `TOKEN=${reference} pnpm test` },
+        bashTmuxHooks([], undefined, undefined, bundle, heavy(), offloadTo({ "package-script": "runner-omen" })),
+    );
+    expect(command).not.toContain("offload-run");
+    expect(command).toContain("queue-run");
+});
+
 test("the agent's own line still reaches the output filter unwrapped", async () => {
     // `-c` feeds cleaner matching and the un-cleaned-commands report; the queue must not appear there either.
     const command = await rewritten({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
@@ -362,7 +394,7 @@ test("a pkill whose pattern the command repeats elsewhere is refused, and files 
     const output = syncHookOutput(
         await preToolUse(
             { command: "pkill -f vite; rm -rf node_modules/.vite && pnpm dev", run_in_background: true },
-            bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs),
+            bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, jobs),
         ),
     ).hookSpecificOutput;
     expect(output).toMatchObject({ hookEventName: "PreToolUse", permissionDecision: "deny" });

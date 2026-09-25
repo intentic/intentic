@@ -12,12 +12,14 @@ import {
     type RunnerSyncLine,
     type RunnerTurn,
     runnerContract,
+    runnerGitUrl,
 } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import { adoptDefinitionSettings } from "../portability/apply-definition.js";
 import { parseDefinitionToml } from "../portability/definition.js";
-import { pushToParent, type RunnerSyncDeps, syncFromParent } from "./runner-sync.js";
+import { gitEnv, pushToParent, type RunnerSyncDeps, syncFromParent } from "./runner-sync.js";
+import { createRunnerCommands } from "./runner-command.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
 // The oRPC server on the socket this runner dialled out (the host router's inversion). Everything here is a thin
@@ -81,6 +83,13 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
     };
     // One live turn per conversation, for `interrupt` to abort; the link's own handle, no conversation lookup.
     const running = new Map<string, AbortController>();
+    // Lines the parent offloaded here (settings `offload` on the parent), each in the offload tree of its repo.
+    const commands = createRunnerCommands({
+        offloadRoot: join(services.config.historyRoot, "offload"),
+        gitUrl: (repo) => runnerGitUrl(identity.parentUrl, repo),
+        gitEnv: gitEnv(identity),
+        queue: services.queueHeavy,
+    });
 
     const materializeAttachments = async (input: RunnerTurn): Promise<void> => {
         for (const file of input.attachments ?? []) {
@@ -148,6 +157,11 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
         })),
         interrupt: os.interrupt.handler(({ input }) => {
             running.get(input.conversationId)?.abort();
+            return { ok: true };
+        }),
+        runCommand: os.runCommand.handler(({ input }) => commands.run(input)),
+        cancelCommand: os.cancelCommand.handler(({ input }) => {
+            commands.cancel(input.runId);
             return { ok: true };
         }),
     });

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { queuePrefixFor, queueWhole } from "./agent/tools/agent-terminals.js";
 import { join, resolve } from "node:path";
 import type {
     AcpAgentConfig,
@@ -449,6 +450,11 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly areas: AreasStore;
     // Which agent commands are heavy enough to queue; the Bash hook reads it per command, binding on the next one.
     readonly heavyCommands: HeavyCommandsStore;
+    // One whole line behind the heavy queue when a rule matches it, unchanged otherwise (agent-terminals.ts queueWhole):
+    // for what the daemon runs itself, here and for a parent on a runner, rather than what an agent types.
+    readonly queueHeavy: (line: string) => Promise<string>;
+    // Just the prefix queueHeavy would put in front of a line, "" when none: what offload-run keeps for running it here.
+    readonly heavyPrefix: (line: string) => Promise<string>;
     // What the cgroup says about memory right now, for the admission gate above every turn. A service rather than a
     // direct call so a test can say what the box has: the reading is of live cgroup files at absolute paths, and once
     // it counts swap (memory-admission.ts) a suite running on a genuinely full machine refuses its own fixtures.
@@ -1331,6 +1337,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         personas,
         areas,
         heavyCommands,
+        queueHeavy: queueWhole(heavyCommands.read),
+        heavyPrefix: queuePrefixFor(heavyCommands.read),
         memoryHeadroom: readMemoryHeadroom,
         memoryWarnings: createMemoryWarnings(),
         ciStore,

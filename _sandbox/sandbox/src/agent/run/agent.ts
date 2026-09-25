@@ -376,6 +376,7 @@ const baseOptions = (
                       request.spec.conversationId,
                       request.tools.secrets,
                       request.tools.heavyCommands,
+                      request.tools.offloadCommands,
                       request.hooks.backgroundJobs,
                   )
                 : request.tools.secrets !== undefined

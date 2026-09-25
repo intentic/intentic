@@ -59,6 +59,7 @@ const AREAS: Readonly<Record<string, { label: string; where: string }>> = {
     logs: { label: `Logs`, where: `the sandbox's own log files` },
     loops: { label: `Loops`, where: `running and saved agent loops` },
     netdisk: { label: `Network disks`, where: `mounted network storage` },
+    offload: { label: `Offloaded work`, where: `heavy commands sent to a runner on one of your machines` },
     panels: { label: `Panels`, where: `the operator panels in the sidebar` },
     personas: { label: `Personas`, where: `the identities the agent speaks as` },
     ports: { label: `Ports`, where: `what this sandbox listens on, and previews` },

@@ -1,0 +1,348 @@
+#!/usr/bin/env node
+// offload-run --to <runner> --label <rule> [--here <prefix>] [--env NAME]… [--export NAME]… -- <command> [args…]
+//
+// Runs one heavy command on a runner on one of the owner's machines instead of in this sandbox (settings `offload`). It
+// is put in front of the line by the daemon, never typed: by the agent's Bash hook when the line matches a heavy-command
+// rule the owner sends somewhere (src/agent/tools/agent-terminals.ts), and by the check after landing when that is sent
+// (src/workspace/deps/verify-deps.ts). To whoever runs it, it is the command itself: the output streams as it comes, the
+// exit code is the command's, a stop stops it on the runner, and every file the command changed comes back into this
+// tree, as if it had run here.
+//
+// 1. Asks the daemon whether the runner can take it (connected, able); if not, runs the command HERE, behind the local
+//    heavy queue it was handed (--here), after one line saying why.
+// 2. Snapshots this repository's working tree as one commit, uncommitted and untracked work included, ignored files not,
+//    under refs/intentic-offload/<run>, which the runner fetches through the daemon's git door. The ref goes once the
+//    run ends.
+// 3. Streams the run through the daemon (src/offload/offload.routes.ts), then applies the patch of what the command
+//    changed, writes back the files it wrote to each --export variable (at the path that variable names here), and
+//    exits with the command's code.
+//
+// --env NAME carries this environment's value of NAME to the runner. Nothing else travels, and no secret ever: the hook
+// runs a line that resolved one here.
+//
+// Auth is the per-boot agent token, which auth/grants.ts admits to the /offload routes. node:http rather than fetch:
+// a quiet test suite can print nothing for longer than undici's body timeout, which would cut a healthy run.
+
+import { execFileSync, spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { request } from "node:http";
+import { tmpdir } from "node:os";
+import { basename, join, relative } from "node:path";
+
+// The per-boot agent token; a test points INTENTIC_AGENT_TOKEN_PATH at its own.
+const TOKEN_PATH = process.env.INTENTIC_AGENT_TOKEN_PATH ?? "/run/intentic/agent.token";
+const PORT = process.env.SANDBOX_PORT ?? "8787";
+const OFFLOAD_REF_PREFIX = "refs/intentic-offload/";
+// What queue-run exits with when it did not start a line (QUEUE_SKIPPED_EXIT_CODE): the runner's own queue stayed full.
+const QUEUE_SKIPPED = 75;
+
+const say = (line) => process.stderr.write(`offload: ${line}\n`);
+
+// POSIX single-quoting, the same rule as @intentic/sandbox-run's shellQuote.
+const quote = (word) => (/^[\w@%+=:,./-]+$/u.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`);
+
+const parseArgs = (argv) => {
+    const at = argv.indexOf("--");
+    const flags = at === -1 ? argv : argv.slice(0, at);
+    const command = at === -1 ? [] : argv.slice(at + 1);
+    const options = { to: undefined, label: "heavy", here: "", env: [], exports: [] };
+    for (let index = 0; index < flags.length; index += 1) {
+        const flag = flags[index];
+        const value = flags[index + 1];
+        if (flag === "--to") {
+            options.to = value;
+        } else if (flag === "--label") {
+            options.label = value;
+        } else if (flag === "--here") {
+            options.here = value;
+        } else if (flag === "--env") {
+            options.env.push(value);
+        } else if (flag === "--export") {
+            options.exports.push(value);
+        } else {
+            continue;
+        }
+        index += 1;
+    }
+    return { options, command };
+};
+
+const { options, command } = parseArgs(process.argv.slice(2));
+if (command.length === 0) {
+    process.stderr.write("usage: offload-run --to <runner> --label <rule> [--here <prefix>] [--env NAME]… [--export NAME]… -- <command>\n");
+    process.exit(2);
+}
+
+// The command in this sandbox, behind the heavy queue the caller named: what would have run had nothing been offloaded.
+const runHere = (why) => {
+    if (why !== undefined) {
+        say(`${why}; running it here`);
+    }
+    const line = `${options.here}${command.map(quote).join(" ")}`;
+    const child = spawn("bash", ["-c", line], { stdio: "inherit" });
+    const forward = (signal) => child.kill(signal);
+    process.on("SIGTERM", forward);
+    process.on("SIGINT", forward);
+    child.on("exit", (code, signal) => process.exit(code ?? (signal === "SIGINT" ? 130 : 143)));
+};
+
+const token = () => {
+    try {
+        return readFileSync(TOKEN_PATH, "utf8").trim();
+    } catch {
+        return undefined;
+    }
+};
+
+// One daemon call; `onChunk` streams the body, otherwise it is read whole. Resolves with the status and the body read.
+const call = (method, path, body, onChunk) =>
+    new Promise((resolve, reject) => {
+        const secret = token();
+        if (secret === undefined) {
+            reject(new Error(`no daemon token at ${TOKEN_PATH}`));
+            return;
+        }
+        const payload = body === undefined ? undefined : JSON.stringify(body);
+        const req = request(
+            {
+                host: "127.0.0.1",
+                port: PORT,
+                method,
+                path,
+                headers: {
+                    "x-intentic-agent": secret,
+                    accept: onChunk === undefined ? "application/json" : "text/event-stream",
+                    ...(payload === undefined ? {} : { "content-type": "application/json", "content-length": Buffer.byteLength(payload) }),
+                },
+            },
+            (response) => {
+                let text = "";
+                response.on("data", (chunk) => {
+                    if (onChunk === undefined) {
+                        text += chunk.toString("utf8");
+                    } else {
+                        onChunk(chunk.toString("utf8"));
+                    }
+                });
+                response.on("end", () => resolve({ status: response.statusCode ?? 0, text }));
+                response.on("error", reject);
+            },
+        );
+        req.on("error", reject);
+        if (payload !== undefined) {
+            req.write(payload);
+        }
+        req.end();
+    });
+
+const git = (args, cwd, env) => execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, ...env }, maxBuffer: 256 * 1024 * 1024 }).trim();
+
+// Which repository this is to the daemon's git door: its entry under /history/gits (a worktree's common dir is there
+// too), else the workspace root itself.
+const repoIdOf = (toplevel) => {
+    const common = git(["rev-parse", "--path-format=absolute", "--git-common-dir"], toplevel);
+    const gits = "/history/gits/";
+    if (common.startsWith(gits)) {
+        return decodeURIComponent(basename(common));
+    }
+    return relative(process.env.WORKSPACE_ROOT ?? "/work", toplevel) === "" ? "root" : undefined;
+};
+
+// The working tree as it stands, as one commit parked under the run's ref: a copy of the real index, so only what changed
+// is hashed again, then everything git does not ignore added to it.
+const snapshot = (toplevel, runId) => {
+    const scratch = mkdtempSync(join(tmpdir(), "offload-snapshot-"));
+    try {
+        const index = join(scratch, "index");
+        const real = git(["rev-parse", "--path-format=absolute", "--git-path", "index"], toplevel);
+        if (existsSync(real)) {
+            copyFileSync(real, index);
+        }
+        const env = { GIT_INDEX_FILE: index };
+        git(["add", "-A"], toplevel, env);
+        const tree = git(["write-tree"], toplevel, env);
+        const commit = git(["commit-tree", tree, "-p", "HEAD", "-m", `offload ${runId}`], toplevel, {
+            GIT_AUTHOR_NAME: "offload",
+            GIT_AUTHOR_EMAIL: "offload@intentic.local",
+            GIT_COMMITTER_NAME: "offload",
+            GIT_COMMITTER_EMAIL: "offload@intentic.local",
+        });
+        const ref = `${OFFLOAD_REF_PREFIX}${runId}`;
+        git(["update-ref", ref, commit], toplevel);
+        return ref;
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+};
+
+// Brings back what the command changed there: the patch applied here (three-way when this tree moved meanwhile), and each
+// exported file written to the path its variable names here.
+const bringBack = (toplevel, exit) => {
+    if (exit.patchBase64 !== undefined) {
+        const scratch = mkdtempSync(join(tmpdir(), "offload-patch-"));
+        const patch = join(scratch, "changes.patch");
+        writeFileSync(patch, Buffer.from(exit.patchBase64, "base64"));
+        try {
+            git(["apply", "--binary", "--whitespace=nowarn", patch], toplevel);
+            say("the files it changed there are changed here too");
+        } catch {
+            try {
+                git(["apply", "--binary", "--3way", "--whitespace=nowarn", patch], toplevel);
+                say("the files it changed there were merged into this tree, which moved meanwhile");
+            } catch (error) {
+                say(`the files it changed there could not be applied here (${String(error.message).split("\n")[0]}); the patch is at ${patch}`);
+                return;
+            }
+        }
+        rmSync(scratch, { recursive: true, force: true });
+    }
+    for (const [name, content] of Object.entries(exit.files ?? {})) {
+        const path = process.env[name];
+        if (path !== undefined && path !== "") {
+            writeFileSync(path, Buffer.from(content, "base64"));
+        }
+    }
+};
+
+const main = async () => {
+    if (options.to === undefined || options.to === "") {
+        runHere("no runner named");
+        return;
+    }
+    let toplevel;
+    let repo;
+    try {
+        toplevel = git(["rev-parse", "--show-toplevel"], process.cwd());
+        git(["rev-parse", "--verify", "--quiet", "HEAD"], toplevel);
+        repo = repoIdOf(toplevel);
+    } catch {
+        runHere("this is not inside a repository with a commit to start from");
+        return;
+    }
+    if (repo === undefined) {
+        runHere("this repository is not one the runner can fetch");
+        return;
+    }
+    let target;
+    try {
+        const answer = await call("GET", `/offload/runners/${encodeURIComponent(options.to)}`);
+        target = answer.status === 200 ? JSON.parse(answer.text) : undefined;
+    } catch {
+        target = undefined;
+    }
+    if (target === undefined || !target.ready) {
+        runHere(target?.why ?? "the daemon could not say whether the runner is there");
+        return;
+    }
+
+    const runId = `off-${randomBytes(6).toString("hex")}`;
+    let ref;
+    try {
+        ref = snapshot(toplevel, runId);
+    } catch (error) {
+        runHere(`the tree could not be snapshotted (${String(error.message).split("\n")[0]})`);
+        return;
+    }
+    const dropRef = () => {
+        try {
+            git(["update-ref", "-d", ref], toplevel);
+        } catch {
+            // A ref already gone has nothing left to drop.
+        }
+    };
+    say(`running on ${target.name}`);
+
+    let stopped = false;
+    const stop = (signal) => {
+        if (stopped) {
+            process.exit(signal === "SIGINT" ? 130 : 143);
+        }
+        stopped = true;
+        say(`stopping it on ${target.name}…`);
+        void call("POST", `/offload/runs/${runId}/cancel`, {}).catch(() => undefined);
+    };
+    process.on("SIGTERM", () => stop("SIGTERM"));
+    process.on("SIGINT", () => stop("SIGINT"));
+
+    const env = Object.fromEntries(options.env.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]]));
+    let buffer = "";
+    let exit;
+    let refused;
+    const onFrame = (frame) => {
+        if (frame.kind === "status") {
+            say(`[${target.name}] ${frame.text}`);
+        } else if (frame.kind === "output") {
+            (frame.stream === "stderr" ? process.stderr : process.stdout).write(frame.text);
+        } else if (frame.kind === "exit") {
+            exit = frame;
+        } else if (frame.kind === "refused") {
+            refused = frame.why;
+        }
+    };
+    try {
+        const answer = await call(
+            "POST",
+            "/offload/runs",
+            {
+                runner: options.to,
+                runId,
+                repo,
+                ref,
+                cwd: relative(toplevel, process.cwd()),
+                command: command.map(quote).join(" "),
+                env,
+                exports: options.exports,
+                label: options.label,
+            },
+            (chunk) => {
+                buffer += chunk;
+                const frames = buffer.split("\n\n");
+                buffer = frames.pop() ?? "";
+                for (const block of frames) {
+                    const data = block
+                        .split("\n")
+                        .filter((line) => line.startsWith("data:"))
+                        .map((line) => line.slice(5).trim())
+                        .join("");
+                    if (data === "") {
+                        continue;
+                    }
+                    try {
+                        onFrame(JSON.parse(data));
+                    } catch {
+                        // A frame that is not JSON is the stream's own bookkeeping, not the run's.
+                    }
+                }
+            },
+        );
+        if (answer.status !== 200 && exit === undefined && refused === undefined) {
+            refused = `the daemon answered ${answer.status}`;
+        }
+    } catch (error) {
+        refused ??= exit === undefined ? `the daemon could not be reached (${error.message})` : undefined;
+    }
+    dropRef();
+    if (exit === undefined) {
+        if (stopped) {
+            process.exit(143);
+        }
+        runHere(refused ?? `${target.name} ended the run without an exit`);
+        return;
+    }
+    if (exit.ran === false) {
+        runHere(`${target.name} could not start it (${String(exit.failure ?? "no reason given").split("\n")[0]})`);
+        return;
+    }
+    if (exit.code === QUEUE_SKIPPED && exit.patchBase64 === undefined) {
+        runHere(`${target.name}'s own queue stayed full`);
+        return;
+    }
+    if (exit.failure !== undefined) {
+        say(`${target.name}: ${exit.failure}`);
+    }
+    bringBack(toplevel, exit);
+    process.exit(exit.code);
+};
+
+void main();

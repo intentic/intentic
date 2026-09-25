@@ -274,6 +274,12 @@ export const deriveDefinition = async (services: Services): Promise<{ definition
     };
 };
 
+// Settings that name this sandbox's own place among the owner's machines, so a runner never takes them: `offload`
+// points at runners, and a runner handed it would try to pass work on again.
+const PARENT_ONLY_SETTINGS: ReadonlySet<string> = new Set(["offload"]);
+const withoutParentOnly = (settings: Record<string, unknown>): Record<string, unknown> =>
+    Object.fromEntries(Object.entries(settings).filter(([key]) => !PARENT_ONLY_SETTINGS.has(key)));
+
 // The settings-only definition a runner declares: capabilities and secrets never travel to it; repos are a git mirror,
 // not clones. Shared by the hello, drift lines, and sync push, so all three agree.
 export const settingsDefinition = async (services: Services): Promise<SandboxDefinition> =>
@@ -283,7 +289,7 @@ export const settingsDefinition = async (services: Services): Promise<SandboxDef
         repositories: [],
         capabilities: [],
         secrets: [],
-        settings: settledSettings((await services.sandboxSettings.get()) as unknown as Record<string, unknown>),
+        settings: withoutParentOnly(settledSettings((await services.sandboxSettings.get()) as unknown as Record<string, unknown>)),
     });
 
 // One line per settings key differing between a runner and its parent; separate from definitionDiff only for wording
@@ -293,7 +299,7 @@ export const settingsDrift = (parent: SandboxDefinition, runner: SandboxDefiniti
     const parentSettings = parent.settings as Record<string, unknown>;
     const runnerSettings = runner.settings as Record<string, unknown>;
     const differences: NeedsAction[] = [];
-    for (const key of [...new Set([...Object.keys(parentSettings), ...Object.keys(runnerSettings)])].toSorted()) {
+    for (const key of [...new Set([...Object.keys(parentSettings), ...Object.keys(runnerSettings)])].filter((name) => !PARENT_ONLY_SETTINGS.has(name)).toSorted()) {
         const here = parentSettings[key] ?? defaults[key];
         const there = runnerSettings[key] ?? defaults[key];
         if (canon(here) !== canon(there)) {

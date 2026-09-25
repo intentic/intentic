@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { git } from "./git.mjs";
 
 // A verdict older than this is re-measured even for an identical tree: node_modules is not in the hash.
@@ -67,20 +68,50 @@ export const freshVerdicts = (root, trees, now = Date.now()) => {
     return readVerdicts(root).filter((verdict) => wanted.has(verdict.tree) && now - verdict.at < VERDICT_TTL_MS);
 };
 
-// Replaces an older verdict about the same tree and suite; `details` is `head` and, when red, failure-units' `verdictUnits`.
-export const writeVerdict = (root, tree, status, suite, details = {}) => {
+// Puts one verdict at the head of the record, replacing an older one about the same tree and suite.
+const recordVerdict = (root, entry) => {
     const path = verdictPath(root);
-    if (path === undefined || tree === undefined) {
+    if (path === undefined) {
         return false;
     }
-    const kept = readVerdicts(root).filter((verdict) => !(verdict.tree === tree && verdict.suite === suite));
+    const kept = readVerdicts(root).filter((verdict) => !(verdict.tree === entry.tree && verdict.suite === entry.suite));
     try {
-        writeFileSync(path, `${JSON.stringify([{ tree, status, suite, at: Date.now(), ...details }, ...kept].slice(0, VERDICTS_KEPT))}\n`);
+        writeFileSync(path, `${JSON.stringify([entry, ...kept].slice(0, VERDICTS_KEPT))}\n`);
         return true;
     } catch {
         return false;
     }
 };
+
+// Replaces an older verdict about the same tree and suite; `details` is `head` and, when red, failure-units' `verdictUnits`.
+// A run offloaded to a runner (INTENTIC_VERDICT_OUT set, bin/offload-run) also leaves the verdict there, for the tree it
+// came from to merge into its own record: the runner's git dir is not the one the push reads.
+export const writeVerdict = (root, tree, status, suite, details = {}) => {
+    if (tree === undefined) {
+        return false;
+    }
+    const entry = { tree, status, suite, at: Date.now(), ...details };
+    const out = process.env.INTENTIC_VERDICT_OUT;
+    if (out !== undefined && out !== "") {
+        try {
+            writeFileSync(out, `${JSON.stringify(entry)}\n`);
+        } catch {
+            // silent-catch: the verdict still lands in this tree's own record below; only the copy is lost
+        }
+    }
+    return recordVerdict(root, entry);
+};
+
+// `node tree-verdict.mjs merge <file>`: records a verdict an offloaded run brought back (see writeVerdict), in the
+// repository the command stands in.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv[2] === "merge") {
+    const entry = JSON.parse(readFileSync(process.argv[3] ?? "", "utf8"));
+    if (typeof entry?.tree !== "string" || typeof entry?.suite !== "string") {
+        process.stderr.write("tree-verdict: that file holds no verdict\n");
+        process.exit(1);
+    }
+    process.exit(recordVerdict(process.cwd(), entry) ? 0 : 1);
+}
 
 // The `verify` verdict about `base`'s tree, else its nearest measured ancestor within BASE_DISTANCE_MAX commits.
 export const verdictForBase = (root, base) => {

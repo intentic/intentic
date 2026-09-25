@@ -54,7 +54,8 @@ in the foreground, one at a time. Do not run the whole repository (`pnpm test`, 
 can take all of its memory, and the check after the land runs all of it anyway, off your clock.
 
 **After the land, off your clock** (`pnpm verify`, `_tools/scripts/verify/verify.mjs`, every land, either door):
-the daemon runs it on the main tree in the background, one project at a time, and lands that arrive while it runs
+the daemon runs it on the main tree in the background (or on a runner on one of the owner's machines, when the
+owner sends it there), one project at a time, and lands that arrive while it runs
 wait and are measured together in the next run (`workspace/deps/verify-deps.ts`). It first writes what a machine
 decides: rustfmt on the crates the land touched, each failing check's own `fix` (`_tools/checks/manifest.mjs`),
 `contract.lock.json` regenerated after the declarations emit when the land changed the contract, and
@@ -68,8 +69,8 @@ status on each session card.
 
 A red run goes to `agents/land/land-breakage.ts`, which decides the same way every time. It waits for the next check
 when more work landed while this one ran, and holds while a conversation still working has unlanded changes in a
-failing package, telling that conversation once. Then it lays the failures at a land, by the paths each land changed
-or by re-running only the failing tests on each suspect's own landed tree (`agents/land/land-bisect.ts`). When it
+failing package, telling that conversation once. Then it lays the failures at a land by the paths each land changed,
+and re-runs nothing to tell suspects apart. When it
 names one land and that land's conversation still has the work in mind, the failures go back to that conversation
 as a message. Anything else starts a fresh fix-up conversation with the failures, each suspect's changed files and
 exact diff, and `agents show <id>` to read its conversation. Past a few sends and fix-ups, a red streak waits for a

@@ -72,6 +72,7 @@ export const MainlineProjectSchema = z.object({
             command: z.string().describe("What is running."),
             startedAt: z.number().describe("When it started, in milliseconds."),
             lands: z.array(MainlineLandSchema).describe("The lands it answers for."),
+            on: z.string().optional().describe("The runner it was sent to, on one of your machines. Absent when it runs in this sandbox."),
         })
         .optional()
         .describe("The check running on it now, if any."),

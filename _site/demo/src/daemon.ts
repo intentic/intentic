@@ -625,6 +625,18 @@ export const procedures = {
     vpn: {
         list: () => ({ links: [] }),
     },
+    // The kinds a fresh sandbox sorts heavy work into, so "Where heavy work runs" draws its rows; nothing ever ran on a
+    // runner in a recording, and sending a command to one needs a machine this demo does not have.
+    offload: {
+        kinds: () => ({
+            kinds: [
+                { id: `repo-verify`, pattern: `\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?verify(:\\S+)?\\b` },
+                { id: `typechecker`, pattern: `(?<![-.])\\b(tsc|tsgo|vue-tsc)\\b(?![-.])` },
+                { id: `package-script`, pattern: `\\b(pnpm|npm|yarn|bun)\\b[^&|;]*\\b(test|typecheck|verify|check|build)\\b` },
+            ],
+        }),
+        runs: () => ({ runs: [] }),
+    },
     // CI board data is real; the badge reflects the fixture's own state. Rerun, cancel and Fix-with-agent
     // refuse: a recording can't act on a real pipeline.
     ci: {

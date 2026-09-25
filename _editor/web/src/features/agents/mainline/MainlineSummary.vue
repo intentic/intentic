@@ -44,7 +44,11 @@ const now = useNow(() => running.value !== undefined);
         </span>
         <span v-if="running !== undefined" data-item="running" class="flex min-w-0 items-center gap-1.5 text-muted">
             <Icon name="spinner" spin class="shrink-0 text-2xs text-link" />
-            <span class="min-w-0 truncate">{{ t(`agents.mainline.checking`, { project: projectName(running.project) }) }}</span>
+            <span class="min-w-0 truncate">{{
+                running.on === undefined
+                    ? t(`agents.mainline.checking`, { project: projectName(running.project) })
+                    : t(`agents.mainline.checkingOn`, { project: projectName(running.project), machine: running.on })
+            }}</span>
             <span class="shrink-0 tabular-nums">{{ formatElapsed(running.startedAt, now) }}</span>
         </span>
         <span v-if="summary.queued > 0" data-item="queued" class="shrink-0 text-muted">{{

@@ -1,4 +1,5 @@
 import { queueWhole } from "../agent/tools/agent-terminals.js";
+import { offloadRunEnabled } from "../offload/offload-prefix.js";
 import type { Services } from "../composition.js";
 import type { DependencyOrigin } from "../workspace/deps/dependency-origin.js";
 import { queueVerify, type VerifyDeps } from "../workspace/deps/verify-deps.js";
@@ -42,6 +43,9 @@ export const wireDependencyCoordinator = (services: Services): void => {
         emit: (event) => services.events.publish("workspace", event),
         announce: announceUnwatchedWrite,
         queue: queueWhole(services.heavyCommands.read),
+        // Where the owner sends the check after landing (settings `offload.landCheck`); read per run, so a change binds
+        // on the next land.
+        ...(offloadRunEnabled() ? { offload: async () => (await services.sandboxSettings.get()).offload.landCheck, heavyPrefix: services.heavyPrefix } : {}),
         route: (breakage) => routeLandBreakage(services, breakage),
         settled: (project) => breakageSettled(services, project),
         recheckPushes: (project) => services.pushChecks.recheckIfOpen(project),

@@ -543,6 +543,10 @@ COPY --chmod=755 _sandbox/sandbox/bin/secrets /usr/local/bin/secrets
 # services — it relays through the daemon, which owns the engine, the budgets and the persona gate; the CLI
 # spawns nothing itself and reads no credential.
 COPY --chmod=755 _sandbox/sandbox/bin/agents /usr/local/bin/agents
+# The offloaded-command wrapper (src/offload/): put in front of a heavy line whose kind the owner sends to a runner on
+# one of their machines, by the Bash hook and the check after landing. It snapshots the tree, relays the run through the
+# daemon, brings back what the command changed, and runs the line here when the runner cannot take it.
+COPY --chmod=755 _sandbox/sandbox/bin/offload-run /usr/local/bin/offload-run
 # The sandbox-fleet command the fleet skill teaches: the owner's other sandboxes, and the one door a new one
 # is created through (src/fleet/). Same shape as wallet — it relays through the daemon, which owns the
 # provisioning token, the consent card and the machine that builds it; the CLI holds no credential, and a

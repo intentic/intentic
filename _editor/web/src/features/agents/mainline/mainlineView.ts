@@ -63,6 +63,8 @@ export interface MainlineRunning {
     readonly command: string;
     readonly startedAt: number;
     readonly lands: readonly MainlineLand[];
+    // The runner the check was sent to (settings `offload.landCheck`); absent when it runs in this sandbox.
+    readonly on?: string;
 }
 
 // WHAT A PUSH LEFT BEHIND, per project: every finding still open, once each, and the pushes that brought them. The

@@ -472,7 +472,8 @@
                 "left": "{count} left | {count} left",
                 "clean": "clean",
                 "handled": "handled"
-            }
+            },
+            "checkingOn": "Checking {project} on {machine}"
         },
         "landCheck": {
             "checking": "Checking main",
@@ -3288,6 +3289,37 @@
                 "label": "Build caches",
                 "reason": "Build tools' saved outputs, made again the next time they are needed. Cleaning keeps the last day's."
             }
+        },
+        "agentOffload": {
+            "here": "This sandbox",
+            "intro": "Tests, typechecks and full checks can run on a runner on one of your machines instead of here, next to every conversation. The code travels as it stands, the output streams back, and any file the command changed comes back with it. A machine that is asleep or busy hands the work back to this sandbox.",
+            "kindBunTest": "Test runs (bun test)",
+            "kindBunTestDetail": "bun test, and each package's own test runner.",
+            "kindCustomDetail": "Commands matching {pattern}",
+            "kindPackageScript": "Package scripts (test, typecheck, build…)",
+            "kindPackageScriptDetail": "A package manager running a test, typecheck, verify, check or build script.",
+            "kindTurbo": "Repo-wide turbo runs",
+            "kindTurboDetail": "turbo run over build, test, typecheck or check.",
+            "kindTypecheck": "Typechecks",
+            "kindTypecheckDetail": "tsc, tsgo and vue-tsc.",
+            "kindVerify": "Full checks (verify)",
+            "kindVerifyDetail": "pnpm verify and its variants, the heaviest run there is.",
+            "kindVitest": "Vitest runs",
+            "kindVitestDetail": "vitest runs.",
+            "landCheck": "Check after landing",
+            "landCheckDetail": "The full check the sandbox runs on the main tree after every land. Its report, the fixes it writes and its verdict come back here.",
+            "lastRunFailed": "Last: {command}, exited {code}",
+            "lastRunGoing": "Running now: {command}",
+            "lastRunPassed": "Last: {command}, passed",
+            "noRunnersAfter": "→ a machine → Runners.",
+            "noRunnersBefore": "None of your machines has a runner yet: add one from",
+            "runnerGone": "The runner \"{runner}\" is no longer set up, so this runs here.",
+            "runnerOffline": "Offline now: work sent here runs in this sandbox until it's back",
+            "runnerOnline": "Connected",
+            "runsHereUntilBack": "{machine} is offline, so this runs here until it's back.",
+            "runsOn": "Runs on",
+            "sentHere": "Runs here: {kinds}",
+            "title": "Where heavy work runs"
         }
     },
     "settings": {

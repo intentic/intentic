@@ -207,7 +207,7 @@ describe("the agent's own TaskStop", () => {
     it("ends the job it names, where the CLI's stop only reached tmux-run", async () => {
         const { job } = await running("conv-taskstop", "exec sleep 60", "tu-taskstop");
         noteJobShell(actors, "tu-taskstop", "btaskstop1");
-        const hooks = bashTmuxHooks([], undefined, undefined, undefined, undefined, { conversationId: "conv-taskstop", profile: {}, conversations: actors });
+        const hooks = bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, { conversationId: "conv-taskstop", profile: {}, conversations: actors });
         const hook = hooks.PostToolUse?.[0]?.hooks[0];
         if (hook === undefined) {
             throw new Error("no TaskStop hook");
@@ -229,7 +229,7 @@ describe("the agent's own TaskStop", () => {
 
     it("leaves an id that names none of this conversation's jobs alone: a subagent's, say", async () => {
         const { job } = await running("conv-taskstop-other");
-        const hooks = bashTmuxHooks([], undefined, undefined, undefined, undefined, {
+        const hooks = bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, {
             conversationId: "conv-taskstop-other",
             profile: {},
             conversations: actors,

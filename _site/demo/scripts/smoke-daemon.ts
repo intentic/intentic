@@ -260,6 +260,10 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
         vpn: {
             list: undefined,
         },
+        offload: {
+            kinds: undefined,
+            runs: undefined,
+        },
         ci: {
             runs: undefined,
             jobs: pipeline,

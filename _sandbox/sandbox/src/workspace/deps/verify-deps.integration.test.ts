@@ -367,6 +367,40 @@ test("the check is told where to leave its failures and which commit the land de
     expect(commands[0]).toContain("export INTENTIC_LAND_FROM=abc");
 });
 
+test("a check the owner sends to a runner is handed to offload-run, keeping the queued form for running it here", async () => {
+    const { queueVerify } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const feed: string[] = [];
+    const commands: string[] = [];
+    const verifier: VerifyDeps = {
+        ...deps(root, fakeProcesses(root, 0, [], undefined, commands), [], feed),
+        offload: async () => "runner-omen",
+        heavyPrefix: async () => "queue-run --pool heavy -- ",
+    };
+    queueVerify(verifier, context, ["app"]);
+    await settle(() => feed.length > 0);
+    // The land's base travels, and the report and the tree verdict come back beside where a local run leaves them.
+    expect(commands[0]).toContain(
+        "/usr/local/bin/offload-run --to runner-omen --label land-check --here 'queue-run --pool heavy -- ' --env INTENTIC_LAND_FROM --export INTENTIC_VERIFY_REPORT --export INTENTIC_VERDICT_OUT -- bash -c 'pnpm run test'",
+    );
+    expect(commands[0]).toContain(`export INTENTIC_VERDICT_OUT=${join(root, `${STATE_DIR}/local/verify/app--verify.verdict.json`)}`);
+    // The verdict it brings back joins this repository's own record, after the status is written.
+    expect(commands[0]).toMatch(/> \S+app--verify\.status; \[ -f \S+app--verify\.verdict\.json \] && \[ -f _tools\/scripts\/lib\/tree-verdict\.mjs \]/u);
+});
+
+test("a check nobody sends anywhere runs here, with no verdict to bring back", async () => {
+    const { queueVerify } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const feed: string[] = [];
+    const commands: string[] = [];
+    queueVerify({ ...deps(root, fakeProcesses(root, 0, [], undefined, commands), [], feed), offload: async () => undefined }, context, ["app"]);
+    await settle(() => feed.length > 0);
+    expect(commands[0]).not.toContain("offload-run");
+    expect(commands[0]).not.toContain("INTENTIC_VERDICT_OUT");
+});
+
 // A router that took the breakage, answering what it decided; the verdict files that answer on the run.
 const taking =
     (routing: MainlineRouting | undefined, routed: LandBreakage[]) =>
@@ -384,6 +418,7 @@ test("failures a red names for the first time go to the router, its answer is fi
     const events: WorkspaceEvent[] = [];
     const feed: string[] = [];
     const routed: LandBreakage[] = [];
+    // The `rerun` an older check still writes is read past: nothing re-runs failures to tell suspect lands apart.
     const verifier = deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"], rerun: "pnpm rerun" }), events, feed);
     queueVerify({ ...verifier, route: taking(SENT_BACK, routed) }, context, ["app"]);
     await settle(() => feed.length > 0 && routed.length > 0);
@@ -398,8 +433,6 @@ test("failures a red names for the first time go to the router, its answer is fi
             runAt: expect.any(Number),
             redSince: expect.any(Number),
             queuedBehind: false,
-            // What the check's report named to re-run only these, for telling suspect lands apart.
-            rerun: "pnpm rerun",
             measured: true,
         },
     ]);

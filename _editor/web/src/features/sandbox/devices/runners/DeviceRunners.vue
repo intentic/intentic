@@ -5,6 +5,10 @@ import { noticeFrom } from "@intentic/ui/async";
 import DeviceOpFailure from "./DeviceOpFailure.vue";
 import { type RunnerFailure, type RunnerOp, runnerFailure } from "./runnerFailure";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "./useRunners";
+import { lastRun, sentTo } from "./runnerWork";
+import { rpcQuery } from "../../client/rpcQuery";
+import { useSandboxQuery } from "../../client/useSandboxQuery";
+import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { type DeviceRow, type MachineRow, managerOf } from "../deviceRows";
 import { environmentTitle } from "../machineEnvironments";
 import { useHubWork } from "../../../../shell/hub/hubWork";
@@ -33,6 +37,13 @@ const doors = computed(
 );
 
 const { runners, refetch } = useRunners();
+
+// The work this sandbox sends each runner (settings `offload`) and how its last offloaded run ended.
+const { settings } = useSandboxSettings();
+const { query: kindsQuery } = useSandboxQuery(rpcQuery(`offload.kinds`));
+const { query: runsQuery } = useSandboxQuery(rpcQuery(`offload.runs`));
+const sentHere = (runner: string): string[] => sentTo(runner, settings.value?.offload, kindsQuery.data.value?.kinds ?? []);
+const lastHere = (runner: string): string | undefined => lastRun(runner, runsQuery.data.value?.runs ?? []);
 const mine = computed(() => runners.value.filter((runner) => runner.host !== undefined && doors.value.has(runner.host)));
 
 // Which side of a many-sided PC a runner was built through; silent on a machine with one door, where it would
@@ -200,6 +211,11 @@ const add = async (): Promise<void> => {
                     <span class="text-2xs text-subtle"
                         >{{ facts(runner) }}<template v-if="builtOn(runner.host)"> · {{ builtOn(runner.host) }}</template></span
                     >
+                    <!-- What this sandbox sends here, set under Agent → Tools → Where heavy work runs. -->
+                    <span v-if="sentHere(runner.id).length > 0" class="truncate text-2xs text-muted">{{
+                        t(`sandbox.agentOffload.sentHere`, { kinds: sentHere(runner.id).join(`, `) })
+                    }}</span>
+                    <span v-if="lastHere(runner.id)" class="truncate text-2xs text-subtle">{{ lastHere(runner.id) }}</span>
                     <!-- Detail rides the tooltip so the row stays one glance. -->
                     <span v-if="driftSummary(runner)" class="truncate text-2xs text-warning" :title="driftDetail(runner)">
                         {{ driftSummary(runner) }}

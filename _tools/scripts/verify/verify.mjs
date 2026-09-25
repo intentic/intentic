@@ -122,13 +122,10 @@ const kept = verdictUnits([...unitless.map(({ label, why }) => `verify ${label}:
 if (failing()) {
     writeVerdict(root, treeHash(root), "failed", "verify", { head, ...kept });
 }
-// Where the daemon asked for this run's failures as data (verify-deps.ts), written whether or not the run was red. A red
-// one names the command that re-runs only some of them in another tree (rerun-units.mjs), which the daemon uses to tell
-// several suspect lands apart on their own trees (agents/land/land-bisect.ts).
+// Where the daemon asked for this run's failures as data (verify-deps.ts), written whether or not the run was red.
 const report = process.env.INTENTIC_VERIFY_REPORT;
 if (report !== undefined && report !== "") {
-    const rerun = failing() ? { rerun: `node ${join(root, "_tools/scripts/verify/rerun-units.mjs")}` } : {};
-    writeFileSync(report, `${JSON.stringify({ status: failing() ? "failed" : "passed", ...kept, ...rerun })}\n`);
+    writeFileSync(report, `${JSON.stringify({ status: failing() ? "failed" : "passed", ...kept })}\n`);
 }
 
 finish(() => {
