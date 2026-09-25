@@ -115,6 +115,9 @@ export const testMintedSlices = (): Services["minted"] => {
     };
 };
 
+// No project is red here, so no red streak is kept.
+const noStreaks = async (): Promise<Record<string, never>> => ({});
+
 export const services = (overrides: ServiceOverrides = {}): Services => {
     const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, iq, ...rest } = overrides;
     // Real registry over an in-memory conversations database, with every conversation's directory under the suite's own
@@ -277,7 +280,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         activity: { append: async () => {}, list: async () => [] },
         // The main line's verdicts: nothing checked yet. Every planned turn that owes the checks-after-landing note reads
         // them, and GET /workspace/mainline serves them.
-        verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects: {}, runs: [] }), lands: async () => ({}) }),
+        verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects: {}, runs: [] }), lands: async () => ({}), streaks: noStreaks }),
         // Nothing is checked after a land here: the land check's own suite stands it up (verify-deps.integration.test.ts).
         landCheck: unstubbed<Services["landCheck"]>("landCheck", { enqueue: () => {}, current: () => undefined, ahead: async () => false }),
         // Nothing pushed yet: GET /workspace/mainline serves the pushes beside the verdicts.

@@ -98,7 +98,8 @@ const deps = (
     announce: () => (announced.count += 1),
     heavyPrefix: async () => "",
     offload: async () => undefined,
-    route: async () => undefined,
+    // The router's escalation: nobody sent, so `deps.broken` is what tells anyone.
+    route: async () => ({ kind: "reported", at: 1, detail: "Repairs after landing are switched off." }),
     settled: async () => undefined,
     recheckPushes: async () => undefined,
     declaredCheck: async () => undefined,
@@ -432,7 +433,7 @@ test("failures a red names for the first time go to the router, its answer is fi
 
 // Every red is the router's to answer, since what an earlier red carried forward may be owed at this one; a router with
 // nothing to decide answers nothing, and then the chore hears of it as before.
-test("a red that names nothing new since the last one is still handed to the router, and the chore wakes when it takes nothing", async () => {
+test("a red that names nothing new since the last one is still handed to the router, and nothing wakes when it owes nothing", async () => {
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const store = fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`));
@@ -444,11 +445,12 @@ test("a red that names nothing new since the last one is still handed to the rou
         context,
         ["app"],
     );
-    await settle(() => events.length > 0);
+    await settle(() => routed.length > 0);
     expect(routed).toHaveLength(1);
     expect(routed[0]).toMatchObject({ fresh: [], failures: ["app#test a.test.ts › x"], redSince: 1, queuedBehind: false });
-    expect(events[0]?.event).toBe("deps.broken");
-    expect(events[0]?.deps?.attempt).toBe(2);
+    // No second fixer: a red the router owes nothing to wakes no automation either (the fix-deps chore's old trigger).
+    await waitFor(async () => expect((await store.read()).runs).toHaveLength(1), SETTLES);
+    expect(events).toEqual([]);
     expect((await store.read()).runs[0]?.routing).toBeUndefined();
 });
 
@@ -483,16 +485,18 @@ test("a red the router only reports still wakes the chore, and the report is fil
     expect((await verifier.verifyStore.read()).runs[0]?.routing).toEqual(reported);
 });
 
-test("a router that throws is logged and treated as taking nothing, so the chore still wakes", async () => {
+test("a router that throws is logged and escalated as reported, which is what wakes anyone", async () => {
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const events: WorkspaceEvent[] = [];
     const route = async (): Promise<MainlineRouting | undefined> => {
         throw new Error("the fleet is gone");
     };
-    checked({ ...deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"] }), events, []), route }, context, ["app"]);
+    const verifier = { ...deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"] }), events, []), route };
+    checked(verifier, context, ["app"]);
     await settle(() => events.length > 0);
     expect(events.map(({ event }) => event)).toEqual(["deps.broken"]);
+    expect((await verifier.verifyStore.read()).runs[0]?.routing).toMatchObject({ kind: "reported", detail: "The sandbox could not decide who fixes it; it waits for you." });
 });
 
 // The history the editor's strip and every card read (mainline-status.ts): one entry per settled run, newest first.
@@ -501,7 +505,8 @@ test("every settled run is filed in the history with the lands it answered for, 
     await ready(root, { test: "vitest run" });
     const feed: string[] = [];
     const titled: DependencyLandOrigin = { ...context, title: "Fix the parser" };
-    const verifier = deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x", "app#test b.test.ts › y"] }), [], feed);
+    // A router that decides nothing, so the run is filed as the check settled it.
+    const verifier = { ...deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x", "app#test b.test.ts › y"] }), [], feed), route: async () => undefined };
     checked(verifier, titled, ["app"]);
     await settle(() => feed.length > 0);
     const [red] = (await verifier.verifyStore.read()).runs;

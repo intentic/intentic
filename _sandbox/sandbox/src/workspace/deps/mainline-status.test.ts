@@ -4,7 +4,7 @@ import type { Services } from "../../composition.js";
 import { knownReds, mainlineStatus } from "./mainline-status.js";
 import type { StoredPush } from "./push-checks-store.js";
 import type { CurrentRun } from "./verify-deps.js";
-import type { QueuedLand, VerifyOutcome } from "./verify-store.js";
+import type { QueuedLand, Streak, VerifyOutcome } from "./verify-store.js";
 
 // The main-line check as the editor reads it: what the verify store remembers and holds waiting, and what the land check
 // runs right now. How the queue fills is verify-deps.integration.test.ts's.
@@ -13,9 +13,12 @@ const storeOf = (
     projects: Record<string, VerifyOutcome>,
     runs: readonly MainlineRun[],
     pushes: readonly StoredPush[] = [],
-    waiting: { readonly current?: CurrentRun; readonly lands?: Record<string, readonly QueuedLand[]> } = {},
+    waiting: { readonly current?: CurrentRun; readonly lands?: Record<string, readonly QueuedLand[]>; readonly streaks?: Record<string, Streak> } = {},
 ): Pick<Services, "verifyStore" | "pushChecks" | "landCheck"> => ({
-    verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects, runs }), lands: async () => waiting.lands ?? {} }),
+    verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects, runs }),
+        lands: async () => waiting.lands ?? {},
+        streaks: async () => waiting.streaks ?? {},
+    }),
     pushChecks: unstubbed<Services["pushChecks"]>("pushChecks", {
         store: unstubbed<Services["pushChecks"]["store"]>("pushChecks.store", { read: async () => ({ pushes: [...pushes], seen: [] }) }),
     }),
@@ -149,6 +152,17 @@ describe("the main line's status", () => {
         const status = await mainlineStatus(storeOf({ app: { status: "red", attempt: 2, at: 40, since: 30 } }, runs));
 
         expect(status.projects[0]?.red).toEqual({ since: 30, cause: [{ conversationId: "c-1", title: "Fix the parser" }], named: true, fixer: sent });
+    });
+
+    // The streak's Red is the router's own record of the red: what it holds is the answer, whatever the runs say.
+    test("lays a red streak at what its Red holds, with its latest decision, over what the runs were filed with", async () => {
+        const sent = { kind: "original" as const, conversationId: "c-2", at: 41 };
+        const runs = [run({ project: "app", at: 30, lands: [{ conversationId: "c-2", title: "Fix the lexer", at: 29 }], suspects: ["c-1"], named: true })];
+        const red: Streak = { since: 30, findings: [], suspects: ["c-2"], named: false, decisions: [{ kind: "waiting", at: 31 }, sent], told: [] };
+
+        const status = await mainlineStatus(storeOf({ app: { status: "red", attempt: 1, at: 30, since: 30 } }, runs, [], { streaks: { app: red } }));
+
+        expect(status.projects[0]?.red).toEqual({ since: 30, cause: [{ conversationId: "c-2", title: "Fix the lexer" }], named: false, fixer: sent });
     });
 
     test("names every land a run covered as the cause, unnarrowed, when blame could not tell them apart", async () => {

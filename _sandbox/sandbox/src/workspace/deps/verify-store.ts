@@ -1,4 +1,4 @@
-import { type MainlineRouting, MainlineRunSchema, type MainlineRun } from "@intentic/sandbox-contract";
+import { type MainlineRouting, MainlineRunSchema, type MainlineRun, nextStreak, RedSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { defineDocument } from "../../store/evolution/documents.js";
@@ -17,7 +17,9 @@ import { stateRelPath } from "../../state-paths.js";
 // - runs is what the editor's strip and every card read (mainline-status.ts), newest first.
 // - lands wait per project until a run with a verdict answers them: a run that ends without one (skipped by the queue,
 //   past the watch window, an install that never settled) leaves them for the next, which measures their sum.
-// - streaks is the router's (land-breakage.ts): what a red waits or holds on, and who was told, until the project is green.
+// - streaks is each red project's Red (contract, RedSchema: what it owes, who it was laid at, every decision about it),
+//   plus the router's own memory (land-breakage.ts): what it waits or holds on, and who was told, until the project is
+//   green. What the editor shows of a red (mainline-status.ts) is read from here.
 // Every write is published to the main-line feed, so no writer can forget to tell the editor.
 
 const OutcomeSchema = z.object({
@@ -60,9 +62,9 @@ const CarriedSchema = z.object({
 });
 export type Carried = z.infer<typeof CarriedSchema>;
 
-// The router's memory of one red streak.
-const StreakSchema = z.object({
-    since: z.number(),
+// One red project's Red (its source is the land check and its scope the key it is filed under), with the router's memory
+// of the streak beside it.
+const StreakSchema = RedSchema.omit({ source: true, scope: true }).extend({
     carried: CarriedSchema.optional(),
     // Conversations still working that were told once this streak that their work touches what failed.
     told: z.array(z.string()).default([]),
@@ -141,18 +143,23 @@ export const freshFailures = (now: readonly string[], before: readonly string[])
 
 type Outcome = z.infer<typeof OutcomeSchema>;
 
-// A red against the red streak it extends, if any: the attempt after its, and what it failed on that the streak had not.
-const reddened = (standing: Outcome | undefined, failures: readonly string[] | undefined): RecordedVerdict => ({
-    edge: "broken",
-    attempt: (standing?.attempt ?? 0) + 1,
-    ...(failures === undefined ? {} : { fresh: freshFailures(failures, standing?.failures ?? []) }),
-});
-
-// The verdict one run makes against the one before it; attempt advances on red and resets on green.
-const judged = (previous: Outcome | undefined, status: "green" | "red", failures: readonly string[] | undefined): RecordedVerdict =>
-    status === "red"
-        ? reddened(previous?.status === "red" ? previous : undefined, failures)
-        : { edge: previous?.status === "red" ? "fixed" : undefined, attempt: 0 };
+// The verdict one run makes against the one before it, by the one streak rule (contract, nextStreak): a red extends the
+// streak (attempt is its count, since its start) and names what it failed on that the streak had not; green ends it,
+// and says which streak it ended.
+const judged = (previous: Outcome | undefined, status: "green" | "red", at: number, failures: readonly string[] | undefined): RecordedVerdict => {
+    const standing = previous?.status === "red" ? previous : undefined;
+    const before = standing === undefined ? undefined : { since: standing.since ?? standing.at, count: standing.attempt };
+    const streak = nextStreak(before, status === "red", at);
+    if (streak === undefined) {
+        return { edge: standing === undefined ? undefined : "fixed", attempt: 0, ...(before === undefined ? {} : { since: before.since }) };
+    }
+    return {
+        edge: "broken",
+        attempt: streak.count,
+        since: streak.since,
+        ...(failures === undefined ? {} : { fresh: freshFailures(failures, standing?.failures ?? []) }),
+    };
+};
 
 // A land is one ask: the conversation that landed it and when it asked.
 const sameLand = (land: { readonly agentId: string; readonly at: number }, run: { readonly conversationId: string; readonly at: number }): boolean =>
@@ -172,18 +179,13 @@ export const verifyStoreOver = (file: Pick<JsonFile<VerifyState>, "read" | "upda
         record: async (dir, status, at, failures) => {
             let verdict: RecordedVerdict = { edge: undefined, attempt: 0 };
             await update((current) => {
-                const previous = current.projects[dir];
-                const began = previous?.status === "red" ? (previous.since ?? previous.at) : undefined;
-                // A red extending a red keeps the streak's start; the first red starts it; green ends it.
-                const since = status === "red" ? (began ?? at) : undefined;
-                const streak = since ?? began;
-                verdict = { ...judged(previous, status, failures), ...(streak === undefined ? {} : { since: streak }) };
+                verdict = judged(current.projects[dir], status, at, failures);
                 const outcome: Outcome = {
                     status,
                     attempt: verdict.attempt,
                     at,
                     ...(failures === undefined ? {} : { failures: [...failures] }),
-                    ...(since === undefined ? {} : { since }),
+                    ...(status === "red" && verdict.since !== undefined ? { since: verdict.since } : {}),
                 };
                 return { ...current, projects: { ...current.projects, [dir]: outcome } };
             });

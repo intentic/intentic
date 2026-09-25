@@ -133,6 +133,7 @@ export * from "./state/history-state.js";
 export * from "./state/fix-stance.js";
 export * from "./state/landed-commit.js";
 export * from "./state/fix-attempt-plan.js";
+export * from "./state/red-streak.js";
 // Provider vocabulary bottom-up: agent-runtimes, provider-specs, agent-catalog; three modules since the dependency
 // points one way.
 export * from "./models/agent-runtimes.js";

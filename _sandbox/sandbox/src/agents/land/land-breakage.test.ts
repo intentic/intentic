@@ -388,8 +388,11 @@ describe("a red with nothing owed", () => {
         expect(await route(world, red())).toEqual(routed("reported", { detail: "Repairs after landing are switched off." }));
         expect(world.told()).toEqual([]);
         expect(world.started).toEqual([]);
-        // The run just settled is filed by the check that asked; nothing was carried in to file with it.
-        expect(world.filed).toEqual([]);
+        // Filed as the red's decision, on the run it answers, which the land check files on it too.
+        expect(world.filed).toEqual([
+            { project: "", at: 1_000, routing: routed("reported", { detail: "Repairs after landing are switched off." }), suspects: ["one"], named: true },
+        ]);
+        expect((await world.services.verifyStore.streaks())[""]?.decisions.map(({ kind }) => kind)).toEqual(["reported"]);
     });
 });
 
@@ -577,10 +580,19 @@ describe("a red with more work queued behind it", () => {
 
         expect(routing).toEqual(routed("original", { conversationId: "one", detail: "Sent back to the conversation that landed it (1 of 2)." }));
         expect(world.told()).toEqual([{ to: "one", prompt: followUp([SANDBOX_TEST]) }]);
-        // Filed on every run it answers, the one it waited on included.
+        // Filed on every run it answers, the one it waited on included, after the wait it was filed with first.
         expect(world.filed).toEqual([
+            { project: "", at: 1_000, routing: routed("waiting", { detail: "More work landed while this ran; its check decides before anybody is sent." }), suspects: ["one"], named: true },
             { project: "", at: 1_000, routing, suspects: ["one"], named: true },
             { project: "", at: 2_000, routing, suspects: ["one"], named: true },
+        ]);
+        // The streak's Red holds each decision once, oldest first, and what it owes.
+        const record = (await world.services.verifyStore.streaks())[""];
+        expect([record?.decisions.map(({ kind }) => kind), record?.suspects, record?.named, record?.findings.map(({ text }) => text)]).toEqual([
+            ["waiting", "original"],
+            ["one"],
+            true,
+            [SANDBOX_TEST],
         ]);
     });
 
@@ -593,6 +605,7 @@ describe("a red with more work queued behind it", () => {
         ).toBeUndefined();
         expect(world.told()).toEqual([]);
         expect(world.filed).toEqual([
+            { project: "", at: 1_000, routing: routed("waiting", { detail: "More work landed while this ran; its check decides before anybody is sent." }), suspects: ["one"], named: true },
             { project: "", at: 1_000, routing: routed("resolved", { detail: "Gone at the next check, before anybody was sent." }), suspects: ["one"], named: true },
         ]);
     });
@@ -608,6 +621,7 @@ describe("a red with more work queued behind it", () => {
 
         expect(routing?.kind).not.toBe("resolved");
         expect(world.filed.map(({ at, routing: filed }) => [at, filed.kind])).toEqual([
+            [1_000, "waiting"],
             [1_000, routing?.kind],
             [2_000, routing?.kind],
         ]);
@@ -622,6 +636,7 @@ describe("a red with more work queued behind it", () => {
 
         await waitFor(() =>
             expect(world.filed).toEqual([
+                { project: "", at: 1_000, routing: routed("waiting", { detail: "More work landed while this ran; its check decides before anybody is sent." }), suspects: ["one"], named: true },
                 {
                     project: "",
                     at: 1_000,
@@ -640,7 +655,7 @@ describe("a red with more work queued behind it", () => {
         );
         expect(next?.kind).toBe("original");
         expect(world.told()).toEqual([{ to: "one", prompt: followUp([SANDBOX_LEXER]) }]);
-        expect(world.filed.slice(1).map(({ at }) => at)).toEqual([3_000]);
+        expect(world.filed.slice(2).map(({ at }) => at)).toEqual([3_000]);
     });
 
     // Lands arriving faster than the check runs must not keep a failure from ever being owed to anybody.
@@ -653,7 +668,16 @@ describe("a red with more work queued behind it", () => {
         }
 
         expect(kinds).toEqual(["waiting", "waiting", "waiting", "original"]);
-        expect(world.filed.map(({ at }) => at)).toEqual([1_000, 2_000, 3_000, 4_000]);
+        // Each wait on its own run, then the decision on every run it answers.
+        expect(world.filed.map(({ at, routing }) => `${routing.kind}@${at}`)).toEqual([
+            "waiting@1000",
+            "waiting@2000",
+            "waiting@3000",
+            "original@1000",
+            "original@2000",
+            "original@3000",
+            "original@4000",
+        ]);
     });
 });
 

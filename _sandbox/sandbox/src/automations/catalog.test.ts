@@ -28,12 +28,12 @@ describe(`code chores come from the book`, () => {
         }
     });
 
-    // fix-dependency-breakage and review-agent-work are event-triggered reflexes with no accumulated evidence;
+    // review-agent-work is an event-triggered reflex with no accumulated evidence (a red land check is the router's to
+    // answer, land-breakage.ts, so no chore wakes on one);
     // dreaming-session and field-notes both measure the fleet's own session history, not a repo.
     test(`the only hand-written chores are the ones the book cannot measure`, () => {
         const handWritten = shelf.filter((template) => !scheduled.some((chore) => chore.id === template.id));
         expect(handWritten.map((template) => [template.id, template.trigger.kind])).toEqual([
-            [`fix-dependency-breakage`, `workspace`],
             [`review-agent-work`, `workspace`],
             [`dreaming-session`, `schedule`],
             [`field-notes`, `schedule`],

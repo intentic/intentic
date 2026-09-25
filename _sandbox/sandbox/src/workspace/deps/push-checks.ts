@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import type { MainlinePushRecheckResult } from "@intentic/sandbox-contract";
+import { type MainlinePushRecheckResult, pushFindingRecheckable, pushFindingSource } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
@@ -47,6 +47,9 @@ export interface PushChecks {
     readonly recheck: (project: string) => Promise<MainlinePushRecheckResult>;
     // The same, only when the project has an open finding to measure; undefined when it has none.
     readonly recheckIfOpen: (project: string) => Promise<MainlinePushRecheckResult | undefined>;
+    // After a land check: files the measurement the check itself left of the checks (verify.mjs), and runs the recheck
+    // only for what it did not measure (an open linter finding, or a repository whose check leaves none).
+    readonly afterLandCheck: (project: string) => Promise<PushIngest | MainlinePushRecheckResult>;
     // Sets open findings aside, or opens named dismissed ones again; how many changed.
     readonly dismiss: (project: string, ids: readonly string[] | undefined, restore: boolean) => Promise<number>;
     // The daemon's own push runs (git/ops/push-run.ts): one the repository's hook refused is filed as a push whose
@@ -227,6 +230,18 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
         ingest,
         recheck,
         recheckIfOpen: async (project) => ((await openIn(project)) === 0 ? undefined : recheck(project)),
+        afterLandCheck: async (project) => {
+            const filed = await ingest(project);
+            const open = (await deps.store.read()).pushes
+                .filter((push) => push.project === project)
+                .flatMap((push) => push.findings)
+                .filter((finding) => finding.state === "open" && pushFindingRecheckable(finding));
+            // Measured already: the check left a measurement of every check, and nothing open waits on the linter.
+            if (open.length === 0 || (filed.rechecks > 0 && open.every((finding) => pushFindingSource(finding) !== "lint"))) {
+                return filed;
+            }
+            return recheck(project);
+        },
         refused: async (project, refusal) => {
             await deps.store.refuse(project, refusal);
             publishRuntimeChange("mainline");

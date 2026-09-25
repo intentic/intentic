@@ -1,4 +1,5 @@
 import {
+    headStreak,
     type MainlineLand,
     type MainlineLandRef,
     type MainlinePush,
@@ -238,10 +239,6 @@ export const checkSession = (status: MainlineStatus, project: string): string =>
    docs/architecture/app-plane.md). Each rebuilds from the raw runs what a newer daemon serves; nothing else reads them,
    and they go when no supported daemon lacks the fields. */
 
-// The latest decision filed on the streak's runs.
-const legacyRouting = (recent: readonly MainlineRun[], project: string, since: number): MainlineRouting | undefined =>
-    recent.find((run) => run.project === project && run.status === `red` && run.at >= since && run.routing !== undefined)?.routing;
-
 // The suspects named on any run of the streak, else the lands of the run that turned the project red.
 const legacyRed = (
     status: MainlineStatus,
@@ -251,13 +248,17 @@ const legacyRed = (
     if (since === undefined) {
         return undefined;
     }
-    const streak = status.recent.filter((run) => run.project === project.project && run.status === `red` && run.at >= since);
+    // The one streak rule (contract, headStreak): the unbroken run of red at the head of the project's history.
+    const streak = headStreak(
+        status.recent.filter((run) => run.project === project.project),
+        (run) => run.status === `red`,
+    );
     const named = streak.find((run) => run.suspects !== undefined && run.suspects.length > 0);
     const first = streak.at(-1);
     const cause =
         named?.suspects?.map((conversationId) => named.lands.find((land) => land.conversationId === conversationId) ?? { conversationId }) ??
         (first === undefined || first.attempt > 1 ? [] : first.lands);
-    return { since, cause, named: named !== undefined, fixer: legacyRouting(status.recent, project.project, since) };
+    return { since, cause, named: named !== undefined, fixer: streak.find((run) => run.routing !== undefined)?.routing };
 };
 
 const legacyFailureParts = (failure: string): { readonly name: string; readonly file?: string } => {

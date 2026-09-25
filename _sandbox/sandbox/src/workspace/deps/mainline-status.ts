@@ -1,7 +1,8 @@
 import type { MainlineLandRef, MainlineProject, MainlineRun, MainlineStatus } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { publicPushes } from "./push-checks-store.js";
-import type { QueuedLand } from "./verify-store.js";
+import type { QueuedLand, Streak } from "./verify-store.js";
+import { opt } from "../../opt.js";
 import { failureOf } from "./failure-units.js";
 import { mainlineLandOf, verifyPanelKey } from "./verify-deps.js";
 import { panelSession } from "../../processes/managed-processes.js";
@@ -14,16 +15,28 @@ import { panelSession } from "../../processes/managed-processes.js";
 // A run with its failures split the way a reader scans them.
 const withUnits = (run: MainlineRun): MainlineRun => (run.failures.length === 0 ? run : { ...run, units: run.failures.map(failureOf) });
 
-// A red streak as the router laid it (land-breakage.ts files the blame on each run as it settles): the cause is the
-// latest run of the streak that named anybody, a run the next check found resolved aside; the fixer is the latest
-// decision. Read, never re-derived: the editor's rail, cards and panel all show this one answer.
-const redOf = (runs: readonly MainlineRun[], project: string, since: number): NonNullable<MainlineProject["red"]> => {
+// A red streak as the router laid it: the streak's Red (verify-store.ts, `streaks`), which land-breakage.ts files as each
+// run settles and each decision is made, names the cause, whether blame narrowed it, and the latest decision. Read,
+// never re-derived: the editor's rail, cards and panel all show this one answer. A streak filed before the Red was kept
+// reads the same off its runs.
+const redOf = (runs: readonly MainlineRun[], record: Streak | undefined, project: string, since: number): NonNullable<MainlineProject["red"]> => {
     const streak = runs.filter((run) => run.project === project && run.status === "red" && run.at >= since);
-    const laid = streak.find((run) => (run.suspects?.length ?? 0) > 0 && run.routing?.kind !== "resolved");
     const titleOf = (conversationId: string): MainlineLandRef => {
         const title = streak.flatMap((run) => run.lands).find((land) => land.conversationId === conversationId)?.title;
-        return { conversationId, ...(title === undefined ? {} : { title }) };
+        return { conversationId, ...opt("title", title) };
     };
+    if (record?.since === since && (record.suspects.length > 0 || record.decisions.length > 0)) {
+        return { since, cause: record.suspects.map(titleOf), named: record.named, ...opt("fixer", record.decisions.at(-1)) };
+    }
+    return redOfRuns(streak, since, titleOf);
+};
+
+const redOfRuns = (
+    streak: readonly MainlineRun[],
+    since: number,
+    titleOf: (conversationId: string) => MainlineLandRef,
+): NonNullable<MainlineProject["red"]> => {
+    const laid = streak.find((run) => (run.suspects?.length ?? 0) > 0 && run.routing?.kind !== "resolved");
     const fixer = streak.find((run) => run.routing !== undefined)?.routing;
     return {
         since,
@@ -35,7 +48,12 @@ const redOf = (runs: readonly MainlineRun[], project: string, since: number): No
 };
 
 export const mainlineStatus = async (deps: Pick<Services, "verifyStore" | "pushChecks" | "landCheck">): Promise<MainlineStatus> => {
-    const [{ projects, runs }, lands, { pushes }] = await Promise.all([deps.verifyStore.read(), deps.verifyStore.lands(), deps.pushChecks.store.read()]);
+    const [{ projects, runs }, lands, streaks, { pushes }] = await Promise.all([
+        deps.verifyStore.read(),
+        deps.verifyStore.lands(),
+        deps.verifyStore.streaks(),
+        deps.pushChecks.store.read(),
+    ]);
     const current = deps.landCheck.current();
     const waiting = (dir: string): readonly QueuedLand[] =>
         (lands[dir] ?? []).filter((land) => !(current?.dir === dir && current.lands.some((covered) => covered.agentId === land.agentId && covered.at === land.at)));
@@ -62,7 +80,7 @@ export const mainlineStatus = async (deps: Pick<Services, "verifyStore" | "pushC
             queued: waiting(dir).map(mainlineLandOf),
             session: panelSession(verifyPanelKey(dir)),
             ...(last === undefined ? {} : { last: withUnits(last) }),
-            ...(outcome?.status === "red" ? { redSince: outcome.since ?? outcome.at, red: redOf(runs, dir, outcome.since ?? outcome.at) } : {}),
+            ...(outcome?.status === "red" ? { redSince: outcome.since ?? outcome.at, red: redOf(runs, streaks[dir], dir, outcome.since ?? outcome.at) } : {}),
         };
     };
     return { projects: [...dirs].toSorted().map(projectOf), recent: runs.map(withUnits), pushes: publicPushes(pushes) };

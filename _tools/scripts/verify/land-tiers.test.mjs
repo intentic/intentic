@@ -1,4 +1,5 @@
 // Pins how lint findings become land units, since a unit that moves with its line number reads as new after any edit above it.
+// The reading is measure-change.mjs's, the one every caller lints with.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -8,7 +9,10 @@ import { test } from "node:test";
 import { allowedInRange } from "../../checks/lib/allow.mjs";
 import { introduced } from "../../oxlint/added.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
-import { LINTABLE, lintUnits } from "./land-tiers.mjs";
+import { LINTABLE } from "./land-tiers.mjs";
+import { lintFindings } from "./measure-change.mjs";
+
+const lintUnits = (output) => lintFindings(output).map(({ unit }) => unit);
 
 test("oxlint's unix lines become units without positions, and its summary is not one", () => {
     const output = [
@@ -75,4 +79,19 @@ test("a plugin finding that names its symbol counts once per file: another use o
     const named = (line) => ({ code: "anti-slop(no-shape-in-symbol-names)", message: `Rename symbol "STATE_SHAPES" for its domain role (${line})` });
     const fresh = { code: "anti-slop(no-shape-in-symbol-names)", message: `Rename symbol "shapeOf" for its domain role` };
     assert.deepEqual(introduced([named(1), named(2), fresh], [named(1)]), [fresh]);
+});
+
+test("a lint finding keeps the line as printed, keyed and named without its position, and names its file", () => {
+    assert.deepEqual(lintFindings("_tools/a.ts:12:21: Prefer `.at()` over `[index]`. [Error/unicorn(prefer-at)]"), [
+        {
+            kind: "lint",
+            source: "lint",
+            recheckable: true,
+            text: "_tools/a.ts:12:21: Prefer `.at()` over `[index]`. [Error/unicorn(prefer-at)]",
+            key: "lint _tools/a.ts: unicorn(prefer-at) Prefer `.at()` over `[index]`.",
+            path: "_tools/a.ts",
+            command: "pnpm lint",
+            unit: "lint _tools/a.ts: unicorn(prefer-at) Prefer `.at()` over `[index]`.",
+        },
+    ]);
 });

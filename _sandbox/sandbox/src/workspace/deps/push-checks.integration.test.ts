@@ -88,8 +88,18 @@ test("files a push only once its head is on the remote-tracking ref it moved, an
             head,
             commits: 1,
             findings: [
-                { id: pushFindingId(CATCH), kind: "check", check: "silent-catch", gate: "code", text: CATCH.text, state: "open", key: CATCH.key },
-                { id: pushFindingId(RATCHET), kind: "ratchet", text: RATCHET.text, state: "open", key: RATCHET.key },
+                {
+                    id: pushFindingId(CATCH),
+                    kind: "check",
+                    check: "silent-catch",
+                    source: "silent-catch",
+                    recheckable: true,
+                    gate: "code",
+                    text: CATCH.text,
+                    state: "open",
+                    key: CATCH.key,
+                },
+                { id: pushFindingId(RATCHET), kind: "ratchet", source: "ratchet", recheckable: false, text: RATCHET.text, state: "open", key: RATCHET.key },
             ],
         },
     ]);

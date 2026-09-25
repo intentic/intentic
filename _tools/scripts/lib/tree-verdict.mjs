@@ -1,6 +1,6 @@
 // Caches pass/fail verdicts against a hash of a tree's content (`git write-tree` over index+add -A), so identical content
-// is not re-measured. Stored in the common git dir (`intentic-push-verified`), shared across worktrees, the newest
-// VERDICTS_KEPT entries; `pnpm verify` writes a `verify` verdict, verify-push.mjs writes `push` and reads both, matching
+// is not re-measured. Stored as `verdict` entries of the push store in the common git dir (lib/push-store.mjs), shared
+// across worktrees and with what pushes leave, the newest VERDICTS_KEPT; `pnpm verify` writes a `verify` verdict, verify-push.mjs writes `push` and reads both, matching
 // the working tree or any pushed commit's own tree.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -8,11 +8,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { git } from "./git.mjs";
+import { legacyVerdictPath, readArray, readStore, writeStore } from "./push-store.mjs";
 
 // A verdict older than this is re-measured even for an identical tree: node_modules is not in the hash.
 export const VERDICT_TTL_MS = 12 * 60 * 60_000;
-// A day of lands, each writing one `verify` verdict green or red, plus the pushes between them.
-export const VERDICTS_KEPT = 40;
+export { VERDICTS_KEPT } from "./push-store.mjs";
 
 // Hash of the working tree's content; `undefined` when git can't answer, which reads as "no verdict" and re-measures.
 export const treeHash = (root) => {
@@ -41,23 +41,13 @@ export const treeHash = (root) => {
 // The tree a commit carries, which is what CI checks out; `undefined` for a sha this clone lacks.
 export const commitTree = (root, sha) => git(root, "rev-parse", "-q", "--verify", `${sha}^{tree}`)?.trim();
 
-const verdictPath = (root) => {
-    const dir = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")?.trim();
-    return dir === undefined ? undefined : join(dir, "intentic-push-verified");
-};
-
-// Every recorded `{ tree, status: "passed" | "failed", suite: "verify" | "push", at, head?, failures? }`, newest first.
+// Every recorded `{ tree, status: "passed" | "failed", suite: "verify" | "push", at, head?, failures? }`, newest first:
+// the store's `verdict` entries, and what the verdicts' own file held before they moved there.
 export const readVerdicts = (root) => {
-    const path = verdictPath(root);
-    if (path === undefined) {
-        return [];
-    }
-    try {
-        const parsed = JSON.parse(readFileSync(path, "utf8"));
-        return Array.isArray(parsed) ? parsed.filter((verdict) => typeof verdict?.tree === "string") : [];
-    } catch {
-        return [];
-    }
+    const legacy = legacyVerdictPath(root);
+    return [...readStore(root).filter((entry) => entry.kind === "verdict"), ...(legacy === undefined ? [] : readArray(legacy))]
+        .filter((verdict) => typeof verdict.tree === "string")
+        .toSorted((left, right) => (right.at ?? 0) - (left.at ?? 0));
 };
 
 // The verdicts about any of `trees` that are young enough to trust, newest first.
@@ -67,19 +57,9 @@ export const freshVerdicts = (root, trees, now = Date.now()) => {
 };
 
 // Puts one verdict at the head of the record, replacing an older one about the same tree and suite.
-const recordVerdict = (root, entry) => {
-    const path = verdictPath(root);
-    if (path === undefined) {
-        return false;
-    }
-    const kept = readVerdicts(root).filter((verdict) => !(verdict.tree === entry.tree && verdict.suite === entry.suite));
-    try {
-        writeFileSync(path, `${JSON.stringify([entry, ...kept].slice(0, VERDICTS_KEPT))}\n`);
-        return true;
-    } catch {
-        return false;
-    }
-};
+const recordVerdict = (root, entry) =>
+    writeStore(root, { version: 1, kind: "verdict", ...entry }, (each) => each.kind === "verdict" && each.tree === entry.tree && each.suite === entry.suite)
+        .ok;
 
 // Replaces an older verdict about the same tree and suite; `details` is `head` and, when red, failure-units' `verdictUnits`.
 // A run offloaded to a runner (INTENTIC_VERDICT_OUT set, bin/offload-run) also leaves the verdict there, for the tree it

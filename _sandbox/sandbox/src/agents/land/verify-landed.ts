@@ -35,7 +35,7 @@ export const landCheckOf = (services: () => Services): LandCheck => {
             offload: async () => (offloadRunEnabled() ? (await all.sandboxSettings.get()).offload.landCheck : undefined),
             route: (breakage) => routeLandBreakage(all, breakage),
             settled: (project, redSince) => breakageSettled(all, project, redSince),
-            recheckPushes: (project) => all.pushChecks.recheckIfOpen(project),
+            recheckPushes: (project) => all.pushChecks.afterLandCheck(project),
             declaredCheck: async (dir) => adoptedLandCheck(all.workspace.root, dir, (await all.sandboxSettings.get()).adoptedChecks),
         });
         return built;

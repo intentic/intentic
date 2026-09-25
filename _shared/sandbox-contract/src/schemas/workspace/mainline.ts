@@ -143,6 +143,28 @@ export const FindingSchema = z.object({
 });
 export type Finding = z.infer<typeof FindingSchema>;
 
+// ONE RED, whatever went red: a land check's project, what a push left in a project, main's CI on a branch. What it owes
+// (its findings), who it was laid at and whether that was narrowed, and every decision about it, oldest first. Each
+// source answers its own red by its own policy (RED_POLICY); the record is the same.
+export const RedSourceSchema = z.enum(["land", "push", "ci"]);
+export type RedSource = z.infer<typeof RedSourceSchema>;
+
+// Who answers a red: `route` sends it itself (the land check's router, agents/land/land-breakage.ts), `owner` waits for a
+// person's press (what a push left, agents/fix/push-fix.ts), `fix-agent` starts the source's own fix agent once the red
+// is main's standing word (CI, ci/repair-gate.ts).
+export const RED_POLICY = { land: "route", push: "owner", ci: "fix-agent" } as const satisfies Record<RedSource, "route" | "owner" | "fix-agent">;
+
+export const RedSchema = z.object({
+    source: RedSourceSchema.describe("What went red."),
+    scope: z.string().describe("Where: a project's folder, or a repository and branch."),
+    since: z.number().describe("When the red streak began (state/red-streak.ts)."),
+    findings: z.array(FindingSchema).default([]).describe("What it owes, as the red's own measurement named it."),
+    suspects: z.array(z.string()).default([]).describe("The conversations it was laid at."),
+    named: z.boolean().default(false).describe("Whether the paths they changed narrowed it to them."),
+    decisions: z.array(MainlineRoutingSchema).default([]).describe("What was decided about it, oldest first."),
+});
+export type Red = z.infer<typeof RedSchema>;
+
 // What measured a push finding, as the first push reports named it: one of the repository's checks (by id), the linter,
 // the assertion ratchet, the manifest/lockfile lockstep, or rustfmt. Read, and still written for editors that read no
 // `source`; what measured a finding is its free `source` now, which any repository's tooling may name.

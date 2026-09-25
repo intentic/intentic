@@ -20,9 +20,9 @@ import { LAND_CHECK_LABEL, offloadPrefix } from "../../offload/offload-prefix.js
 // THE LAND CHECK: one service, built once in composition.ts, that every door into it calls (`enqueue`): the land that
 // ends a turn, the Land button, and the reconciler's installs. It runs a project's land check (its repository's declared
 // `land` check, else the `verify` script, else `test`) after its install settles, records the verdict and the run, has
-// the project's push findings measured again, hands a red one to the breakage router (`route`), and emits
-// `deps.broken`/`deps.fixed` for a chore to wake on when nobody took them. A causeless run (the reconciler's own
-// installs, not a land) still checks and records, but never wakes anyone.
+// the project's push findings measured again, hands a red one to the breakage router (`route`), and emits `deps.broken`
+// when the router only reported it (nobody sent) and `deps.fixed` when the project comes back green. A causeless run
+// (the reconciler's own installs, not a land) still checks and records, but never wakes anyone.
 // This is the ONLY verification the sandbox runs on work: nothing checks inside a turn, and nothing here holds a land, a
 // commit or a push. It runs one project at a time. Lands wait in the verify store until a run with a verdict answers
 // them, so those that arrive meanwhile, and those a run left without one (skipped by the queue, past the watch window,
@@ -428,15 +428,17 @@ export const createLandCheck = (deps: LandCheckDeps): LandCheck => {
                           queuedBehind: await queuedBehind(dir, lands),
                           measured: report !== undefined,
                       })
-                      .catch((error: unknown) => {
+                      .catch((error: unknown): MainlineRouting => {
                           deps.logger.warn({ err: error, project: dir }, "dependency verify: routing the breakage failed");
-                          return undefined;
+                          // Nobody was sent, and nobody else will be: escalated as reported, which is what wakes a person.
+                          return { kind: "reported", at: Date.now(), detail: "The sandbox could not decide who fixes it; it waits for you." };
                       });
         if (routing !== undefined) {
             await deps.verifyStore.routed(dir, at, routing).catch((error: unknown) => deps.logger.warn({ err: error, project: dir }, "dependency verify: routing not filed"));
         }
-        // A breakage somebody took wakes no chore as well: one repair per failure.
-        if (verdict.edge === "fixed" || (verdict.edge === "broken" && (routing === undefined || routing.kind === "reported"))) {
+        // A red is the router's to answer (land-breakage.ts): only one it escalated as reported, with nobody sent, wakes
+        // whatever reacts to `deps.broken`, so no automation ever becomes a second fixer on a red the router took.
+        if (verdict.edge === "fixed" || (verdict.edge === "broken" && routing?.kind === "reported")) {
             announceEdge(deps, origin, dir, command, { exitCode, logTail, edge: verdict.edge, attempt: verdict.attempt });
         }
     };

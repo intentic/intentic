@@ -26,15 +26,14 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
-import { allowedInRange } from "../../checks/lib/allow.mjs";
 import { isLinkedWorktree } from "../../checks/lib/repo.mjs";
 import { changedPaths as treeChangedPaths, git as gitIn } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
 import { ago, commitTree, freshVerdicts, treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
-import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
+import { checkVerdicts } from "./check-snapshot.mjs";
 import { rustfmtAvailable, touchedCrates } from "./fixers.mjs";
-import { brokenFindings, lintOutcome, measureEntry, pushEntry, stepFindings, tidyFindings, writeReport } from "./push-report.mjs";
-import { judgeAgainstBase } from "./turn-findings.mjs";
+import { judgeTidy, LINT_COMMAND, runLint, tidyFindings } from "./measure-change.mjs";
+import { brokenFindings, measureEntry, pushEntry, stepFindings, writeReport } from "./push-report.mjs";
 import { testConcurrency, testWorkers } from "./test-workers.mjs";
 
 const root = repoRoot(import.meta.url);
@@ -216,7 +215,8 @@ const lockfileRewriteOnly = () => {
 //
 // Judged against the merge-base rather than refused wholesale, for the reason the tidy job's own comment gives: a gate
 // that refuses a pusher for state nobody in this push produced teaches everyone that red means nothing. What refuses is
-// the lines the range ADDED (turn-findings.mjs); what was already standing is named and charged to no one.
+// the lines the range ADDED (turn-findings.mjs); what was already standing is named and charged to no one. The judging
+// is measure-change.mjs's (judgeTidy), the same the check after a land does, `Allow:` trailers in the range included.
 //
 // What is KEPT for later (push-report.mjs) is the same share: every line a broken check prints, and of the tidy ones
 // only what this push added. Already failing at the base, or not askable there, is shown here and recorded nowhere.
@@ -255,24 +255,11 @@ const findings = [];
             }
             say(`${untidy.map(({ id }) => id).join(", ")}: no upstream to measure the range against, so these are reported and not refused`);
         } else if (untidy.length > 0) {
-            const judged = judgeAgainstBase(
-                untidy,
-                reportsAt(
-                    root,
-                    base,
-                    untidy.map(({ id }) => id),
-                ),
-                root,
-            );
             // An `Allow: <check> — <reason>` trailer in the range accepts what it adds to that check (lib/allow.mjs).
-            const allowed = allowedInRange(root, base);
-            const excused = judged.filter(({ verdict, added }) => added.length > 0 && allowed.has(verdict.id));
+            const { mine, excused, unsure, theirs } = judgeTidy(root, base, untidy);
             if (excused.length > 0) {
-                say(`${excused.map(({ verdict }) => `${verdict.id} (${allowed.get(verdict.id).join("; ")})`).join(", ")}: declared by an Allow: trailer in the range`);
+                say(`${excused.map(({ verdict, reasons }) => `${verdict.id} (${reasons.join("; ")})`).join(", ")}: declared by an Allow: trailer in the range`);
             }
-            const mine = judged.filter(({ verdict, added }) => added.length > 0 && !allowed.has(verdict.id));
-            const unsure = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length > 0);
-            const theirs = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length === 0);
             if (theirs.length > 0) {
                 say(
                     `${theirs.map(({ verdict }) => verdict.id).join(", ")}: already failing at ${base.slice(0, 9)} and no worse for this push, so not this push's to fix`,
@@ -335,13 +322,20 @@ const changed = changedPaths();
         );
     }
 }
-// Streamed to the pusher as it runs; only its exit is kept, as the report's measurement of the linter.
-const linted = spawnSync("pnpm", ["lint"], { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
-const lint = lintOutcome(linted);
-if (linted.error !== undefined) {
-    say(`lint skipped: ${linted.error.message} (CI does not lint; each edit's own lint and the check after each land do)`);
-} else if (linted.status !== 0) {
-    fail("lint", `exit ${linted.status ?? "signal"}`, [], { spelling: "pnpm lint" });
+// The linter over the whole tree, read one way (measure-change.mjs): all of it is the report's measurement, which clears
+// what earlier pushes left anywhere; the findings on files this push changed are its own.
+const lint = runLint(root);
+if (!lint.ran) {
+    say(`lint skipped: ${lint.why ?? "it could not run"} (CI does not lint; each edit's own lint and the check after each land do)`);
+} else {
+    const mine = lint.findings.filter(({ path }) => changed === undefined || changed.has(path));
+    if (mine.length > 0) {
+        for (const { text } of mine) {
+            process.stderr.write(`${text}\n`);
+        }
+        fail("lint", `${mine.length} finding(s) on files this push changes`, mine.map(({ text }) => text), { spelling: LINT_COMMAND });
+        findings.push(...mine);
+    }
 }
 
 const touched = touchedCrates(root, changed === undefined ? undefined : [...changed]);

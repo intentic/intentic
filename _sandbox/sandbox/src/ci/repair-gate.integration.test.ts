@@ -11,7 +11,8 @@ import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Services } from "../composition.js";
 import type { FetchFn } from "./providers.js";
-import { nextStreak, observeCiRun, resetRepairGate } from "./repair-gate.js";
+import { fileCiStore } from "./ci-store.js";
+import { nextRedStreak, observeCiRun, resetRepairGate } from "./repair-gate.js";
 import { createRunsCache } from "./runs-cache.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { createDomainEvents } from "../seams/domain-events.js";
@@ -65,6 +66,8 @@ const harness = async (forge: { jobs: object; runs: readonly PipelineRun[]; refu
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         ciRuns: createRunsCache(60_000),
+        // Where the streak lives, so a restart (resetRepairGate) keeps it.
+        ciStore: fileCiStore(join(root, STATE_DIR, "secrets", "ci.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ autoRepair }) }),
         agents: unstubbed<Services["agents"]>("agents", { list: () => [], listArchived: () => [] }),
         activity: unstubbed<Services["activity"]>("activity", {
@@ -111,10 +114,10 @@ const harness = async (forge: { jobs: object; runs: readonly PipelineRun[]; refu
 beforeEach(resetRepairGate);
 
 test("a streak continues while any failed job repeats, and starts over when none does", () => {
-    const first = nextStreak(undefined, 41, ["verify-core", "verify-site"]);
+    const first = nextRedStreak(undefined, 41, ["verify-core", "verify-site"]);
     expect(first).toEqual({ jobs: ["verify-core", "verify-site"], runs: 1, firstRunId: 41, runId: 41 });
-    expect(nextStreak(first, 42, ["verify-core"])).toEqual({ jobs: ["verify-core"], runs: 2, firstRunId: 41, runId: 42 });
-    expect(nextStreak(first, 42, ["images"])).toEqual({ jobs: ["images"], runs: 1, firstRunId: 42, runId: 42 });
+    expect(nextRedStreak(first, 42, ["verify-core"])).toEqual({ jobs: ["verify-core"], runs: 2, firstRunId: 41, runId: 42 });
+    expect(nextRedStreak(first, 42, ["images"])).toEqual({ jobs: ["images"], runs: 1, firstRunId: 42, runId: 42 });
 });
 
 test("the same jobs failing on main twice running start one fix, named for the run the streak began with", async () => {
@@ -170,4 +173,28 @@ test("with repairs switched off, main's red is only reported", async () => {
     await observeCiRun(services, run(42, "failed"), fetchFn);
     expect(started).toEqual([]);
     expect(reruns).toEqual([]);
+});
+
+// The streak is kept with the CI store, not in memory: a restart between two reds still counts them as one streak, and a
+// fix it started stays its answer.
+test("a restart between two reds keeps the streak, and a fix already started is not started again", async () => {
+    const forge = { jobs: CODE_JOBS, runs: [run(42, "failed"), run(41, "failed")] };
+    const { services, fetchFn, started } = await harness(forge);
+    await observeCiRun(services, run(41, "failed"), fetchFn);
+
+    resetRepairGate();
+    await observeCiRun(services, run(42, "failed"), fetchFn);
+    await waitFor(() => expect(started.map(({ conversationId }) => conversationId)).toEqual(["ci-fix-web-41"]), SETTLES);
+    const [red] = Object.values(await services.ciStore.reds());
+    expect([red?.count, red?.firstRunId, red?.findings.map(({ text }) => text), red?.decisions.map(({ kind, conversationId }) => [kind, conversationId])]).toEqual([
+        2,
+        41,
+        ["verify-core"],
+        [["fix-up", "ci-fix-web-41"]],
+    ]);
+
+    resetRepairGate();
+    forge.runs = [run(43, "failed"), ...forge.runs];
+    await observeCiRun(services, run(43, "failed"), fetchFn);
+    expect(started).toHaveLength(1);
 });

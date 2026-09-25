@@ -1,13 +1,13 @@
 import { join } from "node:path";
-import { type AgentSummary, fixAttemptOf, landBreakagePrompt, landFixConversationId, type MainlineRouting, type MainlineRun } from "@intentic/sandbox-contract";
+import { type AgentSummary, fixAttemptOf, landBreakagePrompt, landFixConversationId, type MainlineRouting } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Services } from "../../composition.js";
 import { deliverWake } from "../../agent/run/turn/wake-delivery.js";
 import { conversationProfile, isIsolated, type PersistedAgent, reposOf } from "../registry/agents-store.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { LandBreakage } from "../../workspace/deps/verify-deps.js";
-import type { Carried } from "../../workspace/deps/verify-store.js";
-import { pathOfUnit } from "../../workspace/deps/failure-units.js";
+import type { Carried, Streak } from "../../workspace/deps/verify-store.js";
+import { findingOfUnit, pathOfUnit } from "../../workspace/deps/failure-units.js";
 import { readWorkspaceManifests } from "../../workspace/deps/package-graph.js";
 import { landingPaths } from "./landing-paths.js";
 import { landChange, type LandSuspect, narrowCheckOf, startLandFix } from "./land-fix.js";
@@ -102,11 +102,16 @@ const owedOf = (project: string, since: number, carried: Carried): Owed => ({
     on: carried.on,
 });
 
-// Writes (or, with undefined, drops) what the project's streak carries; the conversations told stay with the streak.
+// The project's Red for the streak that began at `since`: the one on file, or a fresh one where the file holds none or an
+// earlier streak's, which is nobody's any more.
+const redFor = (current: Streak | undefined, since: number): Streak =>
+    current?.since === since ? current : { since, findings: [], suspects: [], named: false, decisions: [], told: [] };
+
+// Writes (or, with undefined, drops) what the project's streak carries; the Red and the conversations told stay with it.
 const carry = (services: BreakageRouter, project: string, since: number, owed: Owed | undefined): Promise<void> =>
     services.verifyStore.streak(project, (current) => {
-        const told = current?.since === since ? current.told : [];
-        return { since, told, ...(owed === undefined ? {} : { carried: carriedOf(owed) }) };
+        const { carried: _carried, ...red } = redFor(current, since);
+        return owed === undefined ? red : { ...red, carried: carriedOf(owed) };
     });
 
 // What the project's current streak carries, if anything; one left from an earlier streak is nobody's any more.
@@ -115,22 +120,15 @@ const carriedFor = async (services: BreakageRouter, project: string, since: numb
     return streak?.since === since ? { ...(streak.carried === undefined ? {} : { carried: streak.carried }), told: streak.told } : { told: [] };
 };
 
-// Every decision filed on the project's runs since its streak began, once each: one decision is filed on every run it
-// answers, so the same routing on two runs is one decision.
-const decisionsSince = (runs: readonly MainlineRun[], project: string, since: number): MainlineRouting[] => {
-    const seen = new Map<string, MainlineRouting>();
-    for (const run of runs) {
-        if (run.project === project && run.at >= since && run.routing !== undefined) {
-            seen.set(JSON.stringify(run.routing), run.routing);
-        }
-    }
-    return [...seen.values()];
+// Every decision the streak's Red holds, oldest first; none for a streak it does not hold.
+const decisionsOf = async (services: BreakageRouter, project: string, since: number): Promise<readonly MainlineRouting[]> => {
+    const streak = (await services.verifyStore.streaks())[project];
+    return streak?.since === since ? streak.decisions : [];
 };
 
-// Follow-ups sent to one conversation this streak, as the runs they were filed on say.
+// Follow-ups sent to one conversation this streak, as its Red's decisions say.
 const sendsTo = async (services: BreakageRouter, project: string, since: number, conversationId: string): Promise<number> =>
-    decisionsSince((await services.verifyStore.read()).runs, project, since).filter((routing) => routing.kind === "original" && routing.conversationId === conversationId)
-        .length;
+    (await decisionsOf(services, project, since)).filter((routing) => routing.kind === "original" && routing.conversationId === conversationId).length;
 
 // Fresh fix-up conversations this streak has had, live or archived, as the fleet's own roster numbers them.
 const fixUpsOf = (services: Pick<Services, "agents">, project: string, since: number): number => {
@@ -192,6 +190,12 @@ export const stillInMind = (agent: Pick<AgentSummary, "promptCache" | "contextTo
     return warm && roomy;
 };
 
+// Logs what a best-effort write or decision could not do, with the fields that say where; the router goes on regardless.
+const warnOn =
+    (services: Pick<Services, "logger">, fields: { readonly project?: string; readonly type?: string }, message: string) =>
+    (error: unknown): void =>
+        services.logger.warn({ err: error, ...fields }, message);
+
 const append = (services: BreakageRouter, type: string, content: string, land?: DependencyLandOrigin): void => {
     void services.activity
         .append({
@@ -201,7 +205,7 @@ const append = (services: BreakageRouter, type: string, content: string, land?: 
             outcome: "ok",
             ...(land === undefined ? {} : { conversationId: land.agentId, ...(land.title === undefined ? {} : { title: land.title }) }),
         })
-        .catch((error: unknown) => services.logger.warn({ err: error, type }, "land breakage: activity append failed"));
+        .catch(warnOn(services, { type }, "land breakage: activity append failed"));
 };
 
 const where = (project: string): string => (project === "" ? "the workspace root" : project);
@@ -252,18 +256,40 @@ const workingOn = async (
     return touching.filter((id): id is string => id !== undefined);
 };
 
-// Files the decision on every run it answers for, older ones carried in included.
-const fileRouting = async (services: BreakageRouter, project: string, runs: readonly number[], routing: MainlineRouting): Promise<void> => {
+// Files the decision in the streak's Red, once, and on every run it answers for, older ones carried in included, which the
+// history the cards read keeps.
+const fileRouting = async (services: BreakageRouter, project: string, since: number, runs: readonly number[], routing: MainlineRouting): Promise<void> => {
+    await services.verifyStore
+        .streak(project, (current) => {
+            const red = redFor(current, since);
+            return { ...red, decisions: [...red.decisions, routing] };
+        })
+        .catch(warnOn(services, { project }, "land breakage: decision not filed"));
     for (const at of runs) {
-        await services.verifyStore.routed(project, at, routing).catch((error: unknown) => services.logger.warn({ err: error, project }, "land breakage: routing not filed"));
+        await services.verifyStore.routed(project, at, routing).catch(warnOn(services, { project }, "land breakage: routing not filed"));
     }
 };
 
-// Files who the failures of these runs are laid at, the one place blame is decided: the editor reads it as it stands.
-const fileBlame = async (services: BreakageRouter, project: string, runs: readonly number[], laid: Laid): Promise<void> => {
+// Files who the failures are laid at, the one place blame is decided: in the streak's Red with what it owes, and on each
+// run it answers for. The editor reads it as it stands.
+// A run laid at nobody (`owes` undefined: it only found main red) leaves the streak's Red as it was.
+const fileBlame = async (
+    services: BreakageRouter,
+    project: string,
+    since: number,
+    runs: readonly number[],
+    laid: Laid,
+    owes: readonly string[] | undefined,
+): Promise<void> => {
+    const suspects = laid.suspects.map(({ land }) => land.agentId);
+    if (owes !== undefined) {
+        await services.verifyStore
+            .streak(project, (current) => ({ ...redFor(current, since), findings: owes.map(findingOfUnit), suspects, named: laid.named }))
+            .catch(warnOn(services, { project }, "land breakage: blame not filed"));
+    }
     await services.verifyStore
-        .blamed(project, runs, { suspects: laid.suspects.map(({ land }) => land.agentId), named: laid.named })
-        .catch((error: unknown) => services.logger.warn({ err: error, project }, "land breakage: blame not filed"));
+        .blamed(project, runs, { suspects, named: laid.named })
+        .catch(warnOn(services, { project }, "land breakage: blame not filed"));
 };
 
 // A red with nothing new in it, or no land to answer for it, is laid at nobody: it only found main red.
@@ -374,8 +400,8 @@ const hold = async (services: Services, owed: Owed, on: readonly string[], packa
     const { told } = await carriedFor(services, breakage.project, breakage.redSince);
     // A suspect is asked about its own land once it stops, never told about it mid-turn.
     const telling = on.filter((id) => !told.includes(id) && services.agents.entry(id) !== undefined && !breakage.lands.some((land) => land.agentId === id));
-    await services.verifyStore.streak(breakage.project, () => ({
-        since: breakage.redSince,
+    await services.verifyStore.streak(breakage.project, (current) => ({
+        ...redFor(current, breakage.redSince),
         told: [...told, ...telling],
         carried: carriedOf({ ...owed, heldSince, on }),
     }));
@@ -399,7 +425,7 @@ const decide = async (services: Services, owed: Owed, git: GitRunner, now: numbe
     const { breakage } = owed;
     const { suspects, named } = laid ?? (await blame(services, breakage, git));
     if (laid === undefined) {
-        await fileBlame(services, breakage.project, owed.runs, { suspects, named });
+        await fileBlame(services, breakage.project, breakage.redSince, owed.runs, { suspects, named }, breakage.fresh);
     }
     const ids = suspects.map(({ land }) => land.agentId);
     const workspacePackages = packagesIn(services, breakage.project);
@@ -409,7 +435,7 @@ const decide = async (services: Services, owed: Owed, git: GitRunner, now: numbe
     const busy = holdOverdue ? [] : await workingOn(services, breakage, packages, ids, workspacePackages);
     if (busy.length > 0) {
         const routing = await hold(services, owed, busy, [...packages]);
-        await fileRouting(services, breakage.project, owed.runs, routing);
+        await fileRouting(services, breakage.project, breakage.redSince, owed.runs, routing);
         return routing;
     }
     clearHoldTimer(breakage.project);
@@ -422,7 +448,7 @@ const decide = async (services: Services, owed: Owed, git: GitRunner, now: numbe
         single !== undefined && entry !== undefined && passedOver === undefined
             ? sendBack(services, breakage, single.land, entry, sends)
             : await freshFixUp(services, breakage, suspects, named, passedOver);
-    await fileRouting(services, breakage.project, owed.runs, routing);
+    await fileRouting(services, breakage.project, breakage.redSince, owed.runs, routing);
     return routing;
 };
 
@@ -439,9 +465,7 @@ const release = async (services: Services, project: string, git: GitRunner = def
         await carry(services, project, streak.since, owed);
         return;
     }
-    await decide(services, owed, git, Date.now()).catch((error: unknown) =>
-        services.logger.warn({ err: error, project }, "land breakage: a held red could not be routed"),
-    );
+    await decide(services, owed, git, Date.now()).catch(warnOn(services, { project }, "land breakage: a held red could not be routed"));
 };
 
 // Folds what an earlier red left owed into this one: its failures that still fail, and every land they may have come with.
@@ -476,24 +500,26 @@ export const routeLandBreakage = async (services: Services, breakage: LandBreaka
         // What an earlier red carried in is gone at this one, though the tree is red on something older: those runs
         // were resolved without anybody sent.
         if (owed.runs.length > 1 && owed.breakage.fresh.length === 0) {
-            await fileRouting(services, project, owed.runs.slice(0, -1), { kind: "resolved", at: now, detail: "Gone at the next check, before anybody was sent." });
+            await fileRouting(services, project, breakage.redSince, owed.runs.slice(0, -1), { kind: "resolved", at: now, detail: "Gone at the next check, before anybody was sent." });
         }
-        await fileBlame(services, project, [breakage.runAt], NOBODY);
+        await fileBlame(services, project, breakage.redSince, [breakage.runAt], NOBODY, undefined);
         return undefined;
     }
     // Laid once, as soon as the run settles, whatever is decided about it: every run it answers for carries the answer.
     const laid = await blame(services, owed.breakage, git);
-    await fileBlame(services, project, owed.runs, laid);
+    await fileBlame(services, project, breakage.redSince, owed.runs, laid, owed.breakage.fresh);
     if (!(await services.sandboxSettings.get()).autoRepair) {
         await carry(services, project, breakage.redSince, undefined);
         const routing: MainlineRouting = { kind: "reported", at: now, detail: "Repairs after landing are switched off." };
-        await fileRouting(services, project, owed.runs.slice(0, -1), routing);
+        await fileRouting(services, project, breakage.redSince, owed.runs, routing);
         return routing;
     }
     if (breakage.queuedBehind && owed.waits < WAITS_PER_STREAK) {
         await carry(services, project, breakage.redSince, { ...owed, waits: owed.waits + 1 });
         append(services, "deps.breakage_waiting", `${owed.breakage.fresh.length} failure(s) in ${where(project)} wait for the check of the work that landed meanwhile.`);
-        return { kind: "waiting", at: now, detail: "More work landed while this ran; its check decides before anybody is sent." };
+        const routing: MainlineRouting = { kind: "waiting", at: now, detail: "More work landed while this ran; its check decides before anybody is sent." };
+        await fileRouting(services, project, breakage.redSince, [breakage.runAt], routing);
+        return routing;
     }
     // Filed on every run it answers for, the one just settled included, so a red held now and routed later reads its
     // final answer wherever the editor looks.
@@ -528,13 +554,13 @@ export const breakageSettled = async (
     if (streak?.carried !== undefined) {
         const routing: MainlineRouting = { kind: "resolved", at: Date.now(), detail: "Green at the next check, before anybody was sent." };
         for (const at of streak.carried.runs) {
-            await services.verifyStore.routed(project, at, routing).catch((error: unknown) => services.logger.warn({ err: error, project }, "land breakage: routing not filed"));
+            await services.verifyStore.routed(project, at, routing).catch(warnOn(services, { project }, "land breakage: routing not filed"));
         }
         append(services as BreakageRouter, "deps.breakage_resolved", `The failures in ${where(project)} were gone at the next check; nobody was sent.`);
     }
     const since = redSince ?? streak?.since;
     if (since !== undefined) {
-        const routed = decisionsSince((await services.verifyStore.read()).runs, project, since).filter(
+        const routed = (streak?.since === since ? streak.decisions : []).filter(
             ({ kind }) => kind === "original" || kind === "fix-up" || kind === "spent",
         ).length;
         // The measure of this design: how long main stays red, and how many repairs it took.
@@ -568,9 +594,7 @@ export const resumeBreakageRouter = async (services: Services, git: GitRunner = 
             continue;
         }
         if (!(await services.landCheck.ahead(project))) {
-            await decide(services, owedOf(project, streak.since, carried), git, Date.now()).catch((error: unknown) =>
-                services.logger.warn({ err: error, project }, "land breakage: a waiting red could not be routed"),
-            );
+            await decide(services, owedOf(project, streak.since, carried), git, Date.now()).catch(warnOn(services, { project }, "land breakage: a waiting red could not be routed"));
         }
     }
 };

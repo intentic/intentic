@@ -6,39 +6,32 @@
 // measurement no longer prints it, so every report also carries a measurement of every check and the linter, and the
 // argv that takes the next one (`--recheck`, which writes an entry holding the measurement alone).
 //
-// The file is the contract with the daemon: a JSON array, newest first, at most REPORTS_KEPT entries of `version: 1`,
-// each `{ id, at, kind: "push" | "recheck", remote?, pushes?, findings?, measured?, recheck }`. A finding names what
+// The file is the contract with the daemon (lib/push-store.mjs holds it, beside the tree verdicts): a JSON array, newest
+// first, at most REPORTS_KEPT report entries of `version: 1`, each `{ id, at, kind: "push" | "recheck", remote?,
+// pushes?, findings?, measured?, recheck }`; the daemon reads past every other kind. A finding names what
 // measured it by `source` (a check's id, `lint`, …: this repository's words, which the daemon never interprets) and says
 // whether a later measurement can clear it (`recheckable`); `kind`/`check` are written too, for a daemon that reads only them. A finding is matched
 // against a later measurement by its KEY (findingKey), and `key: ""` means it has no line of its own: it clears only
 // when its whole check passes.
-import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { git } from "../lib/git.mjs";
+import { readStore, storePath, writeStore } from "../lib/push-store.mjs";
 import { checkVerdicts } from "./check-snapshot.mjs";
+import { checkCommand, findingKey, runLint } from "./measure-change.mjs";
 import { problemLines } from "./turn-findings.mjs";
 
-export const REPORT_FILE = "intentic-push-report.json";
-// Enough for the pushes between two times the daemon reads the file, which is at most minutes apart.
-export const REPORTS_KEPT = 10;
+// One definition each, measure-change.mjs's: every caller keys, spells and reads a tidy finding the same way.
+export { checkCommand, findingKey, tidyFindings } from "./measure-change.mjs";
+
+export { REPORTS_KEPT, STORE_FILE as REPORT_FILE } from "../lib/push-store.mjs";
 // What the daemon runs, from the repository root, to measure the findings again.
 export const RECHECK = ["node", "_tools/scripts/verify/push-report.mjs", "--recheck"];
 // git calls one report may spend naming the commit behind its findings: a push that trips a check on hundreds of lines
 // still has to reach the remote in seconds, and the first sixty are the ones anybody reads.
 const ATTRIBUTION_CALLS = 60;
-
-/**
- * The same finding whatever moved around it: whitespace collapsed and every run of digits one `#`, so `a.ts:127  x` and
- * `a.ts:128 x` are one key, and so are `3 silent catch(es)` and `2 silent catch(es)`. Coarser than turn-findings.mjs's
- * own key (which flattens only `:12` anchors) on purpose: that one tells a push's new lines from standing ones in the
- * same minute, this one has to recognise a finding in a measurement taken days and several edits later.
- */
-export const findingKey = (line) => line.trim().replace(/\s+/g, " ").replace(/\d+/g, "#");
-
-export const checkCommand = (id) => `node _tools/checks/run.mjs --only ${id}`;
 
 // A code-gate check the tree fails, one finding per line it printed. A check whose output has no line in a shape
 // problemLines recognises is still named, by its first line, with no key: nothing short of it passing can clear it.
@@ -55,32 +48,11 @@ export const brokenFindings = (verdict) => {
     return lines.map((line) => ({ ...base, text: line.trim(), key: findingKey(line) }));
 };
 
-// The tidy lines this push introduced (judgeAgainstBase's `added`), and none of the rest: a line already failing at the
-// base is not this push's, and one the base could not be asked about is charged to nobody. `added` may hold the
-// whole-check line (a check that passed at the base and fails in a shape with no finding lines), which is no line the
-// check printed, so it gets no key.
-export const tidyFindings = (judged) =>
-    judged.flatMap(({ verdict, added }) => {
-        const printed = new Set(problemLines(verdict).values());
-        return added.map((line) => ({
-            kind: "check",
-            check: verdict.id,
-            source: verdict.id,
-            recheckable: true,
-            gate: "tidy",
-            text: line.trim(),
-            key: printed.has(line) ? findingKey(line) : "",
-            command: checkCommand(verdict.id),
-        }));
-    });
-
-// The failed steps lib/steps.mjs ran or recorded that are findings of their own; the checkout gates and tidiness are
-// already findings line by line (above), so they are not counted twice. The linter's finding is keyless: only the
-// linter passing clears it.
+// The failed steps lib/steps.mjs ran or recorded that are findings of their own; the checkout gates, tidiness and the
+// linter are already findings line by line (measure-change.mjs), so they are not counted twice.
 const STEP_KINDS = [
     [/^assertion ratchet\b/, "ratchet"],
     [/^manifest\/lockfile lockstep$/, "lockstep"],
-    [/^lint$/, "lint"],
     [/^cargo fmt --check\b/, "rustfmt"],
 ];
 export const stepFindings = (failed) =>
@@ -90,36 +62,32 @@ export const stepFindings = (failed) =>
             return [];
         }
         const text = `${label}: ${why}`;
-        // Only the linter can be measured again; the ratchet, the lockstep and rustfmt are about the pushed commits.
-        return [
-            {
-                kind,
-                source: kind,
-                recheckable: kind === "lint",
-                text,
-                key: kind === "lint" ? "" : findingKey(text),
-                ...(spelling === undefined ? {} : { command: spelling }),
-            },
-        ];
+        // The ratchet, the lockstep and rustfmt are about the pushed commits, so no later measurement clears them.
+        const finding = { kind, source: kind, recheckable: false, text, key: findingKey(text) };
+        if (spelling !== undefined) {
+            finding.command = spelling;
+        }
+        return [finding];
     });
 
-// `pnpm lint`'s outcome from its spawn, or undefined when it could not run at all (no pnpm): that is not a pass.
-export const lintOutcome = (result) => (result.error !== undefined ? undefined : result.status === 0 ? "passed" : "failed");
-
 // What every check and the linter said, keyed the way findings are, so a finding recorded at any earlier push can be
-// read against it: gone from `keys` of a measured check (or the check passing) is resolved.
+// read against it: gone from `keys` of a measured source (or the source passing) is resolved. `lint` is runLint's answer
+// (measure-change.mjs); it is kept as a source among the checks, and as the passed/failed the first daemons read.
 export const measuredOf = (verdicts, lint) => ({
-    checks: Object.fromEntries(
-        (verdicts ?? []).map((verdict) => [
-            verdict.id,
-            {
-                ok: verdict.ok === true,
-                measured: verdict.measured !== false,
-                keys: verdict.ok === true ? [] : [...new Set([...problemLines(verdict).values()].map(findingKey))],
-            },
-        ]),
-    ),
-    ...(lint === undefined ? {} : { lint }),
+    checks: {
+        ...Object.fromEntries(
+            (verdicts ?? []).map((verdict) => [
+                verdict.id,
+                {
+                    ok: verdict.ok === true,
+                    measured: verdict.measured !== false,
+                    keys: verdict.ok === true ? [] : [...new Set([...problemLines(verdict).values()].map(findingKey))],
+                },
+            ]),
+        ),
+        ...(lint === undefined ? {} : { lint: { ok: lint.ran && lint.findings.length === 0, measured: lint.ran, keys: [...new Set(lint.findings.map(({ key }) => key))] } }),
+    },
+    ...(lint === undefined || !lint.ran ? {} : { lint: lint.findings.length === 0 ? "passed" : "failed" }),
 });
 
 // A repository-relative path named in a finding: `a/b.ts`, `a/b.ts:12`, `.githooks/pre-push`, a directory `a/b:`, or a
@@ -205,7 +173,7 @@ export const reportId = (at) => `${at.toString(36)}-${Math.random().toString(36)
 const remoteName = (remote) => (remote === undefined || remote === "" || /[:/\\]/.test(remote) ? undefined : remote);
 
 // One push's entry; `pushes` are `[{ ref, head, base? }]`, `findings` what brokenFindings, tidyFindings and stepFindings
-// made of the run, `verdicts` checkVerdicts' answer and `lint` lintOutcome's.
+// made of the run, `verdicts` checkVerdicts' answer and `lint` runLint's (measure-change.mjs).
 export const pushEntry = (root, { remote, pushes, findings, verdicts, lint, at = Date.now() }) => {
     const described = describePushes(root, pushes);
     const name = remoteName(remote);
@@ -233,73 +201,24 @@ export const measureEntry = (verdicts, lint, at = Date.now()) => ({
     recheck: RECHECK,
 });
 
-export const reportPath = (root) => {
-    const dir = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")?.trim();
-    return dir === undefined ? undefined : join(dir, REPORT_FILE);
-};
+// The store the report lives in, shared with the tree verdicts (lib/push-store.mjs).
+export const reportPath = storePath;
 
-const readAt = (path) => {
-    let text;
-    try {
-        text = readFileSync(path, "utf8");
-    } catch (error) {
-        if (error?.code === "ENOENT") {
-            return [];
-        }
-        throw error;
-    }
-    let parsed;
-    try {
-        parsed = JSON.parse(text);
-    } catch {
-        // allow(silent-catch): a report this cannot parse, the daemon cannot either, so its entries are lost to both already;
-        // starting the file over is what lets the next push be read at all.
-        return [];
-    }
-    return Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === "object" && entry !== null && !Array.isArray(entry)) : [];
-};
+// The push and recheck entries on file, newest first; none when git cannot name the common dir.
+export const readReports = (root) => readStore(root).filter((entry) => entry.kind !== "verdict");
 
-// The entries on file, newest first; none when git cannot name the common dir.
-export const readReports = (root) => {
-    const path = reportPath(root);
-    return path === undefined ? [] : readAt(path);
-};
-
-/**
- * Puts `entry` first and keeps REPORTS_KEPT. Never throws: `{ ok: true, path }` or `{ ok: false, why }`, since the
- * caller is a push that goes either way and must not be stopped by its own bookkeeping.
- */
-export const writeReport = (root, entry) => {
-    const path = reportPath(root);
-    if (path === undefined) {
-        return { ok: false, why: "git could not name this repository's common dir" };
-    }
-    // Written aside and renamed over, so a reader never sees half a file; the pid keeps two pushes' scratch files apart.
-    const scratch = `${path}.${process.pid}.tmp`;
-    try {
-        writeFileSync(scratch, `${JSON.stringify([entry, ...readAt(path)].slice(0, REPORTS_KEPT))}\n`);
-        renameSync(scratch, path);
-        return { ok: true, path };
-    } catch (error) {
-        const why = error instanceof Error ? error.message : String(error);
-        try {
-            rmSync(scratch, { force: true });
-        } catch (cleanup) {
-            return { ok: false, why: `${why} (and ${scratch} is left behind: ${cleanup instanceof Error ? cleanup.message : String(cleanup)})` };
-        }
-        return { ok: false, why };
-    }
-};
+/** Puts `entry` first; never throws (lib/push-store.mjs, writeStore). */
+export const writeReport = (root, entry) => writeStore(root, entry);
 
 // THE RECHECK: the same measurement a push takes, without a push, so a finding fixed since can be seen to be gone. The
 // daemon runs it (RECHECK) when the owner asks and after a land check; it writes the measurement alone and exits 0 either
 // way, since what it measured is the answer and a red tree is not a failure to measure.
 const recheck = (root) => {
     const verdicts = checkVerdicts(root);
-    const lint = lintOutcome(spawnSync("pnpm", ["lint"], { cwd: root, stdio: "ignore", shell: process.platform === "win32" }));
+    const lint = runLint(root);
     const checks = verdicts === undefined ? "checks could not be measured" : `${verdicts.filter(({ ok }) => !ok).length} of ${verdicts.length} checks fail`;
-    const linted = lint === undefined ? "lint could not run" : `lint ${lint}`;
-    if (verdicts === undefined && lint === undefined) {
+    const linted = lint.ran ? `lint ${lint.findings.length === 0 ? "passed" : `found ${lint.findings.length}`}` : "lint could not run";
+    if (verdicts === undefined && !lint.ran) {
         console.error(`push-report: ${checks} and ${linted}, so nothing was measured and nothing is written`);
         return;
     }

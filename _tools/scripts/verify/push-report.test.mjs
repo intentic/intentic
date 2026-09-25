@@ -23,6 +23,7 @@ import {
     tidyFindings,
     writeReport,
 } from "./push-report.mjs";
+import { lintFindings } from "./measure-change.mjs";
 import { blindAtBase, judgeAgainstBase, problemLines } from "./turn-findings.mjs";
 
 // The shape _tools/checks/run.mjs emits per check, with `lines` where a real one writes its findings to stderr.
@@ -85,6 +86,8 @@ test("only the tidy lines the push added are recorded: not the standing ones, no
             text: NEW_CATCH.trim(),
             key: "- _sandbox/sandbox/src/browser/tools/browser-router.ts:# catch returns a literal and drops the error",
             command: "node _tools/checks/run.mjs --only silent-catch",
+            // The same finding as the land check's router names it (land-tiers.mjs, one measurement for both).
+            unit: "tidy silent-catch: - _sandbox/sandbox/src/browser/tools/browser-router.ts:#  catch returns a literal and drops the error",
         },
     ]);
 });
@@ -102,6 +105,7 @@ test("a check that passed at the base and fails with no finding lines is recorde
             text: "layout passed before this change and fails now",
             key: "",
             command: "node _tools/checks/run.mjs --only layout",
+            unit: "tidy layout: layout passed before this change and fails now",
         },
     ]);
 });
@@ -143,7 +147,6 @@ test("the steps that are findings of their own are named by kind; the checks' st
         { label: "tidiness", why: "1 tidy check(s) this push breaks: paths" },
         { label: "assertion ratchet (0123abcde..4567fedcb)", why: "exit 1", spelling: "node _tools/scripts/verify/assertion-ratchet.mjs 0123abcde 4567fedcb" },
         { label: "manifest/lockfile lockstep", why: "the push commits package.json while pnpm-lock.yaml is changed" },
-        { label: "lint", why: "exit 1", spelling: "pnpm lint" },
         { label: "cargo fmt --check (tools/ic)", why: "exit 1", spelling: "cargo fmt --manifest-path tools/ic/Cargo.toml --all --check" },
     ];
     assert.deepEqual(stepFindings(failed), [
@@ -162,7 +165,6 @@ test("the steps that are findings of their own are named by kind; the checks' st
             text: "manifest/lockfile lockstep: the push commits package.json while pnpm-lock.yaml is changed",
             key: "manifest/lockfile lockstep: the push commits package.json while pnpm-lock.yaml is changed",
         },
-        { kind: "lint", source: "lint", recheckable: true, text: "lint: exit 1", key: "", command: "pnpm lint" },
         {
             kind: "rustfmt",
             source: "rustfmt",
@@ -191,17 +193,21 @@ test("the measurement keys every check the way findings are keyed, and says whic
             verdict("silent-catch", [NEW_CATCH, moved, STANDING_CATCH]),
             verdict("i18n-literals", [], { measured: false }),
         ],
-        "failed",
+        { ran: true, findings: lintFindings("a.ts:3:1: Unused. [Error/no-unused-vars]\na.ts:9:1: Unused. [Error/no-unused-vars]") },
     );
     assert.deepEqual(measured, {
         checks: {
             paths: { ok: true, measured: true, keys: [] },
             "silent-catch": { ok: false, measured: true, keys: [findingKey(NEW_CATCH), findingKey(STANDING_CATCH)] },
             "i18n-literals": { ok: false, measured: false, keys: [] },
+            // The linter is a source among the checks, its findings keyed without their positions.
+            lint: { ok: false, measured: true, keys: ["lint a.ts: no-unused-vars Unused."] },
         },
         lint: "failed",
     });
     assert.deepEqual(measuredOf(undefined, undefined), { checks: {} });
+    // A linter that could not run measured nothing, and says neither passed nor failed.
+    assert.deepEqual(measuredOf(undefined, { ran: false, findings: [] }), { checks: { lint: { ok: false, measured: false, keys: [] } } });
 });
 
 // A real repository, since what is under test is where git puts the file and what `git log` answers for a range.

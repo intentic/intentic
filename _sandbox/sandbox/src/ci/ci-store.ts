@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { RedSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
@@ -16,12 +17,26 @@ const CONCLUSIONS_KEPT = 200;
 const ANNOUNCED_KEPT = 60;
 
 const ConclusionSchema = z.object({ status: z.enum(["success", "failed"]), at: z.number() });
+
+// Main's CI red on one branch, as the repair gate keeps it (repair-gate.ts): the Red (contract, RedSchema: the failed
+// jobs are its findings, a fix it started is its decision), with the run its streak began with, which names the fix, the
+// newest run of it, how many runs it holds, and when the newest was seen, which the quiet window is measured from. Kept
+// here rather than in memory, so a restart neither forgets a streak nor starts a second fix on it.
+const CiRedSchema = RedSchema.omit({ source: true, scope: true }).extend({
+    count: z.number(),
+    firstRunId: z.number(),
+    runId: z.number(),
+    seenAt: z.number(),
+});
+export type CiRed = z.infer<typeof CiRedSchema>;
 const CiStateSchema = z.object({
     secret: z.string().min(1),
     // Keyed "<repo>\n<branch>": \n can't appear in either half, so the key can't collide.
     conclusions: z.record(z.string(), ConclusionSchema),
     // Absent means never polled (suppresses the backlog storm); empty means polled with none found, not re-seeded.
     announced: z.record(z.string(), z.array(z.number())).optional(),
+    // Keyed like `conclusions`; only branches red right now.
+    reds: z.record(z.string(), CiRedSchema).optional(),
 });
 type CiState = z.infer<typeof CiStateSchema>;
 
@@ -36,6 +51,10 @@ export interface CiStore {
     readonly announcedRuns: (repo: string) => Promise<number[] | undefined>;
     // Newest-first; ids past ANNOUNCED_KEPT are forgotten.
     readonly recordAnnounced: (repo: string, runIds: readonly number[]) => Promise<void>;
+    // Main's CI reds, keyed "<repo>\n<branch>".
+    readonly reds: () => Promise<Readonly<Record<string, CiRed>>>;
+    // Changes one branch's red; undefined forgets it.
+    readonly red: (repo: string, branch: string, change: (current: CiRed | undefined) => CiRed | undefined) => Promise<void>;
 }
 
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
@@ -67,6 +86,15 @@ export const fileCiStore = (path: string): CiStore => {
             });
         },
         announcedRuns: async (repo) => (await file.read()).announced?.[repo],
+        reds: async () => (await file.read()).reds ?? {},
+        red: async (repo, branch, change) => {
+            await file.update((state) => {
+                const key = keyOf(repo, branch);
+                const next = change(state.reds?.[key]);
+                const { [key]: _previous, ...others } = state.reds ?? {};
+                return { ...minted(state), reds: next === undefined ? others : { ...others, [key]: next } };
+            });
+        },
         recordAnnounced: async (repo, runIds) => {
             await file.update((state) => ({
                 ...minted(state),

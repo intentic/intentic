@@ -1,5 +1,5 @@
 import { FIELD_NOTES_FILE, HISTORY_ROOT } from "@intentic/constants";
-import { CHORES, choreAutomationPrompt, FIX_DEPS_AUTOMATION } from "@intentic/sandbox-contract/chores";
+import { CHORES, choreAutomationPrompt } from "@intentic/sandbox-contract/chores";
 import { type AutomationCatalog, type AutomationTemplate, TriggerSchema, type TriggerSource } from "@intentic/sandbox-contract";
 import { type AutomationTemplateContribution, extensionIdOf, type ListenerContribution } from "@intentic/extension-manifest";
 import { installedExtensions } from "../extensions/installed-extensions.js";
@@ -243,20 +243,6 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
             "checks, and say what you changed. `untrusted.breadcrumbs` is what happened in the seconds before, oldest first, which is usually how you " +
             "work out the steps to reproduce.",
         setup: "Paste the reporter snippet into your site before </body>, on any origin you listed. Held for your approval by default: a bug-fix turn has the run of the repo and its brief was written by a stranger's browser, so the first ones are worth reading before you let them run themselves.",
-    },
-    {
-        id: FIX_DEPS_AUTOMATION.id,
-        title: FIX_DEPS_AUTOMATION.title,
-        icon: "wrench",
-        requires: [],
-        trigger: { kind: "workspace", event: FIX_DEPS_AUTOMATION.event },
-        guard: FIX_DEPS_AUTOMATION.guard,
-        holdForSeconds: FIX_DEPS_AUTOMATION.holdForSeconds,
-        prompt: FIX_DEPS_AUTOMATION.prompt,
-        description: "When a landed dependency change breaks the workspace's checks, start a fix, after a countdown you can cancel.",
-        note: FIX_DEPS_AUTOMATION.guardNote,
-        offer: "create",
-        chore: true,
     },
     {
         id: "review-agent-work",
