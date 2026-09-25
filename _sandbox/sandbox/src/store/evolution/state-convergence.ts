@@ -3,15 +3,15 @@ import { basename, dirname, join, sep } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { z } from "zod";
-import { stateRelPath } from "../state-paths.js";
+import { stateRelPath } from "../../state-paths.js";
 import { convertDocument } from "./conversions.js";
 import { defineDocument, type DocumentRoot, type DocumentSpec, documentKey, engineEpoch, registeredDocuments } from "./documents.js";
-import { jsonEntries } from "./json-file.js";
-import { newestRunEngine, recordNewestRun } from "./newest-run.js";
+import { jsonEntries } from "../json-file.js";
+import { newestRunEngine, recordNewestRun } from "../newest-run.js";
 import { commitEpisodes, type Episode, GRACE_MS, type Journal, openEpisode, pruneEpisodes, readJournal, restoreEpisode, writeJournal } from "./state-journal.js";
 import { reconcileRenames, type RenameWindow, setRenameWindows } from "./rename-compat.js";
 import { registeredSteps, type StructuralStep } from "./state-steps.js";
-import { writeTextFile } from "./text-file.js";
+import { writeTextFile } from "../text-file.js";
 
 // The layout step the engine itself owns; every other step registers from the module whose document it evolves.
 export { stateRegroupStep } from "./steps/state-regroup.js";

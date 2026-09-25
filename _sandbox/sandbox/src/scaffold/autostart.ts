@@ -4,7 +4,7 @@ import { zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import type { Services } from "../composition.js";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import { appPanelKey, buildAppSpec } from "../workspace/layout/app-previews.js";
 import { statePath, stateRelPath } from "../state-paths.js";

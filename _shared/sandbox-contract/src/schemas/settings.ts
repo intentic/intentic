@@ -186,7 +186,8 @@ export type SkillSwitch = z.infer<typeof SkillSwitchSchema>;
 // Opt-in settings the /settings routes edit and streamAgent reads, defaulting off so each can be A/B tested (`skills`
 // defaults on for the baked tools worth having, since a skill file is the only thing that tells the agent a baked
 // binary exists). Every default lives in the schema, so an older settings file still parses and keeps the owner's other
-// picks rather than failing whole.
+// picks rather than failing whole. A setting removed or reshaped here gets its conversion in settings-history.ts, which
+// also names every retired setting, none of whose names may come back.
 
 export const SandboxSettingsSchema = z.object({
     // The zone every WALL-CLOCK RULE in this sandbox is meant in — an automation's cron, and anything else that says

@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import { type Automation, type AutomationRun, AutomationRunSchema, AutomationSchema, type ModelPin } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { fold, isJsonObject, type JsonObject } from "../store/conversions.js";
-import { defineDocument } from "../store/documents.js";
+import { fold, isJsonObject, type JsonObject } from "../store/evolution/conversions.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonEntries, jsonFile } from "../store/json-file.js";
-import { defineStep } from "../store/state-steps.js";
+import { defineStep } from "../store/evolution/state-steps.js";
 import { stateRelPath } from "../state-paths.js";
 
 // The sandbox-owned automations manifest and the run ledger beside it; the scheduler polls the manifest, the

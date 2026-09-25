@@ -1,6 +1,6 @@
 import { type Persona, PersonaSchema } from "@intentic/sandbox-contract";
-import { retype } from "../store/conversions.js";
-import { defineDocument } from "../store/documents.js";
+import { retype } from "../store/evolution/conversions.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { idListFile, type IdListStore } from "../store/id-list-file.js";
 import { stateRelPath } from "../state-paths.js";
 

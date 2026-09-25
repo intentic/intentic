@@ -1,7 +1,5 @@
-import { type RuleSchema, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import type { z } from "zod";
-import { dropAll, isJsonObject, mapValue, retype } from "../store/conversions.js";
-import { defineDocument } from "../store/documents.js";
+import { SETTINGS_HISTORY, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import { objectParse } from "../store/unknown-keys.js";
 import { stateRelPath } from "../state-paths.js";
@@ -9,61 +7,11 @@ import { stateRelPath } from "../state-paths.js";
 // The sandbox-owned agent-settings manifest (<workspace>/.intentic/config/settings.json). Mirrors the automations
 // store: a small JSON file the /settings routes edit and streamAgent reads. No secrets, so not on the denylist.
 
-// Rules at a moment or with an action a later version withdrew (the `push.starting` moment, `instruct` actions, three
-// built-in checks) can never run, and one of them made the whole file unreadable, every setting in it with it.
-const RETIRED_MOMENTS: ReadonlySet<unknown> = new Set(["push.starting"]);
-const RETIRED_ACTIONS: ReadonlySet<unknown> = new Set(["instruct"]);
-const RETIRED_BUILTINS: ReadonlySet<unknown> = new Set(["verify-edits", "verify-removals", "verify-tests"]);
-
-const isRetiredRule = (rule: unknown): boolean => {
-    if (!isJsonObject(rule)) {
-        return false;
-    }
-    const action = isJsonObject(rule["action"]) ? rule["action"] : {};
-    return RETIRED_MOMENTS.has(rule["moment"]) || RETIRED_ACTIONS.has(action["kind"]) || (action["kind"] === "builtin" && RETIRED_BUILTINS.has(action["name"]));
-};
-
-const holdsRetiredRule = (value: unknown): value is readonly unknown[] => Array.isArray(value) && value.some(isRetiredRule);
-
+// Its conversions are the contract's (SETTINGS_HISTORY), shared with a sandbox.toml's [settings] table.
 export const settingsDocument = defineDocument({
     path: stateRelPath(".intentic/config/settings.json"),
     schema: SandboxSettingsSchema,
-    history: [
-        // Every setting a release since 2026-08-10 had and this one does not (read off the contract lock's history):
-        // retired, so passthrough stops carrying them, a definition naming one still applies, and no later setting may
-        // take one of these names to mean something else.
-        ...dropAll([
-            "agentRunEffort",
-            "agentRunModel",
-            "agentRunModels",
-            "autoFastModels",
-            "autoTier",
-            "autoTierEagerness",
-            "commandJudgeModels",
-            "commandRules",
-            "contextShelf",
-            "dependencyFreshness",
-            "explainCommands",
-            "iqContext",
-            "iqContextHoldout",
-            "moveAfterLimit",
-            "quickModel",
-            "resumeAfterLimit",
-            "resumeAfterOutage",
-            "terseHoldout",
-            "terseOutput",
-            "testFaultDetection",
-        ]),
-        retype(
-            "rules",
-            holdsRetiredRule,
-            // What survives the filter is every rule this version can read; the parse after the chain says so.
-            (rules) => rules.filter((rule) => !isRetiredRule(rule)) as z.input<typeof RuleSchema>[],
-            "drops rules at a withdrawn moment or with a withdrawn action (push.starting, instruct, three built-in checks)",
-        ),
-        // suggest, the old default, becomes the new default: routing on.
-        mapValue("personaRouting", { off: false, suggest: true, auto: true }),
-    ],
+    history: SETTINGS_HISTORY,
 });
 
 export interface SandboxSettingsStore {

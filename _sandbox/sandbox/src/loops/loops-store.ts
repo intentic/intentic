@@ -7,7 +7,7 @@ import {
     LoopRecordSchema,
     type LoopState,
 } from "@intentic/sandbox-contract";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonEntries } from "../store/json-file.js";
 import { stateRelPath } from "../state-paths.js";
 

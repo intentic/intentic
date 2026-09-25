@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { opt } from "../opt.js";
 import { stateRelPath } from "../state-paths.js";
-import { defineDocument } from "./documents.js";
+import { defineDocument } from "./evolution/documents.js";
 import { jsonFile } from "./json-file.js";
 
 // Tracks whether an embed snippet is actually loading, per origin, to tell an unconfigured automation apart from one

@@ -2,12 +2,13 @@
 // compiled from a checkout. Pulling there REPLACES what the checkout built instead of refreshing it, so the offer is
 // the rebuild from that checkout, and the trade is spelled out rather than made by a click.
 import "@intentic/testing/dom";
-import type { Environment } from "@intentic/sandbox-contract";
+import type { Environment, StagedUpdate } from "@intentic/sandbox-contract";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const updateAvailable = ref(true);
 const localImage = ref<Environment[`localImage`]>(undefined);
+const stagedPlan = ref<StagedUpdate[`plan`]>(undefined);
 jest.mock(`./useSandboxVersion`, () => ({
     useSandboxVersion: () => ({
         info: ref({ version: `1.53.0`, channel: `stable` }),
@@ -19,6 +20,7 @@ jest.mock(`./useSandboxVersion`, () => ({
         breakingNotes: ref([]),
         updateStaged: ref(false),
         stagedBehind: ref(undefined),
+        stagedPlan,
         serverManaged: ref(false),
         slug: ref(`demo`),
         localImage,
@@ -54,6 +56,7 @@ const mount = (): HTMLElement => {
 afterEach(() => {
     updateAvailable.value = true;
     localImage.value = undefined;
+    stagedPlan.value = undefined;
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -75,4 +78,32 @@ it(`offers the checkout's rebuild instead of the pull on a sandbox built from on
     // The way out is still stated, as a command someone has to mean: the published build is named, so is the cost.
     expect(el.textContent).toContain(`discards the image built from your checkout`);
     expect(el.textContent).toContain(`ic sandbox update demo --force`);
+});
+
+it(`names each stored file the downloaded build converts, before anyone takes the update`, () => {
+    stagedPlan.value = {
+        ok: true,
+        steps: [
+            { document: `settings.json`, change: `drops 2 retired settings` },
+            { document: `automations.json`, change: `renames model to modelRef` },
+        ],
+    };
+    const el = mount();
+    expect(el.textContent).toContain(`this update converts 2 stored files`);
+    expect(el.textContent).toContain(`drops 2 retired settings`);
+    expect(el.textContent).toContain(`renames model to modelRef`);
+    // Said, not asked: the update is still offered the same way.
+    expect([...el.querySelectorAll(`[data-recreate]`)].map((node) => node.getAttribute(`data-recreate`))).toEqual([`Update`, `Download`]);
+});
+
+it(`says which conversion would fail instead of listing what converts`, () => {
+    stagedPlan.value = {
+        ok: false,
+        steps: [{ document: `settings.json`, change: `drops 2 retired settings` }],
+        failures: [{ document: `automations.json`, detail: `entry 3 is not an object` }],
+    };
+    const el = mount();
+    expect(el.textContent).toContain(`would stop before touching anything`);
+    expect(el.textContent).toContain(`entry 3 is not an object`);
+    expect(el.textContent).not.toContain(`drops 2 retired settings`);
 });

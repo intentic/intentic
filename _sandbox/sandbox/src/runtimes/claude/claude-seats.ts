@@ -1,6 +1,6 @@
 import type { Logger } from "pino";
 import { z } from "zod";
-import { defineDocument } from "../../store/documents.js";
+import { defineDocument } from "../../store/evolution/documents.js";
 import { jsonFile } from "../../store/json-file.js";
 
 // Accounts an org has turned Claude Code off for, kept apart from the account record: that record is a credential

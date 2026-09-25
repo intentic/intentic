@@ -102,7 +102,7 @@ turns this and the routing of a red land check into reporting only.
 Anything a store writes and reads back (`.intentic/`, the daemon's `/history` files, `conversations.db`, a
 `sandbox.toml`, a bundle) is read by every later release, from sandboxes that skipped any number of them. A change to
 its shape ships with its conversion, in the `history` of the document's `defineDocument`
-(`_sandbox/sandbox/src/store/conversions.ts` has the vocabulary). You do not have to find out when one is needed: the
+(`_sandbox/sandbox/src/store/evolution/conversions.ts` has the vocabulary). You do not have to find out when one is needed: the
 typecheck of `src/store/generated/state-shapes.ts` fails at the document and property an old file would break on. Never
 read an existing key a new way (rename it), and never reuse a retired name. [COMPATIBILITY.md](COMPATIBILITY.md#stored-data)
 has the rest and the reasons.

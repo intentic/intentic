@@ -13,8 +13,8 @@ import type {
 import type { DocumentSpec } from "./documents.js";
 
 // The conversions of conversions.ts replayed on types: given a shape an earlier build wrote (frozen by the shape
-// generator, scripts/write-state-shapes.ts) and a document's history, the shape its conversions leave. The generated
-// checks (store/shapes/state-shapes.gen.ts) require that shape to be assignable to what today's schema accepts, so a
+// generator, store/shapes/write-state-shapes.ts) and a document's history, the shape its conversions leave. The generated
+// checks (store/generated/state-shapes.ts) require that shape to be assignable to what today's schema accepts, so a
 // schema change that would strand an old file fails the typecheck at the document until a conversion covers it.
 // The declarative conversions are modelled exactly; `transform` by its declared input and output.
 

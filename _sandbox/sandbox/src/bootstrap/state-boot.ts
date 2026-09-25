@@ -3,11 +3,11 @@ import type { Config } from "../env.config.js";
 import { AGENT_SESSION_ENV, type ContainerRole } from "../platform/boot/container-owner.js";
 import type { ProfileTraits } from "../platform/boot/profile.js";
 import { statePath } from "../state-paths.js";
-import { commitState, convergeState, type StateRoots } from "../store/state-convergence.js";
+import { commitState, convergeState, type StateRoots } from "../store/evolution/state-convergence.js";
 import { version } from "../version.js";
 import type { BootPhase } from "./boot-phase.js";
 
-// The two moments of boot the state engine owns (store/state-convergence.ts): converging stored files to this build's
+// The two moments of boot the state engine owns (store/evolution/state-convergence.ts): converging stored files to this build's
 // shapes before any store opens, and committing that episode once the boot chain has converged, the point past which
 // nothing it converted needs undoing.
 

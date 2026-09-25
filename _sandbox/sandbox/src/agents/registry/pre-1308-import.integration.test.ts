@@ -14,8 +14,8 @@ import { fileTranscriptRecord, legacyTranscriptFile, transcriptFile } from "../.
 import { conversationUnit } from "../../store/conversation-units.js";
 import { conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
 import { clearNewestRun } from "../../store/newest-run.js";
-import { convergeState, resetStateStatus, type StateRoots } from "../../store/state-convergence.js";
-import type { StepContext, StructuralStep } from "../../store/state-steps.js";
+import { convergeState, resetStateStatus, type StateRoots } from "../../store/evolution/state-convergence.js";
+import type { StepContext, StructuralStep } from "../../store/evolution/state-steps.js";
 import { conversationEntry } from "../../testing.js";
 import { type Composition, type PersistedAgent, type RepoRecord, sqliteAgentsStore } from "./agents-store.js";
 import { importRecordPath, pre1308ImportStep } from "./pre-1308-import.js";

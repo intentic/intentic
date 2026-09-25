@@ -1,7 +1,7 @@
 import { open } from "node:fs/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { DatabaseSync } from "node:sqlite";
-import { transaction } from "./sqlite.js";
+import { transaction } from "../sqlite.js";
 
 // Schema evolution for the daemon's SQLite databases, versioned by the one number SQLite keeps for exactly this
 // (`PRAGMA user_version`, stamped inside the same transaction as the step it counts, so a crash leaves a database at a

@@ -1,6 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
 import { type Fence, type Area, AreaSchema } from "@intentic/sandbox-contract";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { idListFile, type IdListStore } from "../store/id-list-file.js";
 import { stateRelPath } from "../state-paths.js";
 

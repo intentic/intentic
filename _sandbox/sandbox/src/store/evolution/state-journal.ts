@@ -2,9 +2,9 @@ import { copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { z } from "zod";
-import { stateRelPath } from "../state-paths.js";
+import { stateRelPath } from "../../state-paths.js";
 import type { DocumentRoot } from "./documents.js";
-import { writeJsonFile } from "./json-file.js";
+import { writeJsonFile } from "../json-file.js";
 
 // The write-ahead journal of one conversion episode: before the boot step changes a file it copies the file aside
 // (its pre-image), and the episode stays open until the new version has booted all the way. A build that finds an

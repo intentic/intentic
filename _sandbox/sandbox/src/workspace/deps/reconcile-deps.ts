@@ -5,7 +5,7 @@ import { isManifest } from "@intentic/workspace-setup";
 import type { Logger } from "pino";
 import { z } from "zod";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
-import { defineDocument } from "../../store/documents.js";
+import { defineDocument } from "../../store/evolution/documents.js";
 import { jsonFile } from "../../store/json-file.js";
 import { unresolvedDependencies } from "./dependency-drift.js";
 import { type DependencyOrigin, type DependencyRequestOrigin, originPriority } from "./dependency-origin.js";

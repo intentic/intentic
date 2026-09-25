@@ -4,7 +4,7 @@ import { GrantedRoleSchema, roleAtLeast } from "@intentic/sandbox-contract";
 import { isOwnerTicket, verifyOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import { stateRelPath } from "../state-paths.js";
 

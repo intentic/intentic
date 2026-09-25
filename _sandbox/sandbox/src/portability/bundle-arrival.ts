@@ -9,8 +9,8 @@ import { type ArrivalItem, type ArrivalReport, BundleManifestSchema, type Bundle
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { extract, type Headers } from "tar-stream";
 import { pathExists } from "../path-exists.js";
-import { convertDocument, fold, isJsonObject, nested, retype } from "../store/conversions.js";
-import { defineDocument } from "../store/documents.js";
+import { convertDocument, fold, isJsonObject, nested, retype } from "../store/evolution/conversions.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { conversationsDbPath } from "../store/conversations-db.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";

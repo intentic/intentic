@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { headerSchemaVersion, migrateSqlite, type SqliteStep, targetVersion } from "./sqlite-migrations.js";
+import { headerSchemaVersion, migrateSqlite, type SqliteStep, targetVersion } from "./evolution/sqlite-migrations.js";
 import { openSqlite, transaction } from "./sqlite.js";
-import { defineStep } from "./state-steps.js";
+import { defineStep } from "./evolution/state-steps.js";
 
 // The daemon's operational state that must agree with itself, one database beside the conversation units: the registry,
 // and everything keyed by a conversation that must go when it goes, each such row cascading from its conversation's.
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS fire_journal (
 // Every schema change after the baseline, in order; the database's `user_version` says how many it has taken.
 export const CONVERSATIONS_STEPS: readonly SqliteStep[] = [];
 
-// The upgrade runs in the boot step (store/state-convergence.ts), under its journal, with the database and its sidecars
+// The upgrade runs in the boot step (store/evolution/state-convergence.ts), under its journal, with the database and its sidecars
 // copied aside first, so a rolled-back build gets back the file it knew. Opening the database below takes any step
 // this missed (a guest, a failed boot step), as every SQLite program does.
 export const conversationsSchemaStep = defineStep({

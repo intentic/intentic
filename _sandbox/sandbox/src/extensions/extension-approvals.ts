@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { diffPowerMaps, type ExtensionManifest, powersOf, type PowersDiff } from "@intentic/extension-manifest";
 import { z } from "zod";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 
 /* The owner's yes to each workspace extension, pinned by its id and a digest of the powers it declared then. Kept under

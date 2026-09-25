@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { type HookRequests, HookScriptSchema, SettingsHookSchema, type TurnNote } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { type HookPlace, type HookSet, settingsHookSet } from "./settings-hooks.js";
 

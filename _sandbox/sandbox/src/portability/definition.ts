@@ -9,15 +9,15 @@ import {
     type DefinitionWorkspace,
     type SandboxDefinition,
     SandboxDefinitionSchema,
-    SandboxSettingsSchema,DEV_VERSION,isNewer
+    SandboxSettingsSchema,DEV_VERSION,isNewer,
+    SETTINGS_HISTORY,
 } from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/scaffold";
 import { parse } from "smol-toml";
 import { ArrivalFormatError } from "../arrival-error.js";
 import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
-import { settingsDocument } from "../settings/settings-store.js";
-import { convertDocument, nested as carriedAt } from "../store/conversions.js";
-import { defineDocument } from "../store/documents.js";
+import { convertDocument, nested as carriedAt } from "../store/evolution/conversions.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { version } from "../version.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
 import { secretFieldsOf } from "../capabilities/credentials/secret-fields.js";
@@ -45,7 +45,7 @@ export const definitionDocument = defineDocument({
     schema: SandboxDefinitionSchema,
     boot: false,
     history: [
-        ...carriedAt("settings", settingsDocument.history),
+        ...carriedAt("settings", SETTINGS_HISTORY),
         ...carriedAt("capabilities", capabilitiesDocument.history, true),
     ],
 });

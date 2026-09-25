@@ -26,7 +26,7 @@ import { sessionsDir } from "../../sessions/session-store.js";
 import { legacyTranscriptFile, transcriptFile } from "../../sessions/transcript-record.js";
 import { conversationUnit } from "../../store/conversation-units.js";
 import { type ConversationsDb, conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
-import { defineStep, type StepContext, type StepPlan } from "../../store/state-steps.js";
+import { defineStep, type StepContext, type StepPlan } from "../../store/evolution/state-steps.js";
 import { writeTextFile } from "../../store/text-file.js";
 import { type Ending, type PersistedAgent, PersistedAgentSchema, sqliteAgentsStore } from "./agents-store.js";
 

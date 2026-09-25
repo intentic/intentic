@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { statePath, stateRelPath } from "../state-paths.js";
 

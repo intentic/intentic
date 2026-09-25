@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { CONTROL_SCOPES, type ControlReach, type ControlScope, ControlScopeSchema, roleAtLeast, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import { objectParse } from "../store/unknown-keys.js";
 import { stateRelPath } from "../state-paths.js";

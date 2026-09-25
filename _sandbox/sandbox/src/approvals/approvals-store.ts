@@ -2,14 +2,14 @@ import { STATE_DIR } from "@intentic/constants";
 import { ApprovalSchema, type ApprovalSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { writeLoadedSkill } from "../store/loaded-skills.js";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonDir } from "../store/json-dir.js";
 import { stateRelPath } from "../state-paths.js";
 
 // The workspace-relative home the skill text teaches the agent; can't name a dir the store stopped reading.
 const APPROVALS_DIR = stateRelPath(".intentic/config/approvals/");
 
-// Called drafts until 2026-09-02; the flat layout's `drafts` is the regroup step's (store/steps/state-regroup.ts).
+// Called drafts until 2026-09-02; the flat layout's `drafts` is the regroup step's (store/evolution/steps/state-regroup.ts).
 export const approvalsDocument = defineDocument({
     path: APPROVALS_DIR,
     directory: true,

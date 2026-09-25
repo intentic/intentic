@@ -54,6 +54,11 @@ const locked = (): Record<string, LockedFile> => ({
         holds: `an agent's own sign-in`,
         manage: { label: t(`workspace.lockedFile.agentSettings`), to: `/sandbox/agent` },
     },
+    // An update's undo record, written by the boot that converts stored files; a copy of a vault is a vault.
+    "secrets/converting": {
+        subject: `${STATE_DIR}/secrets/converting`,
+        holds: `copies of the files an update changed, kept so a version it rolls back to gets its own files back`,
+    },
     "secrets/auth": {
         subject: `${STATE_DIR}/secrets/auth`,
         holds: `the agents' sign-ins with their providers, plus the vaults behind your connections and your extensions' settings`,

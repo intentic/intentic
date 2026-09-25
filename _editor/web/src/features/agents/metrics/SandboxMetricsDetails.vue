@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
+import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useSandboxReadout } from "./sandboxFigures";
 
@@ -29,7 +30,7 @@ const readout = useSandboxReadout(() => props.metrics);
             <button
                 type="button"
                 v-tooltip.top="t(`agents.liveMetrics.hideHint`)"
-                class="shrink-0 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                :class="ui.textAction(`shrink-0 text-2xs text-muted`)"
                 @click="emit(`hide`)"
             >
                 {{ t(`agents.liveMetrics.hide`) }}

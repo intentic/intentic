@@ -1,13 +1,13 @@
 import { lstat, readFile, rename } from "node:fs/promises";
 import { basename } from "node:path";
 import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
-import { convertDocument } from "./conversions.js";
-import { type DocumentSpec, documentKey } from "./documents.js";
+import { convertDocument } from "./evolution/conversions.js";
+import { type DocumentSpec, documentKey } from "./evolution/documents.js";
 import { type ManifestProblem, recordManifestProblems } from "./manifest-problems.js";
 import { type ManifestEdit, registerManifestEditor } from "./manifest-repair.js";
 import { newerBuildRan } from "./newest-run.js";
-import { reconcileRenames, renameWindowsOf, withOldNames } from "./rename-compat.js";
-import { carryUnknown, type IdKeys, readEntries, reemitQuarantined } from "./passthrough.js";
+import { reconcileRenames, renameWindowsOf, withOldNames } from "./evolution/rename-compat.js";
+import { carryUnknown, type IdKeys, readEntries, reemitQuarantined } from "./evolution/passthrough.js";
 import { queueOnFile, writeTextFile } from "./text-file.js";
 
 // One JSON file, read through a schema and written whole; every `*-store.ts` in the daemon sits on this.

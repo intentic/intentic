@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { rename } from "./conversions.js";
-import { defineDocument } from "./documents.js";
+import { rename } from "./evolution/conversions.js";
+import { defineDocument } from "./evolution/documents.js";
 import { idListFile } from "./id-list-file.js";
 
 const dirs: string[] = [];

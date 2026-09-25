@@ -111,6 +111,6 @@
 // narrowed to the open project, so a view listing every repository (the Projects dashboard) could only poll. Additive.
 // 2.19.0 adds `sandboxDocument` and the `conversions` vocabulary: a file an extension keeps, read through the
 // conversions its shape has had and written with what a newer version of the extension put in it kept in place, the
-// evolution the daemon's own stores got (the daemon's store/conversions.ts). Until now an extension that changed the
+// evolution the daemon's own stores got (the daemon's store/evolution/conversions.ts). Until now an extension that changed the
 // shape of its own file had two choices, a hand-written tolerant reader or a reset for everyone who updated. Additive.
 export const extensionApiVersion = "2.19.0";

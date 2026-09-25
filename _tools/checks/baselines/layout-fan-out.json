@@ -4,5 +4,6 @@
     "_editor/web/src/features/workspace/files": 31,
     "_editor/web/src/features/workspace/viewers": 38,
     "_extensions/viewers/src": 31,
+    "_sandbox/sandbox/src": 32,
     "_sandbox/sandbox/src/capabilities": 35
 }

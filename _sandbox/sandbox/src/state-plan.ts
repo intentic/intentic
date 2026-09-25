@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { statePath } from "./state-paths.js";
 import { recordNewestRun } from "./store/newest-run.js";
-import { planState } from "./store/state-convergence.js";
+import { planState } from "./store/evolution/state-convergence.js";
 import { version } from "./version.js";
 
 // The update pre-flight: run inside the TARGET image over read-only mounts of the running sandbox's volumes

@@ -211,6 +211,7 @@ export * from "./schemas/secrets.js";
 export * from "./schemas/netdisk.js";
 export * from "./schemas/sessions.js";
 export * from "./schemas/settings.js";
+export * from "./schemas/settings-history.js";
 export * from "./schemas/share.js";
 export * from "./schemas/shared.js";
 export * from "./schemas/system-prompt.js";

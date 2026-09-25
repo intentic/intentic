@@ -24,7 +24,7 @@ import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { capabilityFragments } from "../environment/fragment-sources.js";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { statePath, stateRelPath } from "../state-paths.js";
 import { readExtensionEnablement, writeExtensionEnablement } from "./extension-enablement.js";

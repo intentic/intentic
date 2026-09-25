@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { statePath, stateRelPath } from "../state-paths.js";
 

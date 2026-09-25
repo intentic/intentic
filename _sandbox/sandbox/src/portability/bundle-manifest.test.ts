@@ -1,5 +1,5 @@
 import { BundleManifestSchema } from "@intentic/sandbox-contract";
-import { convertDocument } from "../store/conversions.js";
+import { convertDocument } from "../store/evolution/conversions.js";
 import { bundleManifestDocument, unreadableManifest } from "./bundle-arrival.js";
 
 // A bundle's manifest read through the conversions its format has had: what a version 2 bundle (2026-08-25 to 09-02)

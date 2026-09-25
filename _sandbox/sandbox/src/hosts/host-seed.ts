@@ -4,7 +4,7 @@ import { z } from "zod";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { deviceHandler } from "../capabilities/handlers/device.handler.js";
 import type { Services } from "../composition.js";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // Setup auto-connects the machine that ran the installer, granted only `sandboxes` (no shell, files or screen):

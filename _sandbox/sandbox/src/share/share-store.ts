@@ -1,6 +1,6 @@
 import { SharedConversationSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // Daemon's own list of what's shared, on the history volume; the outbox's files alone can't say which conversation,

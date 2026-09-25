@@ -1,7 +1,7 @@
 import { type EngineChannel, EngineChannelSchema, type EngineId, ENGINE_IDS } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { opt } from "../opt.js";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import { statePath, stateRelPath } from "../state-paths.js";
 

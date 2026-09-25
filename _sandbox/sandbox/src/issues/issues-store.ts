@@ -1,5 +1,5 @@
 import { type Issue, type IssueReport, IssueSchema, type IssueStatus, type IssueSummary } from "@intentic/sandbox-contract";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonDir } from "../store/json-dir.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { stateRelPath } from "../state-paths.js";

@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
-import { rename, retype } from "./conversions.js";
-import { defineDocument, type DocumentSpec } from "./documents.js";
+import { rename, retype } from "./evolution/conversions.js";
+import { defineDocument, type DocumentSpec } from "./evolution/documents.js";
 import { type JsonFile, jsonEntries, jsonFile, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
 import { clearNewestRun, recordNewestRun } from "./newest-run.js";
 

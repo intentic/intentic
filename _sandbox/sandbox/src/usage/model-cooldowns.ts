@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // When a model reopens, at <historyRoot>/model-cooldowns.json, outside the agent's reach. Keyed by provider and model,

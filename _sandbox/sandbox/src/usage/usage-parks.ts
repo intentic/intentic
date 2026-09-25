@@ -1,6 +1,6 @@
 import { AgentProviderSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // Per-account stay-away for a provider's usage endpoint, at <historyRoot>/usage-parks.json. On disk rather than in

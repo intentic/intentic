@@ -1,7 +1,7 @@
 import type { z } from "zod";
-import type { DocumentSpec } from "./documents.js";
+import type { DocumentSpec } from "./evolution/documents.js";
 import { jsonFile } from "./json-file.js";
-import { carryUnknown } from "./passthrough.js";
+import { carryUnknown } from "./evolution/passthrough.js";
 
 // JSON file store for entries keyed by id: an invalid entry is skipped and reported rather than thrown, and writes
 // preserve unknown fields so an entry from a newer build survives a rollback.

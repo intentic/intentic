@@ -1,6 +1,6 @@
 import { type Capability, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
-import { isJsonObject, mapValue, retireEntries } from "../store/conversions.js";
-import { defineDocument } from "../store/documents.js";
+import { isJsonObject, mapValue, retireEntries } from "../store/evolution/conversions.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { idListFile, type IdListStore } from "../store/id-list-file.js";
 import { stateRelPath } from "../state-paths.js";
 import type { ResolvedContribution } from "./contributions.js";

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineDocument } from "../../store/documents.js";
+import { defineDocument } from "../../store/evolution/documents.js";
 import { jsonFile } from "../../store/json-file.js";
 import type { ManifestProblem } from "../../store/manifest-problems.js";
 import { heredocSpans } from "../../heredoc.js";

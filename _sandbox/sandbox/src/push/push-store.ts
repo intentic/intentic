@@ -1,7 +1,7 @@
 import { channelId, PushChannelSchema, type PushChannel } from "@intentic/sandbox-contract";
 import webpush from "web-push";
 import { z } from "zod";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // This sandbox's VAPID keypair plus one entry per registered device (a browser's web-push subscription or a native

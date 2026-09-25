@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { TurnStream } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import { threadKey } from "../sessions/thread-sessions.js";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import { stateRelPath } from "../state-paths.js";
 import { WEBCHAT_PROVIDER } from "./webchat-config.js";

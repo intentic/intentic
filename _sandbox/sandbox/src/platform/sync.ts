@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { DeviceReport } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { type JsonFile, jsonEntries } from "../store/json-file.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 

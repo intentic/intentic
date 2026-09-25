@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openSqlite } from "./sqlite.js";
+import { openSqlite } from "../sqlite.js";
 import { headerSchemaVersion, migrateSqlite } from "./sqlite-migrations.js";
 
 test("the header stamp reads without opening the database, and a missing or truncated file reads as nothing", async () => {

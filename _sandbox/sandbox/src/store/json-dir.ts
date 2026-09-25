@@ -1,11 +1,11 @@
 import { readdir, readFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
-import { convertDocument } from "./conversions.js";
-import { type DocumentSpec, documentKey } from "./documents.js";
+import { convertDocument } from "./evolution/conversions.js";
+import { type DocumentSpec, documentKey } from "./evolution/documents.js";
 import { asideOf, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
-import { carryUnknown } from "./passthrough.js";
-import { reconcileRenames, renameWindowsOf, withOldNames } from "./rename-compat.js";
+import { carryUnknown } from "./evolution/passthrough.js";
+import { reconcileRenames, renameWindowsOf, withOldNames } from "./evolution/rename-compat.js";
 import { queueOnFile } from "./text-file.js";
 
 // Directory of one JSON file per entry, for a store with a second writer besides the daemon; jsonFile is the

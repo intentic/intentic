@@ -12,7 +12,7 @@ import { statePath } from "../state-paths.js";
 
 // Undefined until recordNewestRun runs; after that, the newest version seen.
 let newest: string | undefined;
-// The newest conversion engine epoch recorded here (store/documents.ts), undefined before any engine ran.
+// The newest conversion engine epoch recorded here (store/evolution/documents.ts), undefined before any engine ran.
 let newestEngine: number | undefined;
 
 export const newestRunVersion = (): string | undefined => newest;

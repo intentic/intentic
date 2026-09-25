@@ -9,9 +9,9 @@ import {
 } from "@intentic/sandbox-contract";
 import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { isJsonObject, type JsonObject } from "../store/conversions.js";
-import { defineDocument } from "../store/documents.js";
-import { defineStep } from "../store/state-steps.js";
+import { isJsonObject, type JsonObject } from "../store/evolution/conversions.js";
+import { defineDocument } from "../store/evolution/documents.js";
+import { defineStep } from "../store/evolution/state-steps.js";
 import { jsonEntries } from "../store/json-file.js";
 import { stateRelPath } from "../state-paths.js";
 

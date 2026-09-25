@@ -66,7 +66,7 @@ const main = async (): Promise<void> => {
     const role = traits.convergeHome
         ? await claimContainer({ workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot }, logger)
         : { container: false, roots: true };
-    // Brings every stored file to this build's shapes before a single store opens (store/state-convergence.ts), under a
+    // Brings every stored file to this build's shapes before a single store opens (store/evolution/state-convergence.ts), under a
     // journal a rolled-back build undoes; committed once the boot chain converges, below.
     await convergeStateAtBoot({ config, logger, traits, role });
     const services = createServices(config, logger);

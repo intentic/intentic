@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { runnerEnrollUrl } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import type { RunnerModeEnv } from "./runner-mode.js";
 

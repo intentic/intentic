@@ -126,7 +126,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "extension-approvals.json", portability: "identity", note: "Approve the extensions written in this workspace again from Extensions." },
     { path: "local-cert/", portability: "identity" },
 
-    /* ---- the state engine's own bookkeeping (the daemon's store/state-journal.ts) ---- */
+    /* ---- the state engine's own bookkeeping (the daemon's store/evolution/state-journal.ts) ---- */
 
     // Pre-images of the history files an update's conversions changed; `secret` since identity files are among them.
     { path: "converting/", portability: "secret", note: "An update's undo record stays with the sandbox it happened on." },

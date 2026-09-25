@@ -3,7 +3,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
 import { opt } from "../opt.js";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // How something outside this sandbox becomes something it trusts, split into two halves by lifetime. A PAIRING is

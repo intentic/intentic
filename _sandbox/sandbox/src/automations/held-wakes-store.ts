@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type AutomationApproval, AutomationApprovalSchema } from "@intentic/sandbox-contract";
-import { defineDocument } from "../store/documents.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { jsonDir } from "../store/json-dir.js";
 import { stateRelPath } from "../state-paths.js";
 

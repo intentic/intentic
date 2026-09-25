@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { opt } from "../../opt.js";
-import { defineDocument } from "../../store/documents.js";
+import { defineDocument } from "../../store/evolution/documents.js";
 import { jsonFile } from "../../store/json-file.js";
 
 // Stores capability credential values under AGENT_AUTH_DIR (mode 0600), outside the file routes, tree walk and search
