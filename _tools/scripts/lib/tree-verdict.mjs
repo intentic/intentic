@@ -13,8 +13,6 @@ import { git } from "./git.mjs";
 export const VERDICT_TTL_MS = 12 * 60 * 60_000;
 // A day of lands, each writing one `verify` verdict green or red, plus the pushes between them.
 export const VERDICTS_KEPT = 40;
-// How far back along the main line a `verify` verdict still stands in for a base nobody measured exactly.
-export const BASE_DISTANCE_MAX = 20;
 
 // Hash of the working tree's content; `undefined` when git can't answer, which reads as "no verdict" and re-measures.
 export const treeHash = (root) => {
@@ -112,27 +110,6 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     }
     process.exit(recordVerdict(process.cwd(), entry) ? 0 : 1);
 }
-
-// The `verify` verdict about `base`'s tree, else its nearest measured ancestor within BASE_DISTANCE_MAX commits.
-export const verdictForBase = (root, base) => {
-    const tree = commitTree(root, base);
-    const verifies = readVerdicts(root).filter((verdict) => verdict.suite === "verify");
-    const exact = verifies.find((verdict) => verdict.tree === tree);
-    if (exact !== undefined) {
-        return { verdict: exact, distance: 0 };
-    }
-    let nearest;
-    for (const verdict of verifies) {
-        if (typeof verdict.head !== "string" || spawnSync("git", ["merge-base", "--is-ancestor", verdict.head, base], { cwd: root }).status !== 0) {
-            continue;
-        }
-        const distance = Number(git(root, "rev-list", "--count", `${verdict.head}..${base}`)?.trim());
-        if (Number.isInteger(distance) && distance <= BASE_DISTANCE_MAX && (nearest === undefined || distance < nearest.distance)) {
-            nearest = { verdict, distance };
-        }
-    }
-    return nearest;
-};
 
 export const ago = (at) => {
     const seconds = Math.round((Date.now() - at) / 1000);

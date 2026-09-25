@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { type AgentSummary, fixAttemptOf, landBreakagePrompt, landFixConversationId, type MainlineRouting, type MainlineRun } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Services } from "../../composition.js";
@@ -7,6 +8,7 @@ import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origi
 import type { LandBreakage } from "../../workspace/deps/verify-deps.js";
 import type { Carried } from "../../workspace/deps/verify-store.js";
 import { pathOfUnit } from "../../workspace/deps/failure-units.js";
+import { readWorkspaceManifests } from "../../workspace/deps/package-graph.js";
 import { landingPaths } from "./landing-paths.js";
 import { landChange, type LandSuspect, narrowCheckOf, startLandFix } from "./land-fix.js";
 
@@ -40,7 +42,7 @@ const LISTED = 30;
 
 export type BreakageRouter = Pick<
     Services,
-    "sandboxSettings" | "agents" | "agentWorktrees" | "activity" | "logger" | "turns" | "conversations" | "verifyStore" | "landCheck"
+    "sandboxSettings" | "agents" | "agentWorktrees" | "activity" | "logger" | "turns" | "conversations" | "verifyStore" | "landCheck" | "workspace"
 >;
 
 // What a red carried forward, per project, while it waited or held: the failures still owed, the lands they may have
@@ -137,20 +139,34 @@ const fixUpsOf = (services: Pick<Services, "agents">, project: string, since: nu
     return [...ids].filter((id) => fixAttemptOf(base, id) !== undefined).length;
 };
 
-// The package a path sits in, `_area/package` in this layout; the whole path when it is shorter.
-export const packageOf = (path: string): string => path.split("/").slice(0, 2).join("/");
+// The package a path sits in: the deepest workspace package whose folder holds it (package-graph.ts reads them from
+// pnpm-workspace.yaml), else its first two segments, which is where this layout keeps packages; the whole path when it is
+// shorter.
+export const packageOf = (path: string, packages: readonly string[] = []): string =>
+    packages.find((dir) => path === dir || path.startsWith(`${dir}/`)) ?? path.split("/").slice(0, 2).join("/");
+
+// The project's workspace packages, by folder, deepest first so a nested package wins over its parent; empty for a
+// project that is no pnpm workspace, whose paths then fall back to their first two segments.
+const packagesIn = (services: Pick<Services, "workspace">, project: string): string[] =>
+    readWorkspaceManifests(join(services.workspace.root, project))
+        .map(({ dir }) => dir)
+        .toSorted((left, right) => right.length - left.length);
 
 // The packages failures sit in, as repository paths name them.
-export const failingPackages = (fresh: readonly string[]): ReadonlySet<string> =>
-    new Set(fresh.flatMap((unit) => pathOfUnit(unit) ?? []).map(packageOf));
+export const failingPackages = (fresh: readonly string[], packages: readonly string[] = []): ReadonlySet<string> =>
+    new Set(fresh.flatMap((unit) => pathOfUnit(unit) ?? []).map((path) => packageOf(path, packages)));
 
 // Lands whose own changes touch a package some fresh failure sits in; every land when no failure names a path.
-export const suspectsOf = (fresh: readonly string[], lands: readonly { readonly land: DependencyLandOrigin; readonly paths: readonly string[] }[]): DependencyLandOrigin[] => {
-    const named = failingPackages(fresh);
+export const suspectsOf = (
+    fresh: readonly string[],
+    lands: readonly { readonly land: DependencyLandOrigin; readonly paths: readonly string[] }[],
+    packages: readonly string[] = [],
+): DependencyLandOrigin[] => {
+    const named = failingPackages(fresh, packages);
     if (named.size === 0) {
         return lands.map(({ land }) => land);
     }
-    return lands.filter(({ paths }) => paths.some((path) => named.has(packageOf(path)))).map(({ land }) => land);
+    return lands.filter(({ paths }) => paths.some((path) => named.has(packageOf(path, packages)))).map(({ land }) => land);
 };
 
 // Every land once, oldest first, by the conversation that landed it: a conversation landing twice is one suspect.
@@ -210,7 +226,13 @@ const heldNoteOf = (breakage: LandBreakage, packages: readonly string[]): string
 
 // The conversations still working whose unlanded work touches a failing package, suspects included: a suspect busy on
 // something else is asked once it stops, never interrupted.
-const workingOn = async (services: BreakageRouter, breakage: LandBreakage, packages: ReadonlySet<string>, suspects: readonly string[]): Promise<string[]> => {
+const workingOn = async (
+    services: BreakageRouter,
+    breakage: LandBreakage,
+    packages: ReadonlySet<string>,
+    suspects: readonly string[],
+    workspacePackages: readonly string[],
+): Promise<string[]> => {
     const repo = breakage.project === "" ? "root" : breakage.project;
     const running = services.agents.list().filter((agent) => agent.archivedAt === undefined && services.conversations.running(agent.id));
     const touching = await Promise.all(
@@ -224,7 +246,7 @@ const workingOn = async (services: BreakageRouter, breakage: LandBreakage, packa
             }
             const paths = await landingPaths(services, entry, [{ repo }]);
             const inRepo = paths.map((path) => (repo === "root" ? path : path.slice(repo.length + 1)));
-            return inRepo.some((path) => packages.has(packageOf(path))) ? agent.id : undefined;
+            return inRepo.some((path) => packages.has(packageOf(path, workspacePackages))) ? agent.id : undefined;
         }),
     );
     return touching.filter((id): id is string => id !== undefined);
@@ -270,6 +292,7 @@ const blame = async (services: BreakageRouter, breakage: LandBreakage, git: GitR
     const byPath = suspectsOf(
         breakage.fresh,
         changes.map(({ land, paths }) => ({ land, paths })),
+        packagesIn(services, breakage.project),
     );
     const suspects = changes.filter((change) => byPath.includes(change.land));
     return suspects.length === 0 ? { suspects: changes, named: false } : { suspects, named: suspects.length === 1 };
@@ -379,10 +402,11 @@ const decide = async (services: Services, owed: Owed, git: GitRunner, now: numbe
         await fileBlame(services, breakage.project, owed.runs, { suspects, named });
     }
     const ids = suspects.map(({ land }) => land.agentId);
-    const packages = failingPackages(breakage.fresh);
+    const workspacePackages = packagesIn(services, breakage.project);
+    const packages = failingPackages(breakage.fresh, workspacePackages);
     // Past the bound a red is routed even while somebody works: a long session must not keep main red for hours.
     const holdOverdue = owed.heldSince !== undefined && owed.heldSince + HOLD_MAX_MS <= now;
-    const busy = holdOverdue ? [] : await workingOn(services, breakage, packages, ids);
+    const busy = holdOverdue ? [] : await workingOn(services, breakage, packages, ids, workspacePackages);
     if (busy.length > 0) {
         const routing = await hold(services, owed, busy, [...packages]);
         await fileRouting(services, breakage.project, owed.runs, routing);

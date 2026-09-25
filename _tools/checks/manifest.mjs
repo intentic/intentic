@@ -16,7 +16,7 @@
 // finding is a property of the tree rather than of a file — a directory's size, a link's target, a cycle between
 // subsystems — is not scopable and omits the flag; those are read whole or not at all.
 // `fix`: arguments that make the check write the tree into shape itself; the check after a land runs it on the main
-// tree before judging a failure (verify.mjs), and so does `pnpm verify:turn` on a branch.
+// tree before judging a failure (verify.mjs).
 // `ratchet`: the check keeps a standing backlog in baselines/ (lib/ratchet.mjs) that it reads and never writes; the
 // check after a land runs it with `--tighten <the land's paths>` (fixers.mjs), which lowers only the entries that land
 // beat, so the lower count is written for the change that earned it.

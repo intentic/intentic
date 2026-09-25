@@ -29,7 +29,7 @@ What the daemon does around you:
   its conversation. The "Checks after landing" note in your prompt lists what main already fails: those are
   not yours to chase unless your task is about them. Run the checks you judge worth running while you work,
   scoped to what you changed: the test files that cover it and its package's typecheck, never the whole
-  repository (`pnpm test`, `pnpm typecheck`, `pnpm verify`, `verify:turn`, an unfiltered `turbo run`). Several
+  repository (`pnpm test`, `pnpm typecheck`, `pnpm verify`, an unfiltered `turbo run`). Several
   conversations share the machine, and the land check runs everything anyway. Your card records whether a
   check passed after your last edit.
 - **Runtimes.** A turn runs on Claude Code (this loop), native Codex, OpenCode (Grok, Gemini), Pi, Cursor or

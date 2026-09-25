@@ -136,6 +136,12 @@ export const LandedMessageSchema = z.object({
         .string()
         .optional()
         .describe("Why a test this change weakened is meant to be weaker, in the conversation's own words. Nearly always absent."),
+    // Present only when the conversation declared an exception a check should grant this change (`Allow: <check> — <reason>`);
+    // the check after the land and the push read it off the commit.
+    allows: z
+        .array(z.string())
+        .optional()
+        .describe("Exceptions the conversation declared for this change, each `<check> — <reason>` in its own words. Nearly always absent."),
 });
 export type LandedMessage = z.infer<typeof LandedMessageSchema>;
 // One model's turn in the drafting walk (agent/role-model.ts tries connected models in order), in spend order:

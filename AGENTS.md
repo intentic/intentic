@@ -53,7 +53,7 @@ many rendered interface files you changed without looking at them), and the edit
 code you touched (`pnpm --filter @intentic/<pkg> test <path>`, which runs only the files whose path matches), and that
 package's typecheck (`pnpm --filter @intentic/<pkg> typecheck`) when you changed types other packages read. Run them
 in the foreground, one at a time. Do not run the whole repository (`pnpm test`, `pnpm typecheck`, `pnpm verify`,
-`turbo run` without `--filter`) or `pnpm verify:turn`: several conversations share this machine, one of those runs
+`turbo run` without `--filter`): several conversations share this machine, one of those runs
 can take all of its memory, and the check after the land runs all of it anyway, off your clock.
 
 **After the land, off your clock** (`pnpm verify`, `_tools/scripts/verify/verify.mjs`, every land, either door):

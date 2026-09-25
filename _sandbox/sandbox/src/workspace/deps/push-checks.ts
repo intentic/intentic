@@ -7,7 +7,7 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { isValidRepoId } from "../layout/repo-discovery.js";
-import { openCount, parsePushReport, type PushChecksStore, type PushReportEntry } from "./push-checks-store.js";
+import { openCount, parsePushReport, type PushChecksStore, type PushRefusal, type PushReportEntry } from "./push-checks-store.js";
 
 // Files what the pre-push hook leaves in a repository's git common dir (`intentic-push-report.json`, newest first, at most
 // ten entries) into the push-checks store, and measures a project again on request. A push is filed only once its head
@@ -49,6 +49,10 @@ export interface PushChecks {
     readonly recheckIfOpen: (project: string) => Promise<MainlinePushRecheckResult | undefined>;
     // Sets open findings aside, or opens named dismissed ones again; how many changed.
     readonly dismiss: (project: string, ids: readonly string[] | undefined, restore: boolean) => Promise<number>;
+    // The daemon's own push runs (git/ops/push-run.ts): one the repository's hook refused is filed as a push whose
+    // finding is what the hook said, and one that went answers every refusal before it.
+    readonly refused: (project: string, refusal: PushRefusal) => Promise<void>;
+    readonly pushed: (project: string, at: number) => Promise<void>;
 }
 
 // The project a ref-feed repo id names: "root" is the workspace root, whose project folder is empty.
@@ -223,6 +227,14 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
         ingest,
         recheck,
         recheckIfOpen: async (project) => ((await openIn(project)) === 0 ? undefined : recheck(project)),
+        refused: async (project, refusal) => {
+            await deps.store.refuse(project, refusal);
+            publishRuntimeChange("mainline");
+        },
+        pushed: async (project, at) => {
+            await deps.store.pushed(project, at);
+            publishRuntimeChange("mainline");
+        },
         dismiss: async (project, ids, restore) => {
             const changed = await deps.store.dismiss(project, ids, restore);
             if (changed > 0) {

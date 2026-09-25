@@ -127,11 +127,45 @@ export type MainlineProject = z.infer<typeof MainlineProjectSchema>;
 // git dir, the daemon files it here once the push has actually reached the remote, and each finding waits until a later
 // measurement no longer prints it or somebody dismisses it. Nobody is sent after one: acting on it is the owner's call.
 
-// What measured a finding: one of the repository's checks (by id), the linter, the assertion ratchet, the
-// manifest/lockfile lockstep, or rustfmt. Only a check's or the linter's finding can be measured again; the other three
-// are about the pushed commits themselves, so they end only when dismissed.
+// ONE FINDING, whatever measured it: a check run's line as the repository's own tooling printed it, named by what
+// printed it (`source`, the repository's word: a check's id, `lint`, a hook), with the command that shows it again and
+// whether a later measurement can say it is gone. A push's findings are these; a land check's failures and a CI run's
+// failed jobs become them too.
+export const FindingSchema = z.object({
+    id: z.string().describe("Stable across measurements: the same problem found again is the same id."),
+    source: z.string().describe("What measured it, in the repository's own words: a check's id, `lint`, a hook."),
+    text: z.string().describe("The finding as it was printed."),
+    path: z.string().optional().describe("The repository path it is about, when it names one."),
+    command: z.string().optional().describe("The command that shows it again."),
+    recheckable: z
+        .boolean()
+        .describe("Whether a later measurement can find it gone. False for one about commits already made, which ends only when dismissed."),
+});
+export type Finding = z.infer<typeof FindingSchema>;
+
+// What measured a push finding, as the first push reports named it: one of the repository's checks (by id), the linter,
+// the assertion ratchet, the manifest/lockfile lockstep, or rustfmt. Read, and still written for editors that read no
+// `source`; what measured a finding is its free `source` now, which any repository's tooling may name.
 export const PushFindingKindSchema = z.enum(["check", "lint", "ratchet", "lockstep", "rustfmt"]);
 export type PushFindingKind = z.infer<typeof PushFindingKindSchema>;
+
+// The kinds a push finding could name before `source`; any other source is a check of that name.
+const LEGACY_SOURCES: ReadonlySet<string> = new Set(["lint", "ratchet", "lockstep", "rustfmt"]);
+// Before `recheckable`, only a check's and the linter's findings could be measured again.
+const LEGACY_RECHECKABLE: ReadonlySet<PushFindingKind> = new Set(["check", "lint"]);
+
+// The kind and check an editor that reads no `source` names a finding by.
+export const legacyKindOf = (source: string): { readonly kind: PushFindingKind; readonly check?: string } =>
+    // SAFETY: LEGACY_SOURCES holds only PushFindingKind values, so a source it has is one.
+    LEGACY_SOURCES.has(source) ? { kind: source as PushFindingKind } : { kind: "check", check: source };
+
+// What measured a push finding, from any daemon: its `source`, else the kind and check it was filed under.
+export const pushFindingSource = (finding: Pick<PushFinding, "source" | "kind" | "check">): string =>
+    finding.source ?? (finding.kind === "check" ? (finding.check ?? "check") : finding.kind);
+
+// Whether a later measurement can find a push finding gone, from any daemon.
+export const pushFindingRecheckable = (finding: Pick<PushFinding, "recheckable" | "kind">): boolean =>
+    finding.recheckable ?? LEGACY_RECHECKABLE.has(finding.kind);
 
 export const PushFindingStateSchema = z.enum([
     // Still printed at the last measurement, and nobody has dismissed it.
@@ -159,6 +193,9 @@ export const PushFindingSchema = z.object({
         .describe("The newest pushed commit that touched the path the finding names, when it names one."),
     state: PushFindingStateSchema,
     settledAt: z.number().optional().describe("When it was resolved or dismissed, in milliseconds."),
+    source: z.string().optional().describe("What measured it, in the repository's own words. Absent from a daemon that files only `kind`."),
+    recheckable: z.boolean().optional().describe("Whether a later measurement can find it gone. Absent from a daemon that files only `kind`."),
+    path: z.string().optional().describe("The repository path it is about, when it names one."),
 });
 export type PushFinding = z.infer<typeof PushFindingSchema>;
 
@@ -173,6 +210,10 @@ export const MainlinePushSchema = z.object({
     commits: z.number().describe("How many commits the push carried."),
     findings: z.array(PushFindingSchema).describe("What it found that this push brought in, open or not. Empty for a clean push."),
     measuredAt: z.number().optional().describe("When its findings were last measured again, in milliseconds."),
+    refused: z
+        .boolean()
+        .optional()
+        .describe("True when the repository's own pre-push hook refused it, so nothing reached the remote and its findings are why."),
 });
 export type MainlinePush = z.infer<typeof MainlinePushSchema>;
 

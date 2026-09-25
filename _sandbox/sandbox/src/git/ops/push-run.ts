@@ -7,6 +7,7 @@ import { type RuleCommandRun, runRuleCommand } from "../../rules/rule-command.js
 import { PUSH_SESSION } from "../../terminal/terminal-session.js";
 import { pushRefusal, pushRefusalReason } from "../git.js";
 import { pushPlan } from "../remote/remote.js";
+import { projectOfRepo } from "../../workspace/deps/push-checks.js";
 
 // Started and answered at once, executed in the `job-push` terminal, polled for its verdict; the repository's own
 // pre-push hook is the only gate a push passes. One per repo (a second start for a running repo joins it), and pushes
@@ -20,7 +21,9 @@ const PUSH_OUTPUT_BYTES = 24_000;
 // What this needs from the daemon, stated explicitly so a test stands up a handful of seams, not all of Services.
 // `workspace` is the rule runner's, not this module's: it decides from the command's cwd whether the run is building
 // the tree the review reads (rule-command.ts).
-export type PushRunDeps = Pick<Services, "logger" | "terminalRun" | "pushSender" | "activity" | "workspace">;
+// `pushChecks` hears how each push ended: a refusal by the repository's own hook is filed there as what the push left,
+// and a push that went answers the refusals before it (workspace/deps/push-checks.ts).
+export type PushRunDeps = Pick<Services, "logger" | "terminalRun" | "pushSender" | "activity" | "workspace" | "pushChecks">;
 
 export interface PushRuns {
     // Resolves once the run is visible to `state`, not when it finishes: resolving early would hand the first poll an
@@ -110,7 +113,23 @@ export const createPushRuns = (
             ...refusal(run),
         });
 
-    const execute = async (running: PushRun, dir: string, abort: AbortController): Promise<void> => {
+    // Files how the push ended with the push checks, before the run reads as settled, so a press on the refusal's fix
+    // finds it filed. Best-effort: the push's own answer never waits on its bookkeeping failing.
+    const file = async (running: PushRun, run: RuleCommandRun, dir: string, target: { readonly remote: string; readonly branch: string }): Promise<void> => {
+        const project = projectOfRepo(running.repo);
+        try {
+            if (run.status === "passed") {
+                await services.pushChecks.pushed(project, Date.now());
+            } else if (refusal(run).refusedBy === "hook") {
+                const { stdout } = await git(dir, ["rev-parse", "HEAD"]);
+                await services.pushChecks.refused(project, { at: Date.now(), head: stdout.trim(), ...target, output: run.output });
+            }
+        } catch (error) {
+            logger.warn({ err: error, repo: running.repo }, "push: how it ended could not be filed with the push checks");
+        }
+    };
+
+    const execute = async (running: PushRun, dir: string, abort: AbortController, target: { readonly remote: string; readonly branch: string }): Promise<void> => {
         // No session without the tmux wrapper, or the browser would chase a tab nothing lists. Named only once the
         // command is actually in it, not while it waits for another repo's push ahead of it in the session.
         const session = terminalRun.visible ? PUSH_SESSION : undefined;
@@ -132,6 +151,7 @@ export const createPushRuns = (
                 }
             },
         });
+        await file(running, run, dir, target);
         // Republished from what was last published, not from `running`: the session name landed in between.
         settle(runs.get(running.repo) ?? running, run);
     };
@@ -157,7 +177,7 @@ export const createPushRuns = (
                 controllers.set(repo, abort);
                 publish(running);
                 // Not awaited: the caller polls the published state instead; in-flight clears on settle, whichever way it goes.
-                void execute(running, dir, abort)
+                void execute(running, dir, abort, { remote: plan.remote, branch: plan.branch })
                     .catch((error: unknown) => {
                         logger.warn({ err: error, repo }, "push: run failed");
                         publish({ ...running, status: "error", finishedAt: Date.now(), output: "" });

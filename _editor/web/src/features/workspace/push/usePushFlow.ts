@@ -1,31 +1,24 @@
 import {
-    type AgentHarness,
-    type AgentProvider,
     type AgentSummary,
     commandRunOutcome,
-    type FixAttemptPlan,
     type FixResume,
     type FixStance,
     fixStance,
     latestFixAttempt,
-    modelPinKey,
-    planFixAttempt,
+    type MainlineStatus,
     type PushRun,
-    pushFixConversationId,
+    pushFindingsFixBase,
 } from "@intentic/sandbox-contract";
 import type { AgentRunAttempt, AgentRunChoice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
-import { computed, watch } from "vue";
-import { stopAgent } from "../../agents/fleet/agentActions";
-import { composeSession, startSession } from "../../agents/fleet/sessionSuggestion";
+import { computed, type ComputedRef, watch } from "vue";
 import { open as openAgent } from "../../agents/fleet/useAgents-actions";
-import { archive } from "../../agents/fleet/useAgents-archive";
-import { archived, loadArchived, registry } from "../../agents/fleet/useAgents-registry";
+import { registry } from "../../agents/fleet/useAgents-registry";
+import { openLandConversation } from "../../agents/mainline/openLanded";
+import { handPushFindings, useMainline } from "../../agents/mainline/useMainline";
 import { modelLabelFor } from "../../chat/accounts/providerCatalog";
-import { useRoleModel } from "../../chat/accounts/roleModel";
-import type { Conversation } from "../../chat/session/conversation";
-import { fixSignature, pushFixPrompt, pushNudgePrompt } from "../health/fixProposal";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { type SyncTarget, useChanges } from "../changes/useChanges";
 import { workspaceChangedSince } from "../changes/live/useWorkspaceLive";
 import { usePushRun } from "./usePushRun";
@@ -43,9 +36,9 @@ import { t } from "@intentic/ui/i18n";
 // - nothing is lost by walking away: the question and the fix proposal wait until they're answered.
 // - closing the card is "off my screen", not "that never happened": the verdict stands (`standing`), the panel says
 //   so, and the same card comes back on a press. What retires it is the world changing, never a timer.
-// - a failure has ATTEMPTS, and at most one live one (planFixAttempt): the card shows what became of the latest,
-//   a press continues an ended one or opens the next, and never silently resumes a session the reader believed
-//   they were replacing.
+// - a failure has ATTEMPTS, and at most one live one: the card shows what became of the latest, and a press asks the
+//   daemon, which files the hook's refusal with what pushes left (push-checks) and plans, continues or starts the
+//   attempt there (agents/fix/push-fix.ts), the same hand-over the Main line's "Hand to an agent" makes.
 
 // What's about to leave, named the way the control that asked for it was labelled, so the flow echoes the
 // click ("Publish", "Sync") instead of renaming it "Push".
@@ -76,11 +69,9 @@ const sending = sandboxRef(() => false);
 // When the push began, on the client's clock.
 const since = sandboxRef(() => 0);
 const question = sandboxShallowRef<PushQuestion | undefined>(() => undefined);
-/* THE FIX A RED VERDICT PROPOSES: the failure it answers (its derived id, which attempt 1 wears), the opening prompt a fresh attempt gets. */
+/* THE FIX A RED VERDICT PROPOSES: the project whose refused push the daemon filed, whose hand-over it is. */
 export interface FixProposal {
-    readonly base: string;
-    readonly prompt: string;
-    readonly nudge: string;
+    readonly project: string;
 }
 
 // The failure's live attempt as the fleet reports it: what the card's slot shows, and what a press is about.
@@ -118,12 +109,11 @@ const pushedTimer = sandboxValue<ReturnType<typeof setTimeout> | undefined>(
     (timer) => clearTimeout(timer),
 );
 
-// Agent settings when the button was pressed, carried since the proposal may compose minutes later, unmounted.
-const fixWith = sandboxValue<{ model?: string; effort?: string }>(() => ({}));
-
 // Git actions, captured once from a mounted surface. Only useChanges's module-level halves (syncAll, actionBusy,
 // failures) are read here; the query-backed halves are the panel's own.
 let git: ReturnType<typeof useChanges> | undefined;
+// The main line's status, where the daemon files a refused push and names the attempt at it; captured the same way.
+let mainline: ComputedRef<MainlineStatus | undefined> | undefined;
 
 // A new push supersedes whatever was being asked, standing verdict included: the hook is about to answer again.
 const enter = (push: PendingPush): void => {
@@ -213,20 +203,13 @@ const send = async (push: PendingPush): Promise<void> => {
     }
     sending.value = false;
     const runs = refused.map((repo) => git!.failures.value.get(repo)?.run).filter((run) => run !== undefined);
-    const byHook = runs.filter((run) => run.refusedBy === `hook`);
+    const byHook = runs.find((run) => run.refusedBy === `hook`);
     raise(push, refusalQuestion(push, refused), {
         runs,
         at: Date.now(),
-        ...(byHook.length > 0
-            ? {
-                  fix: {
-                      // One hook failure across several repos is one fix in one worktree, so it's one conversation.
-                      base: pushFixConversationId(byHook.map((run) => run.repo).join(`-`), fixSignature(byHook.map((run) => run.output).join(`\n`))),
-                      prompt: pushFixPrompt(byHook),
-                      nudge: pushNudgePrompt(byHook),
-                  },
-              }
-            : {}),
+        // The daemon filed the refusal under the repository's project before the run read as settled; with several
+        // refused, the first one's is the hand-over offered, and each other one waits on the Main line.
+        ...(byHook === undefined ? {} : { fix: { project: byHook.repo === `root` ? `` : byHook.repo } }),
     });
 };
 
@@ -263,18 +246,104 @@ const currentTerminal = (): { readonly session: string; readonly show: () => voi
     return watcher === undefined ? undefined : { session: watcher.terminal.value!, show: watcher.showTerminal };
 };
 
+/* Closing the card leaves the standing verdict and its run available. */
+const dismiss = (): void => {
+    pending.value = undefined;
+    sending.value = false;
+    question.value = undefined;
+    proposedFix.value = undefined;
+    refusedRuns.value = [];
+    fixError.value = undefined;
+    fromMemory.value = false;
+};
+
+// The proposed failure's live attempt, read off the roster the stream keeps current. A landed attempt answered a
+// failure that is now history: the same gates red again is a new failure wearing the same name, and the slot
+// offers a fresh press rather than a chip about work already in the tree.
+const attemptOf = (): FixAttemptState | undefined => {
+    const fix = proposedFix.value;
+    // Named by the daemon's own rule (contract, pushFindingsFixBase), off what it filed; nothing while it is unread.
+    const base = fix === undefined ? undefined : pushFindingsFixBase(mainline?.value?.pushes ?? [], fix.project);
+    const latest = base === undefined ? undefined : latestFixAttempt(base, registry.value);
+    if (latest === undefined) {
+        return undefined;
+    }
+    const stance = fixStance(latest.agent);
+    return stance.kind === `landed` ? undefined : { agent: latest.agent, attempt: latest.attempt, stance };
+};
+
+// The same attempt as the picker's bar names it (AttemptOnOffer): which, on what, how it stands.
+const attemptOnOffer = (): AgentRunAttempt | undefined => {
+    const held = attemptOf();
+    if (held === undefined) {
+        return undefined;
+    }
+    const { agent, attempt, stance } = held;
+    const files = agent.diff?.files ?? 0;
+    const summary = [
+        `Attempt ${attempt}`,
+        agent.model === undefined ? undefined : modelLabelFor(agent.provider, agent.model),
+        stance.label.toLowerCase(),
+        files === 0 ? undefined : `${files} file${files === 1 ? `` : `s`} on its branch`,
+    ]
+        .filter((part) => part !== undefined)
+        .join(` · `);
+    return { summary, continuable: stance.retry };
+};
+
+// The chip's press: the attempt's own conversation, wherever the chat panel is.
+const openAttempt = (): void => {
+    const held = attemptOf();
+    if (held !== undefined) {
+        openAgent(held.agent);
+    }
+};
+
+/* The press: the daemon plans it against the fleet as it stands (continue, start over, or the next attempt), from
+   what it filed of the refusal, and answers the conversation it opened. */
+const startFix = async (pick?: AgentRunChoice, resume?: FixResume): Promise<void> => {
+    const fix = proposedFix.value;
+    if (fix === undefined || fixBusy.value) {
+        return;
+    }
+    // A plain press over an attempt still in play opens it: the question stands until that attempt answers it.
+    const held = attemptOf();
+    if (resume === undefined && held?.stance.ongoing === true) {
+        openAttempt();
+        return;
+    }
+    fixBusy.value = true;
+    fixError.value = undefined;
+    // A press still in flight when the sandbox switches opens nothing: its failure was the old tree's.
+    const current = sandboxScopeGuard();
+    try {
+        const conversationId = await handPushFindings(fix.project, pick, resume);
+        if (!current()) {
+            return;
+        }
+        dismiss();
+        openLandConversation(conversationId);
+    } catch (error) {
+        // An attempt already running on it: the daemon refuses a second, and the one it means is the one to watch.
+        if (error instanceof SandboxHttpError && error.status === 409 && held !== undefined) {
+            openAttempt();
+            return;
+        }
+        fixError.value = errorMessage(error, t(`agents.mainline.push.handFailed`));
+    } finally {
+        fixBusy.value = false;
+    }
+};
+
 export function usePushFlow() {
     git ??= useChanges();
-    // This job's own model list: a pre-push fix reads what a repository's hook refused on work about to leave.
-    const prePushFix = useRoleModel(`pre-push-fix`);
+    mainline ??= useMainline();
 
     // The one door every Push, Sync and Publish arrives at, so every refusal is asked about the same way.
     const askSync = (verb: string, what: string, targets: readonly SyncTarget[]): void => {
         if (sending.value) {
             return;
         }
-        const head = prePushFix.choice.value;
-        fixWith.value = head === undefined ? {} : { model: modelPinKey(head), effort: head.effort };
         void send({ verb, what, targets });
     };
 
@@ -283,144 +352,6 @@ export function usePushFlow() {
         const push = pending.value;
         if (push !== undefined && !sending.value) {
             void send(push);
-        }
-    };
-
-    /* Closing the card leaves the standing verdict and its run available. */
-    const dismiss = (): void => {
-        pending.value = undefined;
-        sending.value = false;
-        question.value = undefined;
-        proposedFix.value = undefined;
-        refusedRuns.value = [];
-        fixError.value = undefined;
-        fromMemory.value = false;
-    };
-
-    // The proposed failure's live attempt, read off the roster the stream keeps current. A landed attempt answered a
-    // failure that is now history: the same gates red again is a new failure wearing the same name, and the slot
-    // offers a fresh press rather than a chip about work already in the tree.
-    const attemptOf = (): FixAttemptState | undefined => {
-        const fix = proposedFix.value;
-        const latest = fix === undefined ? undefined : latestFixAttempt(fix.base, registry.value);
-        if (latest === undefined) {
-            return undefined;
-        }
-        const stance = fixStance(latest.agent);
-        return stance.kind === `landed` ? undefined : { agent: latest.agent, attempt: latest.attempt, stance };
-    };
-
-    // The same attempt as the picker's bar names it (AttemptOnOffer): which, on what, how it stands.
-    const attemptOnOffer = (): AgentRunAttempt | undefined => {
-        const held = attemptOf();
-        if (held === undefined) {
-            return undefined;
-        }
-        const { agent, attempt, stance } = held;
-        const files = agent.diff?.files ?? 0;
-        const summary = [
-            `Attempt ${attempt}`,
-            agent.model === undefined ? undefined : modelLabelFor(agent.provider, agent.model),
-            stance.label.toLowerCase(),
-            files === 0 ? undefined : `${files} file${files === 1 ? `` : `s`} on its branch`,
-        ]
-            .filter((part) => part !== undefined)
-            .join(` · `);
-        return { summary, continuable: stance.retry };
-    };
-
-    // The chip's press: the attempt's own conversation, wherever the chat panel is.
-    const openAttempt = (): void => {
-        const held = attemptOf();
-        if (held !== undefined) {
-            openAgent(held.agent);
-        }
-    };
-
-    /* Only explicitly selected fields overwrite the fix draft. */
-    const applyPick = (fix: Conversation, pick: AgentRunChoice): void => {
-        fix.selection.apply({ kind: `selectModel`, pick: { provider: pick.provider as AgentProvider, value: pick.model } });
-        if (pick.account !== undefined) {
-            fix.selection.apply({ kind: `set`, picks: { account: pick.account } });
-        }
-        if (pick.harness !== undefined) {
-            fix.selection.apply({ kind: `set`, picks: { harness: pick.harness as AgentHarness } });
-        }
-        if (pick.effort !== undefined) {
-            fix.selection.apply({ kind: `setEffort`, effort: pick.effort });
-        }
-        if (pick.thinking !== undefined) {
-            fix.selection.apply({ kind: `setThinking`, thinking: pick.thinking });
-        }
-        if (pick.fast !== undefined) {
-            fix.selection.apply({ kind: `setFast`, fast: pick.fast });
-        }
-    };
-
-    // The plan for a press, against the fleet as it stands now. The archive counts toward the next attempt's number
-    // (conversation-ids.ts, nextFixAttemptId); read fresh, since it is the one half of the fleet the stream never pushes.
-    const planPress = async (base: string, resume: FixResume | undefined): Promise<FixAttemptPlan> => {
-        await loadArchived();
-        return planFixAttempt(
-            base,
-            registry.value,
-            [...registry.value, ...archived.value].map((agent) => agent.id),
-            resume,
-        );
-    };
-
-    // A start-over's preamble: the attempt it replaces is stopped if still running, then filed away. The archive
-    // refuses a running conversation, so the order is not optional.
-    const retireBefore = async (plan: FixAttemptPlan): Promise<void> => {
-        if (plan.kind !== `start-over`) {
-            return;
-        }
-        if (plan.stopFirst) {
-            await stopAgent(plan.retire, undefined, { live: true });
-        }
-        await archive([plan.retire]);
-    };
-
-    /* The agent is chosen from the current fleet, not the stale verdict. */
-    const startFix = async (pick?: AgentRunChoice, resume?: FixResume): Promise<void> => {
-        const fix = proposedFix.value;
-        if (fix === undefined || fixBusy.value) {
-            return;
-        }
-        fixBusy.value = true;
-        fixError.value = undefined;
-        // A press whose plan is still being read when the sandbox switches opens nothing: its failure was the old tree's.
-        const current = sandboxScopeGuard();
-        try {
-            const plan = await planPress(fix.base, resume);
-            if (!current()) {
-                return;
-            }
-            if (plan.kind === `busy`) {
-                openAttempt();
-                return;
-            }
-            await retireBefore(plan);
-            if (!current()) {
-                return;
-            }
-            const conversation = composeSession({
-                // Only an attempt that ran is nudged; one the door turned away (`resend`) never saw the task at all.
-                prompt: plan.kind === `continue` ? fix.nudge : fix.prompt,
-                ...fixWith.value,
-                // Isolated, like any fleet agent: the fix belongs in its own worktree, arriving as a diff to review.
-                isolated: true,
-                conversationId: plan.conversationId,
-            });
-            if (pick !== undefined) {
-                applyPick(conversation, pick);
-            }
-            dismiss();
-            startSession(conversation);
-        } catch (error) {
-            fixError.value = errorMessage(error, `the attempt before it could not be set aside`);
-        } finally {
-            fixBusy.value = false;
         }
     };
 

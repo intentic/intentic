@@ -7,7 +7,9 @@
 // argv that takes the next one (`--recheck`, which writes an entry holding the measurement alone).
 //
 // The file is the contract with the daemon: a JSON array, newest first, at most REPORTS_KEPT entries of `version: 1`,
-// each `{ id, at, kind: "push" | "recheck", remote?, pushes?, findings?, measured?, recheck }`. A finding is matched
+// each `{ id, at, kind: "push" | "recheck", remote?, pushes?, findings?, measured?, recheck }`. A finding names what
+// measured it by `source` (a check's id, `lint`, …: this repository's words, which the daemon never interprets) and says
+// whether a later measurement can clear it (`recheckable`); `kind`/`check` are written too, for a daemon that reads only them. A finding is matched
 // against a later measurement by its KEY (findingKey), and `key: ""` means it has no line of its own: it clears only
 // when its whole check passes.
 import { spawnSync } from "node:child_process";
@@ -41,7 +43,7 @@ export const checkCommand = (id) => `node _tools/checks/run.mjs --only ${id}`;
 // A code-gate check the tree fails, one finding per line it printed. A check whose output has no line in a shape
 // problemLines recognises is still named, by its first line, with no key: nothing short of it passing can clear it.
 export const brokenFindings = (verdict) => {
-    const base = { kind: "check", check: verdict.id, gate: "code", command: checkCommand(verdict.id) };
+    const base = { kind: "check", check: verdict.id, source: verdict.id, recheckable: true, gate: "code", command: checkCommand(verdict.id) };
     const lines = [...problemLines(verdict).values()];
     if (lines.length === 0) {
         const first = `${verdict.stderr ?? ""}${verdict.stdout ?? ""}`
@@ -63,6 +65,8 @@ export const tidyFindings = (judged) =>
         return added.map((line) => ({
             kind: "check",
             check: verdict.id,
+            source: verdict.id,
+            recheckable: true,
             gate: "tidy",
             text: line.trim(),
             key: printed.has(line) ? findingKey(line) : "",
@@ -86,7 +90,17 @@ export const stepFindings = (failed) =>
             return [];
         }
         const text = `${label}: ${why}`;
-        return [{ kind, text, key: kind === "lint" ? "" : findingKey(text), ...(spelling === undefined ? {} : { command: spelling }) }];
+        // Only the linter can be measured again; the ratchet, the lockstep and rustfmt are about the pushed commits.
+        return [
+            {
+                kind,
+                source: kind,
+                recheckable: kind === "lint",
+                text,
+                key: kind === "lint" ? "" : findingKey(text),
+                ...(spelling === undefined ? {} : { command: spelling }),
+            },
+        ];
     });
 
 // `pnpm lint`'s outcome from its spawn, or undefined when it could not run at all (no pnpm): that is not a pass.

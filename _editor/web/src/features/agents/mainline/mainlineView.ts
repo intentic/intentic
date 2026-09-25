@@ -1,13 +1,14 @@
-import type {
-    MainlineLand,
-    MainlineLandRef,
-    MainlinePush,
-    MainlineRouting,
-    MainlineRoutingKind,
-    MainlineRun,
-    MainlineStatus,
-    PushFinding,
-    PushFindingKind,
+import {
+    type MainlineLand,
+    type MainlineLandRef,
+    type MainlinePush,
+    type MainlineRouting,
+    type MainlineRoutingKind,
+    type MainlineRun,
+    type MainlineStatus,
+    type PushFinding,
+    pushFindingRecheckable,
+    pushFindingSource,
 } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { formatClock, formatDate, formatDayMonthTime } from "@intentic/ui/format";
@@ -90,8 +91,9 @@ const isOpen = (finding: PushFinding): boolean => finding.state === `open`;
 // Absent from a daemon that records no pushes, which reads the same as one that recorded none.
 const pushesOf = (status: MainlineStatus | undefined): readonly MainlinePush[] => status?.pushes ?? [];
 
-// A check's own id names it; the other four measure one thing each, so their kind is their name.
-export const findingSource = (finding: PushFinding): string => finding.check ?? finding.kind;
+// What measured it, in the repository's own words (contract, pushFindingSource: its `source`, else the kind and check an
+// older daemon filed it under).
+export const findingSource = (finding: PushFinding): string => pushFindingSource(finding);
 
 // A finding as a dock row can hold it. Checks print the path a finding is about whole from the repository root, and in a
 // column sixteen rem wide that prefix is all a reader would see, the same five folders on every row. The row keeps the
@@ -109,10 +111,9 @@ export const findingGist = (line: string): string => {
     return `${kept}${text.slice(path.length)}`;
 };
 
-// Only a check's or the linter's finding can be measured again; the other three are about the pushed commits
-// themselves (contract, PushFindingKindSchema), so they end only when somebody dismisses them.
-const RECHECKABLE: ReadonlySet<PushFindingKind> = new Set([`check`, `lint`]);
-export const recheckable = (finding: PushFinding): boolean => RECHECKABLE.has(finding.kind);
+// Whether a later measurement can find it gone, as the daemon filed it (contract, pushFindingRecheckable); one about
+// the pushed commits themselves ends only when somebody dismisses it.
+export const recheckable = (finding: PushFinding): boolean => pushFindingRecheckable(finding);
 
 const findingOrder = (left: PushFinding, right: PushFinding): number =>
     Number(left.gate !== `code`) - Number(right.gate !== `code`) || findingSource(left).localeCompare(findingSource(right));

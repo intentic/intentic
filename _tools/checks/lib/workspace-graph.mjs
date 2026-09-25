@@ -1,6 +1,6 @@
 // Workspace dependency graph from every package.json's `workspace:` specifiers, answering which packages a set of
-// changed paths reaches. Shared by affected.mjs (CI, a commit range) and verify-turn.mjs (a working tree, when someone
-// runs `pnpm verify:turn`), so the two agree; reads manifests directly since turbo may not be installed.
+// changed paths reaches (affected.mjs, for CI's commit range; licences.mjs and shared-boundary.mjs read the graph itself);
+// reads manifests directly since turbo may not be installed.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 

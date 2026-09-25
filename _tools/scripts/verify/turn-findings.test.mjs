@@ -1,4 +1,4 @@
-// Pins which of a check's findings verify-turn.mjs charges to the turn that is running. The case worth a test is the
+// Pins which of a check's findings a change is charged with (land-tiers.mjs, verify-push.mjs). The case worth a test is the
 // third answer: a check the base snapshot was in no position to run reports lines that are neither known-new nor
 // known-standing, and treating those as new once meant whichever turn happened to be running while `i18n-keys` was red
 // was sent back to fix ten findings it had not written.

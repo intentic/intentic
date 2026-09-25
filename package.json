@@ -10,7 +10,6 @@
     "scripts": {
         "build": "turbo run build",
         "verify": "node _tools/scripts/verify/verify.mjs",
-        "verify:turn": "node _tools/scripts/verify/verify-turn.mjs",
         "verify:push": "node _tools/scripts/verify/verify-push.mjs",
         "ci:audit": "node _tools/scripts/ci/ci-audit.mjs",
         "sdlc:scoreboard": "node _tools/scripts/ci/sdlc-scoreboard.mjs",

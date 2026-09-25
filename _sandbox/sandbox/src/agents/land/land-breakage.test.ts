@@ -70,6 +70,21 @@ test("every unit shape names the path it failed on", () => {
     expect(packageOf("_editor/web/src/a.ts")).toBe("_editor/web");
 });
 
+// Packages are what the workspace declares, not a guess from the path's shape: a package three folders deep, or one at
+// the top, is found where it is, and a path no package holds falls back to its first two segments.
+test("a path's package is the deepest workspace package holding it", () => {
+    const packages = ["_extensions/pipelines/src", "_extensions/pipelines", "web"];
+    expect(packageOf("_extensions/pipelines/src/ciStreaks.ts", packages)).toBe("_extensions/pipelines/src");
+    expect(packageOf("_extensions/pipelines/README.md", packages)).toBe("_extensions/pipelines");
+    expect(packageOf("web/src/a.ts", packages)).toBe("web");
+    expect(packageOf("docs/architecture/sandbox.md", packages)).toBe("docs/architecture");
+    const lands = [
+        { land: land("one"), paths: ["web/src/a.ts"] },
+        { land: land("two"), paths: ["web-old/src/b.ts"] },
+    ];
+    expect(suspectsOf(["@a/web#test web/src/a.test.ts › x"], lands, packages).map(({ agentId }) => agentId)).toEqual(["one"]);
+});
+
 test("a unit reads as a test by its own name, or as the line it is, with the path it names beside it", () => {
     expect(failureOf("@intentic/web#test _editor/web/src/a.test.ts › outer > it")).toEqual({ name: "outer > it", path: "_editor/web/src/a.test.ts" });
     expect(failureOf("@intentic/sandbox#typecheck _sandbox/sandbox/src/a.ts: TS2322 Type 'x'")).toEqual({
@@ -287,6 +302,8 @@ const fleet = (conversations: readonly Conversation[], options: { readonly autoR
         }),
         logger,
         verifyStore,
+        // No pnpm workspace here: a path's package is its first two segments.
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: "/nonexistent-workspace" }),
         landCheck: unstubbed<Services["landCheck"]>("landCheck", { ahead: async () => ahead.value }),
     });
     // Who each thing the router said was said to, and what, in order.

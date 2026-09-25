@@ -66,16 +66,65 @@ describe("the brief a push-fix conversation opens on", () => {
             [
                 "The push check in `app` let the findings below through. It only reports, so nothing blocked the push, and they still stand.",
                 "What was pushed:\n- `0000000..1111111` to origin/main, 2 commits\n  - 1111111 feat: read the report\n  - 0aaaaaa test: loosen the fixture\n- `2222222` (the remote had nothing to compare it with) to origin/main, 1 commit",
-                "What it found, by check:",
+                "What it found, by what measured it:",
                 "`paths`, which the tree fails whoever caused it:\n- docs/x.md links a missing file\n  `node _tools/checks/run.mjs --only paths`",
                 "`silent-catch`, on lines the push added:\n- src/a.ts:1 empty catch block\n  `node _tools/checks/run.mjs --only silent-catch`",
-                "The linter:\n- src/b.ts:4 no-unused-vars\n  `node _tools/oxlint/lint-edit.mjs src/b.ts`",
-                "The assertion ratchet, on test files the pushed commits weakened:\n- src/a.test.ts: toEqual became toMatchObject",
+                "`lint`:\n- src/b.ts:4 no-unused-vars\n  `node _tools/oxlint/lint-edit.mjs src/b.ts`",
+                "`ratchet`, about the pushed commits themselves:\n- src/a.test.ts: toEqual became toMatchObject",
                 "Fix them in the code, and confirm each one by re-running the command next to it. The owner's Main line clears a finding once a measurement no longer prints it.",
-                "Ratchet, lockstep and rustfmt findings concern commits that are already pushed, so their fix is a follow-up commit, and a ratchet finding may only need the test strengthened again.",
+                "Findings about the pushed commits themselves concern commits that are already pushed, so their fix is a follow-up commit.",
                 "You are in an isolated worktree: commit your fix and it goes through review.",
             ].join("\n\n"),
         );
+    });
+
+    // Any repository's tooling names what measured a finding: the brief groups by that name and whether a measurement can
+    // clear it, never by a list of this repository's own checks.
+    test("groups a finding by the source its repository named, and by whether a measurement can clear it", () => {
+        const generic: MainlinePush = {
+            project: "svc",
+            id: "g1",
+            at: 30,
+            head: "3333333dddd",
+            commits: 1,
+            findings: [
+                { id: "check:mypy:a", kind: "check", check: "mypy", source: "mypy", recheckable: true, text: "svc/a.py:3 error", command: "make typecheck", state: "open" },
+                { id: "check:signoff:b", kind: "check", check: "signoff", source: "signoff", recheckable: false, text: "commit 3333333 is not signed off", state: "open" },
+            ],
+        };
+
+        const prompt = pushFixBrief([generic], "svc")?.prompt ?? "";
+
+        expect(prompt).toContain("`mypy`:\n- svc/a.py:3 error\n  `make typecheck`\n\n`signoff`, about the pushed commits themselves:\n- commit 3333333 is not signed off");
+        expect(prompt).toContain("Findings about the pushed commits themselves concern commits that are already pushed, so their fix is a follow-up commit.");
+    });
+
+    // The push the repository's own hook refused is filed beside what pushes left (push-checks-store.ts, fileRefusal), so
+    // its fix is the same hand-over, opening on what the hook said.
+    test("opens on a refused push with the hook's own words and how to confirm the fix without sending anything", () => {
+        const refused: MainlinePush = {
+            project: "app",
+            id: "refused-x",
+            at: 40,
+            remote: "origin",
+            branch: "main",
+            head: "4444444eeee",
+            commits: 0,
+            refused: true,
+            findings: [{ id: "check:pre-push:z", kind: "check", check: "pre-push", source: "pre-push", recheckable: false, text: "typecheck failed", command: "git push --dry-run", state: "open" }],
+        };
+
+        const brief = pushFixBrief([refused], "app");
+
+        expect(brief?.prompt).toBe(
+            [
+                "The push of `4444444` to origin/main was refused by the repository's own pre-push hook, so nothing reached the remote. What it said (the end of it):",
+                "```\ntypecheck failed\n```",
+                "Find the cause and fix it, then confirm the hook passes: `git push --dry-run` runs it without sending anything.",
+                "You are in an isolated worktree: commit your fix and it goes through review.",
+            ].join("\n\n"),
+        );
+        expect(brief?.base).toBe(pushFixConversationId("app", "left:4444444eeee"));
     });
 
     test("says nothing of already-pushed commits when every open finding can be measured again", () => {

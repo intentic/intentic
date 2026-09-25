@@ -13,18 +13,6 @@ export const git = (root, ...args) => {
     return result.status === 0 ? result.stdout : undefined;
 };
 
-// The main-line commit `root` stands on: HEAD in the primary checkout, the fork point with its branch in a linked worktree.
-export const mainLineBase = (root) => {
-    const gitDir = git(root, "rev-parse", "--path-format=absolute", "--git-dir")?.trim();
-    const commonDir = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")?.trim();
-    if (gitDir === undefined || gitDir === commonDir) {
-        return git(root, "rev-parse", "HEAD")?.trim();
-    }
-    const primary = (git(root, "worktree", "list", "--porcelain") ?? "").split("\n\n")[0];
-    const branch = /^branch (\S+)$/m.exec(primary)?.[1];
-    return branch === undefined ? undefined : git(root, "merge-base", "HEAD", branch)?.trim();
-};
-
 // Every path the tree differs on from `base`, committed or not, untracked included; `undefined` when git cannot answer.
 export const changedSince = (root, base) => {
     const tracked = git(root, "diff", "--name-only", "--no-renames", base);

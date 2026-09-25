@@ -5,7 +5,8 @@ import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
 import { reposOf } from "../registry/agents-store.js";
-import { conversationTestNote, describeLanding } from "./landed-subject.js";
+import { conversationTrailers, describeLanding } from "./landed-subject.js";
+import { opt } from "../../opt.js";
 
 // The `version-landed` built-in at `agent.landed`: keeps the main tree committed for a person who never commits.
 // Worktrees are cut from HEAD (worktrees.ts `snapshot`) and the pre-turn sync rebases onto HEAD, so a land left
@@ -30,10 +31,17 @@ const commitClaim = async (services: Services, id: string): Promise<string[]> =>
     if (entry === undefined) {
         return [];
     }
-    // The drafted message with its trailers; a land nobody drafted keeps the conversation's Test-Note all the same.
+    // The drafted message with its trailers; a land nobody drafted keeps the conversation's Test-Note and Allow lines all
+    // the same.
     const landed = entry.landing.message;
-    const testNote = landed === undefined ? await conversationTestNote(services, entry) : undefined;
-    const message = landedCommitMessage(landed ?? { subject: fallbackSubject(entry.social.title?.text, id), ...(testNote === undefined ? {} : { testNote }) });
+    const trailers = landed === undefined ? await conversationTrailers(services, entry) : {};
+    const message = landedCommitMessage(
+        landed ?? {
+            subject: fallbackSubject(entry.social.title?.text, id),
+            ...opt("testNote", trailers.testNote),
+            ...opt("allows", trailers.allows === undefined ? undefined : [...trailers.allows]),
+        },
+    );
     const committed: string[] = [];
     for (const composed of reposOf(entry)) {
         const dir = services.agentWorktrees.mainDir(composed.repo);

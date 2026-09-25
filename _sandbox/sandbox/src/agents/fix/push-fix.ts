@@ -1,10 +1,11 @@
-import { type MainlinePush, type PushFinding, pushFindingsFixBase } from "@intentic/sandbox-contract";
+import { type MainlinePush, type PushFinding, pushFindingRecheckable, pushFindingSource, pushFindingsFixBase } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { daemonFixAttemptDeps, type FixAttemptOutcome, startFixAttempt } from "./fix-attempts.js";
 
-// A conversation on what a push check let through, opened only when somebody presses "Hand to an agent" on the Main
-// line: the push already went and the tree still works, so the sandbox never starts one by itself. Every open finding in
+// A conversation on what a push check let through, or on the push the repository's own hook refused, opened only when
+// somebody presses for it (the Main line's "Hand to an agent", or the refused push's own card): the sandbox never starts
+// one by itself. Both read the push-checks store, so there is one flow for either. Every open finding in
 // the project goes into one conversation; the oldest push still holding one names it (pushFindingsFixBase), so a second
 // press while any stands continues the same attempt (fix-attempts.ts), exactly as a CI fix does.
 
@@ -25,23 +26,19 @@ const where = (project: string): string => (project === "" ? "the workspace root
 
 const short = (sha: string): string => sha.slice(0, 7);
 
-// Which group a finding reads under, in the order the brief lists them: a check the tree fails whoever caused it, then
-// the lines the push added, then the linter, then the three that are about the pushed commits themselves.
+// Which group a finding reads under, by what measured it (the repository's own name for it), in the order the brief
+// lists them: what the tree fails whoever caused it, then the lines the push added, then anything else a measurement can
+// clear, then what is about the pushed commits themselves.
 const groupOf = (finding: PushFinding): { readonly rank: number; readonly heading: string } => {
-    switch (finding.kind) {
-        case "check":
-            return finding.gate === "code"
-                ? { rank: 0, heading: `\`${finding.check ?? "check"}\`, which the tree fails whoever caused it:` }
-                : { rank: 1, heading: `\`${finding.check ?? "check"}\`, on lines the push added:` };
-        case "lint":
-            return { rank: 2, heading: "The linter:" };
-        case "ratchet":
-            return { rank: 3, heading: "The assertion ratchet, on test files the pushed commits weakened:" };
-        case "lockstep":
-            return { rank: 4, heading: "The manifest/lockfile lockstep:" };
-        case "rustfmt":
-            return { rank: 5, heading: "rustfmt:" };
+    const source = `\`${pushFindingSource(finding)}\``;
+    if (!pushFindingRecheckable(finding)) {
+        return { rank: 3, heading: `${source}, about the pushed commits themselves:` };
     }
+    return finding.gate === "code"
+        ? { rank: 0, heading: `${source}, which the tree fails whoever caused it:` }
+        : finding.gate === "tidy"
+          ? { rank: 1, heading: `${source}, on lines the push added:` }
+          : { rank: 2, heading: `${source}:` };
 };
 
 // A finding's own words as a list item: some checks print theirs as one already, and "- - x" helps nobody.
@@ -67,6 +64,14 @@ const groupedFindings = (findings: readonly PushFinding[]): string => {
     ].join("\n\n");
 };
 
+// A refused push's one finding is the hook's own output, quoted whole rather than listed as a line.
+const refusalLines = (push: MainlinePush, open: readonly PushFinding[]): string =>
+    [
+        `The push of \`${short(push.head)}\`${push.branch === undefined ? "" : ` to ${push.remote === undefined ? push.branch : `${push.remote}/${push.branch}`}`} was refused by the repository's own pre-push hook, so nothing reached the remote. What it said (the end of it):`,
+        ...open.map((finding) => `\`\`\`\n${finding.text}\n\`\`\``),
+        `Find the cause and fix it, then confirm the hook passes: \`git push --dry-run\` runs it without sending anything.`,
+    ].join("\n\n");
+
 // One pushed range as the brief names it, with the commits its open findings came with.
 const pushLines = (push: MainlinePush, open: readonly PushFinding[]): string => {
     const range =
@@ -91,23 +96,29 @@ export const pushFixBrief = (pushes: readonly MainlinePush[], project: string): 
     if (base === undefined || holding.length === 0) {
         return undefined;
     }
+    const refused = holding.filter((push) => push.refused === true);
+    const left = holding.filter((push) => push.refused !== true);
     const open = holding.flatMap(openOf);
-    const pushedCommits = open.some((finding) => finding.kind === "ratchet" || finding.kind === "lockstep" || finding.kind === "rustfmt");
+    const leftOpen = left.flatMap(openOf);
+    const pushedCommits = leftOpen.some((finding) => !pushFindingRecheckable(finding));
     const prompt = [
-        `The push check in ${where(project)} let the findings below through. It only reports, so nothing blocked the push, and they still stand.`,
-        `What was pushed:\n${holding.map((push) => pushLines(push, openOf(push))).join("\n")}`,
-        `What it found, by check:\n\n${groupedFindings(open)}`,
-        `Fix them in the code, and confirm each one by re-running the command next to it. The owner's Main line clears a finding once a measurement no longer prints it.`,
-        ...(pushedCommits
-            ? [
-                  `Ratchet, lockstep and rustfmt findings concern commits that are already pushed, so their fix is a follow-up commit, and a ratchet finding may only need the test strengthened again.`,
-              ]
-            : []),
+        ...refused.map((push) => refusalLines(push, openOf(push))),
+        ...(left.length === 0
+            ? []
+            : [
+                  `The push check in ${where(project)} let the findings below through. It only reports, so nothing blocked the push, and they still stand.`,
+                  `What was pushed:\n${left.map((push) => pushLines(push, openOf(push))).join("\n")}`,
+                  `What it found, by what measured it:\n\n${groupedFindings(leftOpen)}`,
+                  `Fix them in the code, and confirm each one by re-running the command next to it. The owner's Main line clears a finding once a measurement no longer prints it.`,
+              ]),
+        ...(pushedCommits ? [`Findings about the pushed commits themselves concern commits that are already pushed, so their fix is a follow-up commit.`] : []),
         `You are in an isolated worktree: commit your fix and it goes through review.`,
     ].join("\n\n");
     const listed = open.slice(0, NUDGE_LISTED).map(itemOf);
     const nudge = [
-        `What the push check let through in ${where(project)} is not all fixed yet, and this conversation is the attempt at it. Still open:`,
+        refused.length > 0
+            ? `The push in ${where(project)} is still refused by its pre-push hook, or not all of what the push check let through is fixed yet, and this conversation is the attempt at it. Still open:`
+            : `What the push check let through in ${where(project)} is not all fixed yet, and this conversation is the attempt at it. Still open:`,
         [...listed, ...(open.length > NUDGE_LISTED ? [`- …and ${open.length - NUDGE_LISTED} more`] : [])].join("\n"),
         `Carry on from where you left off, and confirm each one with the command next to it earlier in this conversation.`,
     ].join("\n\n");

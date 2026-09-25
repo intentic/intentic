@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { declaredTestNote, type LandedMessageDraft, type LandedMessageStep } from "@intentic/sandbox-contract";
+import { declaredAllows, declaredTestNote, type LandedMessageDraft, type LandedMessageStep } from "@intentic/sandbox-contract";
 import { type RoleAnswer, sentenceReason } from "../../agent/models/role-answer.js";
 import { askRoleModel, type RoleModelAttempt, roleModelIsSet } from "../../agent/models/role-model.js";
 import type { Services } from "../../composition.js";
@@ -17,6 +17,7 @@ import {
 import { claimedContractShrink } from "../../git/changes/contract-shrink.js";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { reposOf } from "../registry/agents-store.js";
+import { opt } from "../../opt.js";
 
 // The commit subject read off the code at land time, not the frozen session title (which describes the ask, not the
 // change). Read through the same collectRepoDiff a real commit uses, so the two agree. Best-effort: nothing here may
@@ -73,15 +74,26 @@ const breakingNote = (removed: readonly string[], written: string, wantsNote: bo
     return wantsNote ? written : ``;
 };
 
-// The Test-Note line the conversation's last word ended with, declaring a test it weakened on purpose; the push's
-// assertion ratchet reads it in the landed commit.
-export const conversationTestNote = async (services: Services, entry: PersistedAgent): Promise<string | undefined> => {
+// The trailers the conversation's last word ended with, each a declaration it made on purpose: a `Test-Note:` for a test
+// it weakened (the assertion ratchet reads it), and `Allow: <check> — <reason>` lines for exceptions a check should
+// grant its change (land-tiers.mjs and verify-push.mjs read them). Copied into the landed commit, where those readers look.
+export const conversationTrailers = async (
+    services: Services,
+    entry: PersistedAgent,
+): Promise<{ readonly testNote?: string; readonly allows?: readonly string[] }> => {
+    let said: string | undefined;
     try {
-        const said = await services.transcripts.lastSaid(entry);
-        return said === undefined ? undefined : declaredTestNote(said);
-    } catch {
-        return undefined;
+        said = await services.transcripts.lastSaid(entry);
+    } catch (error) {
+        // An unreadable transcript declares nothing, and must not cost the land its subject.
+        services.logger.debug({ err: error, agent: entry.id }, "landed subject: the conversation's last word could not be read");
+        return {};
     }
+    if (said === undefined) {
+        return {};
+    }
+    const allows = declaredAllows(said);
+    return { ...opt("testNote", declaredTestNote(said)), ...opt("allows", allows.length === 0 ? undefined : allows) };
 };
 
 // One walk attempt restated in the report's own shape, the same fact.
@@ -146,13 +158,14 @@ export const describeLanding = async (services: Services, id: string): Promise<v
         const subject = removed.length > 0 ? markSubjectBreaking(value.subject) : value.subject;
         // Usability is judged inside the ask now (messageAnswer); reaching this line already means a usable subject.
         const breaking = breakingNote(removed, value.breaking, wantsNote);
-        const testNote = await conversationTestNote(services, entry);
+        const { testNote, allows } = await conversationTrailers(services, entry);
         // Broadcasts synchronously, so an already-open panel's chip updates with no separate request.
         await services.agents.setLandedSubject(id, {
             subject,
-            ...(value.note === `` ? {} : { note: value.note }),
-            ...(breaking === `` ? {} : { breaking }),
-            ...(testNote === undefined ? {} : { testNote }),
+            ...opt("note", value.note === `` ? undefined : value.note),
+            ...opt("breaking", breaking === `` ? undefined : breaking),
+            ...opt("testNote", testNote),
+            ...opt("allows", allows),
         });
         // Sentence lands on the card before the report says so (ordering note above).
         ended(`written`);

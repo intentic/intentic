@@ -103,6 +103,16 @@ interface Fakes {
     readonly feed: () => readonly string[];
     // How many commands actually ran, the "one push at a time" claim counts executions.
     readonly runs: () => number;
+    // How each push was filed with the push checks, in order.
+    readonly filed: () => readonly Filed[];
+}
+
+// How one push was filed with the push checks: a refusal with the length of the head it named and the hook's words.
+interface Filed {
+    readonly project: string;
+    readonly refused: boolean;
+    readonly head?: number;
+    readonly output?: string;
 }
 
 const fakes = (over: { visible?: boolean } = {}): Fakes => {
@@ -110,6 +120,7 @@ const fakes = (over: { visible?: boolean } = {}): Fakes => {
     let runs = 0;
     const notified: string[] = [];
     const feed: string[] = [];
+    const filed: Filed[] = [];
     const services = unstubbed<Services>("services", {
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, debug: () => {}, error: () => {} }),
         pushSender: unstubbed<Services["pushSender"]>("pushSender", {
@@ -129,8 +140,12 @@ const fakes = (over: { visible?: boolean } = {}): Fakes => {
         // Read only by the rule runner, to tell a build on the reviewed tree from one outside it; these clones are
         // temp dirs, so every run here is outside.
         workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
+        pushChecks: unstubbed<Services["pushChecks"]>("pushChecks", {
+            refused: async (project, refusal) => void filed.push({ project, refused: true, head: refusal.head.length, output: refusal.output }),
+            pushed: async (project) => void filed.push({ project, refused: false }),
+        }),
     });
-    return { services, notified: () => notified, feed: () => feed, runs: () => runs };
+    return { services, notified: () => notified, feed: () => feed, runs: () => runs, filed: () => filed };
 };
 
 const settled = async (runs: ReturnType<typeof createPushRuns>, repo: string): Promise<PushRun> => {
@@ -171,7 +186,7 @@ test("a running push names its terminal once the command is in it, and none with
 
 test("a push that goes is passed, reports the repo pushed, and interrupts nobody", async () => {
     const { clone, origin } = await ahead();
-    const { services, notified, feed } = fakes();
+    const { services, notified, feed, filed } = fakes();
     const pushed: string[] = [];
     const runs = createPushRuns(services, (repo) => pushed.push(repo));
     await runs.start("app", clone, {});
@@ -180,6 +195,8 @@ test("a push that goes is passed, reports the repo pushed, and interrupts nobody
     expect(run.reason).toBeUndefined();
     expect(run.refusedBy).toBeUndefined();
     expect(pushed).toEqual(["app"]);
+    // A push that went answers every refusal filed before it; the repo's id is its project.
+    expect(filed()).toEqual([{ project: "app", refused: false }]);
     expect(notified()).toEqual([]);
     expect(feed()).toEqual([]);
     expect(await sh(origin, "log", "--format=%s", "-1", "main")).toBe("two");
@@ -189,12 +206,14 @@ test("a push that goes is passed, reports the repo pushed, and interrupts nobody
 test("a pre-push hook that says no settles as failed, refused by the hook, with the hook's words in the tail", async () => {
     const { clone, origin } = await ahead();
     await hook(clone, 'echo "verify-push: typecheck failed; the push does not go" >&2; exit 1');
-    const { services, notified, feed } = fakes();
+    const { services, notified, feed, filed } = fakes();
     const runs = createPushRuns(services, () => {});
     await runs.start("app", clone, {});
     const run = await settled(runs, "app");
     expect(run).toMatchObject({ status: "failed", exitCode: 1, refusedBy: "hook", reason: `error: failed to push some refs to '${origin}'` });
     expect(run.output).toContain("verify-push: typecheck failed; the push does not go");
+    // Filed as what the push left, with the commit it tried to send and the hook's own words, before it read as settled.
+    expect(filed()).toEqual([{ project: "app", refused: true, head: 40, output: run.output }]);
     expect(notified()).toEqual(["Push failed"]);
     expect(feed()).toEqual(["git.push_refused"]);
     expect(await sh(origin, "log", "--format=%s", "-1", "main")).toBe("one");
@@ -210,12 +229,14 @@ test("an origin that has moved on settles as refused by the remote", async () =>
     await commit(other, "c.txt", "three");
     await sh(other, "push", "-q", "origin", "main");
 
-    const { services } = fakes();
+    const { services, filed } = fakes();
     const runs = createPushRuns(services, () => {});
     await runs.start("app", clone, {});
     const run = await settled(runs, "app");
     // The ref status line names why, in brackets; git's plain verdict below it only says some refs failed.
     expect(run).toMatchObject({ status: "failed", exitCode: 1, refusedBy: "remote", reason: "! [rejected] main -> main (fetch first)" });
+    // Only the repository's own hook speaks about the code: a remote's refusal is filed nowhere.
+    expect(filed()).toEqual([]);
 });
 
 test("a remote that is not a repository settles as refused by the transport", async () => {

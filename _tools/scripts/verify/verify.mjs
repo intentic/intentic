@@ -2,8 +2,7 @@
 // Runs the whole repo the way CI's verify groups measure it, once each, since typecheck and test would otherwise both
 // pay for the declarations emit. THE check work gets: the sandbox runs it on the main tree after every land, in the
 // background, never inside a conversation and never holding anything (a land, a commit, a push). Records its verdict,
-// green or red, for the push check to report and for `pnpm verify:turn` (a manual, optional check now) to subtract what
-// main already fails (failure-units.mjs). Run after a land (INTENTIC_LAND_FROM set), it first writes what a machine
+// green or red, for the push check to report. Run after a land (INTENTIC_LAND_FROM set), it first writes what a machine
 // decides (fixers.mjs), since no turn end does that any more.
 // node _tools/checks/run.mjs the checkout gates
 // node _tools/scripts/build/emit-declarations.mjs every emitted package's dist

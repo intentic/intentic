@@ -201,8 +201,7 @@ const offloadTarget = async (deps: LandCheckDeps): Promise<string | undefined> =
 const offloadedCommand = async (deps: LandCheckDeps, command: string, runner: string): Promise<string> =>
     `${offloadPrefix(runner, LAND_CHECK_LABEL, await prefixOf(deps, command), ["INTENTIC_LAND_FROM"], ["INTENTIC_VERIFY_REPORT", "INTENTIC_VERDICT_OUT"])}bash -c ${shellQuote(command)}`;
 
-// A verdict the check recorded on the runner, merged into this repository's own record for the push gate and the base
-// verify:turn judges against; the recorder is the repository's own (tree-verdict.mjs), so a repository without one keeps
+// A verdict the check recorded on the runner, merged into this repository's own record for the push check to replay; the recorder is the repository's own (tree-verdict.mjs), so a repository without one keeps
 // none, as it would here.
 const VERDICT_RECORDER = "_tools/scripts/lib/tree-verdict.mjs";
 const verdictMerge = (verdict: string): string =>

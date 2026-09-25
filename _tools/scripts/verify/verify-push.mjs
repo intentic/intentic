@@ -11,7 +11,7 @@
 // still exits non-zero on a finding, for a person or a script that asks for a verdict.
 //
 // WHAT THIS CHECK SEES is the pushed range: every commit that becomes main, whoever made it. The check after each land
-// sees the main tree one land at a time, `pnpm verify:turn` sees one worktree against its own base, and a nightly
+// sees the main tree one land at a time, and a nightly
 // measures main a day later with nobody attached. That is why tidiness is judged here against the range (the
 // checkout-gates block below).
 //
@@ -208,9 +208,8 @@ const lockfileRewriteOnly = () => {
 // the next morning on a commit with no author attached. That job then failed on 14 of its 24 runs, 13 of them for
 // `layout` or `paths`, every finding traceable to one line in one commit a day or two old.
 //
-// WHERE THE WORK MEETS. verify-turn, run by hand, asks the same question of a branch, but it measures its own worktree
-// against its own base, a tree that never becomes main. What becomes main is this push, and the difference between the
-// two is every other conversation's work, which is exactly where a counting rule breaks: two branches that each add one
+// WHERE THE WORK MEETS. A branch measured against its own base is a tree that never becomes main. What becomes main is
+// this push, and the difference between the two is every other conversation's work, which is exactly where a counting rule breaks: two branches that each add one
 // file to a directory of thirty are each innocent in their own worktree and over the limit together. Lands meet first on
 // the main tree, where the check after each land asks this question of what that land added (land-tiers.mjs); the push
 // asks it of the whole range, while the person pushing is still there to fix it.

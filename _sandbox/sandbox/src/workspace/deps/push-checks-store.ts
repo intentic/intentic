@@ -1,9 +1,19 @@
-import { type MainlinePush, MainlinePushSchema, PushFindingKindSchema, PushFindingSchema } from "@intentic/sandbox-contract";
+import {
+    fnvDigest,
+    legacyKindOf,
+    type MainlinePush,
+    MainlinePushSchema,
+    PushFindingKindSchema,
+    PushFindingSchema,
+    pushFindingRecheckable,
+    pushFindingSource,
+} from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { jsonFile } from "../../store/json-file.js";
 import { objectParse } from "../../store/unknown-keys.js";
 import { stateRelPath } from "../../state-paths.js";
+import { opt } from "../../opt.js";
 
 // What each push check found and let through (<workspace>/.intentic/records/push-checks.json), and what became of every
 // finding since. The pre-push hook never refuses a push: it measures, prints, and leaves a report in the repository's
@@ -45,19 +55,38 @@ const lenientArray = <T extends z.ZodType>(item: T) =>
         }),
     );
 
-const ReportFindingSchema = z.object({
-    kind: PushFindingKindSchema,
-    check: z.string().optional(),
-    gate: z.enum(["code", "tidy"]).optional(),
-    text: z.string(),
-    key: z.string(),
-    command: z.string().optional(),
-    commit: z.object({ sha: z.string(), subject: z.string() }).optional(),
-});
+// A finding names what measured it by a free `source` (any repository's tooling, with `recheckable` saying whether a
+// later measurement can find it gone), or, from a hook written before that, by the `kind` enum (and `check`).
+const ReportFindingSchema = z
+    .object({
+        source: z.string().min(1).optional(),
+        kind: PushFindingKindSchema.optional(),
+        check: z.string().optional(),
+        recheckable: z.boolean().optional(),
+        gate: z.enum(["code", "tidy"]).optional(),
+        text: z.string(),
+        key: z.string(),
+        path: z.string().optional(),
+        command: z.string().optional(),
+        commit: z.object({ sha: z.string(), subject: z.string() }).optional(),
+    })
+    .refine((finding) => finding.source !== undefined || finding.kind !== undefined);
+type ReportFinding = z.infer<typeof ReportFindingSchema>;
+
+// A reported finding as one shape whichever way it named its source: the kind and check older editors read, derived from
+// the source when the report named only that.
+const normalized = (found: ReportFinding) => {
+    const named = found.kind === undefined ? legacyKindOf(found.source!) : { kind: found.kind, ...(found.check === undefined ? {} : { check: found.check }) };
+    const source = found.source ?? pushFindingSource(named);
+    return { ...named, source, recheckable: found.recheckable ?? pushFindingRecheckable(named) };
+};
 const ReportPushSchema = z.object({ ref: z.string(), head: z.string().min(1), base: z.string().optional(), commits: z.number() });
+// What one source said at a measurement: whether it passed, whether it could run at all, and the keys of what it printed.
 const CheckMeasureSchema = z.object({ ok: z.boolean(), measured: z.boolean(), keys: z.array(z.string()) });
 const MeasuredSchema = z.object({
+    // By source: every check, and any other source the repository's tooling measured.
     checks: z.record(z.string(), CheckMeasureSchema),
+    // The linter as the first reports measured it, beside the checks rather than among them.
     lint: z.enum(["passed", "failed"]).optional(),
 });
 export const PushReportEntrySchema = z.object({
@@ -86,43 +115,35 @@ export const parsePushReport = (text: string): PushReportEntry[] => {
     return (Array.isArray(raw) ? lenientArray(PushReportEntrySchema).parse(raw) : []).toSorted((left, right) => left.at - right.at);
 };
 
-// FNV-1a, as the conversation ids spell it: the same problem found again must be the same id on every read.
-const digest = (text: string): string => {
-    let hash = 0x811c_9dc5;
-    for (let index = 0; index < text.length; index += 1) {
-        hash = Math.imul(hash ^ text.charCodeAt(index), 0x0100_0193);
-    }
-    return (hash >>> 0).toString(36).padStart(7, "0");
-};
-
 // Stable across pushes: what measured it, which check, and the key the hook named it by (its text when it named none).
+// The kind and check are the ones older reports named, so a finding keeps its id whichever way its report named it.
 export const pushFindingId = (finding: {
     readonly kind: string;
     readonly check?: string | undefined;
     readonly key: string;
     readonly text: string;
-}): string => `${finding.kind}:${finding.check ?? ""}:${digest(finding.key !== "" ? finding.key : finding.text)}`;
+}): string => `${finding.kind}:${finding.check ?? ""}:${fnvDigest(finding.key !== "" ? finding.key : finding.text)}`;
 
 const isOpen = (finding: StoredFinding): boolean => finding.state === "open";
 
 export const openCount = (pushes: readonly StoredPush[], project: string): number =>
     pushes.filter((push) => push.project === project).reduce((sum, push) => sum + push.findings.filter(isOpen).length, 0);
 
-// What a measurement says of one open finding: gone, still there, or nothing (it did not measure what found it). Only
-// a check's and the linter's findings can be measured again; the ratchet, the lockstep and rustfmt are about the pushed
-// commits themselves.
+// What the measurement says of one source: its own entry, or the linter as the first reports measured it.
+const measureOf = (measured: PushMeasured, source: string): z.infer<typeof CheckMeasureSchema> | undefined =>
+    measured.checks[source] ?? (source === "lint" && measured.lint !== undefined ? { ok: measured.lint === "passed", measured: true, keys: [] } : undefined);
+
+// What a measurement says of one open finding: gone, still there, or nothing (it did not measure what found it). Only a
+// recheckable finding can be measured again; one about commits already pushed ends only when dismissed.
 const verdictOf = (finding: StoredFinding, measured: PushMeasured): "gone" | "standing" | undefined => {
-    if (finding.kind === "check") {
-        const measure = finding.check === undefined ? undefined : measured.checks[finding.check];
-        if (measure === undefined || !measure.measured) {
-            return undefined;
-        }
-        return measure.ok || (finding.key !== "" && !measure.keys.includes(finding.key)) ? "gone" : "standing";
+    if (!pushFindingRecheckable(finding)) {
+        return undefined;
     }
-    if (finding.kind === "lint") {
-        return measured.lint === undefined ? undefined : measured.lint === "passed" ? "gone" : "standing";
+    const measure = measureOf(measured, pushFindingSource(finding));
+    if (measure === undefined || !measure.measured) {
+        return undefined;
     }
-    return undefined;
+    return measure.ok || (finding.key !== "" && !measure.keys.includes(finding.key)) ? "gone" : "standing";
 };
 
 export interface Tally {
@@ -170,6 +191,25 @@ export const retained = (pushes: readonly StoredPush[]): StoredPush[] =>
 
 const seenWith = (seen: readonly string[], id: string): string[] => [id, ...seen.filter((each) => each !== id)].slice(0, SEEN_KEPT);
 
+// A reported finding as filed: open, under the id its kind, check and key give it.
+const storedFindingOf = (found: ReportFinding): StoredFinding => {
+    const { kind, check, source, recheckable } = normalized(found);
+    return {
+        id: pushFindingId({ kind, check, key: found.key, text: found.text }),
+        kind,
+        ...opt("check", check),
+        source,
+        recheckable,
+        ...opt("gate", found.gate),
+        text: found.text,
+        ...opt("path", found.path),
+        ...opt("command", found.command),
+        ...opt("commit", found.commit),
+        state: "open",
+        key: found.key,
+    };
+};
+
 // Files a push report that reached the remote: its findings open, less any still open from an earlier push of the
 // project (the same problem, still standing), then what it measured applied to the older pushes.
 export const ingestPush = (
@@ -187,30 +227,20 @@ export const ingestPush = (
     );
     const findings: StoredFinding[] = [];
     for (const found of report.findings ?? []) {
-        const id = pushFindingId(found);
-        if (standing.has(id)) {
+        const finding = storedFindingOf(found);
+        if (standing.has(finding.id)) {
             continue;
         }
-        standing.add(id);
-        findings.push({
-            id,
-            kind: found.kind,
-            ...(found.check === undefined ? {} : { check: found.check }),
-            ...(found.gate === undefined ? {} : { gate: found.gate }),
-            text: found.text,
-            ...(found.command === undefined ? {} : { command: found.command }),
-            ...(found.commit === undefined ? {} : { commit: found.commit }),
-            state: "open",
-            key: found.key,
-        });
+        standing.add(finding.id);
+        findings.push(finding);
     }
     const push: StoredPush = {
         project,
         id: report.id,
         at: report.at,
-        ...(report.remote === undefined ? {} : { remote: report.remote }),
-        ...(first.ref.startsWith("refs/heads/") ? { branch: first.ref.slice("refs/heads/".length) } : {}),
-        ...(first.base === undefined ? {} : { base: first.base }),
+        ...opt("remote", report.remote),
+        ...opt("branch", first.ref.startsWith("refs/heads/") ? first.ref.slice("refs/heads/".length) : undefined),
+        ...opt("base", first.base),
         head: first.head,
         commits: (report.pushes ?? []).reduce((sum, each) => sum + each.commits, 0),
         findings,
@@ -229,6 +259,66 @@ export const ingestMeasurement = (
 ): { readonly state: PushChecksState; readonly resolved: number } => {
     const { state: measured, resolved } = applyMeasured(state, project, report.measured, report.at);
     return { state: { ...measured, seen: seenWith(measured.seen, report.id) }, resolved };
+};
+
+// A PUSH THE REPOSITORY'S OWN HOOK REFUSED. Nothing reached the remote, so no report of this sandbox's tooling was filed
+// for it (a hook of any repository may refuse); the daemon files it here itself, as a push whose one finding is what the
+// hook printed, so the owner's hand-over (agents/fix/push-fix.ts) reads it from the same place as every other finding.
+export const REFUSAL_SOURCE = "pre-push";
+// What of the hook's output a refusal keeps: its end, where a hook says what failed.
+const REFUSAL_TAIL = 4_000;
+
+export interface PushRefusal {
+    readonly at: number;
+    // The commit that was being pushed.
+    readonly head: string;
+    readonly branch?: string | undefined;
+    readonly remote?: string | undefined;
+    readonly output: string;
+}
+
+// The open findings of every refused push in the project, settled: a later push answered for the same work, passing or
+// refused again. Returns the state unchanged (by reference) when there was none.
+export const settleRefusals = (state: PushChecksState, project: string, at: number): PushChecksState => {
+    let moved = false;
+    const pushes = state.pushes.map((push) => {
+        if (push.project !== project || push.refused !== true || !push.findings.some(isOpen)) {
+            return push;
+        }
+        moved = true;
+        return { ...push, findings: push.findings.map((finding) => (isOpen(finding) ? { ...finding, state: "resolved" as const, settledAt: at } : finding)) };
+    });
+    return moved ? { ...state, pushes } : state;
+};
+
+// Files one refusal, settling any the project had before it.
+export const fileRefusal = (state: PushChecksState, project: string, refusal: PushRefusal): PushChecksState => {
+    const text = refusal.output.trim().slice(-REFUSAL_TAIL);
+    const push: StoredPush = {
+        project,
+        id: `refused-${refusal.at.toString(36)}`,
+        at: refusal.at,
+        ...opt("remote", refusal.remote),
+        ...opt("branch", refusal.branch),
+        head: refusal.head,
+        commits: 0,
+        refused: true,
+        findings: [
+            {
+                id: pushFindingId({ ...legacyKindOf(REFUSAL_SOURCE), key: "", text }),
+                ...legacyKindOf(REFUSAL_SOURCE),
+                source: REFUSAL_SOURCE,
+                // Only the hook passing answers it, and that is a push: it settles then, never at a measurement.
+                recheckable: false,
+                text: text === "" ? "the pre-push hook refused the push without saying why" : text,
+                command: "git push --dry-run",
+                state: "open",
+                key: "",
+            },
+        ],
+    };
+    const settled = settleRefusals(state, project, refusal.at);
+    return { ...settled, pushes: retained([push, ...settled.pushes].toSorted((left, right) => right.at - left.at)) };
 };
 
 // Sets open findings aside, the named ones in every push of the project that holds them open (every open one when none
@@ -292,6 +382,10 @@ export interface PushChecksStore {
     // Applies a measurement that files no push (a recheck, a refused push), and marks it seen.
     readonly measure: (project: string, report: PushReportEntry) => Promise<Tally>;
     readonly dismiss: (project: string, ids: readonly string[] | undefined, restore: boolean, now?: number) => Promise<number>;
+    // Files a push the repository's own hook refused.
+    readonly refuse: (project: string, refusal: PushRefusal) => Promise<void>;
+    // A push reached the remote: what earlier refusals said is answered.
+    readonly pushed: (project: string, at: number) => Promise<void>;
 }
 
 export const filePushChecksStore = (path: string): PushChecksStore => {
@@ -329,6 +423,12 @@ export const filePushChecksStore = (path: string): PushChecksStore => {
                 return next.state;
             });
             return changed;
+        },
+        refuse: async (project, refusal) => {
+            await file.update((current) => fileRefusal(current, project, refusal));
+        },
+        pushed: async (project, at) => {
+            await file.update((current) => settleRefusals(current, project, at));
         },
     };
 };

@@ -1,6 +1,9 @@
 import {
     applyMeasured,
     dismissIn,
+    fileRefusal,
+    REFUSAL_SOURCE,
+    settleRefusals,
     ingestMeasurement,
     ingestPush,
     parsePushReport,
@@ -129,14 +132,34 @@ describe("filing a push", () => {
                             id: "check:silent-catch:07j3zlp",
                             kind: "check",
                             check: "silent-catch",
+                            source: "silent-catch",
+                            recheckable: true,
                             gate: "code",
                             text: CATCH.text,
                             command: CATCH.command,
                             state: "open",
                             key: CATCH.key,
                         },
-                        { id: pushFindingId(LINT), kind: "lint", text: LINT.text, command: LINT.command, state: "open", key: "" },
-                        { id: "ratchet::0uhne5n", kind: "ratchet", text: RATCHET.text, commit: RATCHET.commit, state: "open", key: RATCHET.key },
+                        {
+                            id: pushFindingId(LINT),
+                            kind: "lint",
+                            source: "lint",
+                            recheckable: true,
+                            text: LINT.text,
+                            command: LINT.command,
+                            state: "open",
+                            key: "",
+                        },
+                        {
+                            id: "ratchet::0uhne5n",
+                            kind: "ratchet",
+                            source: "ratchet",
+                            recheckable: false,
+                            text: RATCHET.text,
+                            commit: RATCHET.commit,
+                            state: "open",
+                            key: RATCHET.key,
+                        },
                     ],
                 },
             ],
@@ -289,6 +312,8 @@ describe("dismissing", () => {
         expect(restored.state.pushes[0]?.findings[1]).toEqual({
             id: pushFindingId(LINT),
             kind: "lint",
+            source: "lint",
+            recheckable: true,
             text: LINT.text,
             command: LINT.command,
             state: "open",
@@ -351,5 +376,101 @@ describe("what is kept", () => {
         expect(state.seen).toHaveLength(SEEN_KEPT);
         expect(state.seen[0]).toBe(`k${SEEN_KEPT + 2}`);
         expect(state.seen.at(-1)).toBe("k3");
+    });
+});
+
+// Any repository's tooling may report: a finding names what measured it by a free `source`, and says whether a later
+// measurement can clear it. The kind an older editor reads is derived from it, and so is the id, so a finding keeps its
+// id whichever way its report named it.
+describe("a finding named by its source", () => {
+    const MYPY = { source: "mypy", recheckable: true, text: "svc/a.py:3 error", key: "svc/a.py:# error", command: "make typecheck" } as const;
+
+    test("is filed with its source, as a check of that name for an editor that reads only the kind", () => {
+        const { state } = ingestPush(EMPTY, "svc", report({ id: "g1", at: 10, findings: [MYPY] }));
+
+        expect(state.pushes[0]?.findings).toEqual([
+            {
+                id: pushFindingId({ kind: "check", check: "mypy", key: MYPY.key, text: MYPY.text }),
+                kind: "check",
+                check: "mypy",
+                source: "mypy",
+                recheckable: true,
+                text: MYPY.text,
+                command: MYPY.command,
+                state: "open",
+                key: MYPY.key,
+            },
+        ]);
+    });
+
+    test("keeps the id an older report gave the same problem under its kind", () => {
+        const older = ingestPush(EMPTY, "app", report({ id: "r1", at: 10, findings: [CATCH] })).state;
+        const newer = ingestPush(EMPTY, "app", report({ id: "r1", at: 10, findings: [{ ...CATCH, kind: undefined, check: undefined, source: "silent-catch" }] })).state;
+
+        expect(newer.pushes[0]?.findings[0]?.id).toBe(older.pushes[0]?.findings[0]?.id);
+    });
+
+    test("is cleared by a measurement of its source, and one its report says no measurement can clear waits to be dismissed", () => {
+        const signoff = { source: "signoff", recheckable: false, text: "commit c1 is not signed off", key: "c1" } as const;
+        const filed = ingestPush(EMPTY, "svc", report({ id: "g1", at: 10, findings: [MYPY, signoff] })).state;
+
+        const { state, resolved } = applyMeasured(filed, "svc", { checks: { mypy: { ok: true, measured: true, keys: [] }, signoff: { ok: true, measured: true, keys: [] } } }, 20);
+
+        expect(resolved).toBe(1);
+        expect(statesOf(state)).toEqual({ g1: [`${pushFindingId({ kind: "check", check: "mypy", key: MYPY.key, text: MYPY.text })}=resolved`, `${pushFindingId({ kind: "check", check: "signoff", key: "c1", text: signoff.text })}=open`] });
+    });
+});
+
+// A push the repository's own hook refused reached no remote and left no report of this sandbox's tooling: the daemon
+// files it itself, so its fix is the same hand-over as every other finding's.
+describe("a refused push", () => {
+    const refusal = (at: number, output = "typecheck failed") => ({ at, head: `head-${at}`, branch: "main", remote: "origin", output });
+
+    test("is filed as a push that reached nothing, with the hook's words as its one finding, which no measurement clears", () => {
+        const state = fileRefusal(EMPTY, "app", refusal(10));
+
+        expect(state.pushes).toEqual([
+            {
+                project: "app",
+                id: "refused-a",
+                at: 10,
+                remote: "origin",
+                branch: "main",
+                head: "head-10",
+                commits: 0,
+                refused: true,
+                findings: [
+                    {
+                        id: pushFindingId({ kind: "check", check: REFUSAL_SOURCE, key: "", text: "typecheck failed" }),
+                        kind: "check",
+                        check: REFUSAL_SOURCE,
+                        source: REFUSAL_SOURCE,
+                        recheckable: false,
+                        text: "typecheck failed",
+                        command: "git push --dry-run",
+                        state: "open",
+                        key: "",
+                    },
+                ],
+            },
+        ]);
+        expect(applyMeasured(state, "app", { checks: { [REFUSAL_SOURCE]: { ok: true, measured: true, keys: [] } } }, 20).resolved).toBe(0);
+    });
+
+    test("is answered by the next push, refused again or gone, and only in its own project", () => {
+        const two = fileRefusal(fileRefusal(fileRefusal(EMPTY, "app", refusal(10)), "lib", refusal(12)), "app", refusal(20, "lint failed"));
+
+        expect(two.pushes.map(({ id, project, findings }) => [project, id, findings.map(({ state }) => state)])).toEqual([
+            ["app", "refused-k", ["open"]],
+            ["lib", "refused-c", ["open"]],
+            ["app", "refused-a", ["resolved"]],
+        ]);
+        const gone = settleRefusals(two, "app", 30);
+        expect(gone.pushes.map(({ id, findings }) => [id, findings.map(({ state, settledAt }) => `${state}@${settledAt ?? "-"}`)])).toEqual([
+            ["refused-k", ["resolved@30"]],
+            ["refused-c", ["open@-"]],
+            ["refused-a", ["resolved@20"]],
+        ]);
+        expect(settleRefusals(gone, "app", 40)).toBe(gone);
     });
 });

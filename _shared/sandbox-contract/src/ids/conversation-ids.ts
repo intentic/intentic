@@ -160,15 +160,16 @@ const repoSlug = (repo: string): string =>
         .replace(/^-+|-+$/g, "") || "repo";
 export const ciFixConversationId = (repo: string, runId: number): string => `${CI_FIX_PREFIX}${repoSlug(repo)}-${runId}`;
 
-// Keyed by which gates failed (fixSignature), not a run id (a push has none); the same gates red again is the same
-// failure. Hashed rather than spelled into the branch name; the fix agent's first message names the gates.
+// Keyed by the oldest push in a project still holding an open finding (pushFindingsFixBase, `left:<head>`), not a run id
+// (a push has none): a refused push is one of those too (push-checks-store.ts). Hashed rather than spelled into the
+// branch name; the fix agent's first message names what it is for.
 export const PUSH_FIX_PREFIX = "push-fix-";
 
 // FNV-1a, not a cryptographic hash: nothing here is secret, the only requirement is the same failure yields the same
-// seven characters in every browser and in node.
+// seven characters in every browser and in node. The one spelling: a push finding's id (push-checks-store.ts) is this too.
 const FNV_OFFSET = 0x811c_9dc5;
 const FNV_PRIME = 0x0100_0193;
-const digest = (text: string): string => {
+export const fnvDigest = (text: string): string => {
     let hash = FNV_OFFSET;
     for (let index = 0; index < text.length; index += 1) {
         hash = Math.imul(hash ^ text.charCodeAt(index), FNV_PRIME);
@@ -176,7 +177,7 @@ const digest = (text: string): string => {
     return (hash >>> 0).toString(36).padStart(7, "0");
 };
 
-export const pushFixConversationId = (scope: string, signature: string): string => `${PUSH_FIX_PREFIX}${repoSlug(scope)}-${digest(signature)}`;
+export const pushFixConversationId = (scope: string, signature: string): string => `${PUSH_FIX_PREFIX}${repoSlug(scope)}-${fnvDigest(signature)}`;
 
 // A red main-line check that no conversation still holding the work could take: keyed by the project and the moment its
 // red streak began, so every attempt at one streak shares a base and a later streak in the same project starts over.

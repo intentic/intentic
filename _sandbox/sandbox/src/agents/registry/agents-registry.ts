@@ -471,7 +471,10 @@ export interface AgentsRegistry {
     readonly setTitle: (id: string, title: string, source: AgentTitleSource, action?: string) => Promise<AgentSummary | undefined>;
     // Records what the landed work did, as a commit subject; no ranking, the newest land simply describes the most
     // current claim. Broadcast so the Changes panel picks it up immediately.
-    readonly setLandedSubject: (id: string, draft: { subject: string; note?: string; breaking?: string; testNote?: string }) => Promise<void>;
+    readonly setLandedSubject: (
+        id: string,
+        draft: { subject: string; note?: string; breaking?: string; testNote?: string; allows?: readonly string[] },
+    ) => Promise<void>;
     // Publishes the live account of a landed message being drafted, as it changes; the wait is the one part of a land a
     // user watches. Runtime and broadcast only, never persisted; `undefined` withdraws it.
     readonly setLandedMessageDraft: (id: string, draft: LandedMessageDraft | undefined) => void;
@@ -979,9 +982,17 @@ export const createFleet = (
             const note = draft.note === undefined ? undefined : sanitizeNote(draft.note);
             const breaking = draft.breaking === undefined ? undefined : sanitizeNote(draft.breaking);
             const testNote = draft.testNote === undefined ? undefined : sanitizeNote(draft.testNote);
+            const allows = (draft.allows ?? []).flatMap((allow) => sanitizeNote(allow) ?? []);
             replace({
                 ...entry,
-                landing: { ...entry.landing, message: { subject, ...opt("note", note), ...opt("breaking", breaking), ...opt("testNote", testNote) } },
+                landing: { ...entry.landing, message: {
+                        subject,
+                        ...opt("note", note),
+                        ...opt("breaking", breaking),
+                        ...opt("testNote", testNote),
+                        ...opt("allows", allows.length === 0 ? undefined : allows),
+                    },
+                },
             });
             broadcast();
             await persist();

@@ -79,6 +79,8 @@ test("only the tidy lines the push added are recorded: not the standing ones, no
         {
             kind: "check",
             check: "silent-catch",
+            source: "silent-catch",
+            recheckable: true,
             gate: "tidy",
             text: NEW_CATCH.trim(),
             key: "- _sandbox/sandbox/src/browser/tools/browser-router.ts:# catch returns a literal and drops the error",
@@ -94,6 +96,8 @@ test("a check that passed at the base and fails with no finding lines is recorde
         {
             kind: "check",
             check: "layout",
+            source: "layout",
+            recheckable: true,
             gate: "tidy",
             text: "layout passed before this change and fails now",
             key: "",
@@ -107,6 +111,8 @@ test("a broken code check is one finding per line, or one keyless finding named 
         {
             kind: "check",
             check: "hooks-armed",
+            source: "hooks-armed",
+            recheckable: true,
             gate: "code",
             command: "node _tools/checks/run.mjs --only hooks-armed",
             text: NEW_CATCH.trim(),
@@ -117,6 +123,8 @@ test("a broken code check is one finding per line, or one keyless finding named 
         {
             kind: "check",
             check: "lockfile",
+            source: "lockfile",
+            recheckable: true,
             gate: "code",
             command: "node _tools/checks/run.mjs --only lockfile",
             text: "the lockfile no longer records the manifest",
@@ -141,18 +149,24 @@ test("the steps that are findings of their own are named by kind; the checks' st
     assert.deepEqual(stepFindings(failed), [
         {
             kind: "ratchet",
+            source: "ratchet",
+            recheckable: false,
             text: "assertion ratchet (0123abcde..4567fedcb): exit 1",
             key: "assertion ratchet (#abcde..#fedcb): exit #",
             command: "node _tools/scripts/verify/assertion-ratchet.mjs 0123abcde 4567fedcb",
         },
         {
             kind: "lockstep",
+            source: "lockstep",
+            recheckable: false,
             text: "manifest/lockfile lockstep: the push commits package.json while pnpm-lock.yaml is changed",
             key: "manifest/lockfile lockstep: the push commits package.json while pnpm-lock.yaml is changed",
         },
-        { kind: "lint", text: "lint: exit 1", key: "", command: "pnpm lint" },
+        { kind: "lint", source: "lint", recheckable: true, text: "lint: exit 1", key: "", command: "pnpm lint" },
         {
             kind: "rustfmt",
+            source: "rustfmt",
+            recheckable: false,
             text: "cargo fmt --check (tools/ic): exit 1",
             key: "cargo fmt --check (tools/ic): exit #",
             command: "cargo fmt --manifest-path tools/ic/Cargo.toml --all --check",
