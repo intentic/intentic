@@ -234,14 +234,14 @@ export const causeOf = (status: MainlineStatus, red: MainlineRed): { readonly co
 };
 
 // A failure as a reader scans it: a failing test by its name first and its file after, since a test's full location
-// ("@acme/web#test web/src/pages/changelog.test.ts › lists every release") would spend a narrow column on the path and cut
+// ("@acme/web#test path/to/sample.test › lists every release") would spend a narrow column on the path and cut
 // the name. Anything that is not a test (a type error, a whole failed task) is kept whole.
 export const failureParts = (failure: string): { readonly name: string; readonly file?: string } => {
     const cut = failure.indexOf(` › `);
     if (cut === -1) {
         return { name: failure };
     }
-    // The location's last word past its last slash: "@acme/web#test web/src/pages/changelog.test.ts" is "changelog.test.ts".
+    // The location's last word past its last slash: "@acme/web#test path/to/sample.test" is "sample.test".
     const file = failure.slice(0, cut).trim().split(/[\s/]/).at(-1) ?? ``;
     const name = failure.slice(cut + ` › `.length).trim();
     return name === `` ? { name: failure } : { name, ...(file === `` ? {} : { file }) };
