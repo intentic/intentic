@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, loadavg, tmpdir } from "node:os";
 import { join, posix } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { git } from "../lib/git.mjs";
 import { SUITE_TIMEOUTS, suiteKindOf } from "../../constants/src/test-suites.mjs";
@@ -43,14 +43,29 @@ const readOr = (path) => {
     }
 };
 
+const CEILING = fileURLToPath(new URL("../lib/memory-ceiling.mjs", import.meta.url));
+
 // One `bun test` of exact files in one package and one budget; answers its cases and the errors between tests.
 const rerun = (root, directory, kind, files) => {
     const scratch = mkdtempSync(join(tmpdir(), "flake-rerun-"));
     try {
         const report = join(scratch, "report.xml");
+        // Under the same memory ceiling `suites` holds a run to (memory-ceiling.mjs): a suite that fails because it runs
+        // away with memory would run away again here, alone and unwatched.
         const run = spawnSync(
-            "bun",
-            ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", `--timeout=${SUITE_TIMEOUTS[kind]}`, "--reporter=junit", `--reporter-outfile=${report}`, ...files.map((file) => `./${file}`)],
+            process.execPath,
+            [
+                CEILING,
+                "--",
+                "bun",
+                "test",
+                `--conditions=${SOURCE_CONDITION}`,
+                "--isolate",
+                `--timeout=${SUITE_TIMEOUTS[kind]}`,
+                "--reporter=junit",
+                `--reporter-outfile=${report}`,
+                ...files.map((file) => `./${file}`),
+            ],
             { cwd: join(root, directory), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
         );
         return { cases: junitCases(readOr(report)), errors: unhandledErrors(`${run.stdout ?? ""}${run.stderr ?? ""}`) };

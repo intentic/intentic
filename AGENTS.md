@@ -44,11 +44,14 @@ the file at `HEAD`. What they print rides back with the edit and never stops the
 
 **When the turn ends**: nothing runs. Your conversation's card records what the turn showed of its own work
 (`proof`: verified, unproven, failing or no-code, read off the checks you chose to run after your last edit, and how
-many rendered interface files you changed without looking at them), and the editor badges it. Run whatever checks
-you judge worth running while you work. `pnpm verify:turn` (`_tools/scripts/verify/verify-turn.mjs`) is one you may
-choose: it judges what your branch changed since its main-line base (the checks line by line, the linter on your
-changed files, the assertion ratchet, typecheck and tests on the affected closure) and sets aside failures main
-already had (`failure-units.mjs`). Nothing runs it for you.
+many rendered interface files you changed without looking at them), and the editor badges it.
+
+**What to run while you work: what you changed, and nothing wider.** The test files you touched or that cover the
+code you touched (`pnpm --filter @intentic/<pkg> test <path>`, which runs only the files whose path matches), and that
+package's typecheck (`pnpm --filter @intentic/<pkg> typecheck`) when you changed types other packages read. Run them
+in the foreground, one at a time. Do not run the whole repository (`pnpm test`, `pnpm typecheck`, `pnpm verify`,
+`turbo run` without `--filter`) or `pnpm verify:turn`: several conversations share this machine, one of those runs
+can take all of its memory, and the check after the land runs all of it anyway, off your clock.
 
 **After the land, off your clock** (`pnpm verify`, `_tools/scripts/verify/verify.mjs`, every land, either door):
 the daemon runs it on the main tree in the background, one project at a time, and lands that arrive while it runs
@@ -166,7 +169,7 @@ rules are about what a test stands the code up with, not about how it asserts.
   the literal text the assertions pin) and flags a downgrade (`toEqual` → `toMatchObject`) or a narrowing (the
   asserted text cut past a quarter with no test removed) unless a commit in the range carries a `test!:` subject
   or a `Test-Note:` trailer saying why. After a land, an undeclared weakening is one of that land's failures,
-  routed like any other. The push reports one in its range, and `pnpm verify:turn` measures your branch's. On
+  routed like any other. The push reports one in its range. On
   2026-08-31 about 180 test files were widened in an afternoon with every suite green; that is what this reads
   for.
 - Mock a workspace package with every name the code under test imports from it – the `test-programs` check reads

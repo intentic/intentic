@@ -27,8 +27,11 @@ What the daemon does around you:
   comes back to this conversation as a message while you still have the work in mind. Otherwise the daemon
   starts a fresh fix-up conversation with the failures, each suspect land's diff and `agents show <id>` for
   its conversation. The "Checks after landing" note in your prompt lists what main already fails: those are
-  not yours to chase unless your task is about them. Run the checks you judge worth running while you work.
-  Your card records whether one passed after your last edit.
+  not yours to chase unless your task is about them. Run the checks you judge worth running while you work,
+  scoped to what you changed: the test files that cover it and its package's typecheck, never the whole
+  repository (`pnpm test`, `pnpm typecheck`, `pnpm verify`, `verify:turn`, an unfiltered `turbo run`). Several
+  conversations share the machine, and the land check runs everything anyway. Your card records whether a
+  check passed after your last edit.
 - **Runtimes.** A turn runs on Claude Code (this loop), native Codex, OpenCode (Grok, Gemini), Pi, Cursor or
   an ACP agent, chosen per conversation. Which model actually ran is recorded (`mcp__diagnostics__turns`).
 - **Capabilities** are the connections the owner made: connectors (GitHub, Notion, databases…), browser

@@ -9,7 +9,8 @@ import type { ConversationActors } from "../../agents/actor/conversation-actors.
 import type { Holding } from "../../agents/actor/conversation-holdings.js";
 import { whenFileAppears } from "../../file-appears.js";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
-import { endSession, jobRunnerPids } from "./job-processes.js";
+import { endSession } from "../../seams/session-processes.js";
+import { jobRunnerPids } from "./job-processes.js";
 
 // Every `run_in_background` Bash call, which outlives the per-turn CLI in its own pane, held by its conversation's
 // actor, whose card lists it (`jobs-shown`).

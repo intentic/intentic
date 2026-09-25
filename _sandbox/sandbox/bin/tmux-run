@@ -152,10 +152,30 @@ printf '%s\n' "$cmd" > "$d/cmd"
 # and handed its caller `exit ""` — which bash refuses ("numeric argument required") by exiting 2. That is how a
 # clean `git clone` came back as "exited 2" with its own untroubled output attached, once in a full test run and
 # never on a re-run. `mv` within one directory is atomic, so the file appears already complete or not at all.
+# The sweep the runner ends with (see below): every process of the pane's session but the runner and its tee. `left`
+# re-reads the session each pass and keeps only pids still alive, since the ps and awk it runs are in the session too,
+# and never its own subshell.
+sweep='left() { for p in $(ps -e -o pid=,sid= | awk -v s=$$ -v t="$teepid" '"'"'$2==s && $1!=s && $1!=t {print $1}'"'"'); do [ "$p" != "$BASHPID" ] && [ -d "/proc/$p" ] && echo "$p"; done; }
+pids=$(left)
+if [ -n "$pids" ]; then
+kill -TERM $pids 2>/dev/null
+for _ in $(seq 30); do sleep 0.1; pids=$(left); [ -z "$pids" ] && break; done
+[ -n "$pids" ] && kill -KILL $pids 2>/dev/null
+fi'
 epitaph='#{?#{==:#{pane_dead_status},0},#[fg=green]✓ finished,#[fg=red]✗ #{?#{!=:#{pane_dead_signal},},signal #{pane_dead_signal},exit #{pane_dead_status}}}#[default] · #{t:pane_dead_time}'
 # INTENTIC_PIPESTATUS_FILE is where the agent hook's EXIT trap (PIPESTATUS_TRAP, src/agent/tools/agent-terminals.ts)
 # leaves the per-stage statuses of the command's last pipeline, for the filter to report a failure `| tail` hid.
-printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on 2>/dev/null\ntmux set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null\nexport INTENTIC_PIPESTATUS_FILE=%q/pipestatus\nbash %q/cmd 2>&1 | tee -a %q/out\ncode=${PIPESTATUS[0]}\necho "$code" > %q/status.part\nmv %q/status.part %q/status\nexit $code\n' "$epitaph" "$d" "$d" "$d" "$d" "$d" "$d" > "$d/runner"
+#
+# WHAT THE COMMAND LEAVES BEHIND IS ENDED WITH IT. The runner is its pane's session leader (tmux starts every pane
+# with setsid), and nothing on a command's path starts a session of its own, so every process the command started is
+# in this session: including the ones in process groups of their own, which is every turbo task and every `bun test`
+# worker. A kill by process group (a `timeout`, a hangup) never reaches those, and a test run whose parent died kept
+# forking workers for thirteen minutes on 2026-09-25 while the next run started beside it. So once the command
+# returns, the runner ends the rest of its session (TERM, three seconds, KILL) before it publishes the status: a job
+# that is finished has nothing left running. The output goes through a process substitution rather than a pipe so the
+# runner learns the command returned even while a leftover still holds the output open, and tee is waited for after
+# the sweep, so the status still means the capture is complete.
+printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on 2>/dev/null\ntmux set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null\nexport INTENTIC_PIPESTATUS_FILE=%q/pipestatus\nexec 3> >(exec tee -a %q/out)\nteepid=$!\nbash %q/cmd >&3 2>&1\ncode=$?\nexec 3>&-\n%s\nwait "$teepid" 2>/dev/null\necho "$code" > %q/status.part\nmv %q/status.part %q/status\nexit $code\n' "$epitaph" "$d" "$d" "$d" "$sweep" "$d" "$d" "$d" > "$d/runner"
 
 # The persistent pane log (written by the global pipe-pane hooks, src/logs/log-files.ts, VT-rendered to clean
 # text by pane-log-clean) — the filter's footer points the agent here for the full output. Path known only
@@ -225,15 +245,21 @@ tmux list-panes -s -t "=$session" -F '#{pane_dead} #{window_id}' 2>/dev/null \
 
 # A SIGTERM (the SDK's Bash timeout, or the daemon runner's abort/watchdog) takes the pane down with the
 # wrapper so timeout semantics match the plain Bash tool, and still returns whatever the command printed
-# before the kill. (A SIGKILLed wrapper leaves the pane running visibly; prune or the user cleans it up.)
+# before the kill. Down means the pane's whole session: closing the window hangs up only its foreground process
+# group, and a turbo task or a `bun test` worker is in a group of its own (see the runner's sweep above). (A SIGKILLed wrapper leaves the pane running visibly; prune or the user cleans it up.)
 #
 # Except for a background job (-b), where the SIGTERM that arrives is the turn's own CLI exiting, not a
 # timeout: killing the pane there is what made `run_in_background` a promise the sandbox could not keep. The
 # capture dir stays too — the daemon reads the status file out of it long after this process is gone.
+endpane() {
+    local leader
+    leader="$(tmux display -p -t "$pane" '#{pane_pid}' 2>/dev/null)"
+    [ -n "$leader" ] && pkill -TERM -s "$leader" 2>/dev/null
+}
 if [ -n "$jobdir" ]; then
     trap 'emit 143; exit 143' TERM INT
 else
-    trap 'tmux kill-window -t "$pane" 2>/dev/null; emit 143; rm -rf "$d"; exit 143' TERM INT
+    trap 'endpane; tmux kill-window -t "$pane" 2>/dev/null; emit 143; rm -rf "$d"; exit 143' TERM INT
 fi
 
 # Completion is the status file, not tail/pane timing: the runner writes it strictly AFTER `tee` closes

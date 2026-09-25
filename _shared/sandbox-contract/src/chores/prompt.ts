@@ -26,8 +26,9 @@ export const TRIAGE_NOTE =
 // Constraints for a change-making turn: every change must be explainable on its own line of the summary.
 export const CHORE_INVARIANTS =
     `Keep it mechanical and separately explainable: nothing lands that you could not justify on its own line of the ` +
-    `summary. Do not reformat, rename or "while I was in here" anything the finding did not name. Run the repository's ` +
-    `own type-check and tests before you finish, and if you cannot make them pass, leave the change out and say so.`;
+    `summary. Do not reformat, rename or "while I was in here" anything the finding did not name. Before you finish, run ` +
+    `the type-check and tests of what you changed (its package, the test files that cover it), not the whole ` +
+    `repository's; if you cannot make them pass, leave the change out and say so.`;
 
 // Constraints for a look-only turn, stated explicitly so a report chore never quietly starts editing.
 export const REPORT_INVARIANTS =

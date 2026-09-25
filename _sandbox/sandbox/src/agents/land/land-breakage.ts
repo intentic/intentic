@@ -7,7 +7,7 @@ import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origi
 import { landCheckAhead, type LandBreakage } from "../../workspace/deps/verify-deps.js";
 import { landingPaths } from "./landing-paths.js";
 import { bisectSuspects } from "./land-bisect.js";
-import { landChange, type LandSuspect, startLandFix } from "./land-fix.js";
+import { landChange, type LandSuspect, narrowCheckOf, startLandFix } from "./land-fix.js";
 
 /* WHAT A RED MAIN-LINE CHECK IS OWED. Nothing checks inside a turn, so this is where a failure meets the work that caused
    it, decided in the order that wastes the least:
@@ -132,6 +132,7 @@ const followUpOf = (breakage: LandBreakage): string =>
     landBreakagePrompt([
         `\`${breakage.command}\` in ${where(breakage.project)} failed on:`,
         [...breakage.fresh.slice(0, LISTED).map((unit) => `- ${unit}`), ...(breakage.fresh.length > LISTED ? [`- …and ${breakage.fresh.length - LISTED} more`] : [])].join("\n"),
+        narrowCheckOf(breakage.command),
         `The end of its output:\n\n\`\`\`\n${breakage.logTail.trim()}\n\`\`\``,
     ]);
 

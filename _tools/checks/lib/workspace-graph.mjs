@@ -7,6 +7,18 @@ import { join } from "node:path";
 // Dev and peer edges count too: a devDependency can compile another package's source into its own bundle.
 const WORKSPACE_DEP_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 
+// A package whose every export is a built asset rather than code: a page, a stylesheet. A dependent ships or serves the
+// file and imports nothing from it that a compiler or a test runner reads, so a change behind it (the web editor a page
+// bundles) cannot move a dependent's typecheck or suites. It does move what the dependent ships, which is why the edge
+// is kept and only a test closure (`throughAssets: false`) stops at it.
+const CODE_EXPORT = /\.(?:[cm]?[jt]sx?|vue)$/;
+const exportTargets = (exports) =>
+    typeof exports === "string" ? [exports] : exports !== null && typeof exports === "object" ? Object.values(exports).flatMap(exportTargets) : [];
+const assetOnly = (pkg) => {
+    const targets = exportTargets(pkg.exports);
+    return targets.length > 0 && pkg.main === undefined && pkg.types === undefined && targets.every((target) => !CODE_EXPORT.test(target));
+};
+
 // Root files with no owning package; a change to any of them invalidates every package in the graph.
 export const GLOBAL = new Set(["pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json", "package.json", "tsconfig.libs.json"]);
 
@@ -67,7 +79,7 @@ const memberTest = (root) => {
 // Every workspace member's package.json, and the `workspace:` edges between them.
 export const readWorkspaceGraph = (root) => {
     const isMember = memberTest(root);
-    const packages = new Map(); // name -> { name, dir, deps: Set<string> }
+    const packages = new Map(); // name -> { name, dir, deps: Set<string>, assetOnly: boolean }
     const byDir = []; // [dir, name], longest dir first
     (function walk(dir, depth) {
         if (depth > 4) {
@@ -81,7 +93,7 @@ export const readWorkspaceGraph = (root) => {
             const manifest = join(root, child, "package.json");
             if (existsSync(manifest) && isMember(child)) {
                 const pkg = JSON.parse(readFileSync(manifest, "utf8"));
-                packages.set(pkg.name, { name: pkg.name, dir: child, deps: workspaceDeps(pkg) });
+                packages.set(pkg.name, { name: pkg.name, dir: child, deps: workspaceDeps(pkg), assetOnly: assetOnly(pkg) });
                 byDir.push([child, pkg.name]);
             }
             walk(child, depth + 1);
@@ -104,8 +116,10 @@ export const readWorkspaceGraph = (root) => {
 };
 
 // The packages a set of changed paths reaches: those containing a changed file, plus everything that transitively
-// depends on one. `global` set means a root file changed, so `affected` is every package.
-export const affectedBy = (graph, changed) => {
+// depends on one. `global` set means a root file changed, so `affected` is every package. `throughAssets: false` is the
+// closure a typecheck and a test run need: an asset-only package is affected itself but reaches no dependent, so an
+// editor change stops at the share page and does not run the daemon's suites (see assetOnly above).
+export const affectedBy = (graph, changed, { throughAssets = true } = {}) => {
     const globalHit = changed.find((path) => GLOBAL.has(path));
     if (globalHit !== undefined) {
         return { global: globalHit, seeds: new Set(), affected: new Set(graph.packages.keys()) };
@@ -126,6 +140,9 @@ export const affectedBy = (graph, changed) => {
             continue;
         }
         affected.add(name);
+        if (!throughAssets && graph.packages.get(name)?.assetOnly) {
+            continue;
+        }
         for (const consumer of graph.dependents.get(name) ?? []) {
             queue.push(consumer);
         }

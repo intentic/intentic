@@ -25,7 +25,7 @@ import { ago, commitTree, freshVerdicts, treeHash, writeVerdict } from "../lib/t
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
 import { rustfmtAvailable, touchedCrates } from "./fixers.mjs";
 import { judgeAgainstBase } from "./turn-findings.mjs";
-import { testWorkers } from "./test-workers.mjs";
+import { testConcurrency, testWorkers } from "./test-workers.mjs";
 
 const root = repoRoot(import.meta.url);
 const hook = process.argv.includes("--hook");
@@ -350,8 +350,8 @@ const noteUncommitted = () => {
 };
 
 const suite = (buildOnly) => {
-    // INDEXNOW_ENABLED=0, or the site build polls the live site. TEST_WORKERS is sized to the cgroup as the root
-    // `test` script's is, since `turbo run build test` bypasses that script; the caller's own value still wins.
+    // INDEXNOW_ENABLED=0, or the site build polls the live site. TEST_WORKERS and the task count are sized to the free
+    // memory (test-workers.mjs), since `turbo run build test` bypasses the root `test` script; a caller's own value wins.
     const env = { ...process.env, INDEXNOW_ENABLED: "0", TEST_WORKERS: testWorkers() };
     const linked = isLinkedWorktree();
     if (linked) {
@@ -366,8 +366,8 @@ const suite = (buildOnly) => {
         : [
               ["pnpm typecheck", ["typecheck"]],
               linked
-                  ? ["pnpm turbo run test --only", ["turbo", "run", "test", "--only", "--continue=dependencies-successful"]]
-                  : ["pnpm turbo run build test", ["turbo", "run", "build", "test", "--continue=dependencies-successful"]],
+                  ? ["pnpm turbo run test --only", ["turbo", "run", "test", "--only", "--continue=dependencies-successful", `--concurrency=${testConcurrency()}`]]
+                  : ["pnpm turbo run build test", ["turbo", "run", "build", "test", "--continue=dependencies-successful", `--concurrency=${testConcurrency()}`]],
           ];
     const started = Date.now();
     for (const [label, args] of commands) {

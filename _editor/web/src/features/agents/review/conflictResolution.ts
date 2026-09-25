@@ -109,7 +109,7 @@ export const resolvePrompt = (conflicts: readonly LandConflict[] | undefined): s
                 ? `2. \`git rebase <branch>\`, where \`<branch>\` is the one in brackets on the FIRST line of \`git worktree list\`, the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge <branch>\` instead.`
                 : `2. \`git rebase ${main}\`, that is the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge ${main}\` instead.`,
             `3. Resolve each conflict keeping the intent of BOTH sides: your change and whatever moved underneath it. Do not take one side wholesale.`,
-            `4. Check the result still builds and tests, where this project makes that cheap.`,
+            `4. Check what you resolved: re-run the tests of the files the conflicts were in, not the project's whole suite; the check after the land runs the rest.`,
         ].join(`\n`),
         `What blocked the land:\n${listing(mine, true)}`,
         ...(theirs.length === 0

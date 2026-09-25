@@ -103,7 +103,8 @@ describe("the brief a fresh fix-up opens on", () => {
         const one = landFixBrief({ breakage: breakage(), suspects: [suspect("one", [])], named: true }, MAIN);
         const two = landFixBrief({ breakage: breakage(), suspects: [suspect("one", []), suspect("two", [])], named: false }, MAIN);
 
-        expect(one).toContain("Start by re-running only the failing tests, not the whole suite");
+        expect(one).toContain("Start by re-running only the failing tests;");
+        expect(one).toContain("not `pnpm verify` or anything else across the whole repository");
         expect(one).not.toContain("With several suspects");
         expect(two).toContain("With several suspects, tell them apart before changing anything");
     });

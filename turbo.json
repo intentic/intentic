@@ -62,13 +62,16 @@
         // the root `test` script runs the same emit and then `turbo run test --only`, which drops the edge
         // and keeps the graph. That is the difference between a suite the fleet can run before landing and one
         // only CI ever sees: 67 of 100 main pipelines failed this job while the whole suite ran nowhere else.
-        // TEST_WORKERS bounds a repo-wide run's memory (test-workers.mjs sizes it to the cgroup); `envMode: strict`
-        // drops any variable not named here. On the TASK, not in `globalPassThroughEnv`, which mirrors the
-        // Dockerfile's ENV blocks and is diffed against them; passThrough keeps the VALUE out of the cache key.
+        // TEST_WORKERS bounds a repo-wide run's memory (test-workers.mjs sizes it to the free memory), and
+        // TEST_MEMORY_CEILING_MB moves the ceiling each bun process is held under; `envMode: strict` drops any
+        // variable not named here. On the TASK, not in `globalPassThroughEnv`, which mirrors the Dockerfile's ENV
+        // blocks and is diffed against them; passThrough keeps the VALUE out of the cache key. INTENTIC_TURN_OWNER
+        // is the stamp the sandbox's reaper finds a stopped conversation's leftovers by (platform/boot/reaper.ts):
+        // stripped here, a test run whose conversation had stopped was invisible to it.
         "test": {
             "dependsOn": ["^build"],
             "outputs": [],
-            "passThroughEnv": ["TEST_WORKERS", "CI_HOST_JOBS", "SUITES_JUNIT_DIR"]
+            "passThroughEnv": ["TEST_WORKERS", "TEST_MEMORY_CEILING_MB", "CI_HOST_JOBS", "SUITES_JUNIT_DIR", "INTENTIC_TURN_OWNER", "INTENTIC_AGENT_SESSION"]
         },
         // Type-checks each package INCLUDING its test files, which `build` cannot: an emitting package excludes
         // *.test.ts to keep test code out of dist, so without this task the tests are the one part of the repo
@@ -88,7 +91,8 @@
         // exactly that. It propagates through packages that have no typecheck script of their own.
         "typecheck": {
             "dependsOn": ["^typecheck"],
-            "outputs": []
+            "outputs": [],
+            "passThroughEnv": ["INTENTIC_TURN_OWNER", "INTENTIC_AGENT_SESSION"]
         },
         "check": {
             "dependsOn": ["^build"],

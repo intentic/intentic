@@ -2,12 +2,13 @@
 // A package's test script: `suites [--watch] [filter...]`. Two `bun test` runs, since a run has one budget and the
 // two kinds cannot share it: unit suites get a hang detector, `*.integration.test.*` and `*.e2e.test.*` get the
 // machine's time. Both read the package's own bunfig.toml (preload, ignore patterns) from the working directory.
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, globSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { INTEGRATION_MARKERS, INTEGRATION_NAME, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
 import { junitFile, SOURCE_CONDITION } from "../../scripts/verify/failure-units.mjs";
+import { ceilingBytes, formatGiB, processTree, watchMemory } from "../../scripts/lib/memory-ceiling.mjs";
 import { standaloneWorkers } from "../../scripts/verify/test-workers.mjs";
 
 // Unit: purely a hang detector, since nothing in a unit suite waits on anything. Integration: real work on a shared
@@ -65,14 +66,47 @@ const throwawayHome = () => {
 };
 
 // `--isolate`: a fresh module registry per file, so a `jest.mock` one suite installs never reaches the next.
-const run = (extra, selection) => {
+// Every bun process of the run is held under a memory ceiling (memory-ceiling.mjs): one that passes it is a test
+// holding memory it never gives back, and the run is killed there rather than left to swap the machine to a halt.
+const run = async (extra, selection) => {
     const home = throwawayHome();
     try {
-        const result = spawnSync("bun", ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...flags, ...extra, ...selection], {
+        const child = spawn("bun", ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...flags, ...extra, ...selection], {
             stdio: "inherit",
             env: { ...process.env, HOME: home, USERPROFILE: home },
         });
-        return result.status ?? 1;
+        const ceiling = ceilingBytes();
+        const stop = watchMemory(child, {
+            ceiling,
+            onExceed: ({ pid, held }) =>
+                process.stderr.write(
+                    `\nsuites: bun process ${pid} held ${formatGiB(held)}, past the ${formatGiB(ceiling)} a test process may hold, so the run was killed. ` +
+                        `A suite is keeping memory it never releases: the file it ran is among the last ones named above. ` +
+                        `TEST_MEMORY_CEILING_MB moves the ceiling (0 turns it off).\n`,
+                ),
+        });
+        // A stopped run stops its tests too: bun's workers sit in process groups of their own, which nothing that
+        // ends this process by group would reach.
+        const forward = (signal) => {
+            for (const pid of processTree(child.pid ?? -1).toReversed()) {
+                try {
+                    process.kill(pid, signal);
+                } catch {
+                    // silent-catch: a process already gone is what the signal was for
+                }
+            }
+            process.exit(128 + (signal === "SIGINT" ? 2 : 15));
+        };
+        process.once("SIGTERM", forward);
+        process.once("SIGINT", forward);
+        const status = await new Promise((resolve) => {
+            child.on("error", () => resolve(1));
+            child.on("exit", (code) => resolve(code ?? 1));
+        });
+        stop();
+        process.off("SIGTERM", forward);
+        process.off("SIGINT", forward);
+        return status;
     } finally {
         rmSync(home, { recursive: true, force: true });
     }
@@ -80,14 +114,14 @@ const run = (extra, selection) => {
 
 if (watch) {
     // One run: a watch never exits, so the second run would never start; the larger budget keeps a slow suite alive.
-    process.exit(run(["--watch", `--timeout=${INTEGRATION_TIMEOUT_MS}`], filters));
+    process.exit(await run(["--watch", `--timeout=${INTEGRATION_TIMEOUT_MS}`], filters));
 }
 
 // A kind the filters chose no file of is not run at all: an empty explicit list would mean "everything" to bun.
 const unit =
     chosen?.unit.length === 0
         ? 0
-        : run([parallel, `--timeout=${UNIT_TIMEOUT_MS}`, ...report("unit"), ...INTEGRATION_GLOBS.flatMap((glob) => ["--path-ignore-patterns", glob])], chosen?.unit ?? []);
+        : await run([parallel, `--timeout=${UNIT_TIMEOUT_MS}`, ...report("unit"), ...INTEGRATION_GLOBS.flatMap((glob) => ["--path-ignore-patterns", glob])], chosen?.unit ?? []);
 const integration =
-    chosen?.integration.length === 0 ? 0 : run([parallel, `--timeout=${INTEGRATION_TIMEOUT_MS}`, ...report("integration")], chosen?.integration ?? INTEGRATION_FILTERS);
+    chosen?.integration.length === 0 ? 0 : await run([parallel, `--timeout=${INTEGRATION_TIMEOUT_MS}`, ...report("integration")], chosen?.integration ?? INTEGRATION_FILTERS);
 process.exit(unit === 0 && integration === 0 ? 0 : 1);

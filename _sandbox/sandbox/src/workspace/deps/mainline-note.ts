@@ -38,7 +38,7 @@ export const landingChecksNote = (reds: readonly KnownRed[], wasRed: boolean): T
     text: [
         LANDING_CHECKS_NOTE_HEADER,
         "",
-        "Nothing checks your work when you finish, and nothing holds it back: you decide when it is done. After it lands, the main tree's own check runs in the background. A failure traced to your work comes back to this conversation as a message; anything else goes to a fresh conversation. Run whatever checks you judge worth running while you work; none is required before you finish.",
+        "Nothing checks your work when you finish, and nothing holds it back: you decide when it is done. After it lands, the main tree's own check runs in the background. A failure traced to your work comes back to this conversation as a message; anything else goes to a fresh conversation. Run whatever checks you judge worth running while you work, scoped to what you changed (the tests that cover it, its package's typecheck), never the whole repository: that is what runs after the land. None is required before you finish.",
         ...(reds.length > 0
             ? [
                   "",

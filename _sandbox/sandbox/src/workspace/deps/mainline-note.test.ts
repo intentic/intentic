@@ -11,7 +11,7 @@ const AT_14_05 = Date.UTC(2026, 8, 25, 14, 5);
 const AT_09_30 = Date.UTC(2026, 8, 25, 9, 30);
 
 const BASE_LINE =
-    "Nothing checks your work when you finish, and nothing holds it back: you decide when it is done. After it lands, the main tree's own check runs in the background. A failure traced to your work comes back to this conversation as a message; anything else goes to a fresh conversation. Run whatever checks you judge worth running while you work; none is required before you finish.";
+    "Nothing checks your work when you finish, and nothing holds it back: you decide when it is done. After it lands, the main tree's own check runs in the background. A failure traced to your work comes back to this conversation as a message; anything else goes to a fresh conversation. Run whatever checks you judge worth running while you work, scoped to what you changed (the tests that cover it, its package's typecheck), never the whole repository: that is what runs after the land. None is required before you finish.";
 
 // The verify store as the note reads it, red or green per project as each case sets it.
 const mainLine = () => {

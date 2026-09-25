@@ -26,7 +26,7 @@ flowchart LR
 | --- | --- | --- |
 | `pnpm verify` | the whole repository, the way CI's verify groups do. After a land it first applies rustfmt, each failing check's `fix` and a regenerated contract lock | after every land, on the main tree, in the background |
 | `pnpm verify:push` | checks, the ratchet, manifest and lockfile lockstep, lint, rustfmt; by hand it also replays a recorded typecheck, build and test verdict, or runs them with `--suite` | the pre-push hook, which reports and never refuses |
-| `pnpm verify:turn` | checks, lint, the assertion ratchet, typecheck and tests over what the branch changed since main | only when you run it |
+| `pnpm verify:turn` | checks, lint and the assertion ratchet over what the branch changed since main, typecheck over the packages it reaches, and the test files whose imports reach a changed file | only when a person runs it; it waits for the sandbox's heavy slot |
 
 No check refuses a land, a commit or a push. The commit-msg hook prints what commitlint finds, the pre-push hook prints what `verify-push.mjs` finds, and git goes on either way. By hand, `pnpm verify:push` exits non-zero on a finding. A red `pnpm verify` is sent to the conversation that landed the work or to a fresh one, and [sandbox.md](docs/architecture/sandbox.md) says how it decides. CI still runs everything on the pushed commit. It builds only branches in this repository: a pull request from a fork runs nothing until a maintainer reads it and pushes its branch here ([the fork boundary](docs/ops/ci-runner.md)).
 

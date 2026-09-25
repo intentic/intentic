@@ -170,7 +170,7 @@ const verificationLine = (standing: Pick<VerificationStanding, "state" | "check"
         case "failing":
             return `- Verification: FAILING, \`${standing.check ?? "the last check"}\` was red when the turn stopped. Fix that before anything else.`;
         case "unproven":
-            return "- Verification: unproven, no check ran after the last edit. Run the workspace's checks on the paths above before building on them.";
+            return "- Verification: unproven, no check ran after the last edit. Run the tests and typecheck of the paths above (their package, not the whole repository) before building on them.";
         default:
             return undefined;
     }

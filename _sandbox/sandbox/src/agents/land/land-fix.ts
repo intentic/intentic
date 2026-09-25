@@ -54,6 +54,11 @@ const suspectLines = (suspect: LandSuspect, repoDir: string): string => {
     ].join("\n");
 };
 
+// How to check a fix without running the whole suite again: the command that failed is the machine's heaviest, it runs on
+// the main tree again the moment the fix lands, and a conversation that re-runs it takes the memory every other one needs.
+export const narrowCheckOf = (command: string): string =>
+    `Check the fix by re-running only the failing tests and the typecheck of the package you change, not \`${command}\` or anything else across the whole repository: that runs again on the main tree when your fix lands.`;
+
 // The brief a fresh fix-up opens on: the failures, the suspects' changes and where to read their conversations, and
 // how to tell several suspects apart without running the whole suite again.
 export const landFixBrief = (ask: LandFixAsk, repoDir: string): string => {
@@ -67,11 +72,12 @@ export const landFixBrief = (ask: LandFixAsk, repoDir: string): string => {
         suspects.map((suspect) => suspectLines(suspect, repoDir)).join("\n\n"),
         ...(ask.passedOver === undefined ? [] : [ask.passedOver]),
         [
-            `Start by re-running only the failing tests, not the whole suite; they fail on the main tree now, and your worktree starts from it.`,
+            `Start by re-running only the failing tests; they fail on the main tree now, and your worktree starts from it.`,
             ...(suspects.length > 1
                 ? [`With several suspects, tell them apart before changing anything: re-run the failing tests with one suspect's change reverted in your worktree at a time.`]
                 : []),
             `If a suspect's conversation is still open, its own record says what it meant to do; keep that intent and fix the break.`,
+            narrowCheckOf(breakage.command),
         ].join(" "),
         `The end of the check's output:\n\n\`\`\`\n${breakage.logTail.trim()}\n\`\`\``,
     ]);

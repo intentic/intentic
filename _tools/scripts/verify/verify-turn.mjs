@@ -1,28 +1,35 @@
 #!/usr/bin/env node
-// `pnpm verify:turn`: an optional check a model or a person runs by hand on a branch's own closure. Nothing runs it
-// automatically and no turn waits on it. The check work gets is verify.mjs, on the main tree after the land. Scoped to
-// what the branch touched since its main-line base, committed or not. Four independent readers, each judged against
-// that base: (1) the checks, line by line (turn-findings.mjs), a new line counted whatever its gate; (2) the linter over
-// the changed files; (3) the assertion ratchet over the changed test files; (4) typecheck+test over the affected
-// closure (lib/workspace-graph.mjs), re-run once before a failure is charged.
+// `pnpm verify:turn`: an optional check a person runs by hand on a branch's own change. Nothing runs it automatically,
+// no turn waits on it, and agents are not asked to run it: the check work gets is verify.mjs, on the main tree after the
+// land. Scoped to what the branch touched since its main-line base, committed or not. Four independent readers, each
+// judged against that base: (1) the checks, line by line (turn-findings.mjs), a new line counted whatever its gate; (2)
+// the linter over the changed files; (3) the assertion ratchet over the changed test files; (4) typecheck over the
+// packages the change reaches, and only the test files whose imports reach a changed file (turn-closure.mjs), one step
+// at a time and sized to the memory free when it starts (test-workers.mjs). It waits for the sandbox's heavy slot
+// first (heavy-slot.mjs), so two of these never fill the machine together.
 // Every reader reports before the digest (lib/steps.mjs), which lists every failure together at the end of the output.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { affectedBy, readWorkspaceGraph } from "../../checks/lib/workspace-graph.mjs";
+import { readWorkspaceGraph } from "../../checks/lib/workspace-graph.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { changedPaths, changedSince, mainLineBase } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
+import { runInHeavySlot } from "../lib/heavy-slot.mjs";
 import { ago, verdictForBase } from "../lib/tree-verdict.mjs";
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
 import { weakenings } from "./assertion-ratchet.mjs";
 import { againstBaseline, failedTasks, failureLines, rerunCommand, takeSummary, taskOf, unitsOf } from "./failure-units.mjs";
 import { fixChecks, formatCrates, regenerateContractLock, regenerateStateShapes, rustfmtAvailable, touchedCrates } from "./fixers.mjs";
-import { recordFlakes, rerunFailures } from "./flakes.mjs";
+import { recordFlakes, rerunFailures, testUnitParts } from "./flakes.mjs";
 import { LINTABLE } from "./land-tiers.mjs";
 import { judgeAgainstBase } from "./turn-findings.mjs";
-import { testWorkers } from "./test-workers.mjs";
+import { standaloneWorkers, typecheckConcurrency } from "./test-workers.mjs";
+import { turnClosure } from "./turn-closure.mjs";
+
+// Nothing below runs beside another heavy run: outside the sandbox's heavy slot this waits for it (heavy-slot.mjs).
+runInHeavySlot("verify-turn");
 
 const root = repoRoot(import.meta.url);
 const { say, step, skip, fail, finish } = createSteps("verify:turn", root);
@@ -170,15 +177,20 @@ if (base === undefined) {
     }
 }
 
-/* 4. the affected closure */
+/* 4. the change's closure: typecheck what it reaches, test what it touched (turn-closure.mjs) */
 const graph = readWorkspaceGraph(root);
-const { global, seeds, affected } = affectedBy(graph, changed ?? [...graph.packages.values()].map(({ dir }) => dir));
-if (global !== undefined) {
-    say(`${global} changed, which every package depends on: measuring all ${affected.size}`);
-} else if (affected.size === 0) {
-    say(`no workspace package holds a changed file (${(changed ?? []).length} changed paths); nothing to type-check or test`);
+const closure = changed === undefined ? undefined : turnClosure(root, graph, changed);
+const tested = closure === undefined ? [] : [...closure.tests];
+if (closure === undefined) {
+    say("git could not list the tree's changes, so there is no closure to typecheck or test; the check after the land measures the whole tree");
+} else if (closure.global !== undefined) {
+    say(`${closure.global} changed, which every package depends on: typechecking all ${closure.typecheck.size}; their suites run after the land`);
+} else if (closure.typecheck.size === 0) {
+    say(`no workspace package holds a changed file (${changed.length} changed paths); nothing to typecheck or test`);
 } else {
-    say(`${seeds.size} changed package${seeds.size === 1 ? "" : "s"}, ${affected.size} in the closure: ${[...affected].sort().join(", ")}`);
+    const files = tested.map(([name, chosen]) => `${name} (${chosen === "all" ? "whole suite" : `${chosen.length} file${chosen.length === 1 ? "" : "s"}`})`);
+    say(`typecheck: ${closure.typecheck.size} package${closure.typecheck.size === 1 ? "" : "s"} (${[...closure.typecheck].sort().join(", ")})`);
+    say(`tests: ${files.length === 0 ? "no test file imports a changed file" : files.join(", ")}; the rest run after the land`);
 }
 
 // Lines of a failure list shown before the rest is counted, so the digest after it stays in a truncated tail.
@@ -189,27 +201,25 @@ const list = (units) => [...units.slice(0, LISTED).map((unit) => `  ${unit}`), .
 const measuredAt = ({ verdict, distance }) =>
     `main at ${(verdict.head ?? base ?? "").slice(0, 9)}${distance > 0 ? `, ${distance} commit(s) before this turn's base` : ""}, measured ${ago(verdict.at)}`;
 
-// Failures that pass when re-run alone are logged as flakes and dropped from the verdict.
-const withoutFlakes = (tasks, units) => {
+// The failures of the turbo run that started at `since`, judged: a test failing only in company is re-run alone once
+// (flakes.mjs) and logged as a flake when it passes, and what main already failed is named, never held. No whole run
+// is repeated: a real failure fails twice for twice the memory, and a flaky one is what the re-run alone is for.
+const judgeRun = (since, junitDir, spell) => {
+    const tasks = failedTasks(takeSummary(root, since));
+    const units = unitsOf(root, tasks, junitDir);
+    if (units.length === 0) {
+        return { ok: false, why: "failed with no task summary to read the failures from" };
+    }
     const { flaky, still } = rerunFailures(root, tasks, units);
     if (flaky.length > 0) {
         recordFlakes(root, flaky);
         process.stderr.write(`\n~ ${flaky.length} failure(s) passed when re-run alone: flaky, logged, not held:\n${list(flaky)}\n`);
     }
-    return still;
-};
-
-// The closure's failures against the land verdict for this turn's base: what main already failed is named, never held.
-const judgeClosure = (tasks, units) => {
-    if (units.length === 0) {
-        return { ok: false, why: "failed with no task summary to read the failures from" };
-    }
-    const current = withoutFlakes(tasks, units);
-    if (current.length === 0) {
+    if (still.length === 0) {
         return { ok: true, note: "every failure passed when re-run alone: flaky, logged" };
     }
     const found = base === undefined ? undefined : verdictForBase(root, base);
-    const { held, standing, unsure } = againstBaseline(current, found?.verdict);
+    const { held, standing, unsure } = againstBaseline(still, found?.verdict);
     if (standing.length > 0) {
         process.stderr.write(`\n= ${standing.length} failure(s) already red on ${measuredAt(found)}, not this turn's to fix:\n${list(standing)}\n`);
     }
@@ -223,52 +233,21 @@ const judgeClosure = (tasks, units) => {
     return {
         ok: false,
         why: found === undefined ? `${held.length} failure(s); no land verdict covers this turn's base, so every one counts` : `${held.length} failure(s) this turn introduced`,
-        spelling: rerunCommand(failing),
-        details: [`failing tasks: ${failing.map(({ taskId }) => taskId).join(", ")}`, ...failureLines(root, held, tasks)],
+        spelling: spell(failing, held),
+        details: failureLines(root, held, tasks),
     };
 };
 
-// The failed tasks of the turbo run that started at `at` (epoch ms), and their units.
-const measure = (at, junitDir) => {
-    const tasks = failedTasks(takeSummary(root, at));
-    return { tasks, units: unitsOf(root, tasks, junitDir) };
-};
+// The test files a unit list names in one task, package-relative, for a re-run command that runs only those.
+const failingFiles = (task, units) => [
+    ...new Set(units.filter((unit) => taskOf(unit) === task.taskId).flatMap((unit) => testUnitParts(unit, task)?.file ?? [])),
+];
 
-// A failed closure runs once more before it is judged; turbo replays cached passes, so only the failed tasks execute.
-const judgeAfterRerun = (args, env, since, junitDir) => {
-    const first = measure(since, junitDir);
-    const found = base === undefined ? undefined : verdictForBase(root, base);
-    if (first.units.length > 0 && againstBaseline(first.units, found?.verdict).held.length === 0) {
-        return judgeClosure(first.tasks, first.units);
-    }
-    const failed = first.tasks.map(({ taskId }) => taskId).join(", ") || "the run";
-    say(`typecheck and test: ${failed} failed; running it once more`);
-    const again = Date.now();
-    const rerun = spawnSync("pnpm", [...args, "--output-logs=errors-only"], {
-        cwd: root,
-        stdio: "inherit",
-        shell: process.platform === "win32",
-        env: { ...process.env, ...env },
-    });
-    const second = measure(again, junitDir);
-    if (rerun.status === 0) {
-        recordFlakes(root, first.units);
-        return { ok: true, note: `${failed} failed, then passed on a re-run: flaky, logged` };
-    }
-    if (second.units.length === 0) {
-        return judgeClosure(first.tasks, first.units);
-    }
-    const cleared = first.units.filter((unit) => !second.units.includes(unit));
-    if (cleared.length > 0) {
-        recordFlakes(root, cleared);
-        process.stderr.write(`\n~ ${cleared.length} failure(s) passed on the re-run: flaky, logged, not held:\n${list(cleared)}\n`);
-    }
-    return judgeClosure(second.tasks, second.units);
-};
-
-// The emit is the one thing the closure's check reads; after a failed one, typecheck would report missing modules
-// against correct files, which is why this pair is a dependency and the two steps above aren't.
-if (affected.size > 0) {
+// One step at a time, typecheck before tests: the two used to share one turbo run, each typecheck beside four test
+// tasks' workers, which is how a single check came to fill a 32 GB machine.
+// The emit is the one thing both read; after a failed one, typecheck would report missing modules against correct
+// files, which is why this pair is a dependency and the steps above aren't.
+if (closure !== undefined && closure.typecheck.size > 0) {
     if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/build/emit-declarations.mjs")])) {
         if (regenerateContractLock(root, changed)) {
             say("contract.lock.json rewritten from the contract this turn changed");
@@ -276,25 +255,44 @@ if (affected.size > 0) {
         if (regenerateStateShapes(root, changed)) {
             say("state-shapes.json froze a new shape of a stored document; the typecheck judges whether older ones still convert");
         }
-        const filters = global !== undefined ? [] : [...affected].flatMap((name) => ["--filter", name]);
-        const junitDir = mkdtempSync(join(tmpdir(), "verify-turn-junit-"));
-        const args = ["turbo", "run", "typecheck", "test", "--only", "--continue=dependencies-successful", "--summarize", ...filters];
-        const env = { TEST_WORKERS: testWorkers(), INDEXNOW_ENABLED: "0", SUITES_JUNIT_DIR: junitDir };
-        const since = Date.now();
-        step("typecheck and test", "pnpm", args, {
-            env,
-            shown: `pnpm turbo run typecheck test --only over the ${affected.size}-package closure`,
-            judge: () => judgeAfterRerun(args, env, since, junitDir),
-        });
-        takeSummary(root, since);
-        rmSync(junitDir, { recursive: true, force: true });
+        const filters = closure.global !== undefined ? [] : [...closure.typecheck].flatMap((name) => ["--filter", name]);
+        const typecheckSince = Date.now();
+        step(
+            "typecheck",
+            "pnpm",
+            ["turbo", "run", "typecheck", "--only", "--continue=always", "--summarize", `--concurrency=${typecheckConcurrency()}`, "--output-logs=errors-only", ...filters],
+            {
+                shown: `pnpm turbo run typecheck --only over ${closure.typecheck.size} package${closure.typecheck.size === 1 ? "" : "s"}`,
+                judge: () => judgeRun(typecheckSince, undefined, (failing) => rerunCommand(failing)),
+            },
+        );
+        takeSummary(root, typecheckSince);
+        // Bun strips types, so a suite means something on a tree that does not typecheck: the tests run either way.
+        for (const [name, chosen] of tested) {
+            const junitDir = mkdtempSync(join(tmpdir(), "verify-turn-junit-"));
+            const files = chosen === "all" ? [] : chosen;
+            const workers = Math.max(1, Math.min(Number(standaloneWorkers()), files.length === 0 ? Number.POSITIVE_INFINITY : files.length));
+            const since = Date.now();
+            step(`test ${name}`, "pnpm", ["turbo", "run", "test", "--only", "--summarize", "--output-logs=errors-only", "--filter", name, ...(files.length > 0 ? ["--", ...files] : [])], {
+                env: { TEST_WORKERS: String(workers), INDEXNOW_ENABLED: "0", SUITES_JUNIT_DIR: junitDir },
+                shown: `pnpm --filter ${name} test${files.length > 0 ? ` (${files.length} file${files.length === 1 ? "" : "s"})` : ""}`,
+                judge: () =>
+                    judgeRun(since, junitDir, (failing, held) =>
+                        failing
+                            .map((task) => `pnpm --filter ${task.name} test ${failingFiles(task, held).join(" ")}`.trim())
+                            .join(" && "),
+                    ),
+            });
+            takeSummary(root, since);
+            rmSync(junitDir, { recursive: true, force: true });
+        }
     } else {
-        skip("typecheck and test", "the declarations it reads were not emitted");
+        skip("typecheck and tests", "the declarations they read were not emitted");
     }
 }
 
 finish(() =>
-    affected.size === 0
+    closure === undefined || closure.typecheck.size === 0
         ? "the checkout gates, the linter and the assertion ratchet; nothing in this turn's closure to measure"
-        : `the turn's closure: ${affected.size} package${affected.size === 1 ? "" : "s"}`,
+        : `typecheck over ${closure.typecheck.size} package${closure.typecheck.size === 1 ? "" : "s"}, tests the change reaches in ${tested.length}`,
 );

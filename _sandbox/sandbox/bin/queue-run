@@ -102,6 +102,9 @@ run() { exec "$@"; }
 # command with it, and that is what frees the slot in the kill case. A supervising parent would survive the signal
 # and orphan the very thing it was supervising.
 held_run() {
+    # Names the slot to everything the command starts. fd 9 says the same to the command itself, but a Node parent does
+    # not pass it on, and a script deciding whether it must queue (heavy-slot.mjs) may sit several spawns down.
+    [ -n "${slot:-}" ] && export INTENTIC_QUEUE_SLOT="$slot"
     if [ "$max_hold" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
         exec timeout --kill-after="$kill_grace" "$max_hold" "$@"
     fi
@@ -154,6 +157,7 @@ acquire() {
     for ((i = 1; i <= limit; i++)); do
         exec 9>"$dir/slot.$i" || continue
         if flock -n 9; then
+            slot="$dir/slot.$i"
             return 0
         fi
     done

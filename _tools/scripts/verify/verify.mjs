@@ -15,13 +15,17 @@ import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { git,changedSince } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
+import { runInHeavySlot } from "../lib/heavy-slot.mjs";
 import { treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
 import { checkVerdicts } from "./check-snapshot.mjs";
 import { failedTasks, takeSummary, taskOf, unitsOf, verdictUnits } from "./failure-units.mjs";
 import { fixChecks, formatCrates, regenerateContractLock, regenerateStateShapes, rustfmtAvailable, touchedCrates } from "./fixers.mjs";
 import { recordFlakes, rerunFailures } from "./flakes.mjs";
 import { landTiers } from "./land-tiers.mjs";
-import { testWorkers } from "./test-workers.mjs";
+import { testConcurrency, testWorkers, typecheckConcurrency } from "./test-workers.mjs";
+
+// Nothing below runs beside another heavy run: outside the sandbox's heavy slot this waits for it (heavy-slot.mjs).
+runInHeavySlot("verify");
 
 const root = repoRoot(import.meta.url);
 const { say, step, skip, fail, failing, failedSteps, finish } = createSteps("verify", root);
@@ -56,9 +60,9 @@ step("script self-tests", process.execPath, ["--test", "_tools/scripts/**/*.test
 // The JUnit reports the test run leaves for failure-units.mjs; removed once read.
 const junitDir = mkdtempSync(join(tmpdir(), "verify-junit-"));
 
-// TEST_WORKERS bounds a repo-wide run's memory, sized to the cgroup; INDEXNOW_ENABLED=0 stops the site build from
-// polling live.
-const SUITE_ENV = { TEST_WORKERS: testWorkers(), INDEXNOW_ENABLED: "0", SUITES_JUNIT_DIR: junitDir };
+// TEST_WORKERS bounds a repo-wide run's memory, sized to what is free when the tests start (test-workers.mjs), not when
+// this script did; INDEXNOW_ENABLED=0 stops the site build from polling live.
+const suiteEnv = () => ({ TEST_WORKERS: testWorkers(), INDEXNOW_ENABLED: "0", SUITES_JUNIT_DIR: junitDir });
 
 // Tasks that failed and their units, less what passed when re-run alone (logged as a flake, never a red verdict).
 const measured = [];
@@ -91,8 +95,9 @@ if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/buil
     if (afterLand && regenerateStateShapes(root, landed)) {
         say("state-shapes.json froze a new shape of a stored document this land changed");
     }
-    turbo("typecheck", ["typecheck"], {});
-    turbo("test", ["test", "--only"], SUITE_ENV);
+    // Each run's task count is sized to what is free as it starts: a vue-tsc heap per typecheck, a worker per test task.
+    turbo("typecheck", ["typecheck", `--concurrency=${typecheckConcurrency()}`], {});
+    turbo("test", ["test", "--only", `--concurrency=${testConcurrency()}`], suiteEnv());
 } else {
     for (const label of ["typecheck", "test"]) {
         skip(label, "the declarations it reads were not emitted");

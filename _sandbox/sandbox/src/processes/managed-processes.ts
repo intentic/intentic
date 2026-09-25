@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { forkedExec } from "@intentic/scaffold";
 import type { Logger } from "pino";
+import { endSession } from "../seams/session-processes.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { SHELL } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
@@ -42,6 +43,8 @@ export interface ProcessRunner {
     readonly launch: (session: string, spec: ProcessSpec & { port: number }) => Promise<void>;
     readonly kill: (session: string) => void | Promise<void>;
     readonly states: () => Promise<Map<string, string>>;
+    // Ends what a finished one-shot left running in its session, the shell at the prompt excepted.
+    readonly endLeftovers?: (session: string) => Promise<void>;
 }
 
 // Sweep interval; tmux gives no exit event, so liveness is only observable by asking, not pushed.
@@ -63,11 +66,28 @@ export const launchEnv = (spec: ProcessSpec & { port: number }, path: string): R
     PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false",
 });
 
+// Ends every process a session's panes started, each pane's own shell excepted (session-processes.ts). Closing the
+// session alone hangs up the shell's foreground job and nothing else: a turbo task or a `bun test` worker sits in a
+// process group of its own and kept running after its check was stopped, beside the next run of the same check.
+const endPanes = async (session: string): Promise<void> => {
+    const listed = await forkedExec("tmux", ["list-panes", "-s", "-t", `=${session}:`, "-F", "#{pane_pid}"]).catch((error: unknown) => {
+        // A session that is not there has no panes to end, and no tmux server means no sessions at all.
+        const stderr = typeof error === "object" && error !== null ? (error as { stderr?: unknown }).stderr : undefined;
+        if (isNoTmuxServer(error) || (typeof stderr === "string" && /can't find (session|window)/.test(stderr))) {
+            return undefined;
+        }
+        throw error;
+    });
+    const leaders = (listed?.stdout ?? "").split("\n").map(Number).filter((pid) => Number.isInteger(pid) && pid > 0);
+    await Promise.all(leaders.map((leader) => endSession(leader)));
+};
+
 const defaultRunner: ProcessRunner = {
     launch: async (session, spec) => {
         const envFlags = Object.entries(launchEnv(spec, process.env["PATH"] ?? "")).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
-        // A lingering same-name session is a previous run's leftover, clear it before creating fresh.
-        // `=` forces an exact target match (a bare `-t panel-x` would prefix-match `panel-x--api`).
+        // A lingering same-name session is a previous run's leftover, clear it and what it left running before creating
+        // fresh. `=` forces an exact target match (a bare `-t panel-x` would prefix-match `panel-x--api`).
+        await endPanes(session);
         await forkedExec("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
         // Sent via send-keys so Ctrl+C/↑ still work; trailing `:` is required for tmux to resolve the pane.
         await forkedExec("tmux", [
@@ -92,8 +112,10 @@ const defaultRunner: ProcessRunner = {
         ]);
     },
     kill: async (session) => {
+        await endPanes(session);
         await forkedExec("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
     },
+    endLeftovers: endPanes,
     // One call for all sessions; pane_current_command at the prompt is how a oneShot's completion is seen. A shell exit
     // destroys the session, reporting as absence; no tmux server means no sessions.
     states: async () => {
@@ -243,6 +265,8 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             const graceOk = Date.now() - entry.startedAt > ONE_SHOT_GRACE_MS;
             if ((fromPrompt && entry.sawJob && entry.promptStreak >= 1) || (entry.promptStreak >= 2 && (entry.sawJob || graceOk))) {
                 untrack(key, true);
+                // The command is back at the prompt; anything it started that is still running is left over.
+                void runner.endLeftovers?.(panelSession(key)).catch((error: unknown) => options.logger?.warn({ err: error, key }, "managed processes: a finished run's leftovers could not be ended"));
             }
         }
         if (current.size === 0) {

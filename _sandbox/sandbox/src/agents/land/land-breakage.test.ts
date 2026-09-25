@@ -17,7 +17,7 @@ import { isolatedAgent } from "../../testing.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { LandBreakage } from "../../workspace/deps/verify-deps.js";
 import type { BisectAsk } from "./land-bisect.js";
-import type { LandSuspect } from "./land-fix.js";
+import { type LandSuspect, narrowCheckOf } from "./land-fix.js";
 
 // What a red main-line check is owed, decided from the fleet as it stands: wait for the check behind it, hold while a
 // conversation still works on what failed, send it back to the land it came with while that conversation still has the
@@ -181,6 +181,7 @@ const followUp = (units: readonly string[]): string =>
     landBreakagePrompt([
         "`pnpm verify` in the workspace root failed on:",
         units.map((unit) => `- ${unit}`).join("\n"),
+        narrowCheckOf("pnpm verify"),
         "The end of its output:\n\n```\n1 failed\n```",
     ]);
 

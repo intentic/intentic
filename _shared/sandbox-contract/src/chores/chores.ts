@@ -175,7 +175,7 @@ const security: Chore = {
         `build-time tool is a different problem from one in a running service. Where the fix is a version bump the lockfile can absorb, ` +
         `make it. Where it needs a real upgrade or has no patch published, leave it and say what it would take. Never rewrite ` +
         `application code to route around a CVE.`,
-    done: `Done when \`pnpm audit\` reports fewer high/critical advisories than it did, and the repository's type-check and tests pass.`,
+    done: `Done when \`pnpm audit\` reports fewer high/critical advisories than it did, and the type-check and tests of what it changed pass.`,
 };
 
 // Majors are the finding, the total is context: the digest is keyed to which packages have a major waiting, with
@@ -226,7 +226,7 @@ const dependencies: Chore = {
         `ONE AT A TIME, reading each one's changelog for breaking changes before you touch anything, and stop at the first one that ` +
         `needs more than a mechanical fix: leave it, and say what it would take. Do not batch majors; a failing test after eight of them ` +
         `is a bisect nobody wanted.`,
-    done: `Done when the repository's type-check and tests pass, and your summary names every major you took and every one you left, with the reason.`,
+    done: `Done when the type-check and tests of what it changed pass, and your summary names every major you took and every one you left, with the reason.`,
 };
 
 // knip's counts folded into one chore rather than split by kind: unused files, exports and dependencies are the
@@ -285,7 +285,7 @@ const deadCode: Chore = {
         `public entry points, files a bundler or framework loads by convention, and types consumed only by a downstream package. Delete ` +
         `what is genuinely unreachable. Leave the false positives and list them in one line each, so the next run's reader knows they ` +
         `were considered rather than missed.`,
-    done: `Done when knip reports fewer findings, the repository's type-check and tests pass, and nothing you deleted is reachable from another package.`,
+    done: `Done when knip reports fewer findings, the type-check and tests of what it changed pass, and nothing you deleted is reachable from another package.`,
 };
 
 // Report-stance: most duplication shouldn't be removed (generated files, deliberate test repetition, lookalikes
@@ -480,7 +480,7 @@ const complexity: Chore = {
         `contract from the churn: a narrow surface for importers, the volatile implementation private behind it. If it is simply ` +
         `tangled, flatten it where it stands: edge cases as early returns, compound conditions behind named predicates, long chains as ` +
         `lookups, and extract a unit only if a cohesive one falls out. Behaviour stays identical, and no re-export shims are left behind.`,
-    done: `Done when \`iq hotspots\` reports materially fewer branch points for that file, the repository's checks pass, and no importer changed meaning.`,
+    done: `Done when \`iq hotspots\` reports materially fewer branch points for that file, the checks of what it changed pass, and no importer changed meaning.`,
 };
 
 // A static table, current only as of this file's last edit; no network call. Source: nodejs/Release.
@@ -541,7 +541,7 @@ const runtime: Chore = {
         `Establish what actually pins this runtime: the image's own base, the workspace's nodeVersion, and each package's engines ` +
         `range. Propose the smallest move to a supported LTS, which of those pins have to change, in what order, and what is likely to ` +
         `break at that boundary. Make the pin changes that are mechanical; do NOT attempt the image rebuild itself.`,
-    done: `Done when the pins name a supported release, the repository's type-check and tests pass on it, and anything needing a rebuild is named as such.`,
+    done: `Done when the pins name a supported release, the type-check and tests of what it changed pass on it, and anything needing a rebuild is named as such.`,
 };
 
 // Evidence for a question usually asked as a vibe: two libraries solving the same problem is a fact, not an
@@ -739,7 +739,7 @@ const frameworkIdiom: Chore = {
         `semantics, an NgModule that something outside the repository imports: leave it, and say what it would take. Do not convert an ` +
         `idiom the repository has deliberately kept: if the newest code uses it too, that is a choice, and reporting it as one is the ` +
         `useful answer.`,
-    done: `Done when a re-scan reports fewer files on that idiom, the repository's type-check and tests pass, and every file you skipped has a one-line reason.`,
+    done: `Done when a re-scan reports fewer files on that idiom, the type-check and tests of what it changed pass, and every file you skipped has a one-line reason.`,
 };
 
 // Two kinds of evidence: a name family catches components written separately that never shared a line; a clone

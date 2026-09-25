@@ -38,8 +38,9 @@ const SYNTHESIS_PROMPT =
     `had to live in, not against your own taste in style.\n\n` +
     `Then write the version worth keeping, here in your own worktree. Start from the stronger of the two rather ` +
     `than retyping it: in every repository where it changed files, bring its named branch in with \`git merge --squash\`, ` +
-    `then fix what it got wrong and fold in whatever the other one did better. Run whatever this project uses to test ` +
-    `itself and leave it passing. What lands must read as one change somebody made on purpose, not as two ` +
+    `then fix what it got wrong and fold in whatever the other one did better. Run the tests of what you changed with ` +
+    `the project's own test command, scoped to those files or that package rather than the whole project, and leave ` +
+    `them passing. What lands must read as one change somebody made on purpose, not as two ` +
     `stitched together, and say, in a sentence each, what you took from where.`;
 
 export const workflowTemplates = (): readonly WorkflowTemplate[] => [
@@ -168,7 +169,8 @@ export const workflowTemplates = (): readonly WorkflowTemplate[] => [
                     prompt:
                         `A pipeline called this gate with everything it knows about a change, the text above: typically a commit, a branch, ` +
                         `sometimes a preview URL. Find that change in this workspace and exercise it the way a careful reviewer would: read the ` +
-                        `diff against what it claims to do, build and test where the project says how, open the preview if one is named. Judge ` +
+                        `diff against what it claims to do, build and test what it changed where the project says how (those files or that package, ` +
+                        `not the whole project), open the preview if one is named. Judge ` +
                         `only the change in front of you, not the codebase's general state.\n\n` +
                         `Write "pass" only for work you actually verified; write "fail" when the change is broken or falls short of what it ` +
                         `claims. If you cannot reach the work at all: the commit is not here, the preview does not answer, fail this step ` +
