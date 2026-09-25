@@ -9,6 +9,8 @@ import { type ArrivalItem, type ArrivalReport, BundleManifestSchema, type Bundle
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { extract, type Headers } from "tar-stream";
 import { pathExists } from "../path-exists.js";
+import { convertDocument, fold, isJsonObject, nested, retype } from "../store/conversions.js";
+import { defineDocument } from "../store/documents.js";
 import { conversationsDbPath } from "../store/conversations-db.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
@@ -17,6 +19,7 @@ import { setWorkspaceMtime } from "../workspace/files/workspace-files.js";
 import { ArrivalFormatError } from "../arrival-error.js";
 import { drain, extractAll } from "../tar-extract.js";
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
+import { definitionDocument } from "./definition.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { sizeLabel } from "@intentic/base/format";
@@ -45,6 +48,44 @@ interface Placed {
     readonly root: "workspace" | "history";
     readonly relPath: string;
 }
+
+const repoIdsOf = (definition: unknown): string[] => {
+    const repositories = isJsonObject(definition) ? definition["repositories"] : undefined;
+    return Array.isArray(repositories) ? [...new Set(repositories.flatMap((repo) => (isJsonObject(repo) && typeof repo["id"] === "string" ? [repo["id"]] : [])))] : [];
+};
+
+// A bundle is read through the conversions its format has had, the embedded definition through a definition's own. A
+// version 2 bundle (2026-08-25 to 09-02) named no `repos`: the ones its definition lists stand in, and a repository with
+// no remote, which only the tar's entries could name, is refused by name like any entry the manifest does not list.
+export const bundleManifestDocument = defineDocument({
+    path: BUNDLE_MANIFEST_ENTRY,
+    schema: BundleManifestSchema,
+    boot: false,
+    // Version 1 carried an environment block no definition can be rebuilt from; unreadableManifest says to re-export.
+    horizon: "v1.232.0",
+    history: [
+        fold("lists the repositories a version 2 bundle carries, from its definition", {
+            from: [],
+            into: "repos",
+            applies: (manifest) => manifest["version"] === 2 && !Object.hasOwn(manifest, "repos"),
+            convert: (_fields, whole) => repoIdsOf(whole["definition"]),
+        }),
+        retype("version", (value): value is 2 => value === 2, () => 3 as const, "reads a version 2 bundle as version 3"),
+        ...nested("definition", definitionDocument.history),
+    ],
+});
+
+// What a manifest this daemon cannot take in is told, by the version it names.
+export const unreadableManifest = (raw: unknown): string => {
+    const stated = isJsonObject(raw) ? raw["version"] : undefined;
+    if (stated === 1) {
+        return "this bundle was exported before 2026-08-25, in a format that did not carry the sandbox's definition; export it again from its source";
+    }
+    if (typeof stated === "number" && stated > 3) {
+        return `this bundle was exported by a newer intentic (format ${stated}); update this sandbox to take it in`;
+    }
+    return "the bundle manifest is not readable by this daemon";
+};
 
 // Maps an entry to its row and destination; undefined means it's not part of this format (caller refuses it by name).
 // `root` isn't its own repo row: /work's git dir is as much part of the workspace as its files.
@@ -132,9 +173,10 @@ const walkBundle = async (
 
     const handleEntry = async (header: Headers, stream: Readable): Promise<void> => {
         if (header.name === BUNDLE_MANIFEST_ENTRY) {
-            const parsed = BundleManifestSchema.safeParse(JSON.parse((await readEntry(stream)).toString("utf8")));
+            const raw: unknown = JSON.parse((await readEntry(stream)).toString("utf8"));
+            const parsed = BundleManifestSchema.safeParse(convertDocument(bundleManifestDocument.history, "object", raw).value);
             if (!parsed.success) {
-                throw new BundleFormatError("the bundle manifest is not readable by this daemon");
+                throw new BundleFormatError(unreadableManifest(raw));
             }
             manifest = parsed.data;
             repos = new Set(parsed.data.repos);

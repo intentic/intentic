@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { jsonFile } from "../store/json-file.js";
+import { defineDocument } from "../store/documents.js";
+import { jsonEntries } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Declined-recommendation store (<workspace>/.intentic/config/capability-dismissals.json). Keyed by the evidence a entry
 // was declined against, not the entry: a workspace change (new repo, moved remote) asks again. One row per entry.
@@ -9,7 +11,13 @@ export interface DismissedRecommendation {
     readonly evidence: string;
 }
 
-const DismissedSchema = z.array(z.object({ entry: z.string(), evidence: z.string() }));
+const DismissedSchema = z.object({ entry: z.string(), evidence: z.string() });
+
+export const dismissalsDocument = defineDocument({
+    path: stateRelPath(".intentic/config/capability-dismissals.json"),
+    schema: DismissedSchema,
+    granularity: "entries",
+});
 
 export interface DismissalsStore {
     readonly list: () => Promise<DismissedRecommendation[]>;
@@ -17,9 +25,10 @@ export interface DismissalsStore {
 }
 
 export const fileDismissalsStore = (path: string): DismissalsStore => {
-    const file = jsonFile<DismissedRecommendation[]>(path, {
-        parse: (raw) => DismissedSchema.safeParse(raw).data,
-        fallback: () => [],
+    const file = jsonEntries<DismissedRecommendation>(path, {
+        entry: (raw) => DismissedSchema.safeParse(raw).data,
+        document: dismissalsDocument,
+        idKeys: ["entry"],
     });
     return {
         list: file.read,

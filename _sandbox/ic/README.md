@@ -19,6 +19,11 @@ flowchart LR
 - `ic sandbox connect <code>` redeems the setup code from the platform and brings a sandbox up. `update`, `prepare`,
   `rollback`, `rebuild` and `reshape` swap or restart the container while keeping `/work` and `/history`; `remove`
   moves the data to a trash that `restore` brings back and `purge` empties early.
+- Before a swap touches the running container, it pre-flights the target image's state conversions against
+  read-only mounts of `/work` and `/history` (`preflight.rs`) and refuses if one would fail; `--skip-preflight`
+  overrides. `prepare` records the staged image's plan in the marker it leaves the sandbox, so the update card says
+  what an update converts before anyone accepts it. A new version that never commits its state journal is rolled back
+  onto the parked container.
 - `ic sandbox reshape <slug> … --later` saves a memory, CPU, privileged or GPU change instead of restarting for it
   (`sandbox-<slug>.shape` beside the channel record). The next recreate applies it and clears it: an update,
   rollback, rebuild, a plain `reshape`, or a Restart from the Devices view. `--forget` drops it.

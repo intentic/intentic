@@ -1,6 +1,11 @@
-import { type Automation, type AutomationRun, AutomationRunSchema, AutomationSchema } from "@intentic/sandbox-contract";
+import { join } from "node:path";
+import { type Automation, type AutomationRun, AutomationRunSchema, AutomationSchema, type ModelPin } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { jsonFile } from "../store/json-file.js";
+import { fold, isJsonObject, type JsonObject } from "../store/conversions.js";
+import { defineDocument } from "../store/documents.js";
+import { jsonEntries, jsonFile } from "../store/json-file.js";
+import { defineStep } from "../store/state-steps.js";
+import { stateRelPath } from "../state-paths.js";
 
 // The sandbox-owned automations manifest and the run ledger beside it; the scheduler polls the manifest, the
 // /automations routes edit it.
@@ -17,7 +22,98 @@ const RUNS_KEPT = 20;
 export type AutomationRecord = Automation & { runs: AutomationRun[] };
 
 const RunLedgerSchema = z.record(z.string(), z.array(AutomationRunSchema));
+
+// Until 2026-09-07 an automation named its model with three optional fields; now it names a ladder of whole pins. One
+// that named a model gets a one-rung ladder of it. One that named none inherited a sandbox-wide default no conversion
+// can see, and stays in the manifest, skipped and reported, for its owner to pick a model.
+const modelLadder = fold("folds agent, harness and model into a one-rung models ladder", {
+    from: ["agent", "harness", "model"],
+    into: "models",
+    applies: (entry) => typeof entry["model"] === "string" && !Object.hasOwn(entry, "models"),
+    convert: ({ agent, harness, model }): ModelPin[] => [
+        { provider: typeof agent === "string" ? agent : "claude", model: String(model), ...(harness === "native" || harness === "claude-code" ? { harness } : {}) },
+    ],
+});
+
+export const automationsDocument = defineDocument({
+    path: stateRelPath(".intentic/config/automations.json"),
+    schema: AutomationSchema,
+    granularity: "entries",
+    history: [modelLadder],
+});
+export const automationRunsDocument = defineDocument({ path: stateRelPath(".intentic/records/automation-runs.json"), schema: RunLedgerSchema });
 type RunLedger = z.infer<typeof RunLedgerSchema>;
+
+const parsedJson = (text: string | undefined): unknown => {
+    try {
+        return text === undefined ? undefined : JSON.parse(text);
+    } catch {
+        // silent-catch: an unreadable file has nothing to move; its own store reports it
+        return undefined;
+    }
+};
+
+const canonical = (value: unknown): string => `${JSON.stringify(value, undefined, 2)}\n`;
+
+// What an automation entry carries that lives elsewhere now: embedded run history, an event trigger's webhook token.
+const carriesElsewhere = (entry: unknown): entry is JsonObject & { id: string } =>
+    isJsonObject(entry) && typeof entry["id"] === "string" && (Array.isArray(entry["runs"]) || (isJsonObject(entry["trigger"]) && typeof entry["trigger"]["token"] === "string"));
+
+// Two things the manifest once held move out of it: run history (split into the runs ledger on 2026-08-11) and an event
+// trigger's webhook token (into the door store on 2026-09-06, since a credential has no place in a tracked file). A
+// moved token keeps working: the fire route checks the door store for exactly the value callers were given. Neither
+// ever overwrites what its new home holds, and only runs this version can read are moved, since one bad run would sink
+// the whole ledger.
+export const automationsRelocationStep = defineStep({
+    id: "automations-runs-and-webhook-tokens",
+    describe: "moves embedded run history into the runs ledger and webhook tokens into the door store",
+    plan: async ({ roots, read }) => {
+        const manifestPath = join(roots.workspace, automationsDocument.path);
+        const manifest = parsedJson(await read(manifestPath));
+        if (!Array.isArray(manifest) || !manifest.some(carriesElsewhere)) {
+            return undefined;
+        }
+        const ledgerPath = join(roots.workspace, automationRunsDocument.path);
+        const doorsPath = join(roots.workspace, stateRelPath(".intentic/secrets/doors.json"));
+        const ledgerRaw = parsedJson(await read(ledgerPath));
+        const doorsRaw = parsedJson(await read(doorsPath));
+        const ledger: Record<string, unknown> = isJsonObject(ledgerRaw) ? { ...ledgerRaw } : {};
+        const doors: JsonObject = isJsonObject(doorsRaw) ? { ...doorsRaw } : {};
+        const automationDoors: Record<string, unknown> = isJsonObject(doors["automation"]) ? { ...doors["automation"] } : {};
+        const moved = { runs: 0, tokens: 0 };
+        const stripped = manifest.map((entry) => {
+            if (!carriesElsewhere(entry)) {
+                return entry;
+            }
+            const { runs, ...withoutRuns } = entry;
+            if (Array.isArray(runs)) {
+                const readable = runs.filter((run) => AutomationRunSchema.safeParse(run).success);
+                const standing = Array.isArray(ledger[entry.id]) ? (ledger[entry.id] as unknown[]) : [];
+                ledger[entry.id] = [...standing, ...readable].slice(0, RUNS_KEPT);
+                moved.runs += 1;
+            }
+            const trigger = withoutRuns["trigger"];
+            if (!isJsonObject(trigger) || typeof trigger["token"] !== "string") {
+                return withoutRuns;
+            }
+            const { token, ...withoutToken } = trigger;
+            automationDoors[entry.id] ??= token;
+            moved.tokens += 1;
+            return { ...withoutRuns, trigger: withoutToken };
+        });
+        const writes = new Map<string, string>([[manifestPath, canonical(stripped)]]);
+        const changes: string[] = [];
+        if (moved.runs > 0) {
+            writes.set(ledgerPath, canonical(ledger));
+            changes.push(`moves the run history of ${moved.runs} automation(s) into the runs ledger`);
+        }
+        if (moved.tokens > 0) {
+            writes.set(doorsPath, canonical({ ...doors, automation: automationDoors }));
+            changes.push(`moves ${moved.tokens} webhook token(s) into the door store, where their URLs keep working`);
+        }
+        return { changes, writes };
+    },
+});
 
 // Runs for an id the manifest no longer has are invisible by construction: the join walks the manifest, never the
 // ledger's keys.
@@ -47,16 +143,15 @@ export interface AutomationsStore {
 
 // Two JSON file stores, used in production at <workspace>/.intentic/config/automations.json and its runs sibling.
 export const fileAutomationsStore = (path: string, runsPath: string): AutomationsStore => {
-    const file = jsonFile<Automation[]>(path, {
-        parse: (raw) => z.array(AutomationSchema).safeParse(raw).data,
-        fallback: () => [],
-    });
+    // One entry at a time: a single automation this build cannot read is skipped and kept, never the whole manifest.
+    const file = jsonEntries<Automation>(path, { entry: (raw) => AutomationSchema.safeParse(raw).data, document: automationsDocument });
     // Unreadable runs fall back to no history rather than reading as an absent manifest, which would silently stop
     // every automation.
     // Rebuild unreadable run history only from the next recorded run.
     const ledger = jsonFile<RunLedger>(runsPath, {
         parse: (raw) => RunLedgerSchema.safeParse(raw).data,
         fallback: () => ({}),
+        document: automationRunsDocument,
     });
     return {
         list: async () => withRuns(await file.read(), await ledger.read()),

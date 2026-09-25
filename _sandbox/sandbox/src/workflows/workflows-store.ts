@@ -9,8 +9,11 @@ import {
 } from "@intentic/sandbox-contract";
 import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { z } from "zod";
-import { jsonFile } from "../store/json-file.js";
+import { isJsonObject, type JsonObject } from "../store/conversions.js";
+import { defineDocument } from "../store/documents.js";
+import { defineStep } from "../store/state-steps.js";
+import { jsonEntries } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Two files: `workflows.json` is a manifest the user edits by hand; `workflow-runs.json` is an append-mostly ledger the
 // scheduler writes many times per step, bounded and never user-edited. Kept apart so a step write can't clobber a
@@ -18,6 +21,61 @@ import { jsonFile } from "../store/json-file.js";
 
 // Ended runs the ledger remembers, newest first; a still-running record is never a retention candidate.
 const RUNS_KEPT = 50;
+
+export const workflowsDocument = defineDocument({ path: stateRelPath(".intentic/config/workflows.json"), schema: WorkflowSchema, granularity: "entries" });
+const parsedJson = (text: string | undefined): unknown => {
+    try {
+        return text === undefined ? undefined : JSON.parse(text);
+    } catch {
+        // silent-catch: an unreadable file has nothing to move; its own store reports it
+        return undefined;
+    }
+};
+
+const carriesGateToken = (entry: unknown): entry is JsonObject & { id: string; gate: JsonObject & { token: string } } =>
+    isJsonObject(entry) && typeof entry["id"] === "string" && isJsonObject(entry["gate"]) && typeof entry["gate"]["token"] === "string";
+
+// A release gate's token lived in the tracked design until 2026-09-06; it moves into the door store, where the gate
+// route checks it, so the pipelines that were taught it keep working. It never overwrites a token the store holds.
+export const workflowGateTokensStep = defineStep({
+    id: "workflow-gate-tokens",
+    describe: "moves release-gate tokens out of the tracked designs into the door store",
+    plan: async ({ roots, read }) => {
+        const designsPath = join(roots.workspace, workflowsDocument.path);
+        const designs = parsedJson(await read(designsPath));
+        if (!Array.isArray(designs) || !designs.some(carriesGateToken)) {
+            return undefined;
+        }
+        const doorsPath = join(roots.workspace, stateRelPath(".intentic/secrets/doors.json"));
+        const doorsRaw = parsedJson(await read(doorsPath));
+        const doors: JsonObject = isJsonObject(doorsRaw) ? { ...doorsRaw } : {};
+        const gateDoors: Record<string, unknown> = isJsonObject(doors["gate"]) ? { ...doors["gate"] } : {};
+        let moved = 0;
+        const stripped = designs.map((entry) => {
+            if (!carriesGateToken(entry)) {
+                return entry;
+            }
+            const { token, ...gate } = entry.gate;
+            gateDoors[entry.id] ??= token;
+            moved += 1;
+            return { ...entry, gate };
+        });
+        const canonical = (value: unknown): string => `${JSON.stringify(value, undefined, 2)}\n`;
+        return {
+            changes: [`moves ${moved} release-gate token(s) into the door store, where their pipelines keep working`],
+            writes: new Map([
+                [designsPath, canonical(stripped)],
+                [doorsPath, canonical({ ...doors, gate: gateDoors })],
+            ]),
+        };
+    },
+});
+
+export const workflowRunsDocument = defineDocument({
+    path: stateRelPath(".intentic/records/workflow-runs.json"),
+    schema: WorkflowRunSchema,
+    granularity: "entries",
+});
 
 export interface WorkflowsStore {
     readonly list: () => Promise<Workflow[]>;
@@ -29,10 +87,8 @@ export interface WorkflowsStore {
 }
 
 export const fileWorkflowsStore = (path: string): WorkflowsStore => {
-    const file = jsonFile<Workflow[]>(path, {
-        parse: (raw) => z.array(WorkflowSchema).safeParse(raw).data,
-        fallback: () => [],
-    });
+    // One entry at a time: a design this build cannot read is skipped and kept, never the whole manifest.
+    const file = jsonEntries<Workflow>(path, { entry: (raw) => WorkflowSchema.safeParse(raw).data, document: workflowsDocument });
     return {
         list: () => file.read(),
         get: async (id) => (await file.read()).find((workflow) => workflow.id === id),
@@ -83,9 +139,10 @@ export interface WorkflowRunsStore {
 }
 
 export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
-    const file = jsonFile<WorkflowRun[]>(path, {
-        parse: (raw) => z.array(WorkflowRunSchema).safeParse(raw).data,
-        fallback: () => [],
+    const file = jsonEntries<WorkflowRun>(path, {
+        entry: (raw) => WorkflowRunSchema.safeParse(raw).data,
+        document: workflowRunsDocument,
+        idKeys: ["runId"],
     });
     // Find this run, replace it; a run not found is a no-op, not an error, since a scheduler may still be writing to
     // one that already rolled off the ledger.

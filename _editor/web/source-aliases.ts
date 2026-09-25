@@ -165,6 +165,9 @@ export const sourceAliases = (): Record<string, string> => ({
     // The terminal channel's binary frame codec and its upgrade paths, shared with the daemon's end of the socket; off
     // the barrel so the terminal's unit tests read the codec without the whole contract.
     "@intentic/sandbox-contract/terminal-frames": fromRoot("_shared/sandbox-contract/src/front/terminal-frames.ts"),
+    // The stored-document conversion vocabulary, imported by extension-api's background.ts so an extension can declare
+    // its own documents' history; off the barrel like every other subpath, or the barrel alias swallows it.
+    "@intentic/sandbox-contract/documents": fromRoot("_shared/sandbox-contract/src/documents/index.ts"),
     "@intentic/sandbox-contract": fromRoot("_shared/sandbox-contract/src/index.ts"),
     // Extension-registry file format, imported by the wire contract's schemas.ts; without this alias the dev server
     // resolves to a `dist/` that may not exist yet.

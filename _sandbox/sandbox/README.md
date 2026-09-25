@@ -30,6 +30,12 @@ flowchart LR
   a nudge, an automation's thread) is refused on an archived one (`agents/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.
 - Extension code never runs in the daemon process; it runs in a supervised backend host.
+- Stored files evolve under one engine (`store/`). Each is declared with `defineDocument` beside its store, carrying
+  the conversions its shape has had; `jsonFile` runs them on every read and keeps what it does not know on writes.
+  Before any store opens, `store/state-convergence.ts` writes converted files back under a journal a rolled-back build
+  undoes, committed once boot converges. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight, and
+  `store/shapes/write-state-shapes.ts` freezes every shape each document has had so the typecheck catches a change that
+  would strand an old file.
 
 More: [subsystems](docs/subsystems.md) (how the parts connect), [environment](docs/env-contract.md) (what the daemon
 reads at start), [debugging](docs/debugging.md) (logs, diagnostics, state on disk).

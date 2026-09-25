@@ -29,7 +29,24 @@ Sandboxes update when their owner accepts the update card, so the hosted editor 
 - The wire contract is [`@intentic/sandbox-contract`](_shared/sandbox-contract). Its `contract.lock.json` records every exported schema. Additions pass. A change that removes or narrows one is declared with a `type!:` subject or a `Breaking-Note:` trailer. The push reports a shrink with no such declaration in its range, without refusing it, and the package's lock test fails in CI on any commit whose lock no longer matches the schemas.
 - A `Breaking-Note:` becomes the release's `## Breaking changes` section, and the update card turns into a warning that names what stops working before anyone takes the update.
 - The daemon lists its routes and their shape fingerprints on the `/events` hello frame. The editor hides a feature an older daemon lacks instead of calling a route that is not there.
-- Extensions declare `engines.intentic`, a semver range matched against `extensionApiVersion` in [`_shared/extension-api/src/version.ts`](_shared/extension-api/src/version.ts): a minor bump for an addition, a major one for a break. That package is the one exception to the repository's no-legacy rule.
+- Extensions declare `engines.intentic`, a semver range matched against `extensionApiVersion` in [`_shared/extension-api/src/version.ts`](_shared/extension-api/src/version.ts): a minor bump for an addition, a major one for a break.
+
+## Stored data
+
+Every file a sandbox keeps and reads back (everything under `.intentic/`, the daemon's files on `/history`, `conversations.db`) reads correctly after any update from any release since its horizon, however many releases the update skips. So do a `sandbox.toml` and an export bundle from those releases.
+
+- Each stored document is declared once, beside its store (`defineDocument`, [`documents.ts`](_sandbox/sandbox/src/store/documents.ts)), with the conversions its shape has had. They run over the raw file on every read, before the schema, so old bytes that arrive by any door (an update, a bundle, a `git revert`, a history restore, a runner on another version) read as today's shape.
+- On the first boot after an update, the daemon writes converted files back, moves documents that changed address and runs structural steps before any store opens ([`state-convergence.ts`](_sandbox/sandbox/src/store/state-convergence.ts)). A journal keeps every file's pre-image until that version has booted all the way. A previous version finding the journal still open puts the pre-images back, and `ic` rolls back an update whose journal never commits.
+- `ic` runs the new image's plan over read-only mounts of the volumes before it swaps anything ([`state-plan.ts`](_sandbox/sandbox/src/state-plan.ts)). A conversion that would fail refuses the update, and a staged update's plan is on its card before anyone accepts it.
+- A write keeps what this version does not know: keys a newer version added, entries it cannot read. After a newer version has run, a file this one cannot read is never set aside or written over.
+- [`state-shapes.json`](_sandbox/sandbox/src/store/generated/state-shapes.json) freezes every shape each document has had, seeded from every release's contract lock. The typecheck requires each one to convert to what today's schema accepts, so a change that would strand an old file names the document and property until a conversion covers it. `verify:turn` records new shapes beside the contract lock.
+
+The rules for a change to stored data:
+
+- **It ships with its conversion.** A field that only grows (optional, or defaulted) needs none; the typecheck says when one is missing.
+- **A change of meaning is a rename.** A key is never read a new way under the same name; `timeoutSec` becomes `timeoutMs`.
+- **A retired name stays retired.** A dropped or renamed key is never reused, which the typecheck enforces from the history.
+- **History is append-only.** A shipped conversion is never edited or removed. A deliberate support horizon (`horizon`) is the only way an old shape stops being converted, and its reader says what to do instead.
 
 ## Agent engines
 
@@ -38,5 +55,5 @@ Sandboxes update when their owner accepts the update card, so the hosted editor 
 ## What every update keeps
 
 - The owner's files in `/work` and `/history` survive an update, a rollback and a failed update; `verify-update-survival.sh` drills all three nightly.
-- An update that cannot come up healthy puts the previous sandbox back.
-- Only the surfaces above carry a promise. Workspace packages, including the published `@intentic/*` ones, change their APIs without shims under the no-legacy rule in [AGENTS.md](AGENTS.md).
+- An update that cannot come up healthy puts the previous sandbox back, and the files its conversions had changed with it.
+- Only the surfaces above carry a promise. Workspace packages, including the published `@intentic/*` ones, change their APIs without shims.

@@ -1,6 +1,7 @@
 import { channelId, PushChannelSchema, type PushChannel } from "@intentic/sandbox-contract";
 import webpush from "web-push";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // This sandbox's VAPID keypair plus one entry per registered device (a browser's web-push subscription or a native
@@ -31,6 +32,8 @@ const StoredStateSchema = z.object({
     channels: z.array(PushChannelSchema).default([]),
 });
 
+export const pushDocument = defineDocument({ root: "history", path: "push.json", schema: StoredStateSchema });
+
 // Must run only inside `update`: concurrent callers both seeing an empty publicKey would each mint and persist their
 // own pair.
 // Never rotated once written; every live web-push channel is bound to the public key it was created with.
@@ -43,6 +46,7 @@ export const filePushStore = (path: string): PushStore => {
         // Empty keys are the in-memory unkeyed marker; the schema requires non-empty keys, so this never reaches disk.
         fallback: () => ({ publicKey: "", privateKey: "", channels: [] }),
         mode: 0o600,
+        document: pushDocument,
     });
 
     return {

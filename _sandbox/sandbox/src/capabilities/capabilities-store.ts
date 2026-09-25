@@ -1,5 +1,8 @@
 import { type Capability, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
+import { isJsonObject, mapValue, retireEntries } from "../store/conversions.js";
+import { defineDocument } from "../store/documents.js";
 import { idListFile, type IdListStore } from "../store/id-list-file.js";
+import { stateRelPath } from "../state-paths.js";
 import type { ResolvedContribution } from "./contributions.js";
 import { partitionSecretValues } from "./credentials/secret-fields.js";
 import type { SecretVault } from "./credentials/secret-vault.js";
@@ -10,10 +13,26 @@ import type { SecretVault } from "./credentials/secret-vault.js";
 // build.
 export type CapabilitiesStore = IdListStore<Capability>;
 
+export const capabilitiesDocument = defineDocument({
+    path: stateRelPath(".intentic/config/capabilities.json"),
+    schema: CapabilitySchema,
+    granularity: "entries",
+    history: [
+        // 2026-09-21: host became device, same config under a new name.
+        mapValue("kind", { host: "device" }),
+        // 2026-09-20: service and integration were withdrawn with no field-for-field successor (a CLI connector does the
+        // job now). Removed, each recorded in the ledger; the tracked file's history keeps the entry whole.
+        retireEntries(
+            "retires a service or integration connection, withdrawn in favour of CLI connectors",
+            (entry): entry is { kind: "service" | "integration" } => isJsonObject(entry) && (entry["kind"] === "service" || entry["kind"] === "integration"),
+        ),
+    ],
+});
+
 // JSON file store on the shared id-list store (store/id-list-file.ts): per-entry validation, skipped entries reported,
 // and writes that preserve what this build can't read.
 export const fileCapabilitiesStore = (path: string, onInvalid?: (id: string, reason: string) => void): CapabilitiesStore =>
-    idListFile(path, CapabilitySchema, onInvalid);
+    idListFile(path, CapabilitySchema, onInvalid, capabilitiesDocument);
 
 // Decorator, not a file-store change: the manifest keeps a connection's shape, the vault keeps its credential values.
 // Reads rehydrate so every caller gets a whole Capability; writes go to the vault first, orphaning at worst.

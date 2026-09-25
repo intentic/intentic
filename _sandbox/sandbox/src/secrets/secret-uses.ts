@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { jsonFile } from "../store/json-file.js";
+import { defineDocument } from "../store/documents.js";
+import { jsonEntries } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 
 // One row per moment a stored secret actually left (resolved into a command, typed into a browser field), joined onto
 // the inventory as "last used". Never a value or the full command: `detail` keeps only the head of the line. Capped and
@@ -22,20 +24,15 @@ const SecretUseSchema = z.object({
 });
 export type SecretUse = z.infer<typeof SecretUseSchema>;
 
+export const secretUsesDocument = defineDocument({ path: stateRelPath(".intentic/records/secret-uses.json"), schema: SecretUseSchema, granularity: "entries" });
+
 export interface SecretUsesStore {
     readonly record: (use: SecretUse) => Promise<void>;
     readonly all: () => Promise<readonly SecretUse[]>;
 }
 
 export const fileSecretUses = (path: string): SecretUsesStore => {
-    const file = jsonFile<SecretUse[]>(path, {
-        parse: (raw) => {
-            const parsed = z.array(SecretUseSchema).safeParse(raw);
-            return parsed.success ? parsed.data : undefined;
-        },
-        fallback: () => [],
-        mode: 0o600,
-    });
+    const file = jsonEntries<SecretUse>(path, { entry: (raw) => SecretUseSchema.safeParse(raw).data, mode: 0o600, document: secretUsesDocument });
     return {
         record: async (use) => {
             await file.update((current) => [...current, use].slice(-USE_CAP));

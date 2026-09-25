@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import { objectParse } from "../store/unknown-keys.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Daemon-recorded CI state in .intentic/secrets/ci.json: the webhook secret, each repo+branch's last terminal
 // conclusion (drives pipeline_fixed/pipeline_broken), and the poller's already-announced run ids. Carries a secret, so
@@ -22,6 +24,8 @@ const CiStateSchema = z.object({
     announced: z.record(z.string(), z.array(z.number())).optional(),
 });
 type CiState = z.infer<typeof CiStateSchema>;
+
+export const ciDocument = defineDocument({ path: stateRelPath(".intentic/secrets/ci.json"), schema: CiStateSchema });
 
 export interface CiStore {
     // Minted on first read, stable after; hook registrations and signature checks must agree across boots.
@@ -45,6 +49,7 @@ export const fileCiStore = (path: string): CiStore => {
         // Empty secret marks no file yet; `minted` fills it inside the update queue so callers can't mint two.
         fallback: () => ({ secret: "", conclusions: {} }),
         mode: 0o600,
+        document: ciDocument,
     });
     return {
         secret: async () => (await file.update(minted)).secret,

@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath } from "../state-paths.js";
+import { statePath, stateRelPath } from "../state-paths.js";
 
 // Usage of each declared sandbox route (.intentic/records/extension-usage.json), by extension id then declared entry.
 // Answers whether a permissions.sandbox entry is used; keyed by the entry, not the path, so the file stays bounded.
@@ -13,8 +14,15 @@ const RouteUsageSchema = z.object({
 });
 export type RouteUsage = z.infer<typeof RouteUsageSchema>;
 
-const FileSchema = z.record(z.string(), z.record(z.string(), RouteUsageSchema));
+const ExtensionUsageSchema = z.record(z.string(), RouteUsageSchema);
+const FileSchema = z.record(z.string(), ExtensionUsageSchema);
 type UsageFile = z.infer<typeof FileSchema>;
+
+export const extensionUsageDocument = defineDocument({
+    path: stateRelPath(".intentic/records/extension-usage.json"),
+    schema: ExtensionUsageSchema,
+    granularity: "record",
+});
 
 // Memoized per root: the write queue lives on the file object; a fresh instance would drop a concurrent report.
 const files = new Map<string, JsonFile<UsageFile>>();
@@ -25,7 +33,11 @@ const usageFile = (root: string): JsonFile<UsageFile> => {
     if (existing !== undefined) {
         return existing;
     }
-    const file = jsonFile<UsageFile>(path, { parse: (raw) => FileSchema.safeParse(raw).data, fallback: () => ({}) });
+    const file = jsonFile<UsageFile>(path, {
+        parse: (raw) => FileSchema.safeParse(raw).data,
+        fallback: () => ({}),
+        document: extensionUsageDocument,
+    });
     files.set(path, file);
     return file;
 };

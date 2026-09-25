@@ -31,6 +31,9 @@ export function useSandboxVersion() {
         return ready !== undefined && (ready.version === undefined || latest.value === undefined || ready.version === latest.value);
     });
     const stagedBehind = computed(() => (staged.value !== undefined && !updateStaged.value ? staged.value.version : undefined));
+    // What the staged build's first boot converts in this sandbox's stored files, pre-flighted when it was downloaded;
+    // only for the build actually on offer, since an overtaken one's plan describes an update nobody is being offered.
+    const stagedPlan = computed(() => (updateStaged.value ? staged.value?.plan : undefined));
 
     // Whether a runtime can serve a turn right now. `unknown` or absent means unverified and is never shown as a
     // problem; only an explicit `unavailable` is, with the daemon's own sentence.
@@ -52,6 +55,7 @@ export function useSandboxVersion() {
         breakingNotes,
         updateStaged,
         stagedBehind,
+        stagedPlan,
         runtimeIssue,
         serverManaged,
         slug,

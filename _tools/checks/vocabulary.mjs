@@ -19,6 +19,10 @@ const EXEMPT = [
     { test: (path) => path === "_tools/constants/src/vocabulary.mjs", why: "the table itself" },
     { test: (path) => path === "_tools/checks/vocabulary.mjs", why: "this file" },
     { test: (path) => path.endsWith("contract.lock.json"), why: "generated from the schemas, not written by hand" },
+    {
+        test: (path) => /\/store\/generated\/state-shapes\.(ts|json)$/.test(path),
+        why: "every shape a stored document has had, generated from release history: the old names are what it records",
+    },
     { test: (path) => path === "docs/architecture/index.json", why: "generated from the package READMEs, not written by hand" },
 ];
 const exemptFor = (path) => EXEMPT.find((rule) => rule.test(path))?.why;

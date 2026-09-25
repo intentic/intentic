@@ -2955,7 +2955,11 @@
             "updateRemovesChangesThings": "This update removes or changes things you may rely on: read what changes below before taking it. Your files (in /work) are kept either way, and you can roll back afterwards:",
             "waitFleetToSettle": "Wait for the fleet to settle, or continue if that is acceptable.",
             "whatChanges": "What changes",
-            "whatUpdatesNeverBreak": "what updates never break"
+            "whatUpdatesNeverBreak": "what updates never break",
+            "updateConvertsStoredFiles": "On its first boot, this update converts one stored file: | On its first boot, this update converts {count} stored files:",
+            "convertedFilesKeptAside": "Each is copied aside first and put back if the new version does not start; afterwards the change shows on the workspace timeline.",
+            "updateWouldStopBeforeTouching": "This update would stop before touching anything: a conversion fails on this sandbox's files.",
+            "newerVersionConvertedTheseFiles": "A newer version already converted some of these files; this one opens them read-only."
         },
         "sandboxUsage": {
             "apiPricingBasis": "Token usage valued at providers’ API rates.",

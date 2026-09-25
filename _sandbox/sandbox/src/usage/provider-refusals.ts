@@ -1,5 +1,6 @@
 import { type ProviderRefusal, ProviderRefusalSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // Last refusal per provider, at <historyRoot>/provider-refusals.json, outside the agent's reach. account-usage.ts holds
@@ -7,6 +8,13 @@ import { jsonFile } from "../store/json-file.js";
 // own error path; last one wins, answering "when did this last happen", not "how often".
 
 const StoredRefusalsSchema = z.record(z.string(), ProviderRefusalSchema);
+
+export const providerRefusalsDocument = defineDocument({
+    root: "history",
+    path: "provider-refusals.json",
+    schema: ProviderRefusalSchema,
+    granularity: "record",
+});
 
 export interface ProviderRefusalStore {
     // Every provider's last refusal, keyed by provider; one old enough to describe a reopened window is omitted, not
@@ -29,6 +37,7 @@ export const fileProviderRefusalStore = (path: string): ProviderRefusalStore => 
     const file = jsonFile<Record<string, ProviderRefusal>>(path, {
         parse: (raw) => StoredRefusalsSchema.safeParse(raw).data,
         fallback: () => ({}),
+        document: providerRefusalsDocument,
     });
 
     const listeners = new Set<(provider: string, refusal: ProviderRefusal | undefined) => void>();

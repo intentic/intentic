@@ -36,7 +36,8 @@ No check refuses a land, a commit or a push. The commit-msg hook prints what com
 - A `Release-Note:` trailer is one line a user would notice; it becomes a bullet under the release's "What's new".
 - A `!` after the type with a `Breaking-Note:` trailer declares a break. The push reports a narrowed wire contract that arrives without one ([COMPATIBILITY.md](COMPATIBILITY.md)).
 - A weakened test needs a `test!:` subject or a `Test-Note:` trailer saying why. Without one, the push reports it and the check after the land counts it as a failure.
-- The code rules (no legacy shims, one source of truth, what a comment may say) are in [AGENTS.md](AGENTS.md).
+- A change to a stored document's shape ships with its conversion; the rules are in [COMPATIBILITY.md](COMPATIBILITY.md#stored-data).
+- The rules for docs and tests, and the gates that read every edit, are in [AGENTS.md](AGENTS.md).
 
 ## Documentation
 

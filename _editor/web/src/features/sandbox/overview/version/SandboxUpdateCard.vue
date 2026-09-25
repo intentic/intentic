@@ -28,6 +28,7 @@ const {
     breakingNotes,
     updateStaged,
     stagedBehind,
+    stagedPlan,
     info,
     serverManaged,
     slug,
@@ -100,6 +101,9 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
 
 // Neutral on a checkout-built sandbox: the two versions still differ and the badge still says so, but an amber "take
 // this" on a card telling you not to would be the card arguing with itself.
+// The files the downloaded build converts on its first boot, read off its own pre-flight; empty when it converts none.
+const convertedFiles = computed(() => stagedPlan.value?.steps ?? []);
+
 const versionBadge = computed(() => (localImage.value !== undefined ? `neutral` : breaking.value ? `danger` : `warning`));
 
 const updateHeading = computed(() => {
@@ -174,6 +178,33 @@ const updateHeading = computed(() => {
                         }}</a>
                     </p>
                 </div>
+
+                <!-- The downloaded build's pre-flight over this sandbox's own files: a refusal is said before anyone takes it. -->
+                <div
+                    v-if="updateAvailable && stagedPlan?.ok === false && !localImage"
+                    class="flex flex-col gap-1.5 rounded-lg border border-danger/40 bg-danger/10 p-3"
+                >
+                    <p class="text-xs font-medium text-danger">{{ t(`sandbox.sandboxUpdateCard.updateWouldStopBeforeTouching`) }}</p>
+                    <ul class="flex flex-col gap-1">
+                        <li v-for="failure in stagedPlan.failures ?? []" :key="failure.document" class="text-2xs text-content">
+                            <span class="font-mono">{{ failure.document }}</span>: {{ failure.detail }}
+                        </li>
+                    </ul>
+                </div>
+                <div v-else-if="updateAvailable && convertedFiles.length > 0 && !localImage" class="flex flex-col gap-1.5">
+                    <p class="text-xs font-medium text-content">
+                        {{ t(`sandbox.sandboxUpdateCard.updateConvertsStoredFiles`, { count: convertedFiles.length }, convertedFiles.length) }}
+                    </p>
+                    <ul class="flex flex-col gap-1">
+                        <li v-for="step in convertedFiles" :key="`${step.document}:${step.change}`" class="text-2xs text-muted">
+                            <span class="font-mono">{{ step.document }}</span>: {{ step.change }}
+                        </li>
+                    </ul>
+                    <p class="text-2xs text-subtle">{{ t(`sandbox.sandboxUpdateCard.convertedFilesKeptAside`) }}</p>
+                </div>
+                <p v-if="updateAvailable && stagedPlan?.downgrade && !localImage" class="text-2xs text-muted">
+                    {{ t(`sandbox.sandboxUpdateCard.newerVersionConvertedTheseFiles`) }}
+                </p>
 
                 <!-- Only the restart costs a turn, so the way out is downloading first. -->
                 <p v-if="midTurn > 0 && updateAvailable" class="text-2xs text-warning">

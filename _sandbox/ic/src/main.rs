@@ -92,6 +92,10 @@ enum SandboxCommand {
         /// published image replaces it, and only a rebuild from that checkout brings it back
         #[arg(long)]
         force: bool,
+        /// Swap without first running the target image's state conversions against read-only mounts of
+        /// /work and /history — the pre-flight that refuses a swap whose conversions would fail
+        #[arg(long = "skip-preflight")]
+        skip_preflight: bool,
     },
     /// Download and build the next update WITHOUT applying it, so the update itself is a short restart
     Prepare {
@@ -113,16 +117,28 @@ enum SandboxCommand {
         /// sha256 of the approved overlay — the trust anchor: only content that still hashes to what the
         /// owner reviewed is ever built
         hash: String,
+        /// Swap without first running the target image's state conversions against read-only mounts of
+        /// /work and /history — the pre-flight that refuses a swap whose conversions would fail
+        #[arg(long = "skip-preflight")]
+        skip_preflight: bool,
     },
     /// Back to the image this sandbox ran before its last update
     Rollback {
         /// The sandbox to roll back (omit when this machine runs exactly one)
         slug: Option<String>,
+        /// Swap without first running the target image's state conversions against read-only mounts of
+        /// /work and /history — the pre-flight that refuses a swap whose conversions would fail
+        #[arg(long = "skip-preflight")]
+        skip_preflight: bool,
     },
     /// Swap onto the locally-built intentic-sandbox:dev image (the dogfood loop)
     Dev {
         /// The sandbox to swap (omit when this machine runs exactly one)
         slug: Option<String>,
+        /// Swap without first running the target image's state conversions against read-only mounts of
+        /// /work and /history — the pre-flight that refuses a swap whose conversions would fail
+        #[arg(long = "skip-preflight")]
+        skip_preflight: bool,
     },
     /// Change a sandbox's share of this machine, or its privileges — a restart of about a minute onto the
     /// same image. The values live on the container and survive every later update, rollback and rebuild.
@@ -152,6 +168,11 @@ enum SandboxCommand {
         /// Drop the share saved with --later, leaving the sandbox as it runs
         #[arg(long, conflicts_with = "ask")]
         forget: bool,
+        /// Swap without first running the target image's state conversions against read-only mounts of
+        /// /work and /history — the pre-flight that refuses a swap whose conversions would fail. Only for a
+        /// restart: --later and --forget restart nothing
+        #[arg(long = "skip-preflight", conflicts_with_all = ["later", "forget"])]
+        skip_preflight: bool,
     },
     /// Check every link of a sandbox's reachability chain and name what is broken, with its fix (read-only)
     Doctor {
@@ -216,6 +237,15 @@ fn seed_value(given: Option<String>) -> Option<String> {
             value
         }
     })
+}
+
+/// `--skip-preflight` as the swap flow reads it.
+fn preflight(skip: bool) -> sandbox::recreate::Preflight {
+    if skip {
+        sandbox::recreate::Preflight::Skip
+    } else {
+        sandbox::recreate::Preflight::Run
+    }
 }
 
 // The runner verb surface (runner.rs says what each will do; all refuse until Phase 1 lands). Spellings are
@@ -287,21 +317,42 @@ fn main() {
                 slug,
                 channel,
                 force,
-            } => sandbox::recreate::run(sandbox::recreate::Mode::Update { channel, force }, slug),
+                skip_preflight,
+            } => sandbox::recreate::run(
+                sandbox::recreate::Mode::Update { channel, force },
+                slug,
+                preflight(skip_preflight),
+            ),
             SandboxCommand::Prepare {
                 slug,
                 channel,
                 auto,
             } => sandbox::recreate::prepare(slug, channel, auto),
-            SandboxCommand::Rebuild { slug, hash } => {
-                sandbox::recreate::run(sandbox::recreate::Mode::Rebuild { hash }, Some(slug))
-            }
-            SandboxCommand::Rollback { slug } => {
-                sandbox::recreate::run(sandbox::recreate::Mode::Rollback, slug)
-            }
-            SandboxCommand::Dev { slug } => {
-                sandbox::recreate::run(sandbox::recreate::Mode::Dev, slug)
-            }
+            SandboxCommand::Rebuild {
+                slug,
+                hash,
+                skip_preflight,
+            } => sandbox::recreate::run(
+                sandbox::recreate::Mode::Rebuild { hash },
+                Some(slug),
+                preflight(skip_preflight),
+            ),
+            SandboxCommand::Rollback {
+                slug,
+                skip_preflight,
+            } => sandbox::recreate::run(
+                sandbox::recreate::Mode::Rollback,
+                slug,
+                preflight(skip_preflight),
+            ),
+            SandboxCommand::Dev {
+                slug,
+                skip_preflight,
+            } => sandbox::recreate::run(
+                sandbox::recreate::Mode::Dev,
+                slug,
+                preflight(skip_preflight),
+            ),
             SandboxCommand::Reshape {
                 slug,
                 memory,
@@ -310,6 +361,7 @@ fn main() {
                 gpus,
                 later,
                 forget,
+                skip_preflight,
             } => {
                 let ask = sandbox::recreate::Reshape {
                     memory: seed_value(memory),
@@ -322,7 +374,7 @@ fn main() {
                 } else if later {
                     sandbox::recreate::reshape_later(slug, ask)
                 } else {
-                    sandbox::recreate::reshape(slug, ask)
+                    sandbox::recreate::reshape(slug, ask, preflight(skip_preflight))
                 }
             }
             SandboxCommand::Doctor { slug } => sandbox::doctor::run(slug),
@@ -422,7 +474,12 @@ mod tests {
         // The hash is the TRUST ANCHOR: the overlay lives on a volume the agent can write, so only content
         // that still hashes to what the owner reviewed may be built. Optional would defeat the whole check.
         let Ok(Cli {
-            command: Command::Sandbox(SandboxCommand::Rebuild { slug, hash }),
+            command:
+                Command::Sandbox(SandboxCommand::Rebuild {
+                    slug,
+                    hash,
+                    skip_preflight: false,
+                }),
         }) = parse(&["sandbox", "rebuild", "abc123", "deadbeef"])
         else {
             panic!("rebuild did not parse")
@@ -507,6 +564,7 @@ mod tests {
                     slug,
                     channel,
                     force,
+                    skip_preflight,
                 }),
         }) = parse(&["sandbox", "update", "abc123", "--channel", "core-stable"])
         else {
@@ -516,6 +574,8 @@ mod tests {
         assert_eq!(channel.as_deref(), Some("core-stable"));
         // The guard that refuses to update a checkout-built sandbox is only lifted by asking for it.
         assert!(!force);
+        // So is the pre-flight's refusal.
+        assert!(!skip_preflight);
         // A valueless --channel must not swallow the next thing or default to something.
         assert!(parse(&["sandbox", "update", "abc123", "--channel"]).is_err());
     }
@@ -529,6 +589,71 @@ mod tests {
             panic!("update --force did not parse")
         };
         assert!(parse(&["sandbox", "update", "abc123", "--force", "yes"]).is_err());
+    }
+
+    /* `--skip-preflight` lifts a refusal that protects the owner's data, so it binds on every verb that swaps and on nothing that does not. */
+    #[test]
+    fn skip_preflight_is_a_bare_flag_on_every_swap_and_never_implied() {
+        let skips = |args: &[&str]| -> Option<bool> {
+            match parse(args).ok()?.command {
+                Command::Sandbox(SandboxCommand::Update { skip_preflight, .. })
+                | Command::Sandbox(SandboxCommand::Rebuild { skip_preflight, .. })
+                | Command::Sandbox(SandboxCommand::Rollback { skip_preflight, .. })
+                | Command::Sandbox(SandboxCommand::Dev { skip_preflight, .. })
+                | Command::Sandbox(SandboxCommand::Reshape { skip_preflight, .. }) => {
+                    Some(skip_preflight)
+                }
+                _ => None,
+            }
+        };
+        for verb in [
+            &["sandbox", "update", "abc123"][..],
+            &["sandbox", "rollback", "abc123"],
+            &["sandbox", "dev", "abc123"],
+            &["sandbox", "rebuild", "abc123", "deadbeef"],
+            &["sandbox", "reshape", "abc123", "--memory", "12g"],
+        ] {
+            assert_eq!(
+                skips(verb),
+                Some(false),
+                "{verb:?} must pre-flight unless asked not to"
+            );
+            let skipped: Vec<&str> = verb.iter().copied().chain(["--skip-preflight"]).collect();
+            assert_eq!(skips(&skipped), Some(true), "{skipped:?}");
+            // A bare flag: it must not swallow a value, nor the slug beside it when it comes first.
+            let valued: Vec<&str> = skipped.iter().copied().chain(["yes"]).collect();
+            assert!(parse(&valued).is_err(), "{valued:?}");
+        }
+        assert_eq!(
+            skips(&["sandbox", "update", "--skip-preflight", "abc123"]),
+            Some(true)
+        );
+        // A prepare never swaps, so there is nothing to skip; accepting the flag would be a promise it ignores.
+        assert!(parse(&["sandbox", "prepare", "abc123", "--skip-preflight"]).is_err());
+        // Neither does a reshape that only saves or forgets an ask.
+        assert!(parse(&[
+            "sandbox",
+            "reshape",
+            "abc123",
+            "--memory",
+            "12g",
+            "--later",
+            "--skip-preflight"
+        ])
+        .is_err());
+        assert!(parse(&[
+            "sandbox",
+            "reshape",
+            "abc123",
+            "--forget",
+            "--skip-preflight"
+        ])
+        .is_err());
+        // A bare reshape applies what is saved, which is a restart, so it takes the flag.
+        assert_eq!(
+            skips(&["sandbox", "reshape", "abc123", "--skip-preflight"]),
+            Some(true)
+        );
     }
 
     #[test]
@@ -724,6 +849,7 @@ mod tests {
                     gpus,
                     later: false,
                     forget: false,
+                    skip_preflight: false,
                 }),
         }) = parse(&[
             "sandbox",

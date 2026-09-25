@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import { objectParse } from "../store/unknown-keys.js";
+import { stateRelPath } from "../state-paths.js";
 import { tokenEquals } from "./auth.js";
 
 // Door tokens: credentials behind the daemon's public doors, for an outside caller with no Google identity or control
@@ -24,6 +26,8 @@ const StoredDoorsSchema = z.object({
 });
 type StoredDoors = z.infer<typeof StoredDoorsSchema>;
 
+export const doorTokensDocument = defineDocument({ path: stateRelPath(".intentic/secrets/doors.json"), schema: StoredDoorsSchema });
+
 export interface DoorTokens {
     // The door's credential, minted now if it has none. The same value every time until rotated or removed.
     readonly ensure: (kind: DoorKind, id: string) => Promise<string>;
@@ -44,7 +48,7 @@ const mintFor = (kind: DoorKind): string => (kind === "intake" ? `ik_${randomByt
 const EMPTY: StoredDoors = { automation: {}, gate: {}, intake: {} };
 
 export const fileDoorTokens = (path: string): DoorTokens => {
-    const file = jsonFile<StoredDoors>(path, { parse: objectParse(StoredDoorsSchema), fallback: () => EMPTY });
+    const file = jsonFile<StoredDoors>(path, { parse: objectParse(StoredDoorsSchema), fallback: () => EMPTY, document: doorTokensDocument });
     const write = async (kind: DoorKind, id: string, token: string | undefined): Promise<void> => {
         await file.update((stored) => {
             const doors = { ...stored[kind] };

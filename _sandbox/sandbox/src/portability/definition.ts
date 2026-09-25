@@ -9,11 +9,16 @@ import {
     type DefinitionWorkspace,
     type SandboxDefinition,
     SandboxDefinitionSchema,
-    SandboxSettingsSchema,
+    SandboxSettingsSchema,DEV_VERSION,isNewer
 } from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/scaffold";
 import { parse } from "smol-toml";
 import { ArrivalFormatError } from "../arrival-error.js";
+import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
+import { settingsDocument } from "../settings/settings-store.js";
+import { convertDocument, nested as carriedAt } from "../store/conversions.js";
+import { defineDocument } from "../store/documents.js";
+import { version } from "../version.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
 import { secretFieldsOf } from "../capabilities/credentials/secret-fields.js";
 import type { Services } from "../composition.js";
@@ -30,6 +35,33 @@ import { stateRelPath } from "../state-paths.js";
 export const DEFINITION_FILE = "sandbox.toml";
 
 export class DefinitionFormatError extends ArrivalFormatError {}
+
+// A definition lives in repositories and downloads this daemon never sees, so it cannot be converted in place: it is
+// read through the same conversions as the documents it carries (the settings table through settings.json's, each
+// capability through capabilities.json's), then held to the strict schema, so an old file applies and a genuinely unknown
+// field is still refused. Never looked for on disk by the boot step.
+export const definitionDocument = defineDocument({
+    path: DEFINITION_FILE,
+    schema: SandboxDefinitionSchema,
+    boot: false,
+    history: [
+        ...carriedAt("settings", settingsDocument.history),
+        ...carriedAt("capabilities", capabilitiesDocument.history, true),
+    ],
+});
+
+// Which release wrote a definition, from the comment line the emitter adds (a comment, since an older daemon's strict
+// parse refuses any field it does not know, and a version stamp must never be why a file stops applying).
+const WRITTEN_BY = /^# written by intentic (\S+)$/m;
+const writerOf = (text: string): string | undefined => WRITTEN_BY.exec(text)?.[1];
+
+// What an unreadable definition is told: a newer release's file says so, and says what to do; anything else is not one.
+export const unreadableDefinition = (text: string, problem: string, running: string = version): DefinitionFormatError => {
+    const writer = writerOf(text);
+    return writer !== undefined && running !== DEV_VERSION && isNewer(writer, running)
+        ? new DefinitionFormatError(`this definition was written by intentic ${writer}, newer than this sandbox (${running}); update the sandbox to apply it (${problem})`)
+        : new DefinitionFormatError(`this is TOML but not a sandbox definition: ${problem}`);
+};
 
 // Every versioned .intentic/config/ entry appears in exactly one of DEFINITION_SOURCES or DEFINITION_WORKSPACE, checked
 // against WORKSPACE_STATE_FILES by definition-coverage.test.ts. A source travels as a typed document section through a
@@ -323,6 +355,8 @@ export const emitDefinitionToml = (definition: SandboxDefinition, omitted: reado
         "# Intentic sandbox definition: the declarable shape of a sandbox, safe to publish.",
         "# Apply it to an empty sandbox from the Environment tab. Secret NAMES travel, values never do;",
         "# the overlay below lands as a proposal for the target owner's approval, it never builds unreviewed.",
+        // Read back by an older release to say it needs updating, rather than that this is not a definition.
+        ...(version === DEV_VERSION ? [] : [`# written by intentic ${version}`]),
         `schemaVersion = ${definition.schemaVersion}`,
     ];
     if (definition.name !== undefined) {
@@ -423,19 +457,22 @@ export const parseDefinitionToml = (text: string): SandboxDefinition => {
     } catch (error) {
         throw new DefinitionFormatError(`this is not readable as TOML: ${errorMessage(error)}`);
     }
+    try {
+        raw = convertDocument(definitionDocument.history, "object", raw).value;
+    } catch (error) {
+        throw new DefinitionFormatError(`this definition could not be brought to this version's shape: ${errorMessage(error)}`);
+    }
     const parsed = SandboxDefinitionSchema.safeParse(raw);
     if (!parsed.success) {
         const problems = parsed.error.issues
             .slice(0, 3)
             .map((issue) => `${issue.path.join(".") === "" ? "document" : issue.path.join(".")}: ${issue.message}`)
             .join("; ");
-        throw new DefinitionFormatError(`this is TOML but not a sandbox definition: ${problems}`);
+        throw unreadableDefinition(text, problems);
     }
     const stripped = strippedDefinitionKeys(raw, parsed.data);
     if (stripped.length > 0) {
-        throw new DefinitionFormatError(
-            `this is TOML but not a sandbox definition: unknown field${stripped.length === 1 ? "" : "s"} ${stripped.join(", ")}`,
-        );
+        throw unreadableDefinition(text, `unknown field${stripped.length === 1 ? "" : "s"} ${stripped.join(", ")}`);
     }
     return parsed.data;
 };

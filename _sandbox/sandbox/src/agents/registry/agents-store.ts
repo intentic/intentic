@@ -17,6 +17,9 @@ import { z } from "zod";
 import type { ConversationsDb } from "../../store/conversations-db.js";
 import { TurnQueueSchema } from "../actor/conversation-queue.js";
 
+// Re-exported so evaluating the store registers the boot step that imports the registry 1.308 left in agents.json.
+export { pre1308ImportStep } from "./pre-1308-import.js";
+
 // The persisted half of the fleet registry: one record per conversation, what must survive a restart, as nested records
 // whose invariants are their types. Runtime-only state (status, attention, activity) lives in the conversation's actor,
 // rebuilt from turn frames. Stored as the `conversation` row, its checkout's repos as `conversation_repo` rows.

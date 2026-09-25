@@ -267,6 +267,14 @@ const STATE_FILES = [
     // Per-extension update/advisory/health findings, written by the periodic check and by update/revert. Pushed live
     // so an auto-disabling advisory doesn't wait for a reload.
     { path: ".intentic/records/extension-updates.json", invalidates: ["extensions"], portability: "carry" },
+    // Every conversion an update ran over this workspace's files, newest last and capped (the daemon's
+    // state-convergence.ts). `carry`: what happened to the owner's files is their history, wherever it goes next.
+    {
+        path: ".intentic/records/conversions.json",
+        invalidates: [],
+        why: "Written once per update that converted something, at boot before any browser is connected; the update card reads the plan from the new image instead.",
+        portability: "carry",
+    },
     // Owner's per-extension update posture (notify/agent/auto, advisory opt-out). `carry`: a decision about the
     // extension, not the machine.
     { path: ".intentic/config/extension-update-policy.json", invalidates: ["extensions"], portability: "carry", versioned: true },
@@ -374,6 +382,16 @@ const STATE_FILES = [
         invalidates: [],
         why: "A running check's wrapper artifacts (log + exit status), read once by the daemon when the panel finishes.",
         portability: "derived",
+    },
+    // What an update converted before it booted all the way (the sandbox daemon's state-journal.ts): a copy of every
+    // file the new version changed, kept until it commits and for a grace window after. `secret` whatever the source
+    // was, since a vault's copy is a vault; locked below for the same reason.
+    {
+        path: ".intentic/secrets/converting/",
+        invalidates: [],
+        why: "Pre-images of the files an update's conversions changed; only the boot step reads them, to put a rolled-back version's files back.",
+        portability: "secret",
+        note: "An export does not carry an update's undo record; the target converts its own files.",
     },
     {
         path: ".intentic/secrets/ci.json",
@@ -588,6 +606,8 @@ export const LOCKED_STATE_ENTRIES: ReadonlySet<string> = new Set([
     "secrets/ci.json",
     "secrets/doors.json",
     "secrets/auth",
+    // An update's pre-images: copies of whatever it converted, vaults included.
+    "secrets/converting",
     "records/sessions",
     "local/browser",
     // The provider CLI's own home, undeclared in the table above and so without a group; stays at the state dir root.

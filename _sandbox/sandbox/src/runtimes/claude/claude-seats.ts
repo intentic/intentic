@@ -1,5 +1,6 @@
 import type { Logger } from "pino";
 import { z } from "zod";
+import { defineDocument } from "../../store/documents.js";
 import { jsonFile } from "../../store/json-file.js";
 
 // Accounts an org has turned Claude Code off for, kept apart from the account record: that record is a credential
@@ -16,6 +17,8 @@ export type SeatRefusal = z.infer<typeof SeatRefusalSchema>;
 
 const StoredSeatsSchema = z.record(z.string(), SeatRefusalSchema);
 
+export const claudeSeatsDocument = defineDocument({ root: "auth", path: "claude/seats.json", schema: SeatRefusalSchema, granularity: "record" });
+
 export interface ClaudeSeatStore {
     // Every account whose organization has refused it, keyed by account id.
     readonly read: () => Promise<Record<string, SeatRefusal>>;
@@ -28,6 +31,7 @@ export const fileClaudeSeatStore = (path: string, logger: Logger): ClaudeSeatSto
     const file = jsonFile<Record<string, SeatRefusal>>(path, {
         parse: (raw) => StoredSeatsSchema.safeParse(raw).data,
         fallback: () => ({}),
+        document: claudeSeatsDocument,
     });
     return {
         read: file.read,

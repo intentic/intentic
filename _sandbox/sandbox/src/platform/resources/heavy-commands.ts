@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { defineDocument } from "../../store/documents.js";
 import { jsonFile } from "../../store/json-file.js";
 import type { ManifestProblem } from "../../store/manifest-problems.js";
 import { heredocSpans } from "../../heredoc.js";
+import { stateRelPath } from "../../state-paths.js";
 
 // Which agent commands are too big to run four at once, as an editable list: a monorepo fan-out exhausts memory, which
 // no scheduling class rations, and the admission gate can't see a command a running turn spawns. Enforced at the
@@ -58,6 +60,8 @@ export const HeavyCommandsSchema = z.object({
 });
 
 export type HeavyCommands = z.infer<typeof HeavyCommandsSchema>;
+
+export const heavyCommandsDocument = defineDocument({ path: stateRelPath(".intentic/config/heavy-commands.json"), schema: HeavyCommandsSchema });
 
 // The shipped list: every entry is something measured pinning this box, not merely slow, matched loosely on spelling
 // and strictly on verb.
@@ -261,6 +265,7 @@ export const fileHeavyCommandsStore = (path: string, onInvalid?: (detail: string
         },
         // `undefined` marks no usable file, unlike one that parsed, so `seed` writes only when there's nothing to lose.
         fallback: () => undefined,
+        document: heavyCommandsDocument,
     });
     return {
         read: async () => (await file.read()) ?? DEFAULT_HEAVY_COMMANDS,

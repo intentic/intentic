@@ -64,6 +64,7 @@ import { reachPosture } from "./platform/listeners/reach-posture.js";
 import { profileTraits } from "./platform/boot/profile.js";
 import { rawRouteServer } from "./http/raw-route-server.js";
 import { logContext } from "./logger.js";
+import { stateStatus } from "./store/state-convergence.js";
 
 // Only genuine server faults (5xx) are logged; expected ORPCErrors are the routes' normal control flow.
 const logUnexpectedError = (services: Services, error: unknown): void => {
@@ -247,6 +248,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             // Which posture answers (platform/profile.ts); needed before any authenticated read.
             profile: services.config.sandbox.profile,
             boot: services.boot.progress(),
+            // Whether an update's state conversions are still uncommitted (store/state-convergence.ts); the host rolls
+            // the update back when they stay open, so this rides the same probe as `boot`.
+            state: stateStatus(),
             announce: services.announcer.status(),
             // Whether this sandbox's public address answers, probed by the box itself.
             reach: services.reach.status(),

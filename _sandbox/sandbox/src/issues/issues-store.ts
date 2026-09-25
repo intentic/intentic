@@ -1,12 +1,16 @@
 import { type Issue, type IssueReport, IssueSchema, type IssueStatus, type IssueSummary } from "@intentic/sandbox-contract";
+import { defineDocument } from "../store/documents.js";
 import { jsonDir } from "../store/json-dir.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 import { culpritOf, titleOf } from "./fingerprint.js";
 
 // One file per fingerprint under `.intentic/records/issues/`, holding the group (what broke, how often, when, the
 // latest sample), not every event. Daemon-owned, unlike an agent-written draft: nothing but this daemon writes an
 // issue, so an unparseable file is a daemon bug. Per-file rather than a manifest, since concurrent reports would race a
 // manifest's read-modify-write; a group's own fingerprint serializes only its own traffic.
+
+export const issuesDocument = defineDocument({ path: stateRelPath(".intentic/records/issues/"), directory: true, schema: IssueSchema });
 
 // Group ceiling: not optional on a public endpoint, where a fresh fingerprint per report can grow it forever.
 const MAX_ISSUES = 500;
@@ -85,7 +89,7 @@ const folded = (existing: Issue, report: IssueReport, now: number): Issue => {
 };
 
 export const fileIssuesStore = (dir: string): IssuesStore => {
-    const files = jsonDir<Issue>(dir, (raw) => IssueSchema.safeParse(raw).data);
+    const files = jsonDir<Issue>(dir, (raw) => IssueSchema.safeParse(raw).data, issuesDocument);
 
     // A group this build cannot read is set aside and restarted, or every later report of that fingerprint would fail.
     const readOrSetAside = async (id: string): Promise<(Issue & { id: string }) | undefined> => {

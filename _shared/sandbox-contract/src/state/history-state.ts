@@ -125,4 +125,14 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // The owner's yes to each workspace extension's declared powers, decided again by the target's owner.
     { path: "extension-approvals.json", portability: "identity", note: "Approve the extensions written in this workspace again from Extensions." },
     { path: "local-cert/", portability: "identity" },
+
+    /* ---- the state engine's own bookkeeping (the daemon's store/state-journal.ts) ---- */
+
+    // Pre-images of the history files an update's conversions changed; `secret` since identity files are among them.
+    { path: "converting/", portability: "secret", note: "An update's undo record stays with the sandbox it happened on." },
+    // Which conversion episodes are open or recently committed, and earlier addresses awaiting removal.
+    { path: "state-journal.json", portability: "derived" },
+    // Every conversation the import of the pre-1.308 layout settled (the daemon's agents/registry/pre-1308-import.ts),
+    // so one deleted after its import is not brought back from the old files still on disk. About this volume only.
+    { path: "pre-1308-import.json", portability: "derived" },
 ];

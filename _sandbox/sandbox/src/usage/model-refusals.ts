@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // Models this sandbox's credentials are refused for, at <historyRoot>/model-refusals.json, outside the agent's reach.
@@ -13,6 +14,13 @@ const StoredModelRefusalSchema = z.object({
 export type StoredModelRefusal = z.infer<typeof StoredModelRefusalSchema>;
 
 const StoredRefusalsSchema = z.record(z.string(), StoredModelRefusalSchema);
+
+export const modelRefusalsDocument = defineDocument({
+    root: "history",
+    path: "model-refusals.json",
+    schema: StoredModelRefusalSchema,
+    granularity: "record",
+});
 
 // Model id alone isn't unique across providers, and the catalog is asked per provider, so the pair is the key.
 const keyOf = (provider: string, model: string): string => `${provider}:${model}`;
@@ -33,6 +41,7 @@ export const fileModelRefusalStore = (path: string): ModelRefusalStore => {
     const file = jsonFile<Record<string, StoredModelRefusal>>(path, {
         parse: (raw) => StoredRefusalsSchema.safeParse(raw).data,
         fallback: () => ({}),
+        document: modelRefusalsDocument,
     });
     return {
         refused: async (provider) => {

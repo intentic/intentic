@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { opt } from "../opt.js";
+import { stateRelPath } from "../state-paths.js";
+import { defineDocument } from "./documents.js";
 import { jsonFile } from "./json-file.js";
 
 // Tracks whether an embed snippet is actually loading, per origin, to tell an unconfigured automation apart from one
@@ -14,8 +17,21 @@ const ProbeSchema = z.object({
 });
 export type InstallProbe = z.infer<typeof ProbeSchema> & { origin: string };
 
-const FileSchema = z.record(z.string(), z.record(z.string(), ProbeSchema));
+const OriginsSchema = z.record(z.string(), ProbeSchema);
+const FileSchema = z.record(z.string(), OriginsSchema);
 type InstallsFile = z.infer<typeof FileSchema>;
+
+// One document per caller's file, the same shape under two names; the store picks the one its path names.
+export const webchatInstallsDocument = defineDocument({
+    path: stateRelPath(".intentic/records/webchat-installs.json"),
+    schema: OriginsSchema,
+    granularity: "record",
+});
+export const issueInstallsDocument = defineDocument({
+    path: stateRelPath(".intentic/records/issue-installs.json"),
+    schema: OriginsSchema,
+    granularity: "record",
+});
 
 // Diagnostic counts are flushed on this timer instead of per write; a crash loses at most this many seconds of counts.
 const FLUSH_MS = 30_000;
@@ -33,9 +49,12 @@ export interface InstallsStore {
 }
 
 export const fileInstallsStore = (path: string): InstallsStore => {
+    // A path naming neither file (a test's own) runs no conversions.
+    const document = [webchatInstallsDocument, issueInstallsDocument].find((spec) => path.endsWith(`/${spec.path}`));
     const file = jsonFile<InstallsFile>(path, {
         parse: (raw) => FileSchema.safeParse(raw).data,
         fallback: () => ({}),
+        ...opt("document", document),
     });
 
     // Undefined until the first read or record pulls the file in, so an automation nobody visits never touches this

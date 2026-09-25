@@ -1,5 +1,6 @@
 pub mod connect;
 pub mod doctor;
+pub mod preflight;
 pub mod recreate;
 pub mod remove;
 pub mod restore;

@@ -3,7 +3,9 @@ import { z } from "zod";
 import type { TurnStream } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import { threadKey } from "../sessions/thread-sessions.js";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 import { WEBCHAT_PROVIDER } from "./webchat-config.js";
 
 // Replies a Visitor chat visitor has not received yet. The widget's SSE is open only for the turn that answers live; an
@@ -32,6 +34,12 @@ const ThreadSchema = z.object({
 const FileSchema = z.record(z.string(), ThreadSchema);
 type OutboxFile = z.infer<typeof FileSchema>;
 
+export const webchatOutboxDocument = defineDocument({
+    path: stateRelPath(".intentic/records/webchat-outbox.json"),
+    schema: ThreadSchema,
+    granularity: "record",
+});
+
 // How long an undelivered reply waits. Deliberately far longer than a thread session's TTL: the session decides
 // whether the agent remembers the visitor, this decides whether a human's answer ever arrives.
 const OUTBOX_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -57,7 +65,11 @@ const live = (thread: z.infer<typeof ThreadSchema> | undefined, now: number): z.
     thread !== undefined && now - thread.lastAt <= OUTBOX_TTL_MS ? thread : undefined;
 
 export const fileWebchatOutbox = (path: string): WebchatOutbox => {
-    const file = jsonFile<OutboxFile>(path, { parse: (raw) => FileSchema.safeParse(raw).data, fallback: () => ({}) });
+    const file = jsonFile<OutboxFile>(path, {
+        parse: (raw) => FileSchema.safeParse(raw).data,
+        fallback: () => ({}),
+        document: webchatOutboxDocument,
+    });
 
     return {
         append: async (key, text, now) => {

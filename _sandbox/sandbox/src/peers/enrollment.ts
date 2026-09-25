@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
+import { opt } from "../opt.js";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // How something outside this sandbox becomes something it trusts, split into two halves by lifetime. A PAIRING is
@@ -13,6 +15,13 @@ const PAIR_TTL_MS = 10 * 60 * 1000;
 
 // Digests, never tokens: records that something was spent, without holding anything that could spend it.
 const BurnedSchema = z.object({ digests: z.array(z.string()) });
+
+// Each door's burn file; `pairings` picks the one its path names.
+export const syncPairConsumedDocument = defineDocument({ root: "history", path: "sync-pair-consumed.json", schema: BurnedSchema });
+export const hostPairConsumedDocument = defineDocument({ root: "history", path: "host-pair-consumed.json", schema: BurnedSchema });
+export const webextPairConsumedDocument = defineDocument({ root: "history", path: "webext-pair-consumed.json", schema: BurnedSchema });
+export const runnerPairConsumedDocument = defineDocument({ root: "history", path: "runner-pair-consumed.json", schema: BurnedSchema });
+const burnDocuments = [syncPairConsumedDocument, hostPairConsumedDocument, webextPairConsumedDocument, runnerPairConsumedDocument];
 
 // A pairing minted and redeemed entirely in-process needs no burn record; one written somewhere immortal (a container's
 // env, replayed into every rebuild) does, permanently. `replayable` is a property of one token, declared at mint time,
@@ -36,6 +45,8 @@ export interface Pairings<T> {
 // `burns` is the /history file replayable pairings are recorded in. Omitting it declares nothing at this door can be
 // replayed, so `arm` refuses: an unauditable token must not be accepted. `ttlMs` is how long an unredeemed one lives.
 export const pairings = <T>(burns?: string, ttlMs = PAIR_TTL_MS): Pairings<T> => {
+    // A path naming none of the doors' burn files (a test's own) runs no conversions.
+    const document = burns === undefined ? undefined : burnDocuments.find((spec) => burns.endsWith(`/${spec.path}`));
     const burned =
         burns === undefined
             ? undefined
@@ -43,6 +54,7 @@ export const pairings = <T>(burns?: string, ttlMs = PAIR_TTL_MS): Pairings<T> =>
                   parse: (raw) => BurnedSchema.safeParse(raw).data,
                   fallback: () => ({ digests: [] }),
                   mode: 0o600,
+                  ...opt("document", document),
               });
     const live = new Map<string, { payload: T; expiresAt: number; replayable: boolean }>();
 
@@ -130,6 +142,26 @@ export interface Enrollments<X extends object> {
     readonly revoke: (id: string) => Promise<boolean>;
 }
 
+// Each door's enrollments file, spelled out per door since each keeps its own top-level key and its own fields beside
+// the digest (a runner's host machine); `enrollments` picks the one its path names.
+const EnrollmentSchema = z.object({ id: z.string(), hash: z.string(), enrolledAt: z.number() });
+export const hostEnrollmentsDocument = defineDocument({
+    root: "history",
+    path: "host-enrollments.json",
+    schema: z.object({ hosts: z.array(EnrollmentSchema) }),
+});
+export const webextEnrollmentsDocument = defineDocument({
+    root: "history",
+    path: "webext-enrollments.json",
+    schema: z.object({ browsers: z.array(EnrollmentSchema) }),
+});
+export const runnerEnrollmentsDocument = defineDocument({
+    root: "history",
+    path: "runner-enrollments.json",
+    schema: z.object({ runners: z.array(EnrollmentSchema.extend({ host: z.string().optional() })) }),
+});
+const enrollmentDocuments = [hostEnrollmentsDocument, webextEnrollmentsDocument, runnerEnrollmentsDocument];
+
 export const enrollments = <Shape extends z.ZodRawShape>(args: {
     // The file on /history; each door keeps its own name and top-level key, so this consolidates the mechanic, not the
     // bytes.
@@ -147,10 +179,13 @@ export const enrollments = <Shape extends z.ZodRawShape>(args: {
     const EntrySchema = z.object({ id: z.string(), hash: z.string(), enrolledAt: z.number(), ...args.extra });
     const StoredSchema = z.object({ [args.key]: z.array(EntrySchema) });
 
+    // A path naming none of the doors' files (a test's own) runs no conversions.
+    const document = enrollmentDocuments.find((spec) => args.path.endsWith(`/${spec.path}`));
     const file = jsonFile<Record<string, Entry[]>>(args.path, {
         parse: (raw) => StoredSchema.safeParse(raw).data as Record<string, Entry[]> | undefined,
         fallback: () => ({ [args.key]: [] }),
         mode: 0o600,
+        ...opt("document", document),
     });
 
     const read = async (): Promise<Entry[]> => (await file.read())[args.key] ?? [];

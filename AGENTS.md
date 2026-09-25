@@ -53,8 +53,10 @@ already had (`failure-units.mjs`). Nothing runs it for you.
 **After the land, off your clock** (`pnpm verify`, `_tools/scripts/verify/verify.mjs`, every land, either door):
 the daemon runs it on the main tree in the background, one project at a time, and lands that arrive while it runs
 wait and are measured together in the next run (`workspace/deps/verify-deps.ts`). It first writes what a machine
-decides: rustfmt on the crates the land touched, each failing check's own `fix` (`_tools/checks/manifest.mjs`), and
-`contract.lock.json` regenerated after the declarations emit when the land changed the contract. These show up in
+decides: rustfmt on the crates the land touched, each failing check's own `fix` (`_tools/checks/manifest.mjs`),
+`contract.lock.json` regenerated after the declarations emit when the land changed the contract, and
+`state-shapes.json` when it changed a daemon or contract source (a new shape of a stored document, frozen for the
+typecheck that follows). These show up in
 the main tree as ordinary uncommitted changes. Then it measures the whole repository, plus what the land itself
 added over the commit it landed on (`land-tiers.mjs`: lint on its files, tidy lines, rustfmt, weakened tests left
 undeclared), and logs a failure that passes when re-run alone as a flake (`flakes.mjs`). The verdict is recorded
@@ -94,6 +96,16 @@ When main's CI goes red, `_sandbox/sandbox/src/ci/repair-gate.ts` acts only on m
 died on the fleet is re-run once, and the same jobs failing twice running, or main sitting red with nothing newer
 for thirty minutes, gets one fix agent. The Agent tab's "Repair what breaks after landing" switch (`autoRepair`)
 turns this and the routing of a red land check into reporting only.
+
+## Stored data
+
+Anything a store writes and reads back (`.intentic/`, the daemon's `/history` files, `conversations.db`, a
+`sandbox.toml`, a bundle) is read by every later release, from sandboxes that skipped any number of them. A change to
+its shape ships with its conversion, in the `history` of the document's `defineDocument`
+(`_sandbox/sandbox/src/store/conversions.ts` has the vocabulary). You do not have to find out when one is needed: the
+typecheck of `src/store/generated/state-shapes.ts` fails at the document and property an old file would break on. Never
+read an existing key a new way (rename it), and never reuse a retired name. [COMPATIBILITY.md](COMPATIBILITY.md#stored-data)
+has the rest and the reasons.
 
 ## Tests
 

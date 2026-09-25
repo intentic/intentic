@@ -1,5 +1,6 @@
 import { AgentProviderSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // Per-account stay-away for a provider's usage endpoint, at <historyRoot>/usage-parks.json. On disk rather than in
@@ -17,6 +18,8 @@ export type ParkedRead = z.infer<typeof ParkedReadSchema>;
 
 const StoredParksSchema = z.record(z.string(), ParkedReadSchema);
 
+export const usageParksDocument = defineDocument({ root: "history", path: "usage-parks.json", schema: ParkedReadSchema, granularity: "record" });
+
 export interface UsageParkStore {
     // Every standing park, keyed the way the usage store keys an account; one whose instant has passed is omitted, not
     // served.
@@ -29,6 +32,7 @@ export const fileUsageParkStore = (path: string): UsageParkStore => {
     const file = jsonFile<Record<string, ParkedRead>>(path, {
         parse: (raw) => StoredParksSchema.safeParse(raw).data,
         fallback: () => ({}),
+        document: usageParksDocument,
     });
 
     return {

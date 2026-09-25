@@ -13,6 +13,8 @@
         "./src/fences/tmux-fence.ts",
         "./src/harness/e2e-harness.ts",
         "./src/testing.ts",
+        "./src/store/shapes/**",
+        "./src/store/generated/**",
         "./src/**/*.testing.ts"
     ],
     "references": [

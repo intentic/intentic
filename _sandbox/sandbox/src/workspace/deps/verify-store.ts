@@ -1,7 +1,9 @@
 import { type MainlineRouting, MainlineRunSchema, type MainlineRun } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { defineDocument } from "../../store/documents.js";
 import { jsonFile } from "../../store/json-file.js";
 import { objectParse } from "../../store/unknown-keys.js";
+import { stateRelPath } from "../../state-paths.js";
 
 // The main-line check's memory (<workspace>/.intentic/records/verify.json): last check outcome per project and its
 // consecutive red streak, and the latest runs across every project with what became of each red one, across restarts.
@@ -28,6 +30,8 @@ const VerifyStateSchema = z.object({
     runs: z.array(MainlineRunSchema).default([]),
 });
 type VerifyState = z.infer<typeof VerifyStateSchema>;
+
+export const verifyDocument = defineDocument({ path: stateRelPath(".intentic/records/verify.json"), schema: VerifyStateSchema });
 
 // Runs kept across every project: enough for each recent land's card to find the run that answered for it.
 export const RUNS_KEPT = 40;
@@ -87,6 +91,7 @@ export const fileVerifyStore = (path: string): VerifyStore => {
     const file = jsonFile<VerifyState>(path, {
         parse: objectParse(VerifyStateSchema),
         fallback: () => ({ projects: {}, runs: [] }),
+        document: verifyDocument,
     });
     return {
         red: async () =>

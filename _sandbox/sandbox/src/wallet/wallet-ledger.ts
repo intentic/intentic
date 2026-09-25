@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { utcDayOf } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 
 // One row per payment attempt that reached a signature request, plus declines and expiries; what the history command,
 // status meter and daily-cap arithmetic read.
@@ -34,6 +36,12 @@ export const PaymentRowSchema = z.object({
     why: z.string().optional(),
 });
 export type PaymentRow = z.infer<typeof PaymentRowSchema>;
+
+export const walletLedgerDocument = defineDocument({
+    path: stateRelPath(".intentic/records/wallet-ledger.json"),
+    schema: PaymentRowSchema,
+    granularity: "entries",
+});
 
 export interface OpenedPayment {
     readonly url: string;
@@ -83,6 +91,7 @@ export const fileWalletLedger = (path: string, now: () => number = Date.now): Wa
         mode: 0o600,
         // The cap's only memory of today's spend: a fresh ledger over an unreadable one would forget it.
         onUnreadable: "refuse",
+        document: walletLedgerDocument,
     });
     const append = async (row: PaymentRow): Promise<void> => {
         await file.update((current) => [...current, row].slice(-ROWS_CAP));

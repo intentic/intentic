@@ -22,6 +22,9 @@ flowchart LR
   machine, the browser extension and a runner over the socket each one opens, with the daemon as the client.
 - The daemon names the routes it implements on the `/events` hello frame, and the browser diffs that list against its
   own build, so a route an older daemon lacks shows as a missing feature instead of a 404.
+- `./documents` is the vocabulary stored files evolve by, shared by the daemon's stores and an extension's own files
+  (`sandboxDocument`): guarded, pure conversions of raw JSON that settle on their own output, and the passthrough that
+  keeps what a build does not know on its writes.
 - `contract.lock.json` is every exported schema as canonical JSON Schema. Rewrite it by hand with
   `pnpm --filter @intentic/sandbox-contract lock`. After a land that changed the contract, the land check's
   `pnpm verify` rewrites it in the main tree, where it waits as an uncommitted change. `src/state/contract-lock.test.ts`

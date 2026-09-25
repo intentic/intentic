@@ -5,11 +5,18 @@ import {
     type RuntimeInstallsFile,
     RuntimeInstallsFileSchema,
 } from "@intentic/sandbox-contract";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Ledger of tools installed into the container at runtime, written by the harness (the install-steering hook), not the
 // model. Lives under /work so it survives container recreates; recurrence counts per session, not per command. Carries
 // the drift snapshot too, machine-scoped where the ledger is workspace-scoped.
+
+export const runtimeInstallsDocument = defineDocument({
+    path: stateRelPath(".intentic/records/runtime-installs.json"),
+    schema: RuntimeInstallsFileSchema,
+});
 
 // Distinct sessions kept per tool; recurrence needs ≥ 2, and eight is enough to call it constant.
 const SESSIONS_KEPT = 8;
@@ -65,6 +72,7 @@ export const fileRuntimeInstallsStore = (path: string): RuntimeInstallsStore => 
     const file = jsonFile<RuntimeInstallsFile>(path, {
         parse: (raw) => RuntimeInstallsFileSchema.safeParse(raw).data,
         fallback: () => ({ installs: [] }),
+        document: runtimeInstallsDocument,
     });
     return {
         read: file.read,

@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Ties a stream of inbound messages (a support chat, a tagged bot) to one conversation and provider session, so repeats
 // don't each spawn a fresh isolated worktree. The record also marks a thread past the anti-bot gate, surviving a daemon
@@ -19,6 +21,12 @@ export type ThreadSession = z.infer<typeof RecordSchema>;
 
 const FileSchema = z.record(z.string(), RecordSchema);
 type SessionsFile = z.infer<typeof FileSchema>;
+
+export const threadSessionsDocument = defineDocument({
+    path: stateRelPath(".intentic/records/thread-sessions.json"),
+    schema: RecordSchema,
+    granularity: "record",
+});
 
 // How long a quiet Visitor chat thread keeps its conversation; overridable via WebchatConfig.sessionTtlMinutes.
 export const WEBCHAT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -53,7 +61,11 @@ export const liveThread = (record: ThreadSession | undefined, ttlMs: number, now
     record !== undefined && now - record.lastAt <= ttlMs && !archived(record.conversationId) ? record : undefined;
 
 export const fileThreadSessionsStore = (path: string, archived: ArchivedConversation): ThreadSessionsStore => {
-    const file = jsonFile<SessionsFile>(path, { parse: (raw) => FileSchema.safeParse(raw).data, fallback: () => ({}) });
+    const file = jsonFile<SessionsFile>(path, {
+        parse: (raw) => FileSchema.safeParse(raw).data,
+        fallback: () => ({}),
+        document: threadSessionsDocument,
+    });
 
     return {
         get: async (key, ttlMs, now) => liveThread((await file.read())[key], ttlMs, now, archived),

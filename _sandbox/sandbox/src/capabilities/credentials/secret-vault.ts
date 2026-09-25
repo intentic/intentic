@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { opt } from "../../opt.js";
+import { defineDocument } from "../../store/documents.js";
 import { jsonFile } from "../../store/json-file.js";
 
 // Stores capability credential values under AGENT_AUTH_DIR (mode 0600), outside the file routes, tree walk and search
@@ -6,8 +8,23 @@ import { jsonFile } from "../../store/json-file.js";
 // against a shell: the daemon and agent already share a root container.
 
 // id -> {config key -> value}; an entry with no credentials keeps no row, not an empty object.
-const VaultSchema = z.record(z.string(), z.record(z.string(), z.string()));
+const SecretValuesSchema = z.record(z.string(), z.string());
+const VaultSchema = z.record(z.string(), SecretValuesSchema);
 export type SecretVaultContents = z.infer<typeof VaultSchema>;
+
+// Two vaults on one factory, the capabilities' and the extensions'; the vault picks the one its path names.
+export const capabilitySecretsDocument = defineDocument({
+    root: "auth",
+    path: "capability-secrets.json",
+    schema: SecretValuesSchema,
+    granularity: "record",
+});
+export const extensionSecretsDocument = defineDocument({
+    root: "auth",
+    path: "extension-secrets.json",
+    schema: SecretValuesSchema,
+    granularity: "record",
+});
 
 export interface SecretVault {
     // Every stored value for one capability, or {} when it holds none.
@@ -22,6 +39,8 @@ export interface SecretVault {
 }
 
 export const fileSecretVault = (path: string): SecretVault => {
+    // A path naming neither vault (a test's own) runs no conversions.
+    const document = [capabilitySecretsDocument, extensionSecretsDocument].find((spec) => path.endsWith(`/${spec.path}`));
     const file = jsonFile<SecretVaultContents>(path, {
         parse: (raw) => {
             const parsed = VaultSchema.safeParse(raw);
@@ -31,6 +50,7 @@ export const fileSecretVault = (path: string): SecretVault => {
         mode: 0o600,
         // Credentials are not state the daemon can regrow: a fresh vault over an unreadable one would drop every one.
         onUnreadable: "refuse",
+        ...opt("document", document),
     });
     return {
         get: async (id) => (await file.read())[id] ?? {},

@@ -1,5 +1,6 @@
 import { SharedConversationSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // Daemon's own list of what's shared, on the history volume; the outbox's files alone can't say which conversation,
@@ -11,6 +12,8 @@ const StoredShareSchema = SharedConversationSchema.omit({ url: true });
 export type StoredShare = z.infer<typeof StoredShareSchema>;
 
 const FileSchema = z.object({ shares: z.array(StoredShareSchema) });
+
+export const sharesDocument = defineDocument({ root: "history", path: "shares.json", schema: FileSchema });
 
 export interface ShareStore {
     readonly all: () => Promise<StoredShare[]>;
@@ -30,6 +33,7 @@ export const fileShareStore = (path: string): ShareStore => {
             return parsed.success ? parsed.data : undefined;
         },
         fallback: () => ({ shares: [] }),
+        document: sharesDocument,
     });
     return {
         all: async () => sorted((await file.read()).shares),

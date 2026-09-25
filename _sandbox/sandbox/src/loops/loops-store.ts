@@ -7,8 +7,9 @@ import {
     LoopRecordSchema,
     type LoopState,
 } from "@intentic/sandbox-contract";
-import { z } from "zod";
-import { jsonFile } from "../store/json-file.js";
+import { defineDocument } from "../store/documents.js";
+import { jsonEntries } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Loop manifest (<workspace>/.intentic/records/loops.json): every loop run, with its iteration history; mirrors the
 // automations store's shape. Keyed by conversation, so re-running replaces rather than duplicates the prior record.
@@ -34,10 +35,14 @@ export interface LoopsStore {
     readonly countResume: (conversationId: string) => Promise<LoopRecord | undefined>;
 }
 
+export const loopsDocument = defineDocument({ path: stateRelPath(".intentic/records/loops.json"), schema: LoopRecordSchema, granularity: "entries" });
+export const loopDesignsDocument = defineDocument({ path: stateRelPath(".intentic/config/loop-designs.json"), schema: LoopDesignSchema, granularity: "entries" });
+
 export const fileLoopsStore = (path: string): LoopsStore => {
-    const file = jsonFile<LoopRecord[]>(path, {
-        parse: (raw) => z.array(LoopRecordSchema).safeParse(raw).data,
-        fallback: () => [],
+    const file = jsonEntries<LoopRecord>(path, {
+        entry: (raw) => LoopRecordSchema.safeParse(raw).data,
+        document: loopsDocument,
+        idKeys: ["conversationId"],
     });
     // Finds the record by conversationId and replaces it; a missing record is a no-op, not an error.
     const amend = async (conversationId: string, change: (record: LoopRecord) => LoopRecord): Promise<void> => {
@@ -78,10 +83,7 @@ export interface LoopDesignsStore {
 }
 
 export const fileLoopDesignsStore = (path: string): LoopDesignsStore => {
-    const file = jsonFile<LoopDesign[]>(path, {
-        parse: (raw) => z.array(LoopDesignSchema).safeParse(raw).data,
-        fallback: () => [],
-    });
+    const file = jsonEntries<LoopDesign>(path, { entry: (raw) => LoopDesignSchema.safeParse(raw).data, document: loopDesignsDocument });
     return {
         list: () => file.read(),
         get: async (id) => (await file.read()).find((design) => design.id === id),

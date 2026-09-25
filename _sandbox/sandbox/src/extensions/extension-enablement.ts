@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath } from "../state-paths.js";
+import { statePath, stateRelPath } from "../state-paths.js";
 
 // The owner's per-extension on/off switch (<workspace>/.intentic/config/extension-enablement.json), keyed by the
 // manifest-derived extension id (publisher.name), the same key extension-settings.json uses, so the choice
@@ -9,6 +10,8 @@ import { statePath } from "../state-paths.js";
 // an entry to be written for it.
 const FileSchema = z.record(z.string(), z.boolean());
 type EnablementFile = z.infer<typeof FileSchema>;
+
+export const extensionEnablementDocument = defineDocument({ path: stateRelPath(".intentic/config/extension-enablement.json"), schema: FileSchema });
 
 // Memoized per root for the reason extension-settings.ts spells out: `update`'s write queue lives on the file
 // object, so building a fresh one per call would let two toggles read the same map and the second erase the
@@ -21,7 +24,11 @@ const enablementFile = (root: string): JsonFile<EnablementFile> => {
     if (existing !== undefined) {
         return existing;
     }
-    const file = jsonFile<EnablementFile>(path, { parse: (raw) => FileSchema.safeParse(raw).data, fallback: () => ({}) });
+    const file = jsonFile<EnablementFile>(path, {
+        parse: (raw) => FileSchema.safeParse(raw).data,
+        fallback: () => ({}),
+        document: extensionEnablementDocument,
+    });
     files.set(path, file);
     return file;
 };

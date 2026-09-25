@@ -4,7 +4,9 @@ import { GrantedRoleSchema, roleAtLeast } from "@intentic/sandbox-contract";
 import { isOwnerTicket, verifyOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 
 // The sandbox authenticates the end user directly against Google; the platform never holds this credential.
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
@@ -54,6 +56,8 @@ export interface OwnerStore {
 
 const OwnerFileSchema = z.object({ email: z.string() });
 
+export const ownerDocument = defineDocument({ path: stateRelPath(".intentic/identity/owner.json"), schema: OwnerFileSchema });
+
 // On the daemon's JSON substrate like every other manifest: this file decides who may drive the sandbox.
 // An atomic rename prevents a read landing mid-write from seeing an empty owner and treating the next identity as
 // first; an owner file that exists but cannot be read throws, since "no owner" would let the next identity bind.
@@ -62,6 +66,7 @@ export const fileOwnerStore = (path: string): OwnerStore => {
         parse: (raw) => OwnerFileSchema.safeParse(raw).data,
         fallback: () => ({}),
         onUnreadable: "refuse",
+        document: ownerDocument,
     });
     return {
         read: async () => {
@@ -121,6 +126,12 @@ const MemberSchema = z
     });
 const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 
+// The shape a grant writes. The file schema above checks only the frame, so one bad row is skipped rather than fatal.
+export const membersDocument = defineDocument({
+    path: stateRelPath(".intentic/identity/members.json"),
+    schema: z.object({ members: z.array(MemberSchema) }),
+});
+
 // The row a grant writes: an area list is kept whatever the tier, and its absence is the whole workspace, so an
 // omitted field can never read as an empty fence.
 export const memberRow = (email: string, grant: MemberGrant): Member => ({
@@ -147,6 +158,7 @@ export const fileMembersStore = (path: string): MembersStore => {
             };
         },
         fallback: () => ({ members: [] }),
+        document: membersDocument,
     });
     return {
         list: async () => [...(await file.read()).members],

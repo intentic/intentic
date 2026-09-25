@@ -139,6 +139,17 @@
                 "default": "./dist/time/zone.js"
             }
         },
+        "./documents": {
+            "types": "./dist/documents/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/documents/index.ts",
+                "default": "./dist/documents/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/documents/index.ts",
+                "default": "./dist/documents/index.js"
+            }
+        },
         "./owner-ticket": {
             "types": "./dist/policy/owner-ticket.d.ts",
             "import": {

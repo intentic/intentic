@@ -31,16 +31,29 @@ const SCHEMA_REJECTED = "the file does not match what this build expects";
 // A schema rejection looks identical whether hand-mangled or written by a newer, rolled-back build. If the workspace's
 // stamp says newer, the report says so instead of implying damage; nothing reads the file differently.
 export const withSkewHint = (problems: readonly ManifestProblem[], running: string, newest: string | undefined): ManifestProblem[] =>
-    problems.map((problem) =>
-        problem.kind === "unreadable" && problem.detail === SCHEMA_REJECTED && newest !== undefined && isNewer(newest, running)
-            ? {
-                  ...problem,
-                  detail: `it was written by intentic ${newest}, newer than this sandbox (${running})`,
-                  // The file is probably fine; editing it to match an older build is how a good config breaks by hand.
-                  fix: `Update the sandbox — the file itself is probably fine.`,
-              }
-            : problem,
-    );
+    problems.map((problem) => {
+        if (newest === undefined || !isNewer(newest, running)) {
+            return problem;
+        }
+        if (problem.kind === "unreadable" && problem.detail === SCHEMA_REJECTED) {
+            return {
+                ...problem,
+                detail: `it was written by intentic ${newest}, newer than this sandbox (${running})`,
+                // The file is probably fine; editing it to match an older build is how a good config breaks by hand.
+                fix: `Update the sandbox — the file itself is probably fine.`,
+            };
+        }
+        if (problem.kind === "unknownKey") {
+            // A key a newer build added, kept on every write since passthrough (passthrough.ts): not a typo to correct,
+            // so no "did you mean" guess, which would invite renaming it into something this build reads wrongly.
+            return {
+                kind: problem.kind,
+                detail: problem.detail,
+                fix: `Probably from intentic ${newest}, newer than this sandbox (${running}): it is kept as it is, and read again once you update.`,
+            };
+        }
+        return problem;
+    });
 
 export const manifestProblems = (root: string): ManifestProblemReport[] =>
     [...byPath.entries()]

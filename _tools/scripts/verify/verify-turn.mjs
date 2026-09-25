@@ -18,7 +18,7 @@ import { ago, verdictForBase } from "../lib/tree-verdict.mjs";
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
 import { weakenings } from "./assertion-ratchet.mjs";
 import { againstBaseline, failedTasks, failureLines, rerunCommand, takeSummary, taskOf, unitsOf } from "./failure-units.mjs";
-import { fixChecks, formatCrates, regenerateContractLock, rustfmtAvailable, touchedCrates } from "./fixers.mjs";
+import { fixChecks, formatCrates, regenerateContractLock, regenerateStateShapes, rustfmtAvailable, touchedCrates } from "./fixers.mjs";
 import { recordFlakes, rerunFailures } from "./flakes.mjs";
 import { LINTABLE } from "./land-tiers.mjs";
 import { judgeAgainstBase } from "./turn-findings.mjs";
@@ -272,6 +272,9 @@ if (affected.size > 0) {
     if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/build/emit-declarations.mjs")])) {
         if (regenerateContractLock(root, changed)) {
             say("contract.lock.json rewritten from the contract this turn changed");
+        }
+        if (regenerateStateShapes(root, changed)) {
+            say("state-shapes.json froze a new shape of a stored document; the typecheck judges whether older ones still convert");
         }
         const filters = global !== undefined ? [] : [...affected].flatMap((name) => ["--filter", name]);
         const junitDir = mkdtempSync(join(tmpdir(), "verify-turn-junit-"));

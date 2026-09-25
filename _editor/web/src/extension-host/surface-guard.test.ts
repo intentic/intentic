@@ -83,9 +83,13 @@ const liveSurface = (): RecordedSurface => ({
     chatApi: nestedMembers(`chat`),
     daemonApi: nestedMembers(`daemon`, `src/server.ts`),
     // The runtime exports only. Types are the api object's business (recorded above) and a package that
-    // re-exports thirty interfaces would drown the one line that says a new FUNCTION arrived.
+    // re-exports thirty interfaces would drown the one line that says a new FUNCTION arrived. A namespace of functions
+    // (`conversions`, 2.19.0) is a set of functions arriving under one name, so an object counts too.
     moduleExports: Object.keys(sdkModule)
-        .filter((name) => typeof (sdkModule as Record<string, unknown>)[name] === `function` || name === `extensionApiVersion`)
+        .filter((name) => {
+            const value = (sdkModule as Record<string, unknown>)[name];
+            return typeof value === `function` || (typeof value === `object` && value !== null) || name === `extensionApiVersion`;
+        })
         .toSorted(),
 });
 

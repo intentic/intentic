@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { type AutomationApproval, AutomationApprovalSchema } from "@intentic/sandbox-contract";
+import { defineDocument } from "../store/documents.js";
 import { jsonDir } from "../store/json-dir.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Held-wakes queue (<workspace>/.intentic/records/approvals/<id>.json, one file per wake): a requireApproval automation
 // enqueues here instead of firing; the owner approves or rejects via the /automations routes. Distinct from the
@@ -9,6 +11,8 @@ import { jsonDir } from "../store/json-dir.js";
 
 // Id is the filename, not part of the body; the store grafts it back on read.
 const ApprovalBodySchema = AutomationApprovalSchema.omit({ id: true });
+
+export const heldWakesDocument = defineDocument({ path: stateRelPath(".intentic/records/approvals/"), directory: true, schema: ApprovalBodySchema });
 
 export interface HeldWakesStore {
     // Held wakes, oldest first (createdAt ascending).
@@ -22,7 +26,7 @@ export interface HeldWakesStore {
 
 // A per-file JSON store, used in production at <workspace>/.intentic/records/approvals/.
 export const fileHeldWakesStore = (dir: string): HeldWakesStore => {
-    const files = jsonDir(dir, (raw) => ApprovalBodySchema.safeParse(raw).data);
+    const files = jsonDir(dir, (raw) => ApprovalBodySchema.safeParse(raw).data, heldWakesDocument);
     return {
         // A file that fails to parse is dropped, not reported: nothing outside this daemon writes here.
         list: async () => (await files.list()).entries.toSorted((a, b) => a.createdAt - b.createdAt),

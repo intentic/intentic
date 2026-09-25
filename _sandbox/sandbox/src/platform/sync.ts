@@ -4,7 +4,8 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { DeviceReport } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { type JsonFile, jsonFile } from "../store/json-file.js";
+import { defineDocument } from "../store/documents.js";
+import { type JsonFile, jsonEntries } from "../store/json-file.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 
 // Desktop enrollment for Mutagen: an ed25519 key lands here via a pairing token, then rides SSH for file sync of /work
@@ -36,6 +37,8 @@ const SyncEnrollmentSchema = z.object({
 type SyncEnrollment = z.infer<typeof SyncEnrollmentSchema>;
 
 const enrollmentsPath = (historyRoot: string): string => join(historyRoot, "sync-enrollments.json");
+
+export const syncEnrollmentsDocument = defineDocument({ root: "history", path: "sync-enrollments.json", schema: SyncEnrollmentSchema, granularity: "entries" });
 // HOME is the home directory of record, read per call so a test can point it at a temp dir.
 const authorizedKeysPath = (): string => join(process.env["HOME"] ?? homedir(), ".ssh", "authorized_keys");
 const digestOf = (token: string): string => createHash("sha256").update(token).digest("hex");
@@ -49,10 +52,11 @@ const enrollmentsFile = (historyRoot: string): JsonFile<SyncEnrollment[]> => {
     const path = enrollmentsPath(historyRoot);
     let file = files.get(path);
     if (file === undefined) {
-        file = jsonFile<SyncEnrollment[]>(path, {
-            parse: (raw) => z.array(SyncEnrollmentSchema).safeParse(raw).data,
-            fallback: () => [],
+        file = jsonEntries<SyncEnrollment>(path, {
+            entry: (raw) => SyncEnrollmentSchema.safeParse(raw).data,
             mode: 0o600,
+            document: syncEnrollmentsDocument,
+            idKeys: ["key"],
         });
         files.set(path, file);
     }

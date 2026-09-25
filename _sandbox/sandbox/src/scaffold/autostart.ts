@@ -4,9 +4,10 @@ import { zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import type { Services } from "../composition.js";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import { appPanelKey, buildAppSpec } from "../workspace/layout/app-previews.js";
-import { statePath } from "../state-paths.js";
+import { statePath, stateRelPath } from "../state-paths.js";
 
 // What this workspace runs on boot: one entry per `<repo>/_apps/<app>` with its dev command, so every boot restarts it,
 // not only the seed's first one. `autostart` (bootstrap/workspace-apps.ts) starts what the file names and is idempotent; a missing folder
@@ -21,6 +22,8 @@ const AutostartAppSchema = z.object({
 });
 const AutostartSchema = z.object({ apps: z.array(AutostartAppSchema) });
 
+export const autostartDocument = defineDocument({ path: stateRelPath(".intentic/config/autostart.json"), schema: AutostartSchema });
+
 export type AutostartApp = z.infer<typeof AutostartAppSchema>;
 type Autostart = z.infer<typeof AutostartSchema>;
 
@@ -28,6 +31,7 @@ const store = (root: string) =>
     jsonFile<Autostart>(statePath(root, ".intentic/config/autostart.json"), {
         parse: (raw) => AutostartSchema.safeParse(raw).data,
         fallback: () => ({ apps: [] }),
+        document: autostartDocument,
     });
 
 export const readAutostart = async (root: string): Promise<readonly AutostartApp[]> => (await store(root).read()).apps;

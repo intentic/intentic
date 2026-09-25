@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // What each peer publishes as its tool table, kept across daemon restarts. The bridge answers `tools/list` from this
@@ -17,6 +18,8 @@ export interface PeerToolMemory {
 const PeerToolsFileSchema = z.object({ peers: z.record(z.string(), z.unknown()) });
 type PeerToolsFile = z.infer<typeof PeerToolsFileSchema>;
 
+export const peerToolsDocument = defineDocument({ root: "history", path: "peer-tools.json", schema: PeerToolsFileSchema });
+
 export const peerToolsFile = (historyRoot: string): string => join(historyRoot, "peer-tools.json");
 
 export const memoryPeerTools = (): PeerToolMemory => {
@@ -29,7 +32,11 @@ export const memoryPeerTools = (): PeerToolMemory => {
 // already was. A live peer's own answer always wins over the file, so hydration never overwrites what this boot learned.
 export const filePeerTools = (historyRoot: string, logger: { warn: (data: object, message: string) => void }): PeerToolMemory => {
     const path = peerToolsFile(historyRoot);
-    const file = jsonFile<PeerToolsFile>(path, { parse: (raw) => PeerToolsFileSchema.safeParse(raw).data, fallback: () => ({ peers: {} }) });
+    const file = jsonFile<PeerToolsFile>(path, {
+        parse: (raw) => PeerToolsFileSchema.safeParse(raw).data,
+        fallback: () => ({ peers: {} }),
+        document: peerToolsDocument,
+    });
     const live = memoryPeerTools();
     const hydrated = new Map<string, unknown>();
     void file

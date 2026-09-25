@@ -18,7 +18,7 @@ import { createSteps } from "../lib/steps.mjs";
 import { treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
 import { checkVerdicts } from "./check-snapshot.mjs";
 import { failedTasks, takeSummary, taskOf, unitsOf, verdictUnits } from "./failure-units.mjs";
-import { fixChecks, formatCrates, regenerateContractLock, rustfmtAvailable, touchedCrates } from "./fixers.mjs";
+import { fixChecks, formatCrates, regenerateContractLock, regenerateStateShapes, rustfmtAvailable, touchedCrates } from "./fixers.mjs";
 import { recordFlakes, rerunFailures } from "./flakes.mjs";
 import { landTiers } from "./land-tiers.mjs";
 import { testWorkers } from "./test-workers.mjs";
@@ -86,6 +86,10 @@ if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/buil
     // against a lock that says what it changed, and the lock itself rides the owner's next commit.
     if (afterLand && regenerateContractLock(root, landed)) {
         say("contract.lock.json rewritten from the contract this land changed");
+    }
+    // Likewise every stored document's new shape, frozen before the typecheck that judges whether older ones still convert.
+    if (afterLand && regenerateStateShapes(root, landed)) {
+        say("state-shapes.json froze a new shape of a stored document this land changed");
     }
     turbo("typecheck", ["typecheck"], {});
     turbo("test", ["test", "--only"], SUITE_ENV);

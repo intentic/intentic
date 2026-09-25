@@ -63,3 +63,20 @@ export const regenerateContractLock = (root, changed) => {
     spawnSync(process.execPath, [join(root, LOCK_WRITER)], { cwd: root, stdio: "ignore" });
     return git(root, "hash-object", CONTRACT_LOCK) !== before;
 };
+
+const DAEMON = "_sandbox/sandbox";
+const STATE_SHAPES = `${DAEMON}/src/store/generated/state-shapes.json`;
+const SHAPES_WRITER = "src/store/shapes/write-state-shapes.ts";
+
+// Freezes any new shape of a stored document and rewrites the type-level checks that every frozen shape still converts
+// to today's schema (the daemon's store/shapes/write-state-shapes.ts), when a daemon or contract source changed. The
+// typecheck after it is what judges: this only records, the way the contract lock does. Answers whether the file moved.
+export const regenerateStateShapes = (root, changed) => {
+    const touches = (changed ?? []).some((path) => path.startsWith(`${DAEMON}/src/`) || path.startsWith(CONTRACT_SOURCES));
+    if (!touches || !existsSync(join(root, DAEMON, SHAPES_WRITER))) {
+        return false;
+    }
+    const before = existsSync(join(root, STATE_SHAPES)) ? git(root, "hash-object", STATE_SHAPES) : "";
+    spawnSync(process.execPath, ["--import", "tsx", SHAPES_WRITER], { cwd: join(root, DAEMON), stdio: "ignore" });
+    return existsSync(join(root, STATE_SHAPES)) && git(root, "hash-object", STATE_SHAPES) !== before;
+};

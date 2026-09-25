@@ -27,6 +27,23 @@ export const StagedUpdateSchema = z.object({
         ),
     // Epoch ms the download finished; used to check this is still the update being offered.
     at: z.number().describe("When the download finished, in milliseconds, which answers whether this is still the update being offered."),
+    // The staged build's state pre-flight (the daemon's state-plan.ts, run by `ic sandbox prepare` over read-only mounts
+    // of this sandbox's volumes): what its first boot converts, before anyone accepts the update.
+    plan: z
+        .object({
+            ok: z.boolean().describe("False when a conversion would fail on this sandbox's files, which refuses the update before anything is touched."),
+            downgrade: z.boolean().optional().describe("The staged build is older than the one that converted these files; it opens them read-only."),
+            steps: z
+                .array(z.object({ document: z.string(), change: z.string() }))
+                .optional()
+                .describe("Each stored file the first boot converts, and how."),
+            failures: z
+                .array(z.object({ document: z.string(), detail: z.string() }))
+                .optional()
+                .describe("Each conversion that would fail, and why."),
+        })
+        .optional()
+        .describe("What the downloaded build's first boot would convert in this sandbox's stored files. Absent when no plan could be had, which says nothing either way."),
 });
 export type StagedUpdate = z.infer<typeof StagedUpdateSchema>;
 export const InfoSchema = z.object({

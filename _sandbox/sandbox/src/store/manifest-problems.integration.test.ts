@@ -168,3 +168,16 @@ test("after a rollback, a schema-rejected file is explained as newer rather than
     await settings.file.read();
     expect(withSkewHint(manifestProblems(root)[0]?.problems ?? [], "1.199.0", "1.200.0")[0]?.detail).toMatch(/JSON/i);
 });
+
+test("after a newer build ran, a key it added is explained as its, not guessed at as a typo", () => {
+    const problems = [{ kind: "unknownKey" as const, detail: "hashlineEditz", suggestion: "hashlineEdits" }];
+    expect(withSkewHint(problems, "1.199.0", "1.200.0")).toEqual([
+        {
+            kind: "unknownKey",
+            detail: "hashlineEditz",
+            fix: "Probably from intentic 1.200.0, newer than this sandbox (1.199.0): it is kept as it is, and read again once you update.",
+        },
+    ]);
+    // With no newer build on record, the guess stands.
+    expect(withSkewHint(problems, "1.200.0", "1.200.0")).toEqual(problems);
+});

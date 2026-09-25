@@ -9,6 +9,8 @@ import {
     windowLive,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { at, pinDefault } from "../store/conversions.js";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // Latest plan-limit snapshot per account, any provider, at <historyRoot>/account-usage.json: one shape
@@ -16,6 +18,15 @@ import { jsonFile } from "../store/json-file.js";
 // Persisted so a page load doesn't owe a round trip; distinct from usage-store.ts, which counts spend, not headroom.
 
 const StoredUsageSchema = z.record(z.string(), AccountUsageSchema);
+
+export const accountUsageDocument = defineDocument({
+    root: "history",
+    path: "account-usage.json",
+    schema: AccountUsageSchema,
+    granularity: "record",
+    // A window measured before gates existed applied to every model.
+    history: [at("windows.*", pinDefault("gates", "all"))],
+});
 
 export interface AccountUsageStore {
     // Every account's snapshot, keyed by account; windows already reset are omitted, and an account left with none is
@@ -82,6 +93,7 @@ export const fileAccountUsageStore = (path: string): AccountUsageStore => {
     const file = jsonFile<Record<string, AccountUsage>>(path, {
         parse: (raw) => StoredUsageSchema.safeParse(raw).data,
         fallback: () => ({}),
+        document: accountUsageDocument,
     });
 
     return {

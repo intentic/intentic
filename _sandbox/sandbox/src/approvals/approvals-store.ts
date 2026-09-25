@@ -1,11 +1,21 @@
+import { STATE_DIR } from "@intentic/constants";
 import { ApprovalSchema, type ApprovalSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { writeLoadedSkill } from "../store/loaded-skills.js";
+import { defineDocument } from "../store/documents.js";
 import { jsonDir } from "../store/json-dir.js";
 import { stateRelPath } from "../state-paths.js";
 
 // The workspace-relative home the skill text teaches the agent; can't name a dir the store stopped reading.
 const APPROVALS_DIR = stateRelPath(".intentic/config/approvals/");
+
+// Called drafts until 2026-09-02; the flat layout's `drafts` is the regroup step's (store/steps/state-regroup.ts).
+export const approvalsDocument = defineDocument({
+    path: APPROVALS_DIR,
+    directory: true,
+    schema: ApprovalSchema,
+    movedFrom: [[STATE_DIR, "config", "drafts"].join("/")],
+});
 
 // The approvals queue: one file per item at <workspace>/.intentic/config/approvals/<id>.json; the agent creates them,
 // the daemon edits/deletes them for the owner.
@@ -23,7 +33,7 @@ export interface ApprovalsStore {
 
 // A per-file JSON store, used in production at <workspace>/.intentic/config/approvals/.
 export const fileApprovalsStore = (dir: string): ApprovalsStore => {
-    const files = jsonDir(dir, (raw) => ApprovalSchema.safeParse(raw).data);
+    const files = jsonDir(dir, (raw) => ApprovalSchema.safeParse(raw).data, approvalsDocument);
     return {
         list: async () => {
             const { entries, invalid } = await files.list();

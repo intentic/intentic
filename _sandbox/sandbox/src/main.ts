@@ -14,6 +14,7 @@ import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
 import { startFrontDoor } from "./bootstrap/front-door.js";
 import { startPlatformPresence } from "./bootstrap/platform-presence.js";
+import { commitStateAtBoot, convergeStateAtBoot } from "./bootstrap/state-boot.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
 import { startWorkspaceApps } from "./bootstrap/workspace-apps.js";
 import { createServices } from "./composition.js";
@@ -56,8 +57,18 @@ const main = async (): Promise<void> => {
     const loopWatchdog = startLoopWatchdog(logger);
     shutdown.push(() => loopWatchdog.stop());
     // Names the function behind a boot stall, which the watchdog can only time: kept under logs/ when one happened.
+    // Started ahead of the state convergence below, so an update's first boot is profiled too.
     const bootProfile = startBootProfile(logger, logsRoot(config.historyRoot));
     shutdown.push(() => bootProfile.stop());
+    // Claims container ownership before anything container-wide runs, since a container can hold more than one daemon
+    // (container-owner.ts). LOCAL never claims: it owns nothing container-wide, and its role is pinned, not derived.
+    // Ahead of the services, since the claim holder alone converges the stored files below.
+    const role = traits.convergeHome
+        ? await claimContainer({ workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot }, logger)
+        : { container: false, roots: true };
+    // Brings every stored file to this build's shapes before a single store opens (store/state-convergence.ts), under a
+    // journal a rolled-back build undoes; committed once the boot chain converges, below.
+    await convergeStateAtBoot({ config, logger, traits, role });
     const services = createServices(config, logger);
     // Ranks the daemon's children for the OOM killer by role and spawn depth; the front renices them.
     const oomScorer = startOomScorer(oomScoreResolver((owner) => spawnDepthOf(services.conversations, owner)));
@@ -73,11 +84,6 @@ const main = async (): Promise<void> => {
     shutdown.push(() => services.serviceProcesses.stopAll());
     // The backend host is a direct child, not a tmux session, stopped here or it outlives the daemon.
     shutdown.push(() => services.extensionBackend.stop());
-    // Claims container ownership before anything container-wide runs, since a container can hold more than one daemon
-    // (container-owner.ts). LOCAL never claims: it owns nothing container-wide, and its role is pinned, not derived.
-    const role = traits.convergeHome
-        ? await claimContainer({ workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot }, logger)
-        : { container: false, roots: true };
     // Pool machine preparing its volume for a future owner (prewarm.ts); nothing below branches on it except the very
     // end. Container-only: a guest or local folder has no volume to prepare.
     const prewarm = config.sandbox.prewarm && role.container;
@@ -110,6 +116,9 @@ const main = async (): Promise<void> => {
     wireDependencyCoordinator(services);
     // Converged state opens the gate; everything below is background machinery no queued request depends on.
     services.boot.finish();
+    // The build booted all the way on the files it converted: nothing needs undoing, and the host's update gate reads
+    // the committed journal off /health.
+    void commitStateAtBoot(phase);
 
     // After the gate, so the editor is live while the dev servers come up; still after the stale-session sweep, which
     // must run before anything starts a session, and after the baseline, so a dev server's first build can't dirty it.

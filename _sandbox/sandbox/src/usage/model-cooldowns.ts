@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // When a model reopens, at <historyRoot>/model-cooldowns.json, outside the agent's reach. Keyed by provider and model,
@@ -17,6 +18,13 @@ export type StoredCooldown = z.infer<typeof StoredCooldownSchema>;
 
 const StoredSchema = z.record(z.string(), StoredCooldownSchema);
 
+export const modelCooldownsDocument = defineDocument({
+    root: "history",
+    path: "model-cooldowns.json",
+    schema: StoredCooldownSchema,
+    granularity: "record",
+});
+
 // Model id alone isn't unique across providers, and the catalog is asked per provider, so the pair is the key.
 const keyOf = (provider: string, model: string): string => `${provider}:${model}`;
 
@@ -31,6 +39,7 @@ export const fileModelCooldownStore = (path: string): ModelCooldownStore => {
     const file = jsonFile<Record<string, StoredCooldown>>(path, {
         parse: (raw) => StoredSchema.safeParse(raw).data,
         fallback: () => ({}),
+        document: modelCooldownsDocument,
     });
     return {
         cooling: async (provider) => {

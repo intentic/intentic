@@ -89,8 +89,18 @@ enum Reach {
     Applied,
 }
 
-pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
-    recreate(mode, slug, Reach::Applied, false)
+/// Whether a swap first asks the target image what its state conversions would do to this sandbox's data
+/// (preflight.rs). `Skip` is the owner's `--skip-preflight`, which lifts the one refusal a pre-flight makes.
+/// Every applied verb runs it, a reshape included: a reshape recreates from the tag the container was run
+/// from, and a `prepare` since then may have moved that tag onto a newer build.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Preflight {
+    Run,
+    Skip,
+}
+
+pub fn run(mode: Mode, slug: Option<String>, preflight: Preflight) -> Result<()> {
+    recreate(mode, slug, Reach::Applied, false, preflight)
 }
 
 /// `ic sandbox prepare` — the pull and the overlay rebuild, taken off the click. Runs against a live sandbox
@@ -110,10 +120,18 @@ pub fn prepare(slug: Option<String>, channel: Option<String>, auto: bool) -> Res
         slug,
         Reach::Staged,
         auto,
+        // Never reached: a prepare stops at the seam, before the pre-flight and everything after it.
+        Preflight::Run,
     )
 }
 
-fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Result<()> {
+fn recreate(
+    mode: Mode,
+    slug: Option<String>,
+    reach: Reach,
+    auto: bool,
+    preflight: Preflight,
+) -> Result<()> {
     if !docker::cli_present() {
         bail!("docker is required — run this on the machine that runs the sandbox.");
     }
@@ -438,7 +456,16 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
 
     /* `prepare` stops here, which is the whole of what makes it safe to run at any moment: the container has not been read from since the overlay copy. */
     if reach == Reach::Staged {
+        // What the staged build's first boot would convert, for the update card to show before anyone accepts it.
+        let plan = crate::sandbox::preflight::staged_plan(
+            &container,
+            &slug,
+            &target_image,
+            &dev_mounts(),
+            &log,
+        );
         return record_staged(
+            plan.as_deref(),
             Prepared {
                 slug: &slug,
                 container: &container,
@@ -450,6 +477,21 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             &saved,
             &log,
         );
+    }
+
+    /* THE LAST MOMENT A "NO" COSTS NOTHING: the image to run is final, and the rollback pin, the swap's record and the cutover are all still ahead. */
+    match preflight {
+        Preflight::Run => crate::sandbox::preflight::check(
+            &container,
+            &slug,
+            &target_image,
+            &dev_mounts(),
+            verb,
+            &log,
+        )?,
+        Preflight::Skip => {
+            println!("intentic: skipping the state-conversion pre-flight (--skip-preflight).")
+        }
     }
 
     // ——— Ask the TARGET IMAGE for its own run command: env in, command out. ———
@@ -476,24 +518,10 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     // The /agent-auth mount is a mount+env pair: replaying AGENT_AUTH_DIR without its volume would point
     // the daemon at an empty container-local dir, stranding the shared credentials.
     let mut mounts: Vec<String> = Vec::new();
-    if let Some(auth) = docker::inspect(
-        &container,
-        "{{range .Mounts}}{{if eq .Destination \"/agent-auth\"}}{{if eq .Type \"volume\"}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}",
-    ) {
-        if !auth.is_empty() {
-            mounts.push(format!("{auth}:/agent-auth"));
-        }
+    if let Some(auth) = docker::mount_source(&container, "/agent-auth") {
+        mounts.push(format!("{auth}:/agent-auth"));
     }
-    // The dev wrapper binds the checkout's compiled trees over the image's baked copies (dev-mounts.mjs), so
-    // a daemon edit restarts in seconds instead of a rebuild — newline-separated -v specs, straight through.
-    if let Ok(dev_mounts) = std::env::var("INTENTIC_DEV_MOUNTS") {
-        mounts.extend(
-            dev_mounts
-                .lines()
-                .filter(|line| !line.is_empty())
-                .map(str::to_string),
-        );
-    }
+    mounts.extend(dev_mounts());
 
     let runtime_lines: String = overlay
         .lines()
@@ -652,15 +680,27 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     }
 
     println!("intentic: waiting for the sandbox daemon to come up…");
-    if let Err(err) = health::wait_answering(
+    let answered = match health::wait_answering(
         &container,
         &log,
         "\n       Your previous sandbox was restored — the update did not take.",
     ) {
+        Ok(answered) => answered,
+        Err(err) => {
+            restore_parked(&container, &parked, &slug, &saved);
+            return Err(err);
+        }
+    };
+    /* A NEW VERSION THAT NEVER COMMITS ITS STATE JOURNAL HAS NOT TAKEN, however well it answers — and the parked container is the way back, so it is only removed after this. */
+    if let Err(Fail(reason)) = health::wait_ready(&container, &answered) {
+        log.section(&format!("container logs ({container})"));
+        docker::logs_into(&container, "500", &log);
         restore_parked(&container, &parked, &slug, &saved);
-        return Err(err);
+        bail!(
+            "{reason}\n       Your previous sandbox was put back; as it starts, it restores the files the new version had started converting. The new version's logs are saved to {}.",
+            log.path.display()
+        );
     }
-    health::wait_ready(&container);
     docker::quiet(&["rm", "-f", &parked]);
 
     /* The saved share is in force now, so it is no longer waiting. Best-effort: the swap already happened, and a file left behind only re-applies the same values next time. */
@@ -714,11 +754,17 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
 ///
 /// An empty ask is allowed only when a share is saved for the next restart: it is how that share is applied
 /// NOW (the Restart button, when something is saved, is exactly this).
-pub fn reshape(slug: String, ask: Reshape) -> Result<()> {
+pub fn reshape(slug: String, ask: Reshape, preflight: Preflight) -> Result<()> {
     if ask.is_empty() && saved_shape::read(&slug)?.is_none() {
         bail!("nothing to change — give at least one of --memory, --cpus, --privileged, --gpus.");
     }
-    recreate(Mode::Reshape(ask), Some(slug), Reach::Applied, false)
+    recreate(
+        Mode::Reshape(ask),
+        Some(slug),
+        Reach::Applied,
+        false,
+        preflight,
+    )
 }
 
 /// `ic sandbox reshape --later` — save the ask for the sandbox's next restart instead of restarting it now. It
@@ -815,7 +861,12 @@ struct Prepared<'a> {
     env_hash: Option<&'a str>,
 }
 
-fn record_staged(what: Prepared<'_>, saved: &record::ChannelRecord, log: &Log) -> Result<()> {
+fn record_staged(
+    plan: Option<&str>,
+    what: Prepared<'_>,
+    saved: &record::ChannelRecord,
+    log: &Log,
+) -> Result<()> {
     let version = staged::image_version(what.image);
     record::write(
         what.slug,
@@ -833,6 +884,7 @@ fn record_staged(what: Prepared<'_>, saved: &record::ChannelRecord, log: &Log) -
         version.as_deref(),
         what.channel,
         what.image,
+        plan,
         log,
     );
     match &version {
@@ -899,6 +951,22 @@ fn overlay_outcome(copied: bool, has_one: bool) -> Overlay {
 fn overlay_exists(container: &str) -> bool {
     docker::exec_ok(container, &["test", "-f", APPROVED_FILE])
         || docker::container_env_value(container, "SANDBOX_ENVIRONMENT_HASH").is_some()
+}
+
+/// The dev wrapper's binds of the checkout's compiled trees over the image's baked copies (dev-mounts.mjs), so a
+/// daemon edit restarts in seconds instead of a rebuild — newline-separated -v specs, straight through. Read by
+/// the launch and by the pre-flight alike: the tree mounted over `/opt/sandbox/dist` is the engine that will
+/// run, so it is the engine that has to be asked.
+fn dev_mounts() -> Vec<String> {
+    std::env::var("INTENTIC_DEV_MOUNTS")
+        .map(|mounts| {
+            mounts
+                .lines()
+                .filter(|line| !line.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Stage the sandbox's approved overlay at `dest` for the flow to build from. True when there is one; false

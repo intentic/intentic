@@ -2,8 +2,10 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { CONTROL_SCOPES, type ControlReach, type ControlScope, ControlScopeSchema, roleAtLeast, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import { objectParse } from "../store/unknown-keys.js";
+import { stateRelPath } from "../state-paths.js";
 import { tokenEquals } from "./auth.js";
 import { routeFloor } from "./role-floor.js";
 
@@ -32,6 +34,8 @@ const StoredTokenSchema = z.object({
 const StoredTokensSchema = z.object({ tokens: z.array(StoredTokenSchema) });
 type StoredToken = z.infer<typeof StoredTokenSchema>;
 type StoredTokens = z.infer<typeof StoredTokensSchema>;
+
+export const controlTokensDocument = defineDocument({ path: stateRelPath(".intentic/identity/control-tokens.json"), schema: StoredTokensSchema });
 
 export type ControlTokenSummary = Omit<StoredToken, "hash">;
 
@@ -67,6 +71,7 @@ export const fileControlTokens = (path: string): ControlTokens => {
     const file = jsonFile<StoredTokens>(path, {
         parse: objectParse(StoredTokensSchema),
         fallback: () => ({ tokens: [] }),
+        document: controlTokensDocument,
     });
     const live = (entry: StoredToken, now: number): boolean => entry.expiresAt === undefined || entry.expiresAt > now;
     return {

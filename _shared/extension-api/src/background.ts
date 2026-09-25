@@ -1,3 +1,20 @@
+import {
+    at,
+    carryUnknown,
+    type Conversion,
+    convertDocument,
+    drop,
+    dropAll,
+    fold,
+    type Granularity,
+    mapValue,
+    nested,
+    pinDefault,
+    rename,
+    retireEntries,
+    retype,
+    transform,
+} from "@intentic/sandbox-contract/documents";
 import type { Ref } from "vue";
 import type { Disposable, IntenticApi } from "./api.js";
 import { sandboxRef, sandboxScopeGuard } from "./scope.js";
@@ -214,4 +231,80 @@ export const sandboxLedger = (host: () => IntenticApi, path: string): SandboxLed
         mark: async (entries) => settle((seen) => ({ ...seen, ...entries })),
         replace: async (entries) => settle(() => entries),
     };
+};
+
+// The vocabulary an extension's stored file evolves by, the same the daemon's own stores use: each a guarded, pure
+// rewrite of the raw JSON, a no-op on a file already past it, so a file from any earlier version of the extension reads
+// as today's shape. One namespace rather than ten loose names, since `rename` and `drop` are an author's words too.
+export const conversions = { at, drop, dropAll, fold, mapValue, nested, pinDefault, rename, retireEntries, retype, transform } as const;
+
+// A file an extension keeps under the workspace (its own record, cache or settings), read through the conversions its
+// shape has had, and written with everything a NEWER version of the extension put in it kept in place, so switching an
+// extension back never deletes what the later version recorded. A file that exists but cannot be read is left alone:
+// `update` rejects rather than writing its fallback over it.
+export interface SandboxDocument<T> {
+    // Today's value: the file converted and parsed; the fallback when it is absent or this version cannot read it.
+    read(): Promise<T>;
+    // Read-change-write, serialized through this handle. Returning `current` unchanged writes nothing; `false` means only
+    // that the sandbox changed mid-write, and nothing was written.
+    update(change: (current: T) => T): Promise<boolean>;
+}
+
+export interface SandboxDocumentOptions<T> {
+    // Today's shape, or undefined for a file this version cannot read.
+    readonly parse: (raw: unknown) => T | undefined;
+    readonly fallback: () => T;
+    // Append-only: a conversion is never edited or removed once shipped, only followed by another.
+    readonly history?: readonly Conversion[];
+    // Where the conversions apply: the document, each entry of a top-level array, or each value of an object keyed by id.
+    readonly granularity?: Granularity;
+}
+
+export const sandboxDocument = <T>(host: () => IntenticApi, path: string, options: SandboxDocumentOptions<T>): SandboxDocument<T> => {
+    const convert = (raw: unknown): unknown => convertDocument(options.history ?? [], options.granularity ?? `object`, raw).value;
+    // Absent is undefined; present but unreadable throws, so no caller mistakes it for absent.
+    const readRaw = async (): Promise<unknown> => {
+        // Through the contract's own read, which throws for a refused or unreachable read where `readJson` answers absent.
+        const answer = await host().sandbox.rpc.workspace.file({ path });
+        if (!answer.present) {
+            return undefined;
+        }
+        return convert(JSON.parse(answer.content));
+    };
+    const read = async (): Promise<T> => {
+        try {
+            const raw = await readRaw();
+            return (raw === undefined ? undefined : options.parse(raw)) ?? options.fallback();
+        } catch {
+            // silent-catch: a file this version cannot read reads as the fallback, the contract `read` states.
+            return options.fallback();
+        }
+    };
+    let queue: Promise<unknown> = Promise.resolve();
+    const update = (change: (current: T) => T): Promise<boolean> => {
+        const run = async (): Promise<boolean> => {
+            const current = sandboxScopeGuard();
+            const raw = await readRaw();
+            const parsed = raw === undefined ? undefined : options.parse(raw);
+            if (raw !== undefined && parsed === undefined) {
+                throw new Error(`${path} holds what this version of the extension cannot read; it is left as it is`);
+            }
+            const before = parsed ?? options.fallback();
+            const after = change(before);
+            if (after === before) {
+                return true;
+            }
+            if (!current()) {
+                return false;
+            }
+            const written = raw === undefined ? after : carryUnknown(raw, parsed, after);
+            await host().workspace.write(path, `${JSON.stringify(written, undefined, 2)}\n`);
+            return true;
+        };
+        const next = queue.then(run, run);
+        // silent-catch: the queue only orders the next update behind this one; this one's caller still gets its rejection
+        queue = next.catch(() => undefined);
+        return next;
+    };
+    return { read, update };
 };

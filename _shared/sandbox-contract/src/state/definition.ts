@@ -48,9 +48,10 @@ const bareField = (field: z.ZodType): z.ZodType => {
     return inner;
 };
 
-const definitionSettings = (): z.ZodType<Partial<z.infer<typeof SandboxSettingsSchema>>> => {
+// Typed as the prefault it is, so the static input type says what the runtime does: an absent table is accepted.
+const definitionSettings = (): z.ZodPrefault<z.ZodType<Partial<z.infer<typeof SandboxSettingsSchema>>>> => {
     const shape = Object.fromEntries(Object.entries(SandboxSettingsSchema.shape).map(([key, field]) => [key, bareField(field).optional()]));
-    return z.strictObject(shape).prefault({}) as unknown as z.ZodType<Partial<z.infer<typeof SandboxSettingsSchema>>>;
+    return z.strictObject(shape).prefault({}) as unknown as z.ZodPrefault<z.ZodType<Partial<z.infer<typeof SandboxSettingsSchema>>>>;
 };
 
 export const SandboxDefinitionSchema = z.strictObject({

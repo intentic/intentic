@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
-import { type JsonFile, jsonFile, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
+import { rename, retype } from "./conversions.js";
+import { defineDocument, type DocumentSpec } from "./documents.js";
+import { type JsonFile, jsonEntries, jsonFile, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
+import { clearNewestRun, recordNewestRun } from "./newest-run.js";
 
 const dirs: string[] = [];
 const tempFile = async (name = "state.json"): Promise<string> => {
@@ -188,4 +191,111 @@ test("writes leave no temp file behind, and apply the requested mode", async () 
     // Only the rename target should exist; a leftover *.tmp means the swap never completed.
     expect(await readdir(join(path, ".."))).toEqual([`state.json`]);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
+});
+
+// Writes content where a test file lives; tempFile leaves the state dir uncreated on purpose.
+const seed = async (path: string, value: unknown): Promise<void> => {
+    await mkdir(join(path, ".."), { recursive: true });
+    await writeFile(path, JSON.stringify(value));
+};
+
+describe("evolution", () => {
+    const Settings = z.object({ theme: z.string().default("light"), agent: z.object({ model: z.string() }).optional() });
+    type Settings = z.infer<typeof Settings>;
+    const settingsFile = (path: string, document?: DocumentSpec): JsonFile<Settings> =>
+        jsonFile<Settings>(path, {
+            parse: (raw) => Settings.safeParse(raw).data,
+            fallback: () => Settings.parse({}),
+            ...(document === undefined ? {} : { document }),
+        });
+
+    afterEach(() => {
+        clearNewestRun();
+    });
+
+    test("a save by this build keeps the keys a newer build wrote, at any depth", async () => {
+        const path = await tempFile();
+        await seed(path, { theme: "dark", agent: { model: "m", effort: "high" }, pins: [1] });
+        await settingsFile(path).update((current) => ({ ...current, theme: "light" }));
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ theme: "light", agent: { model: "m", effort: "high" }, pins: [1] });
+    });
+
+    test("a document's conversions run on every read, and the next save writes today's shape", async () => {
+        const path = await tempFile();
+        const document = defineDocument({ path: "evolution/settings.json", schema: Settings, history: [rename("colour", "theme")] });
+        await seed(path, { colour: "dark" });
+        const file = settingsFile(path, document);
+        expect(await file.read()).toEqual({ theme: "dark" });
+        // Reading converts in memory only; the bytes change on the next save.
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ colour: "dark" });
+        await file.update((current) => ({ ...current, agent: { model: "m" } }));
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ theme: "dark", agent: { model: "m" } });
+    });
+
+    test("a conversion that throws leaves the file unreadable, never half converted", async () => {
+        const path = await tempFile();
+        const failing = retype(
+            "theme",
+            (value): value is number => typeof value === "number",
+            () => {
+                throw new Error("no such theme");
+            },
+            "converts numbered themes",
+        );
+        await seed(path, { theme: 3 });
+        expect(await settingsFile(path, defineDocument({ path: "evolution/failing.json", schema: Settings, history: [failing] })).state()).toEqual({
+            value: { theme: "light" },
+            unreadable: true,
+            detail: 'a conversion to this build\'s shape failed (conversion "converts numbered themes" failed: no such theme)',
+        });
+    });
+
+    test("after a newer build ran here, content this build cannot read is refused rather than set aside", async () => {
+        const path = await tempFile();
+        await recordNewestRun(join(path, "..", ".."), "9.0.0");
+        await seed(path, { theme: { from: "a newer build" } });
+        await expect(settingsFile(path).update(() => ({ theme: "light" }))).rejects.toThrow(
+            "state.json could not be read by this build (the file does not match what this build expects; a newer intentic wrote it)",
+        );
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ theme: { from: "a newer build" } });
+        expect(await readdir(join(path, ".."))).toEqual(["local", "state.json"]);
+    });
+});
+
+describe("jsonEntries", () => {
+    const Entry = z.object({ id: z.string(), kind: z.enum(["cron", "webhook"]) });
+    type Entry = z.infer<typeof Entry>;
+    const entries = (path: string): JsonFile<Entry[]> => jsonEntries<Entry>(path, { entry: (raw) => Entry.safeParse(raw).data });
+
+    test("one entry this build cannot read no longer empties the file, and survives the next save", async () => {
+        const path = await tempFile();
+        await seed(path, [
+            { id: "a", kind: "cron" },
+            { id: "b", kind: "from-the-future" },
+            { id: "c", kind: "webhook" },
+        ]);
+        const file = entries(path);
+        expect(await file.read()).toEqual([
+            { id: "a", kind: "cron" },
+            { id: "c", kind: "webhook" },
+        ]);
+        await file.update((current) => current.filter((entry) => entry.id !== "c"));
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual([
+            { id: "a", kind: "cron" },
+            { id: "b", kind: "from-the-future" },
+        ]);
+    });
+
+    test("an entry the save replaces by id takes the unreadable one's place", async () => {
+        const path = await tempFile();
+        await seed(path, [{ id: "b", kind: "from-the-future" }]);
+        await entries(path).update((current) => [...current, { id: "b", kind: "cron" }]);
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual([{ id: "b", kind: "cron" }]);
+    });
+
+    test("a file that is not an array at all is still unreadable", async () => {
+        const path = await tempFile();
+        await seed(path, { id: "a" });
+        expect(await entries(path).state()).toEqual({ value: [], unreadable: true, detail: "the file does not match what this build expects" });
+    });
 });

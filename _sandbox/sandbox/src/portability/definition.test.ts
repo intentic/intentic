@@ -1,5 +1,5 @@
 import type { SandboxDefinition } from "@intentic/sandbox-contract";
-import { definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinitionToml, settingsDefinition, settingsDrift } from "./definition.js";
+import { definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinitionToml, settingsDefinition, settingsDrift, unreadableDefinition } from "./definition.js";
 
 // Round-trip promises: emit then parse is byte-identical, emission is deterministic, and a bad document fails naming
 // the field.
@@ -153,4 +153,40 @@ test("settingsDrift names each differing key once, with defaults meaning agreeme
     expect(lines).toHaveLength(1);
     expect(lines[0]?.subject).toBe("Setting hashlineEdits");
     expect(lines[0]?.detail).toContain("true");
+});
+
+describe("a definition from an earlier release", () => {
+    test("applies: retired settings are dropped and a host connection reads as a device", () => {
+        const old = [
+            "schemaVersion = 1",
+            "",
+            "[settings]",
+            "hashlineEdits = true",
+            "terseOutput = true",
+            'personaRouting = "auto"',
+            "",
+            "[[capabilities]]",
+            'id = "laptop"',
+            'kind = "host"',
+            'config = { platform = "linux", shell = "on", write = "on", screen = "off", control = "off", sandboxes = "off", destructive = "off" }',
+            "",
+        ].join("\n");
+        const applied = parseDefinitionToml(old);
+        expect(applied.settings).toEqual({ hashlineEdits: true, personaRouting: true });
+        expect(applied.capabilities).toEqual([
+            {
+                id: "laptop",
+                kind: "device",
+                config: { platform: "linux", shell: "on", write: "on", screen: "off", control: "off", sandboxes: "off", destructive: "off" },
+            },
+        ]);
+    });
+
+    test("a field never seen before is still refused, and a newer release's file says to update", () => {
+        const future = "# written by intentic 9.0.0\nschemaVersion = 1\n[settings]\nwarpDrive = true\n";
+        expect(() => parseDefinitionToml(future)).toThrow('this is TOML but not a sandbox definition: settings: Unrecognized key: "warpDrive"');
+        expect(unreadableDefinition(future, 'settings: Unrecognized key: "warpDrive"', "1.400.0").message).toBe(
+            'this definition was written by intentic 9.0.0, newer than this sandbox (1.400.0); update the sandbox to apply it (settings: Unrecognized key: "warpDrive")',
+        );
+    });
 });

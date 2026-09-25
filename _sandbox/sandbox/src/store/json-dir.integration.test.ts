@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
+import { rename } from "./conversions.js";
+import { defineDocument } from "./documents.js";
 import { jsonDir } from "./json-dir.js";
 import { ManifestUnreadableError } from "./json-file.js";
 
@@ -101,4 +103,17 @@ test("remove unlinks the entry; a second remove reports missing", async () => {
     expect(await store.remove("doomed")).toBe(true);
     expect(await store.remove("doomed")).toBe(false);
     expect(await store.read("doomed")).toBeUndefined();
+});
+
+test("a document's conversions run on each file, and a write keeps the keys a newer build left in it", async () => {
+    const dir = await tempDir();
+    const document = defineDocument({ path: "evolution/notes/", schema: NoteSchema, history: [rename("body", "text")] });
+    const store = jsonDir(dir, (raw) => NoteSchema.safeParse(raw).data, document);
+    await store.write("seed", { text: "placeholder" });
+    await writeFile(join(dir, "old.json"), JSON.stringify({ body: "from an older build" }));
+    await writeFile(join(dir, "new.json"), JSON.stringify({ text: "hi", pinned: true }));
+
+    expect(await store.read("old")).toEqual({ text: "from an older build", id: "old" });
+    await store.write("new", { text: "edited" });
+    expect(JSON.parse(await readFile(join(dir, "new.json"), "utf8"))).toEqual({ text: "edited", pinned: true });
 });

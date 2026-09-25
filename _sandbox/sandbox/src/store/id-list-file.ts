@@ -1,5 +1,7 @@
 import type { z } from "zod";
+import type { DocumentSpec } from "./documents.js";
 import { jsonFile } from "./json-file.js";
+import { carryUnknown } from "./passthrough.js";
 
 // JSON file store for entries keyed by id: an invalid entry is skipped and reported rather than thrown, and writes
 // preserve unknown fields so an entry from a newer build survives a rollback.
@@ -25,6 +27,7 @@ export const idListFile = <T extends { readonly id: string }>(
     path: string,
     schema: z.ZodType<T>,
     onInvalid?: (id: string, reason: string) => void,
+    document?: DocumentSpec,
 ): IdListStore<T> => {
     // `${id}\0${reason}` of every entry the previous read could not parse.
     let reported = new Set<string>();
@@ -53,6 +56,7 @@ export const idListFile = <T extends { readonly id: string }>(
             return raw;
         },
         fallback: () => [],
+        ...(document === undefined ? {} : { document }),
     });
     const read = async (): Promise<T[]> =>
         (await file.read()).flatMap((entry) => {
@@ -62,8 +66,14 @@ export const idListFile = <T extends { readonly id: string }>(
     return {
         list: read,
         get: async (id) => (await read()).find((entry) => entry.id === id),
+        // The replaced entry's keys this build does not know ride along, so an edit after a rollback keeps them.
         upsert: async (value) => {
-            await file.update((entries) => [...entries.filter((entry) => rawId(entry) !== value.id), value]);
+            await file.update((entries) => {
+                const before = entries.find((entry) => rawId(entry) === value.id);
+                const parsed = before === undefined ? undefined : schema.safeParse(before).data;
+                const written = before === undefined || parsed === undefined ? value : carryUnknown(before, parsed, value);
+                return [...entries.filter((entry) => rawId(entry) !== value.id), written];
+            });
         },
         remove: async (id) => {
             let removed = false;

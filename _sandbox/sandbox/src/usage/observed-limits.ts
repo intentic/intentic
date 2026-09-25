@@ -1,5 +1,6 @@
 import { type AccountUsage, gatingWindows, humanizeModelId, type ModelRef, type UsageWindow } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import type { TurnLimit } from "./fleet-limit.js";
 
@@ -19,7 +20,15 @@ export type ObservedLimit = z.infer<typeof StoredLimitSchema>;
 
 // `${provider}:${account}` to the models that account is out of; the account is the unit a person switches between, and
 // the model is the pool.
-const StoredSchema = z.record(z.string(), z.record(z.string(), StoredLimitSchema));
+const StoredSpendSchema = z.record(z.string(), StoredLimitSchema);
+const StoredSchema = z.record(z.string(), StoredSpendSchema);
+
+export const observedLimitsDocument = defineDocument({
+    root: "history",
+    path: "observed-limits.json",
+    schema: StoredSpendSchema,
+    granularity: "record",
+});
 
 export type ObservedSpend = Record<string, ObservedLimit>;
 
@@ -41,6 +50,7 @@ export const fileObservedLimitStore = (path: string): ObservedLimitStore => {
     const file = jsonFile<Record<string, ObservedSpend>>(path, {
         parse: (raw) => StoredSchema.safeParse(raw).data,
         fallback: () => ({}),
+        document: observedLimitsDocument,
     });
     return {
         spent: async (provider, account) => {

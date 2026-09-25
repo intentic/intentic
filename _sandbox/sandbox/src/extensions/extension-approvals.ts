@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { diffPowerMaps, type ExtensionManifest, powersOf, type PowersDiff } from "@intentic/extension-manifest";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 
 /* The owner's yes to each workspace extension, pinned by its id and a digest of the powers it declared then. Kept under
@@ -13,12 +14,20 @@ const LedgerSchema = z.object({
 });
 type Ledger = z.infer<typeof LedgerSchema>;
 
+export const extensionApprovalsDocument = defineDocument({ root: "history", path: "extension-approvals.json", schema: LedgerSchema });
+
 // Memoized per path, so every writer of one file shares its update queue (json-file.ts).
 const ledgers = new Map<string, JsonFile<Ledger>>();
 
 const ledgerOf = (historyRoot: string): JsonFile<Ledger> => {
     const path = join(historyRoot, "extension-approvals.json");
-    const file = ledgers.get(path) ?? jsonFile<Ledger>(path, { parse: (raw) => LedgerSchema.safeParse(raw).data, fallback: () => ({ approved: {} }) });
+    const file =
+        ledgers.get(path) ??
+        jsonFile<Ledger>(path, {
+            parse: (raw) => LedgerSchema.safeParse(raw).data,
+            fallback: () => ({ approved: {} }),
+            document: extensionApprovalsDocument,
+        });
     ledgers.set(path, file);
     return file;
 };

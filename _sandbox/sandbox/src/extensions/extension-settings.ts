@@ -1,15 +1,23 @@
 import { z } from "zod";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
+import { defineDocument } from "../store/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath } from "../state-paths.js";
+import { statePath, stateRelPath } from "../state-paths.js";
 
 // Per-extension settings (.intentic/config/extension-settings.json), keyed by the manifest id (publisher.name).
 // Not the capability entry id, so values survive a remove/re-add; secret values live in the vault instead.
 // Writes go to the vault first: the failure mode is an orphaned vault row, never a credential in the tracked file.
 
-const FileSchema = z.record(z.string(), z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])));
+const ExtensionSettingsSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
+const FileSchema = z.record(z.string(), ExtensionSettingsSchema);
 type SettingsFile = z.infer<typeof FileSchema>;
 export type ExtensionSettings = SettingsFile[string];
+
+export const extensionSettingsDocument = defineDocument({
+    path: stateRelPath(".intentic/config/extension-settings.json"),
+    schema: ExtensionSettingsSchema,
+    granularity: "record",
+});
 
 // Memoized per root: the write queue lives on the object; a fresh instance per call would drop concurrent writes.
 const files = new Map<string, JsonFile<SettingsFile>>();
@@ -20,7 +28,11 @@ const settingsFile = (root: string): JsonFile<SettingsFile> => {
     if (existing !== undefined) {
         return existing;
     }
-    const file = jsonFile<SettingsFile>(path, { parse: (raw) => FileSchema.safeParse(raw).data, fallback: () => ({}) });
+    const file = jsonFile<SettingsFile>(path, {
+        parse: (raw) => FileSchema.safeParse(raw).data,
+        fallback: () => ({}),
+        document: extensionSettingsDocument,
+    });
     files.set(path, file);
     return file;
 };

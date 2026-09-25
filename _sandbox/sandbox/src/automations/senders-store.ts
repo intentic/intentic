@@ -1,6 +1,8 @@
 import { type ListenerMessage, type SenderSeen, SenderSeenSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Who has written to each listener source (.intentic/records/senders.json): the roster the sender rules picker offers
 // by name while storing the id. Kept per provider, since a Discord user id means nothing on Slack. Written for every
@@ -9,8 +11,11 @@ import { jsonFile } from "../store/json-file.js";
 // Per provider; the least recently heard is dropped first, so whoever is actually writing is never the one evicted.
 export const SENDERS_KEPT = 200;
 
-const FileSchema = z.record(z.string(), z.record(z.string(), SenderSeenSchema.omit({ id: true })));
+const RosterSchema = z.record(z.string(), SenderSeenSchema.omit({ id: true }));
+const FileSchema = z.record(z.string(), RosterSchema);
 type SendersFile = z.infer<typeof FileSchema>;
+
+export const sendersDocument = defineDocument({ path: stateRelPath(".intentic/records/senders.json"), schema: RosterSchema, granularity: "record" });
 
 export interface SendersStore {
     // Newest first.
@@ -29,7 +34,7 @@ const evict = (roster: SendersFile[string]): SendersFile[string] => {
 };
 
 export const fileSendersStore = (path: string): SendersStore => {
-    const file = jsonFile<SendersFile>(path, { parse: (raw) => FileSchema.safeParse(raw).data, fallback: () => ({}) });
+    const file = jsonFile<SendersFile>(path, { parse: (raw) => FileSchema.safeParse(raw).data, fallback: () => ({}), document: sendersDocument });
     return {
         list: async (provider) =>
             Object.entries((await file.read())[provider] ?? {})

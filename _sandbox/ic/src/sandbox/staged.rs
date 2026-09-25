@@ -12,20 +12,20 @@ const MARKER: &str = "/history/update-staged.json";
 /// Tell the sandbox what is built and waiting for it. Best-effort by construction: the staged image and the
 /// host record are the real outcome of a prepare, and a container that is stopped, wedged or too old to hold
 /// the file must not turn a successful build into a failed command. The card simply reads as it did before.
-pub fn announce(container: &str, version: Option<&str>, channel: &str, image: &str, log: &Log) {
+/// `plan` is the staged build's state pre-flight (preflight::staged_plan), already JSON; absent when none was had.
+pub fn announce(
+    container: &str,
+    version: Option<&str>,
+    channel: &str,
+    image: &str,
+    plan: Option<&str>,
+    log: &Log,
+) {
     let at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|since| since.as_millis())
         .unwrap_or(0);
-    let mut fields = vec![
-        format!("\"channel\":\"{}\"", escape(channel)),
-        format!("\"image\":\"{}\"", escape(image)),
-        format!("\"at\":{at}"),
-    ];
-    if let Some(version) = version {
-        fields.insert(0, format!("\"version\":\"{}\"", escape(version)));
-    }
-    let json = format!("{{{}}}", fields.join(","));
+    let json = marker(version, channel, image, at, plan);
     let script = format!("cat > {MARKER}.tmp && mv {MARKER}.tmp {MARKER}");
     log.section("announcing the staged update to the sandbox");
     log.line(&json);
@@ -34,6 +34,31 @@ pub fn announce(container: &str, version: Option<&str>, channel: &str, image: &s
         json.as_bytes(),
         log,
     );
+}
+
+/// The marker's JSON. Pure, so its shape is asserted without a container.
+fn marker(
+    version: Option<&str>,
+    channel: &str,
+    image: &str,
+    at: u128,
+    plan: Option<&str>,
+) -> String {
+    let mut fields = vec![
+        format!("\"channel\":\"{}\"", escape(channel)),
+        format!("\"image\":\"{}\"", escape(image)),
+        format!("\"at\":{at}"),
+    ];
+    if let Some(version) = version {
+        fields.insert(0, format!("\"version\":\"{}\"", escape(version)));
+    }
+    // Written by preflight::marker_json from serde_json, so it is JSON by construction; anything else is left out
+    // rather than allowed to make the whole marker unreadable.
+    if let Some(plan) = plan.filter(|plan| serde_json::from_str::<serde_json::Value>(plan).is_ok())
+    {
+        fields.push(format!("\"plan\":{plan}"));
+    }
+    format!("{{{}}}", fields.join(","))
 }
 
 /// Take the offer back — the sandbox has just moved onto an image, or what was staged stopped being the right
@@ -99,6 +124,32 @@ fn is_version(token: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_marker_carries_the_staged_builds_plan_when_there_is_one() {
+        let plan = r#"{"ok":true,"downgrade":false,"steps":[{"document":"settings.json","change":"renames a to b"}]}"#;
+        let marker = marker(Some("1.320.0"), "stable", "img:1", 7, Some(plan));
+        let parsed: serde_json::Value = serde_json::from_str(&marker).expect("the marker is JSON");
+        assert_eq!(parsed["version"], "1.320.0");
+        assert_eq!(parsed["plan"]["steps"][0]["change"], "renames a to b");
+        // No plan, no key: the daemon reads the marker exactly as before.
+        let bare: serde_json::Value =
+            serde_json::from_str(&marker_without_plan()).expect("still JSON");
+        assert!(bare.get("plan").is_none());
+    }
+
+    #[test]
+    fn a_plan_that_is_not_json_is_left_out_rather_than_breaking_the_marker() {
+        let parsed: serde_json::Value =
+            serde_json::from_str(&marker(None, "stable", "img:1", 7, Some("{not json")))
+                .expect("still JSON");
+        assert!(parsed.get("plan").is_none());
+        assert_eq!(parsed["channel"], "stable");
+    }
+
+    fn marker_without_plan() -> String {
+        marker(None, "stable", "img:1", 7, None)
+    }
 
     #[test]
     fn a_version_is_read_out_of_whatever_shape_the_cli_prints_it_in() {

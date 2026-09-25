@@ -1,7 +1,8 @@
 import type { ChoreLedgerEntry, ProbeId, ProbeResult } from "@intentic/sandbox-contract";
 import { ChoreLedgerEntrySchema, ProbeResultSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { jsonFile } from "../store/json-file.js";
+import { defineDocument } from "../store/documents.js";
+import { jsonEntries, jsonFile } from "../store/json-file.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Persists two files under .intentic/records/chores/: a probe cache and a ledger of actions. In .intentic, not a repo,
@@ -11,9 +12,14 @@ import { stateRelPath } from "../state-paths.js";
 export const PROBES_FILE = stateRelPath(".intentic/records/chores/", "probes.json");
 export const LEDGER_FILE = stateRelPath(".intentic/records/chores/", "ledger.json");
 
+export const choreLedgerDocument = defineDocument({ path: LEDGER_FILE, schema: ChoreLedgerEntrySchema, granularity: "entries" });
+
 // repo -> probe id -> its last result; the workspace's own root repo is keyed by the empty string.
-const ProbeCacheSchema = z.record(z.string(), z.record(z.string(), ProbeResultSchema));
+const RepoProbesSchema = z.record(z.string(), ProbeResultSchema);
+const ProbeCacheSchema = z.record(z.string(), RepoProbesSchema);
 export type ProbeCache = z.infer<typeof ProbeCacheSchema>;
+
+export const choreProbesDocument = defineDocument({ path: PROBES_FILE, schema: RepoProbesSchema, granularity: "record" });
 
 export interface ChoresStore {
     readonly probes: () => Promise<ProbeCache>;
@@ -27,11 +33,12 @@ export interface ChoresStore {
 }
 
 export const fileChoresStore = (probesPath: string, ledgerPath: string): ChoresStore => {
-    const probeFile = jsonFile<ProbeCache>(probesPath, { parse: (raw) => ProbeCacheSchema.safeParse(raw).data, fallback: () => ({}) });
-    const ledgerFile = jsonFile<ChoreLedgerEntry[]>(ledgerPath, {
-        parse: (raw) => z.array(ChoreLedgerEntrySchema).safeParse(raw).data,
-        fallback: () => [],
+    const probeFile = jsonFile<ProbeCache>(probesPath, {
+        parse: (raw) => ProbeCacheSchema.safeParse(raw).data,
+        fallback: () => ({}),
+        document: choreProbesDocument,
     });
+    const ledgerFile = jsonEntries<ChoreLedgerEntry>(ledgerPath, { entry: (raw) => ChoreLedgerEntrySchema.safeParse(raw).data, document: choreLedgerDocument });
     return {
         probes: probeFile.read,
         probesFor: async (repo) => Object.values((await probeFile.read())[repo] ?? {}),

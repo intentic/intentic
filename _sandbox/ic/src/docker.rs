@@ -1,5 +1,7 @@
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 use crate::logfile::Log;
 use crate::util::{bail, Fail, Result};
@@ -195,6 +197,86 @@ pub fn capture_with_stdin(args: &[&str], input: &[u8], log: &Log) -> Result<Stri
         bail!("docker run failed (see the log)");
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
+}
+
+/// What a bounded run left behind: how it ended, and everything it printed.
+pub struct Bounded {
+    /// The exit code; None when it did not exit on its own (the deadline ended it, or a signal did).
+    pub code: Option<i32>,
+    pub timed_out: bool,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+/// How often a bounded run is checked on. Its commands take seconds, so a tenth of one is noise on top.
+const BOUNDED_POLL: Duration = Duration::from_millis(100);
+
+/// How long the output of a finished or killed command is waited for before it is given up on (see [`collected`]).
+const BOUNDED_DRAIN: Duration = Duration::from_secs(2);
+
+/// Capture a docker command that must not be able to hang the flow: every other capture here waits as long as
+/// its child takes. Killing the CLI at the deadline is all this can do, though. A container that a `docker run`
+/// started keeps running inside the daemon without it, so a caller that starts one names it and removes it by
+/// that name when `timed_out` comes back.
+pub fn capture_bounded(args: &[&str], limit: Duration) -> Result<Bounded> {
+    bounded(docker(args), limit)
+}
+
+/// The deadline itself, for any command, so it can be exercised without a docker daemon. Both pipes drain on
+/// threads of their own: a child blocked writing into a full pipe never exits, which would turn every long
+/// answer into a timeout. A child is polled rather than waited on, because a blocking wait cannot be given up on.
+fn bounded(mut command: Command, limit: Duration) -> Result<Bounded> {
+    let program = command.get_program().to_string_lossy().into_owned();
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| Fail(format!("could not run {program}: {err}")))?;
+    let stdout = drain(child.stdout.take().expect("stdout was piped"));
+    let stderr = drain(child.stderr.take().expect("stderr was piped"));
+    let deadline = Instant::now() + limit;
+    let (code, timed_out) = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break (status.code(), false),
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(BOUNDED_POLL),
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break (None, true);
+            }
+            Err(err) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                bail!("could not wait for {program}: {err}");
+            }
+        }
+    };
+    Ok(Bounded {
+        code,
+        timed_out,
+        stdout: collected(&stdout),
+        stderr: collected(&stderr),
+    })
+}
+
+/// Read a pipe to its end on a thread of its own; the bytes arrive over the channel once it closes.
+fn drain(mut from: impl Read + Send + 'static) -> mpsc::Receiver<Vec<u8>> {
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = from.read_to_end(&mut bytes);
+        let _ = sender.send(bytes);
+    });
+    receiver
+}
+
+/// What a drained pipe held. Waited for, never joined: a grandchild that inherited the pipe keeps it open after
+/// the child is gone, and joining its reader would hand the flow straight back to the hang the deadline ended.
+fn collected(pipe: &mpsc::Receiver<Vec<u8>>) -> String {
+    pipe.recv_timeout(BOUNDED_DRAIN)
+        .map(|bytes| String::from_utf8_lossy(&bytes).trim_end().to_string())
+        .unwrap_or_default()
 }
 
 /// What a streamed command did: its exit, and the tail of what it printed. The log holds all of it, but the
@@ -404,6 +486,21 @@ pub fn image_id(image: &str) -> Option<String> {
 
 pub fn inspect(target: &str, format: &str) -> Option<String> {
     try_capture(&["inspect", "--format", format, target])
+}
+
+/// What a container has mounted at `destination`, spelled the way `-v` takes it back; None when nothing is.
+/// Read off the container rather than derived from its slug: that is the data its daemon actually runs on,
+/// whichever runner created it. Works on a stopped container, like every inspect.
+pub fn mount_source(container: &str, destination: &str) -> Option<String> {
+    inspect(container, &mount_source_format(destination)).filter(|source| !source.is_empty())
+}
+
+/// A named volume answers with its NAME (the path under docker's own data root is not a bind source anyone may
+/// hand back), anything else with its host path.
+fn mount_source_format(destination: &str) -> String {
+    format!(
+        "{{{{range .Mounts}}}}{{{{if eq .Destination \"{destination}\"}}}}{{{{if eq .Type \"volume\"}}}}{{{{.Name}}}}{{{{else}}}}{{{{.Source}}}}{{{{end}}}}{{{{end}}}}{{{{end}}}}"
+    )
 }
 
 pub fn container_exists(name: &str) -> bool {
@@ -666,9 +763,50 @@ fn pull_once(image: &str, log: &Log) -> Result<Streamed> {
 #[cfg(test)]
 mod tests {
     use super::{
-        docker_last_words, pull_refusal, pull_refusal_message, refusal_of,
+        docker_last_words, mount_source_format, pull_refusal, pull_refusal_message, refusal_of,
         wrong_container_platform, PullRefusal,
     };
+
+    #[test]
+    fn a_mount_is_named_the_way_docker_run_takes_it_back() {
+        // Byte for byte the template the /agent-auth replay used before it moved here: the recreate that mounts
+        // the shared credentials and the pre-flight that mounts /work and /history read one template.
+        assert_eq!(
+            mount_source_format("/agent-auth"),
+            "{{range .Mounts}}{{if eq .Destination \"/agent-auth\"}}{{if eq .Type \"volume\"}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}"
+        );
+        // The destination is matched exactly, so /work never also answers for a mount at /workspace.
+        assert!(mount_source_format("/work").contains("eq .Destination \"/work\"}}"));
+    }
+
+    /* THE ONE WAIT IN THIS FILE THAT GIVES UP, exercised on a real child: a probe that never exits must not hold an update with it. */
+
+    #[cfg(unix)]
+    #[test]
+    fn a_command_past_its_deadline_is_killed_and_what_it_printed_is_kept() {
+        let mut hangs = std::process::Command::new("sh");
+        // `exec`, so the killed child IS the sleep: a sleep left behind as a grandchild would hold the pipes open.
+        hangs.args(["-c", "echo started; exec sleep 30"]);
+        let began = std::time::Instant::now();
+        let ran = super::bounded(hangs, std::time::Duration::from_millis(300)).expect("sh runs");
+        assert!(ran.timed_out);
+        assert_eq!(ran.code, None);
+        assert_eq!(ran.stdout, "started");
+        // Far above the 300ms deadline, far below the 30s the child asked for: a hang bound, not a timing.
+        assert!(began.elapsed() < std::time::Duration::from_secs(10));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_command_that_finishes_in_time_reports_its_exit_and_both_streams() {
+        let mut answers = std::process::Command::new("sh");
+        answers.args(["-c", "echo '{\"plan\":1}'; echo oops >&2; exit 3"]);
+        let ran = super::bounded(answers, std::time::Duration::from_secs(20)).expect("sh runs");
+        assert!(!ran.timed_out);
+        assert_eq!(ran.code, Some(3));
+        assert_eq!(ran.stdout, "{\"plan\":1}");
+        assert_eq!(ran.stderr, "oops");
+    }
 
     // Verbatim from a runner launch on Windows whose network was missing.
     #[test]

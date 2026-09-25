@@ -13,6 +13,8 @@
 # Except the front's wire types: cargo writes them (_sandbox/front, front-wire), and they are committed because every
 # TypeScript build compiles against them with no Rust toolchain in reach.
 !_shared/sandbox-contract/src/front/generated
+# Every shape each stored document has had and the checks against them: history, committed like a lock file.
+!_sandbox/sandbox/src/store/generated
 **/out-tsc
 **/.astro
 **/.wrangler

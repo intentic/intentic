@@ -1,10 +1,18 @@
 import { type SafetyLogEntry, SafetyLogEntrySchema } from "@intentic/sandbox-contract";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
+import { stateRelPath } from "../state-paths.js";
 
 // What the safety policy actually decided, newest first: an owner could see a rule was set to "ask me" but not how
 // often it fired or on what. Every verdict is recorded, including allows, since a command the judge waved through
 // unasked is exactly what "why wasn't I asked" needs answered. Bounded and self-trimming (nothing reads it back to
 // decide anything); lives under `.intentic/local/` as derived state.
+
+export const safetyLogDocument = defineDocument({
+    path: stateRelPath(".intentic/local/safety-log.json"),
+    schema: SafetyLogEntrySchema,
+    granularity: "entries",
+});
 
 // Sized to be readable, not complete: enough for a week of ordinary work, small enough to load in one read.
 const KEPT = 200;
@@ -44,6 +52,7 @@ export const fileSafetyLog = (path: string): SafetyLog => {
             });
         },
         fallback: () => [],
+        document: safetyLogDocument,
     });
     return {
         recent: async () => [...(await file.read())].sort((left, right) => right.at - left.at),

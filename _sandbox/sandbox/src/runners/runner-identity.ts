@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { runnerEnrollUrl } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 import type { RunnerModeEnv } from "./runner-mode.js";
 
@@ -15,6 +16,9 @@ const RunnerIdentitySchema = z.object({
 });
 export type RunnerIdentity = z.infer<typeof RunnerIdentitySchema>;
 
+// One document for the two handles below, which open the same file.
+export const runnerIdentityDocument = defineDocument({ root: "history", path: "runner-identity.json", schema: RunnerIdentitySchema });
+
 export const runnerIdentityPath = (historyRoot: string): string => join(historyRoot, "runner-identity.json");
 
 export const readRunnerIdentity = async (historyRoot: string): Promise<RunnerIdentity | undefined> => {
@@ -22,6 +26,7 @@ export const readRunnerIdentity = async (historyRoot: string): Promise<RunnerIde
         parse: (raw) => RunnerIdentitySchema.safeParse(raw).data,
         fallback: () => undefined,
         mode: 0o600,
+        document: runnerIdentityDocument,
     });
     return await file.read();
 };
@@ -44,6 +49,7 @@ export const ensureRunnerIdentity = async (historyRoot: string, env: RunnerModeE
         parse: (raw) => RunnerIdentitySchema.safeParse(raw).data,
         fallback: () => undefined,
         mode: 0o600,
+        document: runnerIdentityDocument,
     });
     await file.update(() => identity);
     return identity;

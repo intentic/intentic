@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { type HookRequests, HookScriptSchema, SettingsHookSchema, type TurnNote } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { defineDocument } from "../store/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { type HookPlace, type HookSet, settingsHookSet } from "./settings-hooks.js";
 
@@ -14,6 +15,8 @@ const LedgerSchema = z.object({
 });
 type Ledger = z.infer<typeof LedgerSchema>;
 
+export const hookApprovalsDocument = defineDocument({ root: "history", path: "hook-approvals.json", schema: LedgerSchema });
+
 const StoredRequestSchema = z.object({
     seenAt: z.number(),
     conversationId: z.string().optional(),
@@ -24,6 +27,8 @@ const StoredRequestSchema = z.object({
 const RequestsSchema = z.object({ requests: z.record(z.string(), StoredRequestSchema) });
 type Requests = z.infer<typeof RequestsSchema>;
 
+export const hookRequestsDocument = defineDocument({ root: "history", path: "hook-requests.json", schema: RequestsSchema });
+
 // Newest kept: an older set nobody answered is one the workspace has since moved past.
 const REQUESTS_KEPT = 20;
 
@@ -33,7 +38,13 @@ const requestFiles = new Map<string, JsonFile<Requests>>();
 
 const ledgerOf = (historyRoot: string): JsonFile<Ledger> => {
     const path = join(historyRoot, "hook-approvals.json");
-    const file = ledgers.get(path) ?? jsonFile<Ledger>(path, { parse: (raw) => LedgerSchema.safeParse(raw).data, fallback: () => ({ approved: {} }) });
+    const file =
+        ledgers.get(path) ??
+        jsonFile<Ledger>(path, {
+            parse: (raw) => LedgerSchema.safeParse(raw).data,
+            fallback: () => ({ approved: {} }),
+            document: hookApprovalsDocument,
+        });
     ledgers.set(path, file);
     return file;
 };
@@ -41,7 +52,12 @@ const ledgerOf = (historyRoot: string): JsonFile<Ledger> => {
 const requestsOf = (historyRoot: string): JsonFile<Requests> => {
     const path = join(historyRoot, "hook-requests.json");
     const file =
-        requestFiles.get(path) ?? jsonFile<Requests>(path, { parse: (raw) => RequestsSchema.safeParse(raw).data, fallback: () => ({ requests: {} }) });
+        requestFiles.get(path) ??
+        jsonFile<Requests>(path, {
+            parse: (raw) => RequestsSchema.safeParse(raw).data,
+            fallback: () => ({ requests: {} }),
+            document: hookRequestsDocument,
+        });
     requestFiles.set(path, file);
     return file;
 };

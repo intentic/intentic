@@ -24,8 +24,9 @@ import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { capabilityFragments } from "../environment/fragment-sources.js";
+import { defineDocument } from "../store/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath } from "../state-paths.js";
+import { statePath, stateRelPath } from "../state-paths.js";
 import { readExtensionEnablement, writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, processesDesired, reconcileListenerProcesses, startAutoStartProcesses } from "./extension-processes.js";
 import { extensionRuntimeAbsent } from "./extension-readiness.js";
@@ -50,10 +51,13 @@ type UpdateRecord = z.infer<typeof RecordSchema>;
 const StateSchema = z.object({ checkedAt: z.string().optional(), extensions: z.record(z.string(), RecordSchema) });
 type UpdateState = z.infer<typeof StateSchema>;
 
+export const extensionUpdatesDocument = defineDocument({ path: stateRelPath(".intentic/records/extension-updates.json"), schema: StateSchema });
+
 const stateFile = (root: string): JsonFile<UpdateState> =>
     jsonFile<UpdateState>(statePath(root, ".intentic/records/extension-updates.json"), {
         parse: (raw) => StateSchema.safeParse(raw).data,
         fallback: () => ({ extensions: {} }),
+        document: extensionUpdatesDocument,
     });
 
 export const readExtensionUpdateState = async (root: string): Promise<UpdateState> => stateFile(root).read();
@@ -73,14 +77,18 @@ const patchRecord = async (root: string, identity: string, patch: (record: Updat
 
 // Policy: .intentic/config/extension-update-policy.json; absent defaults to notify updates, auto-disable advisories.
 
-const PolicyFileSchema = z.record(
-    z.string(),
-    z.object({
-        updates: z.enum(["notify", "agent", "auto"]).optional(),
-        advisories: z.enum(["auto-disable", "notify"]).optional(),
-    }),
-);
+const PolicySchema = z.object({
+    updates: z.enum(["notify", "agent", "auto"]).optional(),
+    advisories: z.enum(["auto-disable", "notify"]).optional(),
+});
+const PolicyFileSchema = z.record(z.string(), PolicySchema);
 type PolicyFile = z.infer<typeof PolicyFileSchema>;
+
+export const extensionUpdatePolicyDocument = defineDocument({
+    path: stateRelPath(".intentic/config/extension-update-policy.json"),
+    schema: PolicySchema,
+    granularity: "record",
+});
 
 const policyFiles = new Map<string, JsonFile<PolicyFile>>();
 const policyFile = (root: string): JsonFile<PolicyFile> => {
@@ -89,7 +97,11 @@ const policyFile = (root: string): JsonFile<PolicyFile> => {
     if (existing !== undefined) {
         return existing;
     }
-    const file = jsonFile<PolicyFile>(path, { parse: (raw) => PolicyFileSchema.safeParse(raw).data, fallback: () => ({}) });
+    const file = jsonFile<PolicyFile>(path, {
+        parse: (raw) => PolicyFileSchema.safeParse(raw).data,
+        fallback: () => ({}),
+        document: extensionUpdatePolicyDocument,
+    });
     policyFiles.set(path, file);
     return file;
 };

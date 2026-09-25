@@ -1,6 +1,6 @@
 // The extension API's protocol version, the value `engines.intentic` ranges are matched against at load, and
 // the value the host reports as IntenticApi.apiVersion. Bumped ONLY with the published package: additive
-// surface = minor, breaking = major. This package is the one deliberate exception to the repo's no-legacy rule.
+// surface = minor, breaking = major; published, so its surface only grows within a major.
 //
 // 1.0.0 rather than 0.5.0, and the reason is the drift that forced that bump. While the major was 0 the caret
 // matcher treats the MINOR as breaking (engines.ts), so every addition invalidated every declared range, which
@@ -109,4 +109,8 @@
 // server.ts): the backend half was the one surface no recorded grain could see.
 // 2.18.0 adds `api.workspace.onDidChangeRepos`: the repository set moving (a clone, a scaffold, a delete). `repos()` is
 // narrowed to the open project, so a view listing every repository (the Projects dashboard) could only poll. Additive.
-export const extensionApiVersion = "2.18.0";
+// 2.19.0 adds `sandboxDocument` and the `conversions` vocabulary: a file an extension keeps, read through the
+// conversions its shape has had and written with what a newer version of the extension put in it kept in place, the
+// evolution the daemon's own stores got (the daemon's store/conversions.ts). Until now an extension that changed the
+// shape of its own file had two choices, a hand-written tolerant reader or a reset for everyone who updated. Additive.
+export const extensionApiVersion = "2.19.0";

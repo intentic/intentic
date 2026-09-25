@@ -4,6 +4,7 @@ import { z } from "zod";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { deviceHandler } from "../capabilities/handlers/device.handler.js";
 import type { Services } from "../composition.js";
+import { defineDocument } from "../store/documents.js";
 import { jsonFile } from "../store/json-file.js";
 
 // Setup auto-connects the machine that ran the installer, granted only `sandboxes` (no shell, files or screen):
@@ -43,6 +44,8 @@ const KNOWN_PLATFORMS = new Set(["linux", "windows"]);
 
 const SeededSchema = z.object({ ids: z.array(z.string()) });
 
+export const hostSetupSeededDocument = defineDocument({ root: "history", path: "host-setup-seeded.json", schema: SeededSchema });
+
 // Which setup cards this sandbox has already offered, not whether the machine is connected or the token spent
 // (host-peer.ts); its own file since it outlives both of those.
 const seededCards = (historyRoot: string) =>
@@ -50,6 +53,7 @@ const seededCards = (historyRoot: string) =>
         parse: (raw) => SeededSchema.safeParse(raw).data,
         fallback: () => ({ ids: [] }),
         mode: 0o600,
+        document: hostSetupSeededDocument,
     });
 
 // Arms the setup pairing, creating the card on first run. Returns whether a card was written, not whether the pairing

@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clearNewestRun, newestRunVersion, recordNewestRun } from "./newest-run.js";
+import { clearNewestRun, newerBuildRan, newestRunEngine, newestRunVersion, recordNewestRun } from "./newest-run.js";
 
 const roots: string[] = [];
 const workspace = async (): Promise<string> => {
@@ -19,7 +19,7 @@ test("a release build stamps a fresh workspace, and the stamp survives on disk",
     const root = await workspace();
     await recordNewestRun(root, "1.200.0");
     expect(newestRunVersion()).toBe("1.200.0");
-    expect(JSON.parse(await readFile(join(root, ".intentic/local/newest-run.json"), "utf8"))).toEqual({ version: "1.200.0" });
+    expect(JSON.parse(await readFile(join(root, ".intentic/local/newest-run.json"), "utf8"))).toEqual({ version: "1.200.0", engine: 0 });
 });
 
 test("the stamp only moves forward: a rollback must not erase the evidence it exists to explain", async () => {
@@ -28,7 +28,7 @@ test("the stamp only moves forward: a rollback must not erase the evidence it ex
     // The rolled-back daemon boots older; the stamp keeps naming the newer run.
     await recordNewestRun(root, "1.199.0");
     expect(newestRunVersion()).toBe("1.200.0");
-    expect(JSON.parse(await readFile(join(root, ".intentic/local/newest-run.json"), "utf8"))).toEqual({ version: "1.200.0" });
+    expect(JSON.parse(await readFile(join(root, ".intentic/local/newest-run.json"), "utf8"))).toEqual({ version: "1.200.0", engine: 0 });
     // Rolling forward past it moves it again.
     await recordNewestRun(root, "1.201.0");
     expect(newestRunVersion()).toBe("1.201.0");
@@ -50,4 +50,22 @@ test("a mangled stamp reads as absent and re-establishes itself", async () => {
     await writeFile(join(root, ".intentic/local/newest-run.json"), "not json");
     await recordNewestRun(root, "1.199.0");
     expect(newestRunVersion()).toBe("1.199.0");
+});
+
+test("the engine epoch rides beside the version and only moves forward with it", async () => {
+    const root = await workspace();
+    await recordNewestRun(root, "1.300.0", { engine: 12 });
+    expect(newestRunEngine()).toBe(12);
+    expect(JSON.parse(await readFile(join(root, ".intentic/local/newest-run.json"), "utf8"))).toEqual({ version: "1.300.0", engine: 12 });
+    // A rolled-back build knows fewer conversions; it learns the stamp and leaves it alone.
+    await recordNewestRun(root, "1.299.0", { engine: 9 });
+    expect(newestRunEngine()).toBe(12);
+    expect(newerBuildRan("1.299.0")).toBe(true);
+});
+
+test("a daemon that may not converge the workspace learns the stamp and writes nothing", async () => {
+    const root = await workspace();
+    await recordNewestRun(root, "1.300.0", { write: false });
+    expect(newestRunVersion()).toBeUndefined();
+    await expect(readFile(join(root, ".intentic/local/newest-run.json"), "utf8")).rejects.toThrow("ENOENT");
 });

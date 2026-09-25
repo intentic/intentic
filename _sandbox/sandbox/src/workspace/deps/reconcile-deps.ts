@@ -5,6 +5,7 @@ import { isManifest } from "@intentic/workspace-setup";
 import type { Logger } from "pino";
 import { z } from "zod";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
+import { defineDocument } from "../../store/documents.js";
 import { jsonFile } from "../../store/json-file.js";
 import { unresolvedDependencies } from "./dependency-drift.js";
 import { type DependencyOrigin, type DependencyRequestOrigin, originPriority } from "./dependency-origin.js";
@@ -27,6 +28,8 @@ const RequestStateSchema = z.object({ projects: z.record(z.string(), RequestOrig
 interface RequestState {
     readonly projects: Record<string, DependencyRequestOrigin>;
 }
+
+export const dependencyRequestsDocument = defineDocument({ root: "history", path: "dependency-requests.json", schema: RequestStateSchema });
 
 const requestState = (raw: unknown): RequestState | undefined => {
     const parsed = RequestStateSchema.safeParse(raw);
@@ -103,6 +106,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
     const requests = jsonFile<RequestState>(deps.requestsPath, {
         parse: requestState,
         fallback: () => ({ projects: {} }),
+        document: dependencyRequestsDocument,
     });
     const causes = new Map<string, DependencyOrigin>();
     const listeners = new Set<(event: DependencyInstallStarted) => void>();

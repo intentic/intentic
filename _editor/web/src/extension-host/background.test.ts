@@ -1,6 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { IntenticApi } from "@intentic/extension-api";
-import { resetSandboxScope, sandboxLedger, sandboxPoll } from "@intentic/extension-api";
+import { conversions, resetSandboxScope, sandboxDocument, sandboxLedger, sandboxPoll } from "@intentic/extension-api";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 // The background pair (extension-api/src/background.ts), tested from here since the SDK ships no test harness of its
@@ -463,6 +463,49 @@ describe(`sandboxLedger`, () => {
 
         // …and says so, so the caller does not clear a badge that now belongs to a different workspace.
         expect(await marking).toBe(false);
+        expect(written).toEqual([]);
+    });
+});
+
+describe(`sandboxDocument`, () => {
+    const NOTES = `${STATE_DIR}/local/runtime/extensions/notes/notes.json`;
+    interface Notes {
+        readonly items: readonly string[];
+    }
+    const parse = (raw: unknown): Notes | undefined => {
+        const items = (raw as { items?: unknown } | null)?.items;
+        return Array.isArray(items) && items.every((item) => typeof item === `string`) ? { items } : undefined;
+    };
+    const notes = (api: IntenticApi) =>
+        sandboxDocument<Notes>(() => api, NOTES, {
+            parse,
+            fallback: () => ({ items: [] }),
+            history: [conversions.rename(`entries`, `items`)],
+        });
+
+    test(`a file an earlier version of the extension wrote reads as today's shape`, async () => {
+        const { api } = fakeApi({ file: { entries: [`a`, `b`] } });
+        expect(await notes(api).read()).toEqual({ items: [`a`, `b`] });
+    });
+
+    test(`an update keeps what a newer version of the extension put in the file`, async () => {
+        const { api, written } = fakeApi({ file: { items: [`a`], pinned: [`a`] } });
+        expect(await notes(api).update((current) => ({ items: [...current.items, `b`] }))).toBe(true);
+        expect(written.map(({ body }) => JSON.parse(body) as unknown)).toEqual([{ items: [`a`, `b`], pinned: [`a`] }]);
+    });
+
+    test(`a file this version cannot read is never written over`, async () => {
+        const { api, written } = fakeApi({ file: { items: [7] } });
+        expect(await notes(api).read()).toEqual({ items: [] });
+        await expect(notes(api).update(() => ({ items: [`fresh`] }))).rejects.toThrow(
+            `${NOTES} holds what this version of the extension cannot read; it is left as it is`,
+        );
+        expect(written).toEqual([]);
+    });
+
+    test(`an update that changes nothing writes nothing`, async () => {
+        const { api, written } = fakeApi({ file: { items: [`a`] } });
+        expect(await notes(api).update((current) => current)).toBe(true);
         expect(written).toEqual([]);
     });
 });
