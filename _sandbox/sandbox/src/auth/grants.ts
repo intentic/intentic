@@ -1,6 +1,5 @@
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { sandboxRouteFor } from "@intentic/sandbox-contract";
-import { EXTENSION_TOKEN_HEADER } from "../extensions/backend/backend-host-config.js";
 import { tokenEquals } from "./auth.js";
 import { type ControlTokens, controlScoped } from "./control-tokens.js";
 import type { Principal } from "./principal.js";
@@ -57,6 +56,10 @@ const agentReach = (method: string, path: string): boolean => declared(method, p
 // per-extension token instead, never this one.
 const panelReach = (method: string, path: string): boolean => declared(method, path)?.panel !== false;
 
+// The header an extension presents its token in. The same string as EXTENSION_TOKEN_HEADER in the extensions'
+// backend-host-config.ts, restated rather than imported so auth takes no import from extensions (which imports auth).
+const EXTENSION_TOKEN_HEADER = "x-intentic-extension";
+
 // What a per-extension token resolves to: the extension, its manifest's `permissions.daemon`, and the provider its
 // `contributes.listener` names, if any. Minted once per extension for its backend and its processes alike.
 export interface ExtensionGrant {
@@ -69,27 +72,19 @@ export interface ExtensionGrant {
 // comes from a manifest and may hold anything a glob would widen on.
 const LISTENER_ROUTE = /^\/listeners\/([^/]+)\/(?:state|dispatch|failure|status)$/;
 
-// The provider a listener route addresses: undefined for any other path, "" for a segment that does not decode (which
-// no manifest can name).
-const listenerProviderOf = (path: string): string | undefined => {
-    const segment = LISTENER_ROUTE.exec(path.split("?")[0] ?? path)?.[1];
-    if (segment === undefined) {
-        return undefined;
-    }
-    try {
-        return decodeURIComponent(segment);
-    } catch {
-        return "";
-    }
-};
+// The provider segment a listener route addresses, as it arrived; undefined for any other path.
+const listenerSegmentOf = (path: string): string | undefined => LISTENER_ROUTE.exec(path.split("?")[0] ?? path)?.[1];
 
 // An extension that declares a listener reaches that provider's listener routes without listing them in
 // `permissions.daemon`: running the gateway is what declaring the provider asked for. Another provider's are never in
 // reach, whatever the manifest globs, since /state hands back that provider's stored credentials.
 const extensionReach = (grant: ExtensionGrant, method: string, path: string): boolean => {
-    const provider = listenerProviderOf(path);
-    if (provider !== undefined) {
-        return provider !== "" && grant.listener === provider && declared(method, path) !== undefined;
+    const segment = listenerSegmentOf(path);
+    if (segment !== undefined) {
+        // Matched against the declared provider as sent or as encoded, never decoded here: a segment that is neither
+        // (a foreign provider, a malformed escape) is refused rather than parsed.
+        const own = grant.listener !== undefined && (segment === grant.listener || segment === encodeURIComponent(grant.listener));
+        return own && declared(method, path) !== undefined;
     }
     return sandboxRouteAllowed(grant.permissions, method, path);
 };
